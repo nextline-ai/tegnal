@@ -57,10 +57,11 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         completionHandler(request.url.map(Self.allows) == true ? request : nil)
     }
 
-    func get(_ url: URL, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil) async throws -> (Data, HTTPURLResponse) {
+    func get(_ url: URL, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil, timeout: TimeInterval = 20) async throws -> (Data, HTTPURLResponse) {
         guard Self.allows(url), limit > 0 else { throw URLError(.unsupportedURL) }
         try Task.checkCancellation()
         var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         request.setValue(galleryID.map { "\(MangaUrls.home)reader/\($0).html" } ?? MangaUrls.home, forHTTPHeaderField: "Referer")
         if let range { request.setValue("bytes=\(range.lowerBound)-\(range.upperBound - 1)", forHTTPHeaderField: "Range") }
@@ -75,6 +76,38 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
             try Task.checkCancellation()
             return result
         } onCancel: { cancellation.cancel() }
+    }
+
+    static func backendConnectionFailed(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost].contains(error.code)
+    }
+
+    /// Resolve once before the first data request, then reuse the site's saved
+    /// endpoints. Refresh only when the saved endpoint actually stops responding.
+    func getData(_ path: String, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil) async throws -> (Data, HTTPURLResponse) {
+        let site = MangaUrls.home
+        guard !site.isEmpty else { throw URLError(.unsupportedURL) }
+        await MangaUrls.resolveBackend(transport: self)
+        try Task.checkCancellation()
+        guard MangaUrls.home == site else { throw CancellationError() }
+        let host = MangaUrls.dataHost
+        guard let target = URL(string: MangaUrls.dataBaseURL + path) else { throw URLError(.badURL) }
+        do { return try await get(target, limit: limit, range: range, galleryID: galleryID) }
+        catch {
+            try Task.checkCancellation()
+            let connectionFailed = Self.backendConnectionFailed(error)
+            let endpointRemoved: Bool
+            if case ContentError.unavailable(let status) = error {
+                endpointRemoved = [403, 404].contains(status) && (path == "gg.js" || path.hasSuffix(".nozomi") || path == "galleriesindex/version")
+            } else { endpointRemoved = false }
+            guard connectionFailed || endpointRemoved, MangaUrls.home == site else { throw error }
+            if MangaUrls.dataHost == host { await MangaUrls.resolveBackend(transport: self, force: true) }
+            try Task.checkCancellation()
+            guard MangaUrls.home == site else { throw CancellationError() }
+            guard MangaUrls.dataHost != host, let updated = URL(string: MangaUrls.dataBaseURL + path) else { throw error }
+            return try await get(updated, limit: limit, range: range, galleryID: galleryID)
+        }
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,

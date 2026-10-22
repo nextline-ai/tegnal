@@ -16,7 +16,6 @@ private actor GalleryMetadataParser {
 actor MangaContentSource: ContentProviding {
     static let shared = MangaContentSource()
     private let transport: ContentTransport
-    private var base: String { MangaUrls.dataBaseURL }
     private var routing: (CDNRouting, Date)?
     private var routingTask: Task<CDNRouting, Error>?
     private var suggestionCache: [String: ([TagSuggestion], Date)] = [:]
@@ -91,10 +90,10 @@ actor MangaContentSource: ContentProviding {
                     galleryFlights[id] = flight
                     return
                 }
-                let token = UUID(), transport = transport, target = url("galleries/\(id).js")
+                let token = UUID(), transport = transport
                 let task = Task.detached(priority: Task.currentPriority) {
                     do {
-                        let (data, _) = try await transport.get(target, limit: 4_000_000, galleryID: id)
+                        let (data, _) = try await transport.getData("galleries/\(id).js", limit: 4_000_000, galleryID: id)
                         try Task.checkCancellation()
                         let document = try await GalleryMetadataParser.shared.parse(data, id: id)
                         try Task.checkCancellation()
@@ -151,7 +150,7 @@ actor MangaContentSource: ContentProviding {
         }
         let path = query.sort != .latest ? "popular/\(query.sort.rawValue)-\(query.language).nozomi" : query.artist.map { "artist/\(segment($0))-\(query.language).nozomi" } ?? "index-\(query.language).nozomi"
         let range = (offset * 4)..<((offset + count) * 4)
-        let (data, response) = try await transport.get(url(path), limit: count * 4, range: range)
+        let (data, response) = try await transport.getData(path, limit: count * 4, range: range)
         if response.statusCode == 416 { return GalleryBatch(ids: [], hasMore: false) }
         let total = try Self.validateRange(response, start: range.lowerBound, received: data.count)
         return GalleryBatch(ids: try BinaryCursor.ids(data), hasMore: range.lowerBound + data.count < total)
@@ -172,6 +171,12 @@ actor MangaContentSource: ContentProviding {
                 } catch {
                     try Task.checkCancellation()
                     lastError = error
+                    if ContentTransport.backendConnectionFailed(error), !refresh {
+                        // A cached CDN may move independently of its data server.
+                        await MangaUrls.resolveBackend(transport: transport, force: true)
+                        try Task.checkCancellation()
+                        break
+                    }
                     // Only stale routing / missing representation merits a format or routing retry.
                     guard case ContentError.unavailable(let status) = error, [403, 404].contains(status) else { throw error }
                 }
@@ -184,10 +189,8 @@ actor MangaContentSource: ContentProviding {
         if !force, let (value, date) = routing, Date().timeIntervalSince(date) < 300 { return value }
         if let task = routingTask { return try await task.value }
         let transport = transport
-        await MangaUrls.resolveBackend(transport: transport)
-        let target = url("gg.js")
         let task = Task {
-            let (data, _) = try await transport.get(target, limit: 100_000)
+            let (data, _) = try await transport.getData("gg.js", limit: 100_000)
             guard let text = String(data: data, encoding: .utf8) else { throw ContentError.invalidResponse }
             return try CDNRouting(text)
         }
@@ -205,7 +208,7 @@ actor MangaContentSource: ContentProviding {
         guard (!tokens.isEmpty || query.artist != nil), tokens.count <= 8, tokens.allSatisfy({ $0.count <= 120 && !$0.contains("\"") }) else {
             throw ContentError.invalidQuery
         }
-        let (versionData, _) = try await transport.get(url("galleriesindex/version"), limit: 64)
+        let (versionData, _) = try await transport.getData("galleriesindex/version", limit: 64)
         let version = String(decoding: versionData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         guard version.range(of: #"^[0-9]{1,20}$"#, options: .regularExpression) != nil else { throw ContentError.unsupportedFormat }
         var included: Set<Int64>?
@@ -244,7 +247,7 @@ actor MangaContentSource: ContentProviding {
 
     private func fullList(_ path: String) async throws -> [Int64] {
         do {
-            let (data, response) = try await transport.get(url(path), limit: 8_000_000)
+            let (data, response) = try await transport.getData(path, limit: 8_000_000)
             guard response.statusCode == 200 else { throw ContentError.invalidResponse }
             return try BinaryCursor.ids(data)
         } catch ContentError.unavailable(404) { return [] }
@@ -279,7 +282,7 @@ actor MangaContentSource: ContentProviding {
     }
 
     private func readRange(_ path: String, range: Range<Int>) async throws -> Data {
-        let (data, response) = try await transport.get(url(path), limit: range.count, range: range)
+        let (data, response) = try await transport.getData(path, limit: range.count, range: range)
         _ = try Self.validateRange(response, start: range.lowerBound, received: data.count)
         guard data.count == range.count else { throw ContentError.invalidResponse }
         return data
@@ -297,7 +300,6 @@ actor MangaContentSource: ContentProviding {
         return parts[2]
     }
 
-    private func url(_ path: String) -> URL { URL(string: base.isEmpty ? "https://invalid.example/" + path : base + path)! }
     private func segment(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_"))) ?? ""
     }

@@ -15,6 +15,8 @@ public enum MangaAPIClient {
 
     public static func fetchGalleryInfo(galleryId: Int64) async throws -> MangaGalleryInfo {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
+        await MangaUrls.resolveBackend()
+        try Task.checkCancellation()
         let urls = [
             "\(MangaUrls.dataBaseURL)galleries/\(galleryId).js",
             "\(MangaUrls.home)galleries/\(galleryId).js"
@@ -54,6 +56,8 @@ public enum MangaAPIClient {
 
     public static func fetchGalleryFiles(galleryId: Int64) async throws -> [String] {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
+        await MangaUrls.resolveBackend()
+        try Task.checkCancellation()
         let urls = [
             "\(MangaUrls.dataBaseURL)galleries/\(galleryId).js",
             "\(MangaUrls.home)galleries/\(galleryId).js"
@@ -160,6 +164,8 @@ public enum MangaAPIClient {
 
     public static func downloadCover(galleryId: Int64, hash: String, destinationDir: URL) async throws -> URL {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
+        await MangaUrls.resolveBackend()
+        try Task.checkCancellation()
         guard hash.count >= 3 else { throw URLError(.badURL) }
         let a = String(hash.suffix(1))
         let bStart = hash.index(hash.endIndex, offsetBy: -3)

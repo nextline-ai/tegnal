@@ -56,7 +56,7 @@ Every AI feature runs **100% locally on your device** without sending your data 
 
 ## 🚀 Quick Start Guide
 
-1. **Connect Your Sites:** Tap **Enter Website Address** and type the URL of the site you want to use (e.g., Hitomi, Danbooru, Gelbooru). Pick from the autocomplete suggestions to connect right away.
+1. **Connect Your Sites:** Tap **Enter Website Address** and type the URL of the site you want to use (e.g., Hitomi, Danbooru, Gelbooru). Pick from the autocomplete suggestions to connect right away. The app discovers and saves data and image server addresses from your chosen domain, then reuses them across launches. It discovers them again only when you change the website address or a server connection fails.
 2. **Switch Modes:** Use the **Book / Image switch** at the top of the screen to move between Comics Mode and Image Mode anytime.
 3. **Save Favorites:** **Long-press** any work in Explore or the viewer to save it immediately, and organize your collection into custom folders.
 4. **Import Existing Backups:** Easily bring your existing collection from **Violet** (`user.db` / `data.db`) or **Anime Boxes** (`.abbj`) in Settings.

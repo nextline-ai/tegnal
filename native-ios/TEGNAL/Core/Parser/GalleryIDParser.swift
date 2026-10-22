@@ -36,7 +36,7 @@ public enum MangaUrls {
     }
 
     public static var dataHost: String {
-        if let resolved = UserDefaults.standard.string(forKey: "manga.resolved_data_host"), !resolved.isEmpty {
+        if hasResolvedBackend, let resolved = UserDefaults.standard.string(forKey: "manga.resolved_data_host"), !resolved.isEmpty {
             return resolved
         }
         guard !configuredHost.isEmpty else { return "" }
@@ -48,65 +48,122 @@ public enum MangaUrls {
     }
 
     public static var cdnHost: String {
-        if let resolved = UserDefaults.standard.string(forKey: "manga.resolved_cdn_host"), !resolved.isEmpty {
+        if hasResolvedBackend, let resolved = UserDefaults.standard.string(forKey: "manga.resolved_cdn_host"), !resolved.isEmpty {
             return resolved
         }
         return configuredHost
     }
 
-    /// Extracts backend data host and CDN domain directly from site HTML or script content.
+    /// A discovered backend belongs to the exact address the user connected.
+    /// Persist it across launches; only a connection failure or site change refreshes it.
+    static var hasResolvedBackend: Bool {
+        let defaults = UserDefaults.standard
+        return !home.isEmpty && defaults.string(forKey: "manga.resolved_backend_site") == home
+            && !(defaults.string(forKey: "manga.resolved_data_host") ?? "").isEmpty
+            && !(defaults.string(forKey: "manga.resolved_cdn_host") ?? "").isEmpty
+    }
+
+    /// Read host declarations, never execute downloaded JavaScript. Frontend
+    /// gallery HTML links are not data endpoints and must not become the backend.
     @discardableResult
     public static func extractBackend(from text: String) -> Bool {
-        guard !text.isEmpty else { return false }
-        let patterns = [
-            #"//(?:([a-zA-Z0-9-]+)\.)?([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/(?:gg\.js|galleries/)"#,
-            #"var\s+domain\s*=\s*['"]([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)['"]"#,
-            #"(?:https?:)?//([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/gg\.js"#
-        ]
-        for pattern in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) {
-                let nsText = text as NSString
-                if match.numberOfRanges > 2 && match.range(at: 2).location != NSNotFound {
-                    let domain = nsText.substring(with: match.range(at: 2)).lowercased()
-                    let prefix = match.range(at: 1).location != NSNotFound ? nsText.substring(with: match.range(at: 1)).lowercased() : "ltn"
-                    let host = prefix.isEmpty ? "ltn." + domain : prefix + "." + domain
-                    UserDefaults.standard.set(host, forKey: "manga.resolved_data_host")
-                    UserDefaults.standard.set(domain, forKey: "manga.resolved_cdn_host")
-                    return true
-                } else if match.numberOfRanges > 1 && match.range(at: 1).location != NSNotFound {
-                    let found = nsText.substring(with: match.range(at: 1)).lowercased()
-                    let domain = found.hasPrefix("ltn.") ? String(found.dropFirst(4)) : found
-                    let host = found.hasPrefix("ltn.") ? found : "ltn." + domain
-                    UserDefaults.standard.set(host, forKey: "manga.resolved_data_host")
-                    UserDefaults.standard.set(domain, forKey: "manga.resolved_cdn_host")
-                    return true
-                }
+        extractBackend(from: text, site: home)
+    }
+
+    @discardableResult
+    static func extractBackend(from text: String, site: String) -> Bool {
+        guard !site.isEmpty, home == site else { return false }
+        func capture(_ pattern: String) -> String? {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                  let range = Range(match.range(at: 1), in: text) else { return nil }
+            return String(text[range]).lowercased()
+        }
+        let domainPattern = #"(?:var|let|const)\s+domain\s*=\s*['"]([a-z0-9-]+(?:\.[a-z0-9-]+)+)['"]"#
+        let endpointPattern = #"(?:(?:https?:)?//)([a-z0-9-]+(?:\.[a-z0-9-]+)+)/(?:gg\.js(?:[?"'\s>]|$)|galleries/[0-9]+\.js(?:[?"'\s>]|$))"#
+        let scriptPattern = #"(?:(?:https?:)?//)(ltn\.[a-z0-9-]+(?:\.[a-z0-9-]+)+)/common\.js(?:[?"'\s>]|$)"#
+        let dataHost: String, cdn: String
+        if let domain = capture(domainPattern) {
+            cdn = domain.hasPrefix("ltn.") ? String(domain.dropFirst(4)) : domain
+            dataHost = "ltn." + cdn
+        } else if let host = capture(endpointPattern) ?? capture(scriptPattern) {
+            dataHost = host
+            cdn = host.hasPrefix("ltn.") ? String(host.dropFirst(4)) : host
+        } else { return false }
+        guard [dataHost, cdn].allSatisfy({ host in
+            host.split(separator: ".", omittingEmptySubsequences: false).allSatisfy {
+                !$0.isEmpty && !$0.hasPrefix("-") && !$0.hasSuffix("-")
             }
+        }), home == site else { return false }
+        let defaults = UserDefaults.standard
+        defaults.set(dataHost, forKey: "manga.resolved_data_host")
+        defaults.set(cdn, forKey: "manga.resolved_cdn_host")
+        defaults.set(site, forKey: "manga.resolved_backend_site")
+        return true
+    }
+
+    /// Keep discovery anchored to the user's address, including its own common.js.
+    static func resolveBackend(transport: ContentTransport = .shared, force: Bool = false) async {
+        await MangaBackendResolver.shared.resolve(transport: transport, force: force)
+    }
+
+    static func discoverBackend(site: String, transport: ContentTransport) async -> Bool {
+        guard let homepage = URL(string: site), !site.isEmpty else { return false }
+        var scripts: [URL] = []
+        do {
+            let (data, _) = try await transport.get(homepage, limit: 1_000_000, timeout: 8)
+            guard home == site, !Task.isCancelled else { return false }
+            let body = String(decoding: data, as: UTF8.self)
+            if extractBackend(from: body, site: site) { return true }
+            let pattern = #"<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]"#
+            let regex = try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+            for match in regex.matches(in: body, range: NSRange(body.startIndex..., in: body)) {
+                guard let range = Range(match.range(at: 1), in: body),
+                      let url = URL(string: String(body[range]), relativeTo: homepage)?.absoluteURL,
+                      url.host?.lowercased() == homepage.host?.lowercased(),
+                      url.lastPathComponent == "common.js", !scripts.contains(url) else { continue }
+                scripts.append(url)
+                if scripts.count == 3 { break }
+            }
+        } catch { }
+        let common = homepage.appendingPathComponent("common.js")
+        if !scripts.contains(common) { scripts.append(common) }
+        for url in scripts {
+            guard home == site, !Task.isCancelled else { return false }
+            if let (data, _) = try? await transport.get(url, limit: 1_000_000, timeout: 8),
+               extractBackend(from: String(decoding: data, as: UTF8.self), site: site) { return true }
         }
         return false
     }
 
-    /// Discovers and extracts backend hosts using the user's configured site URL.
-    static func resolveBackend(transport: ContentTransport? = nil) async {
-        guard !home.isEmpty, let target = URL(string: home) else { return }
-        var request = URLRequest(url: target)
-        request.timeoutInterval = 10
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, http.statusCode == 200,
-               let body = String(data: data, encoding: .utf8) {
-                _ = extractBackend(from: body)
-            }
-        } catch { }
-    }
-
     public static func resetResolvedBackend() {
-        UserDefaults.standard.removeObject(forKey: "manga.resolved_data_host")
-        UserDefaults.standard.removeObject(forKey: "manga.resolved_cdn_host")
+        for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site"] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 
+}
+
+/// Coalesce discovery for concurrent covers and lists. Failed discovery has a
+/// short cooldown; successful discovery lives in UserDefaults without a timer.
+private actor MangaBackendResolver {
+    static let shared = MangaBackendResolver()
+    private var flights: [String: Task<Bool, Never>] = [:]
+    private var failedAt: [String: Date] = [:]
+
+    func resolve(transport: ContentTransport, force: Bool) async {
+        let site = MangaUrls.home
+        guard !site.isEmpty, !Task.isCancelled else { return }
+        if let flight = flights[site] { _ = await flight.value; return }
+        if !force && MangaUrls.hasResolvedBackend { return }
+        if let date = failedAt[site], Date().timeIntervalSince(date) < 10 { return }
+        let task = Task { await MangaUrls.discoverBackend(site: site, transport: transport) }
+        flights[site] = task
+        let succeeded = await task.value
+        flights[site] = nil
+        if succeeded { failedAt[site] = nil }
+        else { failedAt[site] = Date() }
+    }
 }
 
 public enum GalleryIDParser {
