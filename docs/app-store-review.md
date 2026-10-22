@@ -60,12 +60,12 @@ TestFlight 승인 사실은 사용자 제공 정보다. 이번 점검은 소스,
 ## 입력할 URL
 
 - 지원 / 마케팅: https://nextline.work
-- 개인정보처리방침: https://github.com/nextline-ai/Number-Memo/blob/main/docs/privacy-policy.md
+- 개인정보처리방침: https://github.com/nextline-ai/tegnal/blob/main/docs/privacy-policy.md
 - 지원 메일: contact@nextline.work
 
 ## Review Notes 초안
 
-Number Memo is a native client for browsing user-selected websites and organizing local collections. A fresh installation contains no configured servers, bundled content, recommended-site list, or prefilled website address. Users explicitly enter addresses, import a backup they choose, or restore their existing library through optional iCloud sync. Existing configurations are preserved across updates. No Number Memo account is required.
+TEGNAL is a native client for browsing user-selected websites and organizing local collections. A fresh installation contains no configured servers, bundled content, recommended-site list, or prefilled website address. Users explicitly enter addresses, import a backup they choose, or restore their existing library through optional iCloud sync. Existing configurations are preserved across updates. No TEGNAL account is required.
 
 To review image browsing using a public service:
 1. On the first onboarding page, tap Enter Website Address.
@@ -73,7 +73,7 @@ To review image browsing using a public service:
 3. Tap Save. Continue through optional imports and the mode-switch tutorial, then tap Get Started. Image mode opens and the first configured server is available in Explore.
 4. If setup was skipped, use Enter Website Address in Saved or Explore, or More > Servers > Add a Server. The same editor is used everywhere. To inspect other supported engines, manually enter a compatible site and select the type if it is not recognized.
 
-Safebooru is a review example, not a bundled or recommended server. It publishes API documentation at https://safebooru.org/index.php?page=help&topic=dapi and terms at https://safebooru.org/index.php?page=tos. The terms permit API use without excessive requests, prohibit advertising/paywalls, and limit use to adults and personal use. Number Memo has neither advertising nor in-app purchases. These links document API access conditions, not a blanket license for every third-party post.
+Safebooru is a review example, not a bundled or recommended server. It publishes API documentation at https://safebooru.org/index.php?page=help&topic=dapi and terms at https://safebooru.org/index.php?page=tos. The terms permit API use without excessive requests, prohibit advertising/paywalls, and limit use to adults and personal use. TEGNAL has neither advertising nor in-app purchases. These links document API access conditions, not a blanket license for every third-party post.
 
 Supported image engines include Danbooru, Gelbooru, Old Gelbooru, and Moebooru. Address recognition selects an engine only; it does not create a server until the user saves. Account credentials, when supplied, are stored in Keychain for the relevant server. No credentials are required for the public review example above.
 

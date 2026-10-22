@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 @objc(ShareViewController)
 final class ShareViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
-    private let appGroup = "group.com.deaum.numbermemo"
-    private let notifyName = "com.deaum.numbermemo.share" as CFString
+    private let appGroup = "group.work.nextline.tegnal"
+    private let notifyName = "work.nextline.tegnal.share" as CFString
 
     private struct FolderItem {
         let id: Int64
@@ -49,7 +49,7 @@ final class ShareViewController: UIViewController, UITableViewDataSource, UITabl
     private func setupNavBar() {
         let navBar = UINavigationBar()
         navBar.translatesAutoresizingMaskIntoConstraints = false
-        let navItem = UINavigationItem(title: L10n.text("Number Memo"))
+        let navItem = UINavigationItem(title: L10n.text("TEGNAL"))
 
         navItem.leftBarButtonItem = UIBarButtonItem(
             title: L10n.text("Cancel"),

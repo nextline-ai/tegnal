@@ -1,7 +1,7 @@
-Number Memo プライバシーポリシー
+TEGNAL プライバシーポリシー
 更新日：2026年10月10日
 
-Number Memoの開発元はNextLineです。
+TEGNALの開発元はNextLineです。
 連絡先：contact@nextline.work · https://nextline.work
 
 ライブラリと設定

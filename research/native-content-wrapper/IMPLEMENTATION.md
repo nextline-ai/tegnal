@@ -49,7 +49,7 @@
 
 ## 코드 구조
 
-경로는 `native-ios/NumberMemo/` 기준이다.
+경로는 `native-ios/TEGNAL/` 기준이다.
 
 | 위치 | 역할 |
 | --- | --- |
@@ -83,21 +83,21 @@ USB 연결 iPhone 17, iOS 27.2 (24B5089g), arm64에서 서명·설치·실행했
 
 각 수정 뒤 해당 검사를 다시 실행한 **고유 검사 20개**의 최종 결과다. 모든 중간 실행이 성공했다는 뜻은 아니다. 초기 테스트에서 접근성 식별자가 부모에서 전파되던 부분을 수정했고, 복귀 애니메이션·스위치의 실제 터치 영역·연속 스크롤의 화면 밖 요소를 테스트가 올바르게 다루도록 수정했다. [현재 검증 요약](reader-ux-validation.json)과 [초기 구현 검증 요약](device-validation.json)을 구분해서 보관한다.
 
-실행 결과 묶음은 검증 머신의 `/tmp/number-memo-reader-*.xcresult`에 있다. 상세 파일명은 현재 검증 요약에 기록한다. iOS 17 및 다른 iPhone·iPad·이동통신망, 긴 작품의 장시간 메모리 계측은 후속 검증 대상이다. CDN 형식이나 호스트가 바뀌면 어댑터 업데이트가 필요할 수 있다.
+실행 결과 묶음은 검증 머신의 `/tmp/tegnal-reader-*.xcresult`에 있다. 상세 파일명은 현재 검증 요약에 기록한다. iOS 17 및 다른 iPhone·iPad·이동통신망, 긴 작품의 장시간 메모리 계측은 후속 검증 대상이다. CDN 형식이나 호스트가 바뀌면 어댑터 업데이트가 필요할 수 있다.
 
 ## 재실행
 
-일반 `NumberMemo` 스킴에서는 외부 네트워크 통합 검사를 건너뛴다. `NativeContentDeviceValidation`은 실제 CDN 검사를 활성화한다. UI의 번역 검사는 합성 이미지에 실제 시스템 번역을 사용하므로 언어팩이 필요할 수 있다.
+일반 `TEGNAL` 스킴에서는 외부 네트워크 통합 검사를 건너뛴다. `NativeContentDeviceValidation`은 실제 CDN 검사를 활성화한다. UI의 번역 검사는 합성 이미지에 실제 시스템 번역을 사용하므로 언어팩이 필요할 수 있다.
 
 ```sh
-xcodebuild -project native-ios/NumberMemo.xcodeproj \
+xcodebuild -project native-ios/TEGNAL.xcodeproj \
   -scheme NativeContentDeviceValidation -configuration Debug \
   -destination 'id=DEVICE_ID' -allowProvisioningUpdates \
   -parallel-testing-enabled NO \
-  -only-testing:NumberMemoTests/NativeContentTests \
-  -only-testing:NumberMemoTests/NativeContentLiveTests \
-  -only-testing:NumberMemoTests/ReaderUXTests \
-  -only-testing:NumberMemoUITests test
+  -only-testing:TEGNALTests/NativeContentTests \
+  -only-testing:TEGNALTests/NativeContentLiveTests \
+  -only-testing:TEGNALTests/ReaderUXTests \
+  -only-testing:TEGNALUITests test
 ```
 
 테스트 진입점과 합성 소스는 `DEBUG` 빌드에서만 활성화된다. Xcode 프로젝트와 `project.yml`의 앱·공유 확장·테스트 타깃을 유지한다.

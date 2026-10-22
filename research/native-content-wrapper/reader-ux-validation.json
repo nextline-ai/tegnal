@@ -8,7 +8,7 @@
   },
   "tests": [
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentLiveTests",
       "test": "testLiveMetadataImageDecodeAndSearchOnDevice",
       "status": "passed",
@@ -16,7 +16,7 @@
       "result_bundle": "/tmp/nm-reader-round3.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentLiveTests",
       "test": "testLivePopularPeriodsOnDevice",
       "status": "passed",
@@ -24,7 +24,7 @@
       "result_bundle": "/tmp/nm-reader-round3.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testBinaryDataRejectsTruncationAndOverflow",
       "status": "passed",
@@ -32,7 +32,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testBoundedImageDecodeAndCache",
       "status": "passed",
@@ -40,7 +40,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testGalleryParsesEntitiesAndPreservesPages",
       "status": "passed",
@@ -48,7 +48,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testRangeRequiresExactOffsets",
       "status": "passed",
@@ -56,7 +56,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testReaderRoutesUseTrustedHostAndPage",
       "status": "passed",
@@ -64,7 +64,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testRequestPolicyRejectsForeignHostsAndCredentials",
       "status": "passed",
@@ -72,7 +72,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testRoutingUsesCurrentShardAndEpoch",
       "status": "passed",
@@ -80,7 +80,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testSpreadsRespectBoundariesAndLastPartialSpread",
       "status": "passed",
@@ -88,7 +88,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testTagNamespacesAcceptStringAndNumericFlags",
       "status": "passed",
@@ -96,7 +96,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "NativeContentTests",
       "test": "testTranslationCropUsesOriginalPixelsAndViewport",
       "status": "passed",
@@ -104,7 +104,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testBookmarkIsIdempotentAndPreservesFolders",
       "status": "passed",
@@ -112,7 +112,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testCancellingOneConsumerKeepsSharedDownloadAlive",
       "status": "passed",
@@ -120,7 +120,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testChunkedTransportEnforcesBodyLimitAndStatus",
       "status": "passed",
@@ -128,7 +128,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testConcurrentLoadsShareDownloadAndDecodedImage",
       "status": "passed",
@@ -136,7 +136,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testExitRecognizesShortFlickAndRejectsAccidentalDrags",
       "status": "passed",
@@ -144,7 +144,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testExploreBookmarkTogglesOnOffAndOn",
       "status": "passed",
@@ -152,7 +152,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testGridUsesSharedColumnRules",
       "status": "passed",
@@ -160,7 +160,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testLiveTextActionOnlyInvokesTranslateInsideOwnedImage",
       "status": "passed",
@@ -168,7 +168,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testNewFilterRejectsLateResultsFromCancelledQuery",
       "status": "passed",
@@ -176,7 +176,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testOCRFindsSyntheticPageText",
       "status": "passed",
@@ -184,7 +184,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testPrefetchEliminatesNextPageDownload",
       "status": "passed",
@@ -192,7 +192,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testRefreshKeepsResultsOnFailureAndRestartsAtFirstPage",
       "status": "passed",
@@ -200,7 +200,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testRefreshSurvivesRefreshableCallerCancellation",
       "status": "passed",
@@ -208,7 +208,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testShortZoomedPageHasVerticalSpaceAndRestoresParentScrolling",
       "status": "passed",
@@ -216,7 +216,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testTranslationDoesNotToggleActiveOrDisabledActions",
       "status": "passed",
@@ -224,7 +224,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoTests",
+      "target": "TEGNALTests",
       "suite": "ReaderUXTests",
       "test": "testTwoZoomedPagesKeepTheirSharedPagerLocked",
       "status": "passed",
@@ -232,7 +232,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testBrowseLongPressAndNetworkRetry",
       "status": "passed",
@@ -240,7 +240,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testExploreTabAndDetailSearch",
       "status": "passed",
@@ -248,7 +248,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testHelpCanBeDismissedAndReopened",
       "status": "passed",
@@ -256,7 +256,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testImageFailureStillAllowsExit",
       "status": "passed",
@@ -264,7 +264,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testImmersiveReaderGesturesPreviewAndBookmark",
       "status": "passed",
@@ -272,7 +272,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testJapaneseTranslationStartsOnRepeatedOpen",
       "status": "passed",
@@ -280,7 +280,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testMultiplePagesAutoAdvanceAndDownwardExit",
       "status": "passed",
@@ -288,7 +288,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testOneTapTranslationOnDevice",
       "status": "passed",
@@ -296,7 +296,7 @@
       "result_bundle": "/tmp/nm-stable-verification.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testReadingModesAndPersistentQuickMenu",
       "status": "passed",
@@ -304,7 +304,7 @@
       "result_bundle": "/tmp/nm-stable-final.xcresult"
     },
     {
-      "target": "NumberMemoUITests",
+      "target": "TEGNALUITests",
       "suite": "NativeContentUITests",
       "test": "testZoomedShortPagePansVerticallyWithoutExitOrPaging",
       "status": "passed",
@@ -393,5 +393,6 @@
     "paging_and_exit_restored_after_zoom_reset": true,
     "multiple_zoomed_pages_share_parent_scroll_lock": true,
     "viewport_recorded_before_opening_quick_menu": true
-  }
+  },
+  "naming_note": "Historical validation snapshot. Identifiers and local artifact labels have been normalized to TEGNAL; those labels do not verify the existence of pre-rename local artifacts."
 }

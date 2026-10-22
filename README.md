@@ -2,11 +2,11 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/jTaDDEpE">
-    <img src="design/other/main_banner_kr.webp" alt="품번메모 TestFlight 다운로드" width="100%">
+    <img src="design/other/WebP/main_banner_kr.webp" alt="TEGNAL TestFlight 다운로드" width="100%">
   </a>
 </p>
 
-<h1 align="center">품번메모</h1>
+<h1 align="center">TEGNAL</h1>
 <p align="center"><b>Hitomi와 Danbooru를 한곳에서 지원하는 최초의 iOS 전용 뷰어</b></p>
 <p align="center">
   사이드로딩 없이 <b>Apple 공식 TestFlight</b>에서 쉽고 안전하게 다운로드하세요.<br>
@@ -15,13 +15,13 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/jTaDDEpE"><b>📲 TestFlight에서 무료 다운로드</b></a> ·
-  <a href="https://github.com/nextline-ai/Number-Memo/releases">업데이트 내역</a> ·
+  <a href="https://github.com/nextline-ai/tegnal/releases">업데이트 내역</a> ·
   <a href="https://discord.gg/vUTGZNMaMB">Discord 커뮤니티</a>
 </p>
 
 ---
 
-## ✨ 왜 품번메모인가요?
+## ✨ 왜 TEGNAL인가요?
 
 ### 1. Hitomi & Danbooru 통합 지원 (최초의 iOS 전용 올인원 뷰어)
 - **만화 모드(Hitomi 등)**와 **이미지 모드(Danbooru, Gelbooru, Moebooru 등)**를 하나의 앱에서 지원합니다.
@@ -29,7 +29,7 @@
 - 여러 Booru 서버를 동시에 탐색하고, 마음에 드는 작품을 길게 눌러 나만의 폴더에 손쉽게 정리하세요.
 
 ### 2. 사이드로딩 없이 TestFlight로 안전하고 간편하게
-- 품번메모는 **공개 TestFlight를 정식 출시 채널로 사용**합니다.
+- TEGNAL은 **공개 TestFlight를 정식 출시 채널로 사용**합니다.
 - 복잡하고 위험한 사이드로딩(PC 연결, 7일마다 인증서 갱신 등)이 전혀 필요 없습니다.
 - Apple이 검수한 공식 TestFlight 앱을 통해 **클릭 한 번으로 안전하게 설치**하고 자동 업데이트를 받으세요.
 
@@ -48,8 +48,8 @@
 ## 📲 다운로드 및 설치 방법
 
 1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
-2. 아래 링크(또는 상단 배너)를 눌러 **품번메모 TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
-   - 👉 **[품번메모 TestFlight 바로가기](https://testflight.apple.com/join/jTaDDEpE)**
+2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
+   - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/jTaDDEpE)**
 3. **공식 지원 기기:** iPhone, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
 
 ---
@@ -80,9 +80,21 @@
 
 ---
 
+## 🛠️ 개발
+
+네이티브 iOS 소스는 `native-ios/TEGNAL`에 있습니다. `native-ios/TEGNAL.xcodeproj`를 열고 **TEGNAL** 스킴을 선택하세요. 최소 지원 버전은 iOS 17입니다.
+
+- **앱 번들 ID:** `work.nextline.tegnal`
+- **공유 확장 ID:** `work.nextline.tegnal.share`
+- **iCloud 컨테이너:** `iCloud.work.nextline.tegnal`
+
+실기기 서명과 배포에는 위 식별자를 사용하는 Apple Developer 설정과 프로비저닝 프로파일이 필요합니다. 새 식별자는 기존 설치와 별도 앱으로 취급되며, 이전 버전의 이미지·챌린지 JSON 백업은 가져올 수 있습니다.
+
+---
+
 ## 💬 개발자 및 커뮤니티
 
-<img src="design/branding/nextline-logo.svg" alt="NextLine" width="160" align="right">
+<img src="design/developer_branding/nextline-logo.svg" alt="NextLine" width="160" align="right">
 
 앱 사용 중 궁금한 점이나 버그 제보, 기능 제안은 언제든 **Discord 커뮤니티**에 남겨 주세요!
 
@@ -93,5 +105,5 @@
 
 ---
 
-<sub>품번메모는 Apple 및 연결 가능한 외부 사이트와 무관한 독립 클라이언트 애플리케이션입니다.<br>
+<sub>TEGNAL은 Apple 및 연결 가능한 외부 사이트와 무관한 독립 클라이언트 애플리케이션입니다.<br>
 <a href="docs/privacy-policy.md">개인정보처리방침</a></sub>

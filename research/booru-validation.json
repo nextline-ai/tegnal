@@ -12,11 +12,11 @@
     "unique_tests_skipped": 5,
     "failures": 0,
     "skipped": [
-      "NumberMemoTests.NativeContentLiveTests/testLiveBrowserLoadsWebsiteWithoutNativeAdapter",
-      "NumberMemoTests.NativeContentLiveTests/testLiveMetadataImageDecodeAndSearchOnDevice",
-      "NumberMemoTests.NativeContentLiveTests/testLivePopularPeriodsOnDevice",
-      "NumberMemoTests.NativeContentLiveTests/testLiveTagSuggestionsOnDevice",
-      "NumberMemoTests.BooruRevisionTests/testLiveLegacyTagSearchOrInteractiveValidationRoute"
+      "TEGNALTests.NativeContentLiveTests/testLiveBrowserLoadsWebsiteWithoutNativeAdapter",
+      "TEGNALTests.NativeContentLiveTests/testLiveMetadataImageDecodeAndSearchOnDevice",
+      "TEGNALTests.NativeContentLiveTests/testLivePopularPeriodsOnDevice",
+      "TEGNALTests.NativeContentLiveTests/testLiveTagSuggestionsOnDevice",
+      "TEGNALTests.BooruRevisionTests/testLiveLegacyTagSearchOrInteractiveValidationRoute"
     ],
     "covered": [
       "Booru/Hitomi and per-server storage isolation, persistence and mode restoration",
@@ -58,22 +58,22 @@
       "Shared NextLine developer logo, website and Discord support links visible in both modes; Korean/English/Japanese labels and restored Korean/English README banners."
     ],
     "result_bundles": [
-      "/tmp/numbermemo-revision4-units.xcresult",
-      "/tmp/numbermemo-revision4-ui.xcresult",
-      "/tmp/numbermemo-revision4-final-checks.xcresult",
-      "/tmp/numbermemo-revision4-legacy-diagnostic.xcresult",
-      "/tmp/numbermemo-revision4-legacy-fix.xcresult",
-      "/tmp/numbermemo-revision4-network-final.xcresult",
-      "/tmp/numbermemo-revision4-session-final.xcresult",
-      "/tmp/numbermemo-revision4-navigation-final.xcresult",
-      "/tmp/numbermemo-revision4-pagination-final.xcresult",
-      "/tmp/numbermemo-revision4-verification-final.xcresult",
-      "/tmp/numbermemo-revision4-throttle-check.xcresult",
-      "/tmp/numbermemo-revision5-ui.xcresult",
-      "/tmp/numbermemo-revision5-ui-fix.xcresult",
-      "/tmp/numbermemo-revision5-folders.xcresult",
-      "/tmp/numbermemo-revision5-final-ui.xcresult",
-      "/tmp/numbermemo-release-prep-ui.xcresult"
+      "/tmp/tegnal-revision4-units.xcresult",
+      "/tmp/tegnal-revision4-ui.xcresult",
+      "/tmp/tegnal-revision4-final-checks.xcresult",
+      "/tmp/tegnal-revision4-legacy-diagnostic.xcresult",
+      "/tmp/tegnal-revision4-legacy-fix.xcresult",
+      "/tmp/tegnal-revision4-network-final.xcresult",
+      "/tmp/tegnal-revision4-session-final.xcresult",
+      "/tmp/tegnal-revision4-navigation-final.xcresult",
+      "/tmp/tegnal-revision4-pagination-final.xcresult",
+      "/tmp/tegnal-revision4-verification-final.xcresult",
+      "/tmp/tegnal-revision4-throttle-check.xcresult",
+      "/tmp/tegnal-revision5-ui.xcresult",
+      "/tmp/tegnal-revision5-ui-fix.xcresult",
+      "/tmp/tegnal-revision5-folders.xcresult",
+      "/tmp/tegnal-revision5-final-ui.xcresult",
+      "/tmp/tegnal-release-prep-ui.xcresult"
     ],
     "aggregation": "Latest result for each unique test across the listed result bundles; fixed cases were rerun.",
     "visual_verification": "Physical iPhone captures inspected for the white/black 44-point mode switch, unified capsule search, rating row and root toolbar spacing. Root SwiftUI and embedded WebKit top scroll-edge effects are disabled.",
@@ -132,7 +132,7 @@
     "configuration": "Release",
     "installed": true,
     "normal_launch_without_test_arguments": "passed",
-    "build_log": "/tmp/numbermemo-release-prep-release.log"
+    "build_log": "/tmp/tegnal-release-prep-release.log"
   },
   "validated_at": "2026-10-04T20:08:55.560934+00:00",
   "tests": {
@@ -148,30 +148,30 @@
       "passed": 13
     },
     "result_bundles": [
-      "/tmp/numbermemo-revision4-units.xcresult",
-      "/tmp/numbermemo-revision4-ui.xcresult",
-      "/tmp/numbermemo-revision4-final-checks.xcresult",
-      "/tmp/numbermemo-revision4-legacy-diagnostic.xcresult",
-      "/tmp/numbermemo-revision4-legacy-fix.xcresult",
-      "/tmp/numbermemo-revision4-network-final.xcresult",
-      "/tmp/numbermemo-revision4-session-final.xcresult",
-      "/tmp/numbermemo-revision4-navigation-final.xcresult",
-      "/tmp/numbermemo-revision4-pagination-final.xcresult",
-      "/tmp/numbermemo-revision4-verification-final.xcresult",
-      "/tmp/numbermemo-revision4-throttle-check.xcresult",
-      "/tmp/numbermemo-revision5-ui.xcresult",
-      "/tmp/numbermemo-revision5-ui-fix.xcresult",
-      "/tmp/numbermemo-revision5-folders.xcresult",
-      "/tmp/numbermemo-revision5-final-ui.xcresult",
-      "/tmp/numbermemo-release-prep-ui.xcresult"
+      "/tmp/tegnal-revision4-units.xcresult",
+      "/tmp/tegnal-revision4-ui.xcresult",
+      "/tmp/tegnal-revision4-final-checks.xcresult",
+      "/tmp/tegnal-revision4-legacy-diagnostic.xcresult",
+      "/tmp/tegnal-revision4-legacy-fix.xcresult",
+      "/tmp/tegnal-revision4-network-final.xcresult",
+      "/tmp/tegnal-revision4-session-final.xcresult",
+      "/tmp/tegnal-revision4-navigation-final.xcresult",
+      "/tmp/tegnal-revision4-pagination-final.xcresult",
+      "/tmp/tegnal-revision4-verification-final.xcresult",
+      "/tmp/tegnal-revision4-throttle-check.xcresult",
+      "/tmp/tegnal-revision5-ui.xcresult",
+      "/tmp/tegnal-revision5-ui-fix.xcresult",
+      "/tmp/tegnal-revision5-folders.xcresult",
+      "/tmp/tegnal-revision5-final-ui.xcresult",
+      "/tmp/tegnal-release-prep-ui.xcresult"
     ],
     "interpretation": "Latest result per unique test in this revision. Native alert selectors and switch activation were corrected. Cold browser readiness and adoption while subresources are loading were fixed and retested. Legacy pagination initially hit a live server rate limit and passed after pacing requests. One live tag search requires interactive verification; its exact validation URL was verified before marking that search skipped. Four Hitomi live checks were not enabled in this scheme. Revision 5 adds the latest results for four targeted UI scenarios. Initial hold recognition and platform alert field offset failures were fixed and retested. The new prompt test initially used an onboarding-only test root; it now replays onboarding from the real settings UI before checking both libraries.",
     "skipped": [
-      "NumberMemoTests.NativeContentLiveTests/testLiveBrowserLoadsWebsiteWithoutNativeAdapter",
-      "NumberMemoTests.NativeContentLiveTests/testLiveMetadataImageDecodeAndSearchOnDevice",
-      "NumberMemoTests.NativeContentLiveTests/testLivePopularPeriodsOnDevice",
-      "NumberMemoTests.NativeContentLiveTests/testLiveTagSuggestionsOnDevice",
-      "NumberMemoTests.BooruRevisionTests/testLiveLegacyTagSearchOrInteractiveValidationRoute"
+      "TEGNALTests.NativeContentLiveTests/testLiveBrowserLoadsWebsiteWithoutNativeAdapter",
+      "TEGNALTests.NativeContentLiveTests/testLiveMetadataImageDecodeAndSearchOnDevice",
+      "TEGNALTests.NativeContentLiveTests/testLivePopularPeriodsOnDevice",
+      "TEGNALTests.NativeContentLiveTests/testLiveTagSuggestionsOnDevice",
+      "TEGNALTests.BooruRevisionTests/testLiveLegacyTagSearchOrInteractiveValidationRoute"
     ],
     "visual_verification": "Physical iPhone captures inspected for the white/black 44-point mode switch, unified capsule search, rating row and root toolbar spacing. Root SwiftUI and embedded WebKit top scroll-edge effects are disabled. Revision 5 physical screenshots verify equal horizontal margins for empty and filled folder prompts; no private UIKit hierarchy or fixed corrective field offsets are used. Release preparation screenshots verify inline More sections and the supplied full-color NextLine brand artwork and contact links in both modes."
   },
@@ -243,22 +243,23 @@
       "Public server availability is intermittent; cold browser probes encountered connection resets and Danbooru score requests intermittently timed out."
     ],
     "results": [
-      "/tmp/numbermemo-library-core-all.xcresult",
-      "/tmp/numbermemo-library-cloud-final.xcresult",
-      "/tmp/numbermemo-library-navigation.xcresult",
-      "/tmp/numbermemo-library-final-ui.xcresult",
-      "/tmp/numbermemo-library-ui-recheck.xcresult",
-      "/tmp/numbermemo-library-new-ui.xcresult",
-      "/tmp/numbermemo-pool-transport-final.xcresult",
-      "/tmp/numbermemo-original-link-fix.xcresult",
-      "/tmp/numbermemo-gelbooru-referrer.xcresult",
-      "/tmp/numbermemo-autoplay-ended.xcresult",
-      "/tmp/numbermemo-media-regression-complete.xcresult"
+      "/tmp/tegnal-library-core-all.xcresult",
+      "/tmp/tegnal-library-cloud-final.xcresult",
+      "/tmp/tegnal-library-navigation.xcresult",
+      "/tmp/tegnal-library-final-ui.xcresult",
+      "/tmp/tegnal-library-ui-recheck.xcresult",
+      "/tmp/tegnal-library-new-ui.xcresult",
+      "/tmp/tegnal-pool-transport-final.xcresult",
+      "/tmp/tegnal-original-link-fix.xcresult",
+      "/tmp/tegnal-gelbooru-referrer.xcresult",
+      "/tmp/tegnal-autoplay-ended.xcresult",
+      "/tmp/tegnal-media-regression-complete.xcresult"
     ],
     "regression_notes": [
       "An initial ready status belonged to the thumbnail and was not sufficient evidence. The live regression now waits for the resolved original URL and a stable ready status; the final screenshot was visually inspected.",
       "Cold browser probes failed intermittently; public Danbooru pools and the reported Gelbooru original were verified in the visible app using the validated browser profile.",
       "Legacy video UI assertions were updated for autoplay: the short fixture may already have ended when inspected. The latest GIF/video regression passed without a play-button tap."
     ]
-  }
+  },
+  "naming_note": "Historical validation snapshot. Identifiers and local artifact labels have been normalized to TEGNAL; those labels do not verify the existence of pre-rename local artifacts."
 }

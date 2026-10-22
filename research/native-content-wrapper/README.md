@@ -6,11 +6,11 @@
 
 **권장안은 앱 내부의 데이터 처리 계층과 SwiftUI 읽기 화면을 만들고, 필요한 데이터와 이미지를 원본 CDN에서 직접 받는 구조다. 자체 중계 서버를 초기 필수 요소로 둘 근거는 발견하지 못했다.** 실제 Foundation 네트워크 요청으로 목록 일부, 기존 앱의 메타데이터 파싱, 이미지 주소 계산과 이미지 헤더 응답을 확인했다. 다만 iPhone에서의 이미지 디코딩과 전체 검색·읽기 경험까지 검증한 결과는 아니다.
 
-기존 작업은 `main`의 [`3fa38f9`](https://github.com/nextline-ai/Number-Memo/commit/3fa38f9)에 보존했다. 이 연구는 `codex/native-content-wrapper-study` 브랜치에서 진행했으며 앱 타깃에 연결하지 않은 검증 프로그램과 문서로 구성한다.
+기존 작업은 `main`의 [`3fa38f9`](https://github.com/nextline-ai/tegnal/commit/3fa38f9)에 보존했다. 이 연구는 `codex/native-content-wrapper-study` 브랜치에서 진행했으며 앱 타깃에 연결하지 않은 검증 프로그램과 문서로 구성한다.
 
 ## 검증 결과와 그 한계
 
-[Probe.swift](Probe.swift)를 기존 [HitomiAPIClient.swift](../../native-ios/NumberMemo/Core/Network/HitomiAPIClient.swift)와 함께 macOS 명령행 프로그램으로 컴파일했다. 브라우저나 별도 서버 없이 Foundation `URLSession`을 사용했다. 결과 원본과 제어 파일의 SHA-256은 [evidence.json](evidence.json)에 있다.
+[Probe.swift](Probe.swift)를 기존 [HitomiAPIClient.swift](../../native-ios/TEGNAL/Core/Network/HitomiAPIClient.swift)와 함께 macOS 명령행 프로그램으로 컴파일했다. 브라우저나 별도 서버 없이 Foundation `URLSession`을 사용했다. 결과 원본과 제어 파일의 SHA-256은 [evidence.json](evidence.json)에 있다.
 
 | 검증 대상 | 관측 결과 | 여기서 판단할 수 있는 범위 |
 | --- | --- | --- |
@@ -32,12 +32,12 @@
 
 | 코드 | 현재 역할 | 전환할 때 할 일 |
 | --- | --- | --- |
-| [HitomiAPIClient](../../native-ios/NumberMemo/Core/Network/HitomiAPIClient.swift) | 작품 메타데이터, 파일 해시, 표지 다운로드 | 한 번의 메타데이터 요청으로 페이지 파일명·크기·형식 정보까지 보존하도록 확장 |
-| [CoverQueueActor](../../native-ios/NumberMemo/Core/Network/CoverQueueActor.swift) | 메타데이터·표지 작업 큐 | 읽기용 고해상도 이미지 요청과 우선순위 분리 |
-| [당시 InAppHitomiBrowserView](https://github.com/nextline-ai/Number-Memo/blob/3fa38f91f94770ba1d9eb8d92fc3d8864bce0027/native-ios/NumberMemo/Presentation/Browser/InAppHitomiBrowserView.swift) | 원본 페이지 로딩, 페이지 이동 JS, 북마크, 화면 캡처 기반 Live Text | 읽기·탐색 화면과 기능별로 교체 |
-| [WorkDetailView](../../native-ios/NumberMemo/Presentation/Works/WorkDetailView.swift) | 저장된 작품 편집·상세, 브라우저 열기 | 직접 읽기 화면으로 이동하는 첫 진입점 |
-| [AppRootTabView](../../native-ios/NumberMemo/Presentation/Navigation/AppRootTabView.swift), [WorksGridView](../../native-ios/NumberMemo/Presentation/Works/WorksGridView.swift), [ArtistsListView](../../native-ios/NumberMemo/Presentation/Artists/ArtistsListView.swift) | 홈·작품·작가별 브라우저 진입 | 각 진입점을 네이티브 탐색 경로에 연결 |
-| [AppEnvironment.verifySite](../../native-ios/NumberMemo/App/AppEnvironment.swift) | 입력 문자열을 확인해 이용 상태 저장 | 실제 네트워크 연결 검사와 별개임을 유지하고, 오류 상태를 따로 제공 |
+| [HitomiAPIClient](../../native-ios/TEGNAL/Core/Network/HitomiAPIClient.swift) | 작품 메타데이터, 파일 해시, 표지 다운로드 | 한 번의 메타데이터 요청으로 페이지 파일명·크기·형식 정보까지 보존하도록 확장 |
+| [CoverQueueActor](../../native-ios/TEGNAL/Core/Network/CoverQueueActor.swift) | 메타데이터·표지 작업 큐 | 읽기용 고해상도 이미지 요청과 우선순위 분리 |
+| [당시 InAppHitomiBrowserView](https://github.com/nextline-ai/tegnal/blob/3fa38f91f94770ba1d9eb8d92fc3d8864bce0027/native-ios/TEGNAL/Presentation/Browser/InAppHitomiBrowserView.swift) | 원본 페이지 로딩, 페이지 이동 JS, 북마크, 화면 캡처 기반 Live Text | 읽기·탐색 화면과 기능별로 교체 |
+| [WorkDetailView](../../native-ios/TEGNAL/Presentation/Works/WorkDetailView.swift) | 저장된 작품 편집·상세, 브라우저 열기 | 직접 읽기 화면으로 이동하는 첫 진입점 |
+| [AppRootTabView](../../native-ios/TEGNAL/Presentation/Navigation/AppRootTabView.swift), [WorksGridView](../../native-ios/TEGNAL/Presentation/Works/WorksGridView.swift), [ArtistsListView](../../native-ios/TEGNAL/Presentation/Artists/ArtistsListView.swift) | 홈·작품·작가별 브라우저 진입 | 각 진입점을 네이티브 탐색 경로에 연결 |
+| [AppEnvironment.verifySite](../../native-ios/TEGNAL/App/AppEnvironment.swift) | 입력 문자열을 확인해 이용 상태 저장 | 실제 네트워크 연결 검사와 별개임을 유지하고, 오류 상태를 따로 제공 |
 
 표지 URL을 읽기용 원본 URL로 그대로 사용할 수는 없다. 현재 표지는 축소 이미지 경로를 사용하고, 원본 이미지에는 별도의 호스트 선택과 갱신되는 경로 설정이 필요하다. `fetchGalleryFiles`는 지금 해시만 반환하므로 완전한 페이지 모델도 추가해야 한다.
 
@@ -123,10 +123,10 @@ UI 검증에는 합성 이미지와 테스트 데이터를 우선 사용하고, 
 ```sh
 swiftc -parse-as-library \
   research/native-content-wrapper/Probe.swift \
-  native-ios/NumberMemo/Core/Network/HitomiAPIClient.swift \
-  -o /tmp/number-memo-wrapper-probe
+  native-ios/TEGNAL/Core/Network/HitomiAPIClient.swift \
+  -o /tmp/tegnal-wrapper-probe
 
-/tmp/number-memo-wrapper-probe > /tmp/number-memo-wrapper-evidence.json
+/tmp/tegnal-wrapper-probe > /tmp/tegnal-wrapper-evidence.json
 ```
 
 프로브는 합격 여부를 JSON에 기록하고, 필수 검사 실패 시 종료 코드 1을 반환한다. 구 호스트 진단 결과는 별도로 기록하며 필수 성공 조건에 포함하지 않는다. 좁게 관측한 형식만 지원하는 연구 도구이므로 실패하면 결과와 현재 소스 형식을 먼저 비교한다. 응답 스트리밍 제한, 운영용 재시도, 이미지 디코딩, 전체 검색을 갖춘 제품 코드로 사용해서는 안 된다.

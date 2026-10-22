@@ -1,0 +1,1460 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
+		097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */; };
+		09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */; };
+		09F96FACC7155FD7B5D16E12 /* TEGNALApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36718E50F5349D3C2AF44634 /* TEGNALApp.swift */; };
+		0A60DD485C141F30C5BAB21D /* TEGNAL/Presentation/Taste/TasteDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE74A961ED59F0EF62A9473 /* TEGNAL/Presentation/Taste/TasteDashboard.swift */; };
+		0B140CB342956D1F7C619975 /* BooruRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10245435081F97BDB212F1F /* BooruRootView.swift */; };
+		0D752D59608A056720E48531 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58673F01F1EFE84AEBF03097 /* ShareViewController.swift */; };
+		0FE5C86A505BC227BE857AEB /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A17926A2AEB2E2D77B90651 /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift */; };
+		11AA337B07F283E7DFA14360 /* ReaderTranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774127F0B67AC919530A3E44 /* ReaderTranslation.swift */; };
+		1235E4C2F50FAF7CEA917364 /* BooruUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158CA33375FE5A41376A0AA1 /* BooruUITests.swift */; };
+		12D9B1882F790EB5F6CD660E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 46D0EC32888A924E632965F6 /* Localizable.strings */; };
+		14735DB138CD3DB6EE9C4751 /* BooruModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C03DFA3F5213D29C1C638B1 /* BooruModels.swift */; };
+		188562DB426D15EB017C17B8 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E173322EA0D6EF2D26453F1 /* AppEnvironment.swift */; };
+		1BD03E8E869F045D4923249E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2627853DC68AF8337C00516D /* SettingsView.swift */; };
+		1F92E43FA4EF3F72C4B955D4 /* LanguageSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0C400CAB19213FD13D0989C /* LanguageSettings.swift */; };
+		1FB5162E9127DAAB032A95F0 /* NativeContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FEB5C8DB1ECD582DC1CB6FF /* NativeContentView.swift */; };
+		2034B4997F3BC0351EF797F4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A43CD02402545179DA392A4 /* Assets.xcassets */; };
+		20E010B24BD47E4A667BA0C3 /* Acknowledgments.txt in Resources */ = {isa = PBXBuildFile; fileRef = DAFB6A5CB9259D10CE5EE14B /* Acknowledgments.txt */; };
+		2596329E9AE3000223F509E8 /* PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */; };
+		29F36067686258194ABE38F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D4058D8DF59DB2ABCD4E32CC /* PrivacyInfo.xcprivacy */; };
+		2D1032D6C304CE01713FB5F7 /* TEGNAL/Core/Challenge/ChallengeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96769750C5AEC39276B78944 /* TEGNAL/Core/Challenge/ChallengeStore.swift */; };
+		2D21DD66D25E3C3B77F695D8 /* BooruValidationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 218DBE4095096D00E84FE315 /* BooruValidationView.swift */; };
+		33DB30FEE41026006C8A92E4 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52561A4ECDB99CA3B613EA1 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift */; };
+		33DE8B27308A866200A1732A /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 33DE8B26308A866200A1732A /* AppIcon.icon */; };
+		34491643E77AC96F09A6150F /* ContentUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1A9C6283701D99BA3F04E5 /* ContentUITestSupport.swift */; };
+		34AB2A2B77F07AC406CBB81F /* BooruEmbeddedBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32843587F8341CD1016F667 /* BooruEmbeddedBrowserView.swift */; };
+		34D1FBBE82C4EB270E58DAC7 /* AnimeBoxesImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE9259BCCB6BB1343C92121 /* AnimeBoxesImport.swift */; };
+		41E4FD1BC67DDBDB082FFF43 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC82F197835D88FC92F979D /* L10n.swift */; };
+		4648437D37FD8ED08D053802 /* BooruPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 049FCB9C7DD396BBAB69C28D /* BooruPostView.swift */; };
+		4689FFAC40180CE1BDA56211 /* WorkDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF460FBC7BD6826A521EEE1D /* WorkDetailView.swift */; };
+		47C36C499EBA78112C525081 /* BooruBrowserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1C14EBB331C745654EA7FB /* BooruBrowserSession.swift */; };
+		47C5B6BA4230B0E3AFB0FDFE /* BooruWebTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9782DED49457326DFAC679 /* BooruWebTransport.swift */; };
+		4E3053C5D521D804853182BA /* TEGNAL/Presentation/Taste/TasteTagDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEF57ABE07C1BB394AB5FF9 /* TEGNAL/Presentation/Taste/TasteTagDetail.swift */; };
+		522B1CD77F3A9AC3EC37E13A /* SearchLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5BA3974651F205FFFCE3AD /* SearchLibrary.swift */; };
+		528F7B9571CC74D0D47C7C8E /* BooruLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */; };
+		558B9BC856132F232BB2AE8E /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8346FCB8EB53E1B5E6D5B20 /* AppTab.swift */; };
+		56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80B56E655528C707020F8BD7 /* PageImageStore.swift */; };
+		57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */; };
+		59E0835501F6A15D0AA44868 /* TEGNAL/Core/Challenge/ChallengeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C04D77C97393EE83DDE4459 /* TEGNAL/Core/Challenge/ChallengeModels.swift */; };
+		59FB9F6DA9DE8216A44D3A09 /* TEGNAL/Core/Taste/TasteModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB10B9419E82DDA13D5A697 /* TEGNAL/Core/Taste/TasteModels.swift */; };
+		5B796C1586EA5CAFEB763D93 /* PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */; };
+		5B956B8168735279F43D2BBA /* ReaderShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68BD5A5175ACAA298E29203E /* ReaderShortcuts.swift */; };
+		5C1E48A57CD10CFBEC325149 /* CoverQueueActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 850520938F1C755FFC9B688A /* CoverQueueActor.swift */; };
+		5EECFEAB14C80308070211D3 /* ReaderPagingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6441A7F7755A6499F663284 /* ReaderPagingView.swift */; };
+		5FBC7227C639168199880785 /* TEGNAL/Presentation/Taste/TasteSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45ED0863DCAE0B4FB5CFE3BE /* TEGNAL/Presentation/Taste/TasteSettingsView.swift */; };
+		5FCBCF62588D139B16CA6E5F /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 46D0EC32888A924E632965F6 /* Localizable.strings */; };
+		652B414B5302BD33037B3773 /* nextline-logo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 53837377DFD8F9DCA3416A89 /* nextline-logo.svg */; };
+		65AB85B1EC67E3DC1028602D /* SearchHistorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 681E53F114874A3FE23909EF /* SearchHistorySection.swift */; };
+		667DF944A204641CB1A783F9 /* ReaderUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDDBA7681C1BCD83769C7A5 /* ReaderUXTests.swift */; };
+		668320ECDDD69671A1CC54F9 /* GalleryContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D3705AEBC2B0159D541C8A8 /* GalleryContent.swift */; };
+		66AB32026318BC9F09C7D9CE /* MangaAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB9128B0B611B8993A8B9C6F /* MangaAPIClient.swift */; };
+		69BEADC98520A8FFD8B0D31C /* GalleryIDParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2DCD5BCF18F0F15745D09B /* GalleryIDParserTests.swift */; };
+		69C31A65164A48BDB207BFF4 /* LibraryCloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7215851B492D0D97A169F9D4 /* LibraryCloudSync.swift */; };
+		6A8653D49053D9CC205F2DA4 /* GalleryIDParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA37491F91112958F1F93E2 /* GalleryIDParser.swift */; };
+		6B692FB13CBD3CA8AF39D898 /* BooruBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22D8647630A782E540D7EF8 /* BooruBackupView.swift */; };
+		6C79321A05F654A1A75CE0F7 /* LibrarySyncRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9274ADBCCB2719EBF45750D /* LibrarySyncRecord.swift */; };
+		6CC5BC0591E6E4E727404246 /* AppModeSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E787CBAAE755DAE79AB33E9 /* AppModeSwitch.swift */; };
+		6F9F638B758A75AA634F8E34 /* KeyboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C532506B85391D42C94B5 /* KeyboardUITests.swift */; };
+		71E70C9FFAF7BCA8DA8126A6 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F450A9F3F304A6EC4DB763 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift */; };
+		73458B3FBC56D64BF1F57DD4 /* AnimeBoxesImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACBA6DB0FD990FC91B86F973 /* AnimeBoxesImportView.swift */; };
+		767EAEE31B2A8121A3534E33 /* NativeReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53A1AFB009B85457C38C086 /* NativeReaderView.swift */; };
+		7C6BF65F09115D54F402C28F /* TEGNALTests/BooruThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */; };
+		8251D5F60C29EEC6C8F01098 /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */; };
+		83BD9B7BFC83E9A55D5F9109 /* LibrarySyncAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */; };
+		8566DB33557D57EE38DE08D8 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40FFED3CB4EBC6A3BBF7143 /* OnboardingView.swift */; };
+		8826DE8461CAEDE1F2881F0A /* WorkCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8549FF66B66E38E3695F64CC /* WorkCardView.swift */; };
+		894D1911C4BCC72FE63C1B75 /* CDNRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0062A4C5A44F103420CB63 /* CDNRouting.swift */; };
+		8C1EF4C86FFC853636A02F5B /* InAppMangaBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 719A5D25F1F9894E27DC3085 /* InAppMangaBrowserView.swift */; };
+		90019AE476E229454637E2CC /* BooruStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C17FACAAF2D1F2F2E286128 /* BooruStore.swift */; };
+		9222CF5DF347B12600C8154F /* BooruTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A5E549BC3A992CAE3BE32D /* BooruTests.swift */; };
+		96BCAB8DC5D043D004A9C5A0 /* BooruSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78765B26524FE1CE2081058D /* BooruSettingsView.swift */; };
+		97F275EFC03DF3E4A1834733 /* TEGNAL/Core/Challenge/ChallengeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9B9108B0B252C95F752E85 /* TEGNAL/Core/Challenge/ChallengeEngine.swift */; };
+		99F1C17749127F4204D93452 /* FolderOrderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5F65B1C5D31EE473644196 /* FolderOrderView.swift */; };
+		9AE4AA3721DEDE1610B8B5A0 /* BooruReleaseLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A688C07943C20ABCE3EE27BA /* BooruReleaseLiveTests.swift */; };
+		9C61B7BCFCDEC137733E48A0 /* TEGNAL/Core/Taste/TasteFeedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 476981CA28D46033DFBFAD4C /* TEGNAL/Core/Taste/TasteFeedState.swift */; };
+		9EBF0AA004D32F5934A376E7 /* TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81C9A967E62817529CBD16D9 /* TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift */; };
+		A0227014EE42FD43E2769582 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0D758D11EBEE724973FC43F /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0F169C6BB893FB451AF32A7 /* LibrarySyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F4737CDB76989ABF03A465 /* LibrarySyncTests.swift */; };
+		A44973D3E3DC1CA4DF985E73 /* BooruBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A824088835743E484646A8 /* BooruBackupTests.swift */; };
+		A6A9ED07C1AF12F03A8D9E43 /* TEGNAL/Core/Taste/StatisticalInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956E2BBEF83BD873518CDFB8 /* TEGNAL/Core/Taste/StatisticalInsightService.swift */; };
+		A7211E7AAC00D94630FC6920 /* NativeContentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D83FD8E5311C82AD8D9AE1 /* NativeContentUITests.swift */; };
+		A8DEA1F1E17A02BB561A1CD2 /* TEGNAL/Core/Taste/TasteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4B0A3B25EB92FE1EB817A6 /* TEGNAL/Core/Taste/TasteStore.swift */; };
+		A98D1BE5CD53F4CFE2AF73A7 /* AppDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015BE1F0830B18B98744C46 /* AppDatabase.swift */; };
+		AC66C1A66E68133540CA4AA5 /* TargetedTranslationCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2911B6D719B08FEB43BDE39 /* TargetedTranslationCanvas.swift */; };
+		ACC0A6E09E8E55E7DFDDE533 /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B77DB6A93FDC53717A941BDF /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift */; };
+		ACF09107ABCD100000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF09107ABCD200000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift */; };
+		ACF09107ABCD100000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF09107ABCD200000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift */; };
+		B05E6ABDFF62133125716693 /* ContentTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CB5F57AAC63C5B2E44FFA7F /* ContentTransport.swift */; };
+		B205352413DDF87B3797E5E7 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC82F197835D88FC92F979D /* L10n.swift */; };
+		B47065C6484C999BAE01C865 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = BAF3C2DCC06421AB540952AD /* InfoPlist.strings */; };
+		BA28F904E000E535FCD4F84C /* AddWorkSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E775D9AAE076228E7E440E8C /* AddWorkSheet.swift */; };
+		BA64A4EEBAEB6973149849AB /* GridLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13607A445BF764C6E101E808 /* GridLayoutTests.swift */; };
+		BC9B2011765BD8012C1C6461 /* MangaDefaultTagsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */; };
+		BF509BF83941D8832BA4FC59 /* AppRootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA64BC50201F2B264750FB9E /* AppRootTabView.swift */; };
+		BF66076A13EB562C7E29CE3E /* MediaInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E2A750C47AB3A98EDF91D2E /* MediaInputTests.swift */; };
+		C0510C234AE7CFF966FD76C5 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = BAF3C2DCC06421AB540952AD /* InfoPlist.strings */; };
+		C1E5189D7A00147BD0FAB49C /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AE970670259006F0B06867 /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift */; };
+		C2A3F752D9BA1F762F086A08 /* WorksGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561007CAECE6AECF61030D7F /* WorksGridView.swift */; };
+		C420D8F8D9CE80CA52F7AFA6 /* ArtistsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA4BD4BDDD588FC16CD4528 /* ArtistsListView.swift */; };
+		C4E563AAFF6C1AF00B6FF425 /* BooruRevisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */; };
+		C59D65652F9938EA90490992 /* TEGNALUITests/ChallengeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC42FD33C78DB362F63144B /* TEGNALUITests/ChallengeUITests.swift */; };
+		C5CED574C70DCC1099E56470 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD90F333216B9CA5E03F0306 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift */; };
+		C8F1A6D98F620768DCC716E0 /* TEGNAL/Core/Taste/TasteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936F2460280A29C6924501D6 /* TEGNAL/Core/Taste/TasteController.swift */; };
+		C9DBD7867A1DC1FF4D4072BC /* BooruTestMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2713B3C152DDB66FAF0703B6 /* BooruTestMedia.swift */; };
+		CA3ED56268C7F1914E6C3189 /* BooruMediaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC026010A751FA4ECEC32C58 /* BooruMediaView.swift */; };
+		CC08E7E012785A05D48EACE4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 390ED38C727DD30011EF7FBE /* PrivacyInfo.xcprivacy */; };
+		CC287FB165EB8FB0DB96C9A2 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CCB3259837D1E918779915E /* Models.swift */; };
+		D0267FFFB0700CE2ACB0B3EE /* TEGNAL/Core/Taste/RecommendationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950F4BA3B7F26293633599D9 /* TEGNAL/Core/Taste/RecommendationService.swift */; };
+		D66D49ABCF8D48053AE987D3 /* BooruUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A9CA0F41C704D3A5C5A9F9 /* BooruUITestSupport.swift */; };
+		D6A780B15BDF6BD20834BDEF /* ModeAppearanceSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5EFD7523ECEC99D902F3E8 /* ModeAppearanceSettings.swift */; };
+		D7E8D0BC33EE06527B179741 /* TEGNAL/Presentation/Taste/TastePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34EA288756CDA8504000B4F4 /* TEGNAL/Presentation/Taste/TastePresentation.swift */; };
+		D8819E7F99F42BFA09CA0D7E /* SettingsSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 976351FAE534D42BB200A330 /* SettingsSections.swift */; };
+		DA272F265CA70FCB25A0283C /* BooruLibraryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6DA24BF7D36336B5968707 /* BooruLibraryViews.swift */; };
+		DD394E63203D2BEECC88CEFC /* DeveloperInfoSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */; };
+		DF8E10E2A920B6A33911ABDA /* BooruFavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */; };
+		DFF9E986805DDE834086C1C5 /* TEGNALTests/TasteFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */; };
+		E1BD068B22E9A786A6E25819 /* VioletImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBA1E27FC02DDAE5A92D408 /* VioletImportService.swift */; };
+		E1D8BE93D1E5C204FC27FE25 /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268D24A55619AF97E4EEEF85 /* LiquidGlassModifiers.swift */; };
+		E5CBAA3ADBF94E51181BB966 /* ReaderSurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */; };
+		E8A01BD6FF3FE3E253A450FB /* BooruLegacyHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */; };
+		ED48F37CF6CE5A5B8A98FBA5 /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B9952F64D57C1AFCE5169C /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift */; };
+		F25AF0601AF521CC64C99271 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 083A978D5EF5FDE500B3BD56 /* GRDB */; };
+		F5010450F26FF4B278C68B66 /* MangaContentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD0BE0B2FD246C3895D96DBC /* MangaContentSource.swift */; };
+		F62DC0F8FEB71050E4792CEF /* FoldersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D73AA5D57D9771EF1BA73197 /* FoldersView.swift */; };
+		FA3690D99A65DE9E7BA94590 /* FolderBentoCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176F4FAFB5199E5B58E2CC7 /* FolderBentoCardView.swift */; };
+		FB7871E4663830124B9A0C5F /* BooruClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3563D5B3248F319CCDA8D86 /* BooruClient.swift */; };
+		FCA0DAA4EF75DC0DCD831B98 /* CloudSyncSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4C14F8DB9B15B1EF5094844 /* CloudSyncSection.swift */; };
+		FD7611A37574F7AC7C09923D /* TEGNAL/Presentation/Taste/TasteReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBD4B4286C61F915EDA51667 /* TEGNAL/Presentation/Taste/TasteReportsView.swift */; };
+		FE758C6B5B998D79746B261D /* ReaderPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7149D89B9209B78D771A7E1C /* ReaderPreferences.swift */; };
+		FEBE8B7F1A0A6CABAC5BBBF0 /* NativeContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 134C3749F5882A5E7C51E003 /* NativeContentTests.swift */; };
+		FEC8BF3EE45161425F4F0A2A /* AppStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F36E537BD5CCBBECC0C7D91 /* AppStorage.swift */; };
+		FF8710300AB2E727C84EF6F4 /* TEGNALTests/ChallengeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6FFEC1A61D6ED208A9115A0 /* TEGNALTests/ChallengeTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		02C7CBE9A2AD9962EDD82192 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1D83A673F4F68C4DBFA76EAD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9A0004834F8BDB7CCBC0B7DB;
+			remoteInfo = TEGNAL;
+		};
+		097998154E63E1EDDBDBBE5D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1D83A673F4F68C4DBFA76EAD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9A0004834F8BDB7CCBC0B7DB;
+			remoteInfo = TEGNAL;
+		};
+		209F0677FAF45D9D7196C31C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1D83A673F4F68C4DBFA76EAD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D8914C89EB2657B12FA83EDB;
+			remoteInfo = ShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E79C741E1C5254E7142BD4DC /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A0227014EE42FD43E2769582 /* ShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		00A3D8D9E5D6B186E154E5DE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		01F914324983194D6DAD8D84 /* en */ = {isa = PBXFileReference; lastKnownFileType = text; name = en; path = en.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
+		049FCB9C7DD396BBAB69C28D /* BooruPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruPostView.swift; sourceTree = "<group>"; };
+		0CCB3259837D1E918779915E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		0E2A750C47AB3A98EDF91D2E /* MediaInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInputTests.swift; sourceTree = "<group>"; };
+		134C3749F5882A5E7C51E003 /* NativeContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContentTests.swift; sourceTree = "<group>"; };
+		13607A445BF764C6E101E808 /* GridLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridLayoutTests.swift; sourceTree = "<group>"; };
+		158CA33375FE5A41376A0AA1 /* BooruUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruUITests.swift; sourceTree = "<group>"; };
+		190113C69D7BCDAA37E28C94 /* TEGNALUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TEGNALUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A43CD02402545179DA392A4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1CB10B9419E82DDA13D5A697 /* TEGNAL/Core/Taste/TasteModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteModels.swift; sourceTree = SOURCE_ROOT; };
+		2176F4FAFB5199E5B58E2CC7 /* FolderBentoCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderBentoCardView.swift; sourceTree = "<group>"; };
+		218DBE4095096D00E84FE315 /* BooruValidationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruValidationView.swift; sourceTree = "<group>"; };
+		2627853DC68AF8337C00516D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		268D24A55619AF97E4EEEF85 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
+		2713B3C152DDB66FAF0703B6 /* BooruTestMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruTestMedia.swift; sourceTree = "<group>"; };
+		2AA4BD4BDDD588FC16CD4528 /* ArtistsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistsListView.swift; sourceTree = "<group>"; };
+		2B3C532506B85391D42C94B5 /* KeyboardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardUITests.swift; sourceTree = "<group>"; };
+		2D4B0A3B25EB92FE1EB817A6 /* TEGNAL/Core/Taste/TasteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteStore.swift; sourceTree = SOURCE_ROOT; };
+		2FEB5C8DB1ECD582DC1CB6FF /* NativeContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContentView.swift; sourceTree = "<group>"; };
+		31AE970670259006F0B06867 /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift; sourceTree = SOURCE_ROOT; };
+		31F4737CDB76989ABF03A465 /* LibrarySyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySyncTests.swift; sourceTree = "<group>"; };
+		33DE8B26308A866200A1732A /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		34EA288756CDA8504000B4F4 /* TEGNAL/Presentation/Taste/TastePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TastePresentation.swift; sourceTree = SOURCE_ROOT; };
+		36718E50F5349D3C2AF44634 /* TEGNALApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALApp.swift; sourceTree = "<group>"; };
+		38D83FD8E5311C82AD8D9AE1 /* NativeContentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContentUITests.swift; sourceTree = "<group>"; };
+		390ED38C727DD30011EF7FBE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3A1C14EBB331C745654EA7FB /* BooruBrowserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBrowserSession.swift; sourceTree = "<group>"; };
+		3A5EFD7523ECEC99D902F3E8 /* ModeAppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeAppearanceSettings.swift; sourceTree = "<group>"; };
+		3E787CBAAE755DAE79AB33E9 /* AppModeSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModeSwitch.swift; sourceTree = "<group>"; };
+		40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/TasteFeedTests.swift; sourceTree = SOURCE_ROOT; };
+		40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteSyncCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		45ED0863DCAE0B4FB5CFE3BE /* TEGNAL/Presentation/Taste/TasteSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteSettingsView.swift; sourceTree = SOURCE_ROOT; };
+		476981CA28D46033DFBFAD4C /* TEGNAL/Core/Taste/TasteFeedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteFeedState.swift; sourceTree = SOURCE_ROOT; };
+		4B2DCD5BCF18F0F15745D09B /* GalleryIDParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryIDParserTests.swift; sourceTree = "<group>"; };
+		4CB5F57AAC63C5B2E44FFA7F /* ContentTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentTransport.swift; sourceTree = "<group>"; };
+		4D3705AEBC2B0159D541C8A8 /* GalleryContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryContent.swift; sourceTree = "<group>"; };
+		4FE74A961ED59F0EF62A9473 /* TEGNAL/Presentation/Taste/TasteDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteDashboard.swift; sourceTree = SOURCE_ROOT; };
+		5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSurfaces.swift; sourceTree = "<group>"; };
+		53837377DFD8F9DCA3416A89 /* nextline-logo.svg */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "nextline-logo.svg"; sourceTree = "<group>"; };
+		5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/TasteTests.swift; sourceTree = SOURCE_ROOT; };
+		54D631F53A129A6A3F5ADDDD /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		561007CAECE6AECF61030D7F /* WorksGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorksGridView.swift; sourceTree = "<group>"; };
+		58673F01F1EFE84AEBF03097 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		5A17926A2AEB2E2D77B90651 /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteStatisticsView.swift; sourceTree = SOURCE_ROOT; };
+		5C03DFA3F5213D29C1C638B1 /* BooruModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruModels.swift; sourceTree = "<group>"; };
+		5F36E537BD5CCBBECC0C7D91 /* AppStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStorage.swift; sourceTree = "<group>"; };
+		681E53F114874A3FE23909EF /* SearchHistorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchHistorySection.swift; sourceTree = "<group>"; };
+		68BD5A5175ACAA298E29203E /* ReaderShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderShortcuts.swift; sourceTree = "<group>"; };
+		6C04D77C97393EE83DDE4459 /* TEGNAL/Core/Challenge/ChallengeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Challenge/ChallengeModels.swift; sourceTree = SOURCE_ROOT; };
+		7149D89B9209B78D771A7E1C /* ReaderPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferences.swift; sourceTree = "<group>"; };
+		719A5D25F1F9894E27DC3085 /* InAppMangaBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InAppMangaBrowserView.swift; sourceTree = "<group>"; };
+		7215851B492D0D97A169F9D4 /* LibraryCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCloudSync.swift; sourceTree = "<group>"; };
+		774127F0B67AC919530A3E44 /* ReaderTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTranslation.swift; sourceTree = "<group>"; };
+		78765B26524FE1CE2081058D /* BooruSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruSettingsView.swift; sourceTree = "<group>"; };
+		7AA37491F91112958F1F93E2 /* GalleryIDParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryIDParser.swift; sourceTree = "<group>"; };
+		7C17FACAAF2D1F2F2E286128 /* BooruStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruStore.swift; sourceTree = "<group>"; };
+		7EAC1CBAE76FC15768D6C53C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		80B56E655528C707020F8BD7 /* PageImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageImageStore.swift; sourceTree = "<group>"; };
+		81A9CA0F41C704D3A5C5A9F9 /* BooruUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruUITestSupport.swift; sourceTree = "<group>"; };
+		81C9A967E62817529CBD16D9 /* TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift; sourceTree = SOURCE_ROOT; };
+		850520938F1C755FFC9B688A /* CoverQueueActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverQueueActor.swift; sourceTree = "<group>"; };
+		8549FF66B66E38E3695F64CC /* WorkCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkCardView.swift; sourceTree = "<group>"; };
+		8E173322EA0D6EF2D26453F1 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		8E9782DED49457326DFAC679 /* BooruWebTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruWebTransport.swift; sourceTree = "<group>"; };
+		8ECD098FEAC006CEC4FFFAB4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperInfoSection.swift; sourceTree = "<group>"; };
+		936F2460280A29C6924501D6 /* TEGNAL/Core/Taste/TasteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteController.swift; sourceTree = SOURCE_ROOT; };
+		950F4BA3B7F26293633599D9 /* TEGNAL/Core/Taste/RecommendationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/RecommendationService.swift; sourceTree = SOURCE_ROOT; };
+		9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/BooruThumbnailCacheTests.swift; sourceTree = SOURCE_ROOT; };
+		956E2BBEF83BD873518CDFB8 /* TEGNAL/Core/Taste/StatisticalInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/StatisticalInsightService.swift; sourceTree = SOURCE_ROOT; };
+		96769750C5AEC39276B78944 /* TEGNAL/Core/Challenge/ChallengeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Challenge/ChallengeStore.swift; sourceTree = SOURCE_ROOT; };
+		976351FAE534D42BB200A330 /* SettingsSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSections.swift; sourceTree = "<group>"; };
+		97F12694F41487A0764537DB /* ja */ = {isa = PBXFileReference; lastKnownFileType = text; name = ja; path = ja.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
+		9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLibraryTests.swift; sourceTree = "<group>"; };
+		A015BE1F0830B18B98744C46 /* AppDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDatabase.swift; sourceTree = "<group>"; };
+		A22D8647630A782E540D7EF8 /* BooruBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackupView.swift; sourceTree = "<group>"; };
+		A2911B6D719B08FEB43BDE39 /* TargetedTranslationCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetedTranslationCanvas.swift; sourceTree = "<group>"; };
+		A2AEBBC430CBD47CA751B02A /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
+		A32843587F8341CD1016F667 /* BooruEmbeddedBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruEmbeddedBrowserView.swift; sourceTree = "<group>"; };
+		A688C07943C20ABCE3EE27BA /* BooruReleaseLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruReleaseLiveTests.swift; sourceTree = "<group>"; };
+		A6FFEC1A61D6ED208A9115A0 /* TEGNALTests/ChallengeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/ChallengeTests.swift; sourceTree = SOURCE_ROOT; };
+		A8346FCB8EB53E1B5E6D5B20 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
+		AC4B101727BB08D193AF6720 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
+		ACBA6DB0FD990FC91B86F973 /* AnimeBoxesImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeBoxesImportView.swift; sourceTree = "<group>"; };
+		ACF09107ABCD200000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/VisualSimilarity.swift; sourceTree = SOURCE_ROOT; };
+		ACF09107ABCD200000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Works/VisualSimilarityView.swift; sourceTree = SOURCE_ROOT; };
+		AEBA1E27FC02DDAE5A92D408 /* VioletImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VioletImportService.swift; sourceTree = "<group>"; };
+		AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRevisionTests.swift; sourceTree = "<group>"; };
+		B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackup.swift; sourceTree = "<group>"; };
+		B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaDefaultTagsSettings.swift; sourceTree = "<group>"; };
+		B53A1AFB009B85457C38C086 /* NativeReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeReaderView.swift; sourceTree = "<group>"; };
+		B77DB6A93FDC53717A941BDF /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift; sourceTree = SOURCE_ROOT; };
+		B813C06DA6A64AE5F6552571 /* TEGNALTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TEGNALTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BA5BA3974651F205FFFCE3AD /* SearchLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchLibrary.swift; sourceTree = "<group>"; };
+		BBC42FD33C78DB362F63144B /* TEGNALUITests/ChallengeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALUITests/ChallengeUITests.swift; sourceTree = SOURCE_ROOT; };
+		C0D758D11EBEE724973FC43F /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C10245435081F97BDB212F1F /* BooruRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRootView.swift; sourceTree = "<group>"; };
+		C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLegacyHTML.swift; sourceTree = "<group>"; };
+		C3563D5B3248F319CCDA8D86 /* BooruClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruClient.swift; sourceTree = "<group>"; };
+		CA0062A4C5A44F103420CB63 /* CDNRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CDNRouting.swift; sourceTree = "<group>"; };
+		CB9128B0B611B8993A8B9C6F /* MangaAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaAPIClient.swift; sourceTree = "<group>"; };
+		D0C400CAB19213FD13D0989C /* LanguageSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageSettings.swift; sourceTree = "<group>"; };
+		D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySyncAdapter.swift; sourceTree = "<group>"; };
+		D2B9952F64D57C1AFCE5169C /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift; sourceTree = SOURCE_ROOT; };
+		D2FA926EED9698B4A0FF7B70 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		D4058D8DF59DB2ABCD4E32CC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		D40FFED3CB4EBC6A3BBF7143 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		D4C14F8DB9B15B1EF5094844 /* CloudSyncSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncSection.swift; sourceTree = "<group>"; };
+		D6441A7F7755A6499F663284 /* ReaderPagingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPagingView.swift; sourceTree = "<group>"; };
+		D73AA5D57D9771EF1BA73197 /* FoldersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoldersView.swift; sourceTree = "<group>"; };
+		DAFB6A5CB9259D10CE5EE14B /* Acknowledgments.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Acknowledgments.txt; sourceTree = "<group>"; };
+		DB1A9C6283701D99BA3F04E5 /* ContentUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentUITestSupport.swift; sourceTree = "<group>"; };
+		DB6DA24BF7D36336B5968707 /* BooruLibraryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLibraryViews.swift; sourceTree = "<group>"; };
+		DBD4B4286C61F915EDA51667 /* TEGNAL/Presentation/Taste/TasteReportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteReportsView.swift; sourceTree = SOURCE_ROOT; };
+		DBE9259BCCB6BB1343C92121 /* AnimeBoxesImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeBoxesImport.swift; sourceTree = "<group>"; };
+		DC026010A751FA4ECEC32C58 /* BooruMediaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruMediaView.swift; sourceTree = "<group>"; };
+		DD90F333216B9CA5E03F0306 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Challenge/ChallengePlayView.swift; sourceTree = SOURCE_ROOT; };
+		DF5F65B1C5D31EE473644196 /* FolderOrderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderOrderView.swift; sourceTree = "<group>"; };
+		DFEF57ABE07C1BB394AB5FF9 /* TEGNAL/Presentation/Taste/TasteTagDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteTagDetail.swift; sourceTree = SOURCE_ROOT; };
+		E1F450A9F3F304A6EC4DB763 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteLibraryIntegration.swift; sourceTree = SOURCE_ROOT; };
+		E2275B40FD276D6C56A4DCBF /* ko */ = {isa = PBXFileReference; lastKnownFileType = text; name = ko; path = ko.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
+		E52561A4ECDB99CA3B613EA1 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Challenge/ChallengeEditorView.swift; sourceTree = SOURCE_ROOT; };
+		E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift; sourceTree = SOURCE_ROOT; };
+		E775D9AAE076228E7E440E8C /* AddWorkSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddWorkSheet.swift; sourceTree = "<group>"; };
+		EA64BC50201F2B264750FB9E /* AppRootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootTabView.swift; sourceTree = "<group>"; };
+		EBC911B0C0C6ABCE2A07B57B /* TEGNAL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TEGNAL.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EF3D1409528A5E1490FD7BE8 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		EF460FBC7BD6826A521EEE1D /* WorkDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkDetailView.swift; sourceTree = "<group>"; };
+		F2A824088835743E484646A8 /* BooruBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackupTests.swift; sourceTree = "<group>"; };
+		F34E541C9B511EA718074249 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F6728E31C6CB18E178E6ECE0 /* TEGNAL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TEGNAL.entitlements; sourceTree = "<group>"; };
+		F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteAnalyzer.swift; sourceTree = SOURCE_ROOT; };
+		F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruFavoritesView.swift; sourceTree = "<group>"; };
+		F9274ADBCCB2719EBF45750D /* LibrarySyncRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySyncRecord.swift; sourceTree = "<group>"; };
+		F9A5E549BC3A992CAE3BE32D /* BooruTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruTests.swift; sourceTree = "<group>"; };
+		FCC82F197835D88FC92F979D /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		FCDDBA7681C1BCD83769C7A5 /* ReaderUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderUXTests.swift; sourceTree = "<group>"; };
+		FD0BE0B2FD246C3895D96DBC /* MangaContentSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaContentSource.swift; sourceTree = "<group>"; };
+		FD9B9108B0B252C95F752E85 /* TEGNAL/Core/Challenge/ChallengeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Challenge/ChallengeEngine.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D2D119280E1AFC2ABDC236F3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F25AF0601AF521CC64C99271 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		00C253EDA08E0CE9F62EAA99 /* Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				2F9A802BEFC8CF8802D043E9 /* Animations */,
+				BFF3E29D171D5B09D607D363 /* Artists */,
+				EFBED35E5E6E93A6C61CF813 /* Booru */,
+				D74A509DF02E87C3D57B60E2 /* Browser */,
+				9C31BAB5CA3459BE04FDEB88 /* Content */,
+				DF48C4577D1209C85C008845 /* DesignSystem */,
+				F79907FC6DC9D471AC0238BF /* Folders */,
+				FDFA109831A26D54CD13C81C /* Navigation */,
+				8B6344CB8C63F8CEE9918E5B /* Onboarding */,
+				7A5E9290B1BE7682B8182549 /* Settings */,
+				BF28227D6CD87434D41D51A1 /* Works */,
+			);
+			path = Presentation;
+			sourceTree = "<group>";
+		};
+		05409C8DA1D58558417E88FC /* Migration */ = {
+			isa = PBXGroup;
+			children = (
+				AEBA1E27FC02DDAE5A92D408 /* VioletImportService.swift */,
+			);
+			path = Migration;
+			sourceTree = "<group>";
+		};
+		22718F293B9C78C46EEE331B /* Content */ = {
+			isa = PBXGroup;
+			children = (
+				CA0062A4C5A44F103420CB63 /* CDNRouting.swift */,
+				4CB5F57AAC63C5B2E44FFA7F /* ContentTransport.swift */,
+				4D3705AEBC2B0159D541C8A8 /* GalleryContent.swift */,
+				FD0BE0B2FD246C3895D96DBC /* MangaContentSource.swift */,
+			);
+			path = Content;
+			sourceTree = "<group>";
+		};
+		2F9A802BEFC8CF8802D043E9 /* Animations */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Animations;
+			sourceTree = "<group>";
+		};
+		39B456A7234895CBC9CE9D90 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				0CCB3259837D1E918779915E /* Models.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		49BF81E9B83F1FC4DA75C986 /* Parser */ = {
+			isa = PBXGroup;
+			children = (
+				7AA37491F91112958F1F93E2 /* GalleryIDParser.swift */,
+			);
+			path = Parser;
+			sourceTree = "<group>";
+		};
+		4C865123A07E16F90AB30BD5 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				88ABEEC0722E332514E25A8B /* Booru */,
+				22718F293B9C78C46EEE331B /* Content */,
+				05409C8DA1D58558417E88FC /* Migration */,
+				9C283AE8441BC6158B4E8106 /* Network */,
+				49BF81E9B83F1FC4DA75C986 /* Parser */,
+				A9477D81ECECC0CE3816A643 /* Storage */,
+				CB5453EA0CAE503216637517 /* Sync */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		5C1362A5D9026707DCEAFE77 /* Brand */ = {
+			isa = PBXGroup;
+			children = (
+				53837377DFD8F9DCA3416A89 /* nextline-logo.svg */,
+			);
+			path = Brand;
+			sourceTree = "<group>";
+		};
+		66B628C38B3910CAD788C2BB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EBC911B0C0C6ABCE2A07B57B /* TEGNAL.app */,
+				B813C06DA6A64AE5F6552571 /* TEGNALTests.xctest */,
+				190113C69D7BCDAA37E28C94 /* TEGNALUITests.xctest */,
+				C0D758D11EBEE724973FC43F /* ShareExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		718AFBF9D27969F283886850 /* TEGNALTests */ = {
+			isa = PBXGroup;
+			children = (
+				40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */,
+				5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */,
+				9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */,
+				F2A824088835743E484646A8 /* BooruBackupTests.swift */,
+				9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */,
+				A688C07943C20ABCE3EE27BA /* BooruReleaseLiveTests.swift */,
+				AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */,
+				F9A5E549BC3A992CAE3BE32D /* BooruTests.swift */,
+				4B2DCD5BCF18F0F15745D09B /* GalleryIDParserTests.swift */,
+				13607A445BF764C6E101E808 /* GridLayoutTests.swift */,
+				31F4737CDB76989ABF03A465 /* LibrarySyncTests.swift */,
+				0E2A750C47AB3A98EDF91D2E /* MediaInputTests.swift */,
+				134C3749F5882A5E7C51E003 /* NativeContentTests.swift */,
+				FCDDBA7681C1BCD83769C7A5 /* ReaderUXTests.swift */,
+			);
+			path = TEGNALTests;
+			sourceTree = "<group>";
+		};
+		7A5E9290B1BE7682B8182549 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				D4C14F8DB9B15B1EF5094844 /* CloudSyncSection.swift */,
+				8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */,
+				B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */,
+				D0C400CAB19213FD13D0989C /* LanguageSettings.swift */,
+				3A5EFD7523ECEC99D902F3E8 /* ModeAppearanceSettings.swift */,
+				976351FAE534D42BB200A330 /* SettingsSections.swift */,
+				2627853DC68AF8337C00516D /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		826B7AD005E1658A9D5C2451 /* TEGNALUITests */ = {
+			isa = PBXGroup;
+			children = (
+				158CA33375FE5A41376A0AA1 /* BooruUITests.swift */,
+				2B3C532506B85391D42C94B5 /* KeyboardUITests.swift */,
+				38D83FD8E5311C82AD8D9AE1 /* NativeContentUITests.swift */,
+			);
+			path = TEGNALUITests;
+			sourceTree = "<group>";
+		};
+		88ABEEC0722E332514E25A8B /* Booru */ = {
+			isa = PBXGroup;
+			children = (
+				DBE9259BCCB6BB1343C92121 /* AnimeBoxesImport.swift */,
+				B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */,
+				3A1C14EBB331C745654EA7FB /* BooruBrowserSession.swift */,
+				C3563D5B3248F319CCDA8D86 /* BooruClient.swift */,
+				C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */,
+				5C03DFA3F5213D29C1C638B1 /* BooruModels.swift */,
+				7C17FACAAF2D1F2F2E286128 /* BooruStore.swift */,
+				8E9782DED49457326DFAC679 /* BooruWebTransport.swift */,
+			);
+			path = Booru;
+			sourceTree = "<group>";
+		};
+		8B6344CB8C63F8CEE9918E5B /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				D40FFED3CB4EBC6A3BBF7143 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		9C283AE8441BC6158B4E8106 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				850520938F1C755FFC9B688A /* CoverQueueActor.swift */,
+				CB9128B0B611B8993A8B9C6F /* MangaAPIClient.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		9C31BAB5CA3459BE04FDEB88 /* Content */ = {
+			isa = PBXGroup;
+			children = (
+				DB1A9C6283701D99BA3F04E5 /* ContentUITestSupport.swift */,
+				2FEB5C8DB1ECD582DC1CB6FF /* NativeContentView.swift */,
+				B53A1AFB009B85457C38C086 /* NativeReaderView.swift */,
+				80B56E655528C707020F8BD7 /* PageImageStore.swift */,
+				D6441A7F7755A6499F663284 /* ReaderPagingView.swift */,
+				7149D89B9209B78D771A7E1C /* ReaderPreferences.swift */,
+				68BD5A5175ACAA298E29203E /* ReaderShortcuts.swift */,
+				5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */,
+				774127F0B67AC919530A3E44 /* ReaderTranslation.swift */,
+				681E53F114874A3FE23909EF /* SearchHistorySection.swift */,
+				A2911B6D719B08FEB43BDE39 /* TargetedTranslationCanvas.swift */,
+			);
+			path = Content;
+			sourceTree = "<group>";
+		};
+		9CF9B6EE8855F205F3649D61 /* TEGNAL */ = {
+			isa = PBXGroup;
+			children = (
+				DFEF57ABE07C1BB394AB5FF9 /* TEGNAL/Presentation/Taste/TasteTagDetail.swift */,
+				5A17926A2AEB2E2D77B90651 /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift */,
+				31AE970670259006F0B06867 /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift */,
+				34EA288756CDA8504000B4F4 /* TEGNAL/Presentation/Taste/TastePresentation.swift */,
+				DBD4B4286C61F915EDA51667 /* TEGNAL/Presentation/Taste/TasteReportsView.swift */,
+				45ED0863DCAE0B4FB5CFE3BE /* TEGNAL/Presentation/Taste/TasteSettingsView.swift */,
+				4FE74A961ED59F0EF62A9473 /* TEGNAL/Presentation/Taste/TasteDashboard.swift */,
+				476981CA28D46033DFBFAD4C /* TEGNAL/Core/Taste/TasteFeedState.swift */,
+				1CB10B9419E82DDA13D5A697 /* TEGNAL/Core/Taste/TasteModels.swift */,
+				E1F450A9F3F304A6EC4DB763 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift */,
+				956E2BBEF83BD873518CDFB8 /* TEGNAL/Core/Taste/StatisticalInsightService.swift */,
+				ACF09107ABCD200000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift */,
+				ACF09107ABCD200000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift */,
+				936F2460280A29C6924501D6 /* TEGNAL/Core/Taste/TasteController.swift */,
+				950F4BA3B7F26293633599D9 /* TEGNAL/Core/Taste/RecommendationService.swift */,
+				40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */,
+				F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */,
+				2D4B0A3B25EB92FE1EB817A6 /* TEGNAL/Core/Taste/TasteStore.swift */,
+				D2B9952F64D57C1AFCE5169C /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift */,
+				DAFB6A5CB9259D10CE5EE14B /* Acknowledgments.txt */,
+				1A43CD02402545179DA392A4 /* Assets.xcassets */,
+				8ECD098FEAC006CEC4FFFAB4 /* Info.plist */,
+				F6728E31C6CB18E178E6ECE0 /* TEGNAL.entitlements */,
+				390ED38C727DD30011EF7FBE /* PrivacyInfo.xcprivacy */,
+				CA47D27A47253C0A4ECFEA46 /* App */,
+				5C1362A5D9026707DCEAFE77 /* Brand */,
+				4C865123A07E16F90AB30BD5 /* Core */,
+				39B456A7234895CBC9CE9D90 /* Domain */,
+				00C253EDA08E0CE9F62EAA99 /* Presentation */,
+			);
+			path = TEGNAL;
+			sourceTree = "<group>";
+		};
+		A9477D81ECECC0CE3816A643 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				A015BE1F0830B18B98744C46 /* AppDatabase.swift */,
+				5F36E537BD5CCBBECC0C7D91 /* AppStorage.swift */,
+				BA5BA3974651F205FFFCE3AD /* SearchLibrary.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		BF28227D6CD87434D41D51A1 /* Works */ = {
+			isa = PBXGroup;
+			children = (
+				E775D9AAE076228E7E440E8C /* AddWorkSheet.swift */,
+				8549FF66B66E38E3695F64CC /* WorkCardView.swift */,
+				EF460FBC7BD6826A521EEE1D /* WorkDetailView.swift */,
+				561007CAECE6AECF61030D7F /* WorksGridView.swift */,
+			);
+			path = Works;
+			sourceTree = "<group>";
+		};
+		BFF3E29D171D5B09D607D363 /* Artists */ = {
+			isa = PBXGroup;
+			children = (
+				2AA4BD4BDDD588FC16CD4528 /* ArtistsListView.swift */,
+			);
+			path = Artists;
+			sourceTree = "<group>";
+		};
+		C8A110000000000000000001 /* Challenge */ = {
+			isa = PBXGroup;
+			children = (
+				FD9B9108B0B252C95F752E85 /* TEGNAL/Core/Challenge/ChallengeEngine.swift */,
+				6C04D77C97393EE83DDE4459 /* TEGNAL/Core/Challenge/ChallengeModels.swift */,
+				96769750C5AEC39276B78944 /* TEGNAL/Core/Challenge/ChallengeStore.swift */,
+				E52561A4ECDB99CA3B613EA1 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift */,
+				B77DB6A93FDC53717A941BDF /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift */,
+				DD90F333216B9CA5E03F0306 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift */,
+				81C9A967E62817529CBD16D9 /* TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift */,
+				E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */,
+				A6FFEC1A61D6ED208A9115A0 /* TEGNALTests/ChallengeTests.swift */,
+				BBC42FD33C78DB362F63144B /* TEGNALUITests/ChallengeUITests.swift */,
+			);
+			name = Challenge;
+			sourceTree = "<group>";
+		};
+		CA47D27A47253C0A4ECFEA46 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				8E173322EA0D6EF2D26453F1 /* AppEnvironment.swift */,
+				36718E50F5349D3C2AF44634 /* TEGNALApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		CB5453EA0CAE503216637517 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				7215851B492D0D97A169F9D4 /* LibraryCloudSync.swift */,
+				D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */,
+				F9274ADBCCB2719EBF45750D /* LibrarySyncRecord.swift */,
+			);
+			path = Sync;
+			sourceTree = "<group>";
+		};
+		D74A509DF02E87C3D57B60E2 /* Browser */ = {
+			isa = PBXGroup;
+			children = (
+				719A5D25F1F9894E27DC3085 /* InAppMangaBrowserView.swift */,
+			);
+			path = Browser;
+			sourceTree = "<group>";
+		};
+		DF48C4577D1209C85C008845 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				268D24A55619AF97E4EEEF85 /* LiquidGlassModifiers.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		E093767EF52C599B19AB8B11 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				FCC82F197835D88FC92F979D /* L10n.swift */,
+				BAF3C2DCC06421AB540952AD /* InfoPlist.strings */,
+				46D0EC32888A924E632965F6 /* Localizable.strings */,
+				CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		EDB8FCE1D606BD69D592EDCC /* ShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				7EAC1CBAE76FC15768D6C53C /* Info.plist */,
+				D4058D8DF59DB2ABCD4E32CC /* PrivacyInfo.xcprivacy */,
+				A2AEBBC430CBD47CA751B02A /* ShareExtension.entitlements */,
+				58673F01F1EFE84AEBF03097 /* ShareViewController.swift */,
+			);
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
+		EFBED35E5E6E93A6C61CF813 /* Booru */ = {
+			isa = PBXGroup;
+			children = (
+				ACBA6DB0FD990FC91B86F973 /* AnimeBoxesImportView.swift */,
+				A22D8647630A782E540D7EF8 /* BooruBackupView.swift */,
+				A32843587F8341CD1016F667 /* BooruEmbeddedBrowserView.swift */,
+				F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */,
+				DB6DA24BF7D36336B5968707 /* BooruLibraryViews.swift */,
+				DC026010A751FA4ECEC32C58 /* BooruMediaView.swift */,
+				049FCB9C7DD396BBAB69C28D /* BooruPostView.swift */,
+				C10245435081F97BDB212F1F /* BooruRootView.swift */,
+				78765B26524FE1CE2081058D /* BooruSettingsView.swift */,
+				2713B3C152DDB66FAF0703B6 /* BooruTestMedia.swift */,
+				81A9CA0F41C704D3A5C5A9F9 /* BooruUITestSupport.swift */,
+				218DBE4095096D00E84FE315 /* BooruValidationView.swift */,
+			);
+			path = Booru;
+			sourceTree = "<group>";
+		};
+		F79907FC6DC9D471AC0238BF /* Folders */ = {
+			isa = PBXGroup;
+			children = (
+				2176F4FAFB5199E5B58E2CC7 /* FolderBentoCardView.swift */,
+				DF5F65B1C5D31EE473644196 /* FolderOrderView.swift */,
+				D73AA5D57D9771EF1BA73197 /* FoldersView.swift */,
+			);
+			path = Folders;
+			sourceTree = "<group>";
+		};
+		FA938BEFE61F916D347E085D = {
+			isa = PBXGroup;
+			children = (
+				C8A110000000000000000001 /* Challenge */,
+				9CF9B6EE8855F205F3649D61 /* TEGNAL */,
+				718AFBF9D27969F283886850 /* TEGNALTests */,
+				826B7AD005E1658A9D5C2451 /* TEGNALUITests */,
+				E093767EF52C599B19AB8B11 /* Shared */,
+				EDB8FCE1D606BD69D592EDCC /* ShareExtension */,
+				33DE8B26308A866200A1732A /* AppIcon.icon */,
+				66B628C38B3910CAD788C2BB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FDFA109831A26D54CD13C81C /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				3E787CBAAE755DAE79AB33E9 /* AppModeSwitch.swift */,
+				EA64BC50201F2B264750FB9E /* AppRootTabView.swift */,
+				A8346FCB8EB53E1B5E6D5B20 /* AppTab.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		467FC908A4CFDF6B49B8406C /* TEGNALTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 63B1AEB2A5C0E288DD365B9F /* Build configuration list for PBXNativeTarget "TEGNALTests" */;
+			buildPhases = (
+				DF24C83D6B38140D41B30280 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B38A56B7D907EF9CE5F42AFC /* PBXTargetDependency */,
+			);
+			name = TEGNALTests;
+			packageProductDependencies = (
+			);
+			productName = TEGNALTests;
+			productReference = B813C06DA6A64AE5F6552571 /* TEGNALTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8AE1CE50D6D27EC420872A41 /* TEGNALUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 400EB3BA6B18ECB4778C5A3E /* Build configuration list for PBXNativeTarget "TEGNALUITests" */;
+			buildPhases = (
+				53386CE764CE51A7062E8D4C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E205B29D9D3FCAF380ED4648 /* PBXTargetDependency */,
+			);
+			name = TEGNALUITests;
+			packageProductDependencies = (
+			);
+			productName = TEGNALUITests;
+			productReference = 190113C69D7BCDAA37E28C94 /* TEGNALUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		9A0004834F8BDB7CCBC0B7DB /* TEGNAL */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DDB9942D85B5F2E4933D988E /* Build configuration list for PBXNativeTarget "TEGNAL" */;
+			buildPhases = (
+				B367ED018A10C7BE7F004CEF /* Sources */,
+				100731C3D62E50F4E62ABC4C /* Resources */,
+				D2D119280E1AFC2ABDC236F3 /* Frameworks */,
+				E79C741E1C5254E7142BD4DC /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				277861112E42D5562C1BEDDE /* PBXTargetDependency */,
+			);
+			name = TEGNAL;
+			packageProductDependencies = (
+				083A978D5EF5FDE500B3BD56 /* GRDB */,
+			);
+			productName = TEGNAL;
+			productReference = EBC911B0C0C6ABCE2A07B57B /* TEGNAL.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D8914C89EB2657B12FA83EDB /* ShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 55DFD174D1F5F5E252E00CA5 /* Build configuration list for PBXNativeTarget "ShareExtension" */;
+			buildPhases = (
+				EBCFC0F95CD8C4E1C0AC78BC /* Sources */,
+				8B10187F4BE61A7FE2F77C99 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShareExtension;
+			packageProductDependencies = (
+			);
+			productName = ShareExtension;
+			productReference = C0D758D11EBEE724973FC43F /* ShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1D83A673F4F68C4DBFA76EAD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					467FC908A4CFDF6B49B8406C = {
+						DevelopmentTeam = 6HV24C77H5;
+						ProvisioningStyle = Automatic;
+					};
+					8AE1CE50D6D27EC420872A41 = {
+						DevelopmentTeam = 6HV24C77H5;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 9A0004834F8BDB7CCBC0B7DB;
+					};
+					D8914C89EB2657B12FA83EDB = {
+						DevelopmentTeam = 6HV24C77H5;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 8349408B368CC736EF9D6200 /* Build configuration list for PBXProject "TEGNAL" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				ja,
+				ko,
+			);
+			mainGroup = FA938BEFE61F916D347E085D;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7EE50722D44A4D985A8E4A17 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 66B628C38B3910CAD788C2BB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9A0004834F8BDB7CCBC0B7DB /* TEGNAL */,
+				D8914C89EB2657B12FA83EDB /* ShareExtension */,
+				467FC908A4CFDF6B49B8406C /* TEGNALTests */,
+				8AE1CE50D6D27EC420872A41 /* TEGNALUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100731C3D62E50F4E62ABC4C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				20E010B24BD47E4A667BA0C3 /* Acknowledgments.txt in Resources */,
+				2034B4997F3BC0351EF797F4 /* Assets.xcassets in Resources */,
+				B47065C6484C999BAE01C865 /* InfoPlist.strings in Resources */,
+				5FCBCF62588D139B16CA6E5F /* Localizable.strings in Resources */,
+				CC08E7E012785A05D48EACE4 /* PrivacyInfo.xcprivacy in Resources */,
+				33DE8B27308A866200A1732A /* AppIcon.icon in Resources */,
+				5B796C1586EA5CAFEB763D93 /* PrivacyPolicy.txt in Resources */,
+				652B414B5302BD33037B3773 /* nextline-logo.svg in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B10187F4BE61A7FE2F77C99 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0510C234AE7CFF966FD76C5 /* InfoPlist.strings in Resources */,
+				12D9B1882F790EB5F6CD660E /* Localizable.strings in Resources */,
+				29F36067686258194ABE38F2 /* PrivacyInfo.xcprivacy in Resources */,
+				2596329E9AE3000223F509E8 /* PrivacyPolicy.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		53386CE764CE51A7062E8D4C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C59D65652F9938EA90490992 /* TEGNALUITests/ChallengeUITests.swift in Sources */,
+				1235E4C2F50FAF7CEA917364 /* BooruUITests.swift in Sources */,
+				6F9F638B758A75AA634F8E34 /* KeyboardUITests.swift in Sources */,
+				A7211E7AAC00D94630FC6920 /* NativeContentUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B367ED018A10C7BE7F004CEF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */,
+				9EBF0AA004D32F5934A376E7 /* TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift in Sources */,
+				C5CED574C70DCC1099E56470 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift in Sources */,
+				ACC0A6E09E8E55E7DFDDE533 /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift in Sources */,
+				33DB30FEE41026006C8A92E4 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift in Sources */,
+				2D1032D6C304CE01713FB5F7 /* TEGNAL/Core/Challenge/ChallengeStore.swift in Sources */,
+				59E0835501F6A15D0AA44868 /* TEGNAL/Core/Challenge/ChallengeModels.swift in Sources */,
+				97F275EFC03DF3E4A1834733 /* TEGNAL/Core/Challenge/ChallengeEngine.swift in Sources */,
+				BA28F904E000E535FCD4F84C /* AddWorkSheet.swift in Sources */,
+				34D1FBBE82C4EB270E58DAC7 /* AnimeBoxesImport.swift in Sources */,
+				73458B3FBC56D64BF1F57DD4 /* AnimeBoxesImportView.swift in Sources */,
+				A98D1BE5CD53F4CFE2AF73A7 /* AppDatabase.swift in Sources */,
+				A8DEA1F1E17A02BB561A1CD2 /* TEGNAL/Core/Taste/TasteStore.swift in Sources */,
+				57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */,
+				8251D5F60C29EEC6C8F01098 /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift in Sources */,
+				D0267FFFB0700CE2ACB0B3EE /* TEGNAL/Core/Taste/RecommendationService.swift in Sources */,
+				C8F1A6D98F620768DCC716E0 /* TEGNAL/Core/Taste/TasteController.swift in Sources */,
+				A6A9ED07C1AF12F03A8D9E43 /* TEGNAL/Core/Taste/StatisticalInsightService.swift in Sources */,
+				ACF09107ABCD100000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift in Sources */,
+				ACF09107ABCD100000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift in Sources */,
+				71E70C9FFAF7BCA8DA8126A6 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift in Sources */,
+				59FB9F6DA9DE8216A44D3A09 /* TEGNAL/Core/Taste/TasteModels.swift in Sources */,
+				0A60DD485C141F30C5BAB21D /* TEGNAL/Presentation/Taste/TasteDashboard.swift in Sources */,
+				5FBC7227C639168199880785 /* TEGNAL/Presentation/Taste/TasteSettingsView.swift in Sources */,
+				D7E8D0BC33EE06527B179741 /* TEGNAL/Presentation/Taste/TastePresentation.swift in Sources */,
+				0FE5C86A505BC227BE857AEB /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift in Sources */,
+				4E3053C5D521D804853182BA /* TEGNAL/Presentation/Taste/TasteTagDetail.swift in Sources */,
+				9C61B7BCFCDEC137733E48A0 /* TEGNAL/Core/Taste/TasteFeedState.swift in Sources */,
+				FD7611A37574F7AC7C09923D /* TEGNAL/Presentation/Taste/TasteReportsView.swift in Sources */,
+				C1E5189D7A00147BD0FAB49C /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift in Sources */,
+				ED48F37CF6CE5A5B8A98FBA5 /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift in Sources */,
+				188562DB426D15EB017C17B8 /* AppEnvironment.swift in Sources */,
+				6CC5BC0591E6E4E727404246 /* AppModeSwitch.swift in Sources */,
+				BF509BF83941D8832BA4FC59 /* AppRootTabView.swift in Sources */,
+				FEC8BF3EE45161425F4F0A2A /* AppStorage.swift in Sources */,
+				558B9BC856132F232BB2AE8E /* AppTab.swift in Sources */,
+				C420D8F8D9CE80CA52F7AFA6 /* ArtistsListView.swift in Sources */,
+				093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */,
+				6B692FB13CBD3CA8AF39D898 /* BooruBackupView.swift in Sources */,
+				47C36C499EBA78112C525081 /* BooruBrowserSession.swift in Sources */,
+				FB7871E4663830124B9A0C5F /* BooruClient.swift in Sources */,
+				34AB2A2B77F07AC406CBB81F /* BooruEmbeddedBrowserView.swift in Sources */,
+				DF8E10E2A920B6A33911ABDA /* BooruFavoritesView.swift in Sources */,
+				E8A01BD6FF3FE3E253A450FB /* BooruLegacyHTML.swift in Sources */,
+				DA272F265CA70FCB25A0283C /* BooruLibraryViews.swift in Sources */,
+				CA3ED56268C7F1914E6C3189 /* BooruMediaView.swift in Sources */,
+				14735DB138CD3DB6EE9C4751 /* BooruModels.swift in Sources */,
+				4648437D37FD8ED08D053802 /* BooruPostView.swift in Sources */,
+				0B140CB342956D1F7C619975 /* BooruRootView.swift in Sources */,
+				96BCAB8DC5D043D004A9C5A0 /* BooruSettingsView.swift in Sources */,
+				90019AE476E229454637E2CC /* BooruStore.swift in Sources */,
+				C9DBD7867A1DC1FF4D4072BC /* BooruTestMedia.swift in Sources */,
+				D66D49ABCF8D48053AE987D3 /* BooruUITestSupport.swift in Sources */,
+				2D21DD66D25E3C3B77F695D8 /* BooruValidationView.swift in Sources */,
+				47C5B6BA4230B0E3AFB0FDFE /* BooruWebTransport.swift in Sources */,
+				894D1911C4BCC72FE63C1B75 /* CDNRouting.swift in Sources */,
+				FCA0DAA4EF75DC0DCD831B98 /* CloudSyncSection.swift in Sources */,
+				B05E6ABDFF62133125716693 /* ContentTransport.swift in Sources */,
+				34491643E77AC96F09A6150F /* ContentUITestSupport.swift in Sources */,
+				5C1E48A57CD10CFBEC325149 /* CoverQueueActor.swift in Sources */,
+				DD394E63203D2BEECC88CEFC /* DeveloperInfoSection.swift in Sources */,
+				FA3690D99A65DE9E7BA94590 /* FolderBentoCardView.swift in Sources */,
+				99F1C17749127F4204D93452 /* FolderOrderView.swift in Sources */,
+				F62DC0F8FEB71050E4792CEF /* FoldersView.swift in Sources */,
+				668320ECDDD69671A1CC54F9 /* GalleryContent.swift in Sources */,
+				6A8653D49053D9CC205F2DA4 /* GalleryIDParser.swift in Sources */,
+				66AB32026318BC9F09C7D9CE /* MangaAPIClient.swift in Sources */,
+				F5010450F26FF4B278C68B66 /* MangaContentSource.swift in Sources */,
+				BC9B2011765BD8012C1C6461 /* MangaDefaultTagsSettings.swift in Sources */,
+				8C1EF4C86FFC853636A02F5B /* InAppMangaBrowserView.swift in Sources */,
+				41E4FD1BC67DDBDB082FFF43 /* L10n.swift in Sources */,
+				1F92E43FA4EF3F72C4B955D4 /* LanguageSettings.swift in Sources */,
+				69C31A65164A48BDB207BFF4 /* LibraryCloudSync.swift in Sources */,
+				83BD9B7BFC83E9A55D5F9109 /* LibrarySyncAdapter.swift in Sources */,
+				6C79321A05F654A1A75CE0F7 /* LibrarySyncRecord.swift in Sources */,
+				E1D8BE93D1E5C204FC27FE25 /* LiquidGlassModifiers.swift in Sources */,
+				D6A780B15BDF6BD20834BDEF /* ModeAppearanceSettings.swift in Sources */,
+				CC287FB165EB8FB0DB96C9A2 /* Models.swift in Sources */,
+				1FB5162E9127DAAB032A95F0 /* NativeContentView.swift in Sources */,
+				767EAEE31B2A8121A3534E33 /* NativeReaderView.swift in Sources */,
+				09F96FACC7155FD7B5D16E12 /* TEGNALApp.swift in Sources */,
+				8566DB33557D57EE38DE08D8 /* OnboardingView.swift in Sources */,
+				56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */,
+				5EECFEAB14C80308070211D3 /* ReaderPagingView.swift in Sources */,
+				FE758C6B5B998D79746B261D /* ReaderPreferences.swift in Sources */,
+				5B956B8168735279F43D2BBA /* ReaderShortcuts.swift in Sources */,
+				E5CBAA3ADBF94E51181BB966 /* ReaderSurfaces.swift in Sources */,
+				11AA337B07F283E7DFA14360 /* ReaderTranslation.swift in Sources */,
+				65AB85B1EC67E3DC1028602D /* SearchHistorySection.swift in Sources */,
+				522B1CD77F3A9AC3EC37E13A /* SearchLibrary.swift in Sources */,
+				D8819E7F99F42BFA09CA0D7E /* SettingsSections.swift in Sources */,
+				1BD03E8E869F045D4923249E /* SettingsView.swift in Sources */,
+				AC66C1A66E68133540CA4AA5 /* TargetedTranslationCanvas.swift in Sources */,
+				E1BD068B22E9A786A6E25819 /* VioletImportService.swift in Sources */,
+				8826DE8461CAEDE1F2881F0A /* WorkCardView.swift in Sources */,
+				4689FFAC40180CE1BDA56211 /* WorkDetailView.swift in Sources */,
+				C2A3F752D9BA1F762F086A08 /* WorksGridView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF24C83D6B38140D41B30280 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FF8710300AB2E727C84EF6F4 /* TEGNALTests/ChallengeTests.swift in Sources */,
+				A44973D3E3DC1CA4DF985E73 /* BooruBackupTests.swift in Sources */,
+				528F7B9571CC74D0D47C7C8E /* BooruLibraryTests.swift in Sources */,
+				9AE4AA3721DEDE1610B8B5A0 /* BooruReleaseLiveTests.swift in Sources */,
+				C4E563AAFF6C1AF00B6FF425 /* BooruRevisionTests.swift in Sources */,
+				9222CF5DF347B12600C8154F /* BooruTests.swift in Sources */,
+				69BEADC98520A8FFD8B0D31C /* GalleryIDParserTests.swift in Sources */,
+				BA64A4EEBAEB6973149849AB /* GridLayoutTests.swift in Sources */,
+				09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */,
+				DFF9E986805DDE834086C1C5 /* TEGNALTests/TasteFeedTests.swift in Sources */,
+				7C6BF65F09115D54F402C28F /* TEGNALTests/BooruThumbnailCacheTests.swift in Sources */,
+				A0F169C6BB893FB451AF32A7 /* LibrarySyncTests.swift in Sources */,
+				BF66076A13EB562C7E29CE3E /* MediaInputTests.swift in Sources */,
+				FEBE8B7F1A0A6CABAC5BBBF0 /* NativeContentTests.swift in Sources */,
+				667DF944A204641CB1A783F9 /* ReaderUXTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EBCFC0F95CD8C4E1C0AC78BC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B205352413DDF87B3797E5E7 /* L10n.swift in Sources */,
+				0D752D59608A056720E48531 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		277861112E42D5562C1BEDDE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D8914C89EB2657B12FA83EDB /* ShareExtension */;
+			targetProxy = 209F0677FAF45D9D7196C31C /* PBXContainerItemProxy */;
+		};
+		B38A56B7D907EF9CE5F42AFC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9A0004834F8BDB7CCBC0B7DB /* TEGNAL */;
+			targetProxy = 097998154E63E1EDDBDBBE5D /* PBXContainerItemProxy */;
+		};
+		E205B29D9D3FCAF380ED4648 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9A0004834F8BDB7CCBC0B7DB /* TEGNAL */;
+			targetProxy = 02C7CBE9A2AD9962EDD82192 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		46D0EC32888A924E632965F6 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				54D631F53A129A6A3F5ADDDD /* en */,
+				00A3D8D9E5D6B186E154E5DE /* ja */,
+				AC4B101727BB08D193AF6720 /* ko */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		BAF3C2DCC06421AB540952AD /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F34E541C9B511EA718074249 /* en */,
+				EF3D1409528A5E1490FD7BE8 /* ja */,
+				D2FA926EED9698B4A0FF7B70 /* ko */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */ = {
+			isa = PBXVariantGroup;
+			children = (
+				01F914324983194D6DAD8D84 /* en */,
+				97F12694F41487A0764537DB /* ja */,
+				E2275B40FD276D6C56A4DCBF /* ko */,
+			);
+			name = PrivacyPolicy.txt;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		17A136A079DB861A50CFB446 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = TEGNAL/TEGNAL.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TEGNAL/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		1D6730DA9A29CB158B33D47E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2A1A2BBB71CD900C1786B498 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.share;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		31E1D935A2EC4C47EC8BA663 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = TEGNAL/TEGNAL.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TEGNAL/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3452F9AE1CAF4CAE87633724 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		37DFD354D9EFD70F77338651 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.share;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		576AC5FB34039C45F7973DD7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TEGNAL;
+			};
+			name = Release;
+		};
+		6643663E91829C9C03E90BBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TEGNAL;
+			};
+			name = Debug;
+		};
+		692457CD45B37B90E0D7A1BE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.tests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TEGNAL.app/TEGNAL";
+			};
+			name = Release;
+		};
+		CFC19C541F4E7164F48D4394 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6HV24C77H5;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.tests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TEGNAL.app/TEGNAL";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		400EB3BA6B18ECB4778C5A3E /* Build configuration list for PBXNativeTarget "TEGNALUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6643663E91829C9C03E90BBF /* Debug */,
+				576AC5FB34039C45F7973DD7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		55DFD174D1F5F5E252E00CA5 /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A1A2BBB71CD900C1786B498 /* Debug */,
+				37DFD354D9EFD70F77338651 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		63B1AEB2A5C0E288DD365B9F /* Build configuration list for PBXNativeTarget "TEGNALTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFC19C541F4E7164F48D4394 /* Debug */,
+				692457CD45B37B90E0D7A1BE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8349408B368CC736EF9D6200 /* Build configuration list for PBXProject "TEGNAL" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D6730DA9A29CB158B33D47E /* Debug */,
+				3452F9AE1CAF4CAE87633724 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DDB9942D85B5F2E4933D988E /* Build configuration list for PBXNativeTarget "TEGNAL" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				31E1D935A2EC4C47EC8BA663 /* Debug */,
+				17A136A079DB861A50CFB446 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		7EE50722D44A4D985A8E4A17 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.29.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		083A978D5EF5FDE500B3BD56 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7EE50722D44A4D985A8E4A17 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 1D83A673F4F68C4DBFA76EAD /* Project object */;
+}

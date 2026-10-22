@@ -12,8 +12,8 @@
 "4 Columns" = "4단";
 "5 Columns" = "5단";
 "5 Pages" = "5페이지";
-"Add Work Number" = "품번 추가";
-"Add a work number to get started." = "새로운 품번을 추가해 보세요";
+"Add Work Number" = "작품 번호 추가";
+"Add a work number to get started." = "새로운 작품 번호를 추가해 보세요";
 "Added to Artists" = "작가 탭에 추가했습니다";
 "Advance every %@ seconds" = "%@초마다 넘기기";
 "All" = "전체";
@@ -45,7 +45,7 @@
 "Checking file…" = "파일 확인 중…";
 "Choose Destination Folder" = "저장할 폴더 선택";
 "Choose Thumbnail Page" = "썸네일 이미지 페이지 지정";
-"Choose a Violet Database" = "Violet DB 파일 선택하기";
+"Choose a Violet Database" = "다른 만화 뷰어 DB 파일 선택하기";
 "Choose a folder to save to (%@)" = "저장할 폴더를 선택하세요 (%@)";
 "Clear Search" = "검색 지우기";
 "Close" = "닫기";
@@ -57,8 +57,8 @@
 "Continue Anyway" = "그대로 진행";
 "Continuous Scroll" = "스크롤로 보기";
 "Copied tag '%@'" = "태그 '%@' 복사됨";
-"Copied work number %@" = "품번 %@ 복사됨";
-"Copy Work Number (%@)" = "품번 복사 (%@)";
+"Copied work number %@" = "작품 번호 %@ 복사됨";
+"Copy Work Number (%@)" = "작품 번호 복사 (%@)";
 "Create" = "생성";
 "Create Folder" = "새 폴더 만들기";
 "Create Folder and Move" = "새 폴더 생성 및 이동";
@@ -70,7 +70,7 @@
 "Delete Folder" = "폴더 삭제";
 "Delete Work" = "작품 삭제";
 "Delete the folder '%@'?" = "'%@' 폴더를 삭제하시겠습니까?";
-"Delete this work (number: %@)?" = "정말 이 작품(품번: %@)을 삭제하시겠습니까?";
+"Delete this work (number: %@)?" = "정말 이 작품(작품 번호: %@)을 삭제하시겠습니까?";
 "Details" = "상세정보";
 "Dim Screen" = "화면 어둡게";
 "Display" = "화면";
@@ -107,13 +107,13 @@
 "Horizontal Paging" = "가로로 넘기기";
 "How to Import data.db (Catalog)" = "data.db (카탈로그) 가져오기 방식";
 "Import / Restore JSON Backup" = "JSON 백업 가져오기 / 복원";
-"Import Data (Violet)" = "데이터 가져오기 (Violet)";
-"Import Violet Data" = "Violet 데이터 가져오기";
+"Import Data (Violet)" = "데이터 가져오기 (다른 만화 뷰어)";
+"Import Violet Data" = "다른 만화 뷰어 데이터 가져오기";
 "Import data.db (Work Metadata Catalog)" = "data.db 가져오기 (작품 메타데이터 카탈로그)";
 "Import error: %@" = "가져오기 오류: %@";
 "Import failed: %@" = "가져오기 실패: %@";
 "Import user.db (Bookmarks, Folders, Artists)" = "user.db 가져오기 (북마크/폴더/작가)";
-"Import your library and download history from Violet." = "기존 Violet 앱의 보관함 및 다운로드 기록을 불러옵니다.";
+"Import your library and download history from Violet." = "기존 만화 뷰어 앱의 보관함 및 다운로드 기록을 불러옵니다.";
 "Importing entire catalog… (%@ records)" = "카탈로그 전체 수입 중… (%@건)";
 "Importing library from user.db…" = "user.db 보관함 불러오는 중…";
 "Invalid Address" = "유효하지 않은 주소";
@@ -152,15 +152,15 @@
 "No Date" = "날짜 없음";
 "No Favorite Artists" = "즐겨찾기 작가가 없습니다";
 "No Folders" = "폴더가 없습니다";
-"No Work Number" = "품번 미발견";
+"No Work Number" = "작품 번호 미발견";
 "No Works" = "작품이 없습니다";
 "No results for '%@'" = "'%@' 검색 결과가 없습니다";
 "No text to translate was found in this area." = "이 영역에서 번역할 글자를 찾지 못했습니다.";
-"No work numbers found" = "품번을 찾지 못했습니다";
-"No work numbers were found in the shared link or text." = "공유된 링크나 텍스트에서 품번을 찾지 못했습니다";
+"No work numbers found" = "작품 번호를 찾지 못했습니다";
+"No work numbers were found in the shared link or text." = "공유된 링크나 텍스트에서 작품 번호를 찾지 못했습니다";
 "Not bookmarked" = "북마크 안 됨";
 "Notes" = "메모";
-"Number Memo" = "품번메모";
+"TEGNAL" = "TEGNAL";
 "Off" = "끄기";
 "On My iPhone (or Browse in Files)" = "나의 iPhone (또는 파일 앱 둘러보기)";
 "Original" = "원본으로";
@@ -202,9 +202,9 @@
 "Restoring backup…" = "백업 파일 복원 중…";
 "Retry Translation" = "번역 다시 실행";
 "Save" = "저장";
-"Save %@ Work Numbers" = "%@개 품번 저장";
+"Save %@ Work Numbers" = "%@개 작품 번호 저장";
 "Save Entire Catalog" = "전체 카탈로그 저장";
-"Save Work Number %@" = "품번 %@ 저장";
+"Save Work Number %@" = "작품 번호 %@ 저장";
 "Save to Folder" = "저장할 폴더";
 "Save to Library" = "보관함에 저장";
 "Saved Works" = "저장된 작품";
@@ -212,7 +212,7 @@
 "Search Results" = "검색 결과";
 "Search works" = "작품 검색";
 "Search, number, or link" = "검색어, 번호 또는 링크";
-"Select the Violet folder" = "Violet 폴더 선택";
+"Select the Violet folder" = "DB 폴더 선택";
 "Select user.db or data.db" = "user.db 또는 data.db 파일 선택";
 "Settings" = "설정";
 "Show Page Number" = "페이지 번호 표시";
@@ -263,7 +263,7 @@
 "Work %@" = "작품 %@";
 "Work Details" = "작품 정보";
 "Work Number" = "작품 번호";
-"Work Number or Link" = "품번 또는 링크";
+"Work Number or Link" = "작품 번호 또는 링크";
 "Works in this folder will be moved to Unfiled." = "폴더를 삭제하면 폴더 안에 있던 작품들은 미분류 폴더로 들어갑니다.";
 "You can reopen this guide in Reader Settings or Settings." = "읽기 설정과 기본 설정에서 다시 볼 수 있습니다.";
 "Your Library Is Empty" = "보관함이 비어 있습니다";
@@ -438,8 +438,8 @@
 "Manage Servers" = "서버 관리";
 "If a server cannot connect, use Validate Client to complete its browser check." = "서버에 연결되지 않으면 ‘클라이언트 확인’에서 브라우저 인증을 진행해 주세요.";
 "Move your servers, favorites and search history from Anime Boxes." = "Anime Boxes의 서버, 즐겨찾기, 검색 기록을 가져오세요.";
-"Move your folders and works from Violet. You can also start with an empty library." = "Violet의 폴더와 작품을 가져오세요. 빈 보관함으로 시작해도 됩니다.";
-"In Files, open the Violet folder and choose user.db for your library, or data.db for metadata." = "파일 앱에서 Violet 폴더를 열어 보관함은 user.db, 메타데이터는 data.db를 선택하세요.";
+"Move your folders and works from Violet. You can also start with an empty library." = "다른 만화 뷰어의 폴더와 작품을 가져오세요. 빈 보관함으로 시작해도 됩니다.";
+"In Files, open the Violet folder and choose user.db for your library, or data.db for metadata." = "파일 앱에서 보관함은 user.db, 메타데이터는 data.db를 선택하세요.";
 
 "Tap the center: quick menu\nHold anywhere: favorite\nTap the sides or swipe: change image\nDouble tap or pinch: zoom\nTranslate: Apple image translation for the visible area\nSwipe down at original zoom: close" = "중앙 탭: 빠른 메뉴\n화면 아무 곳이나 길게 누르기: 즐겨찾기\n가장자리 탭·스와이프: 이미지 이동\n두 번 탭·핀치: 확대\n번역: 현재 보이는 영역을 Apple 이미지 번역으로 보기\n기본 배율에서 아래로 스와이프: 닫기";
 
@@ -590,13 +590,13 @@
 "Enter the website’s home address." = "사이트의 홈 주소를 입력하세요.";
 "Select the server type for this address." = "서버 종류를 선택하세요.";
 
-"Enter a comics website address, or import your Violet library." = "만화 사이트 주소를 입력하거나 Violet 데이터를 가져오세요.";
+"Enter a comics website address, or import your Violet library." = "만화 사이트 주소를 입력하거나 다른 만화 뷰어 데이터를 가져오세요.";
 
 "Pools in Comics Mode" = "만화 모드에서 풀 보기";
 
 "With only image websites connected, Explore shows their pools. Connect a comics website to browse comics instead." = "이미지 사이트만 연결하면 탐색에 풀이 표시됩니다. 만화 사이트를 연결하면 만화가 표시됩니다.";
 
-"Import from Violet" = "Violet에서 가져오기";
+"Import from Violet" = "다른 만화 뷰어에서 가져오기";
 
 "%@ posts" = "게시물 %@개";
 

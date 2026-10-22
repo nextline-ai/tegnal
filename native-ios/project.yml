@@ -1,7 +1,7 @@
-name: NumberMemo
+name: TEGNAL
 options:
   developmentLanguage: en
-  bundleIdPrefix: com.deaum
+  bundleIdPrefix: work.nextline
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -18,12 +18,12 @@ packages:
     from: "6.29.3"
 
 targets:
-  NumberMemo:
+  TEGNAL:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - path: NumberMemo
+      - path: TEGNAL
       - path: AppIcon.icon
       - path: Shared
     dependencies:
@@ -31,11 +31,11 @@ targets:
       - target: ShareExtension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.deaum.numbermemo
+        PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
         SUPPORTS_MACCATALYST: NO
-        INFOPLIST_FILE: NumberMemo/Info.plist
-        CODE_SIGN_ENTITLEMENTS: NumberMemo/NumberMemo.entitlements
+        INFOPLIST_FILE: TEGNAL/Info.plist
+        CODE_SIGN_ENTITLEMENTS: TEGNAL/TEGNAL.entitlements
         CURRENT_PROJECT_VERSION: 6
         MARKETING_VERSION: 1.0.0
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -56,7 +56,7 @@ targets:
       - path: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.deaum.numbermemo.share
+        PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.share
         INFOPLIST_FILE: ShareExtension/Info.plist
         CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
         CURRENT_PROJECT_VERSION: 6
@@ -67,58 +67,59 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
 
-  NumberMemoTests:
+  TEGNALTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: NumberMemoTests
+      - path: TEGNALTests
     dependencies:
-      - target: NumberMemo
+      - target: TEGNAL
     settings:
       base:
+        PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.tests
         GENERATE_INFOPLIST_FILE: true
         SWIFT_VERSION: "5.10"
         DEVELOPMENT_TEAM: 6HV24C77H5
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
 
-  NumberMemoUITests:
+  TEGNALUITests:
     type: bundle.ui-testing
     platform: iOS
     sources:
-      - path: NumberMemoUITests
+      - path: TEGNALUITests
     dependencies:
-      - target: NumberMemo
+      - target: TEGNAL
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.deaum.numbermemo.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.uitests
         GENERATE_INFOPLIST_FILE: true
         SWIFT_VERSION: "5.10"
         DEVELOPMENT_TEAM: 6HV24C77H5
         CODE_SIGN_STYLE: Automatic
-        TEST_TARGET_NAME: NumberMemo
+        TEST_TARGET_NAME: TEGNAL
 
 schemes:
-  NumberMemo:
+  TEGNAL:
     build:
       targets:
-        NumberMemo: all
+        TEGNAL: all
     test:
-      targets: [NumberMemoTests, NumberMemoUITests]
+      targets: [TEGNALTests, TEGNALUITests]
   NativeContentDeviceValidation:
     build:
       targets:
-        NumberMemo: all
+        TEGNAL: all
     test:
-      targets: [NumberMemoTests, NumberMemoUITests]
+      targets: [TEGNALTests, TEGNALUITests]
       environmentVariables:
-        NUMBER_MEMO_LIVE_TESTS: "1"
+        TEGNAL_LIVE_TESTS: "1"
   BooruDeviceValidation:
     build:
       targets:
-        NumberMemo: all
+        TEGNAL: all
     test:
-      targets: [NumberMemoTests, NumberMemoUITests]
+      targets: [TEGNALTests, TEGNALUITests]
       environmentVariables:
-        NUMBER_MEMO_BOORU_LIVE_TESTS: "1"
-        NUMBER_MEMO_LEGACY_SERVERS: "$(NUMBER_MEMO_LEGACY_SERVERS)"
+        TEGNAL_BOORU_LIVE_TESTS: "1"
+        TEGNAL_LEGACY_SERVERS: "$(TEGNAL_LEGACY_SERVERS)"

@@ -1,6 +1,6 @@
 # 원본 게임 JSON 변환
 
-`edge-roulette.json`은 `/Users/juhyungpark/Programming/old/edge-roulette/src/App.tsx`의 콘텐츠를 `number-memo-challenges`, schemaVersion 1 백업 형식으로 변환한 프로젝트용 자료입니다. 앱의 소스·리소스·기본 예제에 포함하지 않습니다. 필요할 때 앱의 챌린지 백업 및 가져오기에서 사용자가 직접 선택할 수 있습니다.
+`edge-roulette.json`은 `/Users/juhyungpark/Programming/old/edge-roulette/src/App.tsx`의 콘텐츠를 `tegnal-challenges`, schemaVersion 1 백업 형식으로 변환한 프로젝트용 자료입니다. 앱의 소스·리소스·기본 예제에 포함하지 않습니다. 필요할 때 앱의 챌린지 백업 및 가져오기에서 사용자가 직접 선택할 수 있습니다.
 
 - 원본 선택지: 시각 자극 50개, 방식 10개, 보조 상상 문구 25개, 자세 8개. 표시 문구와 검색 태그를 분리했습니다.
 - 시간 5~15분은 300~900초, 간격 60초로 저장합니다. 횟수는 1~3회, 혼합 확률은 50:50입니다.

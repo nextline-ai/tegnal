@@ -4,13 +4,13 @@
   "publisher": "DEAUM (daeummoyang)",
   "distribution": {
     "team": "6HV24C77H5",
-    "bundle": "com.deaum.numbermemo",
-    "app_group": "group.com.deaum.numbermemo",
-    "icloud": "iCloud.com.deaum.numbermemo",
+    "bundle": "work.nextline.tegnal",
+    "app_group": "group.work.nextline.tegnal",
+    "icloud": "iCloud.work.nextline.tegnal",
     "certificate": "Apple Distribution: daeummoyang"
   },
   "repository": {
-    "name": "nextline-ai/Number-Memo",
+    "name": "nextline-ai/tegnal",
     "visibility": "PUBLIC",
     "history": "Fresh initial commit; previous repository retained privately under a different name",
     "excluded": [
@@ -35,5 +35,6 @@
   "limitations": [
     "Pattern checks do not guarantee detection of every possible identifier.",
     "External copies and caches of the previous repository cannot be erased by this migration."
-  ]
+  ],
+  "naming_note": "Historical validation snapshot. Identifiers and local artifact labels have been normalized to TEGNAL; those labels do not verify the existence of pre-rename local artifacts."
 }

@@ -1,0 +1,462 @@
+import XCTest
+import GRDB
+import UIKit
+@testable import TEGNAL
+
+final class TasteTests: XCTestCase {
+    private var originalSite: String?
+    override func setUp() {
+        super.setUp()
+        originalSite = UserDefaults.standard.string(forKey: "manga.site_address")
+        UserDefaults.standard.set("comics.example", forKey: "manga.site_address")
+    }
+    override func tearDown() {
+        UserDefaults.standard.set(originalSite, forKey: "manga.site_address")
+        super.tearDown()
+    }
+
+    func testSpeculativeCoverBackfillHonorsPowerAndThermalLimits() {
+        XCTAssertTrue(CoverQueuePolicy.allowsBackfill(lowPowerMode: false, thermalState: .nominal))
+        XCTAssertTrue(CoverQueuePolicy.allowsBackfill(lowPowerMode: false, thermalState: .fair))
+        XCTAssertFalse(CoverQueuePolicy.allowsBackfill(lowPowerMode: true, thermalState: .nominal))
+        XCTAssertFalse(CoverQueuePolicy.allowsBackfill(lowPowerMode: false, thermalState: .serious))
+        XCTAssertFalse(CoverQueuePolicy.allowsBackfill(lowPowerMode: false, thermalState: .critical))
+    }
+    func testUnchangedTasteMetadataDoesNotDirtyDatabase() throws {
+        let store = try AppDatabase.inMemory().tasteStore
+        try store.metadata(["peer-a", "peer-b"], key: "seen-test")
+        let before = try store.database.read { try Int.fetchOne($0, sql: "SELECT total_changes()") }
+        try store.metadata(["peer-a", "peer-b"], key: "seen-test")
+        let after = try store.database.read { try Int.fetchOne($0, sql: "SELECT total_changes()") }
+        XCTAssertEqual(before, after)
+        try store.metadata(["peer-a", "peer-b", "peer-c"], key: "seen-test")
+        XCTAssertEqual(try store.metadata([String].self, key: "seen-test"), ["peer-a", "peer-b", "peer-c"])
+    }
+    @MainActor func testBootstrapRetriesWhenStoresDeclinedCollectionDuringPause() async throws {
+        let library = try AppDatabase.inMemory(), images = try BooruStore()
+        let controller = TasteController(library: library, images: images)
+        // Model a permission change arriving after the controller passed its
+        // enabled guard but before the detached bootstrap writes either store.
+        var paused = controller.control; paused.enabled = false
+        try controller.comics.setControl(paused); try controller.booru.setControl(paused)
+        _ = try library.upsertWork(galleryId: 91, tags: "tag:watercolor")
+        await controller.bootstrap()
+        XCTAssertNotEqual(try controller.comics.metadata(Bool.self, key: "bootstrapped"), true)
+        controller.change { $0.enabled = true }
+        await controller.bootstrap()
+        XCTAssertEqual(try controller.comics.metadata(Bool.self, key: "bootstrapped"), true)
+        XCTAssertEqual(try controller.booru.metadata(Bool.self, key: "bootstrapped"), true)
+        XCTAssertEqual(try controller.comics.events().filter { $0.kind == .seed }.map(\.item.id), [91])
+    }
+    func testSearchRetentionDefaultsToForeverAndPreservesExplicitChoice() throws {
+        let suite = "taste-retention-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(SearchRetention.days(in: defaults), 0)
+        defaults.set(7, forKey: "search.retentionDays")
+        XCTAssertEqual(SearchRetention.days(in: defaults), 7)
+        defaults.set(0, forKey: "search.retentionDays")
+        XCTAssertEqual(SearchRetention.days(in: defaults), 0)
+    }
+    private let source = "https://example.test"
+    private func event(_ id: Int64, tags: [String] = ["blue_hair", "green_eyes"], query: String = "blue_hair", session: String = "s1", kind: TasteEvent.Kind = .save, at: Double = 100) -> TasteEvent {
+        var e = TasteEvent(kind: kind, item: .init(source: source, id: id, tags: tags), context: .init(origin: .search, query: query, session: session)); e.at = at; return e
+    }
+    func testExplicitAndHiddenStacksAndTechnicalExclusion() {
+        var e = event(1, tags: ["blue_hair", "green_eyes", "animated", "png", "highres", "tagme", "custom_meta", "pixel_art"])
+        e.item.metadata = ["custom_meta"]
+        let result = TasteAnalyzer.analyze([e], control: .init())
+        XCTAssertEqual(result.tags.first { $0.name == "blue_hair" }?.confirmed, 1)
+        XCTAssertEqual(result.tags.first { $0.name == "green_eyes" }?.hidden, 1)
+        XCTAssertEqual(Set(result.tags.map(\.name)), ["blue_hair", "green_eyes", "pixel_art"])
+        XCTAssertFalse(result.tags.contains(where: \.discovery))
+    }
+    func testExactExclusionsPreserveArtisticAndUnknownTags() {
+        let tags = ["PNG", "highres", "translation_request", "monochrome", "pixel_art", "gif_artist", "character:tagme", "unknown_category"]
+        XCTAssertEqual(Set(TasteTagPolicy.filter(tags)), ["monochrome", "pixel_art", "gif_artist", "character:tagme", "unknown_category"])
+        XCTAssertTrue(TasteTagPolicy.filter(["rating:safe", "order:score", "filetype:png"]).isEmpty)
+    }
+    func testSearchedTechnicalTagsNeverBecomeConfirmed() {
+        let result = TasteAnalyzer.analyze([event(1, tags: ["png", "animated", "green_eyes"], query: "png animated")], control: .init())
+        XCTAssertEqual(result.tags.map(\.name), ["green_eyes"])
+    }
+    func testDuplicateEventsAndResavesCountOnceAndRemovalWithdraws() {
+        let first = event(1), second = event(1, at: 200)
+        let result = TasteAnalyzer.analyze([first, first, second], control: .init())
+        XCTAssertEqual(result.tags.first { $0.name == "green_eyes" }?.hidden, 1)
+        let removal = event(1, kind: .remove, at: 300)
+        XCTAssertTrue(TasteAnalyzer.analyze([first, second, removal], control: .init()).tags.isEmpty)
+        let historical = TasteAnalyzer.analyze([first, second, removal], control: .init(), period: .init(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 400)))
+        XCTAssertEqual(historical.saves, 1)
+        XCTAssertEqual(historical.tags.first { $0.name == "green_eyes" }?.count, 1)
+    }
+    func testSeedsAreGeneralAndNotCurrentActivity() {
+        var seed = event(1, kind: .seed); seed.at = 0; seed.context = .unknown
+        let result = TasteAnalyzer.analyze([seed], control: .init())
+        XCTAssertEqual(result.tags.first?.general, 1); XCTAssertEqual(result.saves, 0)
+        let week = TasteAnalyzer.analyze([seed], control: .init(), period: .init(start: Date(timeIntervalSince1970: 1), end: Date(timeIntervalSince1970: 1000)))
+        XCTAssertTrue(week.tags.isEmpty); XCTAssertEqual(week.saves, 0)
+    }
+    func testSearchOnlyDoesNotIncreasePreferenceAndKnownTagsAreNotDiscoveries() {
+        var events = (1...6).map { event(Int64($0), session: "s\($0)") }
+        XCTAssertTrue(TasteAnalyzer.analyze(events, control: .init()).tags.first { $0.name == "green_eyes" }!.discovery)
+        events.append(event(0, tags: ["green_eyes"], query: "green_eyes", kind: .search))
+        let result = TasteAnalyzer.analyze(events, control: .init())
+        let tag = result.tags.first { $0.name == "green_eyes" }!
+        XCTAssertEqual(tag.count, 6); XCTAssertEqual(tag.searches, 1); XCTAssertFalse(tag.discovery)
+    }
+    func testRecommendationsCannotManufactureOrganicEvidence() {
+        let events = (1...10).map { id -> TasteEvent in
+            var e = event(Int64(id), session: "s\(id)"); e.context.origin = .recommendation; return e
+        }
+        let result = TasteAnalyzer.analyze(events, control: .init())
+        XCTAssertTrue(result.tags.allSatisfy { $0.confirmed == 0 && $0.hidden == 0 && !$0.discovery })
+        XCTAssertEqual(result.opens, 0)
+    }
+    func testConstraintsAreNotHidden() {
+        var e = event(1); e.context.constraints = ["green_eyes"]
+        XCTAssertEqual(TasteAnalyzer.analyze([e], control: .init()).tags.map(\.name), ["blue_hair"])
+    }
+    func testLiftRequiresEnoughSamplesAndCommonTagsAreNotDiscoveries() {
+        let opens = (1...40).map { event(Int64($0), tags: ["common", $0 <= 10 ? "rare" : "other"], query: "", session: "s\($0)", kind: .open) }
+        let saves = (1...10).map { event(Int64($0), tags: ["common", "rare"], query: "", session: "s\($0)") }
+        let result = TasteAnalyzer.analyze(opens + saves, control: .init())
+        XCTAssertGreaterThan(result.tags.first { $0.name == "rare" }!.lift!, 1)
+        XCTAssertFalse(result.tags.first { $0.name == "common" }!.discovery)
+        XCTAssertNil(TasteAnalyzer.analyze(Array(saves.prefix(2)), control: .init()).tags.first?.lift)
+    }
+    func testMetadataBackfillDoesNotAddAnotherSave() {
+        var metadata = event(1, tags: ["blue_hair", "green_eyes", "highres"], kind: .metadata, at: 200); metadata.context = .unknown
+        let result = TasteAnalyzer.analyze([event(1, tags: []), metadata], control: .init())
+        XCTAssertEqual(result.saves, 1); XCTAssertEqual(result.tags.first { $0.name == "blue_hair" }?.confirmed, 1)
+        XCTAssertEqual(result.tags.first { $0.name == "green_eyes" }?.hidden, 1)
+    }
+    func testSourceNamespacesRemainSeparate() {
+        var b = event(2); b.item.source = "https://other.test"
+        XCTAssertEqual(TasteAnalyzer.analyze([event(1), b], control: .init()).tags.filter { $0.name == "blue_hair" }.count, 2)
+    }
+    func testDigestIsStableAcrossEncodingAndEventOrder() throws {
+        let events = [event(1, tags: ["green_eyes", "blue_hair"], query: "blue_hair another_tag"), event(2)]
+        let decoded = try JSONDecoder().decode([TasteEvent].self, from: JSONEncoder().encode(events))
+        XCTAssertEqual(TasteAnalyzer.analyze(events, control: .init()).digest, TasteAnalyzer.analyze(decoded.reversed(), control: .init()).digest)
+    }
+    func testWeekMonthAndTimezoneBoundaries() throws {
+        let now = ISO8601DateFormatter().date(from: "2026-10-07T18:00:00Z")!
+        let week = try XCTUnwrap(TastePeriod.week.interval(offset: 0, now: now, timeZone: "Asia/Seoul"))
+        XCTAssertEqual(ISO8601DateFormatter().string(from: week.start), "2026-10-04T15:00:00Z")
+        let month = try XCTUnwrap(TastePeriod.month.interval(offset: 0, now: now, timeZone: "Asia/Seoul"))
+        XCTAssertEqual(ISO8601DateFormatter().string(from: month.start), "2026-09-30T15:00:00Z")
+    }
+    func testAtomicComicSaveMetadataAndRemoval() throws {
+        let db = try AppDatabase.inMemory()
+        let context = DiscoveryContext(origin: .search, query: "female:blue_hair")
+        _ = try db.upsertWork(galleryId: 1, tags: "female:blue_hair, female:green_eyes", discoveryContext: context)
+        _ = try db.upsertWork(galleryId: 1, tags: "female:blue_hair, female:green_eyes", discoveryContext: context)
+        XCTAssertEqual(try db.tasteStore.events().filter { $0.kind == .save }.count, 1)
+        XCTAssertEqual(try db.tasteStore.events().count, 1)
+        try db.deleteWork(galleryId: 1)
+        XCTAssertTrue(TasteAnalyzer.analyze(try db.tasteStore.events(), control: .init()).tags.isEmpty)
+    }
+    func testPeerMergePauseAndResetDoNotResurrectActivity() throws {
+        let a = try AppDatabase.inMemory().tasteStore, b = try AppDatabase.inMemory().tasteStore
+        try a.record(.save, item: event(1).item, context: event(1).context)
+        let original = try a.events()
+        try b.merge(original); try b.merge(original)
+        XCTAssertEqual(try b.events().count, 1)
+        try b.record(.save, item: event(2).item, context: event(2).context)
+        var paused = TasteControl(); paused.enabled = false; paused.generation = "paused"; paused.timestamp = 200
+        try b.setControl(paused, remote: true)
+        XCTAssertEqual(try b.events().count, 1)
+        try b.record(.save, item: event(3).item, context: .unknown)
+        XCTAssertEqual(try b.events().count, 1)
+        var reset = paused; reset.epoch = "reset"; reset.timestamp = 300
+        try a.setControl(reset, remote: true); try b.setControl(reset, remote: true)
+        try a.merge(original); try b.merge(original)
+        XCTAssertTrue(try a.events().isEmpty); XCTAssertTrue(try b.events().isEmpty)
+        try b.bootstrap([event(4).item]); XCTAssertTrue(try b.events().isEmpty)
+    }
+    func testCloudChunksRoundTripWithoutMediaAndDeduplicate() throws {
+        let chunk = TasteSyncChunk(mode: .booru, epoch: "initial", events: [event(1)])
+        let data = try JSONEncoder().encode(chunk)
+        let text = String(decoding: data, as: UTF8.self)
+        XCTAssertFalse(text.contains("fileURL")); XCTAssertFalse(text.contains("previewURL")); XCTAssertFalse(text.contains("title"))
+        let decoded = try JSONDecoder().decode(TasteSyncChunk.self, from: data)
+        let store = try AppDatabase.inMemory().tasteStore
+        try store.merge(decoded.events); try store.merge(decoded.events)
+        XCTAssertEqual(try store.events().count, 1)
+    }
+    func testAnalysisCacheIncludesLateEventsAndReset() async throws {
+        let store = try AppDatabase.inMemory().tasteStore, cache = TasteAnalysisCache()
+        try store.merge([event(1, at: 200)])
+        let first = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        try store.merge([event(2, at: 100)])
+        let second = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(first.saves, 1); XCTAssertEqual(second.saves, 2)
+        var reset = TasteControl(); reset.epoch = "new"
+        try store.setControl(reset)
+        let last = try await cache.snapshot(store: store, control: reset, period: nil, previous: nil)
+        XCTAssertTrue(last.tags.isEmpty)
+    }
+    func testAnalysisCacheReusesIdenticalSnapshotsAndTracksInputs() async throws {
+        let store = try AppDatabase.inMemory().tasteStore, cache = TasteAnalysisCache()
+        let saved = event(1)
+        try store.merge([saved])
+        let first = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil, savedKeys: [saved.item.key])
+        let again = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil, savedKeys: [saved.item.key])
+        XCTAssertEqual(first.digest, again.digest)
+        let repeatedCount = await cache.analysisCount
+        XCTAssertEqual(repeatedCount, 1, "Unchanged requests must not re-analyze the entire history")
+        let removed = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil, savedKeys: [])
+        XCTAssertTrue(removed.tags.isEmpty)
+        var excluded = TasteControl(); excluded.setAnalysisExcluded(["blue_hair"], mode: .comics)
+        let filtered = try await cache.snapshot(store: store, control: excluded, period: nil, previous: nil, savedKeys: [saved.item.key])
+        XCTAssertFalse(filtered.tags.contains { $0.name == "blue_hair" })
+        let historical = DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 200))
+        let report = try await cache.snapshot(store: store, control: .init(), period: historical, previous: nil, savedKeys: [])
+        let sameReport = try await cache.snapshot(store: store, control: .init(), period: historical, previous: nil, savedKeys: [saved.item.key])
+        XCTAssertEqual(report.digest, sameReport.digest)
+        let finalCount = await cache.analysisCount
+        XCTAssertEqual(finalCount, 4, "Historical reports must ignore changes to current saved IDs")
+    }
+    func testAnalysisCacheDropsDeletedEventsWhenNewRowsKeepCountUnchanged() async throws {
+        let store = try AppDatabase.inMemory().tasteStore, cache = TasteAnalysisCache()
+        let removed = event(1), kept = event(2), added = event(3)
+        try store.merge([removed, kept])
+        _ = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        try await store.database.write { db in
+            try db.execute(sql: "DELETE FROM taste_events WHERE id = ?", arguments: [removed.id])
+            try TasteStore.insert(added, db: db, uploaded: true)
+        }
+        let refreshed = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(refreshed.saves, 2)
+        XCTAssertEqual(Set(refreshed.tags.flatMap(\.works).map(\.id)), [2, 3])
+    }
+
+    func testAnalysisCacheSkipsDecodingAfterUnrelatedWritesAndUploadFlags() async throws {
+        let store = try AppDatabase.inMemory().tasteStore, cache = TasteAnalysisCache()
+        let saved = event(1)
+        try store.merge([saved])
+        let first = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        try await store.database.write { db in
+            try TasteStore.put("changed", key: "unrelated-test-value", db: db)
+            try db.execute(sql: "UPDATE taste_events SET uploaded = 1 - uploaded")
+        }
+        let same = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(first.digest, same.digest)
+        let loads = await cache.eventLoadCount
+        XCTAssertEqual(loads, 1, "Unrelated commits must not read/decode the complete taste history")
+
+        var changed = saved
+        changed.item.tags = ["new_tag"]
+        let payload = try JSONEncoder().encode(changed)
+        try await store.database.write { db in
+            try db.execute(sql: "UPDATE taste_events SET payload = ? WHERE id = ?", arguments: [payload, saved.id])
+        }
+        let updated = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        XCTAssertNotEqual(updated.digest, first.digest)
+        XCTAssertTrue(updated.tags.contains { $0.name == "new_tag" })
+        let updatedLoads = await cache.eventLoadCount
+        XCTAssertEqual(updatedLoads, 2)
+    }
+
+    func testAnalysisCacheKeepsCommittedSnapshotAfterRollback() async throws {
+        let store = try AppDatabase.inMemory().tasteStore, cache = TasteAnalysisCache()
+        try store.merge([event(1)])
+        let first = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        enum Rollback: Error { case expected }
+        do {
+            try await store.database.write { db in
+                try db.execute(sql: "DELETE FROM taste_events")
+                throw Rollback.expected
+            }
+        } catch Rollback.expected {}
+        let same = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(same.digest, first.digest)
+        let loads = await cache.eventLoadCount
+        XCTAssertEqual(loads, 1)
+    }
+
+    func testAnalysisCacheDetectsChangesFromAnotherDatabaseConnection() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("library.sqlite").path
+        let store = try AppDatabase(DatabaseQueue(path: path)).tasteStore
+        let peer = try DatabaseQueue(path: path), cache = TasteAnalysisCache()
+        try store.merge([event(1)])
+        _ = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        let added = event(2)
+        try await peer.write { db in try TasteStore.insert(added, db: db, uploaded: true) }
+        let updated = try await cache.snapshot(store: store, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(updated.saves, 2)
+        let loads = await cache.eventLoadCount
+        XCTAssertEqual(loads, 2, "External writers must still invalidate the cached history")
+    }
+    func testAnalysisCacheDetectsReusedFinalRowIDAndDifferentDatabase() async throws {
+        let firstStore = try AppDatabase.inMemory().tasteStore, secondStore = try AppDatabase.inMemory().tasteStore
+        let cache = TasteAnalysisCache(), old = event(1), replacement = event(2)
+        try firstStore.merge([old])
+        _ = try await cache.snapshot(store: firstStore, control: .init(), period: nil, previous: nil)
+        try await firstStore.database.write { db in
+            try db.execute(sql: "DELETE FROM taste_events")
+            try TasteStore.insert(replacement, db: db, uploaded: true)
+        }
+        let replaced = try await cache.snapshot(store: firstStore, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(Set(replaced.tags.flatMap(\.works).map(\.id)), [2])
+        try secondStore.merge([event(3)])
+        let switched = try await cache.snapshot(store: secondStore, control: .init(), period: nil, previous: nil)
+        XCTAssertEqual(Set(switched.tags.flatMap(\.works).map(\.id)), [3])
+    }
+    func testRecommendationMixAndTechnicalScoring() {
+        var candidates: [TasteRecommendation] = []
+        for i in 1...30 {
+            var tag = TasteTag(source: source, name: "green_eyes"); tag.hidden = i > 15 ? 5 : 0; tag.general = i <= 15 ? 2 : 0; tag.sessions = ["a", "b", "c"]
+            candidates.append(.init(item: event(Int64(i)).item, post: nil, gallery: nil, reason: tag, score: Double(i)))
+        }
+        let mixed = RecommendationService.mix(candidates)
+        XCTAssertEqual(mixed.count, 20); XCTAssertEqual(mixed.filter { $0.reason.discovery }.count, 6)
+        let tag = TasteTag(source: source, name: "png", general: 100)
+        XCTAssertEqual(RecommendationService.score(.init(source: source, id: 1, tags: ["png"]), tags: [tag]), 0)
+    }
+    func testStalePreferenceEditCannotUndoResetOrPause() {
+        var original = TasteControl()
+        original.author = "a"
+        var reset = original; reset.timestamp = 100; reset.epoch = UUID().uuidString; reset.resetTimestamp = 100; reset.resetAuthor = "a"
+        reset.enabled = false; reset.enabledTimestamp = 100; reset.enabledAuthor = "a"; reset.generation = "paused"
+        var stale = original; stale.timestamp = 200; stale.author = "b"; stale.cloudEnabled = false
+        let merged = reset.merged(with: stale)
+        XCTAssertEqual(merged.epoch, reset.epoch); XCTAssertFalse(merged.enabled); XCTAssertEqual(merged.generation, "paused")
+        XCTAssertFalse(merged.cloudEnabled)
+        XCTAssertEqual(merged, stale.merged(with: reset))
+    }
+    func testServerMetadataClassificationAlsoExcludesSearchAndLegacyEvidence() {
+        var typed = event(2, tags: ["custom_technical", "green_eyes"], kind: .open)
+        typed.item.metadata = ["custom_technical"]
+        let search = event(0, tags: ["custom_technical"], query: "custom_technical", kind: .search)
+        let legacy = event(1, tags: ["custom_technical", "green_eyes"], query: "custom_technical")
+        XCTAssertEqual(TasteAnalyzer.analyze([typed, search, legacy], control: .init()).tags.map(\.name), ["green_eyes"])
+    }
+    func testBooruMetaTagsSurviveLegacyDecodingAndServerRemap() throws {
+        let server = BooruServer.presets[0]
+        let post = try BooruDecoder.post(["id": 1, "tag_string": "blue_hair custom_meta", "tag_string_meta": "custom_meta", "file_ext": "png"], server: server)
+        XCTAssertEqual(post.metadataTags, ["custom_meta"])
+        XCTAssertEqual(post.onServer("another").metadataTags, ["custom_meta"])
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(post)) as! [String: Any]
+        object.removeValue(forKey: "metadataTags")
+        let legacy = try JSONDecoder().decode(BooruPost.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(legacy.metadataTags)
+    }
+
+    func testImportsSeedGeneralTasteWithoutCountingNewActivity() throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 5, tags: "blue_hair, green_eyes")
+        try db.tasteStore.bootstrap([.comic(5, tags: "blue_hair, green_eyes")])
+        let events = try db.tasteStore.events()
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.kind, .imported)
+        let snapshot = TasteAnalyzer.analyze(events, control: .init())
+        XCTAssertEqual(snapshot.saves, 0)
+        XCTAssertTrue(snapshot.tags.allSatisfy { $0.general == 1 && $0.confirmed == 0 && $0.hidden == 0 })
+    }
+
+    func testTaxonomyDoesNotAddActivityAndRetroactivelyFiltersTechnicalTags() {
+        var taxonomy = event(0, tags: [], kind: .taxonomy)
+        taxonomy.item.metadata = ["custom_meta"]
+        let saved = event(1, tags: ["custom_meta", "green_eyes"], query: "custom_meta")
+        let result = TasteAnalyzer.analyze([saved, taxonomy], control: .init())
+        XCTAssertEqual(result.tags.map(\.name), ["green_eyes"])
+        XCTAssertEqual(result.saves, 1)
+        XCTAssertEqual(result.searches, 0)
+    }
+
+    func testOlderLibraryRemovalInvalidatesCurrentProfileAndDigest() {
+        let saved = event(1)
+        let before = TasteAnalyzer.analyze([saved], control: .init(), savedKeys: [saved.item.key])
+        let after = TasteAnalyzer.analyze([saved], control: .init(), savedKeys: [])
+        XCTAssertFalse(before.tags.isEmpty)
+        XCTAssertTrue(after.tags.isEmpty)
+        XCTAssertNotEqual(before.digest, after.digest)
+        let historical = TasteAnalyzer.analyze([saved], control: .init(), period: .init(start: .init(timeIntervalSince1970: 0), end: .init(timeIntervalSince1970: 200)), savedKeys: [])
+        XCTAssertEqual(historical.saves, 1)
+        XCTAssertFalse(historical.tags.isEmpty)
+    }
+
+    func testCachedReportRejectsUnsupportedEvidence() {
+        let snapshot = TasteAnalyzer.analyze([event(1)], control: .init())
+        var report = TasteReport(epoch: "initial", digest: snapshot.digest, language: "en", insights: [.init(tagKey: snapshot.tags[0].id, pattern: .frequent)])
+        XCTAssertTrue(report.isValid(for: snapshot))
+        report.insights[0].pattern = .discovery
+        XCTAssertFalse(report.isValid(for: snapshot))
+        report.insights[0].pattern = .association
+        report.insights[0].relatedKey = snapshot.tags[1].id
+        XCTAssertFalse(report.isValid(for: snapshot))
+        report.insights[0] = .init(tagKey: "invented", pattern: .frequent)
+        XCTAssertFalse(report.isValid(for: snapshot))
+    }
+
+    func testCoordinatedChunkFilesInventoryReadAndDelete() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controlURL = root.appendingPathComponent("taste-control-device.json")
+        let chunkURL = root.appendingPathComponent("initial/taste-2026-10-device.json")
+        let data = try JSONEncoder().encode(TasteSyncChunk(mode: .booru, epoch: "initial", events: [event(1)]))
+        try CloudLibraryFiles.write(try JSONEncoder().encode(TasteControl()), to: controlURL, ubiquitous: false)
+        try CloudLibraryFiles.write(data, to: chunkURL, ubiquitous: false)
+        let inventory = try TasteCloudFiles.inventory(root)
+        XCTAssertEqual(inventory.controls, [controlURL])
+        XCTAssertEqual(inventory.data, [chunkURL])
+        XCTAssertEqual(try TasteCloudFiles.read(chunkURL), data)
+        try TasteCloudFiles.remove(chunkURL)
+        XCTAssertTrue(try TasteCloudFiles.inventory(root).data.isEmpty)
+    }
+
+    func testRemovingServerWithdrawsSavedTasteEvidence() throws {
+        let store = try BooruStore(), server = BooruServer.presets[0]
+        try store.saveServer(server)
+        try store.toggleFavorite(BooruFixtureSource.post(42, server: server), context: .init(origin: .feed))
+        XCTAssertEqual(try store.tasteStore.events().filter { $0.kind == .save }.count, 1)
+        try store.deleteServer(server)
+        let events = try store.tasteStore.events()
+        XCTAssertEqual(events.filter { $0.kind == .remove }.count, 1)
+        XCTAssertTrue(TasteAnalyzer.analyze(events, control: .init()).tags.isEmpty)
+    }
+
+
+}
+
+
+extension TasteTests {
+    @MainActor func testVisionFingerprintsPersistCompareAndExcludeDeletedWorks() async throws {
+        let db = try AppDatabase.inMemory()
+        for id: Int64 in [1,2,3] { _ = try db.upsertWork(galleryId: id) }
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 128, height: 128))
+        let data = try XCTUnwrap(renderer.image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
+            UIColor.blue.setFill(); context.fill(CGRect(x: 20, y: 20, width: 60, height: 90))
+        }.pngData())
+        let other = try XCTUnwrap(renderer.image { context in
+            UIColor.black.setFill(); context.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
+            UIColor.red.setFill(); context.cgContext.fillEllipse(in: CGRect(x: 50, y: 50, width: 60, height: 60))
+        }.pngData())
+        let store = VisualFingerprintStore(database: db.dbWriter)
+        let first: Data
+        do {
+            first = try await store.save(data: data, scope: "comics", id: 1)
+        } catch {
+            throw XCTSkip("Vision feature print request not supported in this environment: \(error.localizedDescription)")
+        }
+        let cached = try await store.save(data: data, scope: "comics", id: 1)
+        XCTAssertEqual(first, cached)
+        _ = try await store.save(data: data, scope: "comics", id: 2)
+        _ = try await store.save(data: other, scope: "comics", id: 3)
+        var candidates = try store.all(scope: "comics"); candidates.removeValue(forKey: 1)
+        let ranked = try await VisualFingerprintEngine.shared.rank(seed: first, candidates: candidates)
+        XCTAssertEqual(ranked.first?.0, 2); XCTAssertEqual(ranked.first?.1 ?? 1, 0, accuracy: 0.0001)
+        XCTAssertGreaterThan(ranked.last?.1 ?? 0, 0)
+        try db.deleteWork(galleryId: 2)
+        XCTAssertNil(try store.all(scope: "comics")[2])
+        // An extraction finishing after removal cannot restore deleted evidence.
+        _ = try await store.save(data: other, scope: "comics", id: 2)
+        XCTAssertNil(try store.all(scope: "comics")[2])
+    }
+}

@@ -1,9 +1,9 @@
-# Number Memo Privacy Policy
+# TEGNAL Privacy Policy
 
-Number Memo Privacy Policy
+TEGNAL Privacy Policy
 Updated: October 10, 2026
 
-NextLine develops Number Memo. Contact: contact@nextline.work · https://nextline.work
+NextLine develops TEGNAL. Contact: contact@nextline.work · https://nextline.work
 
 Your library and settings
 Saved works, folders, tags, artists, notes, searches, server addresses, and preferences are stored on your device. The two library modes use separate data stores. The app has no NextLine account, advertising SDK, analytics SDK, or developer-operated library server. We do not receive your library through normal app use.
@@ -18,7 +18,7 @@ iCloud
 Sync is enabled by default when iCloud Drive is available. Library records and selected settings are stored in your Apple account’s iCloud Drive and merged between your devices. Media files, API keys, and browser cookies are not included in this library sync. A pseudonymous installation/device-derived identifier distinguishes each device’s sync file; it is not sent to NextLine. You can turn sync off in Settings. This stops future syncing but does not delete existing local or iCloud copies. To remove cloud copies, turn sync off on all devices and use Apple’s iCloud storage controls. Device backups are also controlled by your Apple settings.
 
 Import, export, and translation
-The app accesses the backup files you select and writes exports only when requested. Exported backups can contain private library information; copies outside the app remain until you delete them. Image text recognition and translation use Apple frameworks. Apple may download language resources. Number Memo does not send images or recognized text to a NextLine translation service.
+The app accesses the backup files you select and writes exports only when requested. Exported backups can contain private library information; copies outside the app remain until you delete them. Image text recognition and translation use Apple frameworks. Apple may download language resources. TEGNAL does not send images or recognized text to a NextLine translation service.
 
 Retention and deletion
 Search history is kept until you delete it by default; you can change this duration, stop recording new searches, delete individual searches, or clear history. Saved searches are kept separately. Library items and settings remain until you remove them. Deleting a folder moves or unfiles its contents rather than deleting the works. With sync enabled, supported library deletions merge across devices. Image previews are cached locally up to 256 MB for faster loading and are not included in iCloud sync. Cached images can be recreated from the source website; Booru’s image cache can be cleared in Settings. Uninstalling removes the app’s local container, but exported files, Keychain entries, shared containers used by another installed component, and iCloud copies can remain.
@@ -38,10 +38,10 @@ When both library sync and analysis sync are enabled, analysis data is stored in
 
 ---
 
-품번메모 개인정보처리방침
+TEGNAL 개인정보처리방침
 개정일: 2026년 10월 9일
 
-품번메모는 NextLine이 개발합니다.
+TEGNAL은 NextLine이 개발합니다.
 문의: contact@nextline.work · https://nextline.work
 
 라이브러리와 설정
@@ -77,10 +77,10 @@ iCloud Drive를 사용할 수 있으면 동기화가 기본으로 켜집니다. 
 
 ---
 
-Number Memo プライバシーポリシー
+TEGNAL プライバシーポリシー
 更新日：2026年10月9日
 
-Number Memoの開発元はNextLineです。
+TEGNALの開発元はNextLineです。
 連絡先：contact@nextline.work · https://nextline.work
 
 ライブラリと設定

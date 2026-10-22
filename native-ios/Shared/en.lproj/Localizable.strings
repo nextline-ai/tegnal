@@ -45,7 +45,7 @@
 "Checking file…" = "Checking file…";
 "Choose Destination Folder" = "Choose Destination Folder";
 "Choose Thumbnail Page" = "Choose Thumbnail Page";
-"Choose a Violet Database" = "Choose a Violet Database";
+"Choose a Violet Database" = "Choose a Database from Other Manga Viewer";
 "Choose a folder to save to (%@)" = "Choose a folder to save to (%@)";
 "Clear Search" = "Clear Search";
 "Close" = "Close";
@@ -107,13 +107,13 @@
 "Horizontal Paging" = "Horizontal Paging";
 "How to Import data.db (Catalog)" = "How to Import data.db (Catalog)";
 "Import / Restore JSON Backup" = "Import / Restore JSON Backup";
-"Import Data (Violet)" = "Import Data (Violet)";
-"Import Violet Data" = "Import Violet Data";
+"Import Data (Violet)" = "Import Data (Other Manga Viewer)";
+"Import Violet Data" = "Import Data from Other Manga Viewer";
 "Import data.db (Work Metadata Catalog)" = "Import data.db (Work Metadata Catalog)";
 "Import error: %@" = "Import error: %@";
 "Import failed: %@" = "Import failed: %@";
 "Import user.db (Bookmarks, Folders, Artists)" = "Import user.db (Bookmarks, Folders, Artists)";
-"Import your library and download history from Violet." = "Import your library and download history from Violet.";
+"Import your library and download history from Violet." = "Import your library and download history from other manga viewers.";
 "Importing entire catalog… (%@ records)" = "Importing entire catalog… (%@ records)";
 "Importing library from user.db…" = "Importing library from user.db…";
 "Invalid Address" = "Invalid Address";
@@ -160,7 +160,7 @@
 "No work numbers were found in the shared link or text." = "No work numbers were found in the shared link or text.";
 "Not bookmarked" = "Not bookmarked";
 "Notes" = "Notes";
-"Number Memo" = "Number Memo";
+"TEGNAL" = "TEGNAL";
 "Off" = "Off";
 "On My iPhone (or Browse in Files)" = "On My iPhone (or Browse in Files)";
 "Original" = "Original";
@@ -212,7 +212,7 @@
 "Search Results" = "Search Results";
 "Search works" = "Search works";
 "Search, number, or link" = "Search, number, or link";
-"Select the Violet folder" = "Select the Violet folder";
+"Select the Violet folder" = "Select the database folder";
 "Select user.db or data.db" = "Select user.db or data.db";
 "Settings" = "Settings";
 "Show Page Number" = "Show Page Number";
@@ -438,8 +438,8 @@
 "Manage Servers" = "Manage Servers";
 "If a server cannot connect, use Validate Client to complete its browser check." = "If a server cannot connect, use Validate Client to complete its browser check.";
 "Move your servers, favorites and search history from Anime Boxes." = "Move your servers, favorites and search history from Anime Boxes.";
-"Move your folders and works from Violet. You can also start with an empty library." = "Move your folders and works from Violet. You can also start with an empty library.";
-"In Files, open the Violet folder and choose user.db for your library, or data.db for metadata." = "In Files, open the Violet folder and choose user.db for your library, or data.db for metadata.";
+"Move your folders and works from Violet. You can also start with an empty library." = "Move your folders and works from another manga viewer. You can also start with an empty library.";
+"In Files, open the Violet folder and choose user.db for your library, or data.db for metadata." = "In Files, choose user.db for your library, or data.db for metadata.";
 
 "Tap the center: quick menu\nHold anywhere: favorite\nTap the sides or swipe: change image\nDouble tap or pinch: zoom\nTranslate: Apple image translation for the visible area\nSwipe down at original zoom: close" = "Tap the center: quick menu\nHold anywhere: favorite\nTap the sides or swipe: change image\nDouble tap or pinch: zoom\nTranslate: Apple image translation for the visible area\nSwipe down at original zoom: close";
 
@@ -590,13 +590,13 @@
 "Enter the website’s home address." = "Enter the website’s home address.";
 "Select the server type for this address." = "Select the server type for this address.";
 
-"Enter a comics website address, or import your Violet library." = "Enter a comics website address, or import your Violet library.";
+"Enter a comics website address, or import your Violet library." = "Enter a comics website address, or import your library from another manga viewer.";
 
 "Pools in Comics Mode" = "Pools in Comics Mode";
 
 "With only image websites connected, Explore shows their pools. Connect a comics website to browse comics instead." = "With only image websites connected, Explore shows their pools. Connect a comics website to browse comics instead.";
 
-"Import from Violet" = "Import from Violet";
+"Import from Violet" = "Import from Other Manga Viewer";
 
 "%@ posts" = "%@ posts";
 

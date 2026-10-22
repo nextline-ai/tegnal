@@ -72,8 +72,8 @@
   "total_final_passes": 10,
   "note": "Data tests passed in tests-3 run; UI test was corrected for the return-to-app animation and both UI tests passed in ui-final run. This is a summary across the final applicable runs, not a claim that every intermediate run passed.",
   "result_bundles": {
-    "data": "/tmp/number-memo-native-content-tests-3.xcresult",
-    "ui": "/tmp/number-memo-native-content-ui-final.xcresult"
+    "data": "/tmp/tegnal-native-content-tests-3.xcresult",
+    "ui": "/tmp/tegnal-native-content-ui-final.xcresult"
   },
   "release_build": {
     "status": "passed",
@@ -89,5 +89,6 @@
     "UI uses synthetic images and an in-memory database; live data tests decode remote images without displaying or persisting them.",
     "Live Text toggle checked; OCR accuracy and translation results not asserted.",
     "No iOS 17 / iPad / cellular / long-session memory validation."
-  ]
+  ],
+  "naming_note": "Historical validation snapshot. Identifiers and local artifact labels have been normalized to TEGNAL; those labels do not verify the existence of pre-rename local artifacts."
 }

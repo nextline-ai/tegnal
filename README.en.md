@@ -2,11 +2,11 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/jTaDDEpE">
-    <img src="design/other/main_banner_en.webp" alt="Download Number Memo on TestFlight" width="100%">
+    <img src="design/other/WebP/main_banner_en.webp" alt="Download TEGNAL on TestFlight" width="100%">
   </a>
 </p>
 
-<h1 align="center">Number Memo</h1>
+<h1 align="center">TEGNAL</h1>
 <p align="center"><b>The first dedicated iOS viewer supporting both Hitomi and Danbooru in one place</b></p>
 <p align="center">
   Download easily and safely via <b>Apple’s official TestFlight</b>—no risky sideloading required.<br>
@@ -15,13 +15,13 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/jTaDDEpE"><b>📲 Download Free on TestFlight</b></a> ·
-  <a href="https://github.com/nextline-ai/Number-Memo/releases">Release Notes</a> ·
+  <a href="https://github.com/nextline-ai/tegnal/releases">Release Notes</a> ·
   <a href="https://discord.gg/vUTGZNMaMB">Discord Community</a>
 </p>
 
 ---
 
-## ✨ Why Number Memo?
+## ✨ Why TEGNAL?
 
 ### 1. Hitomi & Danbooru in One Place (First All-in-One iOS Viewer)
 - Supports both **Comics Mode (Hitomi, etc.)** and **Image Mode (Danbooru, Gelbooru, Moebooru, etc.)** in a single native iOS app.
@@ -29,7 +29,7 @@
 - Browse multiple Booru servers simultaneously and long-press any work to organize it into custom color-coded folders.
 
 ### 2. Easy & Safe Installation via Official TestFlight (No Sideloading)
-- Number Memo uses **Public TestFlight as its official release channel**.
+- TEGNAL uses **Public TestFlight as its official release channel**.
 - Forget complicated, risky sideloading tools, PC tethering, or 7-day certificate expirations.
 - Install with a single tap through Apple’s official TestFlight app and receive automatic updates safely.
 
@@ -48,8 +48,8 @@ Every AI feature runs **100% locally on your device** without sending your data 
 ## 📲 How to Install
 
 1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
-2. Tap the link below (or the banner at the top) to open the **Number Memo TestFlight** page and tap **Install**.
-   - 👉 **[Join Number Memo on TestFlight](https://testflight.apple.com/join/jTaDDEpE)**
+2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
+   - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/jTaDDEpE)**
 3. **Supported Platforms:** iPhone, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
 
 ---
@@ -80,9 +80,21 @@ Every AI feature runs **100% locally on your device** without sending your data 
 
 ---
 
+## 🛠️ Development
+
+Native iOS sources live in `native-ios/TEGNAL`. Open `native-ios/TEGNAL.xcodeproj` and select the **TEGNAL** scheme. The minimum deployment target is iOS 17.
+
+- **App bundle ID:** `work.nextline.tegnal`
+- **Share extension ID:** `work.nextline.tegnal.share`
+- **iCloud container:** `iCloud.work.nextline.tegnal`
+
+Device signing and distribution require matching Apple Developer configuration and provisioning profiles. These identifiers create a separate app from existing installations. Image-library and challenge JSON backups from earlier versions can still be imported.
+
+---
+
 ## 💬 Developer & Community
 
-<img src="design/branding/nextline-logo.svg" alt="NextLine" width="160" align="right">
+<img src="design/developer_branding/nextline-logo.svg" alt="NextLine" width="160" align="right">
 
 Have questions, feedback, or bug reports? Join our **Discord community** anytime!
 
@@ -93,5 +105,5 @@ Have questions, feedback, or bug reports? Join our **Discord community** anytime
 
 ---
 
-<sub>Number Memo is an independent client application and is not affiliated with Apple or any user-connected websites.<br>
+<sub>TEGNAL is an independent client application and is not affiliated with Apple or any user-connected websites.<br>
 <a href="docs/privacy-policy.md">Privacy Policy</a></sub>
