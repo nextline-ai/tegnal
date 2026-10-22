@@ -62,7 +62,7 @@ final class KeyboardUITests: XCTestCase {
         XCTAssertTrue(banner.waitForExistence(timeout: 5))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Post-onboarding import banner"; shot.lifetime = .keepAlways; add(shot)
         banner.tap()
-        XCTAssertTrue(element(app, "onboarding.violetImport").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "onboarding.import").exists)
         element(app, "onboarding.continue").tap()
         XCTAssertTrue(banner.waitForNonExistence(timeout: 5))

@@ -19,7 +19,7 @@ public struct ImportSummary: Sendable {
     }
 }
 
-public final class VioletImportService: Sendable {
+public final class MangaViewerImportService: Sendable {
     private let appDb: AppDatabase
 
     public init(appDb: AppDatabase) {
@@ -164,13 +164,13 @@ public final class VioletImportService: Sendable {
 
         for group in groups {
             try Task.checkCancellation()
-            guard let violetId = Self.safeInt64(from: group, column: "Id")
+            guard let sourceGroupId = Self.safeInt64(from: group, column: "Id")
                 ?? Self.safeInt64(from: group, column: "id") else { continue }
             var name = Self.safeString(from: group, column: "Name")
                 ?? Self.safeString(from: group, column: "name") ?? L10n.text("Folders")
             let rawColor = Self.safeInt64(from: group, column: "Color")
                 ?? Self.safeInt64(from: group, column: "color")
-            if name == "violet_default" { name = "미분류" }
+            if [0, 1].contains(sourceGroupId), name.hasSuffix("_default") { name = "미분류" }
 
             let colorInt: Int64
             if let raw = rawColor, raw != 4294940672, raw != 0, !assignedColors.contains(raw) {
@@ -181,9 +181,9 @@ public final class VioletImportService: Sendable {
             assignedColors.insert(colorInt)
 
             let desc = Self.safeString(from: group, column: "Description")
-            let folder = try appDb.createFolder(name: name, description: desc, color: colorInt, violetGroupId: violetId)
+            let folder = try appDb.createFolder(name: name, description: desc, color: colorInt, sourceGroupId: sourceGroupId)
             if let folderId = folder.id {
-                groupMap[violetId] = folderId
+                groupMap[sourceGroupId] = folderId
                 folderCount += 1
             }
         }

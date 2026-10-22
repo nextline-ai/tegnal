@@ -42,7 +42,7 @@ public final class AppDatabase: Sendable {
                 t.column("color", .integer).notNull().defaults(to: 4288585374)
                 t.column("sort_order", .integer).notNull().defaults(to: 0)
                 t.column("created_at", .text).notNull()
-                t.column("violet_group_id", .integer)
+                t.column("source_group_id", .integer)
             }
 
             try db.create(table: "works", ifNotExists: true) { t in
@@ -144,6 +144,15 @@ public final class AppDatabase: Sendable {
         migrator.registerMigration("v9_index_folder_works_work_id") { db in
             try db.create(index: "idx_folder_works_work_id", on: "folder_works", columns: ["work_id"], ifNotExists: true)
         }
+        migrator.registerMigration("v10_generic_import_metadata") { db in
+            let columns = try db.columns(in: "folders").map(\.name)
+            guard !columns.contains(MangaImportMetadata.groupIDKey) else { return }
+            let legacy = MangaImportMetadata.legacyGroupIDKey(in: columns)
+            try db.alter(table: "folders") { table in
+                if let legacy { table.rename(column: legacy, to: MangaImportMetadata.groupIDKey) }
+                else { table.add(column: MangaImportMetadata.groupIDKey, .integer) }
+            }
+        }
         return migrator
     }
 
@@ -163,7 +172,7 @@ public final class AppDatabase: Sendable {
         0xFF65A30D, // Lime Green
         0xFFC026D3, // Fuchsia
         0xFFDC2626, // Crimson
-        0xFF9333EA, // Violet
+        0xFF9333EA, // Purple
         0xFF0284C7, // Sky Blue
         0xFFB45309, // Warm Brown
         0xFF16A34A, // Forest Green
@@ -313,7 +322,7 @@ public final class AppDatabase: Sendable {
                 color: row["color"],
                 sortOrder: row["sort_order"],
                 createdAt: row["created_at"],
-                violetGroupId: row["violet_group_id"],
+                sourceGroupId: row["source_group_id"],
                 workCount: row["work_count"]
             )
         }
@@ -347,13 +356,13 @@ public final class AppDatabase: Sendable {
         return result
     }
 
-    public func createFolder(name: String, description: String? = nil, color: Int64? = nil, violetGroupId: Int64? = nil) throws -> Folder {
+    public func createFolder(name: String, description: String? = nil, color: Int64? = nil, sourceGroupId: Int64? = nil) throws -> Folder {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let folder = try dbWriter.write { db -> Folder in
             let resolvedColor = color ?? nextUniqueFolderColor(in: db)
 
-            // 1. Check by violetGroupId if provided
-            if let violetGroupId, var existing = try Folder.filter(Column("violet_group_id") == violetGroupId).fetchOne(db) {
+            // 1. Check by sourceGroupId if provided
+            if let sourceGroupId, var existing = try Folder.filter(Column("source_group_id") == sourceGroupId).fetchOne(db) {
                 if existing.name != trimmed && !trimmed.isEmpty {
                     try db.execute(sql: "UPDATE folders SET name = ? WHERE id = ?", arguments: [trimmed, existing.id])
                     existing.name = trimmed
@@ -363,9 +372,9 @@ public final class AppDatabase: Sendable {
 
             // 2. Check by name
             if var existing = try Folder.filter(Folder.Columns.name == trimmed).fetchOne(db) {
-                if let violetGroupId, existing.violetGroupId == nil {
-                    try db.execute(sql: "UPDATE folders SET violet_group_id = ? WHERE id = ?", arguments: [violetGroupId, existing.id])
-                    existing.violetGroupId = violetGroupId
+                if let sourceGroupId, existing.sourceGroupId == nil {
+                    try db.execute(sql: "UPDATE folders SET source_group_id = ? WHERE id = ?", arguments: [sourceGroupId, existing.id])
+                    existing.sourceGroupId = sourceGroupId
                 }
                 return existing
             }
@@ -378,7 +387,7 @@ public final class AppDatabase: Sendable {
                 color: resolvedColor,
                 sortOrder: maxOrder + 1,
                 createdAt: now,
-                violetGroupId: violetGroupId
+                sourceGroupId: sourceGroupId
             )
             try newFolder.insert(db)
             if newFolder.id == nil {
@@ -500,7 +509,7 @@ public final class AppDatabase: Sendable {
                     color: row["color"],
                     sortOrder: row["sort_order"],
                     createdAt: row["created_at"],
-                    violetGroupId: row["violet_group_id"],
+                    sourceGroupId: row["source_group_id"],
                     workCount: 0
                 )
                 foldersByWorkId[workId, default: []].append(folder)

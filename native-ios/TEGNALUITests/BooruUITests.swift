@@ -935,7 +935,7 @@ final class BooruUITests: XCTestCase {
         reveal(app, "settings.onboarding").tap()
         XCTAssertTrue(element(app, "onboarding.addServer").waitForExistence(timeout: 10))
         element(app, "onboarding.continue").tap()
-        XCTAssertTrue(element(app, "onboarding.violetImport").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
         element(app, "onboarding.continue").tap()
         XCTAssertTrue(element(app, "onboarding.tutorial").waitForExistence(timeout: 5))
         element(app, "onboarding.continue").tap()
@@ -1091,7 +1091,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Validate Client Danbooru"].exists)
         capture(app, "Unified onboarding addresses")
         element(app, "onboarding.continue").tap()
-        XCTAssertTrue(element(app, "onboarding.violetImport").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "onboarding.import").exists)
         capture(app, "Unified onboarding both imports")
         element(app, "onboarding.import").tap()
@@ -1122,16 +1122,16 @@ final class BooruUITests: XCTestCase {
         selectMode(app, "manga")
         XCTAssertTrue(element(app, "booru.pool.77").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "comics.enterAddress").isHittable)
-        XCTAssertTrue(element(app, "comics.importViolet").isHittable)
+        XCTAssertTrue(element(app, "comics.importMangaViewer").isHittable)
         capture(app, "Korean comics pool setup")
         app.tabBars.buttons["저장"].tap()
         XCTAssertTrue(element(app, "comics.connectionCard").waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["콘텐츠를 표시할 수 없습니다"].exists)
         XCTAssertTrue(element(app, "manga.createFolder").isEnabled)
         capture(app, "Korean disconnected comics library")
-        element(app, "comics.importViolet").tap()
+        element(app, "comics.importMangaViewer").tap()
         XCTAssertTrue(app.buttons["완료"].waitForExistence(timeout: 5))
-        capture(app, "Korean Violet import sheet")
+        capture(app, "Korean MangaViewer import sheet")
     }
 
     func testDisconnectedComicsCanUseLocalFoldersBeforeConnectingReader() {
@@ -1149,15 +1149,16 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(work.waitForExistence(timeout: 5))
     }
 
-    func testDisconnectedComicsKeepsTabsAndOffersVioletImport() {
+    func testDisconnectedComicsKeepsTabsAndOffersMangaViewerImport() {
         let app = launch(extra: ["--comics-setup-test", "--no-sites-test"])
         selectMode(app, "manga")
+        capture(app, "Disconnected comics before import")
         XCTAssertTrue(element(app, "comics.enterAddress").waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["Explore"].isSelected)
-        element(app, "comics.importViolet").tap()
+        element(app, "comics.importMangaViewer").tap()
         XCTAssertTrue(app.buttons["Import user.db (Bookmarks, Folders, Artists)"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Backup & Restore"].exists)
-        capture(app, "Violet import from disconnected comics")
+        capture(app, "MangaViewer import from disconnected comics")
         app.tabBars.buttons["Artists"].tap()
         XCTAssertTrue(app.tabBars.buttons["Artists"].isSelected)
         app.tabBars.buttons["Settings"].tap()
@@ -1220,7 +1221,7 @@ final class BooruUITests: XCTestCase {
         element(app, "booru.serverSave").tap()
         XCTAssertTrue(app.staticTexts["sample.booru.org"].waitForExistence(timeout: 5))
         element(app, "onboarding.continue").tap()
-        XCTAssertTrue(element(app, "onboarding.violetImport").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
     }
 
     func testOnboardingConnectsComicsWithoutAddingAnImageServer() {

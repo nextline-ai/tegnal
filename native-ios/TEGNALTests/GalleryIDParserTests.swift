@@ -3,6 +3,39 @@ import GRDB
 @testable import TEGNAL
 
 final class GalleryIDParserTests: XCTestCase {
+    func testImportMetadataMigrationPreservesFolderIdentityAndWorks() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite")
+        defer { for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: url.path + suffix) } }
+        let original = try AppDatabase.open(at: url.path)
+        let folder = try original.createFolder(name: "Imported folder", sourceGroupId: 42)
+        _ = try original.upsertWork(galleryId: 1234, folderId: folder.id, title: "Saved work")
+        try original.dbWriter.write { db in
+            try db.alter(table: "folders") { $0.rename(column: "source_group_id", to: "legacy_group_id") }
+            try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v10_generic_import_metadata'")
+        }
+        let migrated = try AppDatabase.open(at: url.path)
+        let restored = try XCTUnwrap(migrated.listFolders().first { $0.name == folder.name })
+        XCTAssertEqual(restored.id, folder.id)
+        XCTAssertEqual(restored.sourceGroupId, 42)
+        XCTAssertEqual(try migrated.listWorks(folderId: folder.id).map(\.galleryId), [1234])
+        XCTAssertEqual(try migrated.createFolder(name: folder.name, sourceGroupId: 42).id, folder.id)
+        let columns = try migrated.dbWriter.read { try $0.columns(in: "folders").map(\.name) }
+        XCTAssertTrue(columns.contains("source_group_id"))
+        XCTAssertFalse(columns.contains("legacy_group_id"))
+    }
+
+    func testImportedFolderBackupReadsHistoricalFieldAndExportsGenericField() throws {
+        let folder = Folder(name: "Imported folder", sourceGroupId: 42)
+        var historical = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(folder)) as? [String: Any])
+        historical["legacy_group_id"] = historical.removeValue(forKey: "source_group_id")
+        let restored = try JSONDecoder().decode(Folder.self, from: JSONSerialization.data(withJSONObject: historical))
+        XCTAssertEqual(restored.sourceGroupId, 42)
+        XCTAssertEqual(MangaImportMetadata.groupID(in: historical), 42)
+        let exported = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(restored)) as? [String: Any])
+        XCTAssertEqual(exported["source_group_id"] as? Int, 42)
+        XCTAssertNil(exported["legacy_group_id"])
+    }
+
     func testStandardMangaUrl() {
         let url = "https://comics.example/galleries/1234567.html"
         let ids = GalleryIDParser.parse(url)
@@ -53,9 +86,9 @@ final class GalleryIDParserTests: XCTestCase {
         XCTAssertEqual(createdColors.count, 20, "All 20 folders must have unique colors")
     }
 
-    func testCancelledVioletImportStopsBeforeOpeningTheSource() async throws {
+    func testCancelledMangaViewerImportStopsBeforeOpeningTheSource() async throws {
         let database = try AppDatabase.inMemory()
-        let importer = VioletImportService(appDb: database)
+        let importer = MangaViewerImportService(appDb: database)
         let task = Task.detached {
             withUnsafeCurrentTask { $0?.cancel() }
             return try importer.importUserDb(path: "/source-that-must-not-be-opened.db")
@@ -67,7 +100,7 @@ final class GalleryIDParserTests: XCTestCase {
 
     func testCancelledCatalogImportCommitsOnlyTheCompletedBatch() async throws {
         let database = try AppDatabase.inMemory()
-        let importer = VioletImportService(appDb: database)
+        let importer = MangaViewerImportService(appDb: database)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -117,13 +150,13 @@ final class GalleryIDParserTests: XCTestCase {
         XCTAssertEqual((json["artists"] as? [[String: Any]])?.first?["name"] as? String, "Artist")
     }
 
-    func testVioletUserDbImportRoutesToCorrectFolders() throws {
+    func testMangaViewerUserDbImportRoutesToCorrectFolders() throws {
         let appDb = try AppDatabase.inMemory()
-        let importer = VioletImportService(appDb: appDb)
+        let importer = MangaViewerImportService(appDb: appDb)
 
-        // Create temporary SQLite DB mimicking Violet user.db
+        // Create temporary SQLite DB mimicking MangaViewer user.db
         let tempDir = FileManager.default.temporaryDirectory
-        let tempDbPath = tempDir.appendingPathComponent("test_violet_user_\(UUID().uuidString).db").path
+        let tempDbPath = tempDir.appendingPathComponent("test_manga_viewer_user_\(UUID().uuidString).db").path
         defer { try? FileManager.default.removeItem(atPath: tempDbPath) }
 
         let srcDb = try DatabaseQueue(path: tempDbPath)
@@ -145,7 +178,7 @@ final class GalleryIDParserTests: XCTestCase {
             );
             """)
 
-            try db.execute(sql: "INSERT INTO BookmarkGroup (Id, Name, Gorder) VALUES (1, 'violet_default', 1);")
+            try db.execute(sql: "INSERT INTO BookmarkGroup (Id, Name, Gorder) VALUES (1, 'manga_viewer_default', 1);")
             try db.execute(sql: "INSERT INTO BookmarkGroup (Id, Name, Gorder) VALUES (2, 'Toy', 2);")
             try db.execute(sql: "INSERT INTO BookmarkGroup (Id, Name, Gorder) VALUES (3, 'Omo', 3);")
 

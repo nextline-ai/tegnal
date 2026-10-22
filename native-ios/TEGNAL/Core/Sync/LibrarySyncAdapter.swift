@@ -64,7 +64,7 @@ struct LibrarySyncAdapter {
     static let booruPreferences = ["search.retentionDays", "reader.translationLanguage", "booru.rememberHistory", "booru.showNotes"]
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],
-        "manga.folders": ["sync_id", "name", "description", "color", "sort_order", "created_at", "violet_group_id"],
+        "manga.folders": ["sync_id", "name", "description", "color", "sort_order", "created_at", "source_group_id"],
         "manga.works": ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page"],
         "manga.folder_works": ["folder_id", "work_id", "added_at"],
         "manga.artists": ["name", "kind", "note", "bookmarked_at"],
@@ -144,6 +144,11 @@ struct LibrarySyncAdapter {
     /// Normalize old peer records as well as new snapshots before re-uploading them.
     static func mediaFreeChanges(_ changes: [String: LibrarySyncChange]) throws -> [String: LibrarySyncChange] {
         try changes.mapValues { change in
+            if change.row.table == "manga.folders" {
+                var row = change.row
+                row.values = MangaImportMetadata.normalized(row.values)
+                return .init(row: row, timestamp: change.timestamp, device: change.device, deleted: change.deleted)
+            }
             guard !change.deleted, change.row.table == "booru.favorites",
                   let data = change.row.values["payload"]?.data else { return change }
             var row = change.row
@@ -283,7 +288,9 @@ struct LibrarySyncAdapter {
         guard let id = value?.integer else { return nil }
         return try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [id])
     }
-    private static func upsert(_ row: LibrarySyncRow, db: Database) throws {
+    private static func upsert(_ incoming: LibrarySyncRow, db: Database) throws {
+        var row = incoming
+        if row.table == "manga.folders" { row.values = MangaImportMetadata.normalized(row.values) }
         guard let allowed = columns[row.table], let keys = LibrarySyncRow.keys[row.table], Set(row.values.keys).isSubset(of: Set(allowed)), keys.allSatisfy({ row.values[$0] != nil }) else { throw BooruError.invalidResponse }
         let fields = allowed.filter { row.values[$0] != nil }
         let updates = fields.filter { !keys.contains($0) }.map { "\($0) = excluded.\($0)" }.joined(separator: ",")

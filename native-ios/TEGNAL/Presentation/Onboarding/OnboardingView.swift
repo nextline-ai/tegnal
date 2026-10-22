@@ -114,7 +114,7 @@ public struct OnboardingView: View {
                 Label(L10n.text("Other Manga Viewer"), systemImage: "book.fill").font(.headline)
                 Text("user.db · data.db").font(.subheadline).foregroundStyle(.secondary)
                 Button(L10n.text("Choose File"), systemImage: "doc.badge.plus") { showFilePicker = true }
-                    .buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.violetImport")
+                    .buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.mangaViewerImport")
                 if isImporting { ProgressView(importStatus) }
                 else if importCompleted { Label(importSummary, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
                 else if !importStatus.isEmpty { Text(importStatus).foregroundStyle(.red) }
@@ -167,7 +167,7 @@ public struct OnboardingView: View {
         isImporting = true
         importStatus = L10n.text("Checking file…")
 
-        let importer = env.violetImporter
+        let importer = env.mangaViewerImporter
         let envRef = env
 
         Task.detached(priority: .userInitiated) {
@@ -179,8 +179,8 @@ public struct OnboardingView: View {
             var readPath = url.path
             var tempURL: URL? = nil
 
-            let isUser = VioletImportService.isUserDb(at: readPath)
-            let isData = VioletImportService.isDataDb(at: readPath)
+            let isUser = MangaViewerImportService.isUserDb(at: readPath)
+            let isData = MangaViewerImportService.isDataDb(at: readPath)
 
             if !isUser && !isData {
                 let tempDir = FileManager.default.temporaryDirectory
@@ -206,7 +206,7 @@ public struct OnboardingView: View {
             }
 
             do {
-                if VioletImportService.isUserDb(at: readPath) {
+                if MangaViewerImportService.isUserDb(at: readPath) {
                     await MainActor.run { self.importStatus = L10n.text("Importing library from user.db…") }
                     let res = try importer.importUserDb(path: readPath)
                     await MainActor.run {
@@ -215,7 +215,7 @@ public struct OnboardingView: View {
                         self.importSummary = L10n.text("user.db imported!\n%@ folders, %@ works", String(describing: res.folders), String(describing: res.works))
                         envRef.startCoverQueue()
                     }
-                } else if VioletImportService.isDataDb(at: readPath) {
+                } else if MangaViewerImportService.isDataDb(at: readPath) {
                     await MainActor.run { self.importStatus = L10n.text("Matching data.db metadata…") }
                     let res = try importer.matchAndFillWorks(fromDataDb: readPath)
                     await MainActor.run {

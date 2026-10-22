@@ -267,7 +267,7 @@ public final class AppEnvironment: @unchecked Sendable {
     public let database: AppDatabase
     public let coverQueueActor: CoverQueueActor
     public let coverQueueState: CoverQueueState
-    public let violetImporter: VioletImportService
+    public let mangaViewerImporter: MangaViewerImportService
     let booru: BooruStore
     let modeSwitchMotion = AppModeSwitchMotion()
 
@@ -422,7 +422,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.database = database
         self.coverQueueActor = CoverQueueActor(database: database)
         self.coverQueueState = CoverQueueState()
-        self.violetImporter = VioletImportService(appDb: database)
+        self.mangaViewerImporter = MangaViewerImportService(appDb: database)
 
         self.mangaTheme = AppTheme(rawValue: browserPreferences.string(forKey: "app_theme") ?? "") ?? .dark
         self.booruTheme = AppTheme(rawValue: browserPreferences.string(forKey: "booru.app_theme") ?? "") ?? .dark

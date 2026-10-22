@@ -45,7 +45,7 @@
 "Checking file…" = "파일 확인 중…";
 "Choose Destination Folder" = "저장할 폴더 선택";
 "Choose Thumbnail Page" = "썸네일 이미지 페이지 지정";
-"Choose a Violet Database" = "다른 만화 뷰어 DB 파일 선택하기";
+"Choose a Database from Another Manga Viewer" = "다른 만화 뷰어 DB 파일 선택하기";
 "Choose a folder to save to (%@)" = "저장할 폴더를 선택하세요 (%@)";
 "Clear Search" = "검색 지우기";
 "Close" = "닫기";
@@ -107,13 +107,13 @@
 "Horizontal Paging" = "가로로 넘기기";
 "How to Import data.db (Catalog)" = "data.db (카탈로그) 가져오기 방식";
 "Import / Restore JSON Backup" = "JSON 백업 가져오기 / 복원";
-"Import Data (Violet)" = "데이터 가져오기 (다른 만화 뷰어)";
-"Import Violet Data" = "다른 만화 뷰어 데이터 가져오기";
+"Import Data (Other Manga Viewer)" = "데이터 가져오기 (다른 만화 뷰어)";
+"Import Data from Another Manga Viewer" = "다른 만화 뷰어 데이터 가져오기";
 "Import data.db (Work Metadata Catalog)" = "data.db 가져오기 (작품 메타데이터 카탈로그)";
 "Import error: %@" = "가져오기 오류: %@";
 "Import failed: %@" = "가져오기 실패: %@";
 "Import user.db (Bookmarks, Folders, Artists)" = "user.db 가져오기 (북마크/폴더/작가)";
-"Import your library and download history from Violet." = "기존 만화 뷰어 앱의 보관함 및 다운로드 기록을 불러옵니다.";
+"Import your library and download history from another manga viewer." = "기존 만화 뷰어 앱의 보관함 및 다운로드 기록을 불러옵니다.";
 "Importing entire catalog… (%@ records)" = "카탈로그 전체 수입 중… (%@건)";
 "Importing library from user.db…" = "user.db 보관함 불러오는 중…";
 "Invalid Address" = "유효하지 않은 주소";
@@ -212,7 +212,7 @@
 "Search Results" = "검색 결과";
 "Search works" = "작품 검색";
 "Search, number, or link" = "검색어, 번호 또는 링크";
-"Select the Violet folder" = "DB 폴더 선택";
+"Select the database folder" = "DB 폴더 선택";
 "Select user.db or data.db" = "user.db 또는 data.db 파일 선택";
 "Settings" = "설정";
 "Show Page Number" = "페이지 번호 표시";
@@ -438,8 +438,8 @@
 "Manage Servers" = "서버 관리";
 "If a server cannot connect, use Validate Client to complete its browser check." = "서버에 연결되지 않으면 ‘클라이언트 확인’에서 브라우저 인증을 진행해 주세요.";
 "Move your servers, favorites and search history from Anime Boxes." = "Anime Boxes의 서버, 즐겨찾기, 검색 기록을 가져오세요.";
-"Move your folders and works from Violet. You can also start with an empty library." = "다른 만화 뷰어의 폴더와 작품을 가져오세요. 빈 보관함으로 시작해도 됩니다.";
-"In Files, open the Violet folder and choose user.db for your library, or data.db for metadata." = "파일 앱에서 보관함은 user.db, 메타데이터는 data.db를 선택하세요.";
+"Move your folders and works from another manga viewer. You can also start with an empty library." = "다른 만화 뷰어의 폴더와 작품을 가져오세요. 빈 보관함으로 시작해도 됩니다.";
+"In Files, choose user.db for your library, or data.db for metadata." = "파일 앱에서 보관함은 user.db, 메타데이터는 data.db를 선택하세요.";
 
 "Tap the center: quick menu\nHold anywhere: favorite\nTap the sides or swipe: change image\nDouble tap or pinch: zoom\nTranslate: Apple image translation for the visible area\nSwipe down at original zoom: close" = "중앙 탭: 빠른 메뉴\n화면 아무 곳이나 길게 누르기: 즐겨찾기\n가장자리 탭·스와이프: 이미지 이동\n두 번 탭·핀치: 확대\n번역: 현재 보이는 영역을 Apple 이미지 번역으로 보기\n기본 배율에서 아래로 스와이프: 닫기";
 
@@ -590,13 +590,13 @@
 "Enter the website’s home address." = "사이트의 홈 주소를 입력하세요.";
 "Select the server type for this address." = "서버 종류를 선택하세요.";
 
-"Enter a comics website address, or import your Violet library." = "만화 사이트 주소를 입력하거나 다른 만화 뷰어 데이터를 가져오세요.";
+"Enter a comics website address, or import your library from another manga viewer." = "만화 사이트 주소를 입력하거나 다른 만화 뷰어 데이터를 가져오세요.";
 
 "Pools in Comics Mode" = "만화 모드에서 풀 보기";
 
 "With only image websites connected, Explore shows their pools. Connect a comics website to browse comics instead." = "이미지 사이트만 연결하면 탐색에 풀이 표시됩니다. 만화 사이트를 연결하면 만화가 표시됩니다.";
 
-"Import from Violet" = "다른 만화 뷰어에서 가져오기";
+"Import from Another Manga Viewer" = "다른 만화 뷰어에서 가져오기";
 
 "%@ posts" = "게시물 %@개";
 

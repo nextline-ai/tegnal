@@ -1,6 +1,36 @@
 import Foundation
 import GRDB
 
+/// Import metadata from older databases and backups is identified by its field role.
+enum MangaImportMetadata {
+    static let groupIDKey = "source_group_id"
+
+    static func legacyGroupIDKey(in keys: [String]) -> String? {
+        let candidates = keys.filter { $0 != groupIDKey && $0.hasSuffix("_group_id") }
+        return candidates.count == 1 ? candidates.first : nil
+    }
+
+    static func normalized<T>(_ fields: [String: T]) -> [String: T] {
+        guard let key = legacyGroupIDKey(in: Array(fields.keys)) else { return fields }
+        var result = fields
+        if result[groupIDKey] == nil { result[groupIDKey] = result[key] }
+        result.removeValue(forKey: key)
+        return result
+    }
+
+    static func groupID(in fields: [String: Any]) -> Int64? {
+        let value = normalized(fields)[groupIDKey]
+        return (value as? Int64) ?? (value as? Int).map(Int64.init)
+    }
+}
+
+private struct ImportFieldKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+}
+
 public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "folders"
 
@@ -11,7 +41,7 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
     public var color: Int64 // ARGB 32-bit integer
     public var sortOrder: Int
     public var createdAt: String
-    public var violetGroupId: Int64?
+    public var sourceGroupId: Int64?
     public var workCount: Int
 
     public init(
@@ -21,7 +51,7 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
         color: Int64 = 4288585374,
         sortOrder: Int = 0,
         createdAt: String = ISO8601DateFormatter().string(from: Date()),
-        violetGroupId: Int64? = nil,
+        sourceGroupId: Int64? = nil,
         workCount: Int = 0
     ) {
         self.id = id
@@ -30,7 +60,7 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
         self.color = color
         self.sortOrder = sortOrder
         self.createdAt = createdAt
-        self.violetGroupId = violetGroupId
+        self.sourceGroupId = sourceGroupId
         self.workCount = workCount
     }
 
@@ -43,7 +73,7 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
         case color
         case sortOrder = "sort_order"
         case createdAt = "created_at"
-        case violetGroupId = "violet_group_id"
+        case sourceGroupId = "source_group_id"
     }
 
     public init(from decoder: Decoder) throws {
@@ -54,7 +84,14 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
         color = try container.decode(Int64.self, forKey: .color)
         sortOrder = try container.decode(Int.self, forKey: .sortOrder)
         createdAt = try container.decode(String.self, forKey: .createdAt)
-        violetGroupId = try container.decodeIfPresent(Int64.self, forKey: .violetGroupId)
+        sourceGroupId = try container.decodeIfPresent(Int64.self, forKey: .sourceGroupId)
+        if sourceGroupId == nil {
+            let fields = try decoder.container(keyedBy: ImportFieldKey.self)
+            if let name = MangaImportMetadata.legacyGroupIDKey(in: fields.allKeys.map(\.stringValue)),
+               let key = ImportFieldKey(stringValue: name) {
+                sourceGroupId = try fields.decodeIfPresent(Int64.self, forKey: key)
+            }
+        }
         workCount = 0
     }
 
@@ -66,7 +103,7 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
         try container.encode(color, forKey: .color)
         try container.encode(sortOrder, forKey: .sortOrder)
         try container.encode(createdAt, forKey: .createdAt)
-        try container.encodeIfPresent(violetGroupId, forKey: .violetGroupId)
+        try container.encodeIfPresent(sourceGroupId, forKey: .sourceGroupId)
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {

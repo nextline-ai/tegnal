@@ -3,6 +3,23 @@ import GRDB
 @testable import TEGNAL
 
 final class LibrarySyncTests: XCTestCase {
+    func testHistoricalImportedFolderSyncNormalizesMetadataWithoutLosingIdentity() throws {
+        let source = try adapter(), destination = try adapter()
+        _ = try source.manga.createFolder(name: "Imported folder", sourceGroupId: 42)
+        var row = try XCTUnwrap(source.snapshot().values.first { $0.table == "manga.folders" && $0.values["name"]?.string == "Imported folder" })
+        row.values["legacy_group_id"] = row.values.removeValue(forKey: "source_group_id")
+        let change = LibrarySyncChange(row: row, timestamp: 100, device: "historical", deleted: false)
+        let changes = [row.key: change]
+        try destination.apply(changes)
+        let restored = try XCTUnwrap(destination.manga.listFolders().first { $0.name == "Imported folder" })
+        XCTAssertEqual(restored.sourceGroupId, 42)
+        let normalized = try XCTUnwrap(LibrarySyncAdapter.mediaFreeChanges(changes)[row.key])
+        XCTAssertEqual(normalized.row.values["source_group_id"]?.integer, 42)
+        XCTAssertNil(normalized.row.values["legacy_group_id"])
+        XCTAssertEqual(normalized.timestamp, change.timestamp)
+        XCTAssertEqual(normalized.row.key, row.key)
+    }
+
     private var suites: [String] = []
     override func tearDown() { for suite in suites { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }; suites = [] }
     @MainActor func testCloudContainerAccessIsRecheckedAndDisabledRequestsAreDiscarded() async throws {

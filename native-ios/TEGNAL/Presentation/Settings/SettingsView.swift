@@ -56,7 +56,7 @@ struct ComicsSetupView: View {
             VStack(alignment: .leading, spacing: 24) {
                 Image(systemName: "book.closed").font(.system(size: 48)).foregroundStyle(.tint)
                 Text(L10n.text("Connect Your Comics Website")).font(.largeTitle.bold())
-                Text(L10n.text("Enter a comics website address, or import your Violet library."))
+                Text(L10n.text("Enter a comics website address, or import your library from another manga viewer."))
                     .foregroundStyle(.secondary)
                 NavigationLink { ComicsConnectionSettings() } label: {
                     Label(L10n.text("Enter Website Address"), systemImage: "link")
@@ -64,8 +64,8 @@ struct ComicsSetupView: View {
                 }.buttonStyle(.borderedProminent).controlSize(.large)
                     .accessibilityIdentifier("comics.enterAddress")
                 NavigationLink { MangaLibraryToolsView(importOnly: true) } label: {
-                    Label(L10n.text("Import from Violet"), systemImage: "square.and.arrow.down")
-                }.accessibilityIdentifier("comics.importViolet")
+                    Label(L10n.text("Import from Another Manga Viewer"), systemImage: "square.and.arrow.down")
+                }.accessibilityIdentifier("comics.importMangaViewer")
             }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
         .background(Color(uiColor: .systemGroupedBackground))
@@ -85,7 +85,7 @@ struct ComicsConnectionCard: View {
             Label(L10n.text(env.booru.servers.isEmpty ? "Connect Your Comics Website" : "Pools in Comics Mode"), systemImage: "book.closed")
                 .font(.headline).accessibilityIdentifier("comics.connectionCard")
             Text(L10n.text(env.booru.servers.isEmpty
-                ? "Enter a comics website address, or import your Violet library."
+                ? "Enter a comics website address, or import your library from another manga viewer."
                 : "With only image websites connected, Explore shows their pools. Connect a comics website to browse comics instead."))
                 .font(.subheadline).foregroundStyle(.secondary)
             HStack {
@@ -93,8 +93,8 @@ struct ComicsConnectionCard: View {
                     Text(L10n.text("Enter Website Address"))
                 }.buttonStyle(.borderedProminent).accessibilityIdentifier("comics.enterAddress")
                 Button { showImport = true } label: {
-                    Text(L10n.text("Import from Violet"))
-                }.buttonStyle(.bordered).accessibilityIdentifier("comics.importViolet")
+                    Text(L10n.text("Import from Another Manga Viewer"))
+                }.buttonStyle(.bordered).accessibilityIdentifier("comics.importMangaViewer")
             }.font(.subheadline)
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
@@ -210,7 +210,7 @@ struct MangaLibraryToolsView: View {
                     .padding(.vertical, 4)
                 }
             }
-            Section(header: Text(L10n.text("Import Data (Violet)"))) {
+            Section(header: Text(L10n.text("Import Data (Other Manga Viewer)"))) {
                 Button {
                     showUserDbPicker = true
                 } label: {
@@ -274,7 +274,7 @@ struct MangaLibraryToolsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(L10n.text(importOnly ? "Import from Violet" : "Library Management"))
+        .navigationTitle(L10n.text(importOnly ? "Import from Another Manga Viewer" : "Library Management"))
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $showUserDbPicker,
@@ -389,7 +389,7 @@ struct MangaLibraryToolsView: View {
         isCancellingImport = false
         statusMessage = L10n.text("Preparing user.db…")
 
-        let importer = env.violetImporter
+        let importer = env.mangaViewerImporter
         let envRef = env
 
         importTask = Task.detached(priority: .userInitiated) {
@@ -401,7 +401,7 @@ struct MangaLibraryToolsView: View {
             var readPath = url.path
             var tempURL: URL? = nil
 
-            if !VioletImportService.isUserDb(at: readPath) {
+            if !MangaViewerImportService.isUserDb(at: readPath) {
                 let tempDir = FileManager.default.temporaryDirectory
                 let copyUrl = tempDir.appendingPathComponent("\(UUID().uuidString)_\(url.lastPathComponent)")
                 do {
@@ -449,7 +449,7 @@ struct MangaLibraryToolsView: View {
         isCancellingImport = false
         statusMessage = matchOnly ? L10n.text("Matching metadata for your library…") : L10n.text("Preparing catalog import…")
 
-        let importer = env.violetImporter
+        let importer = env.mangaViewerImporter
 
         importTask = Task.detached(priority: .userInitiated) {
             let hasAccess = url.startAccessingSecurityScopedResource()
@@ -460,7 +460,7 @@ struct MangaLibraryToolsView: View {
             var readPath = url.path
             var tempURL: URL? = nil
 
-            if !VioletImportService.isDataDb(at: readPath) {
+            if !MangaViewerImportService.isDataDb(at: readPath) {
                 await MainActor.run {
                     self.statusMessage = L10n.text("Caching large file… Please wait.")
                 }
@@ -571,12 +571,12 @@ struct MangaLibraryToolsView: View {
                         try Task.checkCancellation()
                         guard let name = f["name"] as? String, !name.isEmpty else { continue }
                         let color = (f["color"] as? Int64) ?? (f["color"] as? Int).map(Int64.init) ?? 0xFF2563EB
-                        let violetGroupId = (f["violet_group_id"] as? Int64) ?? (f["violet_group_id"] as? Int).map(Int64.init)
+                        let sourceGroupId = MangaImportMetadata.groupID(in: f)
                         if folderNameToId[name] == nil {
                             let created = try db.createFolder(
                                 name: name,
                                 color: color,
-                                violetGroupId: violetGroupId
+                                sourceGroupId: sourceGroupId
                             )
                             if let id = created.id {
                                 folderNameToId[name] = id
@@ -680,7 +680,7 @@ enum MangaLibraryBackup {
                 "name": $0.name,
                 "color": $0.color,
                 "sort_order": $0.sortOrder,
-                "violet_group_id": $0.violetGroupId as Any
+                "source_group_id": $0.sourceGroupId as Any
             ] },
             "works": works.map { work -> [String: Any] in
                 var dict: [String: Any] = [

@@ -123,7 +123,7 @@
 		DD394E63203D2BEECC88CEFC /* DeveloperInfoSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */; };
 		DF8E10E2A920B6A33911ABDA /* BooruFavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */; };
 		DFF9E986805DDE834086C1C5 /* TEGNALTests/TasteFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */; };
-		E1BD068B22E9A786A6E25819 /* VioletImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBA1E27FC02DDAE5A92D408 /* VioletImportService.swift */; };
+		E1BD068B22E9A786A6E25819 /* MangaViewerImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBA1E27FC02DDAE5A92D408 /* MangaViewerImportService.swift */; };
 		E1D8BE93D1E5C204FC27FE25 /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268D24A55619AF97E4EEEF85 /* LiquidGlassModifiers.swift */; };
 		E5CBAA3ADBF94E51181BB966 /* ReaderSurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */; };
 		E8A01BD6FF3FE3E253A450FB /* BooruLegacyHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */; };
@@ -267,7 +267,7 @@
 		ACBA6DB0FD990FC91B86F973 /* AnimeBoxesImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeBoxesImportView.swift; sourceTree = "<group>"; };
 		ACF09107ABCD200000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/VisualSimilarity.swift; sourceTree = SOURCE_ROOT; };
 		ACF09107ABCD200000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Works/VisualSimilarityView.swift; sourceTree = SOURCE_ROOT; };
-		AEBA1E27FC02DDAE5A92D408 /* VioletImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VioletImportService.swift; sourceTree = "<group>"; };
+		AEBA1E27FC02DDAE5A92D408 /* MangaViewerImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaViewerImportService.swift; sourceTree = "<group>"; };
 		AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRevisionTests.swift; sourceTree = "<group>"; };
 		B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackup.swift; sourceTree = "<group>"; };
 		B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaDefaultTagsSettings.swift; sourceTree = "<group>"; };
@@ -355,7 +355,7 @@
 		05409C8DA1D58558417E88FC /* Migration */ = {
 			isa = PBXGroup;
 			children = (
-				AEBA1E27FC02DDAE5A92D408 /* VioletImportService.swift */,
+				AEBA1E27FC02DDAE5A92D408 /* MangaViewerImportService.swift */,
 			);
 			path = Migration;
 			sourceTree = "<group>";
@@ -982,7 +982,7 @@
 				D8819E7F99F42BFA09CA0D7E /* SettingsSections.swift in Sources */,
 				1BD03E8E869F045D4923249E /* SettingsView.swift in Sources */,
 				AC66C1A66E68133540CA4AA5 /* TargetedTranslationCanvas.swift in Sources */,
-				E1BD068B22E9A786A6E25819 /* VioletImportService.swift in Sources */,
+				E1BD068B22E9A786A6E25819 /* MangaViewerImportService.swift in Sources */,
 				8826DE8461CAEDE1F2881F0A /* WorkCardView.swift in Sources */,
 				4689FFAC40180CE1BDA56211 /* WorkDetailView.swift in Sources */,
 				C2A3F752D9BA1F762F086A08 /* WorksGridView.swift in Sources */,
