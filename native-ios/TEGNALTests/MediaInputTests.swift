@@ -576,15 +576,31 @@ import WebKit
         _ = try await web.evaluateJavaScript("window.pausePlayback()")
     }
 
-    func testLaunchArtworkPreservesJPEGAndUsesTheBundledImage() throws {
-        let url = try XCTUnwrap(Bundle.main.url(forResource: "splash", withExtension: "jpg"))
-        let bytes = try Data(contentsOf: url)
-        XCTAssertEqual(Array(bytes.prefix(3)), [0xFF, 0xD8, 0xFF])
-        let expected = try XCTUnwrap(UIImage(contentsOfFile: url.path))
-        let artwork = SplashContainerView().artwork
-        let view = try XCTUnwrap(artwork.subviews.compactMap { $0 as? UIImageView }.first)
-        XCTAssertEqual(view.image?.size, expected.size)
-        XCTAssertEqual(view.contentMode, .scaleAspectFit)
+    func testLaunchArtworkPreservesBothJPEGsAndFollowsAppearanceChanges() throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = UIViewController()
+        window.isHidden = false
+        defer { window.isHidden = true }
+        let container = SplashContainerView()
+        container.frame = window.bounds
+        window.rootViewController?.view.addSubview(container)
+        let artwork = container.artwork
+        let imageView = try XCTUnwrap(artwork.subviews.compactMap { $0 as? UIImageView }.first)
+        for (style, name) in [(UIUserInterfaceStyle.light, "splash_light"), (.dark, "splash_dark"), (.light, "splash_light")] {
+            window.overrideUserInterfaceStyle = style
+            window.layoutIfNeeded()
+            let url = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "jpg"))
+            XCTAssertEqual(Array(try Data(contentsOf: url).prefix(3)), [0xFF, 0xD8, 0xFF])
+            let original = try XCTUnwrap(UIImage(contentsOfFile: url.path))
+            let expected = original.preparingForDisplay() ?? original
+            XCTAssertEqual(imageView.image?.pngData(), expected.pngData())
+            XCTAssertEqual(imageView.contentMode, .scaleAspectFit)
+            XCTAssertEqual(artwork.backgroundColor?.resolvedColor(with: artwork.traitCollection), style == .dark ? .black : .white)
+            let screenshot = UIGraphicsImageRenderer(size: container.bounds.size).image { container.layer.render(in: $0.cgContext) }
+            let attachment = XCTAttachment(image: screenshot); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
     }
 
     func testLaunchAndResumeHaveIndependentDurations() {

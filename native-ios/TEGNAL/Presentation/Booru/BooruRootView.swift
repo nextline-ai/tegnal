@@ -385,6 +385,7 @@ struct BooruFeedView: View {
               }
             }
             .coordinateSpace(name: "booru.feedViewport")
+            .clearTopScrollEdge()
             .scrollDismissesKeyboard(.interactively)
             .trackScrollGeometry { oldY, newY in
                 if let visible = searchScroll.update(oldY: oldY, newY: newY, focused: searchFocused) { isSearchBarVisible = visible }
@@ -416,7 +417,7 @@ struct BooruFeedView: View {
                     .offset(y: isSearchBarVisible ? 0 : -60).opacity(isSearchBarVisible ? 1 : 0)
                     .allowsHitTesting(isSearchBarVisible).accessibilityHidden(!isSearchBarVisible)
             }
-        }.clipped()
+        }
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
         } action: { height in

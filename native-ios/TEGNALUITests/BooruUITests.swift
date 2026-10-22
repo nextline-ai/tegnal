@@ -858,6 +858,27 @@ final class BooruUITests: XCTestCase {
         XCTAssertEqual(element(app, "reader.settings.rtl").value as? String, "0")
     }
 
+    func testImageExploreHeaderAndSearchAcrossAppearances() {
+        let app = launch(extra: ["--challenge-scroll-test"])
+        for title in ["Light Mode", "Dark Mode"] {
+            app.tabBars.buttons["More"].tap()
+            let theme = app.buttons[title]
+            XCTAssertTrue(theme.waitForExistence(timeout: 5))
+            theme.tap()
+            let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: theme)
+            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+            app.tabBars.buttons["Explore"].tap()
+            XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
+            capture(app, title + " image Explore top")
+            app.swipeUp()
+            XCTAssertTrue(element(app, "app.mode").isHittable)
+            XCTAssertTrue(element(app, "booru.server").isHittable)
+            capture(app, title + " image Explore scrolled header")
+            app.swipeDown()
+            XCTAssertTrue(element(app, "booru.search").isHittable)
+        }
+    }
+
     func testKoreanRootHeaders() {
         let app = XCUIApplication()
         app.launchArguments = ["--booru-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]

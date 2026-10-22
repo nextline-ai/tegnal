@@ -11,30 +11,17 @@ struct SplashTiming: Equatable {
 }
 
 @MainActor private enum SplashArtwork {
-    // Decode once, before motion starts; resume reuses the prepared image.
-    static let image: UIImage? = {
-        guard let url = Bundle.main.url(forResource: "splash", withExtension: "jpg") else { return nil }
+    // Prepare each original JPEG once; launch and resume reuse the same images.
+    static let light = load("splash_light")
+    static let dark = load("splash_dark")
+    private static func load(_ name: String) -> UIImage? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "jpg") else { return nil }
         let image = UIImage(contentsOfFile: url.path)
         return image?.preparingForDisplay() ?? image
-    }()
+    }
     static func make(frame: CGRect, identifier: String) -> UIView {
-        let cover = UIView(frame: frame)
-        cover.backgroundColor = .white; cover.isOpaque = true; cover.clipsToBounds = true
-        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        let cover = SplashArtworkView(frame: frame)
         cover.accessibilityIdentifier = identifier
-        if let image {
-            let artwork = UIImageView(image: image)
-            artwork.frame = cover.bounds; artwork.contentMode = .scaleAspectFit
-            artwork.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            cover.addSubview(artwork)
-        } else {
-            let label = UILabel(frame: cover.bounds)
-            label.text = L10n.text("TEGNAL"); label.textColor = .black
-            label.font = .systemFont(ofSize: 48, weight: .bold)
-            label.textAlignment = .center; label.adjustsFontSizeToFitWidth = true
-            label.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            cover.addSubview(label)
-        }
         return cover
     }
     static func slide(_ cover: UIView, duration: TimeInterval) {
@@ -43,6 +30,37 @@ struct SplashTiming: Equatable {
             if UIAccessibility.isReduceMotionEnabled { cover.alpha = 0 }
             else { cover.transform = CGAffineTransform(translationX: 0, y: -cover.bounds.height - 1) }
         }
+    }
+}
+
+/// UIKit traits follow both the app's appearance setting and system changes,
+/// including a privacy cover reused after returning from the background.
+@MainActor private final class SplashArtworkView: UIView {
+    private let imageView = UIImageView()
+    private let fallback = UILabel()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? .black : .white }
+        isOpaque = true; clipsToBounds = true
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        imageView.contentMode = .scaleAspectFit
+        fallback.text = L10n.text("TEGNAL"); fallback.textColor = .label
+        fallback.font = .systemFont(ofSize: 48, weight: .bold)
+        fallback.textAlignment = .center; fallback.adjustsFontSizeToFitWidth = true
+        for view in [imageView, fallback] {
+            view.frame = bounds; view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(view)
+        }
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: SplashArtworkView, _: UITraitCollection) in
+            view.updateArtwork()
+        }
+        updateArtwork()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func didMoveToWindow() { super.didMoveToWindow(); updateArtwork() }
+    private func updateArtwork() {
+        imageView.image = traitCollection.userInterfaceStyle == .dark ? SplashArtwork.dark : SplashArtwork.light
+        fallback.isHidden = imageView.image != nil
     }
 }
 
@@ -255,10 +273,7 @@ struct TEGNALApp: App {
 
                 #if targetEnvironment(macCatalyst)
                 if scenePhase != .active && !isSplashScreenVisible {
-                    ZStack {
-                        Color.white
-                        if let image = SplashArtwork.image { Image(uiImage: image).resizable().scaledToFit() }
-                    }
+                    SplashScreenOverlay(isVisible: .constant(true), active: false)
                         .clipped().ignoresSafeArea().zIndex(9998)
                 }
                 #endif
