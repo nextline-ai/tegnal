@@ -856,6 +856,26 @@ final class BooruUITests: XCTestCase {
         }
     }
 
+    func testDeveloperLogoUpdatesBetweenLightAndDarkAppearance() {
+        let app = launch()
+        selectMode(app, "manga")
+        app.tabBars.buttons["Settings"].tap()
+        for (index, title) in ["Dark Mode", "Light Mode", "Dark Mode"].enumerated() {
+            let theme = app.buttons[title]
+            for _ in 0..<8 {
+                if theme.exists && theme.isHittable { break }
+                app.swipeDown()
+            }
+            XCTAssertTrue(theme.isHittable)
+            theme.tap()
+            let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: theme)
+            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+            XCTAssertTrue(reveal(app, "developer.website").isHittable)
+            XCTAssertTrue(element(app, "developer.logo").exists)
+            capture(app, "Developer SVG \(index) \(title)")
+        }
+    }
+
     func testMoreValidationAndCookieSettings() {
         let app = launch()
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))

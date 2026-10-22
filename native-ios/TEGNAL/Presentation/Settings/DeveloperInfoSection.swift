@@ -50,6 +50,14 @@ struct DeveloperInfoSection: View {
 }
 
 private struct DeveloperLogo: UIViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
+
+    final class Coordinator {
+        var renderedScheme: ColorScheme?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -57,12 +65,17 @@ private struct DeveloperLogo: UIViewRepresentable {
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.isOpaque = false; view.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
         view.isUserInteractionEnabled = false
-        if let url = Bundle.main.url(forResource: "nextline-logo", withExtension: "svg"), let svg = try? String(contentsOf: url, encoding: .utf8) {
-            // Trim the square artboard's empty margins for display; preserve the bundled SVG unchanged.
-            let artwork = svg.replacingOccurrences(of: "viewBox=\"0 0 1024 1024\"", with: "viewBox=\"169 415 681 162\"")
-            view.loadHTMLString("<meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent}svg{width:100%;height:64px}</style>" + artwork, baseURL: nil)
-        }
         return view
     }
-    func updateUIView(_ view: WKWebView, context: Context) {}
+
+    func updateUIView(_ view: WKWebView, context: Context) {
+        guard context.coordinator.renderedScheme != colorScheme else { return }
+        if let url = Bundle.main.url(forResource: "nextline-logo", withExtension: "svg"), let svg = try? String(contentsOf: url, encoding: .utf8) {
+            // Trim the square artboard's empty margins for display; preserve the bundled SVG unchanged.
+            let artwork = svg.replacingOccurrences(of: "viewBox=\"0 0 1024 1024\"", with: "viewBox=\"210 440 600 144\"")
+            let textColor = colorScheme == .dark ? "#fff" : "#000"
+            view.loadHTMLString("<meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent}svg{width:100%;height:64px}svg .cls-1{fill:\(textColor)}</style>" + artwork, baseURL: nil)
+            context.coordinator.renderedScheme = colorScheme
+        }
+    }
 }

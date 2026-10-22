@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/jTaDDEpE">
-    <img src="design/other/WebP/main_banner_kr.webp" alt="TEGNAL TestFlight 다운로드" width="100%">
+    <img src="design/other/JPG/main_banner_kr.jpg" alt="TEGNAL TestFlight 다운로드" width="100%">
   </a>
 </p>
 
@@ -94,7 +94,10 @@
 
 ## 💬 개발자 및 커뮤니티
 
-<img src="design/developer_branding/nextline-logo.svg" alt="NextLine" width="160" align="right">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nextline-logo-dark.svg">
+  <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
+</picture>
 
 앱 사용 중 궁금한 점이나 버그 제보, 기능 제안은 언제든 **Discord 커뮤니티**에 남겨 주세요!
 

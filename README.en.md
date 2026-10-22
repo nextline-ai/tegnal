@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/jTaDDEpE">
-    <img src="design/other/WebP/main_banner_en.webp" alt="Download TEGNAL on TestFlight" width="100%">
+    <img src="design/other/JPG/main_banner_en.jpg" alt="Download TEGNAL on TestFlight" width="100%">
   </a>
 </p>
 
@@ -94,7 +94,10 @@ Device signing and distribution require matching Apple Developer configuration a
 
 ## 💬 Developer & Community
 
-<img src="design/developer_branding/nextline-logo.svg" alt="NextLine" width="160" align="right">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nextline-logo-dark.svg">
+  <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
+</picture>
 
 Have questions, feedback, or bug reports? Join our **Discord community** anytime!
 
