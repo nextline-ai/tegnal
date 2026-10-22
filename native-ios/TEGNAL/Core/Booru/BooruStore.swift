@@ -3,7 +3,7 @@ import GRDB
 import Observation
 import Security
 
-/// A separate database, unrelated to manga migrations, imports and backups.
+/// Image-mode storage; portable backups and iCloud coordinate both library databases.
 @Observable
 final class BooruStore: @unchecked Sendable {
     let database: DatabaseQueue

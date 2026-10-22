@@ -80,50 +80,53 @@ extension BooruStore {
     /// The backup restores colors, folder membership and ordering without deleting other items.
     func restoreBackup(_ backup: BooruBackup) throws {
         try backup.validate()
-        try database.write { db in
-            let existing = try Row.fetchAll(db, sql: "SELECT payload FROM servers ORDER BY position").map { try JSONDecoder().decode(BooruServer.self, from: $0["payload"] as Data) }
-            var mapping: [String: String] = [:]
-            for source in backup.servers {
-                if let match = existing.first(where: { $0.canonicalAddress == source.canonicalAddress }) { mapping[source.id] = match.id }
-                else {
-                    var server = source
-                    if existing.contains(where: { $0.id == server.id }) { server.id = UUID().uuidString }
-                    mapping[source.id] = server.id
-                    try db.execute(sql: "INSERT INTO servers VALUES (?, ?, (SELECT COUNT(*) FROM servers))", arguments: [server.id, try JSONEncoder().encode(server)])
-                }
-            }
-            let incomingOrder = backup.folders.map(\.id)
-            let remaining = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name").filter { !incomingOrder.contains($0) }
-            for (position, folder) in backup.folders.enumerated() {
-                try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position", arguments: [folder.id, folder.id == "unsorted" ? "" : folder.name, folder.color, position])
-            }
-            for (position, id) in (incomingOrder + remaining).enumerated() {
-                try db.execute(sql: "UPDATE folders SET position = ? WHERE id = ?", arguments: [position, id])
-            }
-            try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('folder_order', ?)", arguments: [String(decoding: JSONEncoder().encode(incomingOrder + remaining), as: UTF8.self)])
-            for value in backup.favorites {
-                guard let targetServerID = mapping[value.post.serverID] else { continue }
-                let post = value.post.onServer(targetServerID)
-                let existed = try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM favorites WHERE server_id = ? AND post_id = ?)", arguments: [post.serverID, post.postID]) ?? false
-                try db.execute(sql: "INSERT INTO favorites VALUES (?, ?, ?, ?, ?) ON CONFLICT(server_id, post_id) DO UPDATE SET payload = excluded.payload, saved_at = excluded.saved_at, folder_id = excluded.folder_id", arguments: [post.serverID, post.postID, try JSONEncoder().encode(post), value.savedAt, value.folderID])
-                try TasteStore.record(existed ? .metadata : .imported, item: Self.tasteItem(post, db: db), db: db)
-            }
-            for value in backup.history {
-                guard let targetServerID = mapping[value.serverID] else { continue }
-                try db.execute(sql: "INSERT INTO history VALUES (?, ?, ?) ON CONFLICT(server_id, query) DO UPDATE SET used_at = MAX(used_at, excluded.used_at)", arguments: [targetServerID, value.query, value.usedAt])
-            }
-            for value in backup.savedTags {
-                guard let targetServerID = mapping[value.serverID] else { continue }
-                try db.execute(sql: "INSERT OR IGNORE INTO saved_tags VALUES (?, ?, ?)", arguments: [targetServerID, value.name, value.kind])
-            }
-            for (id, rules) in backup.blacklist {
-                guard let targetServerID = mapping[id] else { continue }
-                try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: ["blacklist." + targetServerID, rules])
-            }
-            if !backup.selectedServerIDs.isEmpty {
-                try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('selected_servers', ?)", arguments: [String(decoding: JSONEncoder().encode(backup.selectedServerIDs.compactMap { mapping[$0] }), as: UTF8.self)])
+        try database.write { try restoreBackup(backup, in: $0) }
+        try refresh()
+    }
+
+    /// Allows a combined restore to validate and write both libraries in one operation.
+    func restoreBackup(_ backup: BooruBackup, in db: Database) throws {
+        let existing = try Row.fetchAll(db, sql: "SELECT payload FROM servers ORDER BY position").map { try JSONDecoder().decode(BooruServer.self, from: $0["payload"] as Data) }
+        var mapping: [String: String] = [:]
+        for source in backup.servers {
+            if let match = existing.first(where: { $0.canonicalAddress == source.canonicalAddress }) { mapping[source.id] = match.id }
+            else {
+                var server = source
+                if existing.contains(where: { $0.id == server.id }) { server.id = UUID().uuidString }
+                mapping[source.id] = server.id
+                try db.execute(sql: "INSERT INTO servers VALUES (?, ?, (SELECT COUNT(*) FROM servers))", arguments: [server.id, try JSONEncoder().encode(server)])
             }
         }
-        try refresh()
+        let incomingOrder = backup.folders.map(\.id)
+        let remaining = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name").filter { !incomingOrder.contains($0) }
+        for (position, folder) in backup.folders.enumerated() {
+            try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position", arguments: [folder.id, folder.id == "unsorted" ? "" : folder.name, folder.color, position])
+        }
+        for (position, id) in (incomingOrder + remaining).enumerated() {
+            try db.execute(sql: "UPDATE folders SET position = ? WHERE id = ?", arguments: [position, id])
+        }
+        try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('folder_order', ?)", arguments: [String(decoding: JSONEncoder().encode(incomingOrder + remaining), as: UTF8.self)])
+        for value in backup.favorites {
+            guard let targetServerID = mapping[value.post.serverID] else { continue }
+            let post = value.post.onServer(targetServerID)
+            let existed = try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM favorites WHERE server_id = ? AND post_id = ?)", arguments: [post.serverID, post.postID]) ?? false
+            try db.execute(sql: "INSERT INTO favorites VALUES (?, ?, ?, ?, ?) ON CONFLICT(server_id, post_id) DO UPDATE SET payload = excluded.payload, saved_at = excluded.saved_at, folder_id = excluded.folder_id", arguments: [post.serverID, post.postID, try JSONEncoder().encode(post), value.savedAt, value.folderID])
+            try TasteStore.record(existed ? .metadata : .imported, item: Self.tasteItem(post, db: db), db: db)
+        }
+        for value in backup.history {
+            guard let targetServerID = mapping[value.serverID] else { continue }
+            try db.execute(sql: "INSERT INTO history VALUES (?, ?, ?) ON CONFLICT(server_id, query) DO UPDATE SET used_at = MAX(used_at, excluded.used_at)", arguments: [targetServerID, value.query, value.usedAt])
+        }
+        for value in backup.savedTags {
+            guard let targetServerID = mapping[value.serverID] else { continue }
+            try db.execute(sql: "INSERT OR IGNORE INTO saved_tags VALUES (?, ?, ?)", arguments: [targetServerID, value.name, value.kind])
+        }
+        for (id, rules) in backup.blacklist {
+            guard let targetServerID = mapping[id] else { continue }
+            try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: ["blacklist." + targetServerID, rules])
+        }
+        if !backup.selectedServerIDs.isEmpty {
+            try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('selected_servers', ?)", arguments: [String(decoding: JSONEncoder().encode(backup.selectedServerIDs.compactMap { mapping[$0] }), as: UTF8.self)])
+        }
     }
 }

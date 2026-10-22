@@ -65,7 +65,9 @@ Every AI feature runs **100% locally on your device** without sending your data 
 | --- | --- | --- |
 | **Browse** | Gallery search, popular feeds, artist collections | Multi-server search, latest/popular feeds, tag autocomplete |
 | **Viewer** | Configurable reading direction, continuous scroll, translation | High-res images, GIFs/videos, pools, notes, translation |
-| **Backup & Import** | Violet import & JSON library backup | Anime Boxes import & JSON library backup |
+| **Backup & Import** | Other manga viewer import & unified JSON backup | Anime Boxes import & unified JSON backup |
+
+**Unified JSON backup:** In either mode, open **Settings / More → Library Management → Export JSON Backup** to save both libraries and challenge definitions in one `tegnal-backup.json` file. Restore both modes from the same screen; older separate backups remain supported. Media, caches, and sign-in details are excluded. Restored library data also syncs across devices when iCloud is enabled.
 
 > 💡 **Bonus Feature — Challenge Roulette**
 > Head to **More → Challenge Roulette** in Image Mode to practice timed croquis sketching or create your own custom roulette missions with reference images!

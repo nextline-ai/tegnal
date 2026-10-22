@@ -159,14 +159,15 @@ struct MangaLibraryToolsView: View {
     @State private var showNoWorksAlert = false
     @State private var pendingDataDbUrl: URL? = nil
     @State private var importTask: Task<Void, Never>? = nil
-    @State private var showShareSheet = false
-    @State private var showBackupPicker = false
-    @State private var backupFileURL: URL?
 
 
 
     var body: some View {
         List {
+            if !importOnly {
+                LibraryBackupSection(busy: $isExporting, onRestore: loadStats)
+                    .disabled(isImporting)
+            }
             if !importOnly {
                 Section(header: Text(L10n.text("Library Status"))) {
                     LabeledContent(L10n.text("Saved Works"), value: L10n.text("%@ items", String(describing: worksCount)))
@@ -226,26 +227,6 @@ struct MangaLibraryToolsView: View {
                 .disabled(isImporting || isExporting)
             }
 
-            if !importOnly {
-                Section(header: Text(L10n.text("Backup & Restore"))) {
-                    Button {
-                        exportBackup()
-                    } label: {
-                        HStack {
-                            Label(L10n.text("Export JSON Backup"), systemImage: "square.and.arrow.up")
-                            if isExporting { Spacer(); ProgressView() }
-                        }
-                    }
-                    .disabled(isImporting || isExporting)
-
-                    Button {
-                        showBackupPicker = true
-                    } label: {
-                        Label(L10n.text("Import / Restore JSON Backup"), systemImage: "square.and.arrow.down")
-                    }
-                    .disabled(isImporting || isExporting)
-                }
-            }
             if isImporting || statusMessage != nil {
                 Section(header: Text(L10n.text("Task Status"))) {
                     if isImporting {
@@ -290,13 +271,6 @@ struct MangaLibraryToolsView: View {
         ) { result in
             handleDataDbSelection(result: result)
         }
-        .fileImporter(
-            isPresented: $showBackupPicker,
-            allowedContentTypes: [.json, .item],
-            allowsMultipleSelection: false
-        ) { result in
-            handleBackupImport(result: result)
-        }
         .confirmationDialog(
             L10n.text("How to Import data.db (Catalog)"),
             isPresented: $showDataDbActionSheet,
@@ -329,11 +303,6 @@ struct MangaLibraryToolsView: View {
             }
         } message: {
             Text(L10n.text("There are no saved works to match. Import user.db (bookmarks) first, then import data.db to fill the information you need."))
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let backupFileURL {
-                ShareSheet(items: [backupFileURL])
-            }
         }
         .task {
             loadStats()
@@ -518,213 +487,4 @@ struct MangaLibraryToolsView: View {
         }
     }
 
-    private func exportBackup() {
-        guard !isImporting, !isExporting else { return }
-        isExporting = true
-        let database = env.database
-        Task {
-            defer { isExporting = false }
-            do {
-                backupFileURL = try await Task.detached(priority: .userInitiated) {
-                    try MangaLibraryBackup.export(database: database)
-                }.value
-                showShareSheet = true
-            } catch {
-                statusMessage = L10n.text("Unable to create backup: %@", String(describing: error.localizedDescription))
-            }
-        }
-    }
-
-    private func handleBackupImport(result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
-        guard !isImporting, !isExporting else { return }
-        isImporting = true
-        isCancellingImport = false
-        statusMessage = L10n.text("Restoring backup…")
-
-        let db = env.database
-        let envRef = env
-
-        importTask = Task.detached(priority: .userInitiated) {
-            let hasAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if hasAccess { url.stopAccessingSecurityScopedResource() }
-            }
-
-            do {
-                try Task.checkCancellation()
-                let data = try Data(contentsOf: url)
-                try Task.checkCancellation()
-                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    throw URLError(.cannotParseResponse)
-                }
-
-                var restoredWorks = 0
-                var restoredFolders = 0
-
-                // 1. Folders
-                var folderNameToId = Dictionary(uniqueKeysWithValues: try db.listFolders().compactMap { folder in
-                    folder.id.map { (folder.name, $0) }
-                })
-                if let rawFolders = json["folders"] as? [[String: Any]] {
-                    for f in rawFolders {
-                        try Task.checkCancellation()
-                        guard let name = f["name"] as? String, !name.isEmpty else { continue }
-                        let color = (f["color"] as? Int64) ?? (f["color"] as? Int).map(Int64.init) ?? 0xFF2563EB
-                        let sourceGroupId = MangaImportMetadata.groupID(in: f)
-                        if folderNameToId[name] == nil {
-                            let created = try db.createFolder(
-                                name: name,
-                                color: color,
-                                sourceGroupId: sourceGroupId
-                            )
-                            if let id = created.id {
-                                folderNameToId[name] = id
-                                restoredFolders += 1
-                            }
-                        }
-                    }
-                }
-
-                // 2. Works
-                if let rawWorks = json["works"] as? [[String: Any]] {
-                    for w in rawWorks {
-                        try Task.checkCancellation()
-                        guard let galleryId = (w["gallery_id"] as? Int64) ?? (w["gallery_id"] as? Int).map(Int64.init) else { continue }
-                        let title = w["title"] as? String
-                        let artists = w["artists"] as? String
-                        let note = w["note"] as? String
-                        let language = w["language"] as? String
-                        let type = w["type"] as? String
-                        let series = w["series"] as? String
-                        let groups = w["groups"] as? String
-                        let tags = w["tags"] as? String
-                        let publishedAt = w["published_at"] as? String
-                        let bookmarkedAt = w["bookmarked_at"] as? String
-
-                        let upserted = try db.upsertWork(
-                            galleryId: galleryId,
-                            title: title,
-                            artists: artists,
-                            language: language,
-                            type: type,
-                            series: series,
-                            groups: groups,
-                            tags: tags,
-                            publishedAt: publishedAt,
-                            bookmarkedAt: bookmarkedAt
-                        )
-                        if let note, !note.isEmpty {
-                            try? db.setNote(galleryId: galleryId, note: note)
-                        }
-
-                        // Restore thumb_page if specified (> 1)
-                        if let thumbPage = w["thumb_page"] as? Int, thumbPage > 1 {
-                            try? db.setThumbPage(galleryId: galleryId, page: thumbPage)
-                        }
-
-                        // Folders mapping
-                        if let folderNames = w["folders"] as? [String] {
-                            for fn in folderNames {
-                                if let fid = folderNameToId[fn] {
-                                    if let wid = upserted.id {
-                                        try? db.addWorkToFolder(workId: wid, folderId: fid)
-                                    }
-                                }
-                            }
-                        }
-                        restoredWorks += 1
-                    }
-                }
-
-                // 3. Artists
-                if let rawArtists = json["artists"] as? [[String: Any]] {
-                    for a in rawArtists {
-                        try Task.checkCancellation()
-                        guard let name = a["name"] as? String, !name.isEmpty else { continue }
-                        let kind = (a["kind"] as? Int) ?? 0
-                        _ = try? db.addFavoriteArtist(name: name, kind: kind)
-                    }
-                }
-
-                try Task.checkCancellation()
-                let restoredMessage = L10n.text("Backup restored: %@ works, %@ folders", String(restoredWorks), String(restoredFolders))
-                await MainActor.run {
-                    self.isImporting = false
-                    self.statusMessage = restoredMessage
-                    self.loadStats()
-                    envRef.startCoverQueue()
-                }
-            } catch {
-                await MainActor.run {
-                    self.isImporting = false
-                    self.statusMessage = error is CancellationError ? L10n.text("The task was canceled.") : L10n.text("Unable to restore backup: %@", String(describing: error.localizedDescription))
-                    self.loadStats()
-                }
-            }
-        }
-    }
-}
-
-enum MangaLibraryBackup {
-    static func export(database: AppDatabase) throws -> URL {
-        let (folders, works, artists) = try database.dbWriter.read { db in
-            try (AppDatabase.fetchFolders(db), AppDatabase.fetchWorks(db), ArtistMemo.order(ArtistMemo.Columns.name.asc).fetchAll(db))
-        }
-
-        let backupData: [String: Any] = [
-            "version": 2,
-            "exported_at": ISO8601DateFormatter().string(from: Date()),
-            "folders": folders.map { [
-                "id": $0.id ?? 0,
-                "name": $0.name,
-                "color": $0.color,
-                "sort_order": $0.sortOrder,
-                "source_group_id": $0.sourceGroupId as Any
-            ] },
-            "works": works.map { work -> [String: Any] in
-                var dict: [String: Any] = [
-                    "gallery_id": work.galleryId,
-                    "title": work.title ?? "",
-                    "artists": work.artists ?? "",
-                    "note": work.note ?? "",
-                    "bookmarked_at": work.bookmarkedAt
-                ]
-                if let lang = work.language { dict["language"] = lang }
-                if let type = work.type { dict["type"] = type }
-                if let series = work.series { dict["series"] = series }
-                if let groups = work.groups { dict["groups"] = groups }
-                if let tags = work.tags { dict["tags"] = tags }
-                if let pub = work.publishedAt { dict["published_at"] = pub }
-                if !work.folders.isEmpty {
-                    dict["folders"] = work.folders.map(\.name)
-                }
-                // Only save thumb_page if user specified it and > 1
-                if let page = work.thumbPage, page > 1 {
-                    dict["thumb_page"] = page
-                }
-                return dict
-            },
-            "artists": artists.map { [
-                "name": $0.name,
-                "kind": $0.kind,
-                "note": $0.note ?? ""
-            ] }
-        ]
-
-        let jsonData = try JSONSerialization.data(withJSONObject: backupData, options: .prettyPrinted)
-        let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent("tegnal-backup-\(UUID().uuidString).json")
-        try jsonData.write(to: tempUrl, options: .atomic)
-        return tempUrl
-    }
-}
-
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

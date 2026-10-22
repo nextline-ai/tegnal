@@ -61,6 +61,12 @@ final class LibraryCloudSync {
     }
     deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
 
+    /// Restores update both databases; force a fresh combined snapshot on the next sync.
+    func libraryRestored() {
+        snapshotCache.invalidate()
+        needsUpload = true
+    }
+
     func synchronize(env: AppEnvironment) async {
         guard enabled, !syncing, !Task.isCancelled else { return }
         #if DEBUG

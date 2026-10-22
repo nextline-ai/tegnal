@@ -410,6 +410,33 @@ final class BooruUITests: XCTestCase {
         capture(app, "AI accessible recommendation cards")
     }
 
+    func testBothModesOfferTheSameCombinedJSONBackup() {
+        let app = launch()
+        app.tabBars.buttons["More"].tap()
+        for mode in ["booru", "manga"] {
+            if mode == "manga" { selectMode(app, mode) }
+            reveal(app, mode == "booru" ? "booru.libraryManagement" : "settings.libraryManagement").tap()
+            let export = reveal(app, "backup.export")
+            XCTAssertTrue(export.isEnabled)
+            XCTAssertTrue(element(app, "backup.import").isEnabled)
+            let description = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "One JSON file backs up both Comics and Image libraries")).firstMatch
+            XCTAssertTrue(description.exists)
+            capture(app, mode + " unified library backup")
+            element(app, "backup.import").tap()
+            let cancel = app.buttons.matching(NSPredicate(format: "label IN %@", ["Cancel", "취소", "キャンセル"])).firstMatch
+            XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+            cancel.tap()
+            export.tap()
+            let filename = element(app, "LP.CaptionBar.TopCaption")
+            XCTAssertTrue(filename.waitForExistence(timeout: 10))
+            XCTAssertEqual(filename.label, "tegnal-backup")
+            XCTAssertTrue(element(app, "LP.CaptionBar.BottomCaption").label.contains("JSON"))
+            capture(app, mode + " single JSON backup share sheet")
+            app.buttons["header.closeButton"].tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+    }
+
     func testOrganizedSettingsAndOfflinePrivacyInBothModes() {
         let app = launch()
         app.tabBars.buttons["More"].tap()

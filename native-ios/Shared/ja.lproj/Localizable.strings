@@ -1038,3 +1038,8 @@
 "Import Challenge Backup" = "チャレンジのバックアップを読み込む";
 "Challenges imported successfully." = "チャレンジを読み込みました。";
 "Move or remove the works in Uncategorized before deleting it." = "未分類フォルダに作品があります。作品を移動または削除してからフォルダを削除してください。";
+"This backup is invalid, too large, or uses an unsupported version." = "このバックアップは無効か、大きすぎるか、未対応のバージョンです。";
+"One JSON file backs up both Comics and Image libraries, including folders, saved works, artists, tags, searches, servers, blacklists and challenge definitions. Media, caches and sign-in details are not included. Older separate backups can also be imported." = "1つのJSONファイルに漫画・画像の両ライブラリのフォルダ、保存作品、作者、タグ、検索履歴、サーバー、除外ルール、チャレンジ定義をまとめてバックアップします。メディア、キャッシュ、ログイン情報は含みません。従来の個別バックアップも読み込めます。";
+"Restore Backup?" = "バックアップを復元しますか？";
+"Comics: %@ · Images: %@ · Challenges: %@" = "漫画: %@ · 画像: %@ · チャレンジ: %@";
+"Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device." = "漫画・画像の両ライブラリと一般設定をまとめて同期します。レイアウト、再生設定、メディア、認証情報、Cookieは各端末にのみ保存されます。";

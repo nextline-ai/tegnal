@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6A330EBB789C4DB7B7F655D8 /* LibraryBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */; };
+		239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */; };
+		DC27734E34274E7E9EE48548 /* LibraryBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */; };
 		2B72BACC37E3471895C3405A /* splash.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 32960B1EEBAD47DA9E3A55CB /* splash.jpg */; };
 		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
 		097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */; };
@@ -181,6 +184,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupTests.swift; sourceTree = "<group>"; };
+		C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupSection.swift; sourceTree = "<group>"; };
+		CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackup.swift; sourceTree = "<group>"; };
 		32960B1EEBAD47DA9E3A55CB /* splash.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = splash.jpg; sourceTree = "<group>"; };
 		00A3D8D9E5D6B186E154E5DE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		01F914324983194D6DAD8D84 /* en */ = {isa = PBXFileReference; lastKnownFileType = text; name = en; path = en.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
@@ -436,6 +442,7 @@
 				40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */,
 				5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */,
 				9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */,
+				F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */,
 				F2A824088835743E484646A8 /* BooruBackupTests.swift */,
 				9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */,
 				A688C07943C20ABCE3EE27BA /* BooruReleaseLiveTests.swift */,
@@ -454,6 +461,7 @@
 		7A5E9290B1BE7682B8182549 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */,
 				D4C14F8DB9B15B1EF5094844 /* CloudSyncSection.swift */,
 				8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */,
 				B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */,
@@ -564,6 +572,7 @@
 		A9477D81ECECC0CE3816A643 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */,
 				A015BE1F0830B18B98744C46 /* AppDatabase.swift */,
 				5F36E537BD5CCBBECC0C7D91 /* AppStorage.swift */,
 				BA5BA3974651F205FFFCE3AD /* SearchLibrary.swift */,
@@ -974,6 +983,8 @@
 				1FB5162E9127DAAB032A95F0 /* NativeContentView.swift in Sources */,
 				767EAEE31B2A8121A3534E33 /* NativeReaderView.swift in Sources */,
 				09F96FACC7155FD7B5D16E12 /* TEGNALApp.swift in Sources */,
+				239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */,
+				DC27734E34274E7E9EE48548 /* LibraryBackup.swift in Sources */,
 				8566DB33557D57EE38DE08D8 /* OnboardingView.swift in Sources */,
 				56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */,
 				5EECFEAB14C80308070211D3 /* ReaderPagingView.swift in Sources */,
@@ -998,6 +1009,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FF8710300AB2E727C84EF6F4 /* TEGNALTests/ChallengeTests.swift in Sources */,
+				6A330EBB789C4DB7B7F655D8 /* LibraryBackupTests.swift in Sources */,
 				A44973D3E3DC1CA4DF985E73 /* BooruBackupTests.swift in Sources */,
 				528F7B9571CC74D0D47C7C8E /* BooruLibraryTests.swift in Sources */,
 				9AE4AA3721DEDE1610B8B5A0 /* BooruReleaseLiveTests.swift in Sources */,
