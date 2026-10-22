@@ -27,6 +27,7 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.helpHidden", store: ReaderPreferences.defaults) private var helpHidden = false
     @State private var gallery: NativeGallery?
     @State private var currentPage = 0
+    @State private var pagePrefetcher = ReaderPagePrefetcher()
     @State private var error: String?
     @State private var retry = 0
     @State private var menuVisible = false
@@ -138,14 +139,15 @@ struct NativeReaderView: View {
         }
         .task(id: retry) { await loadGallery() }
         .task(id: "\(currentPage):\(pagesPerSpread):\(prefetch):\(gallery?.id ?? 0):\(mayPrefetch)") {
-            if mayPrefetch, prefetch > 0, let gallery, gallery.pages.indices.contains(currentPage) {
-                do {
-                    // The visible page gets the network/decode slots before speculation.
-                    _ = try await images.load(gallery.pages[currentPage], galleryID: gallery.id)
-                    try Task.checkCancellation()
-                    await images.prefetch(gallery, current: currentPage, count: prefetch, visibleCount: pagesPerSpread)
-                } catch {}
+            guard !Task.isCancelled else { return }
+            guard mayPrefetch, prefetch > 0, let gallery, gallery.pages.indices.contains(currentPage) else {
+                pagePrefetcher.cancel(); return
             }
+            let allowed = await images.canPrefetch
+            guard !Task.isCancelled else { return }
+            if allowed {
+                pagePrefetcher.update(gallery: gallery, images: images, current: currentPage, count: prefetch, visibleCount: pagesPerSpread)
+            } else { pagePrefetcher.cancel() }
         }
         .workSaveFeedback($saveFeedback, identifier: "reader.toast")
         .task(id: toast) {
@@ -174,8 +176,11 @@ struct NativeReaderView: View {
         }
         .onAppear { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake && scenePhase == .active }
         .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value && scenePhase == .active }
-        .onChange(of: scenePhase) { _, phase in UIApplication.shared.isIdleTimerDisabled = keepAwake && phase == .active }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = previousIdleTimer }
+        .onChange(of: scenePhase) { _, phase in
+            UIApplication.shared.isIdleTimerDisabled = keepAwake && phase == .active
+            if phase != .active { pagePrefetcher.cancel() }
+        }
+        .onDisappear { pagePrefetcher.cancel(); UIApplication.shared.isIdleTimerDisabled = previousIdleTimer }
     }
 
     @ViewBuilder private func reader(_ gallery: NativeGallery) -> some View {

@@ -184,6 +184,14 @@ actor PageImageStore {
         else { flights[key] = flight }
     }
 
+    #if DEBUG
+    func consumerCount(hash: String, thumbnail: Bool = false) -> Int {
+        flights["\(hash):\(thumbnail)"]?.waiters.count ?? 0
+    }
+    #endif
+
+    var canPrefetch: Bool { allowsPrefetch() }
+
     /// Current and adjacent/next pages are speculatively downloaded in parallel and cancel on navigation.
     func prefetch(_ gallery: NativeGallery, current: Int, count: Int, visibleCount: Int = 1) async {
         guard !Task.isCancelled, allowsPrefetch() else { return }
@@ -209,5 +217,72 @@ actor PageImageStore {
         var indices = [current] + Array(start..<end)
         if current > 0 { indices.append(current - 1) }
         return indices
+    }
+}
+
+/// The reader owns a rolling window, rather than cancelling a whole task group
+/// on every turn. Downloads shared by the old/new windows survive the handoff.
+@MainActor final class ReaderPagePrefetcher {
+    private struct Job { let id: UUID; let task: Task<Void, Never> }
+    private var jobs: [Int: Job] = [:]
+    private var finished = Set<Int>()
+    private var window: [Int] = []
+    private var visible: [Int] = []
+    private var gallery: NativeGallery?
+    private var images: PageImageStore?
+    private var generation = UUID()
+    private let limit = 3
+
+    func update(gallery: NativeGallery, images: PageImageStore, current: Int, count: Int, visibleCount: Int = 1) {
+        guard count > 0, gallery.pages.indices.contains(current) else { cancel(); return }
+        if self.gallery?.id != gallery.id || self.images !== images { cancel() }
+        self.gallery = gallery; self.images = images
+        visible = Array(current..<min(gallery.pages.count, current + ReaderLayout.count(visibleCount)))
+        window = visible + PageImageStore.prefetchIndices(total: gallery.pages.count, current: current, count: count, visibleCount: visibleCount)
+            .filter { !visible.contains($0) }
+        let wanted = Set(window)
+        for index in jobs.keys.filter({ !wanted.contains($0) }) { jobs.removeValue(forKey: index)?.task.cancel() }
+        finished.formIntersection(wanted)
+        // A visible page evicted under memory pressure can be requested again.
+        // Completed speculation stays bounded instead of cycling evicted pages.
+        for index in visible where images.cachedImage(hash: gallery.pages[index].hash) == nil { finished.remove(index) }
+        fill()
+    }
+
+    func cancel() {
+        generation = UUID()
+        for job in jobs.values { job.task.cancel() }
+        jobs.removeAll(); finished.removeAll(); window = []; visible = []
+        gallery = nil; images = nil
+    }
+
+    private func fill() {
+        guard let gallery, let images else { return }
+        for index in visible where jobs[index] == nil && !finished.contains(index)
+            && images.cachedImage(hash: gallery.pages[index].hash) == nil {
+            start(index, gallery: gallery, images: images, priority: .userInitiated)
+        }
+        // Give every page in the visible spread the network/decode slots first.
+        guard visible.allSatisfy({ images.cachedImage(hash: gallery.pages[$0].hash) != nil }) else { return }
+        for index in window where !visible.contains(index) && jobs.count < limit {
+            guard jobs[index] == nil, !finished.contains(index), images.cachedImage(hash: gallery.pages[index].hash) == nil else { continue }
+            start(index, gallery: gallery, images: images, priority: .utility)
+        }
+    }
+
+    private func start(_ index: Int, gallery: NativeGallery, images: PageImageStore, priority: TaskPriority) {
+        let id = UUID(), token = generation
+        let task = Task(priority: priority) { [weak self] in
+            _ = try? await images.load(gallery.pages[index], galleryID: gallery.id)
+            guard !Task.isCancelled else { return }
+            self?.complete(index, id: id, generation: token)
+        }
+        jobs[index] = Job(id: id, task: task)
+    }
+
+    private func complete(_ index: Int, id: UUID, generation token: UUID) {
+        guard generation == token, jobs[index]?.id == id else { return }
+        jobs[index] = nil; finished.insert(index)
+        fill()
     }
 }

@@ -850,3 +850,140 @@ private struct CachedReaderFixture: ContentProviding {
     func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch { .init(ids: [], hasMore: false) }
     func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data { throw ContentError.unavailable(503) }
 }
+
+extension ReaderUXTests {
+    @MainActor func testPageTurnKeepsTheNextDownloadAcrossPrefetchWindows() async throws {
+        let fixture = FixtureContentSource(), sample = try await fixture.gallery(1)
+        let source = ReaderTurnSource(data: try await fixture.image(sample.pages[0], galleryID: sample.id, thumbnail: false))
+        let gallery = try await source.gallery(7), images = PageImageStore(source: source, allowsPrefetch: { true })
+        let prefetcher = ReaderPagePrefetcher()
+        defer { prefetcher.cancel() }
+        prefetcher.update(gallery: gallery, images: images, current: 0, count: 3)
+        try await waitForReaderTurn { await source.requests(for: 1) == 1 }
+        // SwiftUI replaces its page task before the newly visible view attaches.
+        prefetcher.update(gallery: gallery, images: images, current: 1, count: 3)
+        let visible = Task { try await images.load(gallery.pages[1], galleryID: gallery.id) }
+        try await waitForReaderTurn { await images.consumerCount(hash: gallery.pages[1].hash) == 2 }
+        await source.release(1)
+        _ = try await visible.value
+        let downloads = await source.requests(for: 1)
+        print("READER_PAGE_TURN_DOWNLOADS=\(downloads)")
+        XCTAssertEqual(downloads, 1)
+        let canceled = await source.cancellations(for: 1)
+        XCTAssertEqual(canceled, 0)
+        await source.releaseAll()
+    }
+
+    @MainActor func testRollingPrefetchKeepsItsConcurrencyBoundDuringFastTurns() async throws {
+        let fixture = FixtureContentSource(), sample = try await fixture.gallery(1)
+        let source = ReaderTurnSource(data: try await fixture.image(sample.pages[0], galleryID: sample.id, thumbnail: false))
+        let gallery = try await source.gallery(7), images = PageImageStore(source: source, allowsPrefetch: { true })
+        let prefetcher = ReaderPagePrefetcher()
+        defer { prefetcher.cancel() }
+        prefetcher.update(gallery: gallery, images: images, current: 0, count: 3)
+        try await waitForReaderTurn { await source.requests(for: 3) == 1 }
+        prefetcher.update(gallery: gallery, images: images, current: 1, count: 3)
+        prefetcher.update(gallery: gallery, images: images, current: 2, count: 3)
+        await source.release(2)
+        try await waitForReaderTurn { await source.requests(for: 4) == 1 }
+        let fifth = await source.requests(for: 5), peak = await source.maximumConcurrent
+        XCTAssertEqual(fifth, 0, "Nearby in-flight requests retain the three speculative slots")
+        XCTAssertLessThanOrEqual(peak, 3)
+        for page in 1...3 {
+            let count = await source.requests(for: page)
+            XCTAssertEqual(count, 1)
+        }
+        prefetcher.cancel()
+        try await waitForReaderTurn { await source.activeCount == 0 }
+    }
+
+    @MainActor func testVisibleSpreadLoadsBeforeStartingMoreSpeculation() async throws {
+        let fixture = FixtureContentSource(), sample = try await fixture.gallery(1)
+        let source = ReaderTurnSource(data: try await fixture.image(sample.pages[0], galleryID: sample.id, thumbnail: false))
+        let gallery = try await source.gallery(7), images = PageImageStore(source: source, allowsPrefetch: { true })
+        let prefetcher = ReaderPagePrefetcher()
+        defer { prefetcher.cancel() }
+        prefetcher.update(gallery: gallery, images: images, current: 0, count: 3, visibleCount: 2)
+        try await waitForReaderTurn { await source.requests(for: 1) == 1 }
+        let next = await source.requests(for: 2)
+        XCTAssertEqual(next, 0, "The second visible page gets priority over future pages")
+        await source.release(1)
+        try await waitForReaderTurn { await source.requests(for: 2) == 1 }
+        prefetcher.cancel()
+        try await waitForReaderTurn { await source.activeCount == 0 }
+    }
+
+    @MainActor func testDismissingPrefetchStopsUnusedWorkAndKeepsAVisibleConsumer() async throws {
+        let fixture = FixtureContentSource(), sample = try await fixture.gallery(1)
+        let source = ReaderTurnSource(data: try await fixture.image(sample.pages[0], galleryID: sample.id, thumbnail: false))
+        let gallery = try await source.gallery(7), images = PageImageStore(source: source, allowsPrefetch: { true })
+        let prefetcher = ReaderPagePrefetcher()
+        defer { prefetcher.cancel() }
+        prefetcher.update(gallery: gallery, images: images, current: 0, count: 3)
+        try await waitForReaderTurn { await source.requests(for: 3) == 1 }
+        let visible = Task { try await images.load(gallery.pages[1], galleryID: gallery.id) }
+        try await waitForReaderTurn { await images.consumerCount(hash: gallery.pages[1].hash) == 2 }
+        prefetcher.cancel()
+        try await waitForReaderTurn { await source.activeCount == 1 }
+        let canceled = await source.cancellations(for: 1)
+        XCTAssertEqual(canceled, 0)
+        await source.release(1)
+        _ = try await visible.value
+        let count = await source.requests(for: 1)
+        XCTAssertEqual(count, 1)
+    }
+
+    private func waitForReaderTurn(_ predicate: () async -> Bool) async throws {
+        for _ in 0..<400 {
+            if await predicate() { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail("Reader request did not reach the expected state")
+        throw URLError(.timedOut)
+    }
+}
+
+private actor ReaderTurnSource: ContentProviding {
+    private let data: Data
+    private var counts: [Int: Int] = [:]
+    private var cancelled: [Int: Int] = [:]
+    private(set) var maximumConcurrent = 0
+    var activeCount: Int { pending.count }
+    private var pending: [UUID: (Int, CheckedContinuation<Data, Error>)] = [:]
+    private var released: Set<Int> = [0]
+    init(data: Data) { self.data = data }
+    func gallery(_ id: Int64) async throws -> NativeGallery {
+        NativeGallery(id: id, title: "Reader turns", artists: [], language: "korean", type: "manga", tags: [], pages: (0..<12).map {
+            GalleryPage(hash: String(format: "%064x", $0 + 100), name: "\($0).png", width: 800, height: 1200, hasAVIF: false)
+        })
+    }
+    func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch { .init(ids: [], hasMore: false) }
+    func requests(for page: Int) -> Int { counts[page, default: 0] }
+    func cancellations(for page: Int) -> Int { cancelled[page, default: 0] }
+    func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data {
+        try Task.checkCancellation()
+        let index = Int((page.name as NSString).deletingPathExtension)!
+        counts[index, default: 0] += 1
+        if released.contains(index) { return data }
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if Task.isCancelled { continuation.resume(throwing: CancellationError()) }
+                else {
+                    pending[id] = (index, continuation)
+                    maximumConcurrent = max(maximumConcurrent, pending.count)
+                }
+            }
+        } onCancel: { Task { await self.cancel(id) } }
+    }
+    private func cancel(_ id: UUID) {
+        guard let (page, continuation) = pending.removeValue(forKey: id) else { return }
+        cancelled[page, default: 0] += 1
+        continuation.resume(throwing: CancellationError())
+    }
+    func release(_ page: Int) {
+        released.insert(page)
+        for id in pending.keys.filter({ pending[$0]?.0 == page }) { pending.removeValue(forKey: id)?.1.resume(returning: data) }
+    }
+    func releaseAll() { for page in 0..<12 { release(page) } }
+}
