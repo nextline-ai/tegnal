@@ -58,7 +58,9 @@ private struct DeveloperLogo: UIViewRepresentable {
         view.isOpaque = false; view.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
         view.isUserInteractionEnabled = false
         if let url = Bundle.main.url(forResource: "nextline-logo", withExtension: "svg"), let svg = try? String(contentsOf: url, encoding: .utf8) {
-            view.loadHTMLString("<meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent}svg{width:100%;height:64px}</style>" + svg, baseURL: nil)
+            // Trim the square artboard's empty margins for display; preserve the bundled SVG unchanged.
+            let artwork = svg.replacingOccurrences(of: "viewBox=\"0 0 1024 1024\"", with: "viewBox=\"169 415 681 162\"")
+            view.loadHTMLString("<meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent}svg{width:100%;height:64px}</style>" + artwork, baseURL: nil)
         }
         return view
     }

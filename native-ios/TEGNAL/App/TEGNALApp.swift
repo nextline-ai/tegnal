@@ -13,7 +13,8 @@ struct SplashTiming: Equatable {
 @MainActor private enum SplashArtwork {
     // Decode once, before motion starts; resume reuses the prepared image.
     static let image: UIImage? = {
-        let image = UIImage(named: "splash")
+        guard let url = Bundle.main.url(forResource: "splash", withExtension: "jpg") else { return nil }
+        let image = UIImage(contentsOfFile: url.path)
         return image?.preparingForDisplay() ?? image
     }()
     static func make(frame: CGRect, identifier: String) -> UIView {
@@ -254,7 +255,10 @@ struct TEGNALApp: App {
 
                 #if targetEnvironment(macCatalyst)
                 if scenePhase != .active && !isSplashScreenVisible {
-                    ZStack { Color.white; Image("splash").resizable().scaledToFit() }
+                    ZStack {
+                        Color.white
+                        if let image = SplashArtwork.image { Image(uiImage: image).resizable().scaledToFit() }
+                    }
                         .clipped().ignoresSafeArea().zIndex(9998)
                 }
                 #endif

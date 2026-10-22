@@ -576,6 +576,17 @@ import WebKit
         _ = try await web.evaluateJavaScript("window.pausePlayback()")
     }
 
+    func testLaunchArtworkPreservesJPEGAndUsesTheBundledImage() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "splash", withExtension: "jpg"))
+        let bytes = try Data(contentsOf: url)
+        XCTAssertEqual(Array(bytes.prefix(3)), [0xFF, 0xD8, 0xFF])
+        let expected = try XCTUnwrap(UIImage(contentsOfFile: url.path))
+        let artwork = SplashContainerView().artwork
+        let view = try XCTUnwrap(artwork.subviews.compactMap { $0 as? UIImageView }.first)
+        XCTAssertEqual(view.image?.size, expected.size)
+        XCTAssertEqual(view.contentMode, .scaleAspectFit)
+    }
+
     func testLaunchAndResumeHaveIndependentDurations() {
         XCTAssertEqual(SplashTiming.launch.hold, SplashTiming.resume.hold * 2)
         XCTAssertEqual(SplashTiming.launch.slide, SplashTiming.resume.slide * 2)
