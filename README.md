@@ -47,19 +47,19 @@
 
 ### TestFlight
 
-[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)를 설치한 뒤 **[TEGNAL 베타 참여](https://testflight.apple.com/join/gnkqu44W)**에서 앱을 설치하세요. 현재 공개 베타는 **1.0.0 (7)**입니다.
+[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)를 설치한 뒤 [TEGNAL 베타 참여](https://testflight.apple.com/join/gnkqu44W)에서 앱을 설치하세요. 현재 공개 베타는 <strong>1.0.0 (7)</strong>입니다.
 
 ### AltStore Classic · SideStore
 
-설치된 AltStore Classic 또는 SideStore가 있다면 **[다운로드 페이지](https://nextline-ai.github.io/tegnal/)**에서 해당 **소스 등록** 버튼을 누르세요. 소스를 추가한 뒤 TEGNAL을 선택해 설치하고, 이후 버전도 같은 소스에서 확인할 수 있습니다.
+설치된 AltStore Classic 또는 SideStore가 있다면 [다운로드 페이지](https://nextline-ai.github.io/tegnal/)에서 해당 **소스 등록** 버튼을 누르세요. 소스를 추가한 뒤 TEGNAL을 선택해 설치하고, 이후 버전도 같은 소스에서 확인할 수 있습니다.
 
-수동으로 등록할 때는 두 앱의 **Sources → +**에 아래 주소를 붙여 넣으세요.
+수동으로 등록할 때는 두 앱의 <strong>Sources → +</strong>에 아래 주소를 붙여 넣으세요.
 
 ```text
 https://nextline-ai.github.io/tegnal/source.json
 ```
 
-IPA는 **[GitHub Releases](https://github.com/nextline-ai/tegnal/releases/latest)**에서도 직접 받을 수 있습니다. AltStore Classic·SideStore 설치본은 사용자의 Apple 계정으로 다시 서명되며, 서명 갱신과 사용 가능한 iCloud 기능은 계정 및 설치 도구에 따라 달라집니다. 이 소스는 AltStore Classic용입니다.
+IPA는 [GitHub Releases](https://github.com/nextline-ai/tegnal/releases/latest)에서도 직접 받을 수 있습니다. AltStore Classic·SideStore 설치본은 사용자의 Apple 계정으로 다시 서명되며, 서명 갱신과 사용 가능한 iCloud 기능은 계정 및 설치 도구에 따라 달라집니다. 이 소스는 AltStore Classic용입니다.
 
 ## 시작하기
 
