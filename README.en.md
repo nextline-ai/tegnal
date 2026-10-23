@@ -2,10 +2,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/tegnal-hero-dark.svg">
-      <img src="docs/assets/tegnal-hero-light.svg" alt="TEGNAL — Comics. Images. Your collection." width="100%">
-    </picture>
+    <img src="design/other/JPG/main_banner_en.jpg" alt="TEGNAL · TestFlight" width="100%">
   </a>
 </p>
 
@@ -14,7 +11,7 @@ A native iOS app for discovering comics and illustrations, enjoying them, and bu
 
 <p align="center"><sub>1.0.0 (7) &nbsp; · &nbsp; iOS 17+ &nbsp; · &nbsp; iPhone & iPad &nbsp; · &nbsp; 한국어 / English / 日本語</sub></p>
 
-<p align="center"><a href="https://testflight.apple.com/join/gnkqu44W"><img src="docs/assets/button-testflight.svg" alt="Install with TestFlight" width="220" height="67"></a><br><sub>Recommended installation · TestFlight</sub></p>
+<p align="center"><sub>Tap the banner to install with TestFlight · Recommended</sub></p>
 
 <details>
 <summary>Other installation options · AltStore Classic / SideStore / IPA</summary>
