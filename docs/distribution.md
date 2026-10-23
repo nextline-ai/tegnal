@@ -18,11 +18,11 @@
 1. `native-ios/project.yml`과 `native-ios/TEGNAL.xcodeproj/project.pbxproj`의 앱·공유 확장 버전을 함께 올립니다. 이미 공개한 버전과 빌드 번호 조합은 재사용하지 않습니다.
 2. Xcode에서 **TEGNAL → Any iOS Device → Product → Archive**를 실행합니다. TestFlight 배포는 Organizer에서 App Store Connect로 업로드합니다. Xcode가 업로드 중 빌드 번호를 올릴 수 있으므로 내보내는 IPA의 번호도 확인합니다.
 3. 사이드로딩용으로는 동일 소스의 기기용 **Release** 아카이브를 **Debugging** 방식으로 로컬 내보내기 합니다. 시뮬레이터 빌드나 TestFlight에서 내려받은 암호화 IPA를 사용하지 않습니다. 설치 도구가 사용자의 계정으로 다시 서명하는 IPA이며, 등록 기기에만 직접 설치할 수 있는 개발 서명 자체를 배포 권한으로 사용하지 않습니다.
-4. IPA 이름과 Release 태그를 정한 뒤 아래 명령으로 소스를 갱신합니다. macOS의 `codesign`과 Python 3가 필요합니다.
+4. IPA 이름과 Release 태그를 정한 뒤 아래 명령으로 소스를 갱신합니다. 같은 앱 버전의 핫픽스는 빌드 번호를 올리고 `v1.0.0-8`처럼 태그에 빌드 번호를 포함합니다. macOS의 `codesign`과 Python 3가 필요합니다.
 
 ```sh
-python3 scripts/update-alt-source.py /path/to/TEGNAL-1.0.0-7.ipa \
-  --download-url https://github.com/nextline-ai/tegnal/releases/download/v1.0.0/TEGNAL-1.0.0-7.ipa \
+python3 scripts/update-alt-source.py /path/to/TEGNAL-1.0.0-8.ipa \
+  --download-url https://github.com/nextline-ai/tegnal/releases/download/v1.0.0-8/TEGNAL-1.0.0-8.ipa \
   --date 2026-10-23 \
   --notes 'What changed in this release.'
 ```
