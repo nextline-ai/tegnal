@@ -11,7 +11,7 @@
 | GitHub Pages 원본 | `main` 브랜치의 `/docs` |
 | IPA | GitHub Release의 `TEGNAL-<version>-<build>.ipa` 첨부 파일 |
 
-README의 HTTPS 버튼은 다운로드 페이지를 엽니다. 페이지의 소스 등록 버튼이 `altstore://source?url=…` 또는 `sidestore://source?url=…`를 열며, 앱이 설치되지 않은 경우를 위해 소스 주소 복사도 제공합니다. GitHub README는 앱 전용 URL 스킴을 제한하므로 소스 등록은 이 페이지를 거칩니다.
+기본 설치 경로는 TestFlight입니다. README와 다운로드 페이지에서 AltStore Classic·SideStore·IPA는 기본적으로 접힌 선택 항목으로 제공합니다. README의 소스 등록 HTTPS 버튼은 다운로드 페이지의 해당 선택 항목을 펼쳐 엽니다. 페이지의 소스 등록 버튼이 `altstore://source?url=…` 또는 `sidestore://source?url=…`를 열며, 앱이 설치되지 않은 경우를 위해 소스 주소 복사도 제공합니다. GitHub README는 앱 전용 URL 스킴을 제한하므로 소스 등록은 이 페이지를 거칩니다.
 
 ## 다음 버전 배포
 

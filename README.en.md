@@ -14,12 +14,18 @@ A native iOS app for discovering comics and illustrations, enjoying them, and bu
 
 <p align="center"><sub>1.0.0 (7) &nbsp; · &nbsp; iOS 17+ &nbsp; · &nbsp; iPhone & iPad &nbsp; · &nbsp; 한국어 / English / 日本語</sub></p>
 
+<p align="center"><a href="https://testflight.apple.com/join/gnkqu44W"><img src="docs/assets/button-testflight.svg" alt="Install with TestFlight" width="220" height="67"></a><br><sub>Recommended installation · TestFlight</sub></p>
+
+<details>
+<summary>Other installation options · AltStore Classic / SideStore / IPA</summary>
+
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W"><img src="docs/assets/button-testflight.svg" alt="Install with TestFlight" width="184" height="56"></a>
-  <a href="https://nextline-ai.github.io/tegnal/?lang=en#altstore"><img src="docs/assets/button-altstore.svg" alt="Add the AltStore Classic source" width="184" height="56"></a>
-  <a href="https://nextline-ai.github.io/tegnal/?lang=en#sidestore"><img src="docs/assets/button-sidestore.svg" alt="Add the SideStore source" width="184" height="56"></a>
-  <a href="https://github.com/nextline-ai/tegnal/releases/latest"><img src="docs/assets/button-ipa.svg" alt="Download the IPA from GitHub Releases" width="184" height="56"></a>
+  <a href="https://nextline-ai.github.io/tegnal/?lang=en#altstore"><img src="docs/assets/button-altstore.svg" alt="AltStore Classic" width="160"></a>
+  <a href="https://nextline-ai.github.io/tegnal/?lang=en#sidestore"><img src="docs/assets/button-sidestore.svg" alt="SideStore" width="160"></a>
+  <a href="https://github.com/nextline-ai/tegnal/releases/latest"><img src="docs/assets/button-ipa.svg" alt="Download IPA" width="160"></a>
 </p>
+
+</details>
 
 <p align="center"><a href="#installation">Installation</a> &nbsp; · &nbsp; <a href="#two-ways-to-browse-one-place-to-keep-them">Explore the app</a> &nbsp; · &nbsp; <a href="https://github.com/nextline-ai/tegnal/releases">Release notes</a> &nbsp; · &nbsp; <a href="https://discord.gg/vUTGZNMaMB">Community</a></p>
 
@@ -45,11 +51,12 @@ A native iOS app for discovering comics and illustrations, enjoying them, and bu
 
 ## Installation
 
-### TestFlight
+### TestFlight · Recommended
 
-Install [Apple TestFlight](https://apps.apple.com/app/testflight/id899247664), then **[join the TEGNAL beta](https://testflight.apple.com/join/gnkqu44W)**. The current public beta is **1.0.0 (7)**.
+Install [Apple TestFlight](https://apps.apple.com/app/testflight/id899247664), then **[join the TEGNAL beta](https://testflight.apple.com/join/gnkqu44W)**. The current public beta is **1.0.0 (7)**. TestFlight is the recommended way to install TEGNAL and receive updates.
 
-### AltStore Classic · SideStore
+<details>
+<summary><b>Other installation options · AltStore Classic / SideStore / IPA</b></summary>
 
 With AltStore Classic or SideStore installed, open the **[download page](https://nextline-ai.github.io/tegnal/?lang=en)** and tap the corresponding **Add source** button. Add the source, select TEGNAL, and find future releases in the same place.
 
@@ -60,6 +67,8 @@ https://nextline-ai.github.io/tegnal/source.json
 ```
 
 You can also download the IPA directly from **[GitHub Releases](https://github.com/nextline-ai/tegnal/releases/latest)**. AltStore Classic and SideStore re-sign it with your Apple account; signing renewal and available iCloud capabilities depend on your account and installation tool. This source is intended for AltStore Classic.
+
+</details>
 
 ## Make it yours
 
