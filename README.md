@@ -24,7 +24,7 @@
 ## ✨ 왜 TEGNAL인가요?
 
 ### 1. Hitomi & Danbooru 통합 지원 (최초의 iOS 전용 올인원 뷰어)
-- **만화 모드(Hitomi 등)**와 **이미지 모드(Danbooru, Gelbooru, Moebooru 등)**를 하나의 앱에서 지원합니다.
+- <strong>만화 모드(Hitomi 등)</strong>와 <strong>이미지 모드(Danbooru, Gelbooru, Moebooru 등)</strong>를 하나의 앱에서 지원합니다.
 - 상단 전환바 하나로 만화책 감상과 일러스트(Booru) 탐색을 즉시 오갈 수 있습니다.
 - 여러 Booru 서버를 동시에 탐색하고, 마음에 드는 작품을 길게 눌러 나만의 폴더에 손쉽게 정리하세요.
 
