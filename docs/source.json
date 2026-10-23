@@ -1,0 +1,45 @@
+{
+  "name": "TEGNAL · NextLine",
+  "identifier": "work.nextline.tegnal.source",
+  "sourceURL": "https://nextline-ai.github.io/tegnal/source.json",
+  "subtitle": "Comics. Images. Your collection.",
+  "description": "The official TEGNAL source for AltStore Classic and SideStore.",
+  "iconURL": "https://nextline-ai.github.io/tegnal/assets/app-icon.png",
+  "website": "https://nextline-ai.github.io/tegnal/",
+  "tintColor": "#737373",
+  "apps": [
+    {
+      "name": "TEGNAL",
+      "bundleIdentifier": "work.nextline.tegnal",
+      "developerName": "NextLine",
+      "subtitle": "Comics. Images. Your collection.",
+      "localizedDescription": "A native iOS app for discovering comics and illustrations, enjoying them, and building your own collection. Connect your own sites, organize bookmarks and folders, translate text in images, and back up both libraries in one JSON file. Supports Korean, English and Japanese.",
+      "iconURL": "https://nextline-ai.github.io/tegnal/assets/app-icon.png",
+      "tintColor": "#737373",
+      "category": "entertainment",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "buildVersion": "7",
+          "date": "2026-10-23",
+          "localizedDescription": "Public beta 1.0.0 (7). Unified library backups, appearance-aware splash artwork, saved server discovery and improved comic page prefetching.",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/v1.0.0/TEGNAL-1.0.0-7.ipa",
+          "size": 10714297,
+          "minOSVersion": "17.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          "com.apple.developer.icloud-container-environment",
+          "com.apple.developer.icloud-container-identifiers",
+          "com.apple.developer.icloud-services",
+          "com.apple.developer.ubiquity-container-identifiers",
+          "com.apple.security.application-groups",
+          "get-task-allow"
+        ],
+        "privacy": {}
+      }
+    }
+  ],
+  "news": []
+}
