@@ -29,12 +29,16 @@ struct TargetedTranslationCanvas: View {
                         ready()
                         return
                     }
-                    if configuration == nil { configuration = .init(target: Locale.Language(identifier: target)) }
+                    if configuration == nil {
+                        configuration = .init(source: recognizer.dominantLanguage.map { Locale.Language(identifier: $0.rawValue) },
+                                              target: Locale.Language(identifier: target))
+                    }
                     else { configuration?.invalidate() }
                 } catch { if !Task.isCancelled { failed(error.localizedDescription) } }
             }
             .translationTask(configuration) { session in
                 do {
+                    try Task.checkCancellation()
                     let requests = regions.enumerated().map { TranslationSession.Request(sourceText: $0.element.text, clientIdentifier: String($0.offset)) }
                     let responses = try await session.translations(from: requests)
                     try Task.checkCancellation()

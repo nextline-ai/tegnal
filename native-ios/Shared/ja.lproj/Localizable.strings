@@ -1044,5 +1044,9 @@
 "Comics: %@ · Images: %@ · Challenges: %@" = "漫画: %@ · 画像: %@ · チャレンジ: %@";
 "Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device." = "漫画・画像の両ライブラリと一般設定をまとめて同期します。レイアウト、再生設定、メディア、認証情報、Cookieは各端末にのみ保存されます。";
 
-"Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time." = "表紙・タイトル・タグの取得中は、端末が熱くなり、バッテリーを消費する場合があります。最近保存した作品から処理し、いつでも一時停止できます。";
 "Pause" = "一時停止";
+"Filling missing information" = "表紙・タイトル・タグを自動取得中";
+"Filling %@ works in the background may warm up your device and use battery. Recently saved works are processed first." = "%@作品をバックグラウンドで処理中は、端末が熱くなり、バッテリーを消費する場合があります。最近保存した作品から処理します。";
+"Dismiss filling notice" = "自動取得のお知らせを閉じる";
+"Still missing information: %@ works. Failed downloads can be retried." = "情報が未取得の作品：%@件。失敗したダウンロードは再試行できます。";
+"Missing covers are downloaded separately in the background." = "表紙画像は別途バックグラウンドでダウンロードします。";

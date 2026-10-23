@@ -221,7 +221,8 @@ public struct OnboardingView: View {
                     await MainActor.run {
                         self.isImporting = false
                         self.importCompleted = true
-                        self.importSummary = L10n.text("data.db matched!\nUpdated %2$@ of %1$@ works", String(describing: res.totalWorks), String(describing: res.matched))
+                        self.importSummary = L10n.text("data.db matched!\nUpdated %2$@ of %1$@ works", String(describing: res.totalWorks), String(describing: res.matched)) + "\n" + L10n.text("Missing covers are downloaded separately in the background.")
+                        envRef.startCoverQueue()
                     }
                 } else {
                     await MainActor.run {

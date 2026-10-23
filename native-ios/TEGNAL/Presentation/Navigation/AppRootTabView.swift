@@ -213,6 +213,9 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     }
     var body: some View {
         VStack(spacing: 0) {
+            if env.coverQueueState.showsHeatBanner {
+                CoverFillHeatBanner(state: env.coverQueueState)
+            }
             if let date = env.taste.pendingRecap(tasteMode) {
                 TasteRecapBanner(mode: tasteMode, date: date, open: { showingRecap = true }, dismiss: { env.taste.dismissRecap(tasteMode) })
                     .environment(\.timeZone, TimeZone(identifier: env.taste.control.timeZone) ?? .gmt)
@@ -258,6 +261,28 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
         // iOS 26 gives the search role the separate trailing glass circle.
         if #available(iOS 26.0, *) { return .search }
         return nil
+    }
+}
+
+private struct CoverFillHeatBanner: View {
+    let state: CoverQueueState
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "thermometer.medium").font(.title3).padding(.top, 3)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Filling missing information")).font(.subheadline.bold())
+                Text(L10n.text("Filling %@ works in the background may warm up your device and use battery. Recently saved works are processed first.", String(state.total)))
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            Button { state.heatWarningDismissed = true } label: {
+                Image(systemName: "xmark").font(.subheadline.bold()).frame(width: 44, height: 44)
+            }.buttonStyle(.plain).accessibilityLabel(L10n.text("Dismiss filling notice"))
+                .accessibilityIdentifier("library.fillHeatBanner.dismiss")
+        }.padding(.leading, 16).padding(.vertical, 8)
+            .foregroundStyle(.primary)
+            .background(Color.orange.opacity(0.16), in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 16).padding(.vertical, 6)
+            .accessibilityIdentifier("library.fillHeatBanner")
     }
 }
 

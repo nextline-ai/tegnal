@@ -1,8 +1,53 @@
 import XCTest
 import SwiftUI
+import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
+    @MainActor func testMacSystemLanguageUsesDirectAppleTranslationInsteadOfLiveTextControls() {
+        XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "system", isMac: true))
+        XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "ko", isMac: true))
+        XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "ko", isMac: false))
+        XCTAssertFalse(ReaderTranslationView.usesTextSession(target: "system", isMac: false))
+    }
+
+    @MainActor func testMacTranslationCanvasRecognizesAndDisplaysTranslatedImageText() async throws {
+        guard #available(iOS 26.0, *), ProcessInfo.processInfo.isiOSAppOnMac else { throw XCTSkip("Requires the physical Mac translation engine") }
+        guard await LanguageAvailability().status(from: Locale.Language(identifier: "en"), to: Locale.Language(identifier: "ko")) == .installed else { throw XCTSkip("English/Korean translation models are not installed") }
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 180)).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 900, height: 180))
+            ("Hello, how are you today?" as NSString).draw(at: CGPoint(x: 30, y: 50), withAttributes: [.font: UIFont.systemFont(ofSize: 48), .foregroundColor: UIColor.black])
+        }
+        let done = expectation(description: "Image OCR and Apple translation complete")
+        var failure: String?
+        let host = UIHostingController(rootView: TargetedTranslationCanvas(image: image, target: "ko", retry: 0,
+            ready: { done.fulfill() }, failed: { failure = $0; done.fulfill() }))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKey() }
+        await fulfillment(of: [done], timeout: 45)
+        XCTAssertNil(failure)
+        func labels(in view: UIView) -> [UILabel] {
+            (view as? UILabel).map { [$0] } ?? view.subviews.flatMap { labels(in: $0) }
+        }
+        let translated = labels(in: host.view).filter { $0.accessibilityIdentifier?.hasPrefix("reader.translation.text.") == true }
+        XCTAssertFalse(translated.isEmpty)
+        XCTAssertTrue(translated.contains { ($0.text ?? "").range(of: "[가-힣]", options: .regularExpression) != nil }, "The image overlay must display actual Korean translation")
+    }
+
+    @MainActor func testInstalledAppleTranslationEngineOnMac() async throws {
+        guard #available(iOS 26.0, *), ProcessInfo.processInfo.isiOSAppOnMac else { throw XCTSkip("Requires the physical Mac translation engine") }
+        let source = Locale.Language(identifier: "en"), target = Locale.Language(identifier: "ko")
+        guard await LanguageAvailability().status(from: source, to: target) == .installed else { throw XCTSkip("English/Korean translation models are not installed on this Mac") }
+        let session = TranslationSession(installedSource: source, target: target)
+        let response = try await session.translate("Hello, how are you?")
+        XCTAssertFalse(response.targetText.isEmpty)
+        XCTAssertNotEqual(response.targetText, "Hello, how are you?")
+    }
+
     @MainActor func testSaveFeedbackUsesSameModeSpecificResultAndRecordsToggle() throws {
         let env = AppEnvironment.preview(), server = BooruServer.presets[0]
         try env.booru.saveServer(server)

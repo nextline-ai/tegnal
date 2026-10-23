@@ -50,6 +50,11 @@ enum ContentUITestSupport {
                 }
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--fill-heat-banner-test") {
+            env.coverQueueState.total = 100
+            env.coverQueueState.remaining = 100
+            env.coverQueueState.isRunning = true
+        }
         if ProcessInfo.processInfo.arguments.contains("--challenge-ui-test") {
             try! ChallengeUITestSupport.seed(env.booru)
         }

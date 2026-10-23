@@ -1044,5 +1044,9 @@
 "Comics: %@ · Images: %@ · Challenges: %@" = "Comics: %@ · Images: %@ · Challenges: %@";
 "Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device." = "Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device.";
 
-"Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time." = "Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time.";
 "Pause" = "Pause";
+"Filling missing information" = "Filling missing information";
+"Filling %@ works in the background may warm up your device and use battery. Recently saved works are processed first." = "Filling %@ works in the background may warm up your device and use battery. Recently saved works are processed first.";
+"Dismiss filling notice" = "Dismiss filling notice";
+"Still missing information: %@ works. Failed downloads can be retried." = "Still missing information: %@ works. Failed downloads can be retried.";
+"Missing covers are downloaded separately in the background." = "Missing covers are downloaded separately in the background.";

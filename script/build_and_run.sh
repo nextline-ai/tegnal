@@ -18,6 +18,8 @@ on run argv
             delay 0.5
         end repeat
         stop projectDoc
+        set active scheme of projectDoc to scheme "TEGNAL" of projectDoc
+        set active run destination of projectDoc to first run destination of projectDoc whose name is "My Mac (Designed for iPad)"
     end tell
 end run
 APPLESCRIPT

@@ -413,14 +413,14 @@ public final class AppEnvironment: @unchecked Sendable {
         self.init(database: database, browserPreferences: browserPreferences, booru: try! BooruStore())
     }
 
-    init(database: AppDatabase, browserPreferences: UserDefaults = .standard, booru: BooruStore) {
+    init(database: AppDatabase, browserPreferences: UserDefaults = .standard, booru: BooruStore, coverQueue: CoverQueueActor? = nil) {
         self.browserPreferences = browserPreferences
         self.appLanguage = browserPreferences.string(forKey: "app.language") ?? "system"
         L10n.appLanguage = browserPreferences.string(forKey: "app.language") ?? "system"
         self.booru = booru
         self.mode = AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
         self.database = database
-        self.coverQueueActor = CoverQueueActor(database: database)
+        self.coverQueueActor = coverQueue ?? CoverQueueActor(database: database)
         self.coverQueueState = CoverQueueState()
         self.mangaViewerImporter = MangaViewerImportService(appDb: database)
 
@@ -495,8 +495,7 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     @MainActor public func startCoverQueue() {
-        guard isSiteVerified else { return }
-        guard coverQueueActive, mode == .manga, CoverQueuePolicy.allowsBackfill else { resumeCoverQueue = true; return }
+        guard coverQueueActive, CoverQueuePolicy.allowsBackfill else { resumeCoverQueue = true; return }
         if let task = coverQueueTask, !task.isCancelled {
             coverQueueRequested = true
             return
@@ -509,14 +508,14 @@ public final class AppEnvironment: @unchecked Sendable {
             defer { if self.coverQueueGeneration == token { self.coverQueueTask = nil } }
             repeat {
                 coverQueueRequested = false
-                await coverQueueActor.start(state: coverQueueState)
-            } while coverQueueRequested && !Task.isCancelled && coverQueueActive && mode == .manga && CoverQueuePolicy.allowsBackfill
+                await coverQueueActor.start(state: coverQueueState, downloadsEnabled: isSiteVerified)
+            } while coverQueueRequested && !Task.isCancelled && coverQueueActive && CoverQueuePolicy.allowsBackfill
             if !CoverQueuePolicy.allowsBackfill { resumeCoverQueue = true }
         }
     }
 
     @MainActor func setCoverQueueActive(_ active: Bool) {
-        let allowed = active && mode == .manga && CoverQueuePolicy.allowsBackfill
+        let allowed = active && CoverQueuePolicy.allowsBackfill
         guard coverQueueActive != allowed else { return }
         coverQueueActive = allowed
         if !allowed {

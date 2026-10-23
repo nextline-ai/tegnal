@@ -34,8 +34,8 @@ struct ReaderTranslationRequest: Identifiable {
     var rect = CGRect(x: 0, y: 0, width: 1, height: 1)
 }
 
-/// Use the same VisionKit image interaction as the former in-app browser.
-/// Apple owns recognition, translation grouping, backgrounds and translated text layout.
+/// Mac uses Vision OCR and Apple Translation directly; iOS keeps its native
+/// Live Text interface when the user chooses the system translation language.
 struct ReaderTranslationView: View {
     let loadImage: () async throws -> UIImage
     let finished: () -> Void
@@ -56,11 +56,21 @@ struct ReaderTranslationView: View {
         self.targetLanguage = ReaderTranslationLanguage.preference(booru: booru)
     }
 
+    static func usesTextSession(target: String, isMac: Bool) -> Bool {
+        isMac || target != "system"
+    }
+    private var usesTextSession: Bool {
+        if #available(iOS 18.0, *) {
+            return Self.usesTextSession(target: targetLanguage, isMac: ProcessInfo.processInfo.isiOSAppOnMac)
+        }
+        return false
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
             if let image {
-                if #available(iOS 18.0, *), targetLanguage != "system" {
+                if #available(iOS 18.0, *), usesTextSession {
                     TargetedTranslationCanvas(image: image, target: ReaderTranslationLanguage.resolved(targetLanguage), retry: retry,
                                               ready: { analyzing = false }, failed: failed).ignoresSafeArea()
                 } else { LiveTextTranslationCanvas(image: image, retry: retry, ready: { automatic in
@@ -86,7 +96,7 @@ struct ReaderTranslationView: View {
             }.padding(16)
         }
         .task {
-            guard ImageAnalyzer.isSupported else { failed(L10n.text("This device does not support Apple image analysis.")); return }
+            guard usesTextSession || ImageAnalyzer.isSupported else { failed(L10n.text("This device does not support Apple image analysis.")); return }
             do {
                 // Decode the original pixels, including the current enlarged viewport, without painting over them.
                 image = try await loadImage()

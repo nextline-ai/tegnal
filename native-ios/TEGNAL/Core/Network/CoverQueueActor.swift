@@ -23,6 +23,10 @@ public final class CoverQueueState: @unchecked Sendable {
     public var failed: Int = 0
     public var gone: Int = 0
     public var total: Int = 0
+    public var remaining: Int = 0
+    public var error: String?
+    var heatWarningDismissed = false
+    var showsHeatBanner: Bool { isRunning && total >= 100 && !heatWarningDismissed }
 
     public init() {}
 }
@@ -30,7 +34,11 @@ public final class CoverQueueState: @unchecked Sendable {
 public actor CoverQueueActor {
     private let database: AppDatabase
     private let thumbsDir: URL
-    private let images = PageImageStore(source: MangaContentSource.shared)
+    private let source: any ContentProviding
+    private let images: PageImageStore
+    private let allowsBackfill: @Sendable () -> Bool
+    private let delay: Duration
+    private var checkedThumbnailFiles = false
     private var isRunning: Bool = false
     private var isPaused: Bool = false
     private var kickAgain: Bool = false
@@ -38,6 +46,17 @@ public actor CoverQueueActor {
     public init(database: AppDatabase, thumbsDir: URL = AppStorage.thumbsDirURL) {
         self.database = database
         self.thumbsDir = thumbsDir
+        self.source = MangaContentSource.shared
+        self.images = PageImageStore(source: MangaContentSource.shared)
+        self.allowsBackfill = { CoverQueuePolicy.allowsBackfill }
+        self.delay = .milliseconds(150)
+    }
+
+    init(database: AppDatabase, thumbsDir: URL, source: any ContentProviding,
+         allowsBackfill: @escaping @Sendable () -> Bool = { CoverQueuePolicy.allowsBackfill }, delay: Duration = .milliseconds(150)) {
+        self.database = database; self.thumbsDir = thumbsDir; self.source = source
+        self.images = PageImageStore(source: source)
+        self.allowsBackfill = allowsBackfill; self.delay = delay
     }
 
     public func pause() {
@@ -48,7 +67,7 @@ public actor CoverQueueActor {
         isPaused = false
     }
 
-    public func start(state: CoverQueueState) async {
+    public func start(state: CoverQueueState, downloadsEnabled: Bool = true) async {
         isPaused = false
         if isRunning {
             kickAgain = true
@@ -61,27 +80,43 @@ public actor CoverQueueActor {
             state.processed = 0
             state.failed = 0
             state.gone = 0
+            state.error = nil
+            if state.remaining == 0 { state.heatWarningDismissed = false }
+            state.total = 0
+            state.remaining = 0
         }
 
         do {
+            if !checkedThumbnailFiles {
+                try database.repairThumbnailReferences(in: thumbsDir)
+                checkedThumbnailFiles = true
+            }
+            try FileManager.default.createDirectory(at: thumbsDir, withIntermediateDirectories: true)
             let total = try database.countNeedingFill()
-            await MainActor.run { state.total = total }
+            await MainActor.run { state.total = total; state.remaining = total; state.isRunning = downloadsEnabled && total > 0 }
 
             var attempted = Set<Int64>()
 
             repeat {
                 kickAgain = false
-                while !isPaused && !Task.isCancelled && CoverQueuePolicy.allowsBackfill {
+                while downloadsEnabled && !isPaused && !Task.isCancelled && allowsBackfill() {
                     let batch = try database.worksNeedingFill(limit: 6, exclude: attempted)
                     if batch.isEmpty { break }
+                    let planned = attempted.count + (try database.countNeedingFill(exclude: attempted))
+                    await MainActor.run { state.total = max(state.total, planned) }
 
                     for work in batch {
-                        if isPaused || Task.isCancelled || !CoverQueuePolicy.allowsBackfill { break }
+                        if isPaused || Task.isCancelled || !allowsBackfill() { break }
                         attempted.insert(work.galleryId)
 
                         do {
                             try await fetchOne(work.galleryId)
-                            await MainActor.run { state.processed += 1 }
+                            // A removed bookmark is not a successfully filled work.
+                            if let saved = try database.getWork(galleryId: work.galleryId) {
+                                guard saved.hasThumb, saved.hasTitle,
+                                      !(saved.tags ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ContentError.invalidResponse }
+                                await MainActor.run { state.processed += 1 }
+                            }
                         } catch is CancellationError {
                             break
                         } catch let error as URLError where error.code == .cancelled {
@@ -96,13 +131,15 @@ public actor CoverQueueActor {
                             }
                         }
 
+                        let remaining = try database.countNeedingFill()
+                        await MainActor.run { state.remaining = remaining }
                         // Politeness delay
-                        do { try await Task.sleep(for: .milliseconds(150)) } catch { break }
+                        do { try await Task.sleep(for: delay) } catch { break }
                     }
                 }
-            } while kickAgain && !isPaused && !Task.isCancelled && CoverQueuePolicy.allowsBackfill
+            } while downloadsEnabled && kickAgain && !isPaused && !Task.isCancelled && allowsBackfill()
         } catch {
-            // Error handling
+            await MainActor.run { state.error = error.localizedDescription }
         }
         // Finish publishing before a replacement run can start. A detached
         // cleanup could previously mark a new run as stopped.
@@ -146,7 +183,7 @@ public actor CoverQueueActor {
             return
         }
 
-        let gallery = try await MangaContentSource.shared.gallery(galleryId)
+        let gallery = try await source.gallery(galleryId)
         try Task.checkCancellation()
         guard try database.getWork(galleryId: galleryId) != nil else { return }
         _ = try database.upsertWork(
@@ -154,13 +191,17 @@ public actor CoverQueueActor {
             artists: gallery.artists.joined(separator: ", "), language: gallery.language,
             type: gallery.type, tags: gallery.tags.joined(separator: ", "), metadataSource: "manga"
         )
-        if needCover, !gallery.pages.isEmpty {
+        if needCover {
+            guard !gallery.pages.isEmpty else { throw ContentError.invalidResponse }
             let page = min(max(1, existing?.thumbPage ?? 1), gallery.pages.count)
             let image = try await images.load(gallery.pages[page - 1], galleryID: galleryId, thumbnail: true)
             try Task.checkCancellation()
-            guard try database.getWork(galleryId: galleryId) != nil, let data = image.jpegData(compressionQuality: 0.9) else { return }
+            guard try database.getWork(galleryId: galleryId) != nil else { return }
+            guard let data = image.jpegData(compressionQuality: 0.9) else { throw ContentError.unsupportedFormat }
+            try FileManager.default.createDirectory(at: thumbsDir, withIntermediateDirectories: true)
             let file = thumbsDir.appendingPathComponent("native_\(galleryId).jpg")
             try data.write(to: file, options: .atomic)
+            guard AppStorage.isReadableThumbnail(file) else { throw ContentError.unsupportedFormat }
             try database.setThumb(galleryId: galleryId, status: "ready", path: file.path, page: page)
         }
     }

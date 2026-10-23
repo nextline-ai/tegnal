@@ -3,6 +3,117 @@ import GRDB
 @testable import TEGNAL
 
 final class LibrarySyncTests: XCTestCase {
+    @MainActor func testBackfillRepairsMovedFilesAndDownloadsMissingReadyThumbnails() async throws {
+        let db = try AppDatabase.inMemory()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let thumbs = root.appendingPathComponent("new-container/thumbs", isDirectory: true)
+        try FileManager.default.createDirectory(at: thumbs, withIntermediateDirectories: true)
+        for id: Int64 in [1001, 1002, 1003, 1004] {
+            _ = try db.upsertWork(galleryId: id, title: "Preserved title", tags: "tag:sample", bookmarkedAt: "2026-10-23T00:00:00Z")
+        }
+        let valid = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }.jpegData(compressionQuality: 0.8))
+        let recovered = thumbs.appendingPathComponent("native_1001.jpg")
+        try valid.write(to: recovered)
+        try db.setThumb(galleryId: 1001, status: "ready", path: root.appendingPathComponent("old-container/thumbs/native_1001.jpg").path)
+        try db.setThumb(galleryId: 1002, status: "ready", path: root.appendingPathComponent("missing.jpg").path)
+        try db.setThumb(galleryId: 1003, status: "ready")
+        let corrupt = thumbs.appendingPathComponent("corrupt.jpg")
+        try Data("not an image".utf8).write(to: corrupt)
+        try db.setThumb(galleryId: 1004, status: "ready", path: corrupt.path)
+        let source = BackfillFixtureSource()
+        let actor = CoverQueueActor(database: db, thumbsDir: thumbs, source: source, allowsBackfill: { true }, delay: .zero)
+        let state = CoverQueueState()
+        await actor.start(state: state)
+        XCTAssertEqual(state.processed, 3); XCTAssertEqual(state.failed, 0); XCTAssertEqual(state.remaining, 0)
+        XCTAssertNil(state.error)
+        XCTAssertEqual(try db.getWork(galleryId: 1001)?.thumbPath, recovered.path)
+        let requests = await source.requests
+        XCTAssertEqual(requests, [1004, 1003, 1002], "Recovered local files do not require another network request")
+        for id: Int64 in [1001, 1002, 1003, 1004] {
+            let work = try XCTUnwrap(db.getWork(galleryId: id))
+            XCTAssertTrue(work.hasThumb)
+            let path = try XCTUnwrap(work.thumbPath)
+            let displayed = await LocalThumbnailCache.shared.load(forPath: path)
+            XCTAssertNotNil(displayed, "A completed item must be decodable by the actual saved-card cache")
+        }
+        XCTAssertEqual(try db.countNeedingFill(), 0)
+    }
+
+    @MainActor func testBackfillNeverCountsAnAbsentOrUndecodableCoverAsComplete() async throws {
+        for kind in [BackfillFixtureSource.Failure.emptyGallery, .invalidImage] {
+            let db = try AppDatabase.inMemory()
+            _ = try db.upsertWork(galleryId: 1234)
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let actor = CoverQueueActor(database: db, thumbsDir: root, source: BackfillFixtureSource(failure: kind), allowsBackfill: { true }, delay: .zero)
+            let state = CoverQueueState()
+            await actor.start(state: state)
+            XCTAssertFalse(state.isRunning); XCTAssertEqual(state.processed, 0)
+            XCTAssertEqual(state.failed, 1); XCTAssertEqual(state.remaining, 1)
+            XCTAssertEqual(try db.getWork(galleryId: 1234)?.thumbStatus, "failed")
+            XCTAssertFalse(try XCTUnwrap(db.getWork(galleryId: 1234)).hasThumb)
+            XCTAssertEqual(try db.countNeedingFill(), 1)
+        }
+    }
+
+    @MainActor func testAStoredCoverDoesNotHideUnfilledTitleOrTags() async throws {
+        for failure in [BackfillFixtureSource.Failure.emptyTitle, .emptyTags] {
+            let db = try AppDatabase.inMemory()
+            _ = try db.upsertWork(galleryId: 1234)
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let actor = CoverQueueActor(database: db, thumbsDir: root, source: BackfillFixtureSource(failure: failure), allowsBackfill: { true }, delay: .zero)
+            let state = CoverQueueState()
+            await actor.start(state: state)
+            XCTAssertEqual(state.processed, 0); XCTAssertEqual(state.failed, 1); XCTAssertEqual(state.remaining, 1)
+            XCTAssertTrue(try XCTUnwrap(db.getWork(galleryId: 1234)).hasThumb, "Keep the successfully saved cover while retrying metadata")
+        }
+    }
+
+    @MainActor func testAutomaticBackfillRunsWhileImageModeIsSelected() async throws {
+        guard CoverQueuePolicy.allowsBackfill else { throw XCTSkip("Backfill is paused by the device power/thermal policy") }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let oldAddress = UserDefaults.standard.object(forKey: "manga.site_address")
+        defer { UserDefaults.standard.set(oldAddress, forKey: "manga.site_address") }
+        let suite = "backfill-mode-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 1234)
+        let source = BackfillFixtureSource()
+        let actor = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+        let env = AppEnvironment(database: db, browserPreferences: defaults, booru: try BooruStore(), coverQueue: actor)
+        env.mode = .booru
+        XCTAssertTrue(env.verifySite(input: "comics.example"))
+        env.setCoverQueueActive(true)
+        env.startCoverQueue()
+        for _ in 0..<150 {
+            if env.coverQueueState.processed > 0 && !env.coverQueueState.isRunning { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(env.coverQueueState.processed, 1)
+        XCTAssertTrue(try XCTUnwrap(db.getWork(galleryId: 1234)).hasThumb)
+        env.setCoverQueueActive(false)
+    }
+
+    @MainActor func testHeatBannerThresholdAndDismissalAreSharedByModes() throws {
+        let env = AppEnvironment.preview(), state = env.coverQueueState
+        state.isRunning = true; state.total = 99
+        XCTAssertFalse(state.showsHeatBanner)
+        state.total = 100
+        XCTAssertTrue(state.showsHeatBanner)
+        state.heatWarningDismissed = true
+        env.mode = .manga; XCTAssertFalse(env.coverQueueState.showsHeatBanner)
+        env.mode = .booru; XCTAssertFalse(env.coverQueueState.showsHeatBanner)
+        XCTAssertTrue(state.isRunning, "Dismissing the notice does not stop filling")
+        state.heatWarningDismissed = false; state.isRunning = false
+        XCTAssertFalse(state.showsHeatBanner)
+    }
+
     func testMissingSharedContainerIsCreatedBeforeOpeningBothDatabases() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -504,5 +615,24 @@ private actor CloudAccessFixture {
     func resolve() async -> URL? {
         try? await Task.sleep(for: .milliseconds(100))
         return available ? URL(fileURLWithPath: "/tmp/test-cloud-container") : nil
+    }
+}
+
+private actor BackfillFixtureSource: ContentProviding {
+    enum Failure { case none, emptyGallery, invalidImage, emptyTitle, emptyTags }
+    let failure: Failure
+    private let fixture = FixtureContentSource()
+    private(set) var requests: [Int64] = []
+    init(failure: Failure = .none) { self.failure = failure }
+    func gallery(_ id: Int64) async throws -> NativeGallery {
+        requests.append(id)
+        let gallery = try await fixture.gallery(id)
+        return NativeGallery(id: id, title: failure == .emptyTitle ? "" : gallery.title, artists: gallery.artists, language: gallery.language,
+                             type: gallery.type, tags: failure == .emptyTags ? [] : gallery.tags, pages: failure == .emptyGallery ? [] : gallery.pages)
+    }
+    func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch { try await fixture.list(query, offset: offset, count: count) }
+    func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data {
+        if failure == .invalidImage { return Data("not an image".utf8) }
+        return try await fixture.image(page, galleryID: galleryID, thumbnail: thumbnail)
     }
 }

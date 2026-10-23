@@ -757,12 +757,42 @@ public final class AppDatabase: Sendable {
         }
     }
 
+    /// Ready is a local-file promise, not a property that survives moving an
+    /// app container. Repair old absolute paths before choosing backfill work.
+    func repairThumbnailReferences(in directory: URL) throws {
+        let records = try dbWriter.read { try Row.fetchAll($0, sql: "SELECT gallery_id, thumb_path FROM works WHERE thumb_status = 'ready'") }
+        var changes: [(id: Int64, old: String?, recovered: String?)] = []
+        for row in records {
+            let id: Int64 = row["gallery_id"], old: String? = row["thumb_path"]
+            if let old, AppStorage.isReadableThumbnail(URL(fileURLWithPath: old)) { continue }
+            var candidates = [directory.appendingPathComponent("native_\(id).jpg")]
+            if let old, !old.isEmpty { candidates.insert(directory.appendingPathComponent(URL(fileURLWithPath: old).lastPathComponent), at: 0) }
+            changes.append((id, old, candidates.first(where: AppStorage.isReadableThumbnail)?.path))
+        }
+        guard !changes.isEmpty else { return }
+        try dbWriter.write { db in
+            for change in changes {
+                try db.execute(sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE gallery_id = ? AND thumb_status = 'ready' AND COALESCE(thumb_path, '') = ?",
+                               arguments: [change.recovered == nil ? "missing" : "ready", change.recovered, change.id, change.old ?? ""])
+            }
+        }
+        for change in changes {
+            if let old = change.old { LocalThumbnailCache.shared.invalidate(path: old) }
+            if let recovered = change.recovered { LocalThumbnailCache.shared.invalidate(path: recovered) }
+        }
+    }
+
+    private static let needsFill = """
+        (thumb_status IN ('missing', 'failed')
+         OR (thumb_status = 'ready' AND COALESCE(thumb_path, '') = '')
+         OR TRIM(COALESCE(title, '')) = '' OR TRIM(COALESCE(tags, '')) = '')
+        """
+
     public func worksNeedingFill(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Work] {
         try dbWriter.read { db in
             let placeholders = exclude.isEmpty ? "" : "AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
             let sql = """
-            SELECT * FROM works
-            WHERE (thumb_status IN ('missing', 'failed') OR title IS NULL OR title = '' OR tags IS NULL OR tags = '')
+            SELECT * FROM works WHERE \(Self.needsFill)
             \(placeholders)
             ORDER BY bookmarked_at DESC, id DESC
             LIMIT ?
@@ -771,14 +801,9 @@ public final class AppDatabase: Sendable {
         }
     }
 
-    public func countNeedingFill() throws -> Int {
-        try dbWriter.read { db in
-            let sql = """
-            SELECT COUNT(*) FROM works
-            WHERE thumb_status IN ('missing', 'failed') OR title IS NULL OR title = '' OR tags IS NULL OR tags = ''
-            """
-            return try Int.fetchOne(db, sql: sql) ?? 0
-        }
+    public func countNeedingFill(exclude: Set<Int64> = []) throws -> Int {
+        let exclusions = exclude.isEmpty ? "" : " AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+        return try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE " + Self.needsFill + exclusions) ?? 0 }
     }
 
     public func worksCount() throws -> Int {

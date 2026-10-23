@@ -60,6 +60,12 @@ public enum AppStorage {
         return dir
     }
 
+    static func isReadableThumbnail(_ url: URL) -> Bool {
+        guard FileManager.default.isReadableFile(atPath: url.path),
+              let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { return false }
+        return CGImageSourceGetCount(source) > 0
+    }
+
     public static var pendingShareURL: URL {
         sharedContainerURL.appendingPathComponent("pending_share.json")
     }

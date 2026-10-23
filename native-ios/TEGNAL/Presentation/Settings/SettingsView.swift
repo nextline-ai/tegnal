@@ -157,7 +157,6 @@ struct MangaLibraryToolsView: View {
     @State private var showDataDbPicker = false
     @State private var showDataDbActionSheet = false
     @State private var showNoWorksAlert = false
-    @State private var showFillHeatWarning = false
     @State private var pendingDataDbUrl: URL? = nil
     @State private var importTask: Task<Void, Never>? = nil
 
@@ -186,6 +185,11 @@ struct MangaLibraryToolsView: View {
                                     Text(queueProgressText)
                                         .font(.caption)
                                         .foregroundColor(.secondary)
+                                } else if let error = env.coverQueueState.error {
+                                    Text(error).font(.caption).foregroundStyle(.secondary)
+                                } else if env.coverQueueState.remaining > 0 {
+                                    Text(L10n.text("Still missing information: %@ works. Failed downloads can be retried.", String(env.coverQueueState.remaining)))
+                                        .font(.caption).foregroundStyle(.secondary)
                                 } else {
                                     Text(L10n.text("Fetch missing covers and metadata in the background."))
                                         .font(.caption)
@@ -307,13 +311,6 @@ struct MangaLibraryToolsView: View {
         } message: {
             Text(L10n.text("There are no saved works to match. Import user.db (bookmarks) first, then import data.db to fill the information you need."))
         }
-        .alert(L10n.text("Fill Covers, Titles, and Tags"), isPresented: $showFillHeatWarning) {
-            Button(L10n.text("Cancel"), role: .cancel) {}
-            Button(L10n.text("Continue"), action: confirmFill)
-                .accessibilityIdentifier("library.confirmFill")
-        } message: {
-            Text(L10n.text("Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time."))
-        }
         .task {
             loadStats()
         }
@@ -340,13 +337,7 @@ struct MangaLibraryToolsView: View {
         if env.coverQueueState.isRunning && !env.coverQueueState.isPaused {
             Task { await env.coverQueueActor.pause() }
             env.coverQueueState.isPaused = true
-        } else {
-            showFillHeatWarning = true
-        }
-    }
-
-    private func confirmFill() {
-        if env.coverQueueState.isRunning && env.coverQueueState.isPaused {
+        } else if env.coverQueueState.isRunning && env.coverQueueState.isPaused {
             Task { await env.coverQueueActor.resume() }
             env.coverQueueState.isPaused = false
         } else {
@@ -475,8 +466,9 @@ struct MangaLibraryToolsView: View {
                     let res = try importer.matchAndFillWorks(fromDataDb: readPath)
                     await MainActor.run {
                         self.isImporting = false
-                        self.statusMessage = L10n.text("Metadata matched! Filled %2$@ of %1$@ saved works.", String(describing: res.totalWorks), String(describing: res.matched))
+                        self.statusMessage = L10n.text("Metadata matched! Filled %2$@ of %1$@ saved works.", String(describing: res.totalWorks), String(describing: res.matched)) + "\n" + L10n.text("Missing covers are downloaded separately in the background.")
                         self.loadStats()
+                        env.startCoverQueue()
                     }
                 } else {
                     let total = try importer.importDataDb(path: readPath) { progress in
@@ -489,6 +481,7 @@ struct MangaLibraryToolsView: View {
                         self.isImporting = false
                         self.statusMessage = L10n.text("data.db imported: %@ catalog records applied", String(describing: total))
                         self.loadStats()
+                        env.startCoverQueue()
                     }
                 }
             } catch {
