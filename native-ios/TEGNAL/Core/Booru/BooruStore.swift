@@ -145,7 +145,7 @@ final class BooruStore: @unchecked Sendable {
     }
 
     static func open() throws -> BooruStore {
-        try BooruStore(path: AppStorage.sharedContainerURL.appendingPathComponent("booru.sqlite").path, prefetchSavedPreviews: true)
+        try BooruStore(path: AppStorage.preparedContainerURL().appendingPathComponent("booru.sqlite").path, prefetchSavedPreviews: true)
     }
 
     func reload() throws {

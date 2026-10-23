@@ -14,11 +14,12 @@ public final class AppDatabase: Sendable {
         try migrator.migrate(dbWriter)
     }
 
-    public static func open(at path: String = AppStorage.localDbURL.path) throws -> AppDatabase {
+    public static func open(at path: String? = nil) throws -> AppDatabase {
+        let databasePath = try path ?? AppStorage.preparedContainerURL().appendingPathComponent("memo.sqlite").path
         var config = Configuration()
         config.qos = .userInitiated
         config.foreignKeysEnabled = true
-        let dbQueue = try DatabaseQueue(path: path, configuration: config)
+        let dbQueue = try DatabaseQueue(path: databasePath, configuration: config)
         let db = try AppDatabase(dbQueue)
         try db.repairOrphanWorks()
         return db
@@ -763,7 +764,7 @@ public final class AppDatabase: Sendable {
             SELECT * FROM works
             WHERE (thumb_status IN ('missing', 'failed') OR title IS NULL OR title = '' OR tags IS NULL OR tags = '')
             \(placeholders)
-            ORDER BY bookmarked_at DESC
+            ORDER BY bookmarked_at DESC, id DESC
             LIMIT ?
             """
             return try Work.fetchAll(db, sql: sql, arguments: [limit])

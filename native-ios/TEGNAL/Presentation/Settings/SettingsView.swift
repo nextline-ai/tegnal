@@ -157,6 +157,7 @@ struct MangaLibraryToolsView: View {
     @State private var showDataDbPicker = false
     @State private var showDataDbActionSheet = false
     @State private var showNoWorksAlert = false
+    @State private var showFillHeatWarning = false
     @State private var pendingDataDbUrl: URL? = nil
     @State private var importTask: Task<Void, Never>? = nil
 
@@ -199,6 +200,8 @@ struct MangaLibraryToolsView: View {
                                     .font(.title2)
                                     .foregroundColor(.accentColor)
                             }
+                            .accessibilityLabel(L10n.text(env.coverQueueState.isRunning && !env.coverQueueState.isPaused ? "Pause" : "Fill Covers, Titles, and Tags"))
+                            .accessibilityIdentifier("library.fillMissing")
                         }
 
                         if env.coverQueueState.isRunning && env.coverQueueState.total > 0 {
@@ -304,6 +307,13 @@ struct MangaLibraryToolsView: View {
         } message: {
             Text(L10n.text("There are no saved works to match. Import user.db (bookmarks) first, then import data.db to fill the information you need."))
         }
+        .alert(L10n.text("Fill Covers, Titles, and Tags"), isPresented: $showFillHeatWarning) {
+            Button(L10n.text("Cancel"), role: .cancel) {}
+            Button(L10n.text("Continue"), action: confirmFill)
+                .accessibilityIdentifier("library.confirmFill")
+        } message: {
+            Text(L10n.text("Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time."))
+        }
         .task {
             loadStats()
         }
@@ -327,14 +337,18 @@ struct MangaLibraryToolsView: View {
     }
 
     private func toggleQueue() {
-        if env.coverQueueState.isRunning {
-            if env.coverQueueState.isPaused {
-                Task { await env.coverQueueActor.resume() }
-                env.coverQueueState.isPaused = false
-            } else {
-                Task { await env.coverQueueActor.pause() }
-                env.coverQueueState.isPaused = true
-            }
+        if env.coverQueueState.isRunning && !env.coverQueueState.isPaused {
+            Task { await env.coverQueueActor.pause() }
+            env.coverQueueState.isPaused = true
+        } else {
+            showFillHeatWarning = true
+        }
+    }
+
+    private func confirmFill() {
+        if env.coverQueueState.isRunning && env.coverQueueState.isPaused {
+            Task { await env.coverQueueActor.resume() }
+            env.coverQueueState.isPaused = false
         } else {
             env.startCoverQueue()
         }

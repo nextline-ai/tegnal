@@ -410,6 +410,27 @@ final class BooruUITests: XCTestCase {
         capture(app, "AI accessible recommendation cards")
     }
 
+    func testFillMissingInformationShowsHeatWarningAndCanBeCancelled() {
+        let app = launch()
+        selectMode(app, "manga")
+        app.tabBars.buttons["Settings"].tap()
+        reveal(app, "settings.libraryManagement").tap()
+        let fill = reveal(app, "library.fillMissing")
+        XCTAssertTrue(fill.isEnabled)
+        fill.tap()
+        let warning = app.alerts.firstMatch
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        XCTAssertTrue(warning.staticTexts["Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time."].exists)
+        XCTAssertTrue(element(app, "library.confirmFill").exists)
+        capture(app, "Cover fill heat warning and recent-save priority")
+        warning.buttons["Cancel"].tap()
+        XCTAssertFalse(warning.exists)
+        fill.tap()
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        element(app, "library.confirmFill").tap()
+        XCTAssertFalse(warning.exists)
+    }
+
     func testBothModesOfferTheSameCombinedJSONBackup() {
         let app = launch()
         app.tabBars.buttons["More"].tap()

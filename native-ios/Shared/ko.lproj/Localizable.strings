@@ -1043,3 +1043,6 @@
 "Restore Backup?" = "백업을 복원할까요?";
 "Comics: %@ · Images: %@ · Challenges: %@" = "만화: %@ · 이미지: %@ · 챌린지: %@";
 "Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device." = "만화·이미지 보관함과 일반 설정을 함께 동기화합니다. 레이아웃, 재생 설정, 미디어, 로그인 정보와 쿠키는 각 기기에만 저장됩니다.";
+
+"Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time." = "커버·제목·태그를 채우는 동안 기기 발열과 배터리 소모가 발생할 수 있습니다. 최근 저장한 작품부터 처리하며, 언제든 일시정지할 수 있습니다.";
+"Pause" = "일시정지";

@@ -5,15 +5,43 @@ public enum AppStorage {
     public static let iCloudContainerId = "iCloud.work.nextline.tegnal"
     public static let darwinNotificationName = "work.nextline.tegnal.share" as CFString
 
-    /// Returns the App Group shared container directory if available, or application support directory as fallback.
+    private static let fallbackContainerURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("tegnal", isDirectory: true)
+
+    // macOS can return a group URL even when its directory does not exist or
+    // the current signature has no access to it. Resolve once so both databases,
+    // thumbnails and sync files use the same writable directory for this process.
+    private static let containerResolution: Result<URL, Error> = Result {
+        try resolveContainerURL(
+            group: FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup),
+            fallback: fallbackContainerURL
+        )
+    }
+
     public static var sharedContainerURL: URL {
-        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) {
-            return container
+        (try? preparedContainerURL()) ?? fallbackContainerURL
+    }
+
+    static func preparedContainerURL() throws -> URL {
+        try containerResolution.get()
+    }
+
+    static func resolveContainerURL(group: URL?, fallback: URL) throws -> URL {
+        if let group {
+            do { try prepareDirectory(group); return group }
+            catch { /* Use app-local storage when the shared container is unavailable. */ }
         }
-        let fallback = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("tegnal", isDirectory: true)
-        try? FileManager.default.createDirectory(at: fallback, withIntermediateDirectories: true)
+        try prepareDirectory(fallback)
         return fallback
+    }
+
+    private static func prepareDirectory(_ directory: URL) throws {
+        let files = FileManager.default
+        try files.createDirectory(at: directory, withIntermediateDirectories: true)
+        // A URL or isWritableFile alone does not establish sandbox write access.
+        let probe = directory.appendingPathComponent(".storage-check-" + UUID().uuidString)
+        defer { try? files.removeItem(at: probe) }
+        try Data().write(to: probe, options: .withoutOverwriting)
     }
 
     public static var localDbURL: URL {

@@ -3,6 +3,60 @@ import GRDB
 @testable import TEGNAL
 
 final class LibrarySyncTests: XCTestCase {
+    func testMissingSharedContainerIsCreatedBeforeOpeningBothDatabases() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = root.appendingPathComponent("Group Containers/new-group", isDirectory: true)
+        let fallback = root.appendingPathComponent("Application Support/tegnal", isDirectory: true)
+        let resolved = try AppStorage.resolveContainerURL(group: group, fallback: fallback)
+        XCTAssertEqual(resolved, group)
+        let path = resolved.appendingPathComponent("memo.sqlite").path
+        let database = try AppDatabase.open(at: path)
+        _ = try database.upsertWork(galleryId: 12345, title: "Saved work")
+        let server = BooruServer.presets[0]
+        try BooruStore(path: resolved.appendingPathComponent("booru.sqlite").path).saveServer(server)
+        XCTAssertEqual(try AppDatabase.open(at: path).getWork(galleryId: 12345)?.title, "Saved work")
+        XCTAssertEqual(try BooruStore(path: resolved.appendingPathComponent("booru.sqlite").path).servers, [server])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fallback.path))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: resolved.path).contains { $0.hasPrefix(".storage-check-") })
+    }
+
+    func testUnavailableGroupUsesPersistentApplicationSupportWithoutRemovingExistingFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let unavailable = root.appendingPathComponent("unavailable-group")
+        let marker = Data("Preserve existing content".utf8)
+        try marker.write(to: unavailable)
+        let fallback = root.appendingPathComponent("Application Support/tegnal", isDirectory: true)
+        let resolved = try AppStorage.resolveContainerURL(group: unavailable, fallback: fallback)
+        XCTAssertEqual(resolved, fallback)
+        let path = resolved.appendingPathComponent("memo.sqlite").path
+        _ = try AppDatabase.open(at: path).upsertWork(galleryId: 54321, title: "App-local work")
+        XCTAssertEqual(try AppStorage.resolveContainerURL(group: unavailable, fallback: fallback), resolved)
+        XCTAssertEqual(try AppDatabase.open(at: path).getWork(galleryId: 54321)?.title, "App-local work")
+        XCTAssertEqual(try Data(contentsOf: unavailable), marker)
+        XCTAssertEqual(try AppStorage.resolveContainerURL(group: nil, fallback: fallback), fallback)
+        XCTAssertThrowsError(try AppStorage.resolveContainerURL(group: unavailable, fallback: unavailable))
+    }
+
+    func testFillQueueUsesRecentSaveDatesAndNewestInsertionForTiesAcrossBatches() throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 9000, title: "Older save", bookmarkedAt: "2026-01-01T00:00:00Z")
+        for id: Int64 in [4000, 2000, 6000] {
+            _ = try db.upsertWork(galleryId: id, title: "Imported together", bookmarkedAt: "2026-10-01T00:00:00Z")
+        }
+        _ = try db.upsertWork(galleryId: 1000, title: "Newest save", bookmarkedAt: "2026-10-23T00:00:00Z")
+        let first = try db.worksNeedingFill(limit: 2).map(\.galleryId)
+        XCTAssertEqual(first, [1000, 6000])
+        let second = try db.worksNeedingFill(limit: 2, exclude: Set(first)).map(\.galleryId)
+        XCTAssertEqual(second, [2000, 4000])
+        XCTAssertEqual(try db.worksNeedingFill(exclude: Set(first + second)).map(\.galleryId), [9000])
+        // Retrying a failed cover must keep its original save priority.
+        try db.setThumb(galleryId: 9000, status: "failed")
+        XCTAssertEqual(try db.worksNeedingFill().map(\.galleryId), [1000, 6000, 2000, 4000, 9000])
+    }
+
     func testHistoricalImportedFolderSyncNormalizesMetadataWithoutLosingIdentity() throws {
         let source = try adapter(), destination = try adapter()
         _ = try source.manga.createFolder(name: "Imported folder", sourceGroupId: 42)

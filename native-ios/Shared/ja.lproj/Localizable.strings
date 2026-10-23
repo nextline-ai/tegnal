@@ -1043,3 +1043,6 @@
 "Restore Backup?" = "バックアップを復元しますか？";
 "Comics: %@ · Images: %@ · Challenges: %@" = "漫画: %@ · 画像: %@ · チャレンジ: %@";
 "Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device." = "漫画・画像の両ライブラリと一般設定をまとめて同期します。レイアウト、再生設定、メディア、認証情報、Cookieは各端末にのみ保存されます。";
+
+"Filling covers, titles, and tags may warm up your device and use battery. Recently saved works are filled first. You can pause at any time." = "表紙・タイトル・タグの取得中は、端末が熱くなり、バッテリーを消費する場合があります。最近保存した作品から処理し、いつでも一時停止できます。";
+"Pause" = "一時停止";
