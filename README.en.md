@@ -52,7 +52,9 @@ Every AI feature runs **100% locally on your device** without sending your data 
    - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/gnkqu44W)**
 3. **Supported Platforms:** iPhone, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
 
-**TestFlight is the recommended installation method. The current public version is 1.0.0 (7).**
+**TestFlight is the recommended installation method. The current public TestFlight version is 1.0.0 (7).**
+
+GitHub hotfix: **[1.0.1 (8)](https://github.com/nextline-ai/tegnal/releases/tag/v1.0.1)** — fixes for Mac startup, translation, thumbnail recovery and automatic metadata filling, with updated splash artwork and app icon.
 
 <details>
 <summary><b>Other installation methods (optional)</b></summary>

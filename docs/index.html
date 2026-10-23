@@ -24,7 +24,7 @@
 <p class="intro" data-i18n="intro">만화와 일러스트를 탐색하고, 감상하고, 나만의 컬렉션으로 정리하세요. 설치 방법을 선택하면 시작할 수 있습니다.</p>
 <div class="primary-install"><a class="action" href="https://testflight.apple.com/join/gnkqu44W" data-i18n="testflightAction">TestFlight에서 설치 ↗</a><span data-i18n="recommended">권장 설치 · 공개 베타</span></div>
 <p class="primary-note" data-i18n="testflightDescription">Apple TestFlight에서 공개 베타에 참여하고 업데이트를 받아보세요.</p>
-<p class="version" id="version">1.0.0 (7) &nbsp; / &nbsp; iOS 17+ &nbsp; / &nbsp; iPhone & iPad</p>
+<p class="version" id="version">GitHub IPA 1.0.1 (8) &nbsp; / &nbsp; iOS 17+ &nbsp; / &nbsp; iPhone & iPad</p>
 </section>
 <details class="alternatives" id="other-installation">
 <summary><span data-i18n="otherOptions">다른 설치 방법</span><span class="secondary-label">AltStore Classic / SideStore / IPA</span></summary>
@@ -57,7 +57,7 @@ const options=document.getElementById('other-installation');
 function revealSelectedOption(){if(['#altstore','#sidestore'].includes(location.hash)){options.open=true;requestAnimationFrame(()=>document.querySelector(location.hash).scrollIntoView({block:'start'}));}}
 revealSelectedOption();window.addEventListener('hashchange',revealSelectedOption);
 const versionLabel=document.getElementById('version');
-fetch('source.json').then(r=>{if(!r.ok)throw new Error('Source unavailable');return r.json()}).then(source=>{const version=source.apps[0].versions[0];versionLabel.textContent=`${version.version} (${version.buildVersion}) / iOS ${version.minOSVersion}+ / iPhone & iPad`;}).catch(()=>{});
+fetch('source.json').then(r=>{if(!r.ok)throw new Error('Source unavailable');return r.json()}).then(source=>{const version=source.apps[0].versions[0];versionLabel.textContent=`GitHub IPA ${version.version} (${version.buildVersion}) / iOS ${version.minOSVersion}+ / iPhone & iPad`;}).catch(()=>{});
 document.getElementById('copy').addEventListener('click',async()=>{const input=document.getElementById('source-url');const status=document.getElementById('copy-status');try{await navigator.clipboard.writeText(input.value);status.textContent=english?'Source URL copied.':'소스 주소를 복사했습니다.';}catch{input.focus();input.select();status.textContent=english?'Select and copy the source URL above.':'위 소스 주소를 선택해 복사해주세요.';}});
 </script>
 </body>

@@ -7,12 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		7B291F7D131C4BA39CDEDFB8 /* MangaBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */; };
-		2B0A6DD5F68A4355A37AE91A /* splash_dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2ACD12E9FF2B4DD696487AE1 /* splash_dark.jpg */; };
-		6A330EBB789C4DB7B7F655D8 /* LibraryBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */; };
-		239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */; };
-		DC27734E34274E7E9EE48548 /* LibraryBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */; };
-		2B72BACC37E3471895C3405A /* splash_light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 32960B1EEBAD47DA9E3A55CB /* splash_light.jpg */; };
 		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
 		097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */; };
 		09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */; };
@@ -31,12 +25,15 @@
 		1FB5162E9127DAAB032A95F0 /* NativeContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FEB5C8DB1ECD582DC1CB6FF /* NativeContentView.swift */; };
 		2034B4997F3BC0351EF797F4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A43CD02402545179DA392A4 /* Assets.xcassets */; };
 		20E010B24BD47E4A667BA0C3 /* Acknowledgments.txt in Resources */ = {isa = PBXBuildFile; fileRef = DAFB6A5CB9259D10CE5EE14B /* Acknowledgments.txt */; };
+		239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */; };
 		2596329E9AE3000223F509E8 /* PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */; };
 		29F36067686258194ABE38F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D4058D8DF59DB2ABCD4E32CC /* PrivacyInfo.xcprivacy */; };
+		2B0A6DD5F68A4355A37AE91A /* splash_dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2ACD12E9FF2B4DD696487AE1 /* splash_dark.jpg */; };
+		2B72BACC37E3471895C3405A /* splash_light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 32960B1EEBAD47DA9E3A55CB /* splash_light.jpg */; };
 		2D1032D6C304CE01713FB5F7 /* TEGNAL/Core/Challenge/ChallengeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96769750C5AEC39276B78944 /* TEGNAL/Core/Challenge/ChallengeStore.swift */; };
 		2D21DD66D25E3C3B77F695D8 /* BooruValidationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 218DBE4095096D00E84FE315 /* BooruValidationView.swift */; };
+		336B1F8D308BA6A300BAF2BB /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 336B1F8C308BA6A300BAF2BB /* AppIcon.icon */; };
 		33DB30FEE41026006C8A92E4 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52561A4ECDB99CA3B613EA1 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift */; };
-		33DE8B27308A866200A1732A /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 33DE8B26308A866200A1732A /* AppIcon.icon */; };
 		34491643E77AC96F09A6150F /* ContentUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1A9C6283701D99BA3F04E5 /* ContentUITestSupport.swift */; };
 		34AB2A2B77F07AC406CBB81F /* BooruEmbeddedBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32843587F8341CD1016F667 /* BooruEmbeddedBrowserView.swift */; };
 		34D1FBBE82C4EB270E58DAC7 /* AnimeBoxesImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE9259BCCB6BB1343C92121 /* AnimeBoxesImport.swift */; };
@@ -66,6 +63,7 @@
 		66AB32026318BC9F09C7D9CE /* MangaAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB9128B0B611B8993A8B9C6F /* MangaAPIClient.swift */; };
 		69BEADC98520A8FFD8B0D31C /* GalleryIDParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2DCD5BCF18F0F15745D09B /* GalleryIDParserTests.swift */; };
 		69C31A65164A48BDB207BFF4 /* LibraryCloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7215851B492D0D97A169F9D4 /* LibraryCloudSync.swift */; };
+		6A330EBB789C4DB7B7F655D8 /* LibraryBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */; };
 		6A8653D49053D9CC205F2DA4 /* GalleryIDParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA37491F91112958F1F93E2 /* GalleryIDParser.swift */; };
 		6B692FB13CBD3CA8AF39D898 /* BooruBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22D8647630A782E540D7EF8 /* BooruBackupView.swift */; };
 		6C79321A05F654A1A75CE0F7 /* LibrarySyncRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9274ADBCCB2719EBF45750D /* LibrarySyncRecord.swift */; };
@@ -74,6 +72,7 @@
 		71E70C9FFAF7BCA8DA8126A6 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F450A9F3F304A6EC4DB763 /* TEGNAL/Core/Taste/TasteLibraryIntegration.swift */; };
 		73458B3FBC56D64BF1F57DD4 /* AnimeBoxesImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACBA6DB0FD990FC91B86F973 /* AnimeBoxesImportView.swift */; };
 		767EAEE31B2A8121A3534E33 /* NativeReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53A1AFB009B85457C38C086 /* NativeReaderView.swift */; };
+		7B291F7D131C4BA39CDEDFB8 /* MangaBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */; };
 		7C6BF65F09115D54F402C28F /* TEGNALTests/BooruThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */; };
 		8251D5F60C29EEC6C8F01098 /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */; };
 		83BD9B7BFC83E9A55D5F9109 /* LibrarySyncAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */; };
@@ -126,6 +125,7 @@
 		D7E8D0BC33EE06527B179741 /* TEGNAL/Presentation/Taste/TastePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34EA288756CDA8504000B4F4 /* TEGNAL/Presentation/Taste/TastePresentation.swift */; };
 		D8819E7F99F42BFA09CA0D7E /* SettingsSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 976351FAE534D42BB200A330 /* SettingsSections.swift */; };
 		DA272F265CA70FCB25A0283C /* BooruLibraryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6DA24BF7D36336B5968707 /* BooruLibraryViews.swift */; };
+		DC27734E34274E7E9EE48548 /* LibraryBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */; };
 		DD394E63203D2BEECC88CEFC /* DeveloperInfoSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */; };
 		DF8E10E2A920B6A33911ABDA /* BooruFavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */; };
 		DFF9E986805DDE834086C1C5 /* TEGNALTests/TasteFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */; };
@@ -187,11 +187,6 @@
 
 /* Begin PBXFileReference section */
 		009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaBackendTests.swift; sourceTree = "<group>"; };
-		2ACD12E9FF2B4DD696487AE1 /* splash_dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = splash_dark.jpg; sourceTree = "<group>"; };
-		F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupTests.swift; sourceTree = "<group>"; };
-		C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupSection.swift; sourceTree = "<group>"; };
-		CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackup.swift; sourceTree = "<group>"; };
-		32960B1EEBAD47DA9E3A55CB /* splash_light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = splash_light.jpg; sourceTree = "<group>"; };
 		00A3D8D9E5D6B186E154E5DE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		01F914324983194D6DAD8D84 /* en */ = {isa = PBXFileReference; lastKnownFileType = text; name = en; path = en.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
 		049FCB9C7DD396BBAB69C28D /* BooruPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruPostView.swift; sourceTree = "<group>"; };
@@ -209,12 +204,14 @@
 		268D24A55619AF97E4EEEF85 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
 		2713B3C152DDB66FAF0703B6 /* BooruTestMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruTestMedia.swift; sourceTree = "<group>"; };
 		2AA4BD4BDDD588FC16CD4528 /* ArtistsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistsListView.swift; sourceTree = "<group>"; };
+		2ACD12E9FF2B4DD696487AE1 /* splash_dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = splash_dark.jpg; sourceTree = "<group>"; };
 		2B3C532506B85391D42C94B5 /* KeyboardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardUITests.swift; sourceTree = "<group>"; };
 		2D4B0A3B25EB92FE1EB817A6 /* TEGNAL/Core/Taste/TasteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteStore.swift; sourceTree = SOURCE_ROOT; };
 		2FEB5C8DB1ECD582DC1CB6FF /* NativeContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContentView.swift; sourceTree = "<group>"; };
 		31AE970670259006F0B06867 /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift; sourceTree = SOURCE_ROOT; };
 		31F4737CDB76989ABF03A465 /* LibrarySyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySyncTests.swift; sourceTree = "<group>"; };
-		33DE8B26308A866200A1732A /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		32960B1EEBAD47DA9E3A55CB /* splash_light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = splash_light.jpg; sourceTree = "<group>"; };
+		336B1F8C308BA6A300BAF2BB /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		34EA288756CDA8504000B4F4 /* TEGNAL/Presentation/Taste/TastePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/TastePresentation.swift; sourceTree = SOURCE_ROOT; };
 		36718E50F5349D3C2AF44634 /* TEGNALApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALApp.swift; sourceTree = "<group>"; };
 		38D83FD8E5311C82AD8D9AE1 /* NativeContentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContentUITests.swift; sourceTree = "<group>"; };
@@ -290,10 +287,12 @@
 		BBC42FD33C78DB362F63144B /* TEGNALUITests/ChallengeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALUITests/ChallengeUITests.swift; sourceTree = SOURCE_ROOT; };
 		C0D758D11EBEE724973FC43F /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10245435081F97BDB212F1F /* BooruRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRootView.swift; sourceTree = "<group>"; };
+		C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupSection.swift; sourceTree = "<group>"; };
 		C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLegacyHTML.swift; sourceTree = "<group>"; };
 		C3563D5B3248F319CCDA8D86 /* BooruClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruClient.swift; sourceTree = "<group>"; };
 		CA0062A4C5A44F103420CB63 /* CDNRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CDNRouting.swift; sourceTree = "<group>"; };
 		CB9128B0B611B8993A8B9C6F /* MangaAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaAPIClient.swift; sourceTree = "<group>"; };
+		CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackup.swift; sourceTree = "<group>"; };
 		D0C400CAB19213FD13D0989C /* LanguageSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageSettings.swift; sourceTree = "<group>"; };
 		D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySyncAdapter.swift; sourceTree = "<group>"; };
 		D2B9952F64D57C1AFCE5169C /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift; sourceTree = SOURCE_ROOT; };
@@ -323,6 +322,7 @@
 		EF460FBC7BD6826A521EEE1D /* WorkDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkDetailView.swift; sourceTree = "<group>"; };
 		F2A824088835743E484646A8 /* BooruBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackupTests.swift; sourceTree = "<group>"; };
 		F34E541C9B511EA718074249 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupTests.swift; sourceTree = "<group>"; };
 		F6728E31C6CB18E178E6ECE0 /* TEGNAL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TEGNAL.entitlements; sourceTree = "<group>"; };
 		F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteAnalyzer.swift; sourceTree = SOURCE_ROOT; };
 		F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruFavoritesView.swift; sourceTree = "<group>"; };
@@ -717,7 +717,7 @@
 				826B7AD005E1658A9D5C2451 /* TEGNALUITests */,
 				E093767EF52C599B19AB8B11 /* Shared */,
 				EDB8FCE1D606BD69D592EDCC /* ShareExtension */,
-				33DE8B26308A866200A1732A /* AppIcon.icon */,
+				336B1F8C308BA6A300BAF2BB /* AppIcon.icon */,
 				66B628C38B3910CAD788C2BB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -872,11 +872,11 @@
 				B47065C6484C999BAE01C865 /* InfoPlist.strings in Resources */,
 				5FCBCF62588D139B16CA6E5F /* Localizable.strings in Resources */,
 				CC08E7E012785A05D48EACE4 /* PrivacyInfo.xcprivacy in Resources */,
-				33DE8B27308A866200A1732A /* AppIcon.icon in Resources */,
 				5B796C1586EA5CAFEB763D93 /* PrivacyPolicy.txt in Resources */,
 				652B414B5302BD33037B3773 /* nextline-logo.svg in Resources */,
 				2B72BACC37E3471895C3405A /* splash_light.jpg in Resources */,
 				2B0A6DD5F68A4355A37AE91A /* splash_dark.jpg in Resources */,
+				336B1F8D308BA6A300BAF2BB /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1105,7 +1105,7 @@
 				CODE_SIGN_ENTITLEMENTS = TEGNAL/TEGNAL.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1116,7 +1116,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -1199,7 +1199,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1209,7 +1209,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.share;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -1224,7 +1224,7 @@
 				CODE_SIGN_ENTITLEMENTS = TEGNAL/TEGNAL.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1235,7 +1235,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -1311,7 +1311,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1321,7 +1321,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.share;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;

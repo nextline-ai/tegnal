@@ -52,7 +52,9 @@
    - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/gnkqu44W)**
 3. **공식 지원 기기:** iPhone, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
 
-**권장 설치 방법은 TestFlight이며, 현재 공개 버전은 1.0.0 (7)입니다.**
+**권장 설치 방법은 TestFlight이며, 현재 TestFlight 공개 버전은 1.0.0 (7)입니다.**
+
+GitHub 핫픽스: **[1.0.1 (8)](https://github.com/nextline-ai/tegnal/releases/tag/v1.0.1)** — Mac 실행·번역·썸네일 복구 및 자동 채우기 수정, 시작 화면과 앱 아이콘 업데이트.
 
 <details>
 <summary><b>다른 설치 방법 (선택)</b></summary>
