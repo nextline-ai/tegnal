@@ -17,6 +17,9 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# Private design originals; runtime and documentation assets have separate terms.
+/design/
+
 # Native Xcode build output and local settings
 **/DerivedData/
 **/xcuserdata/

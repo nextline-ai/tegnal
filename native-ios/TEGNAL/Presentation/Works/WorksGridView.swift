@@ -274,7 +274,7 @@ public struct WorksGridView: View {
     }
 
     private func openManga(for galleryId: Int64) {
-        let urlString = "\(MangaUrls.home)reader/\(galleryId).html#1"
+        let urlString = MangaUrls.readerUrl(for: galleryId)
         activeBrowserUrl = urlString
     }
 

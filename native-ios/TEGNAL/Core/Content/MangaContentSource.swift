@@ -16,6 +16,8 @@ private actor GalleryMetadataParser {
 actor MangaContentSource: ContentProviding {
     static let shared = MangaContentSource()
     private let transport: ContentTransport
+    private let documents: DocumentCatalogSource
+    private var activeSite = ""
     private var routing: (CDNRouting, Date)?
     private var routingTask: Task<CDNRouting, Error>?
     private var suggestionCache: [String: ([TagSuggestion], Date)] = [:]
@@ -29,23 +31,55 @@ actor MangaContentSource: ContentProviding {
 
     private final class NativeGalleryBox {
         let gallery: NativeGallery
-        init(_ gallery: NativeGallery) { self.gallery = gallery }
+        let site: String
+        init(_ gallery: NativeGallery, site: String) { self.gallery = gallery; self.site = site }
     }
     // NSCache synchronizes its storage; boxes are immutable after insertion.
     private nonisolated(unsafe) let galleryCache = NSCache<NSNumber, NativeGalleryBox>()
 
     init(transport: ContentTransport = .shared) {
         self.transport = transport
+        self.documents = DocumentCatalogSource(transport: transport)
         galleryCache.countLimit = 512
         galleryCache.totalCostLimit = 32 * 1024 * 1024
     }
 
     nonisolated func cachedGallery(_ id: Int64) -> NativeGallery? {
-        galleryCache.object(forKey: id as NSNumber)?.gallery
+        if let cached = galleryCache.object(forKey: id as NSNumber), cached.site == MangaUrls.home { return cached.gallery }
+        return nil
+    }
+
+    nonisolated func cachedPreview(_ id: Int64) -> NativeGallery? {
+        cachedGallery(id) ?? (MangaUrls.backend == .document ? documents.cachedPreview(id) : nil)
+    }
+
+    private func prepareSite() throws -> String {
+        try Task.checkCancellation()
+        let site = MangaUrls.home
+        guard !site.isEmpty else { throw URLError(.unsupportedURL) }
+        if activeSite != site {
+            activeSite = site
+            for flight in galleryFlights.values {
+                flight.task.cancel()
+                for waiter in flight.waiters.values { waiter.resume(throwing: CancellationError()) }
+            }
+            galleryFlights.removeAll(); galleryCache.removeAllObjects()
+            routingTask?.cancel(); routingTask = nil; routing = nil
+            suggestionCache.removeAll(); searchCache = nil
+        }
+        return site
+    }
+
+    private func resolve(_ site: String) async throws -> MangaUrls.Backend {
+        await MangaUrls.resolveBackend(transport: transport)
+        guard MangaUrls.home == site else { throw CancellationError() }
+        return MangaUrls.backend
     }
 
     func suggestions(for token: String) async throws -> [TagSuggestion] {
         guard let context = TagCompletionContext(token) else { return [] }
+        let site = try prepareSite()
+        if try await resolve(site) == .document { return try await documents.suggestions(token, site: site) }
         let key = context.token
         if let cached = suggestionCache[key], Date().timeIntervalSince(cached.1) < 900 { return cached.0 }
         let target = try Self.suggestionURL(key)
@@ -56,6 +90,7 @@ actor MangaContentSource: ContentProviding {
             items = try TagSuggestion.parse(data)
         } catch ContentError.unavailable(404) { items = [] }
         try Task.checkCancellation()
+        guard MangaUrls.home == site else { throw CancellationError() }
         if suggestionCache.count >= 64, let oldest = suggestionCache.min(by: { $0.value.1 < $1.value.1 })?.key {
             suggestionCache.removeValue(forKey: oldest)
         }
@@ -80,6 +115,8 @@ actor MangaContentSource: ContentProviding {
     func gallery(_ id: Int64) async throws -> NativeGallery {
         try Task.checkCancellation()
         guard id > 0 else { throw ContentError.invalidQuery }
+        let site = try prepareSite()
+        let backend = try await resolve(site)
         if let cached = galleryCache.object(forKey: id as NSNumber)?.gallery { return cached }
         let waiter = UUID()
         return try await withTaskCancellationHandler {
@@ -90,13 +127,21 @@ actor MangaContentSource: ContentProviding {
                     galleryFlights[id] = flight
                     return
                 }
-                let token = UUID(), transport = transport
+                let token = UUID(), transport = transport, documents = documents
                 let task = Task.detached(priority: Task.currentPriority) {
                     do {
+                        if backend == .document {
+                            let document = try await documents.gallery(id, site: site)
+                            try Task.checkCancellation()
+                            guard MangaUrls.home == site else { throw CancellationError() }
+                            await self.finishGallery(id, token: token, result: .success(document), cost: max(1024, document.pages.count * 512))
+                            return
+                        }
                         let (data, _) = try await transport.getData("galleries/\(id).js", limit: 4_000_000, galleryID: id)
                         try Task.checkCancellation()
                         let document = try await GalleryMetadataParser.shared.parse(data, id: id)
                         try Task.checkCancellation()
+                        guard MangaUrls.home == site else { throw CancellationError() }
                         let cost = max(1024, max(data.count * 2, document.pages.count * 192))
                         await self.finishGallery(id, token: token, result: .success(document), cost: cost)
                     } catch { await self.finishGallery(id, token: token, result: .failure(error)) }
@@ -124,7 +169,7 @@ actor MangaContentSource: ContentProviding {
         guard let flight = galleryFlights[id], flight.id == token else { return }
         galleryFlights.removeValue(forKey: id)
         if case .success(let document) = result {
-            galleryCache.setObject(NativeGalleryBox(document), forKey: id as NSNumber, cost: cost)
+            galleryCache.setObject(NativeGalleryBox(document, site: activeSite), forKey: id as NSNumber, cost: cost)
         }
         for continuation in flight.waiters.values { continuation.resume(with: result) }
     }
@@ -132,6 +177,8 @@ actor MangaContentSource: ContentProviding {
     func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch {
         guard query.language.range(of: #"^[a-z]{2,24}$"#, options: .regularExpression) != nil,
               offset >= 0, offset < 10_000_000, (1...100).contains(count) else { throw ContentError.invalidQuery }
+        let site = try prepareSite()
+        if try await resolve(site) == .document { return try await documents.list(query, offset: offset, count: count, site: site) }
         if !query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (query.artist != nil && query.sort != .latest) {
             let ids: [Int64]
             if let cached = searchCache, cached.0 == query, Date().timeIntervalSince(cached.2) < 300 {
@@ -144,6 +191,7 @@ actor MangaContentSource: ContentProviding {
                 }
                 ids = ranked
                 try Task.checkCancellation()
+                guard MangaUrls.home == site else { throw CancellationError() }
                 searchCache = (query, ids, Date())
             }
             return GalleryBatch(ids: Array(ids.dropFirst(offset).prefix(count)), hasMore: ids.count > offset + count)
@@ -151,12 +199,21 @@ actor MangaContentSource: ContentProviding {
         let path = query.sort != .latest ? "popular/\(query.sort.rawValue)-\(query.language).nozomi" : query.artist.map { "artist/\(segment($0))-\(query.language).nozomi" } ?? "index-\(query.language).nozomi"
         let range = (offset * 4)..<((offset + count) * 4)
         let (data, response) = try await transport.getData(path, limit: count * 4, range: range)
+        guard MangaUrls.home == site else { throw CancellationError() }
         if response.statusCode == 416 { return GalleryBatch(ids: [], hasMore: false) }
         let total = try Self.validateRange(response, start: range.lowerBound, received: data.count)
         return GalleryBatch(ids: try BinaryCursor.ids(data), hasMore: range.lowerBound + data.count < total)
     }
 
     func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data {
+        let site = try prepareSite()
+        let backend = try await resolve(site)
+        if let previousSite = page.sourceSite, previousSite != site, let index = page.index {
+            let updated = try await gallery(galleryID)
+            guard updated.pages.indices.contains(index) else { throw ContentError.invalidResponse }
+            return try await image(updated.pages[index], galleryID: galleryID, thumbnail: thumbnail)
+        }
+        if backend == .document { return try await documents.image(page, galleryID: galleryID, thumbnail: thumbnail, site: site) }
         let formats = page.hasAVIF ? ["webp", "avif"] : ["webp"]
         var lastError: Error = ContentError.unsupportedFormat
         for refresh in [false, true] {
@@ -165,6 +222,7 @@ actor MangaContentSource: ContentProviding {
                 do {
                     let imageURL = try configuration.url(hash: page.hash, format: format, thumbnail: thumbnail)
                     let (data, response) = try await transport.get(imageURL, limit: thumbnail ? 2_000_000 : 24_000_000, galleryID: galleryID)
+                    guard MangaUrls.home == site else { throw CancellationError() }
                     guard response.statusCode == 200,
                           response.mimeType == "image/\(format)", data.count > 32 else { throw ContentError.unsupportedFormat }
                     return data

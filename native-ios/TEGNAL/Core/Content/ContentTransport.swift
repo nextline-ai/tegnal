@@ -6,6 +6,7 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     private var session: URLSession!
     private let lock = NSLock()
     private var requests: [Int: Download] = [:]
+    private var browserOrigins = Set<String>()
 
     private final class Download {
         let limit: Int
@@ -48,6 +49,7 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         if !cdn.isEmpty && (host == cdn || host.hasSuffix("." + cdn)) { return true }
         let dataHost = MangaUrls.dataHost
         if !dataHost.isEmpty && (host == dataHost || host.hasSuffix("." + dataHost)) { return true }
+        if MangaUrls.allowsMedia(host) { return true }
         return false
     }
 
@@ -60,10 +62,28 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     func get(_ url: URL, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil, timeout: TimeInterval = 20) async throws -> (Data, HTTPURLResponse) {
         guard Self.allows(url), limit > 0 else { throw URLError(.unsupportedURL) }
         try Task.checkCancellation()
+        let site = MangaUrls.home
+        let usesBrowser = lock.withLock { browserOrigins.contains(site) }
+        if usesBrowser, url.host == MangaUrls.configuredHost, let origin = URL(string: site) {
+            return try await ContentBrowserTransport.get(url, origin: origin, limit: limit, range: range, timeout: timeout)
+        }
+        do { return try await direct(url, limit: limit, range: range, galleryID: galleryID, timeout: timeout) }
+        catch {
+            try Task.checkCancellation()
+            guard MangaUrls.home == site, let network = error as? URLError,
+                  [.secureConnectionFailed, .networkConnectionLost].contains(network.code),
+                  let origin = URL(string: site) else { throw error }
+            let result = try await ContentBrowserTransport.get(url, origin: origin, limit: limit, range: range, timeout: timeout)
+            if url.host == origin.host { _ = lock.withLock { browserOrigins.insert(site) } }
+            return result
+        }
+    }
+
+    private func direct(_ url: URL, limit: Int, range: Range<Int>?, galleryID: Int64?, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-        request.setValue(galleryID.map { "\(MangaUrls.home)reader/\($0).html" } ?? MangaUrls.home, forHTTPHeaderField: "Referer")
+        request.setValue(galleryID.map { MangaUrls.readerUrl(for: $0) } ?? MangaUrls.home, forHTTPHeaderField: "Referer")
         if let range { request.setValue("bytes=\(range.lowerBound)-\(range.upperBound - 1)", forHTTPHeaderField: "Range") }
         let cancellation = Cancellation()
         return try await withTaskCancellationHandler {

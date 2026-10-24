@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="design/other/JPG/main_banner_kr.jpg" alt="TEGNAL TestFlight 다운로드" width="100%">
+    <img src="docs/assets/app-icon.png" alt="TEGNAL TestFlight 다운로드" width="128">
   </a>
 </p>
 
@@ -48,13 +48,13 @@
 ## 📲 다운로드 및 설치 방법
 
 1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
-2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
+2. 아래 링크(또는 상단 아이콘)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
    - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/gnkqu44W)**
 3. **공식 지원 기기:** iPhone, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
 
-**권장 설치 방법은 TestFlight이며, 현재 TestFlight 공개 버전은 1.0.0 (7)입니다.**
+**최신 앱 버전은 TestFlight로 우선 배포됩니다.** 최신 버전을 받으려면 TestFlight를 이용하세요.
 
-GitHub 핫픽스: **[1.0.0 (8)](https://github.com/nextline-ai/tegnal/releases/tag/v1.0.0-8)** — Mac 실행·번역·썸네일 복구 및 자동 채우기 수정, 시작 화면과 앱 아이콘 업데이트.
+IPA 파일과 AltStore Classic·SideStore용 버전은 일부 버전만 업로드되므로, TestFlight와 버전이 다를 수 있습니다. **소스 코드는 항상 GitHub에 먼저 반영됩니다.**
 
 <details>
 <summary><b>다른 설치 방법 (선택)</b></summary>
@@ -116,6 +116,16 @@ IPA는 설치 도구에서 사용자 Apple 계정으로 다시 서명해야 합�
 - **iCloud 컨테이너:** `iCloud.work.nextline.tegnal`
 
 실기기 서명과 배포에는 위 식별자를 사용하는 Apple Developer 설정과 프로비저닝 프로파일이 필요합니다. 새 식별자는 기존 설치와 별도 앱으로 취급되며, 이전 버전의 이미지·챌린지 JSON 백업은 가져올 수 있습니다.
+
+---
+
+## 📄 라이선스 및 브랜드 보호
+
+소스 코드와 문서는 [MIT 라이선스](LICENSE)에 따라 자유롭게 사용·수정·재배포할 수 있으며, 상업적 이용도 허용합니다.
+
+**TEGNAL·NextLine 이름, 로고, 앱 아이콘, 일러스트와 고유 시각 디자인은 MIT 적용 대상에서 제외됩니다.** [브랜드 및 시각 디자인 이용 조건](BRAND_LICENSE.md)에 따라 사전 서면 허가 없는 복제·변형·재배포·다른 제품에서의 재사용을 금지합니다. 파생 앱을 공개 배포할 때는 독립적인 이름·아이콘·아트워크·시각 정체성을 사용해야 합니다. 개인 사용과 내부 개발·테스트를 위한 빌드는 허용합니다.
+
+`design/` 원본 폴더는 공개 저장소의 추적 대상에서 제외합니다. 앱 빌드와 문서 표시에 필요한 포함 리소스에도 위 브랜드 보호 조건이 적용됩니다. 제삼자 자료에는 해당 권리자의 이용 조건이 적용됩니다.
 
 ---
 

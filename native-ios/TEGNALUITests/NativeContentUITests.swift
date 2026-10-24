@@ -427,7 +427,7 @@ final class NativeContentUITests: XCTestCase {
         element(app, "content.read").tap()
         menu(app)
         element(app, "reader.details").tap()
-        app.buttons["female:sample"].tap()
+        app.collectionViews.buttons["female:sample"].tap()
         XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
         XCTAssertEqual(element(app, "content.search").value as? String, "female:sample")
         capture(app, "Explore tab tag search")

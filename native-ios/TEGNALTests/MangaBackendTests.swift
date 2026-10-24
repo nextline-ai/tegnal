@@ -2,7 +2,7 @@ import XCTest
 @testable import TEGNAL
 
 final class MangaBackendTests: XCTestCase {
-    private let keys = ["manga.site_address", "manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site"]
+    private let keys = ["manga.site_address", "manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base"]
     private var saved: [String: Any] = [:]
     override func setUp() {
         super.setUp()

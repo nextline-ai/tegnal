@@ -297,7 +297,7 @@ public struct WorkDetailView: View {
             }
         }
         .fullScreenCover(isPresented: $showBrowser) {
-            ContentEntryView(initialUrl: "\(MangaUrls.home)reader/\(galleryId).html#1")
+            ContentEntryView(initialUrl: MangaUrls.readerUrl(for: galleryId))
         }
         .presentationDetents([.large]).presentationDragIndicator(.visible)
         .task {

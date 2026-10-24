@@ -322,7 +322,7 @@ private struct GalleryFeedView: View {
                                     Text(item.namespace).font(.caption.monospaced()).foregroundStyle(.secondary)
                                     Text(item.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
                                     Spacer(minLength: 4)
-                                    Text(item.count.formatted()).font(.caption).foregroundStyle(.secondary)
+                                    if let count = item.count { Text(count.formatted()).font(.caption).foregroundStyle(.secondary) }
                                 }.frame(minHeight: 46).padding(.horizontal, 12).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityIdentifier("content.suggestion.\(item.token)")
                             if item.id != suggestions.last?.id { Divider() }
@@ -595,7 +595,7 @@ final class GalleryFeedPreview {
         self.id = id
         self.source = source
         self.images = images
-        gallery = source.cachedGallery(id)
+        gallery = source.cachedPreview(id)
         image = gallery?.pages.first.flatMap { images.cachedImage(hash: $0.hash, thumbnail: true) }
     }
 

@@ -78,6 +78,7 @@ final class EmbeddedBrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate {
     var canGoBack = false
     var canGoForward = false
     var error: String?
+    @ObservationIgnored private var opening: Task<Void, Never>?
 
     init(initialUrl: String) {
         self.initialUrl = initialUrl
@@ -102,6 +103,7 @@ final class EmbeddedBrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func start() {
+        opening?.cancel()
         guard let url = URL(string: initialUrl), Self.allows(url) else {
             error = L10n.text("Invalid Address"); return
         }
@@ -111,7 +113,16 @@ final class EmbeddedBrowserModel: NSObject, WKNavigationDelegate, WKUIDelegate {
             if let fixture = components.url { webView.load(URLRequest(url: fixture)); return }
         }
         #endif
-        webView.load(URLRequest(url: url))
+        guard ContentRoute.initial(initialUrl) != nil else {
+            webView.load(URLRequest(url: url)); return
+        }
+        let site = MangaUrls.home
+        loading = true
+        opening = Task { [weak self] in
+            await MangaUrls.resolveBackend()
+            guard !Task.isCancelled, MangaUrls.home == site, let self, webView.navigationDelegate != nil else { return }
+            webView.load(URLRequest(url: ContentRoute.configuredURL(url)))
+        }
     }
 
     func reload() {

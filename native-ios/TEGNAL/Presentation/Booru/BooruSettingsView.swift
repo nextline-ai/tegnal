@@ -75,6 +75,7 @@ struct BooruServerEditor: View {
     @State private var address = ""
     @State private var serverTypeChoice: ServerType?
     @State private var showOptions = false
+    @State private var discoveredComicsAddress: String?
     private var addressURL: URL? { try? BooruServer.validatedURL(address) }
     private var allowsComics: Bool { acceptsComics || server == nil }
 
@@ -89,7 +90,7 @@ struct BooruServerEditor: View {
     }
 
     private var detectedServerType: ServerType? {
-        if allowsComics && Self.isComicsDomain(address) {
+        if allowsComics && (Self.isComicsDomain(address) || addressURL?.absoluteString == discoveredComicsAddress && discoveredComicsAddress != nil) {
             return .comics
         }
         if let suggested = addressURL.flatMap(BooruEngine.suggested) {
@@ -177,6 +178,17 @@ struct BooruServerEditor: View {
                     name = server.displayName; address = server.baseURL.absoluteString; serverTypeChoice = .booru(server.engine); showOptions = true
                     do { let credentials = try BooruKeychain.read(serverID: server.id); account = credentials.account; apiKey = credentials.apiKey }
                     catch { self.error = error.localizedDescription }
+                }
+                .task(id: addressURL?.absoluteString) {
+                    discoveredComicsAddress = nil
+                    guard allowsComics, server == nil, let url = addressURL,
+                          !Self.isComicsDomain(address), BooruEngine.suggested(for: url) == nil else { return }
+                    do {
+                        try await Task.sleep(for: .milliseconds(400))
+                        if try await ContentBrowserTransport.isDocumentCatalog(at: url), addressURL == url {
+                            discoveredComicsAddress = url.absoluteString
+                        }
+                    } catch { }
                 }
         }
     }

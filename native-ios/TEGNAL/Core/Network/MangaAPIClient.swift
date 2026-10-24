@@ -17,6 +17,11 @@ public enum MangaAPIClient {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
         await MangaUrls.resolveBackend()
         try Task.checkCancellation()
+        if MangaUrls.backend == .document {
+            let gallery = try await MangaContentSource.shared.gallery(galleryId)
+            return MangaGalleryInfo(hash: gallery.pages.first?.hash, title: gallery.title, artists: gallery.artists.joined(separator: ", "),
+                                    language: gallery.language, type: gallery.type, published: nil, tags: gallery.tags.joined(separator: ", "))
+        }
         let urls = [
             "\(MangaUrls.dataBaseURL)galleries/\(galleryId).js",
             "\(MangaUrls.home)galleries/\(galleryId).js"
@@ -58,6 +63,7 @@ public enum MangaAPIClient {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
         await MangaUrls.resolveBackend()
         try Task.checkCancellation()
+        if MangaUrls.backend == .document { return try await MangaContentSource.shared.gallery(galleryId).pages.map(\.hash) }
         let urls = [
             "\(MangaUrls.dataBaseURL)galleries/\(galleryId).js",
             "\(MangaUrls.home)galleries/\(galleryId).js"
@@ -166,6 +172,15 @@ public enum MangaAPIClient {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
         await MangaUrls.resolveBackend()
         try Task.checkCancellation()
+        if MangaUrls.backend == .document {
+            let gallery = try await MangaContentSource.shared.gallery(galleryId)
+            guard let page = gallery.pages.first(where: { $0.hash == hash }) else { throw ContentError.invalidResponse }
+            let data = try await MangaContentSource.shared.image(page, galleryID: galleryId, thumbnail: true)
+            let ext = try await DownloadStore.imageExtension(data)
+            let file = destinationDir.appendingPathComponent("\(galleryId).\(ext)")
+            try data.write(to: file, options: .atomic)
+            return file
+        }
         guard hash.count >= 3 else { throw URLError(.badURL) }
         let a = String(hash.suffix(1))
         let bStart = hash.index(hash.endIndex, offsetBy: -3)

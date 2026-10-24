@@ -30,6 +30,10 @@ struct GalleryPage: Codable, Sendable, Hashable {
     let width: Int
     let height: Int
     let hasAVIF: Bool
+    var imageURL: URL? = nil
+    var thumbnailURL: URL? = nil
+    var index: Int? = nil
+    var sourceSite: String? = nil
 }
 
 struct NativeGallery: Codable, Identifiable, Sendable {
@@ -64,7 +68,7 @@ struct NativeGallery: Codable, Identifiable, Sendable {
             return GalleryPage(hash: hash, name: name,
                                width: (file["width"] as? NSNumber)?.intValue ?? 0,
                                height: (file["height"] as? NSNumber)?.intValue ?? 0,
-                               hasAVIF: (file["hasavif"] as? NSNumber)?.boolValue ?? false)
+                               hasAVIF: (file["hasavif"] as? NSNumber)?.boolValue ?? false, index: index, sourceSite: MangaUrls.home)
         }
         try Task.checkCancellation()
         let japanese = (json["japanese_title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,10 +161,12 @@ protocol ContentProviding: Sendable {
     func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch
     func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data
     func cachedGallery(_ id: Int64) -> NativeGallery?
+    func cachedPreview(_ id: Int64) -> NativeGallery?
 }
 
 extension ContentProviding {
     func cachedGallery(_ id: Int64) -> NativeGallery? { nil }
+    func cachedPreview(_ id: Int64) -> NativeGallery? { cachedGallery(id) }
 }
 
 enum ContentRoute: Hashable {
@@ -171,12 +177,30 @@ enum ContentRoute: Hashable {
     case artist(String)
     case query(String)
 
+    /// Rebuild saved native links after the configured server's protocol is known.
+    static func configuredURL(_ url: URL) -> URL {
+        let address: String
+        switch initial(url.absoluteString) {
+        case .reader(let id, let page): address = MangaUrls.readerUrl(for: id, page: page)
+        case .gallery(let id): address = MangaUrls.galleryUrl(for: id)
+        case .artist(let name): address = MangaUrls.artistAllUrl(for: name)
+        default: return url
+        }
+        return URL(string: address) ?? url
+    }
+
     static func initial(_ raw: String) -> ContentRoute? {
         guard let url = URL(string: raw), url.scheme == "https",
               !MangaUrls.configuredHost.isEmpty, url.host?.lowercased() == MangaUrls.configuredHost else { return nil }
         if let id = GalleryIDParser.parse(raw).first {
-            if url.path.hasPrefix("/reader/") { return .reader(id, max(1, Int(url.fragment ?? "1") ?? 1)) }
+            if url.path.hasPrefix("/reader/") || url.path.hasPrefix("/r/") {
+                return .reader(id, max(1, Int(url.fragment ?? "1") ?? 1))
+            }
             return .gallery(id)
+        }
+        if let search = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "search" })?.value,
+           !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .query(search)
         }
         if url.path.hasPrefix("/artist/"), url.lastPathComponent.hasSuffix("-all.html") {
             return .artist(String(url.lastPathComponent.dropLast("-all.html".count)))
@@ -193,7 +217,7 @@ extension ContentProviding {
 struct TagSuggestion: Identifiable, Equatable, Sendable {
     let namespace: String
     let name: String
-    let count: Int
+    let count: Int?
     var id: String { token }
     var token: String { namespace + ":" + name.replacingOccurrences(of: " ", with: "_") }
     static let namespaces: Set<String> = ["female", "male", "tag", "artist", "group", "series", "character", "language", "type"]

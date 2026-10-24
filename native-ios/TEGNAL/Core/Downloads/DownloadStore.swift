@@ -154,7 +154,9 @@ struct WorkDownload: Codable, Identifiable {
                 for (index, page) in gallery.pages.enumerated() {
                     try Task.checkCancellation()
                     if index < item.files.count, FileManager.default.fileExists(atPath: urls(item)[index].path) { continue }
-                    let data = try await manga.image(page, galleryID: gallery.id, thumbnail: false)
+                    var requestPage = page
+                    requestPage.index = index
+                    let data = try await manga.image(requestPage, galleryID: gallery.id, thumbnail: false)
                     try Task.checkCancellation()
                     let ext = try Self.imageExtension(data)
                     try save(data, name: String(format: "%05d", index + 1) + "." + ext, item: item, index: index)

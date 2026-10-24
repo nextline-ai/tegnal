@@ -1,6 +1,11 @@
 import Foundation
 
 public enum MangaUrls {
+    enum Backend: String { case indexed, document }
+    static var backend: Backend {
+        guard UserDefaults.standard.string(forKey: "manga.resolved_backend_site") == home else { return .indexed }
+        return Backend(rawValue: UserDefaults.standard.string(forKey: "manga.resolved_protocol") ?? "") ?? .indexed
+    }
     public static var configuredHome: String {
         let saved = UserDefaults.standard.string(forKey: "manga.site_address")
         if let saved, !saved.isEmpty {
@@ -25,13 +30,23 @@ public enum MangaUrls {
     public static var source: String { String(home.dropLast(home.hasSuffix("/") ? 1 : 0)) }
 
     public static func galleryUrl(for galleryId: Int64) -> String {
-        home.isEmpty ? "" : "\(home)galleries/\(galleryId).html"
+        home.isEmpty ? "" : backend == .document ? "\(home)r/\(galleryId)" : "\(home)galleries/\(galleryId).html"
+    }
+
+    public static func readerUrl(for galleryId: Int64, page: Int = 1) -> String {
+        guard !home.isEmpty else { return "" }
+        return backend == .document ? "\(home)r/\(galleryId)#\(max(1, page))" : "\(home)reader/\(galleryId).html#\(max(1, page))"
     }
 
     public static func artistAllUrl(for artist: String) -> String {
         guard !home.isEmpty else { return "" }
         let trimmed = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? trimmed
+        if backend == .document {
+            var url = URLComponents(string: home)!
+            url.queryItems = [URLQueryItem(name: "search", value: "artist:" + trimmed.replacingOccurrences(of: " ", with: "_"))]
+            return url.url?.absoluteString ?? ""
+        }
         return "\(home)artist/\(encoded)-all.html"
     }
 
@@ -96,10 +111,53 @@ public enum MangaUrls {
             }
         }), home == site else { return false }
         let defaults = UserDefaults.standard
+        if defaults.string(forKey: "manga.resolved_backend_site") != site {
+            defaults.removeObject(forKey: "manga.resolved_media_hosts")
+            defaults.removeObject(forKey: "manga.resolved_preview_base")
+        }
         defaults.set(dataHost, forKey: "manga.resolved_data_host")
         defaults.set(cdn, forKey: "manga.resolved_cdn_host")
         defaults.set(site, forKey: "manga.resolved_backend_site")
+        defaults.set(Backend.indexed.rawValue, forKey: "manga.resolved_protocol")
         return true
+    }
+
+    @discardableResult
+    static func extractDocumentBackend(from text: String, site: String) -> Bool {
+        guard home == site, let host = URL(string: site)?.host,
+              isDocumentPage(text) else { return false }
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: "manga.resolved_backend_site") != site { defaults.removeObject(forKey: "manga.resolved_media_hosts") }
+        defaults.set(host, forKey: "manga.resolved_data_host")
+        defaults.set(host, forKey: "manga.resolved_cdn_host")
+        defaults.set(Backend.document.rawValue, forKey: "manga.resolved_protocol")
+        defaults.set(site, forKey: "manga.resolved_backend_site")
+        defaults.removeObject(forKey: "manga.resolved_preview_base")
+        if let regex = try? NSRegularExpression(pattern: #"thumbServer\s*:\s*(\{[^{}]+\})"#),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let range = Range(match.range(at: 1), in: text),
+           let data = String(text[range]).data(using: .utf8),
+           let item = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           let value = item["url"] as? String, let url = URL(string: value), DocumentCatalogSource.safeMediaURL(url) {
+            defaults.set(url.absoluteString, forKey: "manga.resolved_preview_base")
+            registerMedia([url], site: site)
+        }
+        return true
+    }
+
+    static func isDocumentPage(_ text: String) -> Bool {
+        text.range(of: #"(?:/js/index\.search\.|/ajax/search\b|\bconst\s+gallery\s*=|href\s*=\s*['"]/r/[0-9]+)"#, options: .regularExpression) != nil
+    }
+
+    static func registerMedia(_ urls: [URL], site: String) {
+        guard site == home else { return }
+        var hosts = Set(UserDefaults.standard.stringArray(forKey: "manga.resolved_media_hosts") ?? [])
+        hosts.formUnion(urls.filter { DocumentCatalogSource.safeMediaURL($0) }.compactMap { $0.host?.lowercased() })
+        UserDefaults.standard.set(Array(hosts.prefix(64)), forKey: "manga.resolved_media_hosts")
+    }
+
+    static func allowsMedia(_ host: String) -> Bool {
+        hasResolvedBackend && backend == .document && (UserDefaults.standard.stringArray(forKey: "manga.resolved_media_hosts") ?? []).contains(host)
     }
 
     /// Keep discovery anchored to the user's address, including its own common.js.
@@ -115,6 +173,7 @@ public enum MangaUrls {
             guard home == site, !Task.isCancelled else { return false }
             let body = String(decoding: data, as: UTF8.self)
             if extractBackend(from: body, site: site) { return true }
+            if extractDocumentBackend(from: body, site: site) { return true }
             let pattern = #"<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]"#
             let regex = try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
             for match in regex.matches(in: body, range: NSRange(body.startIndex..., in: body)) {
@@ -137,7 +196,7 @@ public enum MangaUrls {
     }
 
     public static func resetResolvedBackend() {
-        for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site"] {
+        for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base"] {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }
@@ -168,7 +227,7 @@ private actor MangaBackendResolver {
 
 public enum GalleryIDParser {
     private static let mangaIdRegex: NSRegularExpression = {
-        let pattern = #"(?:(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/)?(?:galleries|reader)/(\d{4,10})(?:\.html)?|(?:(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/)?[^/\s]+/[^/\s]*-(\d{4,10})\.html"#
+        let pattern = #"(?:(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/)?(?:galleries|reader|r)/(\d{4,10})(?:\.html)?|(?:(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/)?[^/\s]+/[^/\s]*-(\d{4,10})\.html"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
@@ -213,7 +272,7 @@ public enum GalleryIDParser {
             for match in nestedMatches {
                 if match.numberOfRanges > 1 && match.range(at: 1).location != NSNotFound {
                     let encoded = nsValue.substring(with: match.range(at: 1))
-                    if let decoded = encoded.removingPercentEncoding, (decoded.localizedCaseInsensitiveContains("manga") || decoded.contains("galleries") || decoded.contains("reader")) {
+                    if let decoded = encoded.removingPercentEncoding {
                         addFrom(decoded, depth: depth + 1)
                     }
                 }

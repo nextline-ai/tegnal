@@ -295,7 +295,7 @@ final class NativeContentLiveTests: XCTestCase {
     func testLiveTagSuggestionsOnDevice() async throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["TEGNAL_LIVE_TESTS"] == "1")
         let suggestions = try await MangaContentSource().suggestions(for: "language:ko")
-        XCTAssertTrue(suggestions.contains { $0.token == "language:korean" && $0.count > 0 })
+        XCTAssertTrue(suggestions.contains { $0.token == "language:korean" && ($0.count ?? 0) > 0 })
     }
 
     func testLivePopularPeriodsOnDevice() async throws {
