@@ -662,7 +662,20 @@ struct BooruPostThumbnailCard: View, Equatable {
     var showsFavoriteIndicator = false
     var isFavorite = false
     var body: some View {
-        BooruThumbnail(post: post, server: server)
+        BooruThumbnailCardLayout(post: post, showsFavoriteIndicator: showsFavoriteIndicator, isFavorite: isFavorite) {
+            BooruThumbnail(post: post, server: server)
+        }
+    }
+}
+
+/// Shared geometry and badges for online and downloaded image cards.
+struct BooruThumbnailCardLayout<Cover: View>: View {
+    let post: BooruPost
+    var showsFavoriteIndicator = false
+    var isFavorite = false
+    @ViewBuilder let cover: () -> Cover
+    var body: some View {
+        cover()
             .frame(maxWidth: .infinity).aspectRatio(0.78, contentMode: .fit).clipped()
             .overlay(alignment: .topTrailing) {
                 if post.isVideo || post.isAnimated {
@@ -679,10 +692,10 @@ struct BooruPostThumbnailCard: View, Equatable {
             }
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            // Cropping pixels does not crop SwiftUI hit testing.
             .contentShape(Rectangle())
     }
 }
+
 
 struct BooruNoSelectionView: View {
     var body: some View {

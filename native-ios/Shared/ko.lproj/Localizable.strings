@@ -1050,3 +1050,41 @@
 "Dismiss filling notice" = "자동 채우기 안내 닫기";
 "Still missing information: %@ works. Failed downloads can be retried." = "아직 정보가 비어 있는 작품: %@개. 실패한 다운로드는 다시 시도할 수 있습니다.";
 "Missing covers are downloaded separately in the background." = "커버 이미지는 별도로 백그라운드에서 내려받습니다.";
+
+"Downloads" = "다운로드";
+
+"Download Work" = "작품 다운로드";
+
+"Storage Used" = "사용 중인 저장 공간";
+
+"No Downloads" = "다운로드한 작품이 없습니다";
+
+"Download a work from the viewer quick menu." = "뷰어의 퀵메뉴에서 작품을 다운로드하세요.";
+
+"Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here." = "다운로드는 이 기기에 보관됩니다. 다운로드 중에는 앱을 열어 두세요. 중단된 작업은 여기서 이어받을 수 있습니다.";
+
+"Resume" = "이어받기";
+
+"Delete Download" = "다운로드 삭제";
+
+"Delete Download?" = "다운로드를 삭제할까요?";
+
+"This removes the downloaded files from this device." = "이 기기에 저장한 다운로드 파일이 삭제됩니다.";
+
+"Queued" = "대기 중";
+
+"Downloading" = "다운로드 중";
+
+"Paused" = "일시 정지됨";
+
+"Failed" = "실패";
+
+"Completed" = "완료";
+
+"Read Offline" = "오프라인으로 읽기";
+
+"Open" = "열기";
+
+"Search Downloads" = "다운로드 검색";
+
+"Download Actions" = "다운로드 관리";

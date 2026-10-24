@@ -1050,3 +1050,41 @@
 "Dismiss filling notice" = "Dismiss filling notice";
 "Still missing information: %@ works. Failed downloads can be retried." = "Still missing information: %@ works. Failed downloads can be retried.";
 "Missing covers are downloaded separately in the background." = "Missing covers are downloaded separately in the background.";
+
+"Downloads" = "Downloads";
+
+"Download Work" = "Download Work";
+
+"Storage Used" = "Storage Used";
+
+"No Downloads" = "No Downloads";
+
+"Download a work from the viewer quick menu." = "Download a work from the viewer quick menu.";
+
+"Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here." = "Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here.";
+
+"Resume" = "Resume";
+
+"Delete Download" = "Delete Download";
+
+"Delete Download?" = "Delete Download?";
+
+"This removes the downloaded files from this device." = "This removes the downloaded files from this device.";
+
+"Queued" = "Queued";
+
+"Downloading" = "Downloading";
+
+"Paused" = "Paused";
+
+"Failed" = "Failed";
+
+"Completed" = "Completed";
+
+"Read Offline" = "Read Offline";
+
+"Open" = "Open";
+
+"Search Downloads" = "Search Downloads";
+
+"Download Actions" = "Download Actions";

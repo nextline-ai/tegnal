@@ -55,6 +55,36 @@ final class NativeContentUITests: XCTestCase {
         add(attachment)
     }
 
+    func testDownloadOpensInOfflineReader() {
+        let app = launchReader()
+        menu(app)
+        let download = element(app, "reader.download")
+        XCTAssertTrue(download.waitForExistence(timeout: 5))
+        download.tap()
+        XCTAssertTrue(element(app, "manga.downloads").waitForExistence(timeout: 5))
+        let open = element(app, "download.open")
+        XCTAssertTrue(open.waitForExistence(timeout: 15))
+        let search = element(app, "downloads.search")
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("sample")
+        XCTAssertTrue(open.exists)
+        capture(app, "Downloaded comic grid with tag search")
+        search.typeText("_missing")
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: open)
+        waitForExpectations(timeout: 5)
+        element(app, "manga.downloads").buttons["검색 지우기"].tap()
+        search.typeText("900000001")
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        search.typeText("\n")
+        open.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        XCTAssertTrue(element(app, "reader.download.offline").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "reader.download.offline").isEnabled)
+        capture(app, "Offline comic reader")
+    }
+
     func testSettingsSwitchExploreBetweenNativeAndBuiltInBrowser() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

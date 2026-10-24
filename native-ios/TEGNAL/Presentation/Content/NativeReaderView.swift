@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum ReaderSheet: String, Identifiable {
-    case settings, preview, details, help
+    case settings, preview, details, help, downloads
     var id: String { rawValue }
 }
 
@@ -13,6 +13,7 @@ struct NativeReaderView: View {
     let source: any ContentProviding
     let images: PageImageStore
     let savesProgress: Bool
+    let offline: Bool
     let search: (String) -> Void
     let exit: () -> Void
     @Environment(\.scenePhase) private var scenePhase
@@ -48,9 +49,9 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
 
     init(galleryID: Int64, initialPage: Int, source: any ContentProviding, images: PageImageStore,
-         savesProgress: Bool, search: @escaping (String) -> Void, exit: @escaping () -> Void) {
+         savesProgress: Bool, offline: Bool = false, search: @escaping (String) -> Void, exit: @escaping () -> Void) {
         self.galleryID = galleryID; self.initialPage = initialPage
-        self.source = source; self.images = images; self.savesProgress = savesProgress
+        self.source = source; self.images = images; self.savesProgress = savesProgress; self.offline = offline
         self.search = search; self.exit = exit
         if let cached = source.cachedGallery(galleryID) {
             _gallery = State(initialValue: cached)
@@ -122,6 +123,7 @@ struct NativeReaderView: View {
             if let pendingSearch { self.pendingSearch = nil; search(pendingSearch) }
         }) { item in
             switch item {
+            case .downloads: DownloadsSheet(mode: .manga)
             case .settings: ReaderSettingsView()
             case .preview:
                 if let gallery { ReaderPreviewView(gallery: gallery, images: images, current: $currentPage) }
@@ -218,6 +220,9 @@ struct NativeReaderView: View {
     private func menuActions(compact: Bool) -> some View {
         let columns = Array(repeating: GridItem(.flexible()), count: compact ? 6 : 3)
         return LazyVGrid(columns: columns, spacing: 18) {
+            menuButton(L10n.text("Download Work"), icon: "arrow.down.circle", id: offline ? "download.offline" : "download", compact: compact) {
+                if let gallery { DownloadStore.shared.enqueue(gallery); sheet = .downloads }
+            }.disabled(gallery == nil || offline)
             menuButton(L10n.text("Bookmark"), icon: "bookmark", id: "bookmark", compact: compact, action: bookmark)
             menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "exit", compact: compact, action: closeReader)
             menuButton(L10n.text("Translate"), icon: "translate", id: "translate", compact: compact) { translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1)); menuVisible = false }

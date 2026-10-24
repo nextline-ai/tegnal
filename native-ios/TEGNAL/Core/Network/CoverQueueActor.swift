@@ -121,9 +121,8 @@ public actor CoverQueueActor {
                             break
                         } catch let error as URLError where error.code == .cancelled {
                             break
-                        } catch let error as URLError where error.code == .fileDoesNotExist {
+                        } catch ContentError.galleryNotFound {
                             await MainActor.run { state.gone += 1 }
-                            try? database.setThumb(galleryId: work.galleryId, status: "gone")
                         } catch {
                             await MainActor.run { state.failed += 1 }
                             if (try? database.getWork(galleryId: work.galleryId)?.hasThumb) != true {
@@ -183,7 +182,16 @@ public actor CoverQueueActor {
             return
         }
 
-        let gallery = try await source.gallery(galleryId)
+        let gallery: NativeGallery
+        do {
+            gallery = try await source.gallery(galleryId)
+        } catch ContentError.unavailable(let status) where status == 404 || status == 410 {
+            try Task.checkCancellation()
+            // Only a missing gallery document means the work is gone. A 404
+            // from an image/CDN request below remains a retryable failure.
+            try database.setThumb(galleryId: galleryId, status: "gone")
+            throw ContentError.galleryNotFound
+        }
         try Task.checkCancellation()
         guard try database.getWork(galleryId: galleryId) != nil else { return }
         _ = try database.upsertWork(

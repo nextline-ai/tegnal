@@ -411,6 +411,11 @@ public struct WorkDetailView: View {
                     isRefetching = false
                     showToast(L10n.text("Latest information loaded"))
                 }
+            } catch ContentError.galleryNotFound {
+                imageReloadKey = UUID()
+                loadData()
+                isRefetching = false
+                showToast(L10n.text("This work was removed or could not be found."))
             } catch {
                 await MainActor.run {
                     isRefetching = false

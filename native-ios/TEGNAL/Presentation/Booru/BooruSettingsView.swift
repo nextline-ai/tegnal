@@ -76,6 +76,7 @@ struct BooruServerEditor: View {
     @State private var serverTypeChoice: ServerType?
     @State private var showOptions = false
     private var addressURL: URL? { try? BooruServer.validatedURL(address) }
+    private var allowsComics: Bool { acceptsComics || server == nil }
 
     static func isComicsDomain(_ input: String) -> Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -88,7 +89,7 @@ struct BooruServerEditor: View {
     }
 
     private var detectedServerType: ServerType? {
-        if acceptsComics && Self.isComicsDomain(address) {
+        if allowsComics && Self.isComicsDomain(address) {
             return .comics
         }
         if let suggested = addressURL.flatMap(BooruEngine.suggested) {
@@ -123,7 +124,7 @@ struct BooruServerEditor: View {
                 Section {
                     Picker(L10n.text("Server Type"), selection: $serverTypeChoice) {
                         Text(L10n.text("Automatic")).tag(nil as ServerType?)
-                        if acceptsComics {
+                        if allowsComics {
                             Text(L10n.text("Comics Mode")).tag(Optional(ServerType.comics))
                         }
                         ForEach(BooruEngine.allCases) { engine in
@@ -185,6 +186,7 @@ struct BooruServerEditor: View {
         case .comics:
             if env.verifySite(input: address) {
                 dismiss()
+                env.mode = .manga
             } else {
                 self.error = L10n.text("This address is not supported. Check the website address and try again.")
             }
@@ -255,6 +257,8 @@ struct BooruMoreView: View {
                     } label: { Label(L10n.text("Pools"), systemImage: "rectangle.stack") }
                         .accessibilityIdentifier("booru.poolsLink")
                 }
+                NavigationLink { DownloadsView(mode: .booru) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
+                    .accessibilityIdentifier("booru.downloadsLink")
             } footer: {
                 Text(store.selectedServers.map(\.displayName).joined(separator: " · "))
             }

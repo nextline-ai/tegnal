@@ -3,6 +3,71 @@ import GRDB
 @testable import TEGNAL
 
 final class LibrarySyncTests: XCTestCase {
+    @MainActor func testMissingGalleryStopsAutomaticRetriesUntilManualFill() async throws {
+        for failure in [BackfillFixtureSource.Failure.missingGallery, .removedGallery] {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let path = root.appendingPathComponent("library.sqlite").path
+            let db = try AppDatabase.open(at: path)
+            _ = try db.upsertWork(galleryId: 1234)
+            try db.setThumb(galleryId: 1234, status: "failed")
+            let source = BackfillFixtureSource(failure: failure)
+            let queue = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+            let state = CoverQueueState()
+            await queue.start(state: state)
+            XCTAssertEqual(state.gone, 1)
+            XCTAssertEqual(state.failed, 0)
+            XCTAssertEqual(state.remaining, 0)
+            XCTAssertEqual(try db.getWork(galleryId: 1234)?.thumbStatus, "gone")
+            XCTAssertTrue(try db.worksNeedingFill().isEmpty, "Missing titles and tags must not requeue a removed work")
+
+            let reopened = try AppDatabase.open(at: path)
+            let restarted = CoverQueueActor(database: reopened, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+            await restarted.start(state: CoverQueueState())
+            let requests = await source.requests
+            XCTAssertEqual(requests, [1234], "Absence survives reopening the app")
+
+            // The editor's fill action calls fetchOne directly and can recover a restored work.
+            await source.setFailure(.none)
+            try await restarted.fetchOne(1234)
+            XCTAssertTrue(try XCTUnwrap(reopened.getWork(galleryId: 1234)).hasThumb)
+            XCTAssertEqual(try reopened.countNeedingFill(), 0)
+        }
+    }
+
+    @MainActor func testImage404AndTransientMetadataFailuresRemainRetryable() async throws {
+        for failure in [BackfillFixtureSource.Failure.missingImage, .forbiddenGallery, .serverError, .offline] {
+            let db = try AppDatabase.inMemory()
+            _ = try db.upsertWork(galleryId: 1234)
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let source = BackfillFixtureSource(failure: failure)
+            let queue = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+            let state = CoverQueueState()
+            await queue.start(state: state)
+            XCTAssertEqual(state.gone, 0)
+            XCTAssertEqual(state.failed, 1)
+            XCTAssertEqual(state.remaining, 1)
+            XCTAssertEqual(try db.getWork(galleryId: 1234)?.thumbStatus, "failed")
+            await queue.start(state: state)
+            let requests = await source.requests
+            XCTAssertEqual(requests, [1234, 1234])
+        }
+    }
+
+    @MainActor func testManualFillReportsAndPersistsMissingGallery() async throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 1234)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queue = CoverQueueActor(database: db, thumbsDir: root, source: BackfillFixtureSource(failure: .missingGallery))
+        do { try await queue.fetchOne(1234); XCTFail("Missing metadata must report absence") }
+        catch ContentError.galleryNotFound { }
+        XCTAssertEqual(try db.getWork(galleryId: 1234)?.thumbStatus, "gone")
+        XCTAssertEqual(try db.countNeedingFill(), 0)
+    }
+
     @MainActor func testBackfillRepairsMovedFilesAndDownloadsMissingReadyThumbnails() async throws {
         let db = try AppDatabase.inMemory()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -619,19 +684,29 @@ private actor CloudAccessFixture {
 }
 
 private actor BackfillFixtureSource: ContentProviding {
-    enum Failure { case none, emptyGallery, invalidImage, emptyTitle, emptyTags }
-    let failure: Failure
+    enum Failure { case none, emptyGallery, invalidImage, emptyTitle, emptyTags, missingGallery, removedGallery, missingImage, forbiddenGallery, serverError, offline }
+    private var failure: Failure
     private let fixture = FixtureContentSource()
     private(set) var requests: [Int64] = []
     init(failure: Failure = .none) { self.failure = failure }
+    func setFailure(_ failure: Failure) { self.failure = failure }
     func gallery(_ id: Int64) async throws -> NativeGallery {
         requests.append(id)
+        switch failure {
+        case .missingGallery: throw ContentError.unavailable(404)
+        case .removedGallery: throw ContentError.unavailable(410)
+        case .forbiddenGallery: throw ContentError.unavailable(403)
+        case .serverError: throw ContentError.unavailable(503)
+        case .offline: throw URLError(.notConnectedToInternet)
+        default: break
+        }
         let gallery = try await fixture.gallery(id)
         return NativeGallery(id: id, title: failure == .emptyTitle ? "" : gallery.title, artists: gallery.artists, language: gallery.language,
                              type: gallery.type, tags: failure == .emptyTags ? [] : gallery.tags, pages: failure == .emptyGallery ? [] : gallery.pages)
     }
     func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch { try await fixture.list(query, offset: offset, count: count) }
     func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data {
+        if failure == .missingImage { throw ContentError.unavailable(404) }
         if failure == .invalidImage { return Data("not an image".utf8) }
         return try await fixture.image(page, galleryID: galleryID, thumbnail: thumbnail)
     }

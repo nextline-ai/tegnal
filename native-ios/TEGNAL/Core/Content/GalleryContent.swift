@@ -1,14 +1,14 @@
 import Foundation
 
 enum ContentError: LocalizedError {
-    case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery
+    case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery, galleryNotFound
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return L10n.text("Unable to read the response. Please try again shortly.")
         case .unsupportedFormat: return L10n.text("The service format has changed or this image is unsupported.")
         case .tooLarge: return L10n.text("The requested data is too large. Narrow your search.")
-        case .unavailable(404): return L10n.text("This work was removed or could not be found.")
+        case .galleryNotFound, .unavailable(404): return L10n.text("This work was removed or could not be found.")
         case .unavailable(403): return L10n.text("The image server declined the request. Try again shortly.")
         case .unavailable: return L10n.text("Unable to connect to the server. Try again shortly.")
         case .invalidQuery: return L10n.text("Check your search. Separate terms with spaces and join words within a tag with underscores.")
@@ -24,7 +24,7 @@ enum ContentError: LocalizedError {
     }
 }
 
-struct GalleryPage: Sendable, Hashable {
+struct GalleryPage: Codable, Sendable, Hashable {
     let hash: String
     let name: String
     let width: Int
@@ -32,7 +32,7 @@ struct GalleryPage: Sendable, Hashable {
     let hasAVIF: Bool
 }
 
-struct NativeGallery: Identifiable, Sendable {
+struct NativeGallery: Codable, Identifiable, Sendable {
     let id: Int64
     let title: String
     let artists: [String]

@@ -249,18 +249,16 @@ struct TEGNALApp: App {
                 if ContentUITestSupport.libraryJumpTest {
                     NavigationStack {
                         WorksGridView(folder: try? env.database.listFolders().first(where: { $0.name == "이동 테스트" }))
-                    }.environment(env)
+                    }
                 } else if isContentUITest && (ProcessInfo.processInfo.arguments.contains("--native-content-tab-test") || BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled) {
-                    AppRootTabView().environment(env)
+                    AppRootTabView()
                 } else if isContentUITest {
                     NativeContentView(source: ContentUITestSupport.source, savesProgress: false)
-                        .environment(env)
                 } else {
                     AppRootTabView()
-                        .environment(env)
                 }
                 #else
-                AppRootTabView().environment(env)
+                AppRootTabView()
                 #endif
 
                 // Cold launch holds 1.2 seconds and slides for 1.8 seconds while active.
@@ -300,6 +298,7 @@ struct TEGNALApp: App {
                 }
             }
             .onChange(of: scenePhase, initial: true) { _, phase in
+                if phase != .inactive { DownloadStore.shared.setBackground(phase == .background) }
                 guard !isContentUITest else { return }
                 env.setCoverQueueActive(phase == .active)
                 if phase == .active { backgroundSync.cancel() }
@@ -332,8 +331,11 @@ struct TEGNALApp: App {
                 set: { _ in }
             )) {
                 OnboardingView()
-                    .environment(env)
             }
+            // Include the presenting root and its sheets, not just the tab content.
+            // Retained UIKit hosts also inject these same instances at their own roots.
+            .environment(env)
+            .environment(env.booru)
         }
     }
 }

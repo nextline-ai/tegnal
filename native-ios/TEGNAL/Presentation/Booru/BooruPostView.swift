@@ -71,6 +71,7 @@ struct BooruViewerAccessNavigation {
 
 struct BooruPostView: View {
     @Environment(\.discoveryContext) private var discovery
+    @State private var showDownloads = false
     @State private var posts: [BooruPost]
     var loadMore: (() async -> BooruViewerBatch)?
     var positionChanged: (BooruPost) -> Void
@@ -356,6 +357,9 @@ struct BooruPostView: View {
     }
     private func menuActions(compact: Bool) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: compact ? 4 : 3), spacing: 18) {
+            menuButton(L10n.text("Download Work"), icon: "arrow.down.circle", id: "download", compact: compact) {
+                DownloadStore.shared.enqueue(post, server: server); showDownloads = true
+            }
             menuButton(L10n.text(store.isFavorite(post) ? "Remove Favorite" : "Add Favorite"), icon: store.isFavorite(post) ? "heart.fill" : "heart", id: "favorite", compact: compact) { toggleFavorite() }
             menuButton(L10n.text("Save to Folder"), icon: "folder", id: "folder", compact: compact) { filing = true }
             menuButton(L10n.text("Translate"), icon: "translate", id: "translate", compact: compact) {
@@ -367,6 +371,7 @@ struct BooruPostView: View {
             ShareLink(item: server.pageURL(postID: post.postID)) { menuLabel(L10n.text("Share"), icon: "square.and.arrow.up", compact: compact) }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "readerSettings", compact: compact) { readerSettings = true }
         }.buttonStyle(.plain).foregroundStyle(.white).tint(.white)
+            .sheet(isPresented: $showDownloads) { DownloadsSheet(mode: .booru) }
     }
     private func menuLabel(_ title: String, icon: String, compact: Bool) -> some View {
         VStack(spacing: 6) {

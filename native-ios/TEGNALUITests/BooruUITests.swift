@@ -1301,6 +1301,35 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Explore"].isSelected)
     }
 
+    func testNestedSetupSheetsKeepSharedStateAcrossModes() {
+        let app = launch()
+        // iPad's floating tabs are exposed as cells on recent system versions.
+        func openTab(_ title: String) {
+            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title)).firstMatch.tap()
+        }
+        openTab("More")
+        for (index, mode) in ["booru", "manga", "booru"].enumerated() {
+            selectMode(app, mode)
+            if mode == "manga" { openTab("Settings") }
+            reveal(app, "settings.onboarding").tap()
+            XCTAssertTrue(element(app, "onboarding.addServer").waitForExistence(timeout: 5))
+            if index > 0 { XCTAssertTrue(app.staticTexts["sample.booru.org"].exists) }
+            element(app, "onboarding.addServer").tap()
+            let address = element(app, "booru.serverURL")
+            XCTAssertTrue(address.waitForExistence(timeout: 5))
+            if index == 0 {
+                address.tap(); address.typeText("https://sample.booru.org")
+                element(app, "booru.serverSave").tap()
+            } else {
+                app.buttons["Cancel"].tap()
+            }
+            XCTAssertTrue(app.staticTexts["sample.booru.org"].waitForExistence(timeout: 5))
+            app.buttons["Done"].tap()
+            XCTAssertTrue(element(app, "app.mode").waitForExistence(timeout: 5))
+            assertMode(app, mode)
+        }
+    }
+
     func testOnboardingAddsManualOldGelbooruAddress() {
         let app = launch(extra: ["--onboarding-test"])
         element(app, "onboarding.addServer").tap()
@@ -1358,6 +1387,29 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Explore"].isSelected)
         XCTAssertFalse(element(app, "booru.setupAddress").exists)
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
+    }
+
+    func testImageModeDetectsComicsAddressAndSwitchesModes() {
+        let app = launch(extra: ["--comics-setup-test"])
+        assertMode(app, "booru")
+        app.tabBars.buttons["More"].tap()
+        element(app, "booru.serversLink").tap()
+        element(app, "booru.addServer").tap()
+        let address = element(app, "booru.serverURL")
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap(); address.typeText("https://hitomi.la/")
+        XCTAssertTrue(app.staticTexts["Comics Mode"].exists)
+        XCTAssertFalse(element(app, "booru.serverOptions").exists)
+        element(app, "booru.serverSave").tap()
+        assertMode(app, "manga")
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "comics.connectionCard").exists)
+        selectMode(app, "booru")
+        app.tabBars.buttons["More"].tap()
+        if !element(app, "booru.addServer").exists { element(app, "booru.serversLink").tap() }
+        XCTAssertTrue(element(app, "booru.addServer").waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["hitomi.la"].exists, "A comics connection must not become an image server")
     }
 
     func testModeSwitchSlidesBetweenLibraries() {

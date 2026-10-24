@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5B42C229A2DC415CA3C025C6 /* DownloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 106694BAC40A42F68CE0B32A /* DownloadTests.swift */; };
+		58480F24B5564C1E95CB0845 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8548DDDD54E54F6BB6EB9624 /* DownloadsView.swift */; };
+		E7820637E7A24D6687FC8272 /* DownloadStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19DAC031FA3846EBAB335DDA /* DownloadStore.swift */; };
 		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
 		097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */; };
 		09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */; };
@@ -186,6 +189,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		106694BAC40A42F68CE0B32A /* DownloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/DownloadTests.swift; sourceTree = SOURCE_ROOT; };
+		8548DDDD54E54F6BB6EB9624 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Downloads/DownloadsView.swift; sourceTree = SOURCE_ROOT; };
+		19DAC031FA3846EBAB335DDA /* DownloadStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Downloads/DownloadStore.swift; sourceTree = SOURCE_ROOT; };
 		009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaBackendTests.swift; sourceTree = "<group>"; };
 		00A3D8D9E5D6B186E154E5DE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		01F914324983194D6DAD8D84 /* en */ = {isa = PBXFileReference; lastKnownFileType = text; name = en; path = en.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
@@ -711,6 +717,9 @@
 		FA938BEFE61F916D347E085D = {
 			isa = PBXGroup;
 			children = (
+				106694BAC40A42F68CE0B32A /* DownloadTests.swift */,
+				8548DDDD54E54F6BB6EB9624 /* DownloadsView.swift */,
+				19DAC031FA3846EBAB335DDA /* DownloadStore.swift */,
 				C8A110000000000000000001 /* Challenge */,
 				9CF9B6EE8855F205F3649D61 /* TEGNAL */,
 				718AFBF9D27969F283886850 /* TEGNALTests */,
@@ -941,6 +950,8 @@
 				C1E5189D7A00147BD0FAB49C /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift in Sources */,
 				ED48F37CF6CE5A5B8A98FBA5 /* TEGNAL/Core/Booru/BooruThumbnailDiskCache.swift in Sources */,
 				188562DB426D15EB017C17B8 /* AppEnvironment.swift in Sources */,
+				58480F24B5564C1E95CB0845 /* DownloadsView.swift in Sources */,
+				E7820637E7A24D6687FC8272 /* DownloadStore.swift in Sources */,
 				6CC5BC0591E6E4E727404246 /* AppModeSwitch.swift in Sources */,
 				BF509BF83941D8832BA4FC59 /* AppRootTabView.swift in Sources */,
 				FEC8BF3EE45161425F4F0A2A /* AppStorage.swift in Sources */,
@@ -1032,6 +1043,7 @@
 				BF66076A13EB562C7E29CE3E /* MediaInputTests.swift in Sources */,
 				FEBE8B7F1A0A6CABAC5BBBF0 /* NativeContentTests.swift in Sources */,
 				667DF944A204641CB1A783F9 /* ReaderUXTests.swift in Sources */,
+				5B42C229A2DC415CA3C025C6 /* DownloadTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1105,7 +1117,7 @@
 				CODE_SIGN_ENTITLEMENTS = TEGNAL/TEGNAL.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1199,7 +1211,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1224,7 +1236,7 @@
 				CODE_SIGN_ENTITLEMENTS = TEGNAL/TEGNAL.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1311,7 +1323,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 6HV24C77H5;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;

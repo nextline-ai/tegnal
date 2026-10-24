@@ -19,6 +19,10 @@ public struct SettingsView: View {
             } header: { Text(L10n.text("Browsing")) } footer: {
                 Text(L10n.text("Use the website if the native viewer stops working. Turn off to return to the native viewer."))
             }
+            Section {
+                NavigationLink { DownloadsView(mode: .manga) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
+                    .accessibilityIdentifier("settings.downloads")
+            }
             ModeAppearanceSettings()
             LanguageSettingsSection()
             MangaDefaultTagsSettings()

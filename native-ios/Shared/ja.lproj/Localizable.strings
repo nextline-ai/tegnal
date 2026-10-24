@@ -1050,3 +1050,41 @@
 "Dismiss filling notice" = "自動取得のお知らせを閉じる";
 "Still missing information: %@ works. Failed downloads can be retried." = "情報が未取得の作品：%@件。失敗したダウンロードは再試行できます。";
 "Missing covers are downloaded separately in the background." = "表紙画像は別途バックグラウンドでダウンロードします。";
+
+"Downloads" = "ダウンロード";
+
+"Download Work" = "作品をダウンロード";
+
+"Storage Used" = "使用容量";
+
+"No Downloads" = "ダウンロードはありません";
+
+"Download a work from the viewer quick menu." = "ビューアのクイックメニューから作品をダウンロードしてください。";
+
+"Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here." = "ダウンロードはこの端末に保存されます。ダウンロード中はアプリを開いたままにしてください。中断したダウンロードはここから再開できます。";
+
+"Resume" = "再開";
+
+"Delete Download" = "ダウンロードを削除";
+
+"Delete Download?" = "ダウンロードを削除しますか？";
+
+"This removes the downloaded files from this device." = "この端末に保存したダウンロードファイルを削除します。";
+
+"Queued" = "待機中";
+
+"Downloading" = "ダウンロード中";
+
+"Paused" = "一時停止中";
+
+"Failed" = "失敗";
+
+"Completed" = "完了";
+
+"Read Offline" = "オフラインで読む";
+
+"Open" = "開く";
+
+"Search Downloads" = "ダウンロードを検索";
+
+"Download Actions" = "ダウンロードの管理";

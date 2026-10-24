@@ -88,6 +88,21 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertTrue(MangaUrls.hasResolvedBackend)
     }
 
+    @MainActor func testMissingGalleryHTTPResponseIsCountedAsGoneByBackfill() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 9999)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queue = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+        let state = CoverQueueState()
+        await queue.start(state: state)
+        XCTAssertEqual(state.gone, 1)
+        XCTAssertEqual(state.failed, 0)
+        XCTAssertEqual(state.remaining, 0)
+        XCTAssertEqual(try db.getWork(galleryId: 9999)?.thumbStatus, "gone")
+    }
+
     func testSiteChangeCannotReuseOrAcceptThePreviousSitesEndpoints() async throws {
         let fixture = fixture()
         await MangaUrls.resolveBackend(transport: fixture.transport())

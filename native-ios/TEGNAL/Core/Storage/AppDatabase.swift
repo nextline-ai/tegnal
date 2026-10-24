@@ -783,9 +783,9 @@ public final class AppDatabase: Sendable {
     }
 
     private static let needsFill = """
-        (thumb_status IN ('missing', 'failed')
+        (thumb_status != 'gone' AND (thumb_status IN ('missing', 'failed')
          OR (thumb_status = 'ready' AND COALESCE(thumb_path, '') = '')
-         OR TRIM(COALESCE(title, '')) = '' OR TRIM(COALESCE(tags, '')) = '')
+         OR TRIM(COALESCE(title, '')) = '' OR TRIM(COALESCE(tags, '')) = ''))
         """
 
     public func worksNeedingFill(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Work] {
