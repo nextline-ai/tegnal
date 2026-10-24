@@ -78,7 +78,7 @@ If you already have AltStore Classic or SideStore installed, use the links below
 | --- | --- |
 | AltStore Classic | [Add source](https://nextline-ai.github.io/tegnal/?lang=en#altstore) |
 | SideStore | [Add source](https://nextline-ai.github.io/tegnal/?lang=en#sidestore) |
-| Download IPA directly | [GitHub Releases](https://github.com/nextline-ai/tegnal/releases/latest) |
+| Manual IPA installation | [Read the update limitations before downloading](https://nextline-ai.github.io/tegnal/manual-install.html?lang=en) |
 
 To add the source manually, paste this address into **Sources → +** in AltStore Classic or SideStore:
 

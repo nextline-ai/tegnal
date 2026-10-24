@@ -78,7 +78,7 @@ AltStore Classic 또는 SideStore가 이미 설치되어 있다면 아래 링크
 | --- | --- |
 | AltStore Classic | [소스 등록](https://nextline-ai.github.io/tegnal/#altstore) |
 | SideStore | [소스 등록](https://nextline-ai.github.io/tegnal/#sidestore) |
-| IPA 직접 다운로드 | [GitHub Releases](https://github.com/nextline-ai/tegnal/releases/latest) |
+| IPA 수동 설치 | [자동 업데이트 제한 확인 후 다운로드](https://nextline-ai.github.io/tegnal/manual-install.html) |
 
 수동 등록은 AltStore Classic·SideStore의 <b>Sources → +</b>에서 아래 주소를 추가하세요.
 

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>TEGNAL · 수동 설치 안내</title>
+<link rel="icon" href="assets/app-icon.png">
+<style>
+:root{color-scheme:light dark;--bg:#f8f7f4;--fg:#1b1b1b;--muted:#65635f;--line:#d8d5ce;--surface:#fffefa;--button:#1b1b1b;--button-text:#faf9f6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);line-height:1.7}main{max-width:720px;margin:auto;padding:28px 24px 56px}nav{display:flex;justify-content:space-between;font-size:13px}a{color:inherit;text-underline-offset:4px}h1{font-size:clamp(28px,6vw,40px);line-height:1.25;letter-spacing:-.04em;margin:36px 0 20px}h2{font-size:20px;margin:0 0 10px}p{word-break:keep-all}.muted{color:var(--muted)}.recommended,.manual{padding:24px;border:1px solid var(--line);border-radius:16px;background:var(--surface);margin:22px 0}.recommended p{margin:0 0 18px}.action,button{display:block;width:100%;padding:13px 18px;border-radius:8px;text-align:center;font:inherit;font-weight:600;text-decoration:none;border:1px solid var(--fg);background:var(--button);color:var(--button-text);cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}.manual button{background:transparent;color:var(--fg)}ul{padding-left:22px;margin:0 0 22px}li+li{margin-top:8px}.confirmation{display:flex;gap:12px;align-items:flex-start;margin:22px 0;font-size:14px;cursor:pointer}.confirmation input{margin-top:5px;flex:none;width:19px;height:19px;accent-color:var(--fg)}a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--fg);outline-offset:5px}#download-status{font-size:13px;margin-bottom:0}#manual-version{font-size:12px;color:var(--muted)}footer{font-size:12px;color:var(--muted);margin-top:24px}@media(prefers-color-scheme:dark){:root{--bg:#171716;--fg:#f0efea;--muted:#aaa79e;--line:#3c3a35;--surface:#20201d;--button:#efeee9;--button-text:#191918}}
+</style>
+</head>
+<body>
+<main>
+<nav><a id="home" href="./" data-i18n="back">← 다운로드 안내</a><a id="language" href="?lang=en">English</a></nav>
+<h1 data-i18n="title">IPA 수동 설치 안내</h1>
+<p class="muted" data-i18n="intro">최신 버전과 자동 업데이트를 원하시면 TestFlight를 이용하세요. IPA는 직접 설치와 업데이트를 관리할 수 있는 분을 위한 선택 항목입니다.</p>
+<section class="recommended">
+<h2 data-i18n="recommended">권장 설치 · TestFlight</h2>
+<p data-i18n="testflightNote">Apple TestFlight에서 자동 업데이트를 켜면 새 빌드도 같은 경로로 받을 수 있습니다.</p>
+<a class="action" href="https://testflight.apple.com/join/gnkqu44W" data-i18n="testflightAction">TestFlight에서 설치</a>
+</section>
+<section class="manual" aria-labelledby="manual-title">
+<h2 id="manual-title" data-i18n="manualTitle">수동 설치 전에 확인해 주세요</h2>
+<ul>
+<li data-i18n="updates">IPA 설치본은 TestFlight 자동 업데이트를 받지 못합니다. 새 버전을 직접 확인하고 설치해야 합니다.</li>
+<li data-i18n="selected">모든 버전이 IPA로 배포되지는 않습니다. 최신 버전은 TestFlight에 먼저 올라옵니다.</li>
+<li data-i18n="signing">AltStore Classic·SideStore 등에서 다시 서명해야 하며, 서명 갱신과 iCloud 기능은 계정·설치 도구에 따라 달라집니다.</li>
+<li data-i18n="backup">기존 설치본에서 옮기기 전에는 앱의 백업 기능으로 보관함을 저장해 주세요.</li>
+</ul>
+<label class="confirmation"><input id="acknowledge" type="checkbox" autocomplete="off"><span data-i18n="acknowledge">자동 업데이트를 받지 못하며, 새 버전 설치와 서명 갱신을 직접 관리해야 함을 이해했습니다.</span></label>
+<p id="manual-version"></p>
+<button id="download" type="button" disabled data-i18n="download">수동 설치용 IPA 다운로드</button>
+<p id="download-status" role="status" aria-live="polite" class="muted"></p>
+<noscript><p>다운로드 확인을 위해 JavaScript를 켜 주세요. / Enable JavaScript to confirm the manual installation requirements.</p></noscript>
+</section>
+<footer data-i18n="footer">IPA 파일은 별도의 수동 설치용 배포 경로에서 제공합니다.</footer>
+</main>
+<script>
+const english=new URLSearchParams(location.search).get('lang')==='en';
+const translations={back:'← Installation guide',title:'Manual IPA installation',intro:'Use TestFlight for the latest version and automatic updates. IPA files are an option for people who can manage installation and updates themselves.',recommended:'Recommended · TestFlight',testflightNote:'Turn on automatic updates in Apple TestFlight to receive new builds through the same channel.',testflightAction:'Install with TestFlight',manualTitle:'Before installing manually',updates:'IPA installations do not receive TestFlight automatic updates. You must check for and install new versions yourself.',selected:'Only selected versions are available as IPA files. The latest versions are released on TestFlight first.',signing:'Re-sign the app with AltStore Classic, SideStore or another installer. Signing renewal and iCloud capabilities depend on your account and installer.',backup:'Before switching from an existing installation, save your library using the app’s backup feature.',acknowledge:'I understand that I will not receive automatic updates and must manage new installations and signing renewal myself.',download:'Download IPA for manual installation',footer:'IPA files are provided through a separate manual installation distribution channel.'};
+if(english){document.documentElement.lang='en';document.title='TEGNAL · Manual installation';document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=translations[el.dataset.i18n]);document.getElementById('home').href='./?lang=en';document.getElementById('language').textContent='한국어';document.getElementById('language').href='manual-install.html';}
+const checkbox=document.getElementById('acknowledge');
+const button=document.getElementById('download');
+const status=document.getElementById('download-status');
+let downloadURL;
+checkbox.checked=false;
+checkbox.addEventListener('change',()=>{button.disabled=!checkbox.checked;});
+window.addEventListener('pageshow',()=>{checkbox.checked=false;button.disabled=true;});
+button.addEventListener('click',async()=>{
+ if(!checkbox.checked)return;
+ button.disabled=true;
+ status.textContent=english?'Preparing the manual download…':'수동 설치 파일을 확인하고 있습니다…';
+ try{
+  if(!downloadURL){
+   const response=await fetch('source.json',{cache:'no-store'});
+   if(!response.ok)throw new Error('Unavailable');
+   const source=await response.json();const version=source.apps.find(app=>app.bundleIdentifier==='work.nextline.tegnal').versions[0];
+   const url=new URL(version.downloadURL);
+   if(url.origin!=='https://github.com'||!url.pathname.startsWith('/nextline-ai/tegnal/releases/download/manual-installation/'))throw new Error('Unexpected download address');
+   downloadURL=url.href;
+   document.getElementById('manual-version').textContent=`${version.version} (${version.buildVersion}) · iOS ${version.minOSVersion}+`;
+  }
+  if(checkbox.checked){status.textContent=english?'Opening the manual IPA download.':'수동 설치용 IPA 다운로드를 엽니다.';location.assign(downloadURL);}
+  else status.textContent='';
+ }catch{status.textContent=english?'The download is unavailable. Try again or use TestFlight above.':'파일을 확인하지 못했습니다. 다시 시도하거나 위의 TestFlight를 이용해 주세요.';}
+ finally{button.disabled=!checkbox.checked;}
+});
+</script>
+</body>
+</html>

@@ -20,10 +20,19 @@
       "versions": [
         {
           "version": "1.0.0",
+          "buildVersion": "13",
+          "date": "2026-10-24",
+          "localizedDescription": "1.0.0 (13): unified website setup with automatic mode detection, clearer onboarding and imports, smoother reverse scrolling, connection recovery and VPN/HTTPS bypass troubleshooting. TestFlight is the recommended update channel.",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-13.ipa",
+          "size": 10905005,
+          "minOSVersion": "17.0"
+        },
+        {
+          "version": "1.0.0",
           "buildVersion": "8",
           "date": "2026-10-24",
           "localizedDescription": "Hotfix 1.0.0 (8): updated splash artwork and app icon; fixes for Mac startup, Apple image translation, missing thumbnails and recent-first automatic metadata filling with a dismissible heat notice for batches of 100 or more.",
-          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/v1.0.0-8/TEGNAL-1.0.0-8.ipa",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-8.ipa",
           "size": 10709561,
           "minOSVersion": "17.0"
         },
@@ -32,7 +41,7 @@
           "buildVersion": "7",
           "date": "2026-10-23",
           "localizedDescription": "Public beta 1.0.0 (7). Unified library backups, appearance-aware splash artwork, saved server discovery and improved comic page prefetching.",
-          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/v1.0.0/TEGNAL-1.0.0-7.ipa",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-7.ipa",
           "size": 10714297,
           "minOSVersion": "17.0"
         }
