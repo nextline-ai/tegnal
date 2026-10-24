@@ -6,11 +6,11 @@ final class NativeContentTests: XCTestCase {
     private var originalSite: String?
     override func setUp() {
         super.setUp()
-        originalSite = UserDefaults.standard.string(forKey: "manga.site_address")
-        UserDefaults.standard.set("comics.example", forKey: "manga.site_address")
+        originalSite = MangaUrls.preferences.string(forKey: "manga.site_address")
+        MangaUrls.preferences.set("comics.example", forKey: "manga.site_address")
     }
     override func tearDown() {
-        UserDefaults.standard.set(originalSite, forKey: "manga.site_address")
+        MangaUrls.preferences.set(originalSite, forKey: "manga.site_address")
         super.tearDown()
     }
 
@@ -211,7 +211,7 @@ final class NativeContentTests: XCTestCase {
     }
 
     func testRequestPolicyRejectsForeignHostsAndCredentials() {
-        let defaults = UserDefaults.standard
+        let defaults = MangaUrls.preferences
         let previous = defaults.object(forKey: "manga.site_address")
         defer {
             if let previous { defaults.set(previous, forKey: "manga.site_address") }

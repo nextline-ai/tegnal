@@ -55,7 +55,7 @@ struct NativeReaderView: View {
         self.search = search; self.exit = exit
         if let cached = source.cachedGallery(galleryID) {
             _gallery = State(initialValue: cached)
-            let saved = savesProgress ? UserDefaults.standard.integer(forKey: "reader_page_\(galleryID)") : 0
+            let saved = savesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
             _currentPage = State(initialValue: ReaderLayout.initialPage(initialPage, saved: saved, total: cached.pages.count,
                                                                      count: ReaderPreferences.defaults.integer(forKey: "reader.pagesPerSpread")))
         }
@@ -91,6 +91,7 @@ struct NativeReaderView: View {
             }.ignoresSafeArea(edges: .top).allowsHitTesting(false)
         }
         .background(ReaderExitGesture(enabled: !exiting && sheet == nil && !showJump && !zoomed && translationRequest == nil,
+                                      requiresTopSafeZone: mode == ReaderMode.continuous.rawValue,
                                       progress: { _ in }, exit: closeReader))
         .overlay(alignment: .topTrailing) {
             if let request = translationRequest, let gallery, gallery.pages.indices.contains(request.index) {
@@ -174,7 +175,7 @@ struct NativeReaderView: View {
             let start = ReaderLayout.start(page, count: pagesPerSpread)
             if start != page { currentPage = start }
             translationRequest = nil; viewports = [:]; zoomed = false; zoomedPages = []
-            if savesProgress { UserDefaults.standard.set(page + 1, forKey: "reader_page_\(galleryID)") }
+            if savesProgress { ReaderPreferences.defaults.set(page + 1, forKey: "reader_page_\(galleryID)") }
         }
         .onAppear { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake && scenePhase == .active }
         .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value && scenePhase == .active }
@@ -298,12 +299,12 @@ struct NativeReaderView: View {
             else { value = try await source.gallery(galleryID) }
             try Task.checkCancellation()
             if gallery == nil {
-                let saved = savesProgress ? UserDefaults.standard.integer(forKey: "reader_page_\(galleryID)") : 0
+                let saved = savesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
                 currentPage = ReaderLayout.initialPage(initialPage, saved: saved, total: value.pages.count, count: pagesPerSpread)
                 gallery = value
             }
             // A cached initial page is already in @State and does not trigger onChange.
-            if savesProgress { UserDefaults.standard.set(currentPage + 1, forKey: "reader_page_\(galleryID)") }
+            if savesProgress { ReaderPreferences.defaults.set(currentPage + 1, forKey: "reader_page_\(galleryID)") }
             if !helpHidden { sheet = .help }
             let database = env.database, context = discovery, recordProgress = savesProgress
             let record = Task.detached(priority: .utility) {

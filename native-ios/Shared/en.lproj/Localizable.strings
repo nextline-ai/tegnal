@@ -1114,3 +1114,28 @@
 "Show Work Artists" = "Show Work Artists";
 
 "Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding." = "Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding.";
+
+
+
+
+"Female Tags" = "Female Tags";
+
+"Male Tags" = "Male Tags";
+
+"Metadata Tags" = "Metadata Tags";
+
+"Other Tags" = "Other Tags";
+
+"Series" = "Series";
+
+"Characters" = "Characters";
+
+"Groups" = "Groups";
+
+"In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls." = "In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls.";
+
+"Reduce Image Data Further" = "Reduce Image Data Further";
+
+"Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority." = "Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority.";
+
+"From the bottom of the image, swipe up for details." = "From the bottom of the image, swipe up for details.";

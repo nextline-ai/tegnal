@@ -105,6 +105,27 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertFalse(ReaderDismissal.shouldExit(delta: CGPoint(x: 0, y: -120), velocity: CGPoint(x: 0, y: -800)))
     }
 
+    func testContinuousScrollDismissalStartsOnlyAtTheTopHandle() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        XCTAssertTrue(ReaderDismissal.isInExitZone(CGPoint(x: 195, y: 60), bounds: bounds, safeTop: 47))
+        XCTAssertFalse(ReaderDismissal.isInExitZone(CGPoint(x: 195, y: 400), bounds: bounds, safeTop: 47))
+        XCTAssertFalse(ReaderDismissal.isInExitZone(CGPoint(x: 195, y: 30), bounds: bounds, safeTop: 47))
+        XCTAssertFalse(ReaderDismissal.isInExitZone(CGPoint(x: 195, y: 112), bounds: bounds, safeTop: 47))
+    }
+
+    func testTagGroupsKeepSearchQueriesAndDifferentiateNamespacesAndAPICategories() {
+        let groups = ArtworkTagGroup.make(tags: ["artist:sample", "parody:series_one", "character:hero", "female:long_hair", "male:glasses", "sky", "hero", "sample"],
+                                          artists: ["sample"], categories: ["hero": 4])
+        XCTAssertEqual(groups.first?.category, .artist)
+        XCTAssertEqual(groups.first?.tags.count, 1)
+        XCTAssertEqual(groups.first { $0.category == .series }?.tags.first?.query, "parody:series_one")
+        XCTAssertEqual(groups.first { $0.category == .series }?.tags.first?.name, "series one")
+        XCTAssertEqual(groups.first { $0.category == .character }?.tags.count, 1)
+        XCTAssertEqual(groups.first { $0.category == .female }?.tags.first?.query, "female:long_hair")
+        XCTAssertEqual(groups.first { $0.category == .male }?.tags.first?.name, "glasses")
+        XCTAssertEqual(groups.first { $0.category == .general }?.tags.first?.name, "sky")
+    }
+
     @MainActor func testLiveTextActionOnlyInvokesTranslateInsideOwnedImage() {
         let image = UIImageView()
         let button = UIButton()
@@ -616,7 +637,7 @@ final class ReaderUXTests: XCTestCase {
     }
 
     func testChunkedTransportEnforcesBodyLimitAndStatus() async throws {
-        let defaults = UserDefaults.standard
+        let defaults = ReaderPreferences.defaults
         let previous = defaults.string(forKey: "manga.site_address")
         defaults.set("comics.example", forKey: "manga.site_address")
         defer {
@@ -764,9 +785,9 @@ extension ReaderUXTests {
                                       "reader.prefetch": 0, "reader.keepAwake": false, "reader.mode": ReaderMode.horizontal.rawValue]
         let previous = settings.keys.map { ($0, preferences.object(forKey: $0)) }
         for (key, value) in settings { preferences.set(value, forKey: key) }
-        UserDefaults.standard.set(20, forKey: progressKey)
+        ReaderPreferences.defaults.set(20, forKey: progressKey)
         defer {
-            UserDefaults.standard.removeObject(forKey: progressKey)
+            ReaderPreferences.defaults.removeObject(forKey: progressKey)
             for (key, value) in previous {
                 if let value { preferences.set(value, forKey: key) } else { preferences.removeObject(forKey: key) }
             }
@@ -784,10 +805,10 @@ extension ReaderUXTests {
         window.isHidden = false
         defer { window.isHidden = true; window.rootViewController = nil }
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-        while UserDefaults.standard.integer(forKey: progressKey) != 5 && ContinuousClock.now < deadline {
+        while ReaderPreferences.defaults.integer(forKey: progressKey) != 5 && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: progressKey), 5, "Opening a cached explicit page must replace the old resume point even without turning")
+        XCTAssertEqual(ReaderPreferences.defaults.integer(forKey: progressKey), 5, "Opening a cached explicit page must replace the old resume point even without turning")
         window.rootViewController = nil
         let reopened = UIHostingController(rootView: NativeReaderView(galleryID: id, initialPage: 1, source: source, images: images,
                                                                     savesProgress: true, search: { _ in }, exit: {}).environment(env))

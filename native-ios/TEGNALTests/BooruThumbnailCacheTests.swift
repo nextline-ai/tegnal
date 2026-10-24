@@ -86,6 +86,24 @@ final class BooruThumbnailCacheTests: XCTestCase {
         await relaunched.clear()
         do { _ = try await relaunched.data(url: url, server: server); XCTFail("Clear removes original bytes too") } catch { }
     }
+    @MainActor func testPrefetchedViewerHasImmediateDisplayPixelsAndRestoresThemFromDiskOffline() async throws {
+        let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let loader = ThumbnailLoader(data: preview()), url = URL(string: "https://example.test/prepared.png")!, server = BooruServer.presets[0]
+        let cache = BooruViewerImageCache(directory: root, loadData: { url, _ in try await loader.load(url) })
+        XCTAssertNil(cache.cachedImage(url: url, server: server))
+        await cache.prefetch(url: url, server: server)
+        XCTAssertNotNil(cache.cachedImage(url: url, server: server), "Prepared bytes must also provide immediate viewer pixels")
+        await loader.goOffline()
+        let relaunched = BooruViewerImageCache(directory: root, loadData: { url, _ in try await loader.load(url) })
+        XCTAssertNil(relaunched.cachedImage(url: url, server: server))
+        await relaunched.prefetch(url: url, server: server)
+        XCTAssertNotNil(relaunched.cachedImage(url: url, server: server), "Disk-cached images must become ready without a network request")
+        let requests = await loader.calls
+        XCTAssertEqual(requests, 1)
+        await relaunched.clear()
+        XCTAssertNil(relaunched.cachedImage(url: url, server: server))
+    }
+
     func testViewerNeverUsesPreviewAsFullMedia() {
         let server = BooruServer.presets[0]
         var post = BooruFixtureSource.post(1, server: server)

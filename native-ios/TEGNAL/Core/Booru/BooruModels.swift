@@ -197,13 +197,17 @@ struct BooruPost: Codable, Identifiable, Hashable, Sendable {
     var favoriteCount: Int? = nil
     var upvoteCount: Int? = nil
     var commentCount: Int? = nil
+    var reducedDataURL: URL? = nil
+    var tagCategories: [String: Int]? = nil
+    var animated: Bool? = nil
     var id: String { "\(serverID):\(postID)" }
     var isVideo: Bool { ["mp4", "webm", "mov", "m4v"].contains(fileExtension.lowercased()) }
-    var isAnimated: Bool { ["gif", "webp", "apng"].contains(fileExtension.lowercased()) || tags.contains("animated") }
+    var isAnimated: Bool { tags.contains("animated") || (animated ?? ["gif", "webp", "apng"].contains(fileExtension.lowercased())) }
     var displayURL: URL? { sampleURL ?? fileURL ?? previewURL }
     // A preview-only post must resolve its details before entering the viewer.
-    func viewerURL(original: Bool) -> URL? {
+    func viewerURL(original: Bool, reducedData: Bool = false) -> URL? {
         if isVideo || isAnimated || original { return fileURL ?? sampleURL }
+        if reducedData { return reducedDataURL ?? sampleURL ?? fileURL }
         return sampleURL ?? fileURL
     }
 }

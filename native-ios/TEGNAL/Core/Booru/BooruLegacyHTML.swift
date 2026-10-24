@@ -64,11 +64,12 @@ enum BooruLegacyHTML {
         let score = BooruHTML.matches("Score:\\s*(?:<[^>]*>\\s*)?(-?\\d+)", html).first.flatMap { Int($0[1]) } ?? 0
         let sidebar = try tags(data)
         let tagNames = rawTags.isEmpty ? sidebar.map(\.name) : rawTags.split(whereSeparator: \.isWhitespace).map(String.init)
-        return BooruPost(serverID: server.id, postID: id, previewURL: preview, fileURL: file,
+        return BooruPost(serverID: server.id, postID: id, previewURL: preview, sampleURL: imageURL, fileURL: file,
                          width: Int(dimensions?[1] ?? image?["width"] ?? "") ?? 0,
                          height: Int(dimensions?[2] ?? image?["height"] ?? "") ?? 0,
                          tags: tagNames, artists: sidebar.filter(\.isArtist).map(\.name),
-                         rating: normalizedRating(rating, server: server), score: score, fileExtension: file.pathExtension, metadataTags: sidebar.filter(\.isMetadata).map(\.name))
+                         rating: normalizedRating(rating, server: server), score: score, fileExtension: file.pathExtension, metadataTags: sidebar.filter(\.isMetadata).map(\.name), reducedDataURL: imageURL,
+                         tagCategories: Dictionary(sidebar.map { ($0.name, $0.category) }, uniquingKeysWith: { first, _ in first }))
     }
 
     private static func normalizedRating(_ raw: String, server: BooruServer) -> String {

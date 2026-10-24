@@ -539,17 +539,12 @@ private struct RemoteGalleryView: View {
                             }
                         }
                         NavigationLink(gallery.language, value: ContentRoute.query("language:" + gallery.language))
-                            .buttonStyle(.bordered)
+                            .font(.body).buttonStyle(.bordered).accessibilityIdentifier("content.detail.language")
                         if !gallery.tags.isEmpty {
                             Text(L10n.text("Tags")).font(.headline)
-                            FlowLayout(spacing: 8) {
-                                ForEach(Array(Set(gallery.tags)).sorted(), id: \.self) { tag in
-                                    NavigationLink(value: ContentRoute.query(tag.replacingOccurrences(of: " ", with: "_"))) {
-                                        Text(tag).font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
-                                            .background(.quaternary, in: Capsule())
-                                    }
-                                }
-                            }
+                            ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags), destination: { tag in
+                                .query(tag.query.replacingOccurrences(of: " ", with: "_"))
+                            })
                         }
                     }.padding(20)
                 }

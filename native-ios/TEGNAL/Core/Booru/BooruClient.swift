@@ -37,7 +37,7 @@ actor BooruClient: BooruProviding {
     static let shared = BooruClient()
     static let pageSize = 40
     // Request only the fields consumed by BooruDecoder, including blocking and media metadata.
-    static let postFields = "id,file_url,large_file_url,preview_file_url,image_width,image_height,tag_string,tag_string_artist,tag_string_meta,rating,score,file_ext,pool_ids,fav_count,up_score,comment_count,is_banned"
+    static let postFields = "id,file_url,large_file_url,preview_file_url,media_asset[variants],tag_string_copyright,tag_string_character,image_width,image_height,tag_string,tag_string_artist,tag_string_meta,rating,score,file_ext,pool_ids,fav_count,up_score,comment_count,is_banned"
     private struct PostPage { let data: Data; let date: Date }
     private var postPages: [String: PostPage] = [:]
     private var pendingPostPages: [String: Task<Data, Error>] = [:]
@@ -524,9 +524,21 @@ enum BooruDecoder {
         guard id > 0 else { throw BooruError.invalidResponse }
         let file = safeURL(row["file_url"], base: server.baseURL)
         let preview = safeURL(row["preview_file_url"] ?? row["preview_url"], base: server.baseURL)
-        let sample = safeURL(row["large_file_url"] ?? row["sample_url"] ?? row["jpeg_url"], base: server.baseURL)
         let tags = (row["tag_string"] as? String ?? row["tags"] as? String ?? "").split(whereSeparator: \.isWhitespace).map(String.init)
         let artists = (row["tag_string_artist"] as? String ?? "").split(whereSeparator: \.isWhitespace).map(String.init)
+        var categories: [String: Int] = [:]
+        for (field, category) in [("tag_string_artist", 1), ("tag_string_copyright", 3), ("tag_string_character", 4), ("tag_string_meta", 5)] {
+            for tag in (row[field] as? String ?? "").split(whereSeparator: \.isWhitespace) { categories[String(tag)] = category }
+        }
+        let variants = (row["media_asset"] as? [String: Any])?["variants"] as? [[String: Any]] ?? []
+        // Full-size JPEG or a viewing-size sample, never a grid thumbnail.
+        let viewingVariant = variants.first { $0["type"] as? String == "full" }
+            ?? variants.first { $0["type"] as? String == "sample" }
+        let sample = safeURL(row["jpeg_url"] ?? viewingVariant?["url"] ?? row["sample_url"] ?? row["large_file_url"], base: server.baseURL)
+        let small = variants.first { $0["type"] as? String == "720x720" }
+            ?? variants.first { $0["type"] as? String == "sample" }
+        let reduced = small.flatMap { safeURL($0["url"], base: server.baseURL) }
+
         var rating = row["rating"] as? String ?? ""
         if !server.usesModernRatings && rating == "s" { rating = "g" } // Legacy s means safe, not sensitive.
         return .init(serverID: server.id, postID: Int64(id), previewURL: preview, sampleURL: sample, fileURL: file,
@@ -535,7 +547,9 @@ enum BooruDecoder {
                      fileExtension: row["file_ext"] as? String ?? file?.pathExtension ?? "",
                      poolIDs: (row["pool_ids"] as? [Any] ?? []).map { Int64(integer($0)) }.filter { $0 > 0 },
                      metadataTags: (row["tag_string_meta"] as? String).map { $0.split(whereSeparator: \.isWhitespace).map(String.init) },
-                     favoriteCount: row["fav_count"].map(integer), upvoteCount: row["up_score"].map(integer), commentCount: row["comment_count"].map(integer))
+                     favoriteCount: row["fav_count"].map(integer), upvoteCount: row["up_score"].map(integer), commentCount: row["comment_count"].map(integer), reducedDataURL: reduced,
+                     tagCategories: categories.isEmpty ? nil : categories,
+                     animated: variants.contains { $0["type"] as? String == "full" } ? false : nil)
     }
     static func note(_ row: [String: Any]) -> BooruNote? {
         if let active = row["is_active"], ["false", "0"].contains(String(describing: active).lowercased()) { return nil }

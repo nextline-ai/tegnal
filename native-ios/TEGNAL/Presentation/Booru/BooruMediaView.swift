@@ -7,9 +7,9 @@ import UniformTypeIdentifiers
 /// immutable after initialization, so cells can safely read completed images.
 private final class BooruThumbnailMemoryCache: @unchecked Sendable {
     private let images = NSCache<NSString, UIImage>()
-    init() {
-        images.totalCostLimit = 128 * 1024 * 1024
-        images.countLimit = 256
+    init(capacity: Int = 128 * 1024 * 1024, countLimit: Int = 256) {
+        images.totalCostLimit = capacity
+        images.countLimit = countLimit
     }
     func object(forKey key: NSString) -> UIImage? { images.object(forKey: key) }
     func setObject(_ image: UIImage, forKey key: NSString, cost: Int) { images.setObject(image, forKey: key, cost: cost) }
@@ -225,7 +225,7 @@ struct BooruThumbnail: View {
 /// A minimal local media document: no website HTML, ads or third-party scripts.
 /// WebKit decodes GIF/WebP lazily and provides pinch zoom and hardware video playback.
 enum BooruMediaGesture {
-    case tap(CGFloat), hold, swipe(Int), dismiss, zoom(Bool), viewport(CGRect), shortcut(ReaderShortcut)
+    case tap(CGFloat), hold, swipe(Int), dismiss, details, zoom(Bool), viewport(CGRect), shortcut(ReaderShortcut)
 }
 
 /// Holds useful pixels across local-document replacement. A cache miss takes at
@@ -312,6 +312,7 @@ struct BooruMediaView: UIViewRepresentable {
     let post: BooruPost
     let server: BooruServer
     let original: Bool
+    var reducedData = false
     var active = true
     var failed = false
     let notes: [BooruNote]
@@ -352,7 +353,7 @@ struct BooruMediaView: UIViewRepresentable {
         coordinator.showNotes = showNotes
         coordinator.onGesture = onGesture
         coordinator.onGoldRequired = onGoldRequired
-        let url = post.viewerURL(original: original)
+        let url = post.viewerURL(original: original, reducedData: reducedData)
         let key = post.id + ":" + (url?.absoluteString ?? "")
         if coordinator.key != key {
             coordinator.resources.cancel()
@@ -375,7 +376,8 @@ struct BooruMediaView: UIViewRepresentable {
             // starts suspended; didFinish applies the current native policy.
             coordinator.document = url == nil ? "" : Self.document(post: post, url: displayURL, identifier: coordinator.documentID)
             coordinator.baseURL = server.baseURL
-            let preview = (post.previewURL ?? post.sampleURL).flatMap { BooruThumbnailCache.shared.cachedImage(url: $0, server: server) }
+            let preview = url.flatMap { BooruViewerImageCache.shared.cachedImage(url: $0, server: server) }
+                ?? (post.previewURL ?? post.sampleURL).flatMap { BooruThumbnailCache.shared.cachedImage(url: $0, server: server) }
             let expected = coordinator.documentID
             coordinator.transition.replace(id: expected, preview: preview, capture: { [weak view] completion in
                 guard let view else { completion(nil); return }
@@ -563,6 +565,7 @@ struct BooruMediaView: UIViewRepresentable {
           const atOriginal=s.zoom<=1.01&&zoom()<=1.01;
           if(atOriginal&&Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.3){clearTimeout(tapTimer);send({gesture:'swipe',delta:dx<0?1:-1});return;}
           if(atOriginal&&dy>Math.abs(dx)*1.25&&(dy>=96||(dy>=24&&dy/elapsed>=0.55))){clearTimeout(tapTimer);send({gesture:'dismiss'});return;}
+          if(atOriginal&&s.y>=innerHeight*0.75&&-dy>Math.abs(dx)*1.25&&(-dy>=96||(-dy>=24&&-dy/elapsed>=0.55))){clearTimeout(tapTimer);send({gesture:'details'});return;}
           if(Math.hypot(dx,dy)>10||s.video)return;
           const now=Date.now();
           if(now-lastTap<300){clearTimeout(tapTimer);lastTap=0;e.preventDefault();send({gesture:'double',x:t.clientX/innerWidth,y:t.clientY/innerHeight});}
@@ -708,6 +711,7 @@ struct BooruMediaView: UIViewRepresentable {
             case "hold": onGesture?(.hold)
             case "swipe": onGesture?(.swipe(value["delta"] as? Int ?? 0))
             case "dismiss": onGesture?(.dismiss)
+            case "details": onGesture?(.details)
             case "double":
                 guard let view = message.webView else { return }
                 let scroll = view.scrollView
@@ -792,6 +796,7 @@ final class BooruImageResourceHandler: NSObject, WKURLSchemeHandler {
 /// swipe/dismissal; completed originals remain in bounded disk storage.
 actor BooruViewerImageCache {
     static let shared = BooruViewerImageCache()
+    private let displayImages = BooruThumbnailMemoryCache(capacity: 48 * 1024 * 1024, countLimit: 6)
     private var disk: BooruThumbnailDiskCache
     private struct Flight {
         let id: UUID
@@ -819,13 +824,25 @@ actor BooruViewerImageCache {
             flight.task.cancel()
             for waiter in flight.waiters.values { waiter.resume(throwing: CancellationError()) }
         }
-        disk.clear()
+        displayImages.removeAllObjects(); disk.clear()
+    }
+    nonisolated func cachedImage(url: URL, server: BooruServer) -> UIImage? {
+        displayImages.object(forKey: (server.canonicalAddress + ":" + server.id + ":" + url.absoluteString) as NSString)
+    }
+    private func prepareDisplay(_ data: Data, key: String) {
+        guard displayImages.object(forKey: key as NSString) == nil,
+              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let pixels = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 2048, kCGImageSourceShouldCacheImmediately: true
+              ] as CFDictionary) else { return }
+        displayImages.setObject(UIImage(cgImage: pixels), forKey: key as NSString, cost: pixels.bytesPerRow * pixels.height)
     }
     func data(url: URL, server: BooruServer) async throws -> Data {
         try Task.checkCancellation()
         let key = server.canonicalAddress + ":" + server.id + ":" + url.absoluteString
         if let data = disk.read(key) {
-            if let image = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary), CGImageSourceGetCount(image) > 0 { return data }
+            if let image = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary), CGImageSourceGetCount(image) > 0 { prepareDisplay(data, key: key); return data }
             disk.remove(key)
         }
         let waiter = UUID()
@@ -898,7 +915,7 @@ actor BooruViewerImageCache {
     private func finish(_ key: String, token: UUID, result: Result<Data, Error>) {
         guard let flight = inFlight[key], flight.id == token else { return }
         inFlight.removeValue(forKey: key)
-        if case .success(let data) = result { disk.write(data, key: key) }
+        if case .success(let data) = result { disk.write(data, key: key); prepareDisplay(data, key: key) }
         for waiter in flight.waiters.values { waiter.resume(with: result) }
     }
 
@@ -909,9 +926,8 @@ actor BooruViewerImageCache {
     #endif
 
     func prefetch(url: URL, server: BooruServer) async {
-        let key = server.canonicalAddress + ":" + server.id + ":" + url.absoluteString
-        // Already saved originals need no read/parse just to warm the disk cache.
-        guard !disk.contains(key), !Task.isCancelled else { return }
+        // Prepare display pixels as well as bytes, including after a relaunch.
+        guard cachedImage(url: url, server: server) == nil, !Task.isCancelled else { return }
         _ = try? await data(url: url, server: server)
     }
 }

@@ -6,7 +6,20 @@ import CryptoKit
 actor DocumentCatalogSource {
     private let transport: ContentTransport
     private var site = ""
+    private struct ResultRow {
+        let id: Int64
+        let views: Int64
+    }
+    private struct FilterLane {
+        let visual: Bool
+        var pending: [ResultRow] = []
+        var nextID: Int64?
+        var nextViews: Int64?
+        var more = true
+    }
+    private static let visualCategories: Set<Int> = [3, 4, 6]
     private struct Feed {
+        var lanes: [FilterLane] = []
         var ids: [Int64] = []
         var nextID: Int64?
         var nextViews: Int64?
@@ -83,6 +96,7 @@ actor DocumentCatalogSource {
 
     func list(_ query: GalleryQuery, offset: Int, count: Int, site: String) async throws -> GalleryBatch {
         try prepare(site)
+        if query.language != "all" { return try await listIncludingVisualCollections(query, offset: offset, count: count, site: site) }
         var feed = feeds[query] ?? Feed(offset: offset)
         if offset < feed.offset || offset > feed.offset + feed.ids.count || Date().timeIntervalSince(feed.created) > 300 {
             feed = Feed(offset: offset)
@@ -120,6 +134,58 @@ actor DocumentCatalogSource {
         return GalleryBatch(ids: Array(feed.ids.dropFirst(start).prefix(count)), hasMore: feed.more || feed.ids.count > start + count)
     }
 
+    private func listIncludingVisualCollections(_ query: GalleryQuery, offset: Int, count: Int, site: String) async throws -> GalleryBatch {
+        var feed = feeds[query] ?? Feed(offset: 0)
+        if offset < feed.offset || Date().timeIntervalSince(feed.created) > 300 { feed = Feed(offset: 0) }
+        if feed.lanes.isEmpty { feed.lanes = [FilterLane(visual: false), FilterLane(visual: true)] }
+        let target = offset + count
+        let selected = try Self.selectedCategories(query)
+        var seen = Set(feed.ids), requests = 0
+        while feed.ids.count < target {
+            for index in feed.lanes.indices where feed.lanes[index].pending.isEmpty && feed.lanes[index].more {
+                let categories = feed.lanes[index].visual ? selected.intersection(Self.visualCategories) : selected.subtracting(Self.visualCategories)
+                if categories.isEmpty { feed.lanes[index].more = false; continue }
+                guard requests < 20 else { break }
+                var remote = query
+                if feed.lanes[index].visual { remote.language = "all" }
+                let oldCursor = feed.lanes[index].nextID
+                let url = try Self.searchURL(remote, site: site, nextID: oldCursor, nextViews: feed.lanes[index].nextViews, restrictCategories: categories)
+                let (data, _) = try await transport.get(url, limit: 2_000_000)
+                try prepare(site)
+                guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]], rows.count <= 100 else { throw ContentError.invalidResponse }
+                for row in rows {
+                    guard let id = (row["id"] as? NSNumber)?.int64Value, id > 0 else { throw ContentError.invalidResponse }
+                    guard (row["blocked"] as? NSNumber)?.intValue ?? 0 == 0 else { continue }
+                    let category = (row["category"] as? NSNumber)?.intValue ?? 0
+                    guard categories.contains(category) else { continue }
+                    feed.lanes[index].pending.append(.init(id: id, views: (row["views"] as? NSNumber)?.int64Value ?? 0))
+                    if let preview = Self.preview(row, site: site) { previews.setObject(Preview(preview), forKey: "\(site)#\(id)" as NSString) }
+                }
+                feed.lanes[index].nextID = (rows.last?["id"] as? NSNumber)?.int64Value
+                feed.lanes[index].nextViews = query.sort == .latest ? nil : (rows.last?["views"] as? NSNumber)?.int64Value
+                feed.lanes[index].more = rows.count == 50 && feed.lanes[index].nextID != oldCursor
+                requests += 1
+            }
+            // A lane must have a head or be exhausted before merging the next rank.
+            if feed.lanes.contains(where: { $0.pending.isEmpty && $0.more }) {
+                if requests >= 20 { break }
+                continue
+            }
+            let available = feed.lanes.indices.filter { !feed.lanes[$0].pending.isEmpty }
+            guard let selected = available.max(by: { a, b in
+                let first = feed.lanes[a].pending[0], second = feed.lanes[b].pending[0]
+                return query.sort == .latest || first.views == second.views ? first.id < second.id : first.views < second.views
+            }) else { break }
+            let next = feed.lanes[selected].pending.removeFirst()
+            if seen.insert(next.id).inserted { feed.ids.append(next.id) }
+        }
+        try prepare(site)
+        feed.more = feed.lanes.contains { $0.more || !$0.pending.isEmpty }
+        if feeds.count >= 16, feeds[query] == nil, let oldest = feeds.min(by: { $0.value.created < $1.value.created })?.key { feeds[oldest] = nil }
+        feeds[query] = feed
+        return .init(ids: Array(feed.ids.dropFirst(offset).prefix(count)), hasMore: feed.more || feed.ids.count > target)
+    }
+
     func suggestions(_ token: String, site: String) async throws -> [TagSuggestion] {
         try prepare(site)
         guard let context = TagCompletionContext(token) else { return [] }
@@ -138,20 +204,13 @@ actor DocumentCatalogSource {
     }
 
     nonisolated static func searchURL(_ query: GalleryQuery, site: String, offset: Int? = nil,
-                                      nextID: Int64? = nil, nextViews: Int64? = nil, now: Date = .now) throws -> URL {
+                                      nextID: Int64? = nil, nextViews: Int64? = nil, now: Date = .now, restrictCategories: Set<Int>? = nil) throws -> URL {
         guard var components = URLComponents(string: site + "ajax/search") else { throw ContentError.invalidQuery }
         var terms = query.text.split(whereSeparator: \.isWhitespace).map { remoteTerm(String($0)) }
         if query.language != "all" { terms.append("language:" + query.language) }
         if let artist = query.artist { terms.append("artist:" + artist.replacingOccurrences(of: " ", with: "_")) }
-        var categories = Set(1...11)
-        let included = terms.filter { $0.hasPrefix("type:") }
-        if !included.isEmpty { categories.removeAll() }
-        for term in terms where term.hasPrefix("type:") || term.hasPrefix("-type:") {
-            let negative = term.hasPrefix("-")
-            let name = String(term.split(separator: ":", maxSplits: 1).last ?? "")
-            guard let category = categoryNames.first(where: { $0.value == name })?.key else { throw ContentError.invalidQuery }
-            if negative { categories.remove(category) } else { categories.insert(category) }
-        }
+        var categories = try selectedCategories(query)
+        if let restrictCategories { categories.formIntersection(restrictCategories) }
         terms.removeAll { $0.hasPrefix("type:") || $0.hasPrefix("-type:") }
         var items = [URLQueryItem(name: "search", value: terms.joined(separator: " ")),
                      URLQueryItem(name: "sort", value: query.sort == .latest ? "id_desc" : "popular")]
@@ -172,6 +231,17 @@ actor DocumentCatalogSource {
         components.queryItems = items
         guard let url = components.url else { throw ContentError.invalidQuery }
         return url
+    }
+
+    private nonisolated static func selectedCategories(_ query: GalleryQuery) throws -> Set<Int> {
+        let terms = query.text.split(whereSeparator: \.isWhitespace).map(String.init)
+        var categories = terms.contains(where: { $0.hasPrefix("type:") }) ? Set<Int>() : Set(1...11)
+        for term in terms where term.hasPrefix("type:") || term.hasPrefix("-type:") {
+            let name = String(term.split(separator: ":", maxSplits: 1).last ?? "")
+            guard let category = categoryNames.first(where: { $0.value == name })?.key else { throw ContentError.invalidQuery }
+            if term.hasPrefix("-") { categories.remove(category) } else { categories.insert(category) }
+        }
+        return categories
     }
 
     nonisolated static func parseGallery(_ data: Data, id: Int64, site: String) throws -> NativeGallery {
@@ -222,7 +292,7 @@ actor DocumentCatalogSource {
 
     private nonisolated static func preview(_ object: [String: Any], site: String) -> NativeGallery? {
         guard let id = (object["id"] as? NSNumber)?.int64Value, id > 0,
-              let base = UserDefaults.standard.string(forKey: "manga.resolved_preview_base"),
+              let base = MangaUrls.preferences.string(forKey: "manga.resolved_preview_base"),
               let ext = object["thumb_extension"] as? String, ["jpg", "jpeg", "png", "webp", "avif"].contains(ext),
               let url = URL(string: "\(base)/\(id / 1_000_000)/\((id % 1_000_000) / 1000)/\(id % 1000).\(ext)"), safeMediaURL(url) else { return nil }
         let hash = SHA256.hash(data: Data((site + "#preview:\(id)").utf8)).map { String(format: "%02x", $0) }.joined()

@@ -1,13 +1,31 @@
 import Foundation
 
+/// Test hosts and previews must never rewrite an installed app’s connection.
+enum ContentPreferences {
+    static var isIsolated: Bool {
+        #if DEBUG
+        let info = ProcessInfo.processInfo
+        return info.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil
+            || info.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+            || info.arguments.contains("--native-content-ui-test") || info.arguments.contains("--booru-ui-test")
+            || info.arguments.contains("--booru-live-test")
+        #else
+        return false
+        #endif
+    }
+    private static let isolated = UserDefaults(suiteName: "work.nextline.tegnal.content-tests")!
+    static var defaults: UserDefaults { isIsolated ? isolated : .standard }
+}
+
 public enum MangaUrls {
+    static var preferences: UserDefaults { ContentPreferences.defaults }
     enum Backend: String { case indexed, document }
     static var backend: Backend {
-        guard UserDefaults.standard.string(forKey: "manga.resolved_backend_site") == home else { return .indexed }
-        return Backend(rawValue: UserDefaults.standard.string(forKey: "manga.resolved_protocol") ?? "") ?? .indexed
+        guard preferences.string(forKey: "manga.resolved_backend_site") == home else { return .indexed }
+        return Backend(rawValue: preferences.string(forKey: "manga.resolved_protocol") ?? "") ?? .indexed
     }
     public static var configuredHome: String {
-        let saved = UserDefaults.standard.string(forKey: "manga.site_address")
+        let saved = preferences.string(forKey: "manga.site_address")
         if let saved, !saved.isEmpty {
             let clean = saved.trimmingCharacters(in: .whitespacesAndNewlines)
             if clean.contains("://") {
@@ -51,7 +69,7 @@ public enum MangaUrls {
     }
 
     public static var dataHost: String {
-        if hasResolvedBackend, let resolved = UserDefaults.standard.string(forKey: "manga.resolved_data_host"), !resolved.isEmpty {
+        if hasResolvedBackend, let resolved = preferences.string(forKey: "manga.resolved_data_host"), !resolved.isEmpty {
             return resolved
         }
         guard !configuredHost.isEmpty else { return "" }
@@ -63,7 +81,7 @@ public enum MangaUrls {
     }
 
     public static var cdnHost: String {
-        if hasResolvedBackend, let resolved = UserDefaults.standard.string(forKey: "manga.resolved_cdn_host"), !resolved.isEmpty {
+        if hasResolvedBackend, let resolved = preferences.string(forKey: "manga.resolved_cdn_host"), !resolved.isEmpty {
             return resolved
         }
         return configuredHost
@@ -72,7 +90,7 @@ public enum MangaUrls {
     /// A discovered backend belongs to the exact address the user connected.
     /// Persist it across launches; only a connection failure or site change refreshes it.
     static var hasResolvedBackend: Bool {
-        let defaults = UserDefaults.standard
+        let defaults = preferences
         return !home.isEmpty && defaults.string(forKey: "manga.resolved_backend_site") == home
             && !(defaults.string(forKey: "manga.resolved_data_host") ?? "").isEmpty
             && !(defaults.string(forKey: "manga.resolved_cdn_host") ?? "").isEmpty
@@ -89,7 +107,7 @@ public enum MangaUrls {
     static func extractBackend(from text: String, site: String) -> Bool {
         guard !site.isEmpty, home == site else { return false }
         guard let (dataHost, cdn) = indexedBackendHosts(in: text), home == site else { return false }
-        let defaults = UserDefaults.standard
+        let defaults = preferences
         if defaults.string(forKey: "manga.resolved_backend_site") != site {
             defaults.removeObject(forKey: "manga.resolved_media_hosts")
             defaults.removeObject(forKey: "manga.resolved_preview_base")
@@ -132,7 +150,7 @@ public enum MangaUrls {
     static func extractDocumentBackend(from text: String, site: String) -> Bool {
         guard home == site, let host = URL(string: site)?.host,
               isDocumentPage(text) else { return false }
-        let defaults = UserDefaults.standard
+        let defaults = preferences
         if defaults.string(forKey: "manga.resolved_backend_site") != site { defaults.removeObject(forKey: "manga.resolved_media_hosts") }
         defaults.set(host, forKey: "manga.resolved_data_host")
         defaults.set(host, forKey: "manga.resolved_cdn_host")
@@ -168,13 +186,13 @@ public enum MangaUrls {
 
     static func registerMedia(_ urls: [URL], site: String) {
         guard site == home else { return }
-        var hosts = Set(UserDefaults.standard.stringArray(forKey: "manga.resolved_media_hosts") ?? [])
+        var hosts = Set(preferences.stringArray(forKey: "manga.resolved_media_hosts") ?? [])
         hosts.formUnion(urls.filter { DocumentCatalogSource.safeMediaURL($0) }.compactMap { $0.host?.lowercased() })
-        UserDefaults.standard.set(Array(hosts.prefix(64)), forKey: "manga.resolved_media_hosts")
+        preferences.set(Array(hosts.prefix(64)), forKey: "manga.resolved_media_hosts")
     }
 
     static func allowsMedia(_ host: String) -> Bool {
-        hasResolvedBackend && backend == .document && (UserDefaults.standard.stringArray(forKey: "manga.resolved_media_hosts") ?? []).contains(host)
+        hasResolvedBackend && backend == .document && (preferences.stringArray(forKey: "manga.resolved_media_hosts") ?? []).contains(host)
     }
 
     /// Keep discovery anchored to the user's address, including its own common.js.
@@ -214,7 +232,7 @@ public enum MangaUrls {
 
     public static func resetResolvedBackend() {
         for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base"] {
-            UserDefaults.standard.removeObject(forKey: key)
+            preferences.removeObject(forKey: key)
         }
     }
 

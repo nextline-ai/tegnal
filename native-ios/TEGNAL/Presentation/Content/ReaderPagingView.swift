@@ -426,15 +426,17 @@ struct ReaderContinuousView: View {
 /// Observes a deliberate downward drag without stealing page scrolling or pinch gestures.
 struct ReaderExitGesture: UIViewRepresentable {
     var enabled: Bool
+    var requiresTopSafeZone = false
     let progress: (CGFloat) -> Void
     let exit: () -> Void
     func makeUIView(context: Context) -> ExitGestureView { ExitGestureView() }
-    func updateUIView(_ view: ExitGestureView, context: Context) { view.exit = exit; view.progress = progress; view.pan.isEnabled = enabled }
+    func updateUIView(_ view: ExitGestureView, context: Context) { view.exit = exit; view.progress = progress; view.pan.isEnabled = enabled; view.requiresTopSafeZone = requiresTopSafeZone }
     static func dismantleUIView(_ view: ExitGestureView, coordinator: ()) { view.pan.view?.removeGestureRecognizer(view.pan) }
 }
 final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
     var exit: () -> Void = {}
     var progress: (CGFloat) -> Void = { _ in }
+    var requiresTopSafeZone = false
     lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -453,6 +455,7 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard let window, window.bounds.inset(by: window.safeAreaInsets).contains(touch.location(in: window)) else { return false }
+        if requiresTopSafeZone && !ReaderDismissal.isInExitZone(touch.location(in: window), bounds: window.bounds, safeTop: window.safeAreaInsets.top) { return false }
         var view = touch.view
         while let current = view {
             if current is UIControl { return false }
@@ -476,6 +479,9 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
 }
 
 enum ReaderDismissal {
+    static func isInExitZone(_ point: CGPoint, bounds: CGRect, safeTop: CGFloat) -> Bool {
+        point.y >= bounds.minY + safeTop && point.y <= bounds.minY + safeTop + 64
+    }
     static func shouldExit(delta: CGPoint, velocity: CGPoint) -> Bool {
         delta.y > abs(delta.x) * 1.25 && (delta.y >= 96 || (delta.y >= 24 && velocity.y >= 550))
     }

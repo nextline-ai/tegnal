@@ -17,7 +17,7 @@ final class BooruRevisionTests: XCTestCase {
     }
 
     func testComicsHasNoImplicitHostAndRequiresAnAddress() throws {
-        let defaults = UserDefaults.standard
+        let defaults = MangaUrls.preferences
         let previous = defaults.object(forKey: "manga.site_address")
         defer { defaults.set(previous, forKey: "manga.site_address") }
         defaults.removeObject(forKey: "manga.site_address")
@@ -45,6 +45,20 @@ final class BooruRevisionTests: XCTestCase {
         XCTAssertNil(ContentRoute.initial("https://comics.example/reader/12345.html"))
         XCTAssertNil(ContentRoute.initial("https://my-comics.example.evil.example/reader/12345.html"))
     }
+    @MainActor func testFixtureSiteChangesNeverOverwriteInstalledAppPreferences() throws {
+        let before = UserDefaults.standard.object(forKey: "manga.site_address") as? String
+        let suite = "isolated-site-" + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let previous = MangaUrls.preferences.object(forKey: "manga.site_address")
+        defer { MangaUrls.preferences.set(previous, forKey: "manga.site_address") }
+        XCTAssertTrue(ContentPreferences.isIsolated)
+        let environment = AppEnvironment(database: try .inMemory(), browserPreferences: preferences)
+        XCTAssertTrue(environment.verifySite(input: "fixture.example"))
+        XCTAssertEqual(MangaUrls.configuredHost, "fixture.example")
+        XCTAssertEqual(UserDefaults.standard.object(forKey: "manga.site_address") as? String, before)
+    }
+
     func testDanbooruPublicPoolListParsesNamesCountsAndIgnoresPagination() throws {
         let data = Data("""
         <html><div id="c-pools"><table><tr><th>Name</th><th>Count</th></tr>
@@ -135,9 +149,9 @@ final class BooruRevisionTests: XCTestCase {
 
     @MainActor func testWebsiteDetectionUsesResponseAndPreservesTheExistingConnection() async throws {
         let keys = ["manga.site_address", "manga.resolved_protocol", "manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site"]
-        let previous = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
-        defer { for (key, value) in previous { UserDefaults.standard.set(value, forKey: key) } }
-        UserDefaults.standard.set("existing.example", forKey: "manga.site_address")
+        let previous = keys.map { ($0, MangaUrls.preferences.object(forKey: $0)) }
+        defer { for (key, value) in previous { MangaUrls.preferences.set(value, forKey: key) } }
+        MangaUrls.preferences.set("existing.example", forKey: "manga.site_address")
         XCTAssertTrue(MangaUrls.extractBackend(from: "const domain = 'storage.example';"))
         let before = MangaUrls.dataHost
         let address = URL(string: "https://unlisted.example")!

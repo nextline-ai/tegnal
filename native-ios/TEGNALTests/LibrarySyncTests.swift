@@ -142,8 +142,8 @@ final class LibrarySyncTests: XCTestCase {
         guard CoverQueuePolicy.allowsBackfill else { throw XCTSkip("Backfill is paused by the device power/thermal policy") }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let oldAddress = UserDefaults.standard.object(forKey: "manga.site_address")
-        defer { UserDefaults.standard.set(oldAddress, forKey: "manga.site_address") }
+        let oldAddress = MangaUrls.preferences.object(forKey: "manga.site_address")
+        defer { MangaUrls.preferences.set(oldAddress, forKey: "manga.site_address") }
         let suite = "backfill-mode-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }

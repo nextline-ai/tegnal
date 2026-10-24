@@ -117,6 +117,7 @@ struct BooruPostView: View {
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.booruDefaults) private var tapNavigation = true
     @SwiftUI.AppStorage("reader.autoAdvance", store: ReaderPreferences.booruDefaults) private var autoAdvance = false
     @SwiftUI.AppStorage("reader.autoSeconds", store: ReaderPreferences.booruDefaults) private var autoSeconds = 10.0
+    @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
     @SwiftUI.AppStorage("booru.original", store: ReaderPreferences.booruDefaults) private var loadOriginal = false
     @SwiftUI.AppStorage("booru.showNotes", store: ReaderPreferences.booruDefaults) private var defaultNotes = true
     @State private var showNotes = true
@@ -146,8 +147,8 @@ struct BooruPostView: View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
-                if post.viewerURL(original: original) != nil || resolvesMissingMedia && mediaStatus != "unavailable" {
-                    BooruMediaView(post: post, server: server, original: original, active: mediaActive, failed: mediaStatus == "error", notes: notes, showNotes: showNotes,
+                if post.viewerURL(original: original, reducedData: reducedData) != nil || resolvesMissingMedia && mediaStatus != "unavailable" {
+                    BooruMediaView(post: post, server: server, original: original, reducedData: reducedData, active: mediaActive, failed: mediaStatus == "error", notes: notes, showNotes: showNotes,
                                    onNote: { selectedNote = $0 }, onStatus: { [postID = post.id] status in
                                        if post.id == postID, !accessNavigation.restrictedIDs.contains(postID) { mediaStatus = status }
                                    }, onGesture: gesture, onGoldRequired: { [postID = post.id] in skipGoldRestricted(postID) })
@@ -161,7 +162,7 @@ struct BooruPostView: View {
                             .allowsHitTesting(false)
                     }
                     #endif
-                    if loadingIndicatorID == post.id && waitingForMedia && isActive { ProgressView().tint(.white).allowsHitTesting(false) }
+                    if loadingIndicatorID == post.id && waitingForMedia && isActive { ProgressView().tint(.white).allowsHitTesting(false).accessibilityIdentifier("booru.loading") }
                     if mediaStatus == "error" {
                         ContentUnavailableView {
                             Label(L10n.text("Unable to Load"), systemImage: "photo.badge.exclamationmark")
@@ -177,7 +178,7 @@ struct BooruPostView: View {
                 VStack {
                     if let toast { Text(toast).font(.subheadline.bold()).padding(12).background(.regularMaterial, in: Capsule()).accessibilityIdentifier("booru.toast") }
                     Spacer()
-                    if menuVisible || mediaStatus == "error" || mediaStatus == "unavailable" || post.viewerURL(original: original) == nil && !resolvesMissingMedia { quickMenu }
+                    if menuVisible || mediaStatus == "error" || mediaStatus == "unavailable" || post.viewerURL(original: original, reducedData: reducedData) == nil && !resolvesMissingMedia { quickMenu }
                     else if pageNumber { Text("\(index + 1) / \(posts.count)").font(.caption.monospacedDigit()).padding(6).background(.black.opacity(0.5), in: Capsule()) }
                 }.padding(16)
             }
@@ -219,11 +220,15 @@ struct BooruPostView: View {
             .task(id: "\(post.id):\(waitingForMedia):\(isActive)") {
                 loadingIndicatorID = nil
                 guard isActive, waitingForMedia else { return }
+                if !(loadingMore && wantsNext), let url = post.viewerURL(original: original, reducedData: reducedData),
+                   BooruViewerImageCache.shared.cachedImage(url: url, server: server) != nil { return }
                 do { try await Task.sleep(for: .milliseconds(150)); try Task.checkCancellation() }
                 catch { return }
+                if !(loadingMore && wantsNext), let url = post.viewerURL(original: original, reducedData: reducedData),
+                   BooruViewerImageCache.shared.cachedImage(url: url, server: server) != nil { return }
                 loadingIndicatorID = post.id
             }
-            .task(id: "\(post.id):\(posts.count):\(loadOriginal):\(mediaActive):\(mediaReady)") { await preloadNeighbors() }
+            .task(id: "\(post.id):\(posts.count):\(loadOriginal):\(reducedData):\(mediaActive):\(mediaReady)") { await preloadNeighbors() }
             .task(id: "\(post.id):\(mediaReady):\(isActive)") {
                 guard isActive, mediaReady, index >= posts.count - 5 else { return }
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
@@ -250,9 +255,7 @@ struct BooruPostView: View {
                 pagination.isActive = false; pagination.cancelAdvance(); pagingTask?.cancel()
             }
             .onChange(of: loadOriginal) { _, value in original = value }
-            .onChange(of: original) { previous, value in
-                if post.viewerURL(original: previous) != post.viewerURL(original: value) { mediaStatus = "loading" }
-            }
+            .onChange(of: post.viewerURL(original: original, reducedData: reducedData)) { _, _ in mediaStatus = "loading" }
             .onChange(of: defaultNotes) { _, value in showNotes = value }
             .onChange(of: post.isVideo, initial: true) { _, video in
                 if video && !videoMenuHintSeen { videoMenuHintSeen = true; toast = L10n.text("Tap with two fingers for the video menu") }
@@ -282,24 +285,7 @@ struct BooruPostView: View {
                     }
                 } catch { if !Task.isCancelled { toast = BooruConnectionMessage.describe(error) } }
             }
-            .task(id: post.id + ":\(retry)") {
-                notes = []; notesError = nil
-                if resolvesMissingMedia && post.viewerURL(original: original) == nil {
-                    do {
-                        let resolved = try await source.details(server: server, post: post)
-                        try Task.checkCancellation()
-                        post = resolved; positionChanged(resolved)
-                        if let i = posts.firstIndex(where: { $0.id == resolved.id }) { posts[i] = resolved }
-                        if resolved.viewerURL(original: original) == nil { mediaStatus = "unavailable" }
-                        if let folder = store.folderID(for: post) { try store.saveFavorite(post, folderID: folder) }
-                    } catch {
-                        if !Task.isCancelled {
-                            if error as? BooruPostAccessError == .goldRequired { skipGoldRestricted(post.id) }
-                            else { mediaStatus = "error"; toast = BooruConnectionMessage.describe(error) }
-                        }
-                    }
-                }
-            }
+            .task(id: post.id + ":\(retry)") { await resolveCurrentPost() }
             .task(id: "\(post.id):\(retry):\(mayLoadNotes)") {
                 let key = "\(post.id):\(retry)"
                 guard mayLoadNotes, loadedNotesKey != key else { return }
@@ -403,10 +389,30 @@ struct BooruPostView: View {
         case .hold:
             toggleFavorite()
         case .dismiss: if !zoomed { closeViewer() }
+        case .details: if !zoomed { info = true }
         case .zoom(let value): if zoomed != value { zoomed = value }
         case .viewport(let rect): viewport.rect = rect
         }
     }
+    private func resolveCurrentPost() async {
+        notes = []; notesError = nil
+        if resolvesMissingMedia && post.viewerURL(original: original, reducedData: reducedData) == nil {
+            do {
+                let resolved = try await source.details(server: server, post: post)
+                try Task.checkCancellation()
+                post = resolved; positionChanged(resolved)
+                if let i = posts.firstIndex(where: { $0.id == resolved.id }) { posts[i] = resolved }
+                if resolved.viewerURL(original: original, reducedData: reducedData) == nil { mediaStatus = "unavailable" }
+                if let folder = store.folderID(for: post) { try store.saveFavorite(post, folderID: folder) }
+            } catch {
+                if !Task.isCancelled {
+                    if error as? BooruPostAccessError == .goldRequired { skipGoldRestricted(post.id) }
+                    else { mediaStatus = "error"; toast = BooruConnectionMessage.describe(error) }
+                }
+            }
+        }
+    }
+
     private var details: some View {
         NavigationStack {
             List {
@@ -441,10 +447,14 @@ struct BooruPostView: View {
                         }
                     }
                 }
-                if !post.artists.isEmpty {
-                    Section(L10n.text("Artists")) { ForEach(post.artists, id: \.self) { tag in tagRow(tag, artist: true) } }
+
+                ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:])) { group in
+                    Section {
+                        ForEach(group.tags) { tag in
+                            tagRow(tag.query, artist: group.category == .artist, title: tag.name).tint(group.category.color).foregroundStyle(group.category.color)
+                        }
+                    } header: { ArtworkTagHeading(category: group.category) }
                 }
-                Section(L10n.text("Tags")) { ForEach(post.tags, id: \.self) { tag in tagRow(tag, artist: false) } }
                 if !post.poolIDs.isEmpty {
                     Section(L10n.text("Pools")) {
                         ForEach(post.poolIDs, id: \.self) { id in
@@ -464,6 +474,15 @@ struct BooruPostView: View {
             }.navigationTitle(L10n.text("Details")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { info = false }.keyboardShortcut(.cancelAction) } }
         }.presentationDragIndicator(.visible)
+            .task(id: post.id) {
+                guard server.engine.usesGelbooruPages, post.tagCategories == nil else { return }
+                do {
+                    let resolved = try await source.details(server: server, post: post)
+                    try Task.checkCancellation()
+                    post = resolved
+                    if let index = posts.firstIndex(where: { $0.id == resolved.id }) { posts[index] = resolved }
+                } catch { if !Task.isCancelled { toast = BooruConnectionMessage.describe(error) } }
+            }
     }
     private func hideContent(rule: String) {
         store.perform {
@@ -474,9 +493,9 @@ struct BooruPostView: View {
         }
     }
 
-    private func tagRow(_ tag: String, artist: Bool) -> some View {
+    private func tagRow(_ tag: String, artist: Bool, title: String? = nil) -> some View {
         HStack {
-            NavigationLink { BooruFeedView(server: server, source: source, initialQuery: tag) } label: { Text(tag.replacingOccurrences(of: "_", with: " ")) }
+            NavigationLink { BooruFeedView(server: server, source: source, initialQuery: tag) } label: { Text(title ?? tag.replacingOccurrences(of: "_", with: " ")) }
             Menu {
                 Button(L10n.text("Save Tag"), systemImage: "tag") { saveTag(tag, kind: "tag") }
                 Button(L10n.text("Save Artist"), systemImage: "person") { saveTag(tag, kind: "artist") }
@@ -576,13 +595,13 @@ struct BooruPostView: View {
         guard posts.indices.contains(next) else { return }
         var item = posts[next]
         guard let host = store.servers.first(where: { $0.id == item.serverID }) else { return }
-        if item.viewerURL(original: loadOriginal) == nil, host.engine.usesGelbooruPages,
+        if item.viewerURL(original: loadOriginal, reducedData: reducedData) == nil, host.engine.usesGelbooruPages,
            let resolved = try? await source.details(server: host, post: item) {
             guard !Task.isCancelled else { return }
             item = resolved
             if let i = posts.firstIndex(where: { $0.id == item.id }) { posts[i] = item }
         }
-        if !item.isVideo, let url = item.viewerURL(original: loadOriginal) {
+        if !item.isVideo, let url = item.viewerURL(original: loadOriginal, reducedData: reducedData) {
             await BooruViewerImageCache.shared.prefetch(url: url, server: host)
         }
     }

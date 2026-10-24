@@ -404,8 +404,8 @@ public final class AppEnvironment: @unchecked Sendable {
         didSet {
             MangaUrls.resetResolvedBackend()
             browserPreferences.set(mangaSiteAddress, forKey: "manga.site_address")
-            if browserPreferences != .standard {
-                UserDefaults.standard.set(mangaSiteAddress, forKey: "manga.site_address")
+            if ContentPreferences.isIsolated {
+                MangaUrls.preferences.set(mangaSiteAddress, forKey: "manga.site_address")
             }
         }
     }
@@ -479,6 +479,7 @@ public final class AppEnvironment: @unchecked Sendable {
         guard url.user == nil && url.password == nil else { return false }
         guard host.contains(".") || host == "localhost" else { return false }
         guard !host.hasPrefix(".") && !host.hasSuffix(".") else { return false }
+        if !ContentPreferences.isIsolated && ["example", "test", "invalid"].contains(host.split(separator: ".").last.map(String.init) ?? "") { return false }
         if let scheme = url.scheme?.lowercased(), scheme != "https" && scheme != "http" {
             return false
         }

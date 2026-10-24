@@ -309,6 +309,7 @@ struct BooruMoreView: View {
     @State private var validating: BooruServer?
     @State private var cacheCleared = false
     @State private var confirmClearCache = false
+    @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
     @SwiftUI.AppStorage("booru.fitThumbnails", store: ReaderPreferences.booruDefaults) private var fitThumbnails = false
     @SwiftUI.AppStorage("booru.useEmbeddedBrowser", store: ReaderPreferences.booruDefaults) private var useEmbeddedBrowser = false
     var body: some View {
@@ -334,6 +335,7 @@ struct BooruMoreView: View {
             ModeAppearanceSettings()
             LanguageSettingsSection(booru: true)
             Section {
+                Toggle(L10n.text("Reduce Image Data Further"), isOn: $reducedData).accessibilityIdentifier("booru.reducedData")
                 Toggle(L10n.text("Use Embedded Browser"), isOn: $useEmbeddedBrowser).accessibilityIdentifier("booru.browserToggle")
                 Toggle(L10n.text("Fit Entire Thumbnails"), isOn: $fitThumbnails)
             } header: { Text(L10n.text("Browsing")) } footer: {

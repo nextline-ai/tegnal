@@ -7,11 +7,11 @@ final class TasteTests: XCTestCase {
     private var originalSite: String?
     override func setUp() {
         super.setUp()
-        originalSite = UserDefaults.standard.string(forKey: "manga.site_address")
-        UserDefaults.standard.set("comics.example", forKey: "manga.site_address")
+        originalSite = MangaUrls.preferences.string(forKey: "manga.site_address")
+        MangaUrls.preferences.set("comics.example", forKey: "manga.site_address")
     }
     override func tearDown() {
-        UserDefaults.standard.set(originalSite, forKey: "manga.site_address")
+        MangaUrls.preferences.set(originalSite, forKey: "manga.site_address")
         super.tearDown()
     }
 

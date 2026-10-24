@@ -1114,3 +1114,28 @@
 "Show Work Artists" = "작품 작가 표시";
 
 "Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding." = "썸네일 크기에 맞춰 여백과 글자가 조절됩니다. 여백 없이 표시를 켜면 바깥 여백, 썸네일 간격, 카드 내부 여백을 없앱니다.";
+
+
+
+
+"Female Tags" = "여성 태그";
+
+"Male Tags" = "남성 태그";
+
+"Metadata Tags" = "정보 태그";
+
+"Other Tags" = "기타 태그";
+
+"Series" = "시리즈";
+
+"Characters" = "캐릭터";
+
+"Groups" = "그룹";
+
+"In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls." = "연속 스크롤에서는 상단 손잡이를 아래로 당겨 닫습니다. 페이지를 드래그하면 스크롤만 됩니다.";
+
+"Reduce Image Data Further" = "이미지 데이터 추가 절약";
+
+"Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority." = "기본적으로 감상용 압축 이미지를 사용합니다. 이 옵션을 켜면 데이터를 더 절약합니다. 원본 이미지 설정이 우선 적용됩니다.";
+
+"From the bottom of the image, swipe up for details." = "이미지 하단에서 위로 쓸어올리면 상세정보가 열립니다.";

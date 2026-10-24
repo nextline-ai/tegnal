@@ -130,9 +130,10 @@ struct BooruServerMenu: View {
     var body: some View {
         Menu {
             ForEach(store.servers) { server in
-                Button { store.perform { try store.toggleServer(server) } } label: {
-                    Label(server.displayName, systemImage: store.selectedServerIDs.contains(server.id) ? "checkmark.circle.fill" : "globe")
-                }
+                Toggle(server.displayName, isOn: Binding(get: { store.selectedServerIDs.contains(server.id) }, set: { selected in
+                    guard selected != store.selectedServerIDs.contains(server.id) else { return }
+                    store.perform { try store.toggleServer(server) }
+                }))
             }
         } label: {
             Image(systemName: "server.rack").font(.system(size: 17, weight: .medium))

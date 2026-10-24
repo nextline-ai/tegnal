@@ -1114,3 +1114,28 @@
 "Show Work Artists" = "作品の作家を表示";
 
 "Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding." = "サムネイルの大きさに合わせて余白と文字が調整されます。余白なしで表示を有効にすると、グリッドの外側・サムネイルの間・カード内の余白がなくなります。";
+
+
+
+
+"Female Tags" = "女性タグ";
+
+"Male Tags" = "男性タグ";
+
+"Metadata Tags" = "メタデータタグ";
+
+"Other Tags" = "その他のタグ";
+
+"Series" = "シリーズ";
+
+"Characters" = "キャラクター";
+
+"Groups" = "グループ";
+
+"In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls." = "連続スクロールでは上部のハンドルを下に引くと閉じます。ページのドラッグではスクロールのみ行います。";
+
+"Reduce Image Data Further" = "画像データをさらに節約";
+
+"Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority." = "標準では鑑賞用の圧縮画像を使用します。この設定でデータをさらに節約できます。元の画像の設定が優先されます。";
+
+"From the bottom of the image, swipe up for details." = "画像の下部から上にスワイプすると詳細を表示します。";

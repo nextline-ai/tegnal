@@ -109,6 +109,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "booru.allFavorites").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "booru.noSelection").exists)
         element(app, "booru.allFavorites").tap()
+        for _ in 0..<3 where !element(app, "booru.post.108").exists { app.swipeUp() }
         XCTAssertTrue(element(app, "booru.post.108").waitForExistence(timeout: 5))
         for title in ["Tags", "Smart"] {
             app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title)).firstMatch.tap()
@@ -585,6 +586,21 @@ final class BooruUITests: XCTestCase {
         app.alerts.buttons["Cancel"].tap(); XCTAssertEqual(toggle.value as? String, "1")
         XCTAssertTrue(reveal(app, "developer.email").exists)
         capture(app, "SVG developer identity and contact")
+    }
+
+    func testBottomSwipeOpensImageDetails() {
+        let app = launch()
+        element(app, "booru.post.101").tap()
+        XCTAssertTrue(element(app, "booru.media").waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "label == 'ready'"), evaluatedWith: element(app, "booru.mediaStatus"))
+        waitForExpectations(timeout: 10)
+        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        bottom.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+        XCTAssertTrue(element(app, "booru.postID").waitForExistence(timeout: 5))
+        XCTAssertEqual(element(app, "booru.postID").label, "ID, 101")
+        capture(app, "Bottom swipe opens image details")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(element(app, "booru.media").waitForExistence(timeout: 5))
     }
 
     func testModesFavoritesServersAndNotesAreIsolated() {

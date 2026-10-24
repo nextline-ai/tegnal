@@ -277,6 +277,69 @@ final class NativeContentUITests: XCTestCase {
         capture(app, "Continuous reader with quick menu")
     }
 
+    func testContinuousScrollBackwardsKeepsReaderOpenAndTopHandleCloses() {
+        let app = launchReader()
+        menu(app)
+        element(app, "reader.settings").tap()
+        element(app, "reader.settings.mode").tap()
+        app.buttons["스크롤로 보기"].tap()
+        element(app, "reader.settings.done").tap()
+        element(app, "reader.preview").tap()
+        element(app, "reader.preview.2").tap()
+        element(app, "reader.menu.close").tap()
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+        from.press(forDuration: 0.05, thenDragTo: to)
+        XCTAssertFalse(element(app, "content.read").isHittable)
+        menu(app)
+        capture(app, "Continuous scroll backwards stays in reader")
+        element(app, "reader.menu.close").tap()
+        let handle = element(app, "reader.exitHandle")
+        XCTAssertTrue(handle.waitForExistence(timeout: 5))
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+        XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
+    }
+
+    func testComicInformationUsesReadableTagsWithoutGenderHeadings() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        let tag = element(app, "tags.female.female:sample")
+        for _ in 0..<3 where !tag.isHittable { app.swipeUp() }
+        XCTAssertTrue(tag.isHittable)
+        XCTAssertGreaterThan(tag.frame.height, 30)
+        XCTAssertFalse(app.staticTexts["여성 태그"].exists)
+        XCTAssertFalse(app.staticTexts["남성 태그"].exists)
+        capture(app, "Comic information uses readable tags with color-only gender groups")
+    }
+
+    func testReaderTagSizesMatchLanguageAndKeepCategoryColors() throws {
+        let app = launchReader()
+        menu(app)
+        element(app, "reader.details").tap()
+        let language = element(app, "reader.details.language")
+        let tag = element(app, "tags.female.female:sample")
+        XCTAssertTrue(language.waitForExistence(timeout: 5))
+        XCTAssertTrue(tag.waitForExistence(timeout: 5))
+        // List accessibility bounds include row insets. Compare the rendered
+        // text instead, so a padded language row cannot hide a tiny tag font.
+        let screenshot = try XCTUnwrap(app.screenshot().image.cgImage)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        try VNImageRequestHandler(cgImage: screenshot).perform([request])
+        func textHeight(_ value: String) -> CGFloat? {
+            guard let box = request.results?.first(where: { $0.topCandidates(1).first?.string.lowercased() == value })?.boundingBox else { return nil }
+            return box.height * CGFloat(screenshot.height)
+        }
+        let languageHeight = try XCTUnwrap(textHeight("english"))
+        let tagHeight = try XCTUnwrap(textHeight("sample"))
+        XCTAssertEqual(tagHeight / languageHeight, 1, accuracy: 0.12)
+        capture(app, "Consistent language and categorized tag sizes")
+    }
+
     func testOneTapTranslationOnDevice() throws {
         let app = launchReader()
         menu(app)

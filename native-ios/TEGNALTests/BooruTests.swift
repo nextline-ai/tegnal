@@ -124,6 +124,29 @@ final class BooruTests: XCTestCase {
         XCTAssertNil(try BooruDecoder.post(["id": 111], server: dan).displayURL)
     }
 
+    func testReducedDataMediaPreservesOriginalAndAnimationAndDecodesCategoryMetadata() throws {
+        let post = try BooruDecoder.post(["id": 42, "file_url": "https://cdn.example/original.png", "file_ext": "png",
+            "large_file_url": "https://cdn.example/sample.jpg",
+            "tag_string": "sky author series hero", "tag_string_artist": "author", "tag_string_copyright": "series", "tag_string_character": "hero",
+            "media_asset": ["variants": [["type": "720x720", "url": "https://cdn.example/small.webp"], ["type": "sample", "url": "https://cdn.example/viewing.jpg"]]]], server: dan)
+        XCTAssertEqual(post.viewerURL(original: false, reducedData: true)?.lastPathComponent, "small.webp")
+        XCTAssertEqual(post.viewerURL(original: false)?.lastPathComponent, "viewing.jpg")
+        XCTAssertEqual(post.viewerURL(original: true, reducedData: true)?.lastPathComponent, "original.png")
+        XCTAssertEqual(post.tagCategories, ["author": 1, "series": 3, "hero": 4])
+        var animated = post; animated.fileExtension = "gif"
+        XCTAssertEqual(animated.viewerURL(original: false, reducedData: true), post.fileURL)
+        let staticWebP = try BooruDecoder.post(["id": 43, "file_ext": "webp", "file_url": "https://cdn.example/original.webp",
+            "media_asset": ["variants": [["type": "full", "url": "https://cdn.example/full.jpg"]]]], server: dan)
+        XCTAssertFalse(staticWebP.isAnimated)
+        XCTAssertEqual(staticWebP.viewerURL(original: false)?.lastPathComponent, "full.jpg")
+        XCTAssertEqual(staticWebP.viewerURL(original: true)?.lastPathComponent, "original.webp")
+        var fallback = post; fallback.reducedDataURL = nil
+        XCTAssertEqual(fallback.viewerURL(original: false, reducedData: true), post.sampleURL)
+        fallback.sampleURL = nil
+        XCTAssertEqual(fallback.viewerURL(original: false, reducedData: true), post.fileURL)
+
+    }
+
     func testJSONEnvelopesXMLAndEmptyResponses() throws {
         let json = Data(#"{"@attributes":{"count":1},"post":[{"id":"9"}]}"#.utf8)
         XCTAssertEqual(try BooruDecoder.rows(json, key: "post").count, 1)
@@ -473,7 +496,7 @@ final class BooruTests: XCTestCase {
         let client = mocked { request in
             let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
             let fields = Set((items.first { $0.name == "only" }?.value ?? "").split(separator: ",").map(String.init))
-            XCTAssertEqual(fields, Set(["id", "file_url", "large_file_url", "preview_file_url", "image_width", "image_height", "tag_string", "tag_string_artist", "tag_string_meta", "rating", "score", "file_ext", "pool_ids", "fav_count", "up_score", "comment_count", "is_banned"]))
+            XCTAssertEqual(fields, Set(["id", "file_url", "large_file_url", "preview_file_url", "image_width", "image_height", "tag_string", "tag_string_artist", "tag_string_meta", "rating", "score", "file_ext", "pool_ids", "fav_count", "up_score", "comment_count", "is_banned", "media_asset[variants]", "tag_string_copyright", "tag_string_character"]))
             return (200, #"[{"id":101,"file_url":"https://cdn.example.com/a.jpg","preview_file_url":"https://cdn.example.com/p.jpg","tag_string":"scenery","tag_string_artist":"artist","rating":"g","file_ext":"jpg"}]"#)
         }
         let result = try await client.posts(server: dan, query: "scenery", page: 0)

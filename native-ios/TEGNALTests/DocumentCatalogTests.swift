@@ -9,14 +9,14 @@ final class DocumentCatalogTests: XCTestCase {
     private var saved: [String: Any] = [:]
     override func setUp() {
         super.setUp()
-        for key in keys { saved[key] = UserDefaults.standard.object(forKey: key) }
+        for key in keys { saved[key] = MangaUrls.preferences.object(forKey: key) }
         MangaUrls.resetResolvedBackend()
-        UserDefaults.standard.set("catalog.example", forKey: "manga.site_address")
+        MangaUrls.preferences.set("catalog.example", forKey: "manga.site_address")
     }
     override func tearDown() {
         CatalogFixtureProtocol.install(nil)
         RetryingCatalogProtocol.install(nil)
-        for key in keys { UserDefaults.standard.set(saved[key], forKey: key) }
+        for key in keys { MangaUrls.preferences.set(saved[key], forKey: key) }
         super.tearDown()
     }
     private func fixture() -> CatalogFixture {
@@ -46,7 +46,7 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertEqual(ContentRoute.initial(MangaUrls.artistAllUrl(for: "sample artist")), .query("artist:sample_artist"))
         XCTAssertEqual(fixture.count("/"), 1)
         XCTAssertTrue(ContentTransport.allows(URL(string: "https://preview.example/0/2/0.jpg")!))
-        UserDefaults.standard.set("archive.example", forKey: "manga.site_address")
+        MangaUrls.preferences.set("archive.example", forKey: "manga.site_address")
         XCTAssertFalse(MangaUrls.hasResolvedBackend)
         XCTAssertEqual(MangaUrls.readerUrl(for: 2000, page: 3), "https://archive.example/reader/2000.html#3")
         XCTAssertFalse(ContentTransport.allows(URL(string: "https://preview.example/0/2/0.jpg")!))
@@ -77,11 +77,28 @@ final class DocumentCatalogTests: XCTestCase {
         _ = try await source.list(GalleryQuery(), offset: 0, count: 2)
         let second = try await source.list(GalleryQuery(), offset: 2, count: 2)
         XCTAssertEqual(second.ids, [1998, 1997])
-        XCTAssertEqual(fixture.count("/ajax/search"), 1)
+        XCTAssertEqual(fixture.count("/ajax/search"), 2)
         let next = try await source.list(GalleryQuery(), offset: 48, count: 4)
         XCTAssertEqual(next.ids, [1952, 1951, 1950, 1949])
-        XCTAssertEqual(fixture.count("/ajax/search"), 2)
+        XCTAssertEqual(fixture.count("/ajax/search"), 3)
         XCTAssertTrue(fixture.requests.contains { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.contains(.init(name: "next-id", value: "1951")) == true })
+    }
+
+    func testVisualCollectionsBypassImplicitLanguageButRetainTypesAndRanking() async throws {
+        let fixture = fixture(); fixture.visualCollections = true
+        let source = MangaContentSource(transport: fixture.transport())
+        let latest = try await source.list(GalleryQuery(), offset: 0, count: 5)
+        XCTAssertEqual(latest.ids, [2003, 2002, 2001, 2000, 1999])
+        let popular = try await source.list(GalleryQuery(sort: .week), offset: 0, count: 5)
+        XCTAssertEqual(popular.ids, latest.ids)
+        let onlyManga = try await source.list(GalleryQuery(text: "type:manga"), offset: 0, count: 2)
+        XCTAssertEqual(onlyManga.ids, [2000, 1999])
+        let onlyVisual = try await source.list(GalleryQuery(text: "type:gamecg"), offset: 0, count: 5)
+        XCTAssertEqual(onlyVisual.ids, [2002])
+        let visualRequests = fixture.requests.filter { $0.path == "/ajax/search" }.compactMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }
+            .filter { $0.contains { $0.name == "categories" && $0.value == "3,4,6" } }
+        XCTAssertFalse(visualRequests.isEmpty)
+        XCTAssertTrue(visualRequests.allSatisfy { !$0.contains { $0.name == "search" && ($0.value ?? "").contains("language:korean") } })
     }
 
     func testFiltersAndSuggestionsTranslateNamespacesWithoutChangingTheirLocalForm() async throws {
@@ -133,7 +150,7 @@ final class DocumentCatalogTests: XCTestCase {
         let gallery = try await source.gallery(2000)
         let work = try database.upsertWork(galleryId: gallery.id, title: "Saved title")
         try database.setNote(galleryId: gallery.id, note: "Keep this note")
-        UserDefaults.standard.set(7, forKey: "reader_page_2000")
+        MangaUrls.preferences.set(7, forKey: "reader_page_2000")
         XCTAssertTrue(env.verifySite(input: "archive.example"))
         XCTAssertNil(source.cachedGallery(2000))
         let switched = try await source.gallery(2000)
@@ -141,7 +158,7 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertEqual(switched.title, "Indexed sample")
         XCTAssertEqual(try database.getWork(galleryId: 2000)?.id, work.id)
         XCTAssertEqual(try database.getWork(galleryId: 2000)?.note, "Keep this note")
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: "reader_page_2000"), 7)
+        XCTAssertEqual(MangaUrls.preferences.integer(forKey: "reader_page_2000"), 7)
         XCTAssertEqual(try database.listWorks().count, 1)
         XCTAssertFalse(ContentTransport.allows(URL(string: "https://media.example/page.webp")!))
         let returned = env.verifySite(input: "catalog.example")
@@ -240,7 +257,7 @@ final class DocumentCatalogTests: XCTestCase {
 
     func testChangingTheSiteStopsPendingConnectionRetries() async {
         let fixture = RetryingCatalogFixture(directFailures: [.secureConnectionFailed], browserFailures: [URLError(.networkConnectionLost)])
-        fixture.onBrowserRequest = { UserDefaults.standard.set("other.example", forKey: "manga.site_address") }
+        fixture.onBrowserRequest = { MangaUrls.preferences.set("other.example", forKey: "manga.site_address") }
         do {
             _ = try await fixture.transport().get(URL(string: MangaUrls.home)!, limit: 1024)
             XCTFail("A previous site's request must stop")
@@ -256,7 +273,7 @@ final class DocumentCatalogTests: XCTestCase {
         let detected = try await ServerType.detect(at: url)
         XCTAssertEqual(detected, .comics)
         XCTAssertEqual(MangaUrls.configuredHost, "catalog.example", "Address detection must not change the saved connection")
-        UserDefaults.standard.set(host, forKey: "manga.site_address")
+        MangaUrls.preferences.set(host, forKey: "manga.site_address")
         let source = MangaContentSource()
         let batch = try await source.list(GalleryQuery(), offset: 0, count: 2)
         XCTAssertFalse(batch.ids.isEmpty)
@@ -278,7 +295,7 @@ final class DocumentCatalogTests: XCTestCase {
         if let reference = ProcessInfo.processInfo.environment["TEGNAL_REFERENCE_ADDRESS"], let referenceURL = URL(string: reference), let referenceHost = referenceURL.host {
             let referenceType = try await ServerType.detect(at: referenceURL)
             XCTAssertEqual(referenceType, .comics)
-            UserDefaults.standard.set(referenceHost, forKey: "manga.site_address")
+            MangaUrls.preferences.set(referenceHost, forKey: "manga.site_address")
             MangaUrls.resetResolvedBackend()
             let counterpart = try await source.gallery(id)
             XCTAssertEqual(counterpart.id, gallery.id)
@@ -369,6 +386,7 @@ private final class CatalogFixture: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [URL] = []
     var expireFirstManifest = false
+    var visualCollections = false
     let image = Data(repeating: 0x42, count: 64)
     var requests: [URL] { lock.withLock { recorded } }
     func count(_ path: String) -> Int { requests.filter { $0.path == path }.count }
@@ -408,7 +426,16 @@ private final class CatalogFixture: @unchecked Sendable {
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             let cursor = items.first { $0.name == "next-id" || $0.name == "next-views-id" }?.value.flatMap(Int64.init)
             let start = cursor.map { $0 - 1 } ?? 2000
-            let rows = stride(from: start, through: max(1901, start - 49), by: -1).map(row)
+            let categories = Set((items.first { $0.name == "categories" }?.value ?? "2").split(separator: ",").compactMap { Int($0) })
+            var rows = categories.contains(2) ? stride(from: start, through: max(1901, start - 49), by: -1).map(row) : []
+            if visualCollections {
+                for (id, category) in [(Int64(2003), 3), (2002, 4), (2001, 6)] where categories.contains(category) && (cursor == nil || id < cursor!) {
+                    var visual = row(id); visual["category"] = category
+                    visual["tags"] = [["tag": ["artist", "sample_artist"]]]
+                    rows.append(visual)
+                }
+            }
+            rows.sort { ($0["id"] as! Int64) > ($1["id"] as! Int64) }
             return (200, try JSONSerialization.data(withJSONObject: rows), ["Content-Type": "application/json"])
         case "/ajax/search-tags": return (200, Data(#"["parody:sample_series"]"#.utf8), ["Content-Type": "application/json"])
         default:

@@ -51,7 +51,7 @@ public struct WorkDetailView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L10n.text("Artists"))
                                 .font(.caption.bold())
-                                .foregroundColor(.secondary)
+                                .foregroundColor(ArtworkTagCategory.artist.color)
                             FlowLayout(spacing: 8) {
                                 ForEach(artists.components(separatedBy: ", "), id: \.self) { artist in
                                     let isFav = favoriteArtists.contains(artist)
@@ -64,63 +64,37 @@ public struct WorkDetailView: View {
                                             Text(artist)
                                                 .foregroundColor(.primary)
                                         }
-                                        .font(.subheadline)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                                        .modifier(ArtworkTagPill(color: ArtworkTagCategory.artist.color))
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Metadata badges (Language, Type, Date)
-                    HStack(spacing: 12) {
+                    // Match metadata and tag text sizes, and wrap narrow layouts.
+                    FlowLayout(spacing: 8) {
                         if let lang = work.language, !lang.isEmpty {
                             Label(lang, systemImage: "character.bubble")
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                                .foregroundStyle(ArtworkTagCategory.language.color)
+                                .modifier(ArtworkTagPill(color: ArtworkTagCategory.language.color))
                         }
                         if let type = work.type, !type.isEmpty {
                             Label(type, systemImage: "doc")
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                                .foregroundStyle(ArtworkTagCategory.type.color)
+                                .modifier(ArtworkTagPill(color: ArtworkTagCategory.type.color))
                         }
                         if let published = work.publishedAt, !published.isEmpty {
                             Label(published, systemImage: "calendar")
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                                .foregroundStyle(.secondary)
+                                .modifier(ArtworkTagPill(color: .secondary))
                         }
                     }
 
-                    // Tags Section
                     if let tags = work.tags, !tags.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(L10n.text("Tags (Tap to Copy)"))
-                                .font(.caption.bold())
-                                .foregroundColor(.secondary)
-                            FlowLayout(spacing: 8) {
-                                ForEach(tags.components(separatedBy: ", "), id: \.self) { tag in
-                                    Button {
-                                        UIPasteboard.general.string = tag
-                                        showToast(L10n.text("Copied tag '%@'", String(describing: tag)))
-                                    } label: {
-                                        Text(tag)
-                                            .font(.caption)
-                                            .foregroundColor(.primary)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 5)
-                                            .background(Color.secondary.opacity(0.1), in: Capsule())
-                                    }
-                                }
-                            }
-                        }
+                        ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: tags.components(separatedBy: ", ")), action: { tag in
+                            UIPasteboard.general.string = tag.query
+                            showToast(L10n.text("Copied tag '%@'", tag.query))
+                        })
                     }
 
                     // Folders

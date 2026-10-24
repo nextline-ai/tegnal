@@ -22,6 +22,10 @@ actor MangaContentSource: ContentProviding {
     private var routingTask: Task<CDNRouting, Error>?
     private var suggestionCache: [String: ([TagSuggestion], Date)] = [:]
     private var searchCache: (GalleryQuery, [Int64], Date)?
+    private struct IndexPrefix { var ids: [Int64] = []; var more = true; let created = Date() }
+    private var indexPrefixes: [String: IndexPrefix] = [:]
+    private static let visualTypes = ["artistcg", "gamecg", "imageset"]
+
     private struct GalleryFlight {
         let id: UUID
         let task: Task<Void, Never>
@@ -65,7 +69,7 @@ actor MangaContentSource: ContentProviding {
             }
             galleryFlights.removeAll(); galleryCache.removeAllObjects()
             routingTask?.cancel(); routingTask = nil; routing = nil
-            suggestionCache.removeAll(); searchCache = nil
+            suggestionCache.removeAll(); searchCache = nil; indexPrefixes.removeAll()
         }
         return site
     }
@@ -179,7 +183,20 @@ actor MangaContentSource: ContentProviding {
               offset >= 0, offset < 10_000_000, (1...100).contains(count) else { throw ContentError.invalidQuery }
         let site = try prepareSite()
         if try await resolve(site) == .document { return try await documents.list(query, offset: offset, count: count, site: site) }
-        if !query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (query.artist != nil && query.sort != .latest) {
+        if query.language != "all", query.sort == .latest, query.artist == nil, query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let target = ((offset + count + 128) / 128) * 128
+            var ids = Set(try await indexPrefix("index-\(query.language).nozomi", count: target))
+            var more = indexPrefixes["index-\(query.language).nozomi"]?.more ?? false
+            for type in Self.visualTypes {
+                let path = "type/\(type)-all.nozomi"
+                ids.formUnion(try await indexPrefix(path, count: target, optional: true))
+                more = more || (indexPrefixes[path]?.more ?? false)
+            }
+            guard MangaUrls.home == site else { throw CancellationError() }
+            let sorted = ids.sorted(by: >)
+            return .init(ids: Array(sorted.dropFirst(offset).prefix(count)), hasMore: sorted.count > offset + count || more)
+        }
+        if !query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || query.artist != nil || query.language != "all" && query.sort != .latest {
             let ids: [Int64]
             if let cached = searchCache, cached.0 == query, Date().timeIntervalSince(cached.2) < 300 {
                 ids = cached.1
@@ -187,7 +204,7 @@ actor MangaContentSource: ContentProviding {
                 var ranked = try await search(query)
                 if query.sort != .latest {
                     let matches = Set(ranked)
-                    ranked = try await fullList("popular/\(query.sort.rawValue)-\(query.language).nozomi").filter { matches.contains($0) }
+                    ranked = try await fullList("popular/\(query.sort.rawValue)-all.nozomi").filter { matches.contains($0) }
                 }
                 ids = ranked
                 try Task.checkCancellation()
@@ -263,7 +280,7 @@ actor MangaContentSource: ContentProviding {
 
     private func search(_ query: GalleryQuery) async throws -> [Int64] {
         let tokens = query.text.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-        guard (!tokens.isEmpty || query.artist != nil), tokens.count <= 8, tokens.allSatisfy({ $0.count <= 120 && !$0.contains("\"") }) else {
+        guard (!tokens.isEmpty || query.artist != nil || query.language != "all"), tokens.count <= 8, tokens.allSatisfy({ $0.count <= 120 && !$0.contains("\"") }) else {
             throw ContentError.invalidQuery
         }
         let (versionData, _) = try await transport.getData("galleriesindex/version", limit: 64)
@@ -294,20 +311,57 @@ actor MangaContentSource: ContentProviding {
             else { included = included.map { $0.intersection(matches) } ?? matches }
         }
         if let artist = query.artist {
-            let matches = Set(try await fullList("artist/\(segment(artist))-\(query.language).nozomi"))
+            let matches = Set(try await fullList("artist/\(segment(artist))-all.nozomi"))
             included = included.map { $0.intersection(matches) } ?? matches
-        } else if query.language != "all" || included == nil {
-            let matches = Set(try await fullList("index-\(query.language).nozomi"))
+        }
+        if query.language != "all" || included == nil {
+            var matches = Set(try await fullList("index-\(query.language).nozomi"))
+            if query.language != "all" {
+                for type in Self.visualTypes { matches.formUnion(try await fullList("type/\(type)-all.nozomi")) }
+            }
             included = included.map { $0.intersection(matches) } ?? matches
         }
         return (included ?? []).subtracting(excluded).sorted(by: >)
     }
 
+    private func indexPrefix(_ path: String, count: Int, optional: Bool = false) async throws -> [Int64] {
+        let site = MangaUrls.home
+        var prefix = indexPrefixes[path] ?? IndexPrefix()
+        if Date().timeIntervalSince(prefix.created) > 300 { prefix = IndexPrefix() }
+        guard prefix.more, prefix.ids.count < count else { return prefix.ids }
+        let range = (prefix.ids.count * 4)..<(count * 4)
+        do {
+            let (data, response) = try await transport.getData(path, limit: range.count, range: range)
+            if response.statusCode == 416 { prefix.more = false }
+            else {
+                let total = try Self.validateRange(response, start: range.lowerBound, received: data.count)
+                prefix.ids += try BinaryCursor.ids(data)
+                prefix.more = prefix.ids.count * 4 < total
+            }
+        } catch ContentError.unavailable(404) where optional { prefix.more = false }
+        guard MangaUrls.home == site else { throw CancellationError() }
+        storeIndex(prefix, path: path)
+        return prefix.ids
+    }
+
+    private func storeIndex(_ prefix: IndexPrefix, path: String) {
+        indexPrefixes[path] = prefix
+        while indexPrefixes.count > 16 || indexPrefixes.values.reduce(0, { $0 + $1.ids.count }) > 2_000_000 {
+            guard let key = indexPrefixes.filter({ $0.key != path }).min(by: { $0.value.created < $1.value.created })?.key else { break }
+            indexPrefixes[key] = nil
+        }
+    }
+
     private func fullList(_ path: String) async throws -> [Int64] {
+        let site = MangaUrls.home
+        if let prefix = indexPrefixes[path], !prefix.more, Date().timeIntervalSince(prefix.created) < 300 { return prefix.ids }
         do {
             let (data, response) = try await transport.getData(path, limit: 8_000_000)
+            guard MangaUrls.home == site else { throw CancellationError() }
             guard response.statusCode == 200 else { throw ContentError.invalidResponse }
-            return try BinaryCursor.ids(data)
+            let ids = try BinaryCursor.ids(data)
+            storeIndex(IndexPrefix(ids: ids, more: false), path: path)
+            return ids
         } catch ContentError.unavailable(404) { return [] }
     }
 

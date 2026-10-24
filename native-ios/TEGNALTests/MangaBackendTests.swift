@@ -6,17 +6,17 @@ final class MangaBackendTests: XCTestCase {
     private var saved: [String: Any] = [:]
     override func setUp() {
         super.setUp()
-        for key in keys { saved[key] = UserDefaults.standard.object(forKey: key) }
+        for key in keys { saved[key] = MangaUrls.preferences.object(forKey: key) }
         MangaUrls.resetResolvedBackend()
     }
     override func tearDown() {
         BackendFixtureProtocol.install(nil)
-        for key in keys { UserDefaults.standard.set(saved[key], forKey: key) }
+        for key in keys { MangaUrls.preferences.set(saved[key], forKey: key) }
         super.tearDown()
     }
     private func fixture() -> BackendFixture {
         let fixture = BackendFixture()
-        UserDefaults.standard.set(fixture.host, forKey: "manga.site_address")
+        MangaUrls.preferences.set(fixture.host, forKey: "manga.site_address")
         BackendFixtureProtocol.install(fixture)
         return fixture
     }
@@ -26,7 +26,7 @@ final class MangaBackendTests: XCTestCase {
         async let list = source.list(GalleryQuery(), offset: 0, count: 2)
         async let gallery = source.gallery(1234)
         let (batch, work) = try await (list, gallery)
-        XCTAssertEqual(batch.ids, [1234, 5678])
+        XCTAssertEqual(batch.ids, [5678, 1234])
         XCTAssertEqual(work.id, 1234)
         XCTAssertEqual(fixture.count(path: "/"), 1)
         XCTAssertEqual(fixture.count(path: "/assets/common.js"), 1)
@@ -37,10 +37,31 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertFalse(ContentTransport.allows(URL(string: "https://unrelated.example/gg.js")!))
     }
 
+    func testLanguageExceptionMergesVisualIndexesWithoutDroppingArtistTypeOrPopularOrder() async throws {
+        let fixture = fixture()
+        fixture.indexes = ["/index-korean.nozomi": [2000, 1997], "/type/artistcg-all.nozomi": [2003],
+            "/type/gamecg-all.nozomi": [2002, 1999], "/type/imageset-all.nozomi": [2001],
+            "/artist/sample-all.nozomi": [2002, 1998], "/type/manga-all.nozomi": [2000, 1997],
+            "/popular/week-all.nozomi": [1997, 2001, 2002, 2000, 2003, 1999]]
+        let source = MangaContentSource(transport: fixture.transport())
+        let first = try await source.list(GalleryQuery(), offset: 0, count: 3)
+        XCTAssertEqual(first.ids, [2003, 2002, 2001])
+        let second = try await source.list(GalleryQuery(), offset: 3, count: 3)
+        XCTAssertEqual(second.ids, [2000, 1999, 1997])
+        XCTAssertFalse(second.hasMore)
+        XCTAssertEqual(fixture.count(path: "/type/gamecg-all.nozomi"), 1, "Pagination must reuse the bounded prefix")
+        let artist = try await source.list(GalleryQuery(artist: "sample"), offset: 0, count: 10)
+        XCTAssertEqual(artist.ids, [2002])
+        let manga = try await source.list(GalleryQuery(text: "type:manga"), offset: 0, count: 10)
+        XCTAssertEqual(manga.ids, [2000, 1997])
+        let popular = try await source.list(GalleryQuery(sort: .week), offset: 0, count: 10)
+        XCTAssertEqual(popular.ids, [1997, 2001, 2002, 2000, 2003, 1999])
+    }
+
     func testSavedEndpointsSurviveNewSourcesWithoutRediscovery() async throws {
         let fixture = fixture()
         _ = try await MangaContentSource(transport: fixture.transport()).list(GalleryQuery(), offset: 0, count: 2)
-        XCTAssertEqual(UserDefaults.standard.string(forKey: "manga.resolved_backend_site"), MangaUrls.home)
+        XCTAssertEqual(MangaUrls.preferences.string(forKey: "manga.resolved_backend_site"), MangaUrls.home)
         for _ in 0..<3 {
             let freshSource = MangaContentSource(transport: fixture.transport())
             let gallery = try await freshSource.gallery(1234)
@@ -107,14 +128,14 @@ final class MangaBackendTests: XCTestCase {
         let fixture = fixture()
         await MangaUrls.resolveBackend(transport: fixture.transport())
         let original = MangaUrls.home
-        UserDefaults.standard.set("another-comics.example", forKey: "manga.site_address")
+        MangaUrls.preferences.set("another-comics.example", forKey: "manga.site_address")
         XCTAssertFalse(MangaUrls.hasResolvedBackend)
         XCTAssertEqual(MangaUrls.dataHost, "ltn.another-comics.example")
         XCTAssertEqual(MangaUrls.cdnHost, "another-comics.example")
         XCTAssertFalse(MangaUrls.extractBackend(from: "const domain = 'late-response.example';", site: original))
         XCTAssertEqual(MangaUrls.dataHost, "ltn.another-comics.example")
         MangaUrls.resetResolvedBackend()
-        XCTAssertNil(UserDefaults.standard.object(forKey: "manga.resolved_backend_site"))
+        XCTAssertNil(MangaUrls.preferences.object(forKey: "manga.resolved_backend_site"))
     }
 
     func testFrontendGalleryLinksDoNotMasqueradeAsDataEndpoints() {
@@ -156,6 +177,7 @@ private final class BackendFixture: @unchecked Sendable {
     private let lock = NSLock()
     private var generation = 1
     private var discoveryAvailable = true
+    var indexes: [String: [Int64]] = [:]
     private var requests: [URL] = []
     var domain: String { lock.withLock { domain(generation) } }
     private func domain(_ generation: Int) -> String { "storage-\(generation)." + host }
@@ -181,9 +203,25 @@ private final class BackendFixture: @unchecked Sendable {
             }
             guard ["ltn.", "atn."].contains(where: { url.host == $0 + domain(generation) }) else { throw URLError(.cannotFindHost) }
             if url.path.hasSuffix(".webp") { return (200, Data(repeating: 1, count: 64), ["Content-Type": "image/webp"]) }
+            if let ids = indexes[url.path] {
+                let data = Data(ids.flatMap { id -> [UInt8] in
+                    let value = UInt32(id)
+                    return [UInt8(truncatingIfNeeded: value >> 24), UInt8(truncatingIfNeeded: value >> 16), UInt8(truncatingIfNeeded: value >> 8), UInt8(truncatingIfNeeded: value)]
+                })
+                if let range = request.value(forHTTPHeaderField: "Range") {
+                    let parts = range.replacingOccurrences(of: "bytes=", with: "").split(separator: "-").compactMap { Int($0) }
+                    let start = parts[0], end = min(parts[1], data.count - 1)
+                    if start >= data.count { return (416, Data(), ["Content-Range": "bytes */\(data.count)"]) }
+                    return (206, data.subdata(in: start..<(end + 1)), ["Content-Range": "bytes \(start)-\(end)/\(data.count)"])
+                }
+                return (200, data, [:])
+            }
             switch url.path {
+            case "/galleriesindex/version": return (200, Data("1".utf8), [:])
             case "/index-korean.nozomi":
-                return (206, Data([0, 0, 4, 210, 0, 0, 22, 46]), ["Content-Range": "bytes 0-7/8"])
+                return (206, Data([0, 0, 22, 46, 0, 0, 4, 210]), ["Content-Range": "bytes 0-7/8"])
+            case "/type/artistcg-all.nozomi", "/type/gamecg-all.nozomi", "/type/imageset-all.nozomi":
+                return (416, Data(), ["Content-Range": "bytes */0"])
             case "/galleries/1234.js":
                 let hash = String(repeating: "a", count: 64)
                 return (200, Data("var galleryinfo = {\"title\":\"Fixture\",\"files\":[{\"hash\":\"\(hash)\",\"name\":\"1.jpg\",\"width\":100,\"height\":150}]};".utf8), [:])
