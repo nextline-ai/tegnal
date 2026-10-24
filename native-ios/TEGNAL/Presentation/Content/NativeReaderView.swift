@@ -119,7 +119,7 @@ struct NativeReaderView: View {
         // The presenting gallery/navigation stack remains mounted underneath.
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
-        .sheet(item: $sheet, onDismiss: {
+        .appSheet(item: $sheet, onDismiss: {
             if let pendingSearch { self.pendingSearch = nil; search(pendingSearch) }
         }) { item in
             switch item {
@@ -322,7 +322,7 @@ struct NativeReaderView: View {
 struct ReaderMenuGlass: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content.glassEffect(.regular.tint(.black.opacity(0.3)).interactive(), in: .rect(cornerRadius: 24))
+            content.glassEffect(.regular.tint(.black.opacity(0.3)).platformInteractive(), in: .rect(cornerRadius: 24))
                 .environment(\.colorScheme, .dark)
         } else {
             content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))

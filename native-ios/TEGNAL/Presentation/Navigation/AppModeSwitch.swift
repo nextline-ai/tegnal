@@ -14,6 +14,20 @@ struct AppToolbarActions<Content: View>: View {
 @Observable final class AppModeSwitchMotion {
     var position: CGFloat?
     var target: AppMode?
+    @ObservationIgnored private var lastInteraction: ContinuousClock.Instant?
+    func acceptInteraction(at now: ContinuousClock.Instant = ContinuousClock().now) -> Bool {
+        if let lastInteraction, lastInteraction.duration(to: now) < .milliseconds(220) { return false }
+        lastInteraction = now
+        return true
+    }
+}
+
+private struct DisplayedAppModeKey: EnvironmentKey { static let defaultValue: AppMode? = nil }
+extension EnvironmentValues {
+    var displayedAppMode: AppMode? {
+        get { self[DisplayedAppModeKey.self] }
+        set { self[DisplayedAppModeKey.self] = newValue }
+    }
 }
 
 /// The same compact switch occupies the title area of every root navigation bar.
@@ -21,6 +35,7 @@ struct AppModeSwitch: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayedAppMode) private var displayedAppMode
     /// A tutorial can preview the switch without changing the active library.
     var previewMode: Binding<AppMode>? = nil
     @State private var previewMotion = AppModeSwitchMotion()
@@ -29,7 +44,8 @@ struct AppModeSwitch: View {
     @State private var visible = false
     @State private var hintPhase = 0
     private let hintColors: [Color] = [.cyan, .purple, .pink, .orange, .green]
-    private var animatesHint: Bool { env.modeSwitchHintPending && visible && scenePhase == .active && !reduceMotion }
+    private var isActiveControl: Bool { previewMode != nil || displayedAppMode == nil || displayedAppMode == env.mode }
+    private var animatesHint: Bool { env.modeSwitchHintPending && visible && isActiveControl && scenePhase == .active && !reduceMotion }
     private var activeMode: AppMode { previewMode?.wrappedValue ?? env.mode }
     private var current: AppMode { activeMode }
     private var motion: AppModeSwitchMotion { previewMode == nil ? env.modeSwitchMotion : previewMotion }
@@ -67,6 +83,7 @@ struct AppModeSwitch: View {
         .highPriorityGesture(DragGesture(minimumDistance: 12)
             .updating($dragging) { _, state, _ in state = true }
             .onChanged { value in
+                guard isActiveControl else { return }
                 var transaction = Transaction(); transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     if dragOrigin == nil { dragOrigin = motion.position ?? position(current) }
@@ -83,12 +100,14 @@ struct AppModeSwitch: View {
             DispatchQueue.main.async {
                 // Cancellation has no onEnded callback. Keep the absolute thumb
                 // position until it can settle, rather than resetting a translation.
-                if !dragging && dragOrigin != nil { dragOrigin = nil; settle(activeMode) }
+                if isActiveControl && !dragging && dragOrigin != nil { dragOrigin = nil; settle(activeMode) }
             }
         }
-        .onChange(of: activeMode) { _, mode in
+        .onChange(of: activeMode) { _, _ in
+            guard isActiveControl else { return }
             dragOrigin = nil
-            if motion.target != mode { settle(mode) }
+            // Read the current selection: retained trees can deliver older changes later.
+            if motion.target != activeMode { settle(activeMode) }
         }
         .onAppear {
             visible = true
@@ -112,7 +131,9 @@ struct AppModeSwitch: View {
     }
     private func position(_ mode: AppMode) -> CGFloat { mode == .manga ? 0 : 44 }
     private func change(_ mode: AppMode) {
-        if mode != current { env.acknowledgeModeSwitch() }
+        guard isActiveControl else { return }
+        guard mode != current, motion.acceptInteraction() else { settle(current); return }
+        env.acknowledgeModeSwitch()
         // The shared selection is authoritative immediately. A disappearing
         // toolbar must never commit an older selection from an animation callback.
         settle(mode)
@@ -176,6 +197,6 @@ private struct ImportReminderBanner: View {
                 .padding(.horizontal, 16).padding(.bottom, 8)
             }
         }
-        .sheet(isPresented: $showingImport) { OnboardingView(importsOnly: true).environment(env).environment(env.booru) }
+        .appSheet(isPresented: $showingImport) { OnboardingView(importsOnly: true).environment(env).environment(env.booru) }
     }
 }

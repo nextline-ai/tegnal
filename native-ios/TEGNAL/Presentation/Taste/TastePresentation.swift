@@ -124,6 +124,8 @@ struct TasteArtwork: View {
 }
 
 struct TasteRecommendationCard: View {
+    @Environment(\.artworkCellStyle) private var style
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
     let item: TasteRecommendation
     let open: () -> Void
     let toggle: () -> Void
@@ -131,24 +133,24 @@ struct TasteRecommendationCard: View {
     @Environment(AppEnvironment.self) private var env
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: style.inset(6)) {
                 if let post = item.post, let server = env.booru.servers.first(where: { $0.id == post.serverID }) {
                     BooruPostThumbnailCard(post: post, server: server, showsFavoriteIndicator: true, isFavorite: env.booru.favoriteIDs.contains(post.id))
                 } else if item.post != nil {
                     Color.secondary.opacity(0.12).aspectRatio(0.78, contentMode: .fit)
-                        .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }.clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }.clipShape(RoundedRectangle(cornerRadius: style.radius(16)))
                 } else if let gallery = item.gallery {
                     GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language, recommendationTag: reasonAllowed ? TastePresentation.name(item.reason.name) : nil) {
                         TasteArtwork(gallery: gallery)
                     }.overlay(alignment: .topLeading) {
                         if isBookmarked {
-                            Image(systemName: "bookmark.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(.yellow)
-                                .padding(8).background(.black.opacity(0.72), in: Circle()).padding(7).accessibilityHidden(true)
+                            Image(systemName: "bookmark.fill").font(.system(size: style.fontSize(14), weight: .semibold)).foregroundStyle(.yellow)
+                                .padding(style.inset(8)).background(.black.opacity(0.72), in: Circle()).padding(style.inset(7)).accessibilityHidden(true)
                         }
                     }
                 }
                 if item.gallery == nil && reasonAllowed { Label(TastePresentation.name(item.reason.name), systemImage: "number")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2).padding(.horizontal, 2) }
+                    .font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(style.width < 110 ? 1 : 2).padding(.horizontal, style.inset(2)) }
             }.contentShape(Rectangle())
         }.buttonStyle(.plain).hoverEffect(.highlight)
             .accessibilityIdentifier("taste.work.\(item.item.id)")
@@ -213,11 +215,11 @@ private struct TasteWorkPresentation: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: item?.id) { _, _ in viewerPosition = nil }
-            .sheet(item: selection(comics: true)) { item in
+            .appSheet(item: selection(comics: true)) { item in
                 TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item))
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
-            .fullScreenCover(item: selection(comics: false)) { item in
+            .appFullScreenCover(item: selection(comics: false)) { item in
                 TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item))
             }
     }

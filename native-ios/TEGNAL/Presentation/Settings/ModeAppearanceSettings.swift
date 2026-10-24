@@ -11,6 +11,13 @@ struct ModeAppearanceSettings: View {
             }.pickerStyle(.segmented).labelsHidden()
             columnPicker("Folder Columns", selection: $env.folderColumns, identifier: "settings.folderColumns")
             columnPicker("Grid Columns", selection: $env.gridColumns, identifier: "settings.gridColumns")
+            Toggle(L10n.text("Show Without Spacing"), isOn: $env.removesGridPadding).accessibilityIdentifier("settings.noGridPadding")
+            if env.mode == .manga {
+                Toggle(L10n.text("Show Work Titles"), isOn: $env.showsMangaTitles).accessibilityIdentifier("settings.showMangaTitles")
+                Toggle(L10n.text("Show Work Artists"), isOn: $env.showsMangaArtists).accessibilityIdentifier("settings.showMangaArtists")
+            }
+            Text(L10n.text("Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding."))
+                .font(.footnote).foregroundStyle(.secondary)
             Text(L10n.text("Automatic adjusts to the window width. Folder and artwork layouts are saved separately on this device."))
                 .font(.footnote).foregroundStyle(.secondary)
         }

@@ -10,8 +10,8 @@ public struct AppRootTabView: View {
 
     public var body: some View {
         RetainedModeContainer(mode: env.mode,
-            manga: AnyView(mangaTabs.environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()),
-            booru: AnyView(BooruRootView(selectedTab: $selectedTab).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()))
+            manga: AnyView(mangaTabs.environment(\.displayedAppMode, .manga).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()),
+            booru: AnyView(BooruRootView(selectedTab: $selectedTab).environment(\.displayedAppMode, .booru).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
         .clearTopScrollEdge()
@@ -156,7 +156,9 @@ private final class RetainedModeController: UIViewController {
             }
         }
         selected = mode
-        if hosts[mode] == nil {
+        if let host = hosts[mode] {
+            host.rootView = mode == .manga ? manga : booru
+        } else {
             let host = UIHostingController(rootView: mode == .manga ? manga : booru)
             addChild(host)
             host.view.translatesAutoresizingMaskIntoConstraints = false
@@ -223,7 +225,7 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
             }
             tabContent
         }
-        .sheet(isPresented: $showingRecap, onDismiss: { env.taste.dismissRecap(tasteMode) }) {
+        .appSheet(isPresented: $showingRecap, onDismiss: { env.taste.dismissRecap(tasteMode) }) {
             NavigationStack {
                 TasteReportsView(mode: tasteMode, period: .month)
                     .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L10n.text("Done")) { showingRecap = false } } }

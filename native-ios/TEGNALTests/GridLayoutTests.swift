@@ -4,6 +4,75 @@ import GRDB
 @testable import TEGNAL
 
 final class GridLayoutTests: XCTestCase {
+    @MainActor func testModeSwitchCoalescesOverlappingUserInteractions() {
+        let motion = AppModeSwitchMotion()
+        let now = ContinuousClock().now
+        XCTAssertTrue(motion.acceptInteraction(at: now))
+        XCTAssertFalse(motion.acceptInteraction(at: now.advanced(by: .milliseconds(60))))
+        XCTAssertFalse(motion.acceptInteraction(at: now.advanced(by: .milliseconds(180))))
+        XCTAssertTrue(motion.acceptInteraction(at: now.advanced(by: .milliseconds(230))))
+        XCTAssertFalse(motion.acceptInteraction(at: now.advanced(by: .milliseconds(280))))
+    }
+
+    @MainActor func testDensityPreferencesPersistIndependentlyAndDefaultToVisibleMetadata() throws {
+        let suite = "density-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = try AppDatabase.inMemory(), store = try BooruStore()
+        let env = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
+        XCTAssertTrue(env.showsMangaTitles); XCTAssertTrue(env.showsMangaArtists)
+        env.mode = .manga; XCTAssertFalse(env.removesGridPadding)
+        env.removesGridPadding = true; env.showsMangaTitles = false; env.showsMangaArtists = false
+        env.mode = .booru; XCTAssertFalse(env.removesGridPadding)
+        env.gridColumns = 5
+        let restored = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
+        XCTAssertFalse(restored.removesGridPadding(for: .booru)); XCTAssertTrue(restored.removesGridPadding(for: .manga))
+        XCTAssertFalse(restored.showsMangaTitles); XCTAssertFalse(restored.showsMangaArtists)
+        XCTAssertEqual(restored.gridColumns(for: .booru), 5)
+    }
+
+    @MainActor func testRealGridShrinksMarginsAndBecomesEdgeToEdgeInBothModes() async throws {
+        let env = AppEnvironment.preview()
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        var baselineMargin: CGFloat = 0
+        for mode in [AppMode.manga, .booru] {
+            for (columns, dense) in [(2, false), (5, false), (5, true)] {
+                env.mode = mode; env.gridColumns = columns; env.removesGridPadding = dense
+                var frames: [Int: CGRect] = [:]
+                let host = UIHostingController(rootView: DensityGridProbe(mode: mode) { frames[$0] = $1 }.environment(env).frame(width: 390, height: 900))
+                let window = UIWindow(windowScene: scene); window.rootViewController = host; window.makeKeyAndVisible()
+                defer { window.isHidden = true; window.rootViewController = nil }
+                host.view.layoutIfNeeded(); try await Task.sleep(for: .milliseconds(120)); host.view.layoutIfNeeded()
+                let first = try XCTUnwrap(frames[0]), next = try XCTUnwrap(frames[1])
+                let row = frames.values.filter { abs($0.minY - first.minY) < 1 }
+                XCTAssertEqual(row.count, columns)
+                if columns == 2 { baselineMargin = first.minX }
+                else if !dense {
+                    XCTAssertGreaterThan(first.minX, 0); XCTAssertLessThan(first.minX, baselineMargin)
+                    XCTAssertLessThan(next.minX - first.maxX, 14)
+                } else {
+                    XCTAssertEqual(first.minX, 0, accuracy: 0.6)
+                    XCTAssertEqual(next.minX, first.maxX, accuracy: 0.6)
+                    XCTAssertEqual(row.map(\.maxX).max()!, 390, accuracy: 0.6)
+                }
+            }
+        }
+    }
+
+    @MainActor func testRenderedGalleryMetadataShrinksAndCanBeRemovedWithoutEmptySpace() {
+        func size(_ width: CGFloat, titles: Bool = true, artists: Bool = true) -> CGSize {
+            let style = ArtworkCellStyle(width: width, showsTitle: titles, showsArtists: artists)
+            let view = GalleryCardLayout(title: "A sample title that wraps across two lines", artists: "Example artist", language: "") { Color.blue }.environment(\.artworkCellStyle, style)
+            return UIHostingController(rootView: view).sizeThatFits(in: CGSize(width: width, height: 2000))
+        }
+        let normal = size(170).height - 170 / 0.72
+        let small = size(65).height - 65 / 0.72
+        XCTAssertLessThan(small, normal)
+        XCTAssertEqual(size(65, titles: false, artists: false).height, 65 / 0.72, accuracy: 0.6)
+        XCTAssertGreaterThan(size(65, titles: false).height, 65 / 0.72)
+        XCTAssertGreaterThan(size(65, artists: false).height, 65 / 0.72)
+    }
+
     @MainActor func testLocalThumbnailsDecodeOnceOffTheRenderingPathAndRespectPixelLimit() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -283,5 +352,20 @@ private struct GridProbe: View {
                 }
             }.padding(16)
         }.coordinateSpace(name: "grid").onPreferenceChange(GridFrames.self, perform: report)
+    }
+}
+
+private struct DensityGridProbe: View {
+    let mode: AppMode
+    let report: (Int, CGRect) -> Void
+    var body: some View {
+        ScrollView {
+            ArtworkGrid(mode: mode) { _ in
+                ForEach(0..<10) { index in
+                    Color.blue.frame(height: 80)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("density")) } action: { report(index, $0) }
+                }
+            }
+        }.coordinateSpace(name: "density")
     }
 }

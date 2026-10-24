@@ -102,7 +102,7 @@ struct BooruPoolsView: View {
             .task(id: server.id + "|" + query + "|\(reload)") { await load(reset: true) }
             .refreshable { await load(reset: true) }
             .onReceive(NotificationCenter.default.publisher(for: .booruClientValidated)) { if $0.object as? String == server.id { reload += 1 } }
-            .sheet(isPresented: $validating) { BooruValidationView(server: server) }
+            .appSheet(isPresented: $validating) { BooruValidationView(server: server) }
     }
     private func load(reset: Bool) async {
         if !reset && loading { return }

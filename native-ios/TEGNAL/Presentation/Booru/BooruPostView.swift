@@ -229,8 +229,8 @@ struct BooruPostView: View {
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
                 requestMore()
             }
-            .sheet(isPresented: $filing) { BooruFolderPicker(post: post).environment(\.discoveryContext, activeDiscovery) }
-            .sheet(isPresented: $readerSettings) { ReaderSettingsView(booru: true) }
+            .appSheet(isPresented: $filing) { BooruFolderPicker(post: post).environment(\.discoveryContext, activeDiscovery) }
+            .appSheet(isPresented: $readerSettings) { ReaderSettingsView(booru: true) }
             .alert(L10n.text("Go to Page"), isPresented: $showJump) {
                 TextField(L10n.text("Page Number"), text: $jumpText).keyboardType(.numberPad)
                 Button(L10n.text("Go")) { if let number = Int(jumpText), posts.indices.contains(number - 1) { move(number - 1 - index) } }
@@ -311,8 +311,8 @@ struct BooruPostView: View {
                     if !Task.isCancelled { notesError = error.localizedDescription; loadedNotesKey = key }
                 }
             }
-            .sheet(isPresented: $info) { details }
-            .sheet(item: $selectedNote) { note in
+            .appSheet(isPresented: $info) { details }
+            .appSheet(item: $selectedNote) { note in
                 NavigationStack {
                     ScrollView { Text(note.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(24) }
                         .navigationTitle(L10n.text("Notes")).navigationBarTitleDisplayMode(.inline)
@@ -372,7 +372,7 @@ struct BooruPostView: View {
             ShareLink(item: server.pageURL(postID: post.postID)) { menuLabel(L10n.text("Share"), icon: "square.and.arrow.up", compact: compact) }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "readerSettings", compact: compact) { readerSettings = true }
         }.buttonStyle(.plain).foregroundStyle(.white).tint(.white)
-            .sheet(isPresented: $showDownloads) { DownloadsSheet(mode: .booru) }
+            .appSheet(isPresented: $showDownloads) { DownloadsSheet(mode: .booru) }
     }
     private func menuLabel(_ title: String, icon: String, compact: Bool) -> some View {
         VStack(spacing: 6) {

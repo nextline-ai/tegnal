@@ -36,13 +36,15 @@ struct VisualSimilarityView: View {
                         Text(L10n.text("Some saved thumbnails could not be read. Available works are shown."))
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                    LazyVGrid(columns: WorkGridLayout.columns(env.gridColumns(for: seed.post == nil ? .manga : .booru)), spacing: 16) {
-                        ForEach(works) { work in
-                            Button { open(work) } label: { WorkCardView(work: work) }.buttonStyle(.plain)
+                    if !works.isEmpty {
+                        ArtworkGrid(mode: .manga, surroundingPadding: 20) { _ in
+                            ForEach(works) { work in
+                                Button { open(work) } label: { WorkCardView(work: work) }.buttonStyle(.plain)
+                            }
                         }
                     }
                     if let post = seed.post, let server = env.booru.servers.first(where: { $0.id == post.serverID }) {
-                        BooruPostGrid(posts: posts, server: server, feedback: { feedback = $0 }, open: { open($0, server: server) })
+                        BooruPostGrid(posts: posts, server: server, surroundingPadding: 20, feedback: { feedback = $0 }, open: { open($0, server: server) })
                     }
                 }.padding(20)
             }.navigationTitle(L10n.text("Similar art styles")).navigationBarTitleDisplayMode(.inline)

@@ -4,6 +4,8 @@ import AVFoundation
 
 struct DownloadsView: View {
     let mode: WorkDownload.Mode
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
     @Environment(AppEnvironment.self) private var env
     @State private var store = DownloadStore.shared
     @State private var deleting: WorkDownload?
@@ -31,17 +33,17 @@ struct DownloadsView: View {
                             description: Text(items.isEmpty ? L10n.text("Download a work from the viewer quick menu.") : L10n.text("No results for '%@'", query)))
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else {
-                        LazyVGrid(columns: WorkGridLayout.columns(env.gridColumns), spacing: mode == .manga ? 16 : 12) {
+                        ArtworkGrid(mode: mode == .manga ? .manga : .booru) { style in
                             ForEach(results) { item in
-                                VStack(alignment: .leading, spacing: 6) {
+                                VStack(alignment: .leading, spacing: style.inset(6)) {
                                     if item.status == .completed {
-                                        NavigationLink { DownloadFilesView(item: item, store: store) } label: { card(item) }
+                                        NavigationLink { DownloadFilesView(item: item, store: store) } label: { card(item, style: style) }
                                             .buttonStyle(.plain).accessibilityIdentifier("download.open")
-                                    } else { card(item) }
-                                    downloadStatus(item)
+                                    } else { card(item, style: style) }
+                                    downloadStatus(item, style: style)
                                 }.contextMenu { actions(item) }
                             }
-                        }.padding(16)
+                        }
                     }
                 }.padding(.top, 56)
             }
@@ -74,8 +76,8 @@ struct DownloadsView: View {
         } message: { Text(L10n.text("This removes the downloaded files from this device.")) }
     }
 
-    @ViewBuilder private func card(_ item: WorkDownload) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    @ViewBuilder private func card(_ item: WorkDownload, style: ArtworkCellStyle) -> some View {
+        VStack(alignment: .leading, spacing: style.inset(4)) {
             if let gallery = item.gallery {
                 GalleryCardLayout(title: item.title, artists: item.artists.joined(separator: ", "), language: gallery.language) {
                     DownloadCoverView(url: store.urls(item).first, isVideo: false)
@@ -84,33 +86,33 @@ struct DownloadsView: View {
                 BooruThumbnailCardLayout(post: post) {
                     DownloadCoverView(url: store.urls(item).first, isVideo: post.isVideo)
                 }
-                Text(item.title).font(.subheadline.weight(.medium)).lineLimit(2).foregroundStyle(.primary)
-                if !item.artists.isEmpty { Text(item.artists.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                Text(item.title).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .medium)).lineLimit(2).foregroundStyle(.primary)
+                if !item.artists.isEmpty { Text(item.artists.joined(separator: ", ")).font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(1) }
             }
             if !item.tags.isEmpty {
-                Text(item.tags.prefix(4).joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(item.tags.prefix(4).joined(separator: " · ")).font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(1)
             }
         }.frame(maxWidth: .infinity, alignment: .topLeading)
             .contentShape(Rectangle())
     }
 
-    private func downloadStatus(_ item: WorkDownload) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func downloadStatus(_ item: WorkDownload, style: ArtworkCellStyle) -> some View {
+        VStack(alignment: .leading, spacing: style.inset(4)) {
             if item.status != .completed {
                 if item.status == .downloading && item.total == 1 {
                     if let progress = store.transferProgress[item.id] { ProgressView(value: progress) }
                     else { ProgressView() }
                 } else { ProgressView(value: Double(item.files.count), total: Double(max(1, item.total))) }
             }
-            HStack(spacing: 4) {
+            HStack(spacing: style.inset(4)) {
                 Text(L10n.text(status(item.status))).lineLimit(1)
                 if item.status != .completed { Text("\(item.files.count)/\(item.total)").monospacedDigit() }
                 Spacer(minLength: 0)
                 Menu { actions(item) } label: {
-                    Image(systemName: "ellipsis").frame(width: 36, height: 36).contentShape(Rectangle())
+                    Image(systemName: "ellipsis").frame(width: max(24, 36 * style.scale), height: max(24, 36 * style.scale)).contentShape(Rectangle())
                 }.accessibilityLabel(L10n.text("Download Actions")).accessibilityIdentifier("download.actions")
-            }.font(.caption).foregroundStyle(.secondary)
-            if let error = item.error { Text(error).font(.caption).foregroundStyle(.red).lineLimit(2) }
+            }.font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary)
+            if let error = item.error { Text(error).font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.red).lineLimit(2) }
         }
     }
 
@@ -197,7 +199,7 @@ private struct DownloadFilesView: View {
                 if item.gallery != nil { reading = true }
                 else { preview = store.urls(item).first }
             }
-            .fullScreenCover(isPresented: $reading) {
+            .appFullScreenCover(isPresented: $reading) {
                 OfflineMangaReader(item: item, folder: store.folder(item))
             }
     }

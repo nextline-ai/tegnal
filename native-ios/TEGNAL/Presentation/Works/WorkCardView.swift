@@ -1,45 +1,117 @@
 import SwiftUI
 import Combine
 
-/// Zero means automatic. SwiftUI resolves columns from the available container width,
-/// including iPad multitasking and resizable iOS-app windows on Apple silicon Macs.
+/// Grid geometry is resolved once per container, not once per thumbnail.
 enum WorkGridLayout {
-    static func columns(_ count: Int, minimum: CGFloat = 160) -> [GridItem] {
-        if count == 0 {
-            return [GridItem(.adaptive(minimum: minimum), spacing: 14, alignment: .top)]
+    static func columns(_ count: Int, minimum: CGFloat = 160, spacing: CGFloat = 14) -> [GridItem] {
+        if count == 0 { return [GridItem(.adaptive(minimum: minimum), spacing: spacing, alignment: .top)] }
+        return Array(repeating: GridItem(.flexible(minimum: 0), spacing: spacing, alignment: .top), count: min(5, max(1, count)))
+    }
+}
+
+struct ArtworkCellStyle: Equatable {
+    var width: CGFloat = 160
+    var removesPadding = false
+    var showsTitle = true
+    var showsArtists = true
+    var scale: CGFloat { min(1, max(0.2, width / 160)) }
+    func inset(_ value: CGFloat) -> CGFloat { removesPadding ? 0 : value * scale }
+    func radius(_ value: CGFloat) -> CGFloat { inset(value) }
+    func fontSize(_ value: CGFloat, minimum: CGFloat = 8) -> CGFloat { max(minimum, value * scale) }
+}
+
+struct ArtworkGridGeometry: Equatable {
+    let count: Int
+    let cellWidth: CGFloat
+    let spacing: CGFloat
+    let margin: CGFloat
+    init(width: CGFloat, columns: Int, minimum: CGFloat = 160, removesPadding: Bool) {
+        let width = max(1, width)
+        count = columns == 0 ? max(1, Int((width - (removesPadding ? 0 : 32) + 14) / (minimum + 14))) : min(5, max(1, columns))
+        let gaps = CGFloat(count - 1)
+        // Solve the proportional margins and gaps together with the cell width.
+        let proposed = (width - 32 - gaps * 14) / CGFloat(count)
+        cellWidth = removesPadding ? width / CGFloat(count) : proposed >= 160 ? proposed : width / (CGFloat(count) + (32 + gaps * 14) / 160)
+        let scale = min(1, cellWidth / 160)
+        spacing = removesPadding ? 0 : 14 * scale
+        margin = removesPadding ? 0 : 16 * scale
+    }
+}
+
+private struct ArtworkCellStyleKey: EnvironmentKey { static let defaultValue = ArtworkCellStyle() }
+extension EnvironmentValues {
+    var artworkCellStyle: ArtworkCellStyle {
+        get { self[ArtworkCellStyleKey.self] }
+        set { self[ArtworkCellStyleKey.self] = newValue }
+    }
+}
+
+/// Online, saved, recommended and downloaded artwork share the same density.
+struct ArtworkGrid<Content: View>: View {
+    enum Kind { case artwork, folders }
+    let mode: AppMode
+    var kind: Kind = .artwork
+    /// The surrounding section keeps its own controls inset; the grid can reach the edges.
+    var surroundingPadding: CGFloat = 0
+    @ViewBuilder let content: (ArtworkCellStyle) -> Content
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var width: CGFloat = 390
+    var body: some View {
+        let columns = typeSize.isAccessibilitySize ? 1 : kind == .folders ? env.folderColumns(for: mode) : env.gridColumns(for: mode)
+        let geometry = ArtworkGridGeometry(width: width, columns: columns,
+            minimum: kind == .folders && sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: mode))
+        let style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: env.removesGridPadding(for: mode),
+            showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists)
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing, alignment: .top), count: geometry.count), alignment: .leading, spacing: geometry.spacing) {
+            content(style)
         }
-        return Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: min(5, max(1, count)))
+        .environment(\.artworkCellStyle, style)
+        .padding(geometry.margin)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if abs(width - $0) > 0.5 { width = $0 } }
+        .padding(.horizontal, -surroundingPadding)
     }
 }
 
 /// Shared cover ratio, language badge and typography for local and remote galleries.
 struct GalleryCardLayout<Cover: View>: View {
+    @Environment(\.artworkCellStyle) private var style
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var badgeSize: CGFloat = 11
     let title: String
     let artists: String
     let language: String
     var recommendationTag: String? = nil
     @ViewBuilder let cover: () -> Cover
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: style.inset(6)) {
             ZStack(alignment: .bottomTrailing) {
                 Color.clear.aspectRatio(0.72, contentMode: .fit).overlay { cover() }.clipped()
                 if !language.isEmpty {
-                    Text(language).font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: Capsule()).padding(6)
+                    Text(language).font(.system(size: style.fontSize(badgeSize), weight: .bold)).padding(.horizontal, style.inset(6)).padding(.vertical, style.inset(2))
+                        .background(.ultraThinMaterial, in: Capsule()).padding(style.inset(6))
                 }
-            }.clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.medium)).lineLimit(2).multilineTextAlignment(.leading).foregroundStyle(.primary)
-                if let recommendationTag {
-                    Label(recommendationTag, systemImage: "number").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
-                if !artists.isEmpty { Text(artists).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-            }.padding(.horizontal, 2)
+            }.clipShape(RoundedRectangle(cornerRadius: style.radius(12), style: .continuous))
+            if style.showsTitle || style.showsArtists && !artists.isEmpty || recommendationTag != nil {
+                VStack(alignment: .leading, spacing: style.inset(2)) {
+                    if style.showsTitle { Text(title).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .medium)).lineLimit(2).multilineTextAlignment(.leading).foregroundStyle(.primary) }
+                    if let recommendationTag {
+                        Label(recommendationTag, systemImage: "number").font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(style.width < 110 ? 1 : 2)
+                    }
+                    if style.showsArtists && !artists.isEmpty { Text(artists).font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(1) }
+                }.padding(.horizontal, style.inset(2))
+            }
         }.frame(maxWidth: .infinity, alignment: .topLeading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([title, artists, language].filter { !$0.isEmpty }.joined(separator: " · "))
     }
 }
 
 public struct WorkCardView: View {
+    @Environment(\.artworkCellStyle) private var style
     public let work: Work
     public init(work: Work) { self.work = work }
     public var body: some View {
@@ -49,9 +121,9 @@ public struct WorkCardView: View {
                     Image(uiImage: image).resizable().scaledToFill()
                 } else {
                     Rectangle().fill(Color.secondary.opacity(0.12)).overlay {
-                        VStack(spacing: 6) {
-                            Image(systemName: work.thumbStatus == "gone" ? "slash.circle" : "photo").font(.title2)
-                            Text(String(work.galleryId)).font(.caption2.monospacedDigit())
+                        VStack(spacing: style.inset(6)) {
+                            Image(systemName: work.thumbStatus == "gone" ? "slash.circle" : "photo").font(.system(size: style.fontSize(22)))
+                            if style.showsTitle { Text(String(work.galleryId)).font(.system(size: style.fontSize(11), design: .monospaced)) }
                         }.foregroundStyle(.secondary)
                     }
                 }

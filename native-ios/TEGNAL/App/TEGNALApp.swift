@@ -323,7 +323,7 @@ struct TEGNALApp: App {
                 let timing: SplashTiming = splashEnabled && !isSplashScreenVisible ? .resume : .init(hold: 0, slide: 0)
                 PrivacyCoverManager.shared.hide(timing: timing) { isResumeSplashVisible = false }
             }
-            .fullScreenCover(isPresented: Binding(
+            .appFullScreenCover(isPresented: Binding(
                 get: {
                     let allowsOnboarding = !isContentUITest || ProcessInfo.processInfo.arguments.contains("--onboarding-test")
                     return allowsOnboarding && !env.isOnboardingCompleted && (!isSplashScreenVisible || !splashEnabled)

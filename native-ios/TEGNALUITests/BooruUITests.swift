@@ -1135,6 +1135,67 @@ final class BooruUITests: XCTestCase {
         capture(app, "Imported favorites organized by server")
     }
 
+    func testDenseGridsAndHiddenComicMetadataStayInTheirOwnMode() {
+        let app = launch(extra: ["--taste-ui-rich"])
+        func setSwitch(_ id: String, to enabled: Bool) {
+            let control = reveal(app, id)
+            // A partly visible row can overlap the floating tab bar.
+            for _ in 0..<6 {
+                let tooLow = control.frame.maxY > app.frame.maxY - 140
+                let tooHigh = control.frame.minY < 200
+                if !tooLow && !tooHigh { break }
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: tooLow ? 0.7 : 0.4))
+                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: tooLow ? 0.55 : 0.55))
+                start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+            }
+            if control.value as? String != (enabled ? "1" : "0") {
+                control.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            }
+            expectation(for: NSPredicate(format: "value == %@", enabled ? "1" : "0"), evaluatedWith: control)
+            waitForExpectations(timeout: 5)
+        }
+        app.tabBars.buttons["More"].tap()
+        reveal(app, "settings.gridColumns").buttons["5"].tap()
+        reveal(app, "settings.folderColumns").buttons["5"].tap()
+        setSwitch("settings.noGridPadding", to: true)
+        XCTAssertFalse(element(app, "settings.showMangaTitles").exists)
+        app.tabBars.buttons["Explore"].tap()
+        let first = element(app, "booru.post.101"), second = element(app, "booru.post.102")
+        XCTAssertTrue(first.waitForExistence(timeout: 10)); XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertEqual(first.frame.minX, 0, accuracy: 1)
+        XCTAssertEqual(first.frame.maxX, second.frame.minX, accuracy: 1)
+        capture(app, "Five-column image grid without spacing")
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
+        XCTAssertLessThanOrEqual(firstTasteCard(app).frame.width, app.frame.width / 5 + 1)
+        capture(app, "Dense image recommendations")
+        app.tabBars.buttons["Saved"].tap()
+        capture(app, "Dense image folders")
+        selectMode(app, "manga")
+        app.tabBars.buttons["Settings"].tap()
+        let comicsSpacing = reveal(app, "settings.noGridPadding")
+        XCTAssertEqual(comicsSpacing.value as? String, "0")
+        reveal(app, "settings.gridColumns").buttons["5"].tap()
+        reveal(app, "settings.folderColumns").buttons["5"].tap()
+        setSwitch("settings.noGridPadding", to: true)
+        setSwitch("settings.showMangaTitles", to: false)
+        setSwitch("settings.showMangaArtists", to: false)
+        capture(app, "Comic density and hidden metadata preferences")
+        app.tabBars.buttons["Explore"].tap()
+        let comic = element(app, "content.gallery.900000001")
+        XCTAssertTrue(comic.waitForExistence(timeout: 10))
+        XCTAssertEqual(comic.frame.minX, 0, accuracy: 1)
+        XCTAssertEqual(comic.frame.height, comic.frame.width / 0.72, accuracy: 2)
+        capture(app, "Five-column comic covers without metadata")
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
+        XCTAssertLessThanOrEqual(firstTasteCard(app).frame.width, app.frame.width / 5 + 1)
+        capture(app, "Dense comic recommendations without metadata")
+        app.tabBars.buttons["Saved"].tap()
+        capture(app, "Dense comic folders")
+        selectMode(app, "booru")
+        app.tabBars.buttons["More"].tap()
+        XCTAssertEqual(reveal(app, "settings.noGridPadding").value as? String, "1")
+    }
+
     func testMangaDefaultTagsAndGridSettingsStayInTheirMode() {
         let app = launch()
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
@@ -1583,6 +1644,31 @@ final class BooruUITests: XCTestCase {
         if !element(app, "booru.addServer").exists { element(app, "booru.serversLink").tap() }
         XCTAssertTrue(element(app, "booru.addServer").waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["indexed.example"].exists, "A comics connection must not become an image server")
+    }
+
+    func testRapidModeSwitchingKeepsTheDisplayedLibraryAndThumbInSync() {
+        let app = launch()
+        let control = element(app, "app.mode")
+        for _ in 0..<6 {
+            control.tap(withNumberOfTaps: 4, numberOfTouches: 1)
+            let mode = control.value as? String ?? ""
+            if modeTitles("manga").contains(mode) {
+                XCTAssertTrue(app.tabBars.buttons["Artists"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
+                XCTAssertFalse(app.tabBars.buttons["Tags"].exists)
+            } else {
+                XCTAssertTrue(modeTitles("booru").contains(mode))
+                XCTAssertTrue(app.tabBars.buttons["Tags"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.tabBars.buttons["More"].exists)
+                XCTAssertFalse(app.tabBars.buttons["Artists"].exists)
+            }
+        }
+        selectMode(app, "manga")
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 10))
+        capture(app, "Stable mode after rapid alternating taps")
+        selectMode(app, "booru")
+        XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
     }
 
     func testModeSwitchSlidesBetweenLibraries() {

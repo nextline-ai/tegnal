@@ -48,7 +48,7 @@ public struct ArtistsListView: View {
                 LiquidGlassTitleCapsule(L10n.text("Artists"))
             }
         }
-        .fullScreenCover(item: $selectedBrowserItem) { item in
+        .appFullScreenCover(item: $selectedBrowserItem) { item in
             ContentEntryView(initialUrl: item.url)
         }
         .task(id: env.mode == .manga && scenePhase == .active) {

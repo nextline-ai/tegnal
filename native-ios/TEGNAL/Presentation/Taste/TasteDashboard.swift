@@ -19,7 +19,6 @@ struct TasteDashboard: View {
     private var source: String { sources.first ?? "" }
     private var isActiveMode: Bool { env.mode == (mode == .booru ? .booru : .manga) }
     private var feed: TasteFeedState { env.taste.feed(mode, sources: sources) }
-    private var columns: [GridItem] { WorkGridLayout.columns(typeSize.isAccessibilitySize ? 1 : env.gridColumns(for: mode == .booru ? .booru : .manga)) }
     private var lookahead: Int {
         let count = typeSize.isAccessibilitySize ? 1 : env.gridColumns(for: mode == .booru ? .booru : .manga)
         return (count == 0 ? 2 : count) * 2
@@ -57,7 +56,7 @@ struct TasteDashboard: View {
                 }
             }
             .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 32)
-            .frame(maxWidth: 960).frame(maxWidth: .infinity)
+            .frame(maxWidth: env.removesGridPadding(for: mode == .booru ? .booru : .manga) ? .infinity : 960).frame(maxWidth: .infinity)
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .tint(TastePresentation.accent)
@@ -164,7 +163,7 @@ struct TasteDashboard: View {
             }
             if !items.isEmpty {
                 let prefetchThresholdIndex = max(0, items.count - lookahead)
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20) { _ in
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id))
                             .onAppear {

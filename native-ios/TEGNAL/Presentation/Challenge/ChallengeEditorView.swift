@@ -78,7 +78,7 @@ struct ChallengeEditorView: View {
                     }.accessibilityIdentifier("challenge.save")
                 }
             }
-            .sheet(item: $preview) { preview in NavigationStack { ChallengePreviewView(controller: preview) } }
+            .appSheet(item: $preview) { preview in NavigationStack { ChallengePreviewView(controller: preview) } }
             .alert(L10n.text("Discard Changes?"), isPresented: $confirmDiscard) {
                 Button(L10n.text("Discard"), role: .destructive) { dismiss() }
                 Button(L10n.text("Cancel"), role: .cancel) {}

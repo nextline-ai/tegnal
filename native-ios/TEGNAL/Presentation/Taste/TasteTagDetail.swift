@@ -58,7 +58,7 @@ struct TasteTagDetail: View {
             }
         }.navigationTitle(L10n.text("Taste details")).navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("taste.tag.detail")
-        .sheet(isPresented: $searching) {
+        .appSheet(isPresented: $searching) {
             if mode == .booru, let server = env.booru.servers.first(where: { $0.canonicalAddress == tag.source }) {
                 NavigationStack {
                     BooruFeedView(server: server, source: TasteSources.booru, initialQuery: tag.name)

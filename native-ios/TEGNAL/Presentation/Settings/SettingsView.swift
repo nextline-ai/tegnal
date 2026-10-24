@@ -49,9 +49,9 @@ public struct SettingsView: View {
             ToolbarItem(placement: .principal) { AppModeSwitch() }
             ToolbarItem(placement: .topBarLeading) { LiquidGlassTitleCapsule(L10n.text("Settings")) }
         }
-        .sheet(isPresented: $showReader) { ReaderSettingsView() }
-        .sheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil, initialAddress: env.isSiteVerified ? env.mangaSiteAddress : "") }
-        .fullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
+        .appSheet(isPresented: $showReader) { ReaderSettingsView() }
+        .appSheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil, initialAddress: env.isSiteVerified ? env.mangaSiteAddress : "") }
+        .appFullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
     }
 }
 
@@ -75,7 +75,7 @@ struct ComicsConnectionCard: View {
             WebsiteImportLinks(mangaImportIdentifier: "comics.importMangaViewer").font(.subheadline)
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            .sheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil) }
+            .appSheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil) }
     }
 }
 

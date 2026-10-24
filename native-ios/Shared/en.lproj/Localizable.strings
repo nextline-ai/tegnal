@@ -1106,3 +1106,11 @@
 "Tap or swipe to switch between comics and images." = "Tap or swipe to switch between comics and images.";
 
 "Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again." = "Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again.";
+
+"Show Without Spacing" = "Show Without Spacing";
+
+"Show Work Titles" = "Show Work Titles";
+
+"Show Work Artists" = "Show Work Artists";
+
+"Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding." = "Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding.";

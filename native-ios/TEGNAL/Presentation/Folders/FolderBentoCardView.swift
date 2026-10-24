@@ -1,6 +1,9 @@
 import SwiftUI
 
 public struct FolderBentoCardView: View {
+    @Environment(\.artworkCellStyle) private var style
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
     public let folder: Folder
     public let previews: [Work]
     public let onChangeColor: (() -> Void)?
@@ -28,46 +31,46 @@ public struct FolderBentoCardView: View {
         VStack(spacing: 0) {
             // Top: 2x2 thumbnails preview
             Color.clear.aspectRatio(1.25, contentMode: .fit).overlay {
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
+                VStack(spacing: style.inset(4)) {
+                    HStack(spacing: style.inset(4)) {
                         thumbCell(index: 0)
                         thumbCell(index: 1)
                     }
-                    HStack(spacing: 4) {
+                    HStack(spacing: style.inset(4)) {
                         thumbCell(index: 2)
                         thumbCell(index: 3)
                     }
                 }
-                .padding(6)
+                .padding(style.inset(6))
                 .frame(maxWidth: .infinity)
             }
             .clipped()
 
             // Bottom: Folder title & count
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: style.inset(2)) {
                     Text(folder.displayName)
-                        .font(.subheadline.bold())
+                        .font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
                         .lineLimit(1)
                         .foregroundColor(textColor)
 
                     Text(L10n.text("%@ items", String(describing: folder.workCount)))
-                        .font(.caption2.weight(.semibold))
+                        .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
                         .foregroundColor(textColor.opacity(0.85))
                 }
 
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, style.inset(10))
+            .padding(.vertical, style.inset(8))
         }
         .background(folderColor)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: style.radius(16), style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: style.radius(16), style: .continuous)
+                .stroke(Color.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5)
         )
-        .shadow(color: .black.opacity(0.1), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.1), radius: style.inset(8), y: style.inset(3))
     }
 
     @ViewBuilder
@@ -82,24 +85,24 @@ public struct FolderBentoCardView: View {
                             if let image {
                                 Image(uiImage: image).resizable().scaledToFill()
                             } else {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                RoundedRectangle(cornerRadius: style.radius(8), style: .continuous)
                                     .fill(textColor.opacity(0.14))
                                     .overlay(
                                         Text(verbatim: String(work.galleryId))
-                                            .font(.system(size: 10, weight: .semibold))
+                                            .font(.system(size: style.fontSize(10), weight: .semibold))
                                             .foregroundColor(textColor.opacity(0.85))
                                             .lineLimit(1)
-                                            .padding(2)
+                                            .padding(style.inset(2))
                                     )
                             }
                         }
                     } else {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: style.radius(8), style: .continuous)
                             .fill(textColor.opacity(0.08))
                     }
                 }
             )
             .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: style.radius(8), style: .continuous))
     }
 }

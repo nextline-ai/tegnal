@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ReaderPreviewView: View {
+    @ScaledMetric(relativeTo: .caption) private var pageNumberSize: CGFloat = 12
     @Environment(\.dismiss) private var dismiss
     let gallery: NativeGallery
     let images: PageImageStore
@@ -9,19 +10,19 @@ struct ReaderPreviewView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 16) {
+                    ArtworkGrid(mode: .manga) { style in
                         ForEach(gallery.pages.indices, id: \.self) { index in
                             Button { current = index; dismiss() } label: {
-                                VStack {
+                                VStack(spacing: style.inset(6)) {
                                     ReaderThumbnail(page: gallery.pages[index], galleryID: gallery.id, images: images)
                                         .aspectRatio(0.72, contentMode: .fit).clipped()
                                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(current == index ? Color.accentColor : .clear, lineWidth: 3))
-                                    Text("\(index + 1)").font(.caption.monospacedDigit())
+                                    Text("\(index + 1)").font(.system(size: style.fontSize(pageNumberSize, minimum: 9), design: .monospaced))
                                 }
                             }.buttonStyle(.plain).id(index).accessibilityLabel(L10n.text("Pages: %@", String(describing: index + 1)))
                                 .accessibilityIdentifier("reader.preview.\(index + 1)")
                         }
-                    }.padding(16)
+                    }
                 }.onAppear { proxy.scrollTo(current, anchor: .center) }
             }
             .navigationTitle(L10n.text("Total pages: %@", String(describing: gallery.pages.count))).navigationBarTitleDisplayMode(.inline)

@@ -27,7 +27,7 @@ struct BooruFavoritesView: View {
                         Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
                     }.padding(18).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
                 }.accessibilityIdentifier("booru.allFavorites")
-                LazyVGrid(columns: WorkGridLayout.columns(env.folderColumns, minimum: sizeClass == .regular ? 240 : 160), spacing: 14) {
+                ArtworkGrid(mode: .booru, kind: .folders, surroundingPadding: 16) { _ in
                     ForEach(store.folders()) { folder in
                         NavigationLink { BooruFolderContentsView(source: source, folderID: folder.id) } label: {
                             BooruFolderCard(folder: folder, posts: store.visibleFavorites(folderID: folder.id))
@@ -58,8 +58,8 @@ struct BooruFavoritesView: View {
         } }
         .transientMessage($folderMessage)
         .booruCreateFolderAlert(isPresented: $creating, name: $newFolderName)
-        .sheet(isPresented: $reordering) { FolderOrderView(booru: true) }
-        .sheet(item: $editing) { item in
+        .appSheet(isPresented: $reordering) { FolderOrderView(booru: true) }
+        .appSheet(item: $editing) { item in
             if let folder = item.folder {
                 NativeColorPickerSheet(title: folder.displayName, color: folder.color, onColorSelected: { color in
                     store.perform { try store.setFolderColor(folder.id, color: NativeColorPickerSheet.argb(color)) }
@@ -78,33 +78,36 @@ struct BooruFavoritesView: View {
 }
 
 private struct BooruFolderCard: View {
+    @Environment(\.artworkCellStyle) private var style
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
     let folder: BooruFolder
     let posts: [BooruPost]
     @Environment(BooruStore.self) private var store
     var body: some View {
         VStack(spacing: 0) {
             Color.clear.aspectRatio(1.25, contentMode: .fit).overlay {
-                VStack(spacing: 4) {
+                VStack(spacing: style.inset(4)) {
                     ForEach(0..<2) { row in
-                        HStack(spacing: 4) {
+                        HStack(spacing: style.inset(4)) {
                             ForEach(0..<2) { col in
                                 let index = row * 2 + col
                                 Color.white.opacity(0.12).overlay {
                                     if posts.indices.contains(index), let server = store.servers.first(where: { $0.id == posts[index].serverID }) {
                                         BooruThumbnail(post: posts[index], server: server)
-                                    } else { Image(systemName: "photo").font(.title3).foregroundStyle(.white.opacity(0.3)) }
-                                }.clipped().clipShape(RoundedRectangle(cornerRadius: 8))
+                                    } else { Image(systemName: "photo").font(.system(size: style.fontSize(20))).foregroundStyle(.white.opacity(0.3)) }
+                                }.clipped().clipShape(RoundedRectangle(cornerRadius: style.radius(8)))
                             }
                         }
                     }
-                }.padding(6)
+                }.padding(style.inset(6))
             }.clipped()
-            VStack(alignment: .leading, spacing: 3) {
-                Text(folder.displayName).font(.subheadline.bold()).lineLimit(1)
-                Text(L10n.text("%@ items", String(posts.count))).font(.caption2.weight(.semibold)).opacity(0.85)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
+            VStack(alignment: .leading, spacing: style.inset(3)) {
+                Text(folder.displayName).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold)).lineLimit(1)
+                Text(L10n.text("%@ items", String(posts.count))).font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold)).opacity(0.85)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, style.inset(10)).padding(.vertical, style.inset(8))
         }.foregroundStyle(.white).background(Color(argb: folder.color))
-            .clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.15), lineWidth: 0.5))
+            .clipShape(RoundedRectangle(cornerRadius: style.radius(16))).overlay(RoundedRectangle(cornerRadius: style.radius(16)).stroke(.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5))
     }
 }
 
@@ -132,7 +135,7 @@ struct BooruFolderContentsView: View {
                 Group {
                     if posts.isEmpty {
                         ContentUnavailableView(L10n.text("No Favorites"), systemImage: "heart", description: Text(L10n.text("Hold an image to save it, or choose Save to Folder from its menu."))).padding(.top, 48)
-                    } else { BooruPostGrid(posts: posts, selection: selecting ? $selection : nil, feedback: { saveFeedback = $0 }) { viewerPosition = $0; selectedPost = $0 }.padding(16) }
+                    } else { BooruPostGrid(posts: posts, selection: selecting ? $selection : nil, feedback: { saveFeedback = $0 }) { viewerPosition = $0; selectedPost = $0 } }
                 }.padding(.top, 56)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -174,7 +177,7 @@ struct BooruFolderContentsView: View {
             Button(L10n.text("Delete"), role: .destructive) { store.perform { try store.removeFavorites(posts.filter { selection.contains($0.id) }); selection.removeAll(); selecting = false } }
             Button(L10n.text("Cancel"), role: .cancel) {}
         }
-        .sheet(isPresented: $showJump, onDismiss: { if let pendingJump { proxy.scrollTo(pendingJump, anchor: .top); self.pendingJump = nil } }) {
+        .appSheet(isPresented: $showJump, onDismiss: { if let pendingJump { proxy.scrollTo(pendingJump, anchor: .top); self.pendingJump = nil } }) {
             NavigationStack {
                 List(months, id: \.month) { item in
                     Button(item.month) { pendingJump = item.id; showJump = false }
@@ -182,7 +185,7 @@ struct BooruFolderContentsView: View {
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { showJump = false } } }
             }.presentationDetents([.medium, .large])
         }
-        .fullScreenCover(item: $selectedPost) { post in
+        .appFullScreenCover(item: $selectedPost) { post in
             if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: posts, server: server, source: source, positionChanged: { viewerPosition = $0 }) }
         }
         }

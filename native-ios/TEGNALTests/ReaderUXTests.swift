@@ -4,6 +4,35 @@ import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
+    @MainActor func testGlassControlsAvoidMacWheelCrashWithoutRemovingIOSInteraction() async throws {
+        guard #available(iOS 26, *) else { throw XCTSkip("Requires Liquid Glass") }
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let button = Button("Glass control") {}.padding()
+        let surfaces = [
+            AnyView(button.glassSurface(isInteractive: true)),
+            AnyView(button.glassCapsule(isInteractive: true)),
+            AnyView(button.glassCircle(isInteractive: true)),
+            AnyView(button.modifier(ReaderMenuGlass()))
+        ]
+        func hasFlexInteraction(_ view: UIView) -> Bool {
+            // Diagnostic only: production code uses public Glass APIs and never
+            // accesses or changes the system's private gesture recognizers.
+            (view.gestureRecognizers ?? []).contains { String(reflecting: type(of: $0)).contains("FlexInteraction") }
+                || view.subviews.contains(where: hasFlexInteraction)
+        }
+        for (index, surface) in surfaces.enumerated() {
+            let host = UIHostingController(rootView: surface)
+            let window = UIWindow(windowScene: scene)
+            window.rootViewController = host; window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertEqual(hasFlexInteraction(window), !ProcessInfo.processInfo.isiOSAppOnMac,
+                           "Glass surface \(index) must omit FlexInteraction only on Mac")
+        }
+    }
+
     @MainActor func testMacSystemLanguageUsesDirectAppleTranslationInsteadOfLiveTextControls() {
         XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "system", isMac: true))
         XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "ko", isMac: true))

@@ -291,6 +291,10 @@ public final class AppEnvironment: @unchecked Sendable {
     private var booruTheme: AppTheme
     private var mangaColumns: Int
     private var booruColumns: Int
+    private var mangaRemovesGridPadding: Bool
+    private var booruRemovesGridPadding: Bool
+    var showsMangaTitles: Bool { didSet { browserPreferences.set(showsMangaTitles, forKey: "manga.grid.showTitles") } }
+    var showsMangaArtists: Bool { didSet { browserPreferences.set(showsMangaArtists, forKey: "manga.grid.showArtists") } }
     private var mangaFolderColumns: Int
     private var booruFolderColumns: Int
 
@@ -303,6 +307,15 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     func gridColumns(for mode: AppMode) -> Int { mode == .manga ? mangaColumns : booruColumns }
+    func folderColumns(for mode: AppMode) -> Int { mode == .manga ? mangaFolderColumns : booruFolderColumns }
+    func removesGridPadding(for mode: AppMode) -> Bool { mode == .manga ? mangaRemovesGridPadding : booruRemovesGridPadding }
+    var removesGridPadding: Bool {
+        get { removesGridPadding(for: mode) }
+        set {
+            if mode == .manga { mangaRemovesGridPadding = newValue } else { booruRemovesGridPadding = newValue }
+            browserPreferences.set(newValue, forKey: mode == .manga ? "manga.grid.noPadding" : "booru.grid.noPadding")
+        }
+    }
 
     public var gridColumns: Int {
         get { mode == .manga ? mangaColumns : booruColumns }
@@ -441,6 +454,10 @@ public final class AppEnvironment: @unchecked Sendable {
         let booruColumns = browserPreferences.integer(forKey: "booru.grid_columns")
         self.mangaColumns = min(5, max(0, mangaColumns))
         self.booruColumns = min(5, max(0, booruColumns))
+        self.mangaRemovesGridPadding = browserPreferences.bool(forKey: "manga.grid.noPadding")
+        self.booruRemovesGridPadding = browserPreferences.bool(forKey: "booru.grid.noPadding")
+        self.showsMangaTitles = browserPreferences.object(forKey: "manga.grid.showTitles") as? Bool ?? true
+        self.showsMangaArtists = browserPreferences.object(forKey: "manga.grid.showArtists") as? Bool ?? true
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
         self.defaultTags = browserPreferences.string(forKey: "manga.defaultTags") ?? ""

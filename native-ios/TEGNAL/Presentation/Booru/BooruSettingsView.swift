@@ -32,7 +32,7 @@ struct BooruServersView: View {
                 Button(L10n.text("Add a Server"), systemImage: "plus") { editing = .init() }.accessibilityIdentifier("booru.addServer")
             } header: { Text(L10n.text("Servers")) } footer: { Text(L10n.text("Danbooru, Gelbooru, Old Gelbooru (v0.1.11) and Moebooru compatible servers are supported.")) }
         }.navigationTitle(L10n.text("Servers")).navigationBarTitleDisplayMode(.inline)
-            .sheet(item: $editing) { item in WebsiteConnectionEditor(server: item.server) }
+            .appSheet(item: $editing) { item in WebsiteConnectionEditor(server: item.server) }
             .confirmationDialog(L10n.text("Delete Server?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
                 Button(L10n.text("Delete"), role: .destructive) { if let deleting { store.perform { try store.deleteServer(deleting); Task { await BooruBrowserSession.reset(deleting) } } }; deleting = nil }
             } message: { Text(L10n.text("This removes the server and its Booru favorites, saved tags, artists, history and blacklist from this device.")) }
@@ -222,7 +222,7 @@ struct WebsiteConnectionEditor: View {
                         .accessibilityIdentifier("booru.serverSave")
                 }
             }
-            .sheet(isPresented: $validating) { if let server { BooruValidationView(server: server) } }
+            .appSheet(isPresented: $validating) { if let server { BooruValidationView(server: server) } }
             .onAppear {
                 guard !initialized else { return }; initialized = true
                 guard let server else { address = initialAddress; return }
@@ -370,9 +370,9 @@ struct BooruMoreView: View {
             Button(L10n.text("Clear Image Cache"), role: .destructive) { Task { await BooruThumbnailCache.shared.clear(); await BooruViewerImageCache.shared.clear(); cacheCleared = true } }
             Button(L10n.text("Cancel"), role: .cancel) {}
         } message: { Text(L10n.text("Saved favorites are kept. Images will be downloaded again when needed.")) }
-        .sheet(isPresented: $showReader) { ReaderSettingsView(booru: true) }
-        .fullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
-        .sheet(item: $validating) { BooruValidationView(server: $0) }
+        .appSheet(isPresented: $showReader) { ReaderSettingsView(booru: true) }
+        .appFullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
+        .appSheet(item: $validating) { BooruValidationView(server: $0) }
 
     }
 }

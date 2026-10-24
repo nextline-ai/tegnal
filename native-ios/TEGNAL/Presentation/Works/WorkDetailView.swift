@@ -296,7 +296,7 @@ public struct WorkDetailView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .fullScreenCover(isPresented: $showBrowser) {
+        .appFullScreenCover(isPresented: $showBrowser) {
             ContentEntryView(initialUrl: MangaUrls.readerUrl(for: galleryId))
         }
         .presentationDetents([.large]).presentationDragIndicator(.visible)

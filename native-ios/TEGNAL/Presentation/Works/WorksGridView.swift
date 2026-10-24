@@ -40,10 +40,6 @@ public struct WorksGridView: View {
         folder != nil || artist != nil
     }
 
-    private var columns: [GridItem] {
-        WorkGridLayout.columns(env.gridColumns)
-    }
-
     public var body: some View {
         ScrollViewReader { proxy in
         ZStack(alignment: .top) {
@@ -59,7 +55,7 @@ public struct WorksGridView: View {
                         )
                         .padding(.top, 40)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 16) {
+                        ArtworkGrid(mode: .manga) { style in
                             ForEach(works) { work in
                                 WorkCardView(work: work)
                                     .id(work.galleryId)
@@ -71,7 +67,7 @@ public struct WorksGridView: View {
                                         } else { openManga(for: work.galleryId) }
                                     }
                                     .overlay(alignment: .topTrailing) {
-                                        if selecting { Image(systemName: selection.contains(work.galleryId) ? "checkmark.circle.fill" : "circle").font(.title2).foregroundStyle(.white, .blue).padding(10).allowsHitTesting(false) }
+                                        if selecting { Image(systemName: selection.contains(work.galleryId) ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
                                     }
                                     .contextMenu {
                                         workContextMenu(for: work)
@@ -79,7 +75,6 @@ public struct WorksGridView: View {
 
                             }
                         }
-                        .padding(16)
                     }
                 }
             }
@@ -98,8 +93,8 @@ public struct WorksGridView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isPushed)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .sheet(item: $similarity) { VisualSimilarityView(seed: $0) }
-        .sheet(item: Binding(
+        .appSheet(item: $similarity) { VisualSimilarityView(seed: $0) }
+        .appSheet(item: Binding(
             get: { selectedDetailGalleryId.map { IdentifiableInt64(id: $0) } },
             set: { selectedDetailGalleryId = $0?.id }
         ), onDismiss: { loadWorks() }) { item in
@@ -107,7 +102,7 @@ public struct WorksGridView: View {
                 WorkDetailView(galleryId: item.id)
             }
         }
-        .fullScreenCover(item: Binding(
+        .appFullScreenCover(item: Binding(
             get: { activeBrowserUrl.map { IdentifiableString(id: $0) } },
             set: { activeBrowserUrl = $0?.id }
         )) { item in
@@ -182,14 +177,14 @@ public struct WorksGridView: View {
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
         }
-        .sheet(isPresented: $showJumpSheet, onDismiss: {
+        .appSheet(isPresented: $showJumpSheet, onDismiss: {
             if let id = pendingJump { proxy.scrollTo(id, anchor: .top); pendingJump = nil }
         }) {
             WorkMonthJumpView(months: WorkMonthDestination.make(works)) { id in
                 pendingJump = id; showJumpSheet = false
             }
         }
-        .sheet(isPresented: $showAddSheet, onDismiss: { loadWorks() }) {
+        .appSheet(isPresented: $showAddSheet, onDismiss: { loadWorks() }) {
             AddWorkSheet()
         }
         .alert(L10n.text("Delete Work"), isPresented: Binding(

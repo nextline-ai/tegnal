@@ -1106,3 +1106,11 @@
 "Tap or swipe to switch between comics and images." = "タップまたは左右にスワイプして、漫画と画像のモードを切り替えます。";
 
 "Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again." = "サイトやネットワークによって、VPNやHTTPS回避が接続を助けたり、妨げたりする場合があります。有効なら無効に、無効なら有効にしてから、もう一度お試しください。";
+
+"Show Without Spacing" = "余白なしで表示";
+
+"Show Work Titles" = "作品タイトルを表示";
+
+"Show Work Artists" = "作品の作家を表示";
+
+"Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding." = "サムネイルの大きさに合わせて余白と文字が調整されます。余白なしで表示を有効にすると、グリッドの外側・サムネイルの間・カード内の余白がなくなります。";

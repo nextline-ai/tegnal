@@ -21,7 +21,6 @@ public struct FoldersView: View {
     @State private var reordering = false
     @State private var folderMessage: String?
 
-    private var columns: [GridItem] { WorkGridLayout.columns(env.folderColumns, minimum: sizeClass == .regular ? 240 : 160) }
 
     public init() {}
 
@@ -35,7 +34,7 @@ public struct FoldersView: View {
                 )
                 .padding(.top, 60)
             } else {
-                LazyVGrid(columns: columns, spacing: 14) {
+                ArtworkGrid(mode: .manga, kind: .folders) { _ in
                     ForEach(folders) { folder in
                         NavigationLink(value: folder) {
                             FolderBentoCardView(
@@ -65,7 +64,6 @@ public struct FoldersView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(16)
             }
         }
         .transientMessage($folderMessage)
@@ -127,11 +125,11 @@ public struct FoldersView: View {
         } message: { _ in
             Text(L10n.text("Works in this folder will be moved to Unfiled."))
         }
-        .sheet(isPresented: $showAddSheet, onDismiss: { loadFolders() }) {
+        .appSheet(isPresented: $showAddSheet, onDismiss: { loadFolders() }) {
             AddWorkSheet()
         }
-        .sheet(isPresented: $reordering, onDismiss: loadFolders) { FolderOrderView(booru: false) }
-        .sheet(item: $editingColorFolder) { folder in
+        .appSheet(isPresented: $reordering, onDismiss: loadFolders) { FolderOrderView(booru: false) }
+        .appSheet(item: $editingColorFolder) { folder in
             NativeColorPickerSheet(
                 title: folder.displayName, color: folder.color,
                 onColorSelected: { newColor in

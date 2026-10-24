@@ -1,5 +1,15 @@
 import SwiftUI
 
+@available(iOS 26, *)
+extension Glass {
+    /// iOS-on-Mac's FlexInteractionGesture throws in UIScrollEvent when a mouse
+    /// wheel has no nonaccelerated delta. Keep the glass appearance and the
+    /// control's own gestures, but omit the decorative interaction recognizer.
+    func platformInteractive(_ enabled: Bool = true) -> Glass {
+        enabled && !ProcessInfo.processInfo.isiOSAppOnMac ? interactive() : self
+    }
+}
+
 public struct GlassSurfaceModifier: ViewModifier {
     public var cornerRadius: CGFloat
     public var isInteractive: Bool
@@ -12,7 +22,7 @@ public struct GlassSurfaceModifier: ViewModifier {
     public func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content
-                .glassEffect(isInteractive ? .regular.interactive() : .regular, in: .rect(cornerRadius: cornerRadius))
+                .glassEffect(.regular.platformInteractive(isInteractive), in: .rect(cornerRadius: cornerRadius))
         } else {
             content
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -34,7 +44,7 @@ public struct GlassCapsuleModifier: ViewModifier {
     public func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content
-                .glassEffect(isInteractive ? .regular.interactive() : .regular, in: .capsule)
+                .glassEffect(.regular.platformInteractive(isInteractive), in: .capsule)
         } else {
             content
                 .background(.ultraThinMaterial, in: Capsule())
@@ -56,7 +66,7 @@ public struct GlassCircleModifier: ViewModifier {
     public func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content
-                .glassEffect(isInteractive ? .regular.interactive() : .regular, in: .circle)
+                .glassEffect(.regular.platformInteractive(isInteractive), in: .circle)
         } else {
             content
                 .background(.ultraThinMaterial, in: Circle())

@@ -88,16 +88,16 @@ struct ChallengeLibraryView: View {
         }
         .navigationTitle(L10n.text("Challenge Roulette"))
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $editing, onDismiss: reload) { game in
+        .appSheet(item: $editing, onDismiss: reload) { game in
             ChallengeEditorView(game: game, store: store)
         }
-        .sheet(item: $backingUp) { game in
+        .appSheet(item: $backingUp) { game in
             NavigationStack {
                 ChallengeBackupView(selected: game)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { backingUp = nil } } }
             }
         }
-        .fullScreenCover(item: $playing, onDismiss: reload) { game in
+        .appFullScreenCover(item: $playing, onDismiss: reload) { game in
             NavigationStack { ChallengePlayHost(game: game, store: store, source: source) }
         }
         .alert(L10n.text("Delete Challenge?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {

@@ -59,8 +59,8 @@ public struct OnboardingView: View {
                     if env.isOnboardingCompleted { Button(L10n.text("Done")) { dismiss() }.disabled(isImporting) }
                 }
             }
-            .sheet(item: $validating) { BooruValidationView(server: $0) }
-            .sheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
+            .appSheet(item: $validating) { BooruValidationView(server: $0) }
+            .appSheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: false, onCompletion: handleImport)
         }.environment(env.booru)
     }

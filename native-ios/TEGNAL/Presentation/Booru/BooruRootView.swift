@@ -100,7 +100,7 @@ struct WebsiteSetupContent: View {
                 .accessibilityIdentifier(connectionIdentifier)
             WebsiteModeGuide()
             WebsiteImportLinks(mangaImportIdentifier: mangaImportIdentifier)
-        }.sheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil) }
+        }.appSheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil) }
     }
 }
 
@@ -115,7 +115,7 @@ struct WebsiteImportLinks: View {
             Button { showMangaImport = true } label: {
                 Label(L10n.text("Import from Another Manga Viewer"), systemImage: "square.and.arrow.down")
             }.buttonStyle(.plain).foregroundStyle(.tint).accessibilityIdentifier(mangaImportIdentifier)
-        }.sheet(isPresented: $showMangaImport) {
+        }.appSheet(isPresented: $showMangaImport) {
             NavigationStack {
                 MangaLibraryToolsView(importOnly: true)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { showMangaImport = false } } }
@@ -339,17 +339,17 @@ struct BooruFeedView: View {
         .workSaveFeedback($saveFeedback, identifier: "booru.saveStatus")
         .navigationTitle(challenge?.session.definition.title ?? pool?.name.replacingOccurrences(of: "_", with: " ") ?? L10n.text("Explore"))
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $validating) { server in
+        .appSheet(item: $validating) { server in
             BooruValidationView(server: server, initialURL: server.browsingURL(query: sort.query(query, engine: server.engine), poolID: pool?.id))
         }
-        .sheet(isPresented: $challengeBrowser) {
+        .appSheet(isPresented: $challengeBrowser) {
             NavigationStack {
                 BooruEmbeddedBrowserView(servers: servers, query: query, poolID: pool?.id, sort: sort, preferredServerID: browserServerID)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { challengeBrowser = false } } }
             }.tint(.purple)
         }
-        .sheet(item: $accountServer) { WebsiteConnectionEditor(server: $0) }
-        .fullScreenCover(item: $selectedPost) { post in
+        .appSheet(item: $accountServer) { WebsiteConnectionEditor(server: $0) }
+        .appFullScreenCover(item: $selectedPost) { post in
             if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: visiblePosts, server: server, source: source, loadMore: {
                 for _ in 0..<3 {
                     guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { break }
@@ -381,7 +381,7 @@ struct BooruFeedView: View {
                         }
                     }
                     if pool == nil { filters }
-                    BooruPostGrid(posts: visiblePosts, showsFavoriteIndicator: true, prefetch: {
+                    BooruPostGrid(posts: visiblePosts, showsFavoriteIndicator: true, surroundingPadding: 16, prefetch: {
                         if loader.hasMore && !loader.loading { Task { await load(reset: false) } }
                     }, feedback: { saveFeedback = $0 }) { viewerPosition = $0; selectedPost = $0; challenge?.select($0) }.environment(\.discoveryContext, discovery)
                     if loader.loading { ProgressView(L10n.text("Loading")).padding(24) }
@@ -617,6 +617,7 @@ struct BooruPostGrid: View {
     let posts: [BooruPost]
     var server: BooruServer? = nil
     var showsFavoriteIndicator = false
+    var surroundingPadding: CGFloat = 0
     var selection: Binding<Set<String>>? = nil
     var prefetch: (() -> Void)? = nil
     var feedback: (WorkSaveFeedback) -> Void = { _ in }
@@ -630,7 +631,7 @@ struct BooruPostGrid: View {
         let favorites = store.favoriteIDs
         let prefetchThresholdIndex = max(0, posts.count - 8)
         let serversByID = Dictionary(uniqueKeysWithValues: store.servers.map { ($0.id, $0) })
-        return LazyVGrid(columns: WorkGridLayout.columns(env.gridColumns), spacing: 12) {
+        return ArtworkGrid(mode: browsingMode, surroundingPadding: surroundingPadding) { style in
             ForEach(Array(posts.enumerated()), id: \.element.id) { index, post in
                 if let server = serversByID[post.serverID] ?? server {
                     Group {
@@ -688,8 +689,8 @@ struct BooruPostGrid: View {
                     }
                 }
             }
-        }.sheet(item: $similarity) { VisualSimilarityView(seed: $0) }
-        .sheet(item: $filing) { BooruFolderPicker(post: $0).environment(\.discoveryContext, discovery) }
+        }.appSheet(item: $similarity) { VisualSimilarityView(seed: $0) }
+        .appSheet(item: $filing) { BooruFolderPicker(post: $0).environment(\.discoveryContext, discovery) }
     }
 
     private func thumbnail(_ post: BooruPost, server: BooruServer, isFavorite: Bool) -> some View {
@@ -716,6 +717,8 @@ struct BooruPostThumbnailCard: View, Equatable {
 
 /// Shared geometry and badges for online and downloaded image cards.
 struct BooruThumbnailCardLayout<Cover: View>: View {
+    @Environment(\.artworkCellStyle) private var style
+    @ScaledMetric(relativeTo: .caption2) private var badgeSize: CGFloat = 10
     let post: BooruPost
     var showsFavoriteIndicator = false
     var isFavorite = false
@@ -726,18 +729,18 @@ struct BooruThumbnailCardLayout<Cover: View>: View {
             .overlay(alignment: .topTrailing) {
                 if post.isVideo || post.isAnimated {
                     Image(systemName: post.isVideo ? "play.fill" : "sparkles")
-                        .font(.system(size: 10, weight: .bold)).padding(6).background(.ultraThinMaterial, in: Capsule()).padding(8)
+                        .font(.system(size: style.fontSize(badgeSize), weight: .bold)).padding(style.inset(6)).background(.ultraThinMaterial, in: Capsule()).padding(style.inset(8))
                 }
             }
             .overlay(alignment: .topLeading) {
                 if showsFavoriteIndicator && isFavorite {
-                    Image(systemName: "heart.fill").foregroundStyle(.pink).padding(8)
-                        .background(.ultraThinMaterial, in: Circle()).padding(8)
+                    Image(systemName: "heart.fill").font(.system(size: style.fontSize(badgeSize + 3))).foregroundStyle(.pink).padding(style.inset(8))
+                        .background(.ultraThinMaterial, in: Circle()).padding(style.inset(8))
                         .accessibilityIdentifier("booru.favoriteBadge.\(post.postID)")
                 }
             }
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: style.radius(16)))
+            .clipShape(RoundedRectangle(cornerRadius: style.radius(16)))
             .contentShape(Rectangle())
     }
 }

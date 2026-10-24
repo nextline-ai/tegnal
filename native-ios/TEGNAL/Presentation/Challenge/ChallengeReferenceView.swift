@@ -56,7 +56,7 @@ struct ChallengeReferenceView: View {
                 }
             }
         }.tint(.purple)
-        .sheet(isPresented: $choosingSource) { ChallengeSourceView(controller: controller).tint(.purple) }
+        .appSheet(isPresented: $choosingSource) { ChallengeSourceView(controller: controller).tint(.purple) }
     }
 }
 
@@ -140,7 +140,7 @@ private struct ChallengeSourceView: View {
                 serverIDs = controller.session.serverIDs.isEmpty ? store.selectedServerIDs : controller.session.serverIDs
                 folderID = controller.session.folderID
             }
-            .sheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
+            .appSheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
         }
     }
 }

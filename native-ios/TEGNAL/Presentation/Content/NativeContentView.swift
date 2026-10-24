@@ -104,13 +104,13 @@ public struct NativeContentView: View {
                     } }
                 }
         }
-        .sheet(item: $presentedGallery) { gallery in
+        .appSheet(item: $presentedGallery) { gallery in
             NativeContentView(initialUrl: MangaUrls.galleryUrl(for: gallery.id), source: source,
                               savesProgress: savesProgress, images: images)
                 .environment(\.discoveryContext, gallery.context)
                 .presentationDetents([.large]).presentationDragIndicator(.visible)
         }
-        .fullScreenCover(item: $presentedReader, onDismiss: {
+        .appFullScreenCover(item: $presentedReader, onDismiss: {
             if let readerSearch { self.readerSearch = nil; path.append(.query(readerSearch)) }
         }) { reader in
             NativeReaderView(galleryID: reader.id, initialPage: reader.page, source: source, images: images,
@@ -242,7 +242,7 @@ private struct GalleryFeedView: View {
                 }
                 }.accessibilityIdentifier("content.sort")
                 }
-                LazyVGrid(columns: WorkGridLayout.columns(env.gridColumns), spacing: 16) {
+                ArtworkGrid(mode: .manga, surroundingPadding: 16) { _ in
                     let prefetchColumns = env.gridColumns > 0 ? env.gridColumns : 2
                     let lookahead = prefetchColumns * 2
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
@@ -450,6 +450,7 @@ private final class GalleryPaginationViewport {
     var height: CGFloat = 0
 }
 private struct GalleryGridCard: View {
+    @Environment(\.artworkCellStyle) private var style
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     private struct LoadKey: Hashable { let preview: ObjectIdentifier?; let active: Bool }
@@ -478,9 +479,9 @@ private struct GalleryGridCard: View {
         }
         .overlay(alignment: .topLeading) {
             if isBookmarked {
-                Image(systemName: "bookmark.fill").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.yellow).padding(8).background(.black.opacity(0.72), in: Circle())
-                    .padding(7).accessibilityHidden(true).allowsHitTesting(false)
+                Image(systemName: "bookmark.fill").font(.system(size: style.fontSize(14), weight: .semibold))
+                    .foregroundStyle(.yellow).padding(style.inset(8)).background(.black.opacity(0.72), in: Circle())
+                    .padding(style.inset(7)).accessibilityHidden(true).allowsHitTesting(false)
             }
         }
         .contentShape(Rectangle())
@@ -560,7 +561,7 @@ private struct RemoteGalleryView: View {
         .toolbar(.visible, for: .navigationBar)
         .navigationTitle(L10n.text("Work Details"))
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $bookmark) { target in AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery) }
+        .appSheet(item: $bookmark) { target in AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery) }
         .task(id: retry) {
             error = nil
             do {
