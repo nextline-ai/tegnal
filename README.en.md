@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="docs/assets/app-icon.png" alt="Download TEGNAL on TestFlight" width="128">
+    <img src="design-output/JPG/main_banner_en.jpg" alt="Download TEGNAL on TestFlight" width="100%">
   </a>
 </p>
 
@@ -47,8 +47,14 @@ Every AI feature runs **100% locally on your device** without sending your data 
 
 ## 📲 How to Install
 
+**Apple’s official TestFlight is the recommended installation method for a safe, trustworthy distribution experience.**
+
+- **Distribution managed by Apple:** Install developer-provided builds directly through TestFlight. Public distribution to external testers is subject to Apple’s beta review process. [Apple’s official guide](https://developer.apple.com/testflight/)
+- **No manual certificate management:** There is no need to obtain and re-sign an IPA file or manually install separate certificates and device management profiles.
+- **A consistent installation and update channel:** Enable automatic updates in TestFlight to receive new builds through the same official channel. [TestFlight installation and updates](https://testflight.apple.com/)
+
 1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
-2. Tap the link below (or the icon at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
+2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
    - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/gnkqu44W)**
 3. **Supported Platforms:** iPhone, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
 
@@ -116,16 +122,6 @@ Native iOS sources live in `native-ios/TEGNAL`. Open `native-ios/TEGNAL.xcodepro
 - **iCloud container:** `iCloud.work.nextline.tegnal`
 
 Device signing and distribution require matching Apple Developer configuration and provisioning profiles. These identifiers create a separate app from existing installations. Image-library and challenge JSON backups from earlier versions can still be imported.
-
----
-
-## 📄 License and Brand Protection
-
-Source code and documentation are available under the [MIT license](LICENSE), allowing use, modification, redistribution, and commercial use.
-
-**The TEGNAL and NextLine names, logos, app icons, illustrations, and original visual design are excluded from the MIT license.** The [Brand and Visual Design Terms](BRAND_LICENSE.md) prohibit copying, adaptation, redistribution, and reuse in other products without prior written permission. Publicly distributed derivative apps must use independently created names, icons, artwork, and visual identities. Builds for private use and internal development and testing are permitted.
-
-The original `design/` directory is excluded from public repository tracking. Included resources needed to build the app or display its documentation remain subject to the brand terms above. Third-party materials retain their respective owners' terms.
 
 ---
 

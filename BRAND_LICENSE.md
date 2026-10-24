@@ -17,7 +17,7 @@ not grant a license to the following materials owned by NextLine (the
 
 Reserved artwork includes the NextLine-owned visual materials in
 `native-ios/AppIcon.icon/`, `native-ios/TEGNAL/Brand/`,
-`native-ios/TEGNAL/Assets.xcassets/`, and `docs/assets/`, as well as the local
+`native-ios/TEGNAL/Assets.xcassets/`, `docs/assets/`, and `design-output/`, as well as the local
 `design/` directory, which is excluded from future repository commits.
 This list does not limit protection for Reserved Materials elsewhere.
 Third-party marks and materials belong to their respective owners and retain
