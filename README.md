@@ -47,16 +47,23 @@
 
 ## 📲 다운로드 및 설치 방법
 
+1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
+2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
+   - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/gnkqu44W)**
+3. **공식 지원 기기:** iPhone, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
+
+<details>
+<summary><b>TestFlight가 뭔가요?</b></summary>
+
+TestFlight는 Apple이 제공하는 앱 베타 배포 서비스입니다.
+
 **안전하고 신뢰할 수 있는 권장 설치 방법은 Apple 공식 TestFlight입니다.**
 
 - **Apple이 관리하는 공식 배포 경로:** 개발자가 제공한 빌드를 TestFlight에서 직접 설치하며, 외부 테스터를 위한 공개에는 Apple의 베타 심사 절차가 적용됩니다. [Apple 공식 안내](https://developer.apple.com/testflight/)
 - **별도의 인증서 관리 불필요:** IPA 파일을 직접 구해 재서명하거나, 별도 인증서와 기기 관리 프로파일을 수동으로 설치할 필요가 없습니다.
 - **일관된 설치·업데이트 경로:** TestFlight에서 자동 업데이트를 켜면 새로운 빌드도 같은 공식 경로로 받아 설치할 수 있습니다. [TestFlight 설치·업데이트 안내](https://testflight.apple.com/)
 
-1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
-2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
-   - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/gnkqu44W)**
-3. **공식 지원 기기:** iPhone, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
+</details>
 
 **최신 앱 버전은 TestFlight로 우선 배포됩니다.** 최신 버전을 받으려면 TestFlight를 이용하세요.
 

@@ -47,16 +47,23 @@ Every AI feature runs **100% locally on your device** without sending your data 
 
 ## 📲 How to Install
 
+1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
+2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
+   - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/gnkqu44W)**
+3. **Supported Platforms:** iPhone, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
+
+<details>
+<summary><b>What is TestFlight?</b></summary>
+
+TestFlight is Apple’s service for distributing beta versions of apps.
+
 **Apple’s official TestFlight is the recommended installation method for a safe, trustworthy distribution experience.**
 
 - **Distribution managed by Apple:** Install developer-provided builds directly through TestFlight. Public distribution to external testers is subject to Apple’s beta review process. [Apple’s official guide](https://developer.apple.com/testflight/)
 - **No manual certificate management:** There is no need to obtain and re-sign an IPA file or manually install separate certificates and device management profiles.
 - **A consistent installation and update channel:** Enable automatic updates in TestFlight to receive new builds through the same official channel. [TestFlight installation and updates](https://testflight.apple.com/)
 
-1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
-2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
-   - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/gnkqu44W)**
-3. **Supported Platforms:** iPhone, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
+</details>
 
 **The latest app versions are distributed through TestFlight first.** Use TestFlight to receive the latest version.
 
