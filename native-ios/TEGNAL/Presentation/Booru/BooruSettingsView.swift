@@ -32,14 +32,14 @@ struct BooruServersView: View {
                 Button(L10n.text("Add a Server"), systemImage: "plus") { editing = .init() }.accessibilityIdentifier("booru.addServer")
             } header: { Text(L10n.text("Servers")) } footer: { Text(L10n.text("Danbooru, Gelbooru, Old Gelbooru (v0.1.11) and Moebooru compatible servers are supported.")) }
         }.navigationTitle(L10n.text("Servers")).navigationBarTitleDisplayMode(.inline)
-            .sheet(item: $editing) { item in BooruServerEditor(server: item.server) }
+            .sheet(item: $editing) { item in WebsiteConnectionEditor(server: item.server) }
             .confirmationDialog(L10n.text("Delete Server?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
                 Button(L10n.text("Delete"), role: .destructive) { if let deleting { store.perform { try store.deleteServer(deleting); Task { await BooruBrowserSession.reset(deleting) } } }; deleting = nil }
             } message: { Text(L10n.text("This removes the server and its Booru favorites, saved tags, artists, history and blacklist from this device.")) }
     }
 }
 
-enum ServerType: Hashable, Identifiable {
+enum ServerType: Hashable, Identifiable, Sendable {
     case comics
     case booru(BooruEngine)
 
@@ -63,11 +63,46 @@ enum ServerType: Hashable, Identifiable {
         case .booru: return "checkmark.circle"
         }
     }
+
+    static func recognizing(_ html: String) -> Self? {
+        if MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html) { return .comics }
+        if html.range(of: #"Danbooru\.|content=["']Danbooru"#, options: .regularExpression) != nil { return .booru(.danbooru) }
+        if html.range(of: #"Gelbooru\s+Beta\s+0\.1\.11"#, options: [.regularExpression, .caseInsensitive]) != nil { return .booru(.oldGelbooru) }
+        if html.range(of: "Moebooru", options: .caseInsensitive) != nil { return .booru(.moebooru) }
+        if html.range(of: "Gelbooru", options: .caseInsensitive) != nil { return .booru(.gelbooru) }
+        return nil
+    }
+
+    @MainActor static func detect(at url: URL, loadHTML: (URL) async throws -> String = { try await ContentBrowserTransport.inspectWebsite(at: $0) }) async throws -> Self? {
+        if let engine = BooruEngine.suggested(for: url) { return .booru(engine) }
+        #if DEBUG
+        if ContentUITestSupport.enabled { return recognizing(try await ContentUITestSupport.websiteHTML(for: url)) }
+        #endif
+        return recognizing(try await loadHTML(url))
+    }
 }
 
-struct BooruServerEditor: View {
+struct WebsiteModeGuide: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            mode(.manga, description: "Read multi-page works by their work number.", icon: "book.closed")
+            mode(.booru, description: "Browse individual images using tags.", icon: "photo")
+        }.accessibilityElement(children: .contain).accessibilityIdentifier("website.modeGuide")
+    }
+    private func mode(_ mode: AppMode, description: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon).foregroundStyle(.tint).frame(width: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(mode.title).font(.subheadline.bold())
+                Text(L10n.text(description)).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct WebsiteConnectionEditor: View {
     let server: BooruServer?
-    var acceptsComics = false
+    var initialAddress = ""
     @Environment(AppEnvironment.self) private var env
     @Environment(BooruStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -75,24 +110,22 @@ struct BooruServerEditor: View {
     @State private var address = ""
     @State private var serverTypeChoice: ServerType?
     @State private var showOptions = false
-    @State private var discoveredComicsAddress: String?
-    private var addressURL: URL? { try? BooruServer.validatedURL(address) }
-    private var allowsComics: Bool { acceptsComics || server == nil }
-
-    static func isComicsDomain(_ input: String) -> Bool {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return false }
-        let raw = trimmed.contains("://") ? trimmed : "https://" + trimmed
-        guard let url = URLComponents(string: raw), let host = url.host?.lowercased() else {
-            return trimmed.hasSuffix(".la")
-        }
-        return host.hasSuffix(".la") || host == "la"
+    private enum Detection: Equatable {
+        case idle, checking(URL), recognized(URL, ServerType), unrecognized(URL), failed(URL)
     }
+    @State private var detection = Detection.idle
+    @State private var detectionRetry = 0
+    private var needsConnectionHelp: Bool {
+        switch detection {
+        case .failed(let url), .unrecognized(let url): return url == addressURL
+        default: return false
+        }
+    }
+    private var addressURL: URL? { try? BooruServer.validatedURL(address) }
+    private var allowsComics: Bool { server == nil }
 
     private var detectedServerType: ServerType? {
-        if allowsComics && (Self.isComicsDomain(address) || addressURL?.absoluteString == discoveredComicsAddress && discoveredComicsAddress != nil) {
-            return .comics
-        }
+        if case .recognized(let url, let type) = detection, url == addressURL { return type }
         if let suggested = addressURL.flatMap(BooruEngine.suggested) {
             return .booru(suggested)
         }
@@ -113,84 +146,106 @@ struct BooruServerEditor: View {
     @State private var initialized = false
     @State private var validating = false
     var body: some View {
-        NavigationStack {
-            Form {
+        NavigationStack { form }
+    }
+
+    private var form: some View {
+        Form {
+            Section {
+                TextField("https://example.com", text: $address).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .disabled(server != nil).accessibilityIdentifier("booru.serverURL")
+                    .accessibilityLabel(L10n.text("Website Address"))
+            } header: { Text(L10n.text("Website Address")) } footer: {
+                Text(L10n.text(server == nil ? "Enter a comics or image website. We’ll detect its type and switch to the right mode." : "Enter the website’s home address."))
+            }
+            Section {
+                Picker(L10n.text("Mode"), selection: $serverTypeChoice) {
+                    Text(L10n.text("Automatic")).tag(nil as ServerType?)
+                    if allowsComics {
+                        Text(L10n.text("Comics Mode")).tag(Optional(ServerType.comics))
+                    }
+                    ForEach(BooruEngine.allCases) { engine in
+                        Text(L10n.text("Image Mode") + " · " + engine.title).tag(Optional(ServerType.booru(engine)))
+                    }
+                }.accessibilityIdentifier("booru.serverEngine")
+                if case .checking(let url) = detection, url == addressURL, serverTypeChoice == nil {
+                    ProgressView(L10n.text("Identifying website…")).accessibilityIdentifier("website.detecting")
+                } else if let effectiveServerType {
+                    Label(effectiveServerType == .comics ? L10n.text("Comics Mode") : L10n.text("Image Mode"), systemImage: effectiveServerType.icon)
+                        .foregroundStyle(.tint).accessibilityIdentifier("website.detectedMode")
+                    if case .booru(let engine) = effectiveServerType { Text(engine.title).font(.footnote).foregroundStyle(.secondary) }
+                    Text(L10n.text("Saving this address will open the matching mode.")).font(.footnote).foregroundStyle(.secondary)
+                } else if !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(L10n.text("Couldn’t identify this website. Check the connection or select its mode manually."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            } header: { Text(L10n.text("Connection")) }
+            if needsConnectionHelp {
                 Section {
-                    TextField("https://example.com", text: $address).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .disabled(server != nil).accessibilityIdentifier("booru.serverURL")
-                        .accessibilityLabel(L10n.text("Website Address"))
-                } header: { Text(L10n.text("Website Address")) } footer: {
-                    Text(L10n.text("Enter the website’s home address."))
+                    Text(ContentError.initialConnectionHelp)
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("website.connectionHelp")
+                    Button(L10n.text("Try Again")) { detectionRetry += 1 }
+                        .accessibilityIdentifier("website.retryDetection")
                 }
+            }
+            if server == nil { Section { WebsiteModeGuide() } }
+            if case .booru(let engine) = effectiveServerType {
                 Section {
-                    Picker(L10n.text("Server Type"), selection: $serverTypeChoice) {
-                        Text(L10n.text("Automatic")).tag(nil as ServerType?)
-                        if allowsComics {
-                            Text(L10n.text("Comics Mode")).tag(Optional(ServerType.comics))
+                    DisclosureGroup(isExpanded: $showOptions) {
+                        TextField(L10n.text("Name (Optional)"), text: $name).accessibilityIdentifier("booru.serverName")
+                        if engine != .oldGelbooru {
+                            TextField(L10n.text(engine == .gelbooru ? "User ID" : "Username"), text: $account).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            SecureField(L10n.text(engine == .moebooru ? "Password Hash" : "API Key"), text: $apiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            Text(L10n.text("Use credentials from your server account settings. They are stored securely in Keychain."))
+                                .font(.footnote).foregroundStyle(.secondary)
                         }
-                        ForEach(BooruEngine.allCases) { engine in
-                            Text(engine.title).tag(Optional(ServerType.booru(engine)))
-                        }
-                    }.accessibilityIdentifier("booru.serverEngine")
-                    if let effectiveServerType {
-                        Label(effectiveServerType.title, systemImage: effectiveServerType.icon).foregroundStyle(.secondary)
-                    } else if !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(L10n.text("Select the server type for this address."))
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                } header: { Text(L10n.text("Connection")) }
-                if case .booru(let engine) = effectiveServerType {
-                    Section {
-                        DisclosureGroup(isExpanded: $showOptions) {
-                            TextField(L10n.text("Name (Optional)"), text: $name).accessibilityIdentifier("booru.serverName")
-                            if engine != .oldGelbooru {
-                                TextField(L10n.text(engine == .gelbooru ? "User ID" : "Username"), text: $account).textInputAutocapitalization(.never).autocorrectionDisabled()
-                                SecureField(L10n.text(engine == .moebooru ? "Password Hash" : "API Key"), text: $apiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
-                                Text(L10n.text("Use credentials from your server account settings. They are stored securely in Keychain."))
-                                    .font(.footnote).foregroundStyle(.secondary)
-                            }
-                        } label: {
-                            Text(L10n.text("Additional Options")).accessibilityIdentifier("booru.serverOptions")
-                        }
+                    } label: {
+                        Text(L10n.text("Additional Options")).accessibilityIdentifier("booru.serverOptions")
                     }
                 }
-                if let server {
-                    Section {
-                        Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = true }
-                        NavigationLink { BooruCookiesView(server: server) } label: { Label(L10n.text("Cookies"), systemImage: "network.badge.shield.half.filled") }
-                    }
+            }
+            if let server {
+                Section {
+                    Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = true }
+                    NavigationLink { BooruCookiesView(server: server) } label: { Label(L10n.text("Cookies"), systemImage: "network.badge.shield.half.filled") }
                 }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
-            }.navigationTitle(L10n.text(acceptsComics ? "Connect a Website" : (server == nil ? "Add a Server" : "Edit Server")))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(L10n.text("Save"), action: save)
-                            .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || effectiveServerType == nil)
-                            .accessibilityIdentifier("booru.serverSave")
-                    }
+            }
+            if let error { Section { Text(error).foregroundStyle(.red) } }
+        }.navigationTitle(L10n.text(server == nil ? "Connect a Website" : "Edit Server"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.text("Save"), action: save)
+                        .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || effectiveServerType == nil)
+                        .accessibilityIdentifier("booru.serverSave")
                 }
-                .sheet(isPresented: $validating) { if let server { BooruValidationView(server: server) } }
-                .onAppear {
-                    guard !initialized else { return }; initialized = true
-                    guard let server else { return }
-                    name = server.displayName; address = server.baseURL.absoluteString; serverTypeChoice = .booru(server.engine); showOptions = true
-                    do { let credentials = try BooruKeychain.read(serverID: server.id); account = credentials.account; apiKey = credentials.apiKey }
-                    catch { self.error = error.localizedDescription }
+            }
+            .sheet(isPresented: $validating) { if let server { BooruValidationView(server: server) } }
+            .onAppear {
+                guard !initialized else { return }; initialized = true
+                guard let server else { address = initialAddress; return }
+                name = server.displayName; address = server.baseURL.absoluteString; serverTypeChoice = .booru(server.engine); showOptions = true
+                do { let credentials = try BooruKeychain.read(serverID: server.id); account = credentials.account; apiKey = credentials.apiKey }
+                catch { self.error = error.localizedDescription }
+            }
+            .task(id: "\(addressURL?.absoluteString ?? "")|\(detectionRetry)") {
+                detection = .idle
+                if server == nil { serverTypeChoice = nil }
+                guard allowsComics, server == nil, let url = addressURL,
+                      BooruEngine.suggested(for: url) == nil else { return }
+                detection = .checking(url)
+                do {
+                    try await Task.sleep(for: .milliseconds(400))
+                    let type = try await ServerType.detect(at: url)
+                    try Task.checkCancellation()
+                    guard addressURL == url else { return }
+                    detection = type.map { .recognized(url, $0) } ?? .unrecognized(url)
+                } catch {
+                    if !Task.isCancelled, addressURL == url { detection = .failed(url) }
                 }
-                .task(id: addressURL?.absoluteString) {
-                    discoveredComicsAddress = nil
-                    guard allowsComics, server == nil, let url = addressURL,
-                          !Self.isComicsDomain(address), BooruEngine.suggested(for: url) == nil else { return }
-                    do {
-                        try await Task.sleep(for: .milliseconds(400))
-                        if try await ContentBrowserTransport.isDocumentCatalog(at: url), addressURL == url {
-                            discoveredComicsAddress = url.absoluteString
-                        }
-                    } catch { }
-                }
-        }
+            }
     }
     private func save() {
         guard let effectiveServerType else { return }
@@ -214,6 +269,7 @@ struct BooruServerEditor: View {
                 try store.saveServer(value)
                 if server == nil { try store.setSelectedServers(store.selectedServerIDs + [value.id]) }
                 dismiss()
+                env.mode = .booru
             } catch { self.error = error.localizedDescription }
         }
     }

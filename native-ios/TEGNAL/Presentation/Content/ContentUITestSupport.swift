@@ -6,12 +6,28 @@ enum ContentUITestSupport {
     static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("--native-content-ui-test") || BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled }
     static let source = FixtureContentSource()
     static var libraryJumpTest: Bool { enabled && ProcessInfo.processInfo.arguments.contains("--library-jump-test") }
+    @MainActor private static var websiteRetryAttempts = 0
+    @MainActor static func websiteHTML(for url: URL) async throws -> String {
+        switch url.host {
+        case "catalog.example": return #"<script src="/js/index.search.tail.js"></script>"#
+        case "indexed.example": return #"<script src="https://ltn.storage.example/common.js"></script>"#
+        case "retry.example":
+            websiteRetryAttempts += 1
+            if websiteRetryAttempts == 1 { throw URLError(.secureConnectionFailed) }
+            return #"<script src="/js/index.search.tail.js"></script>"#
+        case "delayed.example":
+            try await Task.sleep(for: .seconds(2))
+            return #"<script src="/js/index.search.tail.js"></script>"#
+        default: return "<html><title>Website</title></html>"
+        }
+    }
     @MainActor static func environment() -> AppEnvironment {
         UserDefaults(suiteName: "work.nextline.tegnal.booru-ui-tests")!.removePersistentDomain(forName: "work.nextline.tegnal.booru-ui-tests")
         var env = AppEnvironment.preview()
         if ProcessInfo.processInfo.arguments.contains("--booru-restored-badge-test") {
             env = AppEnvironment(database: env.database, browserPreferences: UserDefaults(suiteName: "work.nextline.tegnal.booru-ui-tests")!, booru: try! BooruUITestSupport.restoredBadgeStore())
         }
+        if !ProcessInfo.processInfo.arguments.contains("--mode-hint-test") { env.acknowledgeModeSwitch() }
         env.isOnboardingCompleted = !ProcessInfo.processInfo.arguments.contains("--onboarding-test")
         if !ProcessInfo.processInfo.arguments.contains("--onboarding-test") && !ProcessInfo.processInfo.arguments.contains("--comics-setup-test") {
             _ = env.verifySite(input: "comics.example")

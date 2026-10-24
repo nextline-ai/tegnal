@@ -88,6 +88,21 @@ public enum MangaUrls {
     @discardableResult
     static func extractBackend(from text: String, site: String) -> Bool {
         guard !site.isEmpty, home == site else { return false }
+        guard let (dataHost, cdn) = indexedBackendHosts(in: text), home == site else { return false }
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: "manga.resolved_backend_site") != site {
+            defaults.removeObject(forKey: "manga.resolved_media_hosts")
+            defaults.removeObject(forKey: "manga.resolved_preview_base")
+        }
+        defaults.set(dataHost, forKey: "manga.resolved_data_host")
+        defaults.set(cdn, forKey: "manga.resolved_cdn_host")
+        defaults.set(site, forKey: "manga.resolved_backend_site")
+        defaults.set(Backend.indexed.rawValue, forKey: "manga.resolved_protocol")
+        return true
+    }
+
+    /// Protocol recognition without changing the user’s configured connection.
+    static func indexedBackendHosts(in text: String) -> (dataHost: String, cdn: String)? {
         func capture(_ pattern: String) -> String? {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
                   let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
@@ -104,22 +119,13 @@ public enum MangaUrls {
         } else if let host = capture(endpointPattern) ?? capture(scriptPattern) {
             dataHost = host
             cdn = host.hasPrefix("ltn.") ? String(host.dropFirst(4)) : host
-        } else { return false }
+        } else { return nil }
         guard [dataHost, cdn].allSatisfy({ host in
             host.split(separator: ".", omittingEmptySubsequences: false).allSatisfy {
                 !$0.isEmpty && !$0.hasPrefix("-") && !$0.hasSuffix("-")
             }
-        }), home == site else { return false }
-        let defaults = UserDefaults.standard
-        if defaults.string(forKey: "manga.resolved_backend_site") != site {
-            defaults.removeObject(forKey: "manga.resolved_media_hosts")
-            defaults.removeObject(forKey: "manga.resolved_preview_base")
-        }
-        defaults.set(dataHost, forKey: "manga.resolved_data_host")
-        defaults.set(cdn, forKey: "manga.resolved_cdn_host")
-        defaults.set(site, forKey: "manga.resolved_backend_site")
-        defaults.set(Backend.indexed.rawValue, forKey: "manga.resolved_protocol")
-        return true
+        }) else { return nil }
+        return (dataHost, cdn)
     }
 
     @discardableResult
@@ -146,7 +152,18 @@ public enum MangaUrls {
     }
 
     static func isDocumentPage(_ text: String) -> Bool {
-        text.range(of: #"(?:/js/index\.search\.|/ajax/search\b|\bconst\s+gallery\s*=|href\s*=\s*['"]/r/[0-9]+)"#, options: .regularExpression) != nil
+        if text.range(of: #"/js/index\.search\."#, options: .regularExpression) != nil { return true }
+        if text.contains("/ajax/search"), text.contains("serverConfig"), text.contains("thumbServer") { return true }
+        guard let data = text.data(using: .utf8),
+              let gallery = try? DocumentCatalogSource.embeddedObject(data, named: "gallery"),
+              (gallery["id"] as? NSNumber)?.int64Value ?? 0 > 0,
+              gallery["files"] is [[String: Any]] else { return false }
+        return true
+    }
+
+    static func isIndexedPage(_ text: String) -> Bool {
+        guard indexedBackendHosts(in: text) != nil else { return false }
+        return text.contains(".nozomi") || text.range(of: #"/(?:common\.js|gg\.js|galleries/[0-9]+\.js)(?:[?"'\s>]|$)"#, options: .regularExpression) != nil
     }
 
     static func registerMedia(_ urls: [URL], site: String) {
@@ -215,7 +232,7 @@ private actor MangaBackendResolver {
         guard !site.isEmpty, !Task.isCancelled else { return }
         if let flight = flights[site] { _ = await flight.value; return }
         if !force && MangaUrls.hasResolvedBackend { return }
-        if let date = failedAt[site], Date().timeIntervalSince(date) < 10 { return }
+        if !force, let date = failedAt[site], Date().timeIntervalSince(date) < 10 { return }
         let task = Task { await MangaUrls.discoverBackend(site: site, transport: transport) }
         flights[site] = task
         let succeeded = await task.value

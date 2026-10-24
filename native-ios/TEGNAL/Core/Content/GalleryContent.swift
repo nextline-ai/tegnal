@@ -15,12 +15,25 @@ enum ContentError: LocalizedError {
         }
     }
 
+    static var initialConnectionHelp: String {
+        L10n.text("Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again.")
+    }
+
+    static func withConnectionHelp(_ message: String, for error: Error) -> String {
+        guard let error = error as? URLError else { return message }
+        switch error.code {
+        case .secureConnectionFailed, .networkConnectionLost, .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+            return message + "\n\n" + initialConnectionHelp
+        default: return message
+        }
+    }
+
     static func message(_ error: Error) -> String {
         if let error = error as? ContentError { return error.localizedDescription }
         if let error = error as? URLError, error.code == .notConnectedToInternet {
             return L10n.text("Check your internet connection.")
         }
-        return L10n.text("Unable to load. Check your connection and try again.")
+        return withConnectionHelp(L10n.text("Unable to load. Check your connection and try again."), for: error)
     }
 }
 

@@ -20,11 +20,16 @@ struct AppToolbarActions<Content: View>: View {
 struct AppModeSwitch: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     /// A tutorial can preview the switch without changing the active library.
     var previewMode: Binding<AppMode>? = nil
     @State private var previewMotion = AppModeSwitchMotion()
     @State private var dragOrigin: CGFloat?
     @GestureState private var dragging = false
+    @State private var visible = false
+    @State private var hintPhase = 0
+    private let hintColors: [Color] = [.cyan, .purple, .pink, .orange, .green]
+    private var animatesHint: Bool { env.modeSwitchHintPending && visible && scenePhase == .active && !reduceMotion }
     private var activeMode: AppMode { previewMode?.wrappedValue ?? env.mode }
     private var current: AppMode { activeMode }
     private var motion: AppModeSwitchMotion { previewMode == nil ? env.modeSwitchMotion : previewMotion }
@@ -44,6 +49,21 @@ struct AppModeSwitch: View {
         }
         .buttonStyle(.plain)
         .glassCapsule(isInteractive: true)
+        .overlay {
+            if env.modeSwitchHintPending {
+                Capsule().strokeBorder(hintColors[hintPhase], lineWidth: 2.5)
+                    .background(Capsule().fill(hintColors[hintPhase].opacity(0.12)))
+                    .opacity(hintPhase.isMultiple(of: 2) ? 1 : 0.45)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
+        .task(id: animatesHint) {
+            guard animatesHint else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(1400)) } catch { return }
+                withAnimation(.easeInOut(duration: 0.7)) { hintPhase = (hintPhase + 1) % hintColors.count }
+            }
+        }
         .highPriorityGesture(DragGesture(minimumDistance: 12)
             .updating($dragging) { _, state, _ in state = true }
             .onChanged { value in
@@ -71,12 +91,15 @@ struct AppModeSwitch: View {
             if motion.target != mode { settle(mode) }
         }
         .onAppear {
+            visible = true
             if motion.position == nil { motion.position = position(current); motion.target = current }
         }
         .onDisappear {
+            visible = false
             dragOrigin = nil
         }
         .accessibilityLabel(L10n.text("Switch Modes"))
+        .accessibilityHint(L10n.text("Tap or swipe to switch between comics and images."))
         .accessibilityValue(current.title)
         .accessibilityIdentifier("app.mode")
     }
@@ -89,6 +112,7 @@ struct AppModeSwitch: View {
     }
     private func position(_ mode: AppMode) -> CGFloat { mode == .manga ? 0 : 44 }
     private func change(_ mode: AppMode) {
+        if mode != current { env.acknowledgeModeSwitch() }
         // The shared selection is authoritative immediately. A disappearing
         // toolbar must never commit an older selection from an animation callback.
         settle(mode)

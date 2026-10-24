@@ -1088,3 +1088,21 @@
 "Search Downloads" = "Search Downloads";
 
 "Download Actions" = "Download Actions";
+
+"Read multi-page works by their work number." = "Read multi-page works by their work number.";
+
+"Browse individual images using tags." = "Browse individual images using tags.";
+
+"Enter a comics or image website. We’ll detect its type and switch to the right mode." = "Enter a comics or image website. We’ll detect its type and switch to the right mode.";
+
+"Mode" = "Mode";
+
+"Identifying website…" = "Identifying website…";
+
+"Saving this address will open the matching mode." = "Saving this address will open the matching mode.";
+
+"Couldn’t identify this website. Check the connection or select its mode manually." = "Couldn’t identify this website. Check the connection or select its mode manually.";
+
+"Tap or swipe to switch between comics and images." = "Tap or swipe to switch between comics and images.";
+
+"Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again." = "Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again.";

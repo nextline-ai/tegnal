@@ -6,12 +6,13 @@ public struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showReader = false
     @State private var showOnboarding = false
+    @State private var showConnection = false
     public init() {}
     public var body: some View {
         @Bindable var env = env
         List {
             Section {
-                NavigationLink { ComicsConnectionSettings() } label: {
+                Button { showConnection = true } label: {
                     Label(L10n.text("Website Connection"), systemImage: "globe")
                 }.accessibilityIdentifier("settings.connection")
                 Toggle(L10n.text("Use Embedded Browser"), isOn: $env.useEmbeddedBrowser)
@@ -49,102 +50,35 @@ public struct SettingsView: View {
             ToolbarItem(placement: .topBarLeading) { LiquidGlassTitleCapsule(L10n.text("Settings")) }
         }
         .sheet(isPresented: $showReader) { ReaderSettingsView() }
+        .sheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil, initialAddress: env.isSiteVerified ? env.mangaSiteAddress : "") }
         .fullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
     }
 }
 
-/// The same setup route is available to every user, including App Review.
+/// All unconnected modes use the same neutral website connection flow.
 struct ComicsSetupView: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Image(systemName: "book.closed").font(.system(size: 48)).foregroundStyle(.tint)
-                Text(L10n.text("Connect Your Comics Website")).font(.largeTitle.bold())
-                Text(L10n.text("Enter a comics website address, or import your library from another manga viewer."))
-                    .foregroundStyle(.secondary)
-                NavigationLink { ComicsConnectionSettings() } label: {
-                    Label(L10n.text("Enter Website Address"), systemImage: "link")
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
-                }.buttonStyle(.borderedProminent).controlSize(.large)
-                    .accessibilityIdentifier("comics.enterAddress")
-                NavigationLink { MangaLibraryToolsView(importOnly: true) } label: {
-                    Label(L10n.text("Import from Another Manga Viewer"), systemImage: "square.and.arrow.down")
-                }.accessibilityIdentifier("comics.importMangaViewer")
-            }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
-        }
-        .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("comics.setup")
+        WebsiteSetupView(connectionIdentifier: "comics.enterAddress", mangaImportIdentifier: "comics.importMangaViewer")
+            .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier("comics.setup")
     }
 }
 
-
-/// Available on every unconnected comics library, not just during setup.
 struct ComicsConnectionCard: View {
-    @Environment(AppEnvironment.self) private var env
     @State private var showConnection = false
-    @State private var showImport = false
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(L10n.text(env.booru.servers.isEmpty ? "Connect Your Comics Website" : "Pools in Comics Mode"), systemImage: "book.closed")
-                .font(.headline).accessibilityIdentifier("comics.connectionCard")
-            Text(L10n.text(env.booru.servers.isEmpty
-                ? "Enter a comics website address, or import your library from another manga viewer."
-                : "With only image websites connected, Explore shows their pools. Connect a comics website to browse comics instead."))
-                .font(.subheadline).foregroundStyle(.secondary)
-            HStack {
-                Button { showConnection = true } label: {
-                    Text(L10n.text("Enter Website Address"))
-                }.buttonStyle(.borderedProminent).accessibilityIdentifier("comics.enterAddress")
-                Button { showImport = true } label: {
-                    Text(L10n.text("Import from Another Manga Viewer"))
-                }.buttonStyle(.bordered).accessibilityIdentifier("comics.importMangaViewer")
-            }.font(.subheadline)
+            Text(L10n.text("Connect a Website")).font(.headline).accessibilityIdentifier("comics.connectionCard")
+            Button { showConnection = true } label: {
+                Label(L10n.text("Enter Website Address"), systemImage: "link")
+            }.buttonStyle(.borderedProminent).accessibilityIdentifier("comics.enterAddress")
+            WebsiteImportLinks(mangaImportIdentifier: "comics.importMangaViewer").font(.subheadline)
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            .sheet(isPresented: $showConnection) {
-                NavigationStack {
-                    ComicsConnectionSettings()
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { showConnection = false } } }
-                }
-            }
-            .sheet(isPresented: $showImport) {
-                NavigationStack {
-                    MangaLibraryToolsView(importOnly: true)
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { showImport = false } } }
-                }
-            }
+            .sheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil) }
     }
 }
 
-struct ComicsConnectionSettings: View {
-    @Environment(AppEnvironment.self) private var env
-    @Environment(\.dismiss) private var dismiss
-    @State private var address = ""
-    @State private var invalid = false
-    var body: some View {
-        Form {
-            Section {
-                Label(L10n.text(env.isSiteVerified ? "Connected" : "Connection Disabled"), systemImage: env.isSiteVerified ? "checkmark.circle" : "globe")
-                TextField(L10n.text("Website Address"), text: $address)
-                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityIdentifier("comics.address")
-                Button(L10n.text("Connect")) {
-                    if env.verifySite(input: address) { dismiss() } else { invalid = true }
-                }
-                .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("comics.connect")
-            } footer: {
-                Text(L10n.text("Enter the website’s home address."))
-            }
-        }
-        .navigationTitle(L10n.text("Website Connection")).navigationBarTitleDisplayMode(.inline)
-        .onAppear { if env.isSiteVerified { address = env.mangaSiteAddress } }
-        .alert(L10n.text("Invalid Address"), isPresented: $invalid) {
-            Button(L10n.text("OK"), role: .cancel) {}
-        } message: { Text(L10n.text("This address is not supported. Check the website address and try again.")) }
-    }
-}
 
 struct MangaLibraryToolsView: View {
     var importOnly = false

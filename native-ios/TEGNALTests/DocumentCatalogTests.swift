@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import WebKit
 @testable import TEGNAL
 
 final class DocumentCatalogTests: XCTestCase {
@@ -14,6 +15,7 @@ final class DocumentCatalogTests: XCTestCase {
     }
     override func tearDown() {
         CatalogFixtureProtocol.install(nil)
+        RetryingCatalogProtocol.install(nil)
         for key in keys { UserDefaults.standard.set(saved[key], forKey: key) }
         super.tearDown()
     }
@@ -163,12 +165,96 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertTrue(DocumentCatalogSource.safeMediaURL(URL(string: "https://media.example/page.webp?expires=1")!))
     }
 
+    func testInterruptedBrowserRequestRecoversAndReusesTheWorkingTransport() async throws {
+        let fixture = RetryingCatalogFixture(directFailures: [.secureConnectionFailed, .secureConnectionFailed],
+                                             browserFailures: [URLError(.networkConnectionLost)])
+        let transport = fixture.transport(), url = URL(string: MangaUrls.home + "ajax/search")!
+        let (data, _) = try await transport.get(url, limit: 1024)
+        XCTAssertEqual(data, fixture.payload)
+        XCTAssertEqual(fixture.counts.direct, 2)
+        XCTAssertEqual(fixture.counts.browser, 2)
+        _ = try await transport.get(url, limit: 1024)
+        XCTAssertEqual(fixture.counts.direct, 2, "A successful browser connection must be reused")
+        XCTAssertEqual(fixture.counts.browser, 3)
+    }
+
+    func testTimedOutOriginCanRecoverThroughTheBrowser() async throws {
+        let fixture = RetryingCatalogFixture(directFailures: [.timedOut])
+        let (data, _) = try await fixture.transport().get(URL(string: MangaUrls.home + "ajax/search")!, limit: 1024)
+        XCTAssertEqual(data, fixture.payload)
+        XCTAssertEqual(fixture.counts.direct, 1)
+        XCTAssertEqual(fixture.counts.browser, 1)
+    }
+
+    func testTerminatedWebProcessIsRetryable() async throws {
+        let fixture = RetryingCatalogFixture(directFailures: [.secureConnectionFailed, .secureConnectionFailed],
+            browserFailures: [NSError(domain: WKError.errorDomain, code: WKError.webContentProcessTerminated.rawValue)])
+        _ = try await fixture.transport().get(URL(string: MangaUrls.home)!, limit: 1024)
+        XCTAssertEqual(fixture.counts.browser, 2)
+    }
+
+    func testPersistentConnectionFailureHasABoundedRetryCount() async {
+        let fixture = RetryingCatalogFixture(directFailures: Array(repeating: .secureConnectionFailed, count: 3),
+            browserFailures: Array(repeating: URLError(.networkConnectionLost), count: 3))
+        do {
+            _ = try await fixture.transport().get(URL(string: MangaUrls.home)!, limit: 1024)
+            XCTFail("A persistent failure must be returned after the retry budget")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost) }
+        XCTAssertEqual(fixture.counts.direct, 3)
+        XCTAssertEqual(fixture.counts.browser, 3)
+    }
+
+    func testCertificateRejectionAndHTTPFailuresAreNotRetried() async {
+        let certificate = RetryingCatalogFixture(directFailures: [.serverCertificateUntrusted])
+        do {
+            _ = try await certificate.transport().get(URL(string: MangaUrls.home)!, limit: 1024)
+            XCTFail("Certificate validation must remain enforced")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .serverCertificateUntrusted) }
+        XCTAssertEqual(certificate.counts.direct, 1)
+        XCTAssertEqual(certificate.counts.browser, 0)
+        for status in [403, 404, 429, 500] {
+            let fixture = RetryingCatalogFixture(status: status)
+            do {
+                _ = try await fixture.transport().get(URL(string: MangaUrls.home)!, limit: 1024)
+                XCTFail("HTTP failures must be reported")
+            } catch ContentError.unavailable(let received) { XCTAssertEqual(received, status) }
+            catch { XCTFail("Unexpected error: \(error)") }
+            XCTAssertEqual(fixture.counts.direct, 1)
+            XCTAssertEqual(fixture.counts.browser, 0)
+        }
+    }
+
+    func testCancellationStopsPendingConnectionRetries() async {
+        let first = expectation(description: "The initial browser request failed")
+        let fixture = RetryingCatalogFixture(directFailures: [.secureConnectionFailed], browserFailures: [URLError(.networkConnectionLost)])
+        fixture.onBrowserRequest = { first.fulfill() }
+        let transport = fixture.transport(), url = URL(string: MangaUrls.home)!
+        let task = Task { try await transport.get(url, limit: 1024) }
+        await fulfillment(of: [first], timeout: 3)
+        task.cancel()
+        do { _ = try await task.value; XCTFail("Canceled work must not retry") }
+        catch { XCTAssertTrue(error is CancellationError || (error as? URLError)?.code == .cancelled) }
+        XCTAssertEqual(fixture.counts.direct, 1)
+        XCTAssertEqual(fixture.counts.browser, 1)
+    }
+
+    func testChangingTheSiteStopsPendingConnectionRetries() async {
+        let fixture = RetryingCatalogFixture(directFailures: [.secureConnectionFailed], browserFailures: [URLError(.networkConnectionLost)])
+        fixture.onBrowserRequest = { UserDefaults.standard.set("other.example", forKey: "manga.site_address") }
+        do {
+            _ = try await fixture.transport().get(URL(string: MangaUrls.home)!, limit: 1024)
+            XCTFail("A previous site's request must stop")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertEqual(fixture.counts.direct, 1)
+        XCTAssertEqual(fixture.counts.browser, 1)
+    }
+
     func testConfiguredLiveCatalog() async throws {
         guard let address = ProcessInfo.processInfo.environment["TEGNAL_CATALOG_ADDRESS"], let url = URL(string: address), let host = url.host else {
             throw XCTSkip("An explicit catalog address is required for live verification")
         }
-        let detected = try await ContentBrowserTransport.isDocumentCatalog(at: url)
-        XCTAssertTrue(detected)
+        let detected = try await ServerType.detect(at: url)
+        XCTAssertEqual(detected, .comics)
         XCTAssertEqual(MangaUrls.configuredHost, "catalog.example", "Address detection must not change the saved connection")
         UserDefaults.standard.set(host, forKey: "manga.site_address")
         let source = MangaContentSource()
@@ -190,6 +276,8 @@ final class DocumentCatalogTests: XCTestCase {
         let pageDecodes = await MainActor.run { UIImage(data: fullPage) != nil }
         XCTAssertTrue(pageDecodes)
         if let reference = ProcessInfo.processInfo.environment["TEGNAL_REFERENCE_ADDRESS"], let referenceURL = URL(string: reference), let referenceHost = referenceURL.host {
+            let referenceType = try await ServerType.detect(at: referenceURL)
+            XCTAssertEqual(referenceType, .comics)
             UserDefaults.standard.set(referenceHost, forKey: "manga.site_address")
             MangaUrls.resetResolvedBackend()
             let counterpart = try await source.gallery(id)
@@ -218,6 +306,63 @@ final class DocumentCatalogTests: XCTestCase {
         }
         return drawn ? bytes : nil
     }
+}
+
+private final class RetryingCatalogFixture: @unchecked Sendable {
+    let payload = Data("[]".utf8)
+    private let lock = NSLock()
+    private var directFailures: [URLError.Code]
+    private var browserFailures: [Error]
+    private var directCount = 0
+    private var browserCount = 0
+    private let status: Int
+    var onBrowserRequest: (@Sendable () -> Void)?
+    var counts: (direct: Int, browser: Int) { lock.withLock { (directCount, browserCount) } }
+
+    init(directFailures: [URLError.Code] = [], browserFailures: [Error] = [], status: Int = 200) {
+        self.directFailures = directFailures
+        self.browserFailures = browserFailures
+        self.status = status
+    }
+
+    func transport() -> ContentTransport {
+        RetryingCatalogProtocol.install(self)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RetryingCatalogProtocol.self]
+        return ContentTransport(configuration: configuration, browserFetch: { [self] url, _, _, _, _ in
+            let failure = lock.withLock { browserCount += 1; return browserFailures.isEmpty ? nil : browserFailures.removeFirst() }
+            onBrowserRequest?()
+            if let failure { throw failure }
+            return response(url)
+        })
+    }
+
+    func reply(_ url: URL) throws -> (Data, HTTPURLResponse) {
+        let failure = lock.withLock { directCount += 1; return directFailures.isEmpty ? nil : directFailures.removeFirst() }
+        if let failure { throw URLError(failure) }
+        return response(url)
+    }
+    private func response(_ url: URL) -> (Data, HTTPURLResponse) {
+        (payload, HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!)
+    }
+}
+
+private final class RetryingCatalogProtocol: URLProtocol {
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var fixture: RetryingCatalogFixture?
+    static func install(_ fixture: RetryingCatalogFixture?) { lock.withLock { Self.fixture = fixture } }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        do {
+            guard let fixture = Self.lock.withLock({ Self.fixture }) else { throw URLError(.cancelled) }
+            let (data, response) = try fixture.reply(request.url!)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch { client?.urlProtocol(self, didFailWithError: error) }
+    }
+    override func stopLoading() { }
 }
 
 private final class CatalogFixture: @unchecked Sendable {

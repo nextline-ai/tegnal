@@ -60,7 +60,7 @@ public struct OnboardingView: View {
                 }
             }
             .sheet(item: $validating) { BooruValidationView(server: $0) }
-            .sheet(isPresented: $addingServer) { BooruServerEditor(server: nil, acceptsComics: true) }
+            .sheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: false, onCompletion: handleImport)
         }.environment(env.booru)
     }
@@ -68,6 +68,8 @@ public struct OnboardingView: View {
     private var setup: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(L10n.text("Connect a Website")).font(.largeTitle.bold())
+            Text(L10n.text("Enter a comics or image website. We’ll detect its type and switch to the right mode.")).foregroundStyle(.secondary)
+            WebsiteModeGuide()
             VStack(alignment: .leading, spacing: 16) {
                 Button { addingServer = true } label: {
                     Label(L10n.text("Enter Website Address"), systemImage: "plus.circle")
@@ -86,18 +88,6 @@ public struct OnboardingView: View {
                     }
                 }
             }.padding(18).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            Button { step = 1 } label: {
-                HStack(spacing: 14) {
-                    Image(systemName: "square.and.arrow.down").font(.title2)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(L10n.text("Import Data")).font(.headline)
-                        Text("Anime Boxes · Other Manga Viewer").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.footnote)
-                }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            }.buttonStyle(.plain).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-                .accessibilityIdentifier("onboarding.chooseImport")
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(L10n.text("iCloud Sync"), isOn: Binding(get: { env.sync.enabled }, set: { env.sync.enabled = $0 }))
                 Text(L10n.text("Sync saved items and settings across your devices."))
@@ -111,6 +101,14 @@ public struct OnboardingView: View {
             Image(systemName: "square.and.arrow.down").font(.system(size: 42)).foregroundStyle(.tint)
             Text(L10n.text("Import Data")).font(.title.bold())
             VStack(alignment: .leading, spacing: 12) {
+                Label("Anime Boxes", systemImage: "shippingbox.fill").font(.headline)
+                Text(".abbj").font(.subheadline).foregroundStyle(.secondary)
+                NavigationLink { AnimeBoxesImportView() } label: {
+                    Label(L10n.text("Import"), systemImage: "doc.badge.plus")
+                }.buttonStyle(.bordered).accessibilityIdentifier("onboarding.import")
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+            VStack(alignment: .leading, spacing: 12) {
                 Label(L10n.text("Other Manga Viewer"), systemImage: "book.fill").font(.headline)
                 Text("user.db · data.db").font(.subheadline).foregroundStyle(.secondary)
                 Button(L10n.text("Choose File"), systemImage: "doc.badge.plus") { showFilePicker = true }
@@ -118,14 +116,6 @@ public struct OnboardingView: View {
                 if isImporting { ProgressView(importStatus) }
                 else if importCompleted { Label(importSummary, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
                 else if !importStatus.isEmpty { Text(importStatus).foregroundStyle(.red) }
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Anime Boxes", systemImage: "shippingbox.fill").font(.headline)
-                Text(".abbj").font(.subheadline).foregroundStyle(.secondary)
-                NavigationLink { AnimeBoxesImportView() } label: {
-                    Label(L10n.text("Import"), systemImage: "doc.badge.plus")
-                }.buttonStyle(.bordered).accessibilityIdentifier("onboarding.import")
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
         }
@@ -156,10 +146,9 @@ public struct OnboardingView: View {
     private func next() {
         if importsOnly { dismiss(); return }
         if step == 0 {
-            env.mode = .booru
             step = 1
         } else if step == 1 { step = 2 }
-        else { env.mode = .booru; env.isOnboardingCompleted = true; dismiss() }
+        else { env.isOnboardingCompleted = true; dismiss() }
     }
 
     private func handleImport(result: Result<[URL], Error>) {

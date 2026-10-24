@@ -523,6 +523,36 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
     }
 
+    func testExploreReverseScrollKeepsPreparedTextAndCardHeight() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let first = element(app, "content.gallery.900000001")
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        let prepared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "네이티브 읽기 테스트"), object: first)
+        XCTAssertEqual(XCTWaiter.wait(for: [prepared], timeout: 5), .completed)
+        let originalHeight = first.frame.height
+        let later = element(app, "content.gallery.900000025")
+        for _ in 0..<12 {
+            if later.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(later.isHittable)
+        XCTAssertFalse(first.isHittable)
+        for _ in 0..<12 {
+            if first.isHittable { break }
+            app.swipeDown()
+            for card in app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "content.gallery.")).allElementsBoundByIndex where card.isHittable {
+                XCTAssertTrue(card.label.contains("네이티브 읽기 테스트"), "Returning rows must retain their text while covers are restored")
+            }
+        }
+        XCTAssertTrue(first.isHittable)
+        XCTAssertEqual(first.frame.height, originalHeight, accuracy: 1)
+        capture(app, "Explore returning to previously loaded rows")
+        first.tap()
+        XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
+    }
+
     func testPreparedExploreCoverKeepsDetailLayoutAndDismissesDownward() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

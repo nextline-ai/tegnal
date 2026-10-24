@@ -7,15 +7,27 @@ import WebKit
 enum ContentBrowserTransport {
     private static var sessions: [String: Browser] = [:]
 
-    static func isDocumentCatalog(at origin: URL) async throws -> Bool {
-        guard origin.scheme == "https", origin.user == nil, origin.password == nil else { return false }
+    static func inspectWebsite(at origin: URL) async throws -> String {
+        for attempt in 0..<3 {
+            do { return try await websiteHTML(at: origin) }
+            catch {
+                try Task.checkCancellation()
+                guard attempt < 2, ContentTransport.isTransient(error) else { throw error }
+                try await Task.sleep(for: .milliseconds(250 * (attempt + 1)))
+            }
+        }
+        throw URLError(.cannotConnectToHost)
+    }
+
+    private static func websiteHTML(at origin: URL) async throws -> String {
+        guard origin.scheme == "https", origin.user == nil, origin.password == nil else { throw URLError(.unsupportedURL) }
         let browser = Browser(origin: origin)
         defer { browser.view.stopLoading() }
         try await browser.ready()
         let value = try await browser.view.evaluateJavaScript("document.documentElement.outerHTML", in: nil, contentWorld: .defaultClient)
         try Task.checkCancellation()
-        guard let text = value as? String, text.utf8.count <= 1_000_000 else { return false }
-        return MangaUrls.isDocumentPage(text)
+        guard let text = value as? String, text.utf8.count <= 1_000_000 else { throw ContentError.invalidResponse }
+        return text
     }
 
     static func get(_ url: URL, origin: URL, limit: Int, range: Range<Int>?, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
@@ -65,6 +77,10 @@ enum ContentBrowserTransport {
                     }
                     return {status:response.status, body:btoa(binary),
                         mime:response.headers.get('content-type') ?? '', range:response.headers.get('content-range') ?? ''};
+                } catch (error) {
+                    if (error.name === 'AbortError') return {networkError:'timeout'};
+                    if (error.name === 'TypeError') return {networkError:'connection'};
+                    throw error;
                 } finally {
                     clearTimeout(timer);
                     globalThis.contentRequests.delete(requestID);
@@ -81,6 +97,9 @@ enum ContentBrowserTransport {
         }
         try Task.checkCancellation()
         guard origin.absoluteString == MangaUrls.home, ContentTransport.allows(url) else { throw CancellationError() }
+        if let result = value as? [String: Any], let failure = result["networkError"] as? String {
+            throw URLError(failure == "timeout" ? .timedOut : .networkConnectionLost)
+        }
         guard let result = value as? [String: Any], let status = result["status"] as? Int,
               let body = result["body"] as? String, let data = Data(base64Encoded: body), data.count <= limit,
               let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil,

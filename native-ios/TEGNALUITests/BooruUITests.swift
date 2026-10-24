@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 final class BooruUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -707,7 +708,7 @@ final class BooruUITests: XCTestCase {
         element(app, "booru.serversLink").tap()
         element(app, "booru.addServer").tap()
         element(app, "booru.serverURL").tap(); element(app, "booru.serverURL").typeText("https://example.com")
-        element(app, "booru.serverEngine").tap(); app.buttons["Danbooru"].tap()
+        element(app, "booru.serverEngine").tap(); app.buttons["Image Mode · Danbooru"].tap()
         reveal(app, "booru.serverOptions").tap()
         element(app, "booru.serverName").tap(); element(app, "booru.serverName").typeText("My Booru")
         element(app, "booru.serverSave").tap()
@@ -1179,6 +1180,8 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["danbooru.donmai.us"].exists)
         XCTAssertFalse(app.staticTexts["Safebooru"].exists)
         XCTAssertFalse(app.buttons["Validate Client Danbooru"].exists)
+        XCTAssertFalse(element(app, "onboarding.chooseImport").exists)
+        XCTAssertFalse(element(app, "onboarding.import").exists)
         capture(app, "Unified onboarding addresses")
         element(app, "onboarding.continue").tap()
         XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
@@ -1195,7 +1198,10 @@ final class BooruUITests: XCTestCase {
         capture(app, "Unified onboarding switch tutorial")
         selectMode(app, "manga")
         element(app, "onboarding.continue").tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element(app, "onboarding.tutorial"))
+        waitForExpectations(timeout: 5)
         XCTAssertTrue(app.tabBars.buttons["More"].waitForExistence(timeout: 5))
+        assertMode(app, "booru")
         XCTAssertFalse(element(app, "comics.enterAddress").exists)
         selectMode(app, "manga")
         XCTAssertTrue(element(app, "comics.enterAddress").waitForExistence(timeout: 5))
@@ -1271,9 +1277,11 @@ final class BooruUITests: XCTestCase {
         openMenu(app); element(app, "booru.close").tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         element(app, "comics.enterAddress").tap()
-        let input = element(app, "comics.address")
-        input.tap(); input.typeText("comics.example")
-        element(app, "comics.connect").tap()
+        let input = element(app, "booru.serverURL")
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap(); input.typeText("catalog.example")
+        XCTAssertTrue(element(app, "website.detectedMode").waitForExistence(timeout: 5))
+        element(app, "booru.serverSave").tap()
         XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "comics.connectionCard").exists)
         XCTAssertTrue(app.tabBars.buttons["Explore"].isSelected)
@@ -1284,15 +1292,14 @@ final class BooruUITests: XCTestCase {
         selectMode(app, "manga")
         XCTAssertTrue(element(app, "comics.enterAddress").waitForExistence(timeout: 5))
         element(app, "comics.enterAddress").tap()
-        let input = element(app, "comics.address")
+        let input = element(app, "booru.serverURL")
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap(); input.typeText("not-a-domain")
-        element(app, "comics.connect").tap()
-        XCTAssertTrue(app.alerts["Invalid Address"].waitForExistence(timeout: 5))
-        app.alerts.buttons["OK"].tap()
+        XCTAssertFalse(element(app, "booru.serverSave").isEnabled)
         input.tap()
-        input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "not-a-domain".count) + "comics.example")
-        element(app, "comics.connect").tap()
+        input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "not-a-domain".count) + "catalog.example")
+        XCTAssertTrue(element(app, "website.detectedMode").waitForExistence(timeout: 5))
+        element(app, "booru.serverSave").tap()
         XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "comics.enterAddress").exists)
         selectMode(app, "booru")
@@ -1361,8 +1368,7 @@ final class BooruUITests: XCTestCase {
         element(app, "onboarding.continue").tap()
         capture(app, "Concise onboarding mode tutorial")
         element(app, "onboarding.continue").tap()
-        XCTAssertTrue(element(app, "booru.setupAddress").waitForExistence(timeout: 5))
-        selectMode(app, "manga")
+        assertMode(app, "manga")
         XCTAssertTrue(app.tabBars.buttons["설정"].waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "comics.enterAddress").exists)
     }
@@ -1389,6 +1395,171 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
     }
 
+    func testSkippedOnboardingAutoDetectsDocumentCatalogFromTheInitialAddressForm() {
+        let app = launch(extra: ["--onboarding-test"])
+        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        XCTAssertTrue(element(app, "booru.setupAddress").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "website.modeGuide").exists)
+        element(app, "booru.setupAddress").tap()
+        let address = element(app, "booru.serverURL")
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap(); address.typeText("https://catalog.example")
+        let mode = element(app, "website.detectedMode")
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertEqual(mode.label, "Comics Mode")
+        element(app, "booru.serverSave").tap()
+        assertMode(app, "manga")
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "comics.connectionCard").exists)
+    }
+
+    func testBothModesShareTheConnectionScreenAndBothImportOptions() {
+        let app = launch(extra: ["--comics-setup-test", "--no-sites-test"])
+        let boxes = element(app, "booru.setupImport")
+        let other = reveal(app, "website.importMangaViewer")
+        XCTAssertLessThan(boxes.frame.minY, other.frame.minY)
+        other.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        selectMode(app, "manga")
+        XCTAssertTrue(app.staticTexts["Connect a Website"].waitForExistence(timeout: 5))
+        let comicsImport = reveal(app, "comics.importMangaViewer")
+        XCTAssertLessThan(element(app, "booru.setupImport").frame.minY, comicsImport.frame.minY)
+        comicsImport.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        let connect = element(app, "comics.enterAddress")
+        for _ in 0..<5 where !connect.isHittable { app.swipeDown() }
+        connect.tap()
+        let address = element(app, "booru.serverURL")
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap(); address.typeText("sample.booru.org")
+        element(app, "booru.serverSave").tap()
+        assertMode(app, "booru")
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
+        capture(app, "Shared connection form selects image mode from comics")
+    }
+
+    func testFirstUseModeSwitchCyclesColorsAndStopsAfterUserSwitches() {
+        let app = launch(extra: ["--onboarding-test", "--mode-hint-test"])
+        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        let control = element(app, "app.mode")
+        XCTAssertTrue(control.waitForExistence(timeout: 5))
+        var initial = (count: 0, color: [0, 0, 0])
+        let brightCue = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let sample = self.switchAccent(control)
+            if sample.count > 100 { initial = sample; return true }
+            return false
+        }, object: control)
+        XCTAssertEqual(XCTWaiter.wait(for: [brightCue], timeout: 5), .completed)
+        XCTAssertGreaterThan(initial.count, 100)
+        if !UIAccessibility.isReduceMotionEnabled {
+            let changesColor = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let current = self.switchAccent(control)
+                return current.count > 100 && zip(initial.color, current.color).reduce(0) { $0 + abs($1.0 - $1.1) } > 40
+            }, object: control)
+            XCTAssertEqual(XCTWaiter.wait(for: [changesColor], timeout: 6), .completed)
+        }
+        capture(app, "First-use mode switch color cue")
+        control.tap()
+        assertMode(app, "manga")
+        let cueReturns = expectation(for: NSPredicate { _, _ in self.switchAccent(control).count > initial.count / 2 }, evaluatedWith: control)
+        cueReturns.isInverted = true
+        waitForExpectations(timeout: 3)
+        capture(app, "Mode cue stopped after first manual switch")
+    }
+
+    private func switchAccent(_ control: XCUIElement) -> (count: Int, color: [Int]) {
+        guard let image = control.screenshot().image.cgImage else { return (0, [0, 0, 0]) }
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        var count = 0, color = [0, 0, 0]
+        for offset in stride(from: 0, to: bytes.count, by: 4) {
+            let rgb = (0..<3).map { Int(bytes[offset + $0]) }
+            if rgb.max()! - rgb.min()! > 20, rgb.max()! > 100 {
+                count += 1
+                for channel in 0..<3 { color[channel] += rgb[channel] }
+            }
+        }
+        return (count, color.map { $0 / max(1, count) })
+    }
+
+    func testOnboardingAutoDetectsDocumentCatalogAndKeepsItsModeAfterFinishing() {
+        let app = launch(extra: ["--onboarding-test"])
+        XCTAssertTrue(element(app, "website.modeGuide").waitForExistence(timeout: 5))
+        element(app, "onboarding.addServer").tap()
+        let address = element(app, "booru.serverURL")
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap(); address.typeText("catalog.example")
+        let mode = element(app, "website.detectedMode")
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertEqual(mode.label, "Comics Mode")
+        element(app, "booru.serverSave").tap()
+        XCTAssertTrue(element(app, "onboarding.comicsConnected").waitForExistence(timeout: 5))
+        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        assertMode(app, "manga")
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
+        selectMode(app, "booru")
+        XCTAssertTrue(element(app, "booru.setupAddress").waitForExistence(timeout: 5), "A comics website must not become an image server")
+    }
+
+    func testConnectionHelpForUnknownAndUnreachableWebsitesCanRetryWithoutEditingAddress() {
+        let app = launch(extra: ["--onboarding-test"])
+        XCTAssertFalse(element(app, "onboarding.chooseImport").exists)
+        element(app, "onboarding.addServer").tap()
+        let address = element(app, "booru.serverURL")
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "website.connectionHelp").exists)
+        address.tap(); address.typeText("unknown.example")
+        let help = element(app, "website.connectionHelp")
+        XCTAssertTrue(help.waitForExistence(timeout: 5))
+        XCTAssertTrue(help.label.contains("VPN or HTTPS bypass"))
+        XCTAssertFalse(element(app, "booru.serverSave").isEnabled)
+        app.buttons["Cancel"].tap()
+
+        element(app, "onboarding.addServer").tap()
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap(); address.typeText("retry.example")
+        XCTAssertTrue(help.waitForExistence(timeout: 5))
+        capture(app, "First connection network guidance")
+        reveal(app, "website.retryDetection").tap()
+        let mode = element(app, "website.detectedMode")
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertEqual(mode.label, "Comics Mode")
+        XCTAssertFalse(help.exists)
+        XCTAssertTrue(element(app, "booru.serverSave").isEnabled)
+        app.buttons["Cancel"].tap()
+        element(app, "onboarding.continue").tap()
+        XCTAssertTrue(element(app, "onboarding.import").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "onboarding.mangaViewerImport").exists)
+    }
+
+    func testChangingTheAddressRejectsAStaleComicsDetection() {
+        let app = launch(extra: ["--onboarding-test"])
+        element(app, "onboarding.addServer").tap()
+        let address = element(app, "booru.serverURL")
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap(); address.typeText("delayed.example")
+        XCTAssertTrue(element(app, "website.detecting").waitForExistence(timeout: 5))
+        address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "delayed.example".count) + "sample.booru.org")
+        let mode = element(app, "website.detectedMode")
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        let stale = expectation(for: NSPredicate(format: "label == %@", "Comics Mode"), evaluatedWith: mode)
+        stale.isInverted = true
+        waitForExpectations(timeout: 2.5)
+        XCTAssertEqual(mode.label, "Image Mode")
+        element(app, "booru.serverSave").tap()
+        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        assertMode(app, "booru")
+    }
+
     func testImageModeDetectsComicsAddressAndSwitchesModes() {
         let app = launch(extra: ["--comics-setup-test"])
         assertMode(app, "booru")
@@ -1397,8 +1568,10 @@ final class BooruUITests: XCTestCase {
         element(app, "booru.addServer").tap()
         let address = element(app, "booru.serverURL")
         XCTAssertTrue(address.waitForExistence(timeout: 5))
-        address.tap(); address.typeText("https://hitomi.la/")
-        XCTAssertTrue(app.staticTexts["Comics Mode"].exists)
+        address.tap(); address.typeText("https://indexed.example/")
+        let detected = element(app, "website.detectedMode")
+        XCTAssertTrue(detected.waitForExistence(timeout: 5))
+        XCTAssertEqual(detected.label, "Comics Mode")
         XCTAssertFalse(element(app, "booru.serverOptions").exists)
         element(app, "booru.serverSave").tap()
         assertMode(app, "manga")
@@ -1409,7 +1582,7 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["More"].tap()
         if !element(app, "booru.addServer").exists { element(app, "booru.serversLink").tap() }
         XCTAssertTrue(element(app, "booru.addServer").waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["hitomi.la"].exists, "A comics connection must not become an image server")
+        XCTAssertFalse(app.staticTexts["indexed.example"].exists, "A comics connection must not become an image server")
     }
 
     func testModeSwitchSlidesBetweenLibraries() {

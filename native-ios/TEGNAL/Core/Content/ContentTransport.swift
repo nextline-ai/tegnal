@@ -1,8 +1,11 @@
 import Foundation
+import WebKit
 
 /// Bounded chunked downloads. The delegate rejects foreign redirects before following them.
 final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     static let shared = ContentTransport()
+    typealias BrowserFetch = @Sendable (URL, URL, Int, Range<Int>?, TimeInterval) async throws -> (Data, HTTPURLResponse)
+    private let browserFetch: BrowserFetch
     private var session: URLSession!
     private let lock = NSLock()
     private var requests: [Int: Download] = [:]
@@ -29,7 +32,11 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         func cancel() { lock.withLock { cancelled = true; task?.cancel() } }
     }
 
-    init(configuration: URLSessionConfiguration = .ephemeral) {
+    init(configuration: URLSessionConfiguration = .ephemeral,
+         browserFetch: @escaping BrowserFetch = { url, origin, limit, range, timeout in
+             try await ContentBrowserTransport.get(url, origin: origin, limit: limit, range: range, timeout: timeout)
+         }) {
+        self.browserFetch = browserFetch
         super.init()
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
@@ -61,22 +68,52 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
 
     func get(_ url: URL, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil, timeout: TimeInterval = 20) async throws -> (Data, HTTPURLResponse) {
         guard Self.allows(url), limit > 0 else { throw URLError(.unsupportedURL) }
-        try Task.checkCancellation()
         let site = MangaUrls.home
+        var attempt = 0
+        while true {
+            try Task.checkCancellation()
+            guard MangaUrls.home == site else { throw CancellationError() }
+            do {
+                let result = try await getOnce(url, site: site, limit: limit, range: range, galleryID: galleryID, timeout: timeout)
+                try Task.checkCancellation()
+                guard MangaUrls.home == site else { throw CancellationError() }
+                return result
+            } catch {
+                try Task.checkCancellation()
+                guard MangaUrls.home == site else { throw CancellationError() }
+                guard attempt < 2, Self.isTransient(error) else { throw error }
+                attempt += 1
+                try await Task.sleep(for: .milliseconds(250 * attempt))
+            }
+        }
+    }
+
+    private func getOnce(_ url: URL, site: String, limit: Int, range: Range<Int>?, galleryID: Int64?, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        try Task.checkCancellation()
         let usesBrowser = lock.withLock { browserOrigins.contains(site) }
         if usesBrowser, url.host == MangaUrls.configuredHost, let origin = URL(string: site) {
-            return try await ContentBrowserTransport.get(url, origin: origin, limit: limit, range: range, timeout: timeout)
+            return try await browserFetch(url, origin, limit, range, timeout)
         }
         do { return try await direct(url, limit: limit, range: range, galleryID: galleryID, timeout: timeout) }
         catch {
             try Task.checkCancellation()
             guard MangaUrls.home == site, let network = error as? URLError,
-                  [.secureConnectionFailed, .networkConnectionLost].contains(network.code),
+                  [.secureConnectionFailed, .networkConnectionLost].contains(network.code)
+                    || (url.host == MangaUrls.configuredHost && [.timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed].contains(network.code)),
                   let origin = URL(string: site) else { throw error }
-            let result = try await ContentBrowserTransport.get(url, origin: origin, limit: limit, range: range, timeout: timeout)
+            let result = try await browserFetch(url, origin, limit, range, timeout)
             if url.host == origin.host { _ = lock.withLock { browserOrigins.insert(site) } }
             return result
         }
+    }
+
+    static func isTransient(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NSURLErrorDomain {
+            return [.secureConnectionFailed, .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed]
+                .contains(URLError.Code(rawValue: error.code))
+        }
+        return error.domain == WKError.errorDomain && error.code == WKError.webContentProcessTerminated.rawValue
     }
 
     private func direct(_ url: URL, limit: Int, range: Range<Int>?, galleryID: Int64?, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {

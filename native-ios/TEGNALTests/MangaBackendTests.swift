@@ -126,6 +126,17 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertEqual(MangaUrls.cdnHost, "storage.example")
     }
 
+    func testForcedDiscoveryCanRecoverImmediatelyAfterAFailure() async {
+        let fixture = fixture(), transport = fixture.transport()
+        fixture.setDiscoveryAvailable(false)
+        await MangaUrls.resolveBackend(transport: transport)
+        XCTAssertFalse(MangaUrls.hasResolvedBackend)
+        fixture.setDiscoveryAvailable(true)
+        await MangaUrls.resolveBackend(transport: transport, force: true)
+        XCTAssertTrue(MangaUrls.hasResolvedBackend, "Explicit recovery must not be blocked by the failed-discovery cooldown")
+        XCTAssertEqual(fixture.count(path: "/"), 2)
+    }
+
     func testRoutingUsesTheSavedCDNWithoutRecheckingTheHomepage() async throws {
         let fixture = fixture()
         let source = MangaContentSource(transport: fixture.transport())
@@ -144,10 +155,12 @@ private final class BackendFixture: @unchecked Sendable {
     let host = "comics-" + UUID().uuidString.lowercased() + ".example"
     private let lock = NSLock()
     private var generation = 1
+    private var discoveryAvailable = true
     private var requests: [URL] = []
     var domain: String { lock.withLock { domain(generation) } }
     private func domain(_ generation: Int) -> String { "storage-\(generation)." + host }
     func advanceDomain() { lock.withLock { generation += 1 } }
+    func setDiscoveryAvailable(_ available: Bool) { lock.withLock { discoveryAvailable = available } }
     func count(path: String) -> Int { lock.withLock { requests.filter { $0.path == path }.count } }
     func count(host: String) -> Int { lock.withLock { requests.filter { $0.host == host }.count } }
     func transport() -> ContentTransport {
@@ -160,6 +173,7 @@ private final class BackendFixture: @unchecked Sendable {
             let url = request.url!; requests.append(url)
             if url.host == host {
                 if url.path == "/" {
+                    if !discoveryAvailable { return (503, Data(), [:]) }
                     return (200, Data(#"<script src="/assets/common.js?v=7"></script><a href="/galleries/1234.html">Work</a>"#.utf8), [:])
                 }
                 if url.path == "/assets/common.js" { return (200, Data("const domain = '\(domain(generation))';".utf8), [:]) }

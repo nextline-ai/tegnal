@@ -89,6 +89,7 @@ struct BooruPostView: View {
     var challenge: ChallengeSessionController?
     @Environment(BooruStore.self) private var store
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.booruBrowsingMode) private var browsingMode
     @Environment(\.dismiss) private var dismiss
     @State private var post: BooruPost
     @State private var notes: [BooruNote] = []
@@ -133,7 +134,7 @@ struct BooruPostView: View {
         _showNotes = State(initialValue: ReaderPreferences.booruDefaults.object(forKey: "booru.showNotes") as? Bool ?? true)
     }
     private var index: Int { posts.firstIndex(where: { $0.id == post.id }) ?? 0 }
-    private var isActive: Bool { !exiting && env.mode == .booru && scenePhase == .active }
+    private var isActive: Bool { !exiting && env.mode == browsingMode && scenePhase == .active }
     private var mediaActive: Bool {
         isActive && store.isVisible(post) && !accessNavigation.restrictedIDs.contains(post.id) && translation == nil && !info && !readerSettings && !filing && !showJump && selectedNote == nil
     }

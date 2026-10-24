@@ -1,5 +1,15 @@
 import SwiftUI
 
+private struct BooruBrowsingModeKey: EnvironmentKey {
+    static let defaultValue = AppMode.booru
+}
+extension EnvironmentValues {
+    var booruBrowsingMode: AppMode {
+        get { self[BooruBrowsingModeKey.self] }
+        set { self[BooruBrowsingModeKey.self] = newValue }
+    }
+}
+
 struct BooruRootView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
@@ -59,24 +69,58 @@ struct BooruRootView: View {
 }
 
 struct BooruSetupView: View {
-    @State private var addingServer = false
+    var body: some View { WebsiteSetupView() }
+}
+
+struct WebsiteSetupView: View {
+    var connectionIdentifier = "booru.setupAddress"
+    var mangaImportIdentifier = "website.importMangaViewer"
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Image(systemName: "photo.on.rectangle.angled").font(.system(size: 48)).foregroundStyle(.tint)
-                Text(L10n.text("Connect an Image Website")).font(.largeTitle.bold())
-                Text(L10n.text("No websites are included. Add a website you use, or bring your servers and favorites from a backup."))
-                    .foregroundStyle(.secondary)
-                Button { addingServer = true } label: {
-                    Label(L10n.text("Enter Website Address"), systemImage: "link")
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
-                }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("booru.setupAddress")
-                NavigationLink { AnimeBoxesImportView() } label: {
-                    Label(L10n.text("Import from Anime Boxes"), systemImage: "square.and.arrow.down")
-                }.accessibilityIdentifier("booru.setupImport")
-            }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
+            WebsiteSetupContent(connectionIdentifier: connectionIdentifier, mangaImportIdentifier: mangaImportIdentifier)
+                .padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
+        }.background(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
+struct WebsiteSetupContent: View {
+    var connectionIdentifier = "booru.setupAddress"
+    var mangaImportIdentifier = "website.importMangaViewer"
+    @State private var showConnection = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Image(systemName: "link").font(.system(size: 48)).foregroundStyle(.tint)
+            Text(L10n.text("Connect a Website")).font(.largeTitle.bold())
+            Text(L10n.text("Enter a comics or image website. We’ll detect its type and switch to the right mode."))
+                .foregroundStyle(.secondary)
+            Button { showConnection = true } label: {
+                Label(L10n.text("Enter Website Address"), systemImage: "link")
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }.buttonStyle(.borderedProminent).controlSize(.large)
+                .accessibilityIdentifier(connectionIdentifier)
+            WebsiteModeGuide()
+            WebsiteImportLinks(mangaImportIdentifier: mangaImportIdentifier)
+        }.sheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil) }
+    }
+}
+
+struct WebsiteImportLinks: View {
+    var mangaImportIdentifier = "website.importMangaViewer"
+    @State private var showMangaImport = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            NavigationLink { AnimeBoxesImportView() } label: {
+                Label(L10n.text("Import from Anime Boxes"), systemImage: "shippingbox")
+            }.buttonStyle(.plain).foregroundStyle(.tint).accessibilityIdentifier("booru.setupImport")
+            Button { showMangaImport = true } label: {
+                Label(L10n.text("Import from Another Manga Viewer"), systemImage: "square.and.arrow.down")
+            }.buttonStyle(.plain).foregroundStyle(.tint).accessibilityIdentifier(mangaImportIdentifier)
+        }.sheet(isPresented: $showMangaImport) {
+            NavigationStack {
+                MangaLibraryToolsView(importOnly: true)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { showMangaImport = false } } }
+            }
         }
-        .sheet(isPresented: $addingServer) { BooruServerEditor(server: nil) }
     }
 }
 
@@ -217,6 +261,7 @@ final class BooruFeedLoader {
 }
 
 struct BooruFeedView: View {
+    @Environment(\.booruBrowsingMode) private var browsingMode
     let servers: [BooruServer]
     let source: any BooruProviding
     private let startup: LaunchFeedWarmup?
@@ -276,7 +321,7 @@ struct BooruFeedView: View {
     }
     private var visiblePosts: [BooruPost] { loader.visiblePosts }
     private var hasAccessiblePosts: Bool { loader.posts.contains(where: store.isVisible) }
-    private var isActive: Bool { env.mode == .booru && scenePhase == .active }
+    private var isActive: Bool { env.mode == browsingMode && scenePhase == .active }
     private func updateBlacklists() {
         loader.setBlacklists(Dictionary(uniqueKeysWithValues: servers.map { ($0.id, store.blacklist(serverID: $0.id)) }))
         loader.setExcludedPostIDs(store.confirmedGoldRestrictedIDs)
@@ -303,7 +348,7 @@ struct BooruFeedView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { challengeBrowser = false } } }
             }.tint(.purple)
         }
-        .sheet(item: $accountServer) { BooruServerEditor(server: $0) }
+        .sheet(item: $accountServer) { WebsiteConnectionEditor(server: $0) }
         .fullScreenCover(item: $selectedPost) { post in
             if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: visiblePosts, server: server, source: source, loadMore: {
                 for _ in 0..<3 {
@@ -567,6 +612,7 @@ struct BooruFeedView: View {
 }
 
 struct BooruPostGrid: View {
+    @Environment(\.booruBrowsingMode) private var browsingMode
     @Environment(\.discoveryContext) private var discovery
     let posts: [BooruPost]
     var server: BooruServer? = nil
@@ -624,7 +670,7 @@ struct BooruPostGrid: View {
                     .accessibilityIdentifier("booru.post.\(post.postID)")
                     .accessibilityValue(selection.map { $0.wrappedValue.contains(post.id) ? L10n.text("Selected") : "" } ?? (showsFavoriteIndicator ? WorkSaveResult.accessibilityValue(saved: favorites.contains(post.id), mode: .booru) : ""))
                     .onAppear {
-                        guard env.mode == .booru, scenePhase == .active else { return }
+                        guard env.mode == browsingMode, scenePhase == .active else { return }
                         if index >= prefetchThresholdIndex {
                             prefetch?()
                         }

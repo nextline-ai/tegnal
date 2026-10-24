@@ -140,7 +140,7 @@ private struct ChallengeSourceView: View {
                 serverIDs = controller.session.serverIDs.isEmpty ? store.selectedServerIDs : controller.session.serverIDs
                 folderID = controller.session.folderID
             }
-            .sheet(isPresented: $addingServer) { BooruServerEditor(server: nil) }
+            .sheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
         }
     }
 }

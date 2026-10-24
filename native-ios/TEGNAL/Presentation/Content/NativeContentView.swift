@@ -252,7 +252,7 @@ private struct GalleryFeedView: View {
                         }
                         .onAppear {
                             if index.isMultiple(of: prefetchColumns) {
-                                loader.prioritizeCovers(startingAt: index, count: lookahead)
+                                loader.prioritizeCovers(startingAt: index, count: lookahead, columns: prefetchColumns)
                             }
                             if index >= prefetchThresholdIndex && loader.hasMore && !loader.loading && loader.error == nil {
                                 loader.load(effectiveQuery, reset: false)
@@ -472,7 +472,7 @@ private struct GalleryGridCard: View {
     }
 
     var body: some View {
-        GalleryCardLayout(title: gallery?.title ?? L10n.text("Work %@", String(describing: id)), artists: gallery?.artists.joined(separator: ", ") ?? "", language: gallery?.language ?? "") {
+        GalleryCardLayout(title: preview.display?.title ?? L10n.text("Work %@", String(describing: id)), artists: preview.display?.artists ?? "", language: preview.display?.language ?? "") {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
             else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: "book.closed").foregroundStyle(.secondary) } }
         }
@@ -492,6 +492,7 @@ private struct GalleryGridCard: View {
         .accessibilityValue(isBookmarked ? L10n.text("Bookmarked") : L10n.text("Not bookmarked"))
         .accessibilityAction { open() }
         .accessibilityAction(named: WorkSaveResult.actionTitle(saved: isBookmarked, mode: .comics)) { bookmark(gallery) }
+        .onAppear { preview.restoreCachedContent() }
         .task(id: LoadKey(preview: suppliedPreview.map(ObjectIdentifier.init), active: env.mode == .manga && scenePhase == .active)) {
             guard env.mode == .manga, scenePhase == .active else { return }
             if let suppliedPreview { preview = suppliedPreview }
@@ -581,27 +582,57 @@ private struct RemoteGalleryView: View {
 /// One observable cover per card: prefetch and visible cells share the same request and updates.
 @MainActor @Observable
 final class GalleryFeedPreview {
+    struct Display: Equatable {
+        let title: String
+        let artists: String
+        let language: String
+        init(_ gallery: NativeGallery) {
+            title = gallery.title
+            artists = gallery.artists.joined(separator: ", ")
+            language = gallery.language
+        }
+    }
     let id: Int64
     private(set) var gallery: NativeGallery?
     private(set) var image: UIImage?
+    private(set) var display: Display?
     @ObservationIgnored private let source: any ContentProviding
     @ObservationIgnored private let images: PageImageStore
     @ObservationIgnored private var request: Task<Void, Never>?
     @ObservationIgnored private var requestID = UUID()
     @ObservationIgnored private var waiters = Set<UUID>()
     @ObservationIgnored private var cancelled = false
+    @ObservationIgnored private var coverHash: String?
 
     init(id: Int64, source: any ContentProviding, images: PageImageStore) {
         self.id = id
         self.source = source
         self.images = images
         gallery = source.cachedPreview(id)
+        display = gallery.map(Display.init)
+        coverHash = gallery?.pages.first?.hash
         image = gallery?.pages.first.flatMap { images.cachedImage(hash: $0.hash, thumbnail: true) }
+    }
+
+    /// Reappearing rows can display an already decoded cover before an async
+    /// task runs. Text layout survives even when both bounded caches evict it.
+    func restoreCachedContent() {
+        guard !cancelled else { return }
+        if gallery == nil, let cached = source.cachedPreview(id) { setGallery(cached) }
+        if image == nil, let coverHash { image = images.cachedImage(hash: coverHash, thumbnail: true) }
+    }
+
+    private func setGallery(_ gallery: NativeGallery) {
+        self.gallery = gallery
+        let display = Display(gallery)
+        if self.display != display { self.display = display }
+        coverHash = gallery.pages.first?.hash
     }
 
     func load() async {
         guard !cancelled, !Task.isCancelled else { return }
-        guard image == nil else { return }
+        restoreCachedContent()
+        guard image == nil || gallery == nil else { return }
         let waiter = UUID()
         waiters.insert(waiter)
         let request = request ?? makeRequest()
@@ -624,7 +655,7 @@ final class GalleryFeedPreview {
                 if let cached = self.gallery { gallery = cached }
                 else { gallery = try await source.gallery(id) }
                 try Task.checkCancellation()
-                self.gallery = gallery
+                self.setGallery(gallery)
                 if let page = gallery.pages.first {
                     let image = try await images.load(page, galleryID: id, thumbnail: true)
                     try Task.checkCancellation()
@@ -650,8 +681,8 @@ final class GalleryFeedPreview {
 
     func discardDisplayContent() {
         pause()
-        // Lazy cell state can outlive its onscreen view. Keep decoded images
-        // and full gallery documents in the bounded caches, not every old row.
+        // Release heavy content, but keep the small text projection so a row
+        // above the viewport never collapses and grows when scrolling back.
         image = nil
         gallery = nil
     }
@@ -671,6 +702,8 @@ final class GalleryFeedLoader {
     @ObservationIgnored private var prefetchTasks: [Int64: CoverFlight] = [:]
     @ObservationIgnored private var prefetchQueue: [Int64] = []
     @ObservationIgnored private var prefetchWindow: [Int64] = []
+    @ObservationIgnored private var previousCoverIndex: Int?
+    @ObservationIgnored private var retainedCoverIDs = Set<Int64>()
     @ObservationIgnored private var suspended = false
     private var generation = UUID()
     private var nextOffset = 0
@@ -691,10 +724,13 @@ final class GalleryFeedLoader {
 
     /// Only the rows near the viewport merit speculation. Never drain a whole
     /// page of full gallery documents and covers just because its IDs arrived.
-    func prioritizeCovers(startingAt index: Int, count: Int) {
+    func prioritizeCovers(startingAt index: Int, count: Int, columns: Int = 1) {
         guard !suspended, ids.indices.contains(index), count > 0 else { return }
-        let end = index + min(count, ids.count - index)
-        prefetchWindow = Array(ids[index..<end])
+        let returning = previousCoverIndex.map { index < $0 } ?? false
+        previousCoverIndex = index
+        let end = index + min(returning ? max(1, min(columns, count)) : count, ids.count - index)
+        let start = returning ? max(0, end - count) : index
+        prefetchWindow = returning ? Array(ids[start..<end].reversed()) : Array(ids[start..<end])
         let priority = Set(prefetchWindow)
         for (id, flight) in prefetchTasks where !priority.contains(id) { flight.task.cancel() }
         prefetchQueue = prefetchWindow.filter { previews[$0]?.image == nil && previews[$0] != nil }
@@ -734,6 +770,8 @@ final class GalleryFeedLoader {
         if changedQuery {
             stopPrefetch(cancelCovers: true)
             prefetchWindow.removeAll()
+            previousCoverIndex = nil
+            retainedCoverIDs.removeAll()
             ids = []; nextOffset = 0; hasMore = false; previews.removeAll(); didLoad = false
         }
         currentQuery = query
@@ -763,9 +801,12 @@ final class GalleryFeedLoader {
                 let incoming = batch.ids.filter { seen.insert($0).inserted }
                 let updatedIDs = (reset ? [] : self.ids) + incoming
                 if reset { self.stopPrefetch(cancelCovers: false) }
-                // Retain only three pages of covers; lazy cells own any older covers still on screen.
+                // Keep lightweight identities and text for every loaded row;
+                // only the most recent three pages may pin heavy content.
                 let retained = Set(updatedIDs.suffix(72))
-                self.previews = (reset ? [:] : self.previews).filter { retained.contains($0.key) }
+                if reset { self.previews = [:]; self.retainedCoverIDs.removeAll(); self.previousCoverIndex = nil }
+                for id in self.retainedCoverIDs.subtracting(retained) { self.previews[id]?.discardDisplayContent() }
+                self.retainedCoverIDs = retained
                 if let images = self.images {
                     for id in incoming { self.previews[id] = GalleryFeedPreview(id: id, source: source, images: images) }
                 }

@@ -93,6 +93,9 @@ enum BooruBrowserSession {
 
 enum BooruConnectionMessage {
     static func describe(_ error: Error) -> String {
+        ContentError.withConnectionHelp(detail(error), for: error)
+    }
+    private static func detail(_ error: Error) -> String {
         if let error = error as? URLError, error.code == .secureConnectionFailed {
             return L10n.text("Unable to connect securely. Open Validate Client and complete the server’s browser check, then tap Done to retry.")
         }

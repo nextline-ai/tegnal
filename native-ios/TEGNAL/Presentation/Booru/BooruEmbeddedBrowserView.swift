@@ -38,11 +38,12 @@ private struct BooruWebsiteView: View {
     let server: BooruServer
     let url: URL
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.booruBrowsingMode) private var browsingMode
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: BooruValidationModel
     @State private var loadedURL: URL?
     @State private var visible = false
-    private var active: Bool { visible && env.mode == .booru && scenePhase == .active }
+    private var active: Bool { visible && env.mode == browsingMode && scenePhase == .active }
     init(server: BooruServer, url: URL) {
         self.server = server; self.url = url
         _model = State(initialValue: BooruValidationModel(server: server))

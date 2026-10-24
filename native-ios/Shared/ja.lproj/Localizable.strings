@@ -1088,3 +1088,21 @@
 "Search Downloads" = "ダウンロードを検索";
 
 "Download Actions" = "ダウンロードの管理";
+
+"Read multi-page works by their work number." = "作品番号で複数ページの漫画を読みます。";
+
+"Browse individual images using tags." = "タグで画像やイラストを探します。";
+
+"Enter a comics or image website. We’ll detect its type and switch to the right mode." = "漫画・画像のどちらのサイトでもアドレスを入力してください。種類を判別し、適切なモードに切り替えます。";
+
+"Mode" = "モード";
+
+"Identifying website…" = "サイトの種類を確認中…";
+
+"Saving this address will open the matching mode." = "このアドレスを保存すると、適切なモードが開きます。";
+
+"Couldn’t identify this website. Check the connection or select its mode manually." = "サイトの種類を確認できませんでした。接続を確認するか、モードを手動で選択してください。";
+
+"Tap or swipe to switch between comics and images." = "タップまたは左右にスワイプして、漫画と画像のモードを切り替えます。";
+
+"Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again." = "サイトやネットワークによって、VPNやHTTPS回避が接続を助けたり、妨げたりする場合があります。有効なら無効に、無効なら有効にしてから、もう一度お試しください。";

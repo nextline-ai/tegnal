@@ -274,6 +274,12 @@ public final class AppEnvironment: @unchecked Sendable {
     var mode: AppMode {
         didSet { browserPreferences.set(mode.rawValue, forKey: "content_mode") }
     }
+    private(set) var modeSwitchHintPending: Bool
+    func acknowledgeModeSwitch() {
+        guard modeSwitchHintPending else { return }
+        modeSwitchHintPending = false
+        browserPreferences.set(true, forKey: "mode_switch.discovered")
+    }
     var appLanguage: String {
         didSet {
             browserPreferences.set(appLanguage, forKey: "app.language")
@@ -415,6 +421,11 @@ public final class AppEnvironment: @unchecked Sendable {
 
     init(database: AppDatabase, browserPreferences: UserDefaults = .standard, booru: BooruStore, coverQueue: CoverQueueActor? = nil) {
         self.browserPreferences = browserPreferences
+        let discoveredSwitch = browserPreferences.object(forKey: "mode_switch.discovered") as? Bool
+            ?? browserPreferences.bool(forKey: "onboarding_completed")
+        self.modeSwitchHintPending = !discoveredSwitch
+        // Remember a genuinely new install before onboarding is completed.
+        browserPreferences.set(discoveredSwitch, forKey: "mode_switch.discovered")
         self.appLanguage = browserPreferences.string(forKey: "app.language") ?? "system"
         L10n.appLanguage = browserPreferences.string(forKey: "app.language") ?? "system"
         self.booru = booru

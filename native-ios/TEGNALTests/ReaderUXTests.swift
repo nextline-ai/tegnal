@@ -276,10 +276,14 @@ final class ReaderUXTests: XCTestCase {
         let preview = GalleryFeedPreview(id: 1, source: source, images: PageImageStore(source: source))
         await preview.load()
         let image = preview.image
+        let display = preview.display
         XCTAssertNotNil(image)
         preview.discardDisplayContent()
         XCTAssertNil(preview.image)
         XCTAssertNil(preview.gallery)
+        XCTAssertEqual(preview.display, display, "Scrolling back must retain the text that determines the row height")
+        preview.restoreCachedContent()
+        XCTAssertTrue(preview.image === image, "A decoded cached cover must be restored without awaiting a task")
         await preview.load()
         XCTAssertTrue(preview.image === image)
         let requests = await source.imageRequests
@@ -308,6 +312,28 @@ final class ReaderUXTests: XCTestCase {
             XCTAssertEqual(gallery.id, id)
             XCTAssertTrue(image === store.cachedImage(hash: gallery.pages[0].hash, thumbnail: true))
         }
+    }
+
+    @MainActor func testOffscreenFeedTextPreservesItsMeasuredCardHeight() throws {
+        let gallery = NativeGallery(id: 1, title: "A previously loaded gallery with a long title that spans both lines", artists: ["Sample artist"],
+                                    language: "english", type: "manga", tags: [], pages: [])
+        let source = CachedReaderFixture(gallery: gallery)
+        let preview = GalleryFeedPreview(id: 1, source: source, images: PageImageStore(source: source))
+        func height(_ display: GalleryFeedPreview.Display?) -> CGFloat {
+            let host = UIHostingController(rootView: GalleryCardLayout(title: display?.title ?? "Work 1", artists: display?.artists ?? "",
+                                                                      language: display?.language ?? "") { Color.clear })
+            return host.sizeThatFits(in: CGSize(width: 170, height: 1000)).height
+        }
+        let before = height(preview.display)
+        let clearedTextHeight = height(nil)
+        XCTAssertGreaterThan(before - clearedTextHeight, 20, "The fixture must reproduce a substantial height change when text is cleared")
+        preview.discardDisplayContent()
+        XCTAssertNil(preview.gallery)
+        XCTAssertEqual(height(preview.display), before, accuracy: 0.5, "A returning row must not change height while its metadata reloads")
+        let attachment = XCTAttachment(string: "Loaded card: \(before) pt; cleared text: \(clearedTextHeight) pt; retained text: \(height(preview.display)) pt")
+        attachment.name = "Reverse scroll card layout"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor func testFeedAppendDoesNotWaitForCoversAndCoalescesRequests() async {
@@ -373,6 +399,22 @@ final class ReaderUXTests: XCTestCase {
         await loadCovers(loader)
     }
 
+    @MainActor func testReverseScrollPrefetchesRowsAboveTheViewport() async {
+        let source = feedSource(blocked: [49, 50])
+        let loader = GalleryFeedLoader(source: source, images: PageImageStore(source: source))
+        for reset in [true, false, false] { await loader.load(GalleryQuery(), reset: reset).value }
+        loader.prioritizeCovers(startingAt: 48, count: 4, columns: 2)
+        for id: Int64 in 49...50 { await source.waitForImage(id) }
+        loader.prioritizeCovers(startingAt: 40, count: 4, columns: 2)
+        await source.release(49)
+        await source.waitForImage(42)
+        let requests = await source.imageRequests
+        XCTAssertEqual(requests.dropFirst(2).first, 42, "A reversed scroll must warm the current row and then earlier rows")
+        XCTAssertFalse(requests.contains(51), "Do not continue warming rows below the old viewport")
+        await source.release(50)
+        loader.cancel()
+    }
+
     @MainActor func testFilterChangeCancelsOldCoversWithoutDelayingNewResults() async {
         let source = feedSource(blocked: [1])
         let loader = GalleryFeedLoader(source: source, images: PageImageStore(source: source))
@@ -406,18 +448,31 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertNil(loader.error)
     }
 
-    @MainActor func testFeedPinsOnlyRecentCoversDuringLongScroll() async {
+    @MainActor func testFeedRetainsRowMetadataWhileBoundingPinnedCoversDuringLongScroll() async {
         let source = feedSource()
         let loader = GalleryFeedLoader(source: source, images: PageImageStore(source: source))
         await loader.load(GalleryQuery(), reset: true).value
         await loadCovers(loader)
+        let first = loader.previews[1]
+        let firstDisplay = first?.display
         while loader.hasMore {
+            let previousCount = loader.ids.count
             await loader.load(GalleryQuery(), reset: false).value
-            await loadCovers(loader)
+            for id in loader.ids.dropFirst(previousCount) { await loader.previews[id]?.load() }
         }
         XCTAssertEqual(loader.ids, Array(1...108).map(Int64.init))
-        XCTAssertEqual(Set(loader.previews.keys), Set(loader.ids.suffix(72)))
-        XCTAssertTrue(loader.previews.values.allSatisfy { $0.image != nil })
+        XCTAssertEqual(Set(loader.previews.keys), Set(loader.ids))
+        XCTAssertTrue(loader.previews[1] === first, "An earlier row must keep its identity after multiple page appends")
+        XCTAssertEqual(first?.display, firstDisplay)
+        let retained = Set(loader.ids.suffix(72))
+        for (id, preview) in loader.previews {
+            if retained.contains(id) { XCTAssertNotNil(preview.image) }
+            else {
+                XCTAssertNil(preview.image)
+                XCTAssertNil(preview.gallery)
+                XCTAssertNotNil(preview.display)
+            }
+        }
     }
 
     func testConcurrentLoadsShareDownloadAndDecodedImage() async throws {

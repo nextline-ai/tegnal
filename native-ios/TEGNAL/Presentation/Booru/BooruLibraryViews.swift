@@ -52,6 +52,7 @@ struct BooruSavedView: View {
 }
 
 struct BooruPoolsView: View {
+    @Environment(\.booruBrowsingMode) private var browsingMode
     let server: BooruServer
     let source: any BooruProviding
     var comicsMode = false
@@ -73,7 +74,7 @@ struct BooruPoolsView: View {
             Section {
                 if server.engine.usesGelbooruPages { Text(L10n.text("Browse pools or enter a pool ID to open it.")).font(.footnote).foregroundStyle(.secondary) }
                 ForEach(pools) { pool in
-                    NavigationLink { BooruFeedView(server: server, source: source, pool: pool) } label: {
+                    NavigationLink { BooruFeedView(server: server, source: source, pool: pool).environment(\.booruBrowsingMode, browsingMode) } label: {
                         HStack(spacing: 14) {
                             Image(systemName: "rectangle.stack.fill").font(.title2).foregroundStyle(.tint).frame(width: 36)
                             VStack(alignment: .leading, spacing: 5) {
@@ -142,11 +143,12 @@ struct BooruSavedServersView: View {
 }
 
 struct BooruPoolServersView: View {
+    @Environment(\.booruBrowsingMode) private var browsingMode
     let source: any BooruProviding
     @Environment(BooruStore.self) private var store
     var body: some View {
         List(store.selectedServers) { server in
-            NavigationLink { BooruPoolsView(server: server, source: source) } label: {
+            NavigationLink { BooruPoolsView(server: server, source: source).environment(\.booruBrowsingMode, browsingMode) } label: {
                 Label(server.displayName, systemImage: "server.rack")
             }
         }.navigationTitle(L10n.text("Pools")).navigationBarTitleDisplayMode(.inline)
@@ -168,5 +170,6 @@ struct ComicsPoolsView: View {
             else if store.selectedServers.count == 1, let server = store.selectedServer { BooruPoolsView(server: server, source: source, comicsMode: true).id(server.id) }
             else { BooruPoolServersView(source: source) }
         }.toolbar { ToolbarItem(placement: .topBarTrailing) { BooruServerMenu() } }
+            .environment(\.booruBrowsingMode, .manga)
     }
 }

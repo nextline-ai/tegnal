@@ -5,6 +5,17 @@ import WebKit
 final class BooruRevisionTests: XCTestCase {
     private let legacy = BooruServer(id: "legacy", name: "Legacy", baseURL: URL(string: "https://example.booru.org")!, engine: .oldGelbooru)
 
+    func testConnectionFailuresExplainFirstConnectionRequirementsWithoutMislabelingOtherErrors() {
+        for code in [URLError.Code.secureConnectionFailed, .timedOut, .cannotConnectToHost] {
+            let error = URLError(code)
+            XCTAssertTrue(ContentError.message(error).contains(ContentError.initialConnectionHelp))
+            XCTAssertTrue(BooruConnectionMessage.describe(error).contains(ContentError.initialConnectionHelp))
+        }
+        XCTAssertFalse(ContentError.message(URLError(.notConnectedToInternet)).contains(ContentError.initialConnectionHelp))
+        XCTAssertFalse(ContentError.message(ContentError.galleryNotFound).contains(ContentError.initialConnectionHelp))
+        XCTAssertFalse(BooruConnectionMessage.describe(URLError(.userAuthenticationRequired)).contains(ContentError.initialConnectionHelp))
+    }
+
     func testComicsHasNoImplicitHostAndRequiresAnAddress() throws {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "manga.site_address")
@@ -103,13 +114,42 @@ final class BooruRevisionTests: XCTestCase {
         }
     }
 
-    func testComicsDomainAutoDetection() {
-        for address in ["https://comics.la", "test.la"] {
-            XCTAssertTrue(BooruServerEditor.isComicsDomain(address), address)
+    @MainActor func testDomainSuffixAloneDoesNotChooseAWebsiteMode() async throws {
+        for address in ["https://comics.la", "https://test.la", "https://custom.example"] {
+            let type = try await ServerType.detect(at: URL(string: address)!, loadHTML: { _ in "<html>Unrecognized</html>" })
+            XCTAssertNil(type, "A domain suffix must not substitute for identifying the response protocol")
         }
-        for address in ["", "comics.example", "safebooru.org", "custommanga.com", "danbooru.donmai.us"] {
-            XCTAssertFalse(BooruServerEditor.isComicsDomain(address), address)
-        }
+    }
+
+    func testWebsiteResponseRecognizesBothComicsProtocolsWithoutSiteNames() {
+        XCTAssertEqual(ServerType.recognizing(#"<script src="/js/index.search.tail.js"></script>"#), .comics)
+        XCTAssertEqual(ServerType.recognizing(#"<script src="https://ltn.files.example/common.js"></script>"#), .comics)
+        XCTAssertEqual(ServerType.recognizing("const gallery = {\"id\":1234,\"files\":[]};"), .comics)
+        XCTAssertEqual(ServerType.recognizing("Danbooru.Post.initialize();"), .booru(.danbooru))
+        XCTAssertEqual(ServerType.recognizing("Running Gelbooru Beta 0.1.11"), .booru(.oldGelbooru))
+        XCTAssertEqual(ServerType.recognizing("Moebooru"), .booru(.moebooru))
+        XCTAssertNil(ServerType.recognizing("<html><title>Unknown website</title></html>"))
+        XCTAssertNil(ServerType.recognizing("<script>const gallery = {\"images\":[]};</script><a href='/ajax/search'>Search</a>"))
+        XCTAssertNil(ServerType.recognizing("<script>const domain = 'analytics.example';</script>"))
+    }
+
+    @MainActor func testWebsiteDetectionUsesResponseAndPreservesTheExistingConnection() async throws {
+        let keys = ["manga.site_address", "manga.resolved_protocol", "manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site"]
+        let previous = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        defer { for (key, value) in previous { UserDefaults.standard.set(value, forKey: key) } }
+        UserDefaults.standard.set("existing.example", forKey: "manga.site_address")
+        XCTAssertTrue(MangaUrls.extractBackend(from: "const domain = 'storage.example';"))
+        let before = MangaUrls.dataHost
+        let address = URL(string: "https://unlisted.example")!
+        let type = try await ServerType.detect(at: address, loadHTML: { requested in
+            XCTAssertEqual(requested, address)
+            return #"<script src="/js/index.search.tail.js"></script>"#
+        })
+        XCTAssertEqual(type, .comics)
+        XCTAssertEqual(MangaUrls.configuredHost, "existing.example")
+        XCTAssertEqual(MangaUrls.dataHost, before)
+        let unknown = try await ServerType.detect(at: address, loadHTML: { _ in "<html>Unknown</html>" })
+        XCTAssertNil(unknown, "An unknown response must not silently register an image server")
     }
 
     func testReplayingSetupDoesNotRemoveAnExistingConnectionOnATypo() throws {
@@ -126,6 +166,32 @@ final class BooruRevisionTests: XCTestCase {
         XCTAssertTrue(env.verifySite(input: "https://custom-manga.org/"))
         XCTAssertTrue(env.isSiteVerified)
         XCTAssertEqual(env.mangaSiteAddress, "custom-manga.org")
+    }
+
+    @MainActor func testFirstUseModeHintPersistsUntilAnExplicitInteraction() throws {
+        let name = "mode-hint-" + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        let database = try AppDatabase.inMemory()
+        let first = AppEnvironment(database: database, browserPreferences: preferences)
+        XCTAssertTrue(first.modeSwitchHintPending)
+        first.mode = .manga
+        first.isOnboardingCompleted = true
+        XCTAssertTrue(first.modeSwitchHintPending, "An automatic website-mode change does not teach the switch")
+        let reopened = AppEnvironment(database: database, browserPreferences: preferences)
+        XCTAssertTrue(reopened.modeSwitchHintPending, "Finishing onboarding must not hide an unused switch hint")
+        reopened.acknowledgeModeSwitch()
+        XCTAssertFalse(reopened.modeSwitchHintPending)
+        XCTAssertFalse(AppEnvironment(database: database, browserPreferences: preferences).modeSwitchHintPending)
+    }
+
+    @MainActor func testExistingInstallDoesNotRestartTheFirstUseModeHint() throws {
+        let name = "returning-mode-hint-" + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        preferences.set(true, forKey: "onboarding_completed")
+        let env = AppEnvironment(database: try AppDatabase.inMemory(), browserPreferences: preferences)
+        XCTAssertFalse(env.modeSwitchHintPending)
     }
 
     func testLegacyHTMLListingDetailTagsAndNotes() throws {
