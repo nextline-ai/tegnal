@@ -588,6 +588,27 @@ final class BooruUITests: XCTestCase {
         capture(app, "SVG developer identity and contact")
     }
 
+    func testImageViewerKeepsCurrentWorkAcrossCompactAndWideViewports() {
+        let app = launch()
+        element(app, "booru.post.101").tap()
+        XCTAssertTrue(element(app, "booru.media").waitForExistence(timeout: 10))
+        openMenu(app)
+        element(app, "booru.next").tap()
+        let state = element(app, "booru.viewerState")
+        expectation(for: NSPredicate(format: "label == '102:fit'"), evaluatedWith: state)
+        waitForExpectations(timeout: 5)
+        element(app, "booru.menuClose").tap()
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertTrue(element(app, "booru.media").waitForExistence(timeout: 5))
+            XCTAssertEqual(state.label, "102:fit")
+            openMenu(app)
+            XCTAssertTrue(element(app, "booru.info").isHittable)
+            capture(app, orientation == .portrait ? "Image viewer compact viewport" : "Image viewer wide viewport")
+            element(app, "booru.menuClose").tap()
+        }
+    }
+
     func testBottomSwipeOpensImageDetails() {
         let app = launch()
         element(app, "booru.post.101").tap()

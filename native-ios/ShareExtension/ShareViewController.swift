@@ -72,8 +72,8 @@ final class ShareViewController: UIViewController, UITableViewDataSource, UITabl
 
         NSLayoutConstraint.activate([
             navBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            navBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            navBar.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            navBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            navBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
         ])
     }
 
@@ -106,8 +106,8 @@ final class ShareViewController: UIViewController, UITableViewDataSource, UITabl
 
         NSLayoutConstraint.activate([
             headerCard.topAnchor.constraint(equalTo: navBar.bottomAnchor, constant: 12),
-            headerCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            headerCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            headerCard.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            headerCard.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             headerCard.heightAnchor.constraint(greaterThanOrEqualToConstant: 64),
 
             iconImageView.leadingAnchor.constraint(equalTo: headerCard.leadingAnchor, constant: 14),

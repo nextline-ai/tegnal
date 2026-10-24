@@ -34,7 +34,7 @@
 - Apple이 검수한 공식 TestFlight 앱을 통해 **클릭 한 번으로 안전하게 설치**하고 자동 업데이트를 받으세요.
 
 ### 3. 완벽한 Apple 기기 연속성 & iCloud 최고 수준 보안
-- **크로스플랫폼 연속성 (iPhone · iPad · macOS · visionOS):** 공식 지원하는 모든 Apple 기기에서 끊김 없이 이어볼 수 있으며, 각 기기 환경에 맞춰 최적화된 전용 UI와 키보드·마우스·트랙패드 조작을 제공합니다.
+- **크로스플랫폼 연속성 (iPhone · iPhone Duo · iPad · macOS · visionOS):** 공식 지원하는 모든 Apple 기기에서 끊김 없이 이어볼 수 있으며, 각 기기 환경에 맞춰 최적화된 전용 UI와 키보드·마우스·트랙패드 조작을 제공합니다.
 - **안전한 iCloud 동기화:** 최고 수준의 보안을 자랑하는 Apple iCloud를 통해 북마크, 폴더, 작가, 검색 기록이 내 기기 간에만 안전하게 보호되며 자동으로 동기화됩니다.
 
 ### 4. 더 즐거운 감상을 돕는 100% 온디바이스 AI
@@ -50,7 +50,7 @@
 1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
 2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
    - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/gnkqu44W)**
-3. **공식 지원 기기:** iPhone, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
+3. **공식 지원 기기:** iPhone, iPhone Duo, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
 
 <details>
 <summary><b>TestFlight가 뭔가요?</b></summary>

@@ -126,6 +126,31 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertEqual(groups.first { $0.category == .general }?.tags.first?.name, "sky")
     }
 
+    @MainActor func testLiveTextControlsFollowAsymmetricSafeAreasWithoutResizing() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let canvas = LiveTextCanvasView(), controller = UIViewController()
+        controller.view = canvas
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        window.layoutIfNeeded(); canvas.layoutIfNeeded()
+        let size = canvas.bounds.size
+        let initial = canvas.interaction.supplementaryInterfaceContentInsets
+        for extra in [UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0),
+                      UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 120), .zero] {
+            controller.additionalSafeAreaInsets = extra
+            try await Task.sleep(for: .milliseconds(30))
+            window.layoutIfNeeded(); canvas.layoutIfNeeded()
+            let actual = canvas.interaction.supplementaryInterfaceContentInsets
+            XCTAssertEqual(canvas.bounds.size, size, "An inset-only change must not require resizing the canvas")
+            XCTAssertEqual(actual.left, initial.left + extra.left, accuracy: 1)
+            XCTAssertEqual(actual.right, initial.right + extra.right, accuracy: 1)
+            XCTAssertEqual(actual.top, canvas.safeAreaInsets.top + 8, accuracy: 1)
+            XCTAssertEqual(actual.bottom, canvas.safeAreaInsets.bottom + 12, accuracy: 1)
+        }
+    }
+
     @MainActor func testLiveTextActionOnlyInvokesTranslateInsideOwnedImage() {
         let image = UIImageView()
         let button = UIButton()

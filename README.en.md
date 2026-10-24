@@ -34,7 +34,7 @@
 - Install with a single tap through Apple’s official TestFlight app and receive automatic updates safely.
 
 ### 3. Seamless Apple Continuity & Top-Tier iCloud Security
-- **Cross-Platform Continuity (iPhone · iPad · macOS · visionOS):** Enjoy seamless continuity across all officially supported Apple platforms, featuring dedicated UI and controls optimized for each environment.
+- **Cross-Platform Continuity (iPhone · iPhone Duo · iPad · macOS · visionOS):** Enjoy seamless continuity across all officially supported Apple platforms, featuring dedicated UI and controls optimized for each environment.
 - **Secure iCloud Sync:** Your bookmarks, folders, saved artists, and search history are protected by Apple’s industry-leading iCloud security and synced automatically across your devices.
 
 ### 4. Private, 100% On-Device AI Features
@@ -50,7 +50,7 @@ Every AI feature runs **100% locally on your device** without sending your data 
 1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
 2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
    - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/gnkqu44W)**
-3. **Supported Platforms:** iPhone, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
+3. **Supported Platforms:** iPhone, iPhone Duo, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
 
 <details>
 <summary><b>What is TestFlight?</b></summary>

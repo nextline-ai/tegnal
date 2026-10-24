@@ -169,8 +169,13 @@ final class LiveTextCanvasView: UIView, ImageAnalysisInteractionDelegate, UIGest
         scroll.frame = bounds
         updateInterfaceGeometry()
     }
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        setNeedsLayout()
+    }
     private func updateInterfaceGeometry() {
-        let insets = UIEdgeInsets(top: safeAreaInsets.top + 8, left: 12, bottom: safeAreaInsets.bottom + 12, right: 12)
+        let safeInsets = safeAreaInsets
+        let insets = UIEdgeInsets(top: safeInsets.top + 8, left: safeInsets.left + 12, bottom: safeInsets.bottom + 12, right: safeInsets.right + 12)
         if interaction.supplementaryInterfaceContentInsets != insets { interaction.supplementaryInterfaceContentInsets = insets }
         interaction.setContentsRectNeedsUpdate()
     }

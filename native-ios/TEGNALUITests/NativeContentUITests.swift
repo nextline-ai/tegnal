@@ -1,5 +1,6 @@
 import XCTest
 import Vision
+import UIKit
 
 final class NativeContentUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -53,6 +54,23 @@ final class NativeContentUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    func testComicReaderKeepsPageAcrossCompactAndWideViewports() {
+        let app = launchReader()
+        tap(app, x: 0.9)
+        menu(app)
+        XCTAssertEqual(element(app, "reader.position").label, "페이지 2 / 3")
+        element(app, "reader.menu.close").tap()
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 5))
+            menu(app)
+            XCTAssertEqual(element(app, "reader.position").label, "페이지 2 / 3")
+            XCTAssertTrue(element(app, "reader.settings").isHittable)
+            capture(app, orientation == .portrait ? "Comic reader compact viewport" : "Comic reader wide viewport")
+            element(app, "reader.menu.close").tap()
+        }
     }
 
     func testDownloadOpensInOfflineReader() {
