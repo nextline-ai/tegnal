@@ -7,9 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="design-output/SVG/button/Down_button_kr.svg" alt="TestFlight에서 TEGNAL 다운로드" width="480">
-  </a>
+  <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Down_button_kr_mobile.svg"><img src="design-output/SVG/button/Down_button_kr.svg" alt="TestFlight에서 TEGNAL 다운로드"></picture></a>
+  <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Discord_button_kr_mobile.svg"><img src="design-output/SVG/button/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
 </p>
 
 <h1 align="center">TEGNAL</h1>
@@ -156,9 +155,3 @@ IPA는 설치 도구에서 사용자 Apple 계정으로 다시 서명해야 합�
 
 <sub>TEGNAL은 Apple 및 연결 가능한 외부 사이트와 무관한 독립 클라이언트 애플리케이션입니다.<br>
 <a href="docs/privacy-policy.md">개인정보처리방침</a></sub>
-
-<p align="center">
-  <a href="https://discord.gg/vUTGZNMaMB">
-    <img src="design-output/SVG/button/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기" width="480">
-  </a>
-</p>

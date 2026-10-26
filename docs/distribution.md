@@ -32,6 +32,8 @@ python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0
 
 5. `docs/index.html`의 TestFlight 버전 표기를 실제 업로드된 빌드와 맞춥니다. TestFlight와 수동 IPA는 공개 시점이 다를 수 있으므로 소스 JSON의 IPA 버전을 TestFlight 버전으로 표시하지 않습니다. 두 언어의 README와 다운로드 페이지는 IPA 파일 대신 수동 설치 안내로 연결합니다.
 6. IPA의 SHA-256 체크섬을 만들고 `manual-installation` 사전 릴리스에 IPA와 `SHA256SUMS.txt`를 첨부합니다. 이 릴리스는 최신 릴리스로 지정하지 않습니다. 일반 버전 릴리스에는 TestFlight 설치 링크와 변경 내역, 접힌 수동 설치 안내만 둡니다. 소스의 다운로드 URL·파일 크기와 첨부 파일이 일치하는지 확인한 뒤 소스와 문서를 커밋·푸시합니다. Release 태그는 해당 커밋을 가리키도록 지정합니다.
+릴리스 본문 상단에는 [`release-buttons.md`](release-buttons.md)의 버튼 블록을 복사해 TestFlight와 Discord를 함께 안내합니다. 두 버튼은 휴대폰 화면에서 전체 너비로 쌓이고, 넓은 본문에서는 나란히 표시됩니다. 릴리스에서는 태그와 관계없이 표시되도록 `main`의 절대 이미지 주소를 사용합니다.
+
 7. GitHub Pages 배포 후 페이지·소스·아이콘과 IPA 다운로드가 모두 정상 응답하는지 확인합니다. iPhone/iPad의 Safari에서 각 소스 등록과 실제 설치도 확인합니다.
 
 ## 권한과 서명

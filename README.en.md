@@ -7,9 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="design-output/SVG/button/Down_button_en.svg" alt="Download TEGNAL on TestFlight" width="480">
-  </a>
+  <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Down_button_en_mobile.svg"><img src="design-output/SVG/button/Down_button_en.svg" alt="Download TEGNAL on TestFlight"></picture></a>
+  <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Discord_button_en_mobile.svg"><img src="design-output/SVG/button/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
 </p>
 
 <h1 align="center">TEGNAL</h1>
@@ -156,9 +155,3 @@ Have questions, feedback, or bug reports? Join our **Discord community** anytime
 
 <sub>TEGNAL is an independent client application and is not affiliated with Apple or any user-connected websites.<br>
 <a href="docs/privacy-policy.md">Privacy Policy</a></sub>
-
-<p align="center">
-  <a href="https://discord.gg/vUTGZNMaMB">
-    <img src="design-output/SVG/button/Discord_button_en.svg" alt="Join the TEGNAL Discord community" width="480">
-  </a>
-</p>
