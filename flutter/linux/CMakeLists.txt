@@ -1,13 +1,13 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.13)
-project(runner LANGUAGES CXX)
+project(tegnal LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "tegnal")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "work.nextline.tegnal.tegnal")
+set(APPLICATION_ID "work.nextline.tegnal")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -90,6 +90,14 @@ install(CODE "
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
+
+# Desktop metadata and the existing TEGNAL icon accompany the portable bundle.
+# An installer may copy these into the user's XDG applications/icon directories.
+install(FILES "runner/resources/${APPLICATION_ID}.desktop"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/applications" COMPONENT Runtime)
+install(FILES "runner/resources/${APPLICATION_ID}.png"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/icons/hicolor/256x256/apps"
+  COMPONENT Runtime)
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "work.nextline.tegnal" "\0"
-            VALUE "FileDescription", "tegnal" "\0"
+            VALUE "CompanyName", "NextLine" "\0"
+            VALUE "FileDescription", "TEGNAL" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "tegnal" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 work.nextline.tegnal. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 NextLine. All rights reserved." "\0"
             VALUE "OriginalFilename", "tegnal.exe" "\0"
-            VALUE "ProductName", "tegnal" "\0"
+            VALUE "ProductName", "TEGNAL" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

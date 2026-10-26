@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Website cookies, local storage, and sign-ins stay on this device. -->
+<full-backup-content>
+    <exclude domain="root" path="app_webview/" />
+    <!-- A restored device must establish its own Drive comparison baseline. -->
+    <exclude domain="file" path="drive-sync/" />
+</full-backup-content>

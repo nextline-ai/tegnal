@@ -1,0 +1,97 @@
+name: Flutter platform build (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Build one preview platform; no tests are run
+        type: choice
+        required: true
+        default: android
+        options:
+          - android
+          - windows
+          - linux
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-preview-${{ github.ref }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.47.8
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }} preview
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      # Confirmed against the official v7/action.yml (Node 24).
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Flutter (Linux / Android)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/tegnal-flutter"
+          echo "$RUNNER_TEMP/tegnal-flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned Flutter (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $flutterDirectory = Join-Path $env:RUNNER_TEMP 'tegnal-flutter'
+          git clone --depth 1 --branch $env:FLUTTER_VERSION https://github.com/flutter/flutter.git $flutterDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content $env:GITHUB_PATH (Join-Path $flutterDirectory 'bin')
+
+      - name: Select Java 17 for Android
+        if: inputs.platform == 'android'
+        shell: bash
+        # AGP 9.1 officially lists JDK 17 as minimum/default for Gradle 9.3.1.
+        run: echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+
+      - name: Install Linux build and media dependencies
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev liblzma-dev libmpv-dev libepoxy-dev libsecret-1-dev mpv
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      - name: Build Android debug APK
+        if: inputs.platform == 'android'
+        run: flutter build apk --debug --target-platform android-arm64 --split-per-abi
+
+      - name: Build Windows release bundle
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: |
+          flutter build windows --release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath tegnal-windows-x64.zip
+
+      - name: Build Linux release bundle
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          flutter build linux --release
+          tar -czf tegnal-linux-x64.tar.gz -C build/linux/x64/release bundle
+
+      - name: Upload preview build
+        uses: actions/upload-artifact@v7
+        with:
+          name: tegnal-${{ inputs.platform }}-preview
+          path: ${{ inputs.platform == 'android' && 'flutter/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk' || inputs.platform == 'windows' && 'flutter/tegnal-windows-x64.zip' || 'flutter/tegnal-linux-x64.tar.gz' }}
+          if-no-files-found: error
+          retention-days: 7
