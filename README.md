@@ -2,7 +2,13 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="design-output/JPG/main_banner_kr.jpg" alt="TEGNAL TestFlight 다운로드" width="100%">
+    <img src="design-output/screenshot/info.jpg" alt="TEGNAL TestFlight 다운로드" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://testflight.apple.com/join/gnkqu44W">
+    <img src="design-output/SVG/button/Down_button_kr.svg" alt="TestFlight에서 TEGNAL 다운로드" width="480">
   </a>
 </p>
 
