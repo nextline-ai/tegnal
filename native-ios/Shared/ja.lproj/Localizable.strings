@@ -1149,3 +1149,20 @@
 "Allow Language Filter Exceptions" = "言語フィルターの例外を許可";
 "Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type." = "Game CG、Artist CG、Image Setを選択した言語にかかわらず含めます。オフの場合はすべての種類に言語フィルターを適用します。";
 "From the bottom of the page, swipe up for previews." = "ページの下部から上にスワイプするとプレビューが開きます。";
+
+/* Manga reading progress */
+"Use up to %@ search terms, including default and excluded tags." = "既定タグと除外タグを含め、検索条件は%@個まで使用できます。";
+"Reading Progress" = "読書の進行状況";
+"When Reopening a Work" = "作品を開き直したとき";
+"Ask Before Continuing" = "続きから読む前に確認";
+"Continue Reading" = "続きから読む";
+"Start from Beginning" = "最初から読む";
+"Continue Reading?" = "続きから読みますか？";
+"Continue from page %@?" = "%@ページから続きますか？";
+
+/* Work details */
+"Show Full Title" = "完全なタイトルを表示";
+"Hide This Work" = "この作品を非表示";
+"Show This Work" = "この作品を再表示";
+
+"Preview Rows per Page" = "プレビュー1ページの行数";

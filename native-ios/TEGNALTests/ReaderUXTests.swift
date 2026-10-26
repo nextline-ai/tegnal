@@ -4,6 +4,67 @@ import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
+    func testReaderResumeChoicesPreserveExplicitPagesAndDefaultToConfirmation() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "reader-resume-\(UUID().uuidString)"))
+        XCTAssertEqual(ReaderResumeBehavior.stored(in: defaults), .ask)
+        defaults.set("unknown", forKey: "reader.resumeBehavior")
+        XCTAssertEqual(ReaderResumeBehavior.stored(in: defaults), .ask)
+        for behavior in ReaderResumeBehavior.allCases {
+            XCTAssertEqual(behavior.opening(initial: 5, saved: 20, resumesProgress: true), .page(5))
+            XCTAssertEqual(behavior.opening(initial: 1, saved: 20, resumesProgress: false), .page(1))
+            XCTAssertEqual(behavior.opening(initial: 1, saved: 0, resumesProgress: true), .page(1))
+        }
+        XCTAssertEqual(ReaderResumeBehavior.ask.opening(initial: 1, saved: 20, resumesProgress: true), .confirmation(20))
+        XCTAssertEqual(ReaderResumeBehavior.ask.opening(initial: 1, saved: 1, resumesProgress: true), .confirmation(1))
+        XCTAssertEqual(ReaderResumeBehavior.continueReading.opening(initial: 1, saved: 20, resumesProgress: true), .page(20))
+        XCTAssertEqual(ReaderResumeBehavior.fromBeginning.opening(initial: 1, saved: 20, resumesProgress: true), .page(1))
+        let pending = ReaderOpening.confirmation(20)
+        XCTAssertEqual(pending.initialPage, 1)
+        XCTAssertEqual(pending.resolved(continuing: false), .page(1))
+        XCTAssertEqual(pending.resolved(continuing: true), .page(20))
+    }
+
+    @MainActor func testResumePromptLoadsTheWorkAndFirstPageBeforeAsking() async throws {
+        let id = Int64.random(in: 1_000_000_000...2_000_000_000), preferences = ReaderPreferences.defaults
+        let progressKey = "reader_page_\(id)"
+        let settings: [String: Any] = [progressKey: 3, "reader.resumeBehavior": ReaderResumeBehavior.ask.rawValue,
+                                      "reader.helpHidden": true, "reader.autoAdvance": false, "reader.prefetch": 0, "reader.keepAwake": false]
+        let previous = settings.keys.map { ($0, preferences.object(forKey: $0)) }
+        for (key, value) in settings { preferences.set(value, forKey: key) }
+        defer { for (key, value) in previous { preferences.set(value, forKey: key) } }
+        let source = CountingContentSource(), images = PageImageStore(source: source, allowsPrefetch: { false })
+        let gallery = try await source.gallery(id)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousWindow = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        var exited = false
+        let host = UIHostingController(rootView: NativeReaderView(galleryID: id, initialPage: 1, source: source, images: images,
+                                                                savesProgress: true, search: { _ in }, exit: { exited = true }).environment(AppEnvironment.preview()))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { host.dismiss(animated: false); window.isHidden = true; window.rootViewController = nil; previousWindow?.makeKey() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while host.presentedViewController == nil && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNotNil(host.presentedViewController, "Ask only after loading the work")
+        XCTAssertNotNil(images.cachedImage(hash: gallery.pages[0].hash), "Load the first page before presenting the choice")
+        XCTAssertEqual(preferences.integer(forKey: progressKey), 3, "Loading the first page must retain the resume point until the choice")
+        XCTAssertFalse(exited)
+    }
+
+    @MainActor func testGalleryHeadingAndActionSizingKeepTheButtonPositionStable() {
+        let env = AppEnvironment.preview()
+        func size<V: View>(_ view: V) -> CGSize { UIHostingController(rootView: view.environment(env)).sizeThatFits(in: CGSize(width: 320, height: 1000)) }
+        let short = size(GalleryDetailHeading(title: "Short title", metadata: "English · manga · 24 pages"))
+        let long = size(GalleryDetailHeading(title: String(repeating: "Long work title ", count: 20), metadata: "English · manga · 24 pages"))
+        XCTAssertEqual(short.height, long.height, accuracy: 0.5, "Metadata follows the actual title while total heading height reserves two lines")
+        let button = Button {} label: {
+            Label("Read", systemImage: "book").font(.headline).frame(maxWidth: .infinity, maxHeight: .infinity).padding(.vertical, 8)
+        }.buttonStyle(.borderedProminent)
+        let original = Button {} label: {
+            Label("Read", systemImage: "book").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+        }.buttonStyle(.borderedProminent)
+        XCTAssertEqual(size(GalleryActionHeight { button }).height, size(original).height * 1.25, accuracy: 0.5)
+    }
+
     func testDetailPreviewsRequireMeaningfulScrollAndReachingMetadataEnd() {
         for height: CGFloat in [320, 678, 1024] {
             for travel: CGFloat in [0, 12, 48, 120] {
@@ -868,7 +929,8 @@ extension ReaderUXTests {
         let id = Int64.random(in: 1_000_000_000...2_000_000_000)
         let progressKey = "reader_page_\(id)"
         let preferences = ReaderPreferences.defaults
-        let settings: [String: Any] = ["reader.pagesPerSpread": 1, "reader.helpHidden": true, "reader.autoAdvance": false,
+        let settings: [String: Any] = ["reader.resumeBehavior": ReaderResumeBehavior.continueReading.rawValue,
+                                      "reader.pagesPerSpread": 1, "reader.helpHidden": true, "reader.autoAdvance": false,
                                       "reader.prefetch": 0, "reader.keepAwake": false, "reader.mode": ReaderMode.horizontal.rawValue]
         let previous = settings.keys.map { ($0, preferences.object(forKey: $0)) }
         for (key, value) in settings { preferences.set(value, forKey: key) }

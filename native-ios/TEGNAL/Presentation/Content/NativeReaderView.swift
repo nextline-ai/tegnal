@@ -22,6 +22,9 @@ struct NativeReaderView: View {
     @State private var zoomed = false
     @State private var zoomedPages: Set<Int> = []
     @State private var exiting = false
+    @State private var opening: ReaderOpening
+    @State private var showResume = false
+    @State private var resumeReady = false
     @State private var pendingSearch: String?
     @SwiftUI.AppStorage("reader.pagesPerSpread", store: ReaderPreferences.defaults) private var pagesPerSpread = 1
     @SwiftUI.AppStorage("reader.autoAdvance", store: ReaderPreferences.defaults) private var autoAdvance = false
@@ -55,10 +58,13 @@ struct NativeReaderView: View {
         self.source = source; self.images = images; self.savesProgress = savesProgress; self.offline = offline
         self.resumesProgress = resumesProgress
         self.search = search; self.exit = exit
+        let defaults = ReaderPreferences.defaults
+        let saved = savesProgress ? defaults.integer(forKey: "reader_page_\(galleryID)") : 0
+        let opening = ReaderResumeBehavior.stored(in: defaults).opening(initial: initialPage, saved: saved, resumesProgress: resumesProgress)
+        _opening = State(initialValue: opening)
         if let cached = source.cachedGallery(galleryID) {
             _gallery = State(initialValue: cached)
-            let saved = savesProgress && resumesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
-            _currentPage = State(initialValue: ReaderLayout.initialPage(initialPage, saved: saved, total: cached.pages.count,
+            _currentPage = State(initialValue: ReaderLayout.initialPage(opening.initialPage, saved: 0, total: cached.pages.count,
                                                                      count: ReaderPreferences.defaults.integer(forKey: "reader.pagesPerSpread")))
         }
     }
@@ -66,7 +72,7 @@ struct NativeReaderView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let gallery {
+            if let gallery, !opening.needsConfirmation || resumeReady {
                 reader(gallery).ignoresSafeArea()
                     .overlay(Color.black.opacity(min(0.65, max(0, dimming))).allowsHitTesting(false))
             } else if let error {
@@ -92,7 +98,7 @@ struct NativeReaderView: View {
                 Spacer()
             }.ignoresSafeArea(edges: .top).allowsHitTesting(false)
         }
-        .background(ReaderExitGesture(enabled: !exiting && sheet == nil && !showJump && !zoomed && translationRequest == nil,
+        .background(ReaderExitGesture(enabled: readerActive && sheet == nil && !showJump && !zoomed,
                                       requiresTopSafeZone: mode == ReaderMode.continuous.rawValue,
                                       progress: { _ in }, exit: closeReader))
         .background(ReaderPreviewGesture(enabled: readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
@@ -113,7 +119,7 @@ struct NativeReaderView: View {
             if bottomMenu && !menuVisible && gallery != nil { menuActions(compact: true).padding(.horizontal, 12).padding(.vertical, 8)
                     .modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
         }
-        .background(ReaderKeyboardCommands(enabled: sheet == nil && !showJump, action: shortcut))
+        .background(ReaderKeyboardCommands(enabled: readerActive && sheet == nil && !showJump, action: shortcut))
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .toolbar(.hidden, for: .navigationBar)
@@ -144,7 +150,17 @@ struct NativeReaderView: View {
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
         }
-        .task(id: retry) { await loadGallery() }
+        .alert(L10n.text("Continue Reading?"), isPresented: $showResume) {
+            Button(L10n.text("Continue Reading")) { resolveOpening(continuing: true) }
+                .accessibilityIdentifier("reader.resume.continue")
+            Button(L10n.text("Cancel"), role: .cancel) { resolveOpening(continuing: false) }
+                .accessibilityIdentifier("reader.resume.cancel")
+        } message: {
+            Text(L10n.text("Continue from page %@?", String(describing: opening.page)))
+        }
+        .task(id: "\(retry):\(opening.needsConfirmation)") {
+            await loadGallery()
+        }
         .task(id: "\(currentPage):\(pagesPerSpread):\(prefetch):\(gallery?.id ?? 0):\(mayPrefetch)") {
             guard !Task.isCancelled else { return }
             guard mayPrefetch, prefetch > 0, let gallery, gallery.pages.indices.contains(currentPage) else {
@@ -162,7 +178,7 @@ struct NativeReaderView: View {
             do { try await Task.sleep(for: .seconds(2)); toast = nil } catch {}
         }
         .task(id: autoTaskID) {
-            guard autoAdvance, scenePhase == .active, sheet == nil, !menuVisible, !showJump,
+            guard autoAdvance, readerActive, sheet == nil, !menuVisible, !showJump,
                   !zoomed, !exiting, translationRequest == nil, let gallery else { return }
             do {
                 try await Task.sleep(for: .seconds(min(120, max(2, autoSeconds))))
@@ -179,7 +195,7 @@ struct NativeReaderView: View {
             let start = ReaderLayout.start(page, count: pagesPerSpread)
             if start != page { currentPage = start }
             translationRequest = nil; viewports = [:]; zoomed = false; zoomedPages = []
-            if savesProgress { ReaderPreferences.defaults.set(page + 1, forKey: "reader_page_\(galleryID)") }
+            if savesProgress && !opening.needsConfirmation { ReaderPreferences.defaults.set(page + 1, forKey: "reader_page_\(galleryID)") }
         }
         .onAppear { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake && scenePhase == .active }
         .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value && scenePhase == .active }
@@ -250,9 +266,9 @@ struct NativeReaderView: View {
     }
 
     private var autoTaskID: String {
-        "\(autoAdvance):\(autoSeconds):\(currentPage):\(pagesPerSpread):\(menuVisible):\(sheet?.rawValue ?? ""):\(showJump):\(zoomed):\(exiting):\(translationRequest?.id.uuidString ?? ""):\(scenePhase):\(gallery?.id ?? 0)"
+        "\(autoAdvance):\(autoSeconds):\(currentPage):\(pagesPerSpread):\(menuVisible):\(sheet?.rawValue ?? ""):\(showJump):\(zoomed):\(exiting):\(translationRequest?.id.uuidString ?? ""):\(scenePhase):\(gallery?.id ?? 0):\(opening.needsConfirmation)"
     }
-    private var readerActive: Bool { scenePhase == .active && !exiting && translationRequest == nil }
+    private var readerActive: Bool { scenePhase == .active && !exiting && translationRequest == nil && !opening.needsConfirmation }
     private var mayPrefetch: Bool { readerActive && sheet == nil && !zoomed }
     private func viewportChanged(_ index: Int, rect: CGRect, scale: CGFloat) {
         if scale > 1.01 { zoomedPages.insert(index) } else { zoomedPages.remove(index) }
@@ -293,6 +309,13 @@ struct NativeReaderView: View {
     private func bookmark() {
         saveFeedback = .perform { try ContentBookmarkAction.toggle(id: galleryID, gallery: gallery, env: env, images: images, context: discovery) }
     }
+    private func resolveOpening(continuing: Bool) {
+        let resolved = opening.resolved(continuing: continuing)
+        if let gallery {
+            currentPage = ReaderLayout.initialPage(resolved.page, saved: 0, total: gallery.pages.count, count: pagesPerSpread)
+        }
+        opening = resolved
+    }
     private func loadGallery() async {
         error = nil
         // Even an unavailable gallery must retain a visible way out.
@@ -303,9 +326,15 @@ struct NativeReaderView: View {
             else { value = try await source.gallery(galleryID) }
             try Task.checkCancellation()
             if gallery == nil {
-                let saved = savesProgress && resumesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
-                currentPage = ReaderLayout.initialPage(initialPage, saved: saved, total: value.pages.count, count: pagesPerSpread)
+                currentPage = ReaderLayout.initialPage(opening.initialPage, saved: 0, total: value.pages.count, count: pagesPerSpread)
                 gallery = value
+            }
+            if opening.needsConfirmation {
+                if let first = value.pages.first { _ = try? await images.load(first, galleryID: galleryID) }
+                try Task.checkCancellation()
+                resumeReady = true
+                showResume = true
+                return
             }
             // A cached initial page is already in @State and does not trigger onChange.
             if savesProgress { ReaderPreferences.defaults.set(currentPage + 1, forKey: "reader_page_\(galleryID)") }

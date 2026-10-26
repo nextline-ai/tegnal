@@ -128,10 +128,16 @@ public enum MangaUrls {
             return String(text[range]).lowercased()
         }
         let domainPattern = #"(?:var|let|const)\s+domain\s*=\s*['"]([a-z0-9-]+(?:\.[a-z0-9-]+)+)['"]"#
+        // The current indexed frontend derives domain from a literal domain2.
+        // Recognize that declaration without evaluating downloaded JavaScript.
+        let derivedDomainPattern = #"(?:var|let|const)\s+domain\s*=\s*[^;\n]*['"]ltn\.['"]\s*\+\s*domain2\b"#
+        let domain2Pattern = #"(?:var|let|const)\s+domain2\s*=\s*['"]([a-z0-9-]+(?:\.[a-z0-9-]+)+)['"]"#
         let endpointPattern = #"(?:(?:https?:)?//)([a-z0-9-]+(?:\.[a-z0-9-]+)+)/(?:gg\.js(?:[?"'\s>]|$)|galleries/[0-9]+\.js(?:[?"'\s>]|$))"#
         let scriptPattern = #"(?:(?:https?:)?//)(ltn\.[a-z0-9-]+(?:\.[a-z0-9-]+)+)/common\.js(?:[?"'\s>]|$)"#
         let dataHost: String, cdn: String
-        if let domain = capture(domainPattern) {
+        let derivedDomain = text.range(of: derivedDomainPattern, options: [.regularExpression, .caseInsensitive]) != nil
+            ? capture(domain2Pattern) : nil
+        if let domain = capture(domainPattern) ?? derivedDomain {
             cdn = domain.hasPrefix("ltn.") ? String(domain.dropFirst(4)) : domain
             dataHost = "ltn." + cdn
         } else if let host = capture(endpointPattern) ?? capture(scriptPattern) {

@@ -226,9 +226,10 @@ private struct GalleryFeedView: View {
     private var isActive: Bool { env.mode == .manga && scenePhase == .active }
 
     var body: some View {
+        let visibleEntries = loader.ids.enumerated().filter { !env.hiddenMangaGalleryIDs.contains($0.element) }
         ZStack(alignment: .top) {
         ScrollView {
-            LazyVStack(spacing: 16) {
+            LazyVStack(spacing: 8) {
                 HStack {
                 BrowseFilterMenu(title: L10n.text(query.language.capitalized), icon: "globe") {
                 Picker(L10n.text("Language"), selection: $query.language) {
@@ -245,11 +246,11 @@ private struct GalleryFeedView: View {
                 }
                 }.accessibilityIdentifier("content.sort")
                 }
-                ArtworkGrid(mode: .manga, surroundingPadding: 16) { style in
+                ArtworkGrid(mode: .manga, surroundingPadding: 16, topMarginScale: 0.5) { style in
                     let prefetchColumns = style.columns
                     let lookahead = prefetchColumns * 6
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
-                    ForEach(Array(loader.ids.enumerated()), id: \.element) { index, id in
+                    ForEach(visibleEntries, id: \.element) { index, id in
                         GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { navigate(.discoveredGallery(id, discovery)) }) { gallery in
                             saveFeedback = .perform { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
                         }
@@ -279,7 +280,7 @@ private struct GalleryFeedView: View {
                     paginationViewport.footer = frame
                     updateFooterVisibility()
                 }
-            }.padding(16).padding(.top, 56)
+            }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, 8).padding(.top, 56)
         }
         .coordinateSpace(name: "gallery.feedViewport")
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
@@ -544,6 +545,7 @@ private struct RemoteGalleryView: View {
                                 read(galleryID, index + 1, discovery, false)
                             }
                             .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
+                            MangaContentControls(gallery: gallery)
                         }.padding(20)
                     }
                     .coordinateSpace(name: "gallery.detailViewport")
@@ -585,30 +587,157 @@ private struct GalleryInformation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             WorkDetailCover(image: cover, loading: !coverFinished)
-            Text(gallery.title).font(.title2.bold()).textSelection(.enabled).accessibilityIdentifier("content.detail.title")
-            Text(L10n.text("%@ · %@ · %@ pages", String(describing: gallery.language), String(describing: gallery.type), String(describing: gallery.pages.count)))
-                .font(.subheadline).foregroundStyle(.secondary)
-            Button(action: read) {
-                Label(L10n.text("Read"), systemImage: AppMode.manga.icon).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
-            }.buttonStyle(.borderedProminent).accessibilityIdentifier("content.read")
-            Button(action: bookmark) {
-                Label(L10n.text("Save to Library"), systemImage: "bookmark").frame(maxWidth: .infinity)
-            }.buttonStyle(.bordered).accessibilityIdentifier("content.bookmark")
+            GalleryDetailHeading(title: gallery.title, metadata: L10n.text("%@ · %@ · %@ pages", gallery.language, gallery.type, String(gallery.pages.count)))
+            GalleryDetailActions(read: read, bookmark: bookmark)
+            GalleryDetailMetadata(gallery: gallery)
+        }
+    }
+}
+
+private struct GalleryDetailMetadata: View {
+    let gallery: NativeGallery
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
             if !gallery.artists.isEmpty {
-                Text(L10n.text("Artists")).font(.headline)
-                ForEach(gallery.artists, id: \.self) { name in
-                    NavigationLink(name, value: ContentRoute.artist(name)).buttonStyle(.bordered)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text("Artists")).font(.headline).padding(.leading, 16)
+                    FlowLayout(spacing: 6) {
+                        ForEach(gallery.artists, id: \.self) { name in
+                            NavigationLink(name, value: ContentRoute.artist(name)).font(.body).buttonStyle(.bordered)
+                        }
+                    }
                 }
             }
-            NavigationLink(gallery.language, value: ContentRoute.query("language:" + gallery.language))
-                .font(.body).buttonStyle(.bordered).accessibilityIdentifier("content.detail.language")
-            if !gallery.tags.isEmpty {
-                Text(L10n.text("Tags")).font(.headline)
-                ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags), destination: { tag in
-                    .query(tag.query.replacingOccurrences(of: " ", with: "_"))
-                })
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Language")).font(.headline).padding(.leading, 16)
+                NavigationLink(gallery.language, value: ContentRoute.query("language:" + gallery.language))
+                    .font(.body).buttonStyle(.bordered).accessibilityIdentifier("content.detail.language")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Tags")).font(.headline).padding(.leading, 16)
+                if gallery.tags.isEmpty {
+                    Text(" ").modifier(ArtworkTagPill(color: .clear)).hidden().accessibilityHidden(true)
+                } else {
+                    ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags), headingStyle: .detail, destination: { tag in
+                        .query(tag.query.replacingOccurrences(of: " ", with: "_"))
+                    })
+                }
             }
         }
+    }
+}
+
+struct GalleryDetailHeading: View {
+    let title: String
+    let metadata: String
+    @State private var showTitle = false
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            // Reserve the same total height while keeping metadata immediately
+            // below the actual title, including when it occupies just one line.
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title).font(.title2.bold()).lineLimit(2, reservesSpace: true)
+                Text(metadata).font(.subheadline)
+            }.hidden().accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 0) {
+                Button { showTitle = true } label: {
+                    Text(title).font(.title2.bold()).lineLimit(2).truncationMode(.tail)
+                        .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(.plain).accessibilityIdentifier("content.detail.title")
+                    .accessibilityHint(L10n.text("Show Full Title"))
+                Text(metadata).font(.subheadline).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("content.detail.metadata")
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+        .appSheet(isPresented: $showTitle) { GalleryFullTitle(title: title) }
+    }
+}
+
+private struct GalleryFullTitle: View {
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            ScrollView { Text(title).font(.title2.bold()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(20) }
+                .navigationTitle(L10n.text("Title")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
+        }.presentationDetents([.medium, .large])
+    }
+}
+
+private struct GalleryDetailActions: View {
+    let read: () -> Void
+    let bookmark: () -> Void
+    @ScaledMetric(relativeTo: .headline) private var fontSize = 19.5
+    var body: some View {
+        VStack(spacing: 11) {
+            GalleryActionHeight {
+                Button(action: read) {
+                    Label(L10n.text("Read"), systemImage: AppMode.manga.icon).font(.system(size: fontSize, weight: .bold)).imageScale(.medium)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.vertical, 8)
+                }.buttonStyle(.borderedProminent).accessibilityIdentifier("content.read")
+            }
+            GalleryActionHeight {
+                Button(action: bookmark) {
+                    Label(L10n.text("Save to Library"), systemImage: "bookmark").font(.system(size: fontSize, weight: .bold)).imageScale(.medium)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.vertical, 8)
+                }.buttonStyle(.bordered).accessibilityIdentifier("content.bookmark")
+            }
+        }
+    }
+}
+
+/// Scale each system button's natural height, including its style and text size.
+struct GalleryActionHeight: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let button = subviews.first else { return .zero }
+        let size = button.sizeThatFits(.init(width: proposal.width, height: nil))
+        return CGSize(width: size.width, height: size.height * 1.25)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: .init(bounds.size))
+    }
+}
+
+private struct MangaContentControls: View {
+    let gallery: NativeGallery
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.text("Content Controls")).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 16)
+            VStack(spacing: 0) {
+                if let page = URL(string: MangaUrls.galleryUrl(for: gallery.id)) {
+                    NavigationLink { ContentReportView(page: page) } label: {
+                        HStack {
+                            Label(L10n.text("Report Content"), systemImage: "flag")
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    }.accessibilityIdentifier("content.report")
+                    Divider().padding(.leading, 16)
+                }
+                Button {
+                    env.setMangaGalleryHidden(gallery.id, hidden: !env.hiddenMangaGalleryIDs.contains(gallery.id))
+                    dismiss()
+                } label: {
+                    Label(L10n.text(env.hiddenMangaGalleryIDs.contains(gallery.id) ? "Show This Work" : "Hide This Work"), systemImage: "eye.slash")
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                }.accessibilityIdentifier("content.hideWork")
+                if !gallery.artists.isEmpty {
+                    Divider().padding(.leading, 16)
+                    Menu {
+                        ForEach(gallery.artists, id: \.self) { artist in
+                            Button(artist) { env.blockMangaArtist(artist); dismiss() }
+                        }
+                    } label: {
+                        Label(L10n.text("Block Artist"), systemImage: "person.crop.circle.badge.xmark")
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    }.accessibilityIdentifier("content.blockArtist")
+                }
+            }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        }.accessibilityIdentifier("content.controls")
     }
 }
 

@@ -201,12 +201,21 @@ struct BooruPost: Codable, Identifiable, Hashable, Sendable {
     var reducedDataURL: URL? = nil
     var tagCategories: [String: Int]? = nil
     var animated: Bool? = nil
+    var animationVideoURL: URL? = nil
     var id: String { "\(serverID):\(postID)" }
-    var isVideo: Bool { ["mp4", "webm", "mov", "m4v"].contains(fileExtension.lowercased()) }
-    var isAnimated: Bool { tags.contains("animated") || (animated ?? ["gif", "webp", "apng"].contains(fileExtension.lowercased())) }
+    static let videoExtensions = ["mp4", "webm", "mov", "m4v"]
+    var isUgoira: Bool { fileExtension.lowercased() == "zip" }
+    var animationPlaybackURL: URL? {
+        animationVideoURL ?? [sampleURL, reducedDataURL].compactMap { $0 }.first { Self.videoExtensions.contains($0.pathExtension.lowercased()) }
+    }
+    var isVideo: Bool { Self.videoExtensions.contains(fileExtension.lowercased()) || isUgoira && animationPlaybackURL != nil }
+    var isAnimated: Bool { isUgoira || tags.contains("animated") || (animated ?? ["gif", "webp", "apng"].contains(fileExtension.lowercased())) }
     var displayURL: URL? { sampleURL ?? fileURL ?? previewURL }
     // A preview-only post must resolve its details before entering the viewer.
     func viewerURL(original: Bool, reducedData: Bool = false) -> URL? {
+        // A ZIP contains animation frames, not a browser-decodable image. Keep
+        // the original for downloads and use the site's video conversion to view.
+        if isUgoira { return animationPlaybackURL }
         if isVideo || isAnimated || original { return fileURL ?? sampleURL }
         if reducedData { return reducedDataURL ?? sampleURL ?? fileURL }
         return sampleURL ?? fileURL

@@ -4,6 +4,8 @@ struct BooruFavoritesView: View {
     let source: any BooruProviding
     @Environment(AppEnvironment.self) private var env
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var width: CGFloat = 390
     @Environment(BooruStore.self) private var store
     @State private var creating = false
     @State private var newFolderName = ""
@@ -16,8 +18,11 @@ struct BooruFavoritesView: View {
     @State private var folderMessage: String?
     private var posts: [BooruPost] { store.visibleFavorites() }
     var body: some View {
+        let geometry = ArtworkGridGeometry(width: width,
+            columns: typeSize.isAccessibilitySize ? 1 : env.folderColumns(for: .booru),
+            minimum: sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: .booru))
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 0) {
                 NavigationLink { BooruFolderContentsView(source: source) } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "square.grid.2x2.fill").font(.title2).foregroundStyle(.tint)
@@ -26,7 +31,7 @@ struct BooruFavoritesView: View {
                         Text(String(posts.count)).foregroundStyle(.secondary)
                         Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
                     }.padding(18).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
-                }.accessibilityIdentifier("booru.allFavorites")
+                }.accessibilityIdentifier("booru.allFavorites").padding(.bottom, geometry.spacing)
                 ArtworkGrid(mode: .booru, kind: .folders, surroundingPadding: 16) { _ in
                     ForEach(store.folders()) { folder in
                         NavigationLink { BooruFolderContentsView(source: source, folderID: folder.id) } label: {
@@ -46,14 +51,15 @@ struct BooruFavoritesView: View {
                                 }
                             }
                     }
-                }
+                }.padding(.top, -geometry.margin)
             }.padding(16)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             AppToolbarActions {
-                BooruServerMenu(compact: true)
                 Button { creating = true } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
                     .accessibilityLabel(L10n.text("Create Folder")).accessibilityIdentifier("booru.createFolder")
+                BooruServerMenu(compact: true)
             }
         } }
         .transientMessage($folderMessage)
@@ -79,8 +85,6 @@ struct BooruFavoritesView: View {
 
 private struct BooruFolderCard: View {
     @Environment(\.artworkCellStyle) private var style
-    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
     let folder: BooruFolder
     let posts: [BooruPost]
     @Environment(BooruStore.self) private var store
@@ -102,10 +106,7 @@ private struct BooruFolderCard: View {
                     }
                 }.padding(style.inset(6))
             }.clipped()
-            VStack(alignment: .leading, spacing: style.inset(3)) {
-                Text(folder.displayName).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold)).lineLimit(1)
-                Text(L10n.text("%@ items", String(posts.count))).font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold)).opacity(0.85)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, style.inset(10)).padding(.vertical, style.inset(8))
+            FolderCardCaption(title: folder.displayName, count: posts.count, color: .white)
         }.foregroundStyle(.white).background(Color(argb: folder.color))
             .clipShape(RoundedRectangle(cornerRadius: style.radius(16))).overlay(RoundedRectangle(cornerRadius: style.radius(16)).stroke(.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5))
     }

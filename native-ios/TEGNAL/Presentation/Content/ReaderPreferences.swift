@@ -43,10 +43,49 @@ enum ReaderMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum ReaderResumeBehavior: String, CaseIterable, Identifiable {
+    case ask, continueReading, fromBeginning
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .ask: L10n.text("Ask Before Continuing")
+        case .continueReading: L10n.text("Continue Reading")
+        case .fromBeginning: L10n.text("Start from Beginning")
+        }
+    }
+
+    static func stored(in defaults: UserDefaults) -> Self {
+        Self(rawValue: defaults.string(forKey: "reader.resumeBehavior") ?? "") ?? .ask
+    }
+
+    func opening(initial: Int, saved: Int, resumesProgress: Bool) -> ReaderOpening {
+        guard resumesProgress, initial <= 1, saved > 0 else { return .page(max(1, initial)) }
+        switch self {
+        case .ask: return .confirmation(saved)
+        case .continueReading: return .page(saved)
+        case .fromBeginning: return .page(1)
+        }
+    }
+}
+
+enum ReaderOpening: Equatable {
+    case page(Int), confirmation(Int)
+    var page: Int {
+        switch self { case .page(let page), .confirmation(let page): page }
+    }
+    var needsConfirmation: Bool {
+        if case .confirmation = self { return true }
+        return false
+    }
+    var initialPage: Int { needsConfirmation ? 1 : page }
+    func resolved(continuing: Bool) -> Self { .page(continuing ? page : 1) }
+}
+
 struct ReaderSettingsView: View {
     var booru = false
     @Environment(\.dismiss) private var dismiss
     @State private var showHelp = false
+    @SwiftUI.AppStorage("reader.resumeBehavior", store: ReaderPreferences.defaults) private var resumeBehavior = ReaderResumeBehavior.ask.rawValue
     @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
     @SwiftUI.AppStorage("booru.original", store: ReaderPreferences.booruDefaults) private var original = false
     @SwiftUI.AppStorage("booru.showNotes", store: ReaderPreferences.booruDefaults) private var showNotes = true
@@ -81,6 +120,11 @@ struct ReaderSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !booru { Section(L10n.text("Reading Progress")) {
+                    Picker(L10n.text("When Reopening a Work"), selection: $resumeBehavior) {
+                        ForEach(ReaderResumeBehavior.allCases) { Text($0.title).tag($0.rawValue) }
+                    }.accessibilityIdentifier("reader.settings.resumeBehavior")
+                } }
                 if booru { Section(L10n.text("Media")) {
                     Toggle(L10n.text("Load Original Images"), isOn: $original)
                     Toggle(L10n.text("Reduce Image Data Further"), isOn: $reducedData).disabled(original)

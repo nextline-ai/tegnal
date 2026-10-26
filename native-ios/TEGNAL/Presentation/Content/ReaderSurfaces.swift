@@ -31,18 +31,42 @@ enum GalleryPreviewLoading {
 }
 
 struct GalleryDetailPreviews: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var width: CGFloat = 350
+    @State private var selectedPage = 0
     let gallery: NativeGallery
     let images: PageImageStore
     let enabled: Bool
     let select: (Int) -> Void
     var body: some View {
+        let fullWidth = width + 40
+        let columns = GalleryPreviewLayout.columns(width: fullWidth, artworkColumns: env.gridColumns(for: .manga),
+            previewColumns: env.mangaPreviewColumns, removesArtworkPadding: env.removesGridPadding(for: .manga))
+        let rows = env.mangaPreviewRows
+        let pageCount = GalleryPreviewLayout.pageCount(total: gallery.pages.count, columns: columns, rows: rows)
+        let geometry = ArtworkGridGeometry(width: fullWidth, columns: columns, removesPadding: env.removesGridPadding(for: .manga),
+                                           maximumColumns: max(10, columns))
         VStack(alignment: .leading, spacing: 16) {
             Divider()
-            Text(L10n.text("Preview")).font(.headline)
+            HStack(spacing: 12) {
+                Text(L10n.text("Preview")).font(.headline).fixedSize()
+                if enabled {
+                    GalleryPreviewPagePicker(count: pageCount, selection: $selectedPage)
+                }
+            }
             if enabled {
-                GalleryPagePreviewGrid(gallery: gallery, images: images, current: nil,
-                                       identifier: "content.detail.preview", select: select)
-                    .padding(.horizontal, -20)
+                TabView(selection: $selectedPage) {
+                    ForEach(0..<pageCount, id: \.self) { page in
+                        GalleryPagePreviewGrid(gallery: gallery, images: images, current: nil, identifier: "content.detail.preview",
+                            pageRange: GalleryPreviewLayout.pageRange(page, total: gallery.pages.count, columns: columns, rows: rows), select: select)
+                            .frame(maxHeight: .infinity, alignment: .top).tag(page)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: GalleryPreviewLayout.height(rows: rows, geometry: geometry))
+                .padding(.horizontal, -20)
+                .onChange(of: columns) { _, _ in selectedPage = 0 }
+                .onChange(of: rows) { _, _ in selectedPage = 0 }
             } else {
                 Label(L10n.text("Scroll down to load page previews."), systemImage: "chevron.down")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -50,10 +74,51 @@ struct GalleryDetailPreviews: View {
                     .accessibilityIdentifier("content.detail.previewHint")
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
+
+private struct GalleryPreviewPagePicker: View {
+    let count: Int
+    @Binding var selection: Int
+    @State private var width: CGFloat = 0
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 4) {
+                    ForEach(0..<count, id: \.self) { page in
+                        Button { withAnimation(.easeInOut(duration: 0.2)) { selection = page } } label: {
+                            Text(String(page + 1)).font(.subheadline.monospacedDigit().weight(selection == page ? .bold : .regular))
+                                .frame(minWidth: 32, minHeight: 36)
+                                .background(selection == page ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                        }.buttonStyle(.plain).id(page)
+                            .accessibilityLabel(L10n.text("Page %@ / %@", String(page + 1), String(count)))
+                            .accessibilityAddTraits(selection == page ? .isSelected : [])
+                            .accessibilityIdentifier("content.detail.previewPage.\(page + 1)")
+                    }
+                }.frame(minWidth: width, alignment: .trailing)
+            }.scrollIndicators(.hidden)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+                .onChange(of: selection) { _, page in withAnimation { proxy.scrollTo(page, anchor: .trailing) } }
+        }.frame(height: 40)
     }
 }
 
 enum GalleryPreviewLayout {
+    static func pageSize(columns: Int, rows: Int) -> Int { max(1, columns) * max(1, rows) }
+    static func pageCount(total: Int, columns: Int, rows: Int) -> Int {
+        let size = pageSize(columns: columns, rows: rows)
+        return max(1, (max(0, total) + size - 1) / size)
+    }
+    static func pageRange(_ page: Int, total: Int, columns: Int, rows: Int) -> Range<Int> {
+        let size = pageSize(columns: columns, rows: rows)
+        let start = min(max(0, page) * size, max(0, total))
+        return start..<min(start + size, max(0, total))
+    }
+    static func height(rows: Int, geometry: ArtworkGridGeometry) -> CGFloat {
+        let rows = max(1, rows)
+        return CGFloat(rows) * geometry.cellWidth / 0.72 + CGFloat(rows - 1) * geometry.spacing + geometry.margin * 2
+    }
     static func columns(width: CGFloat, artworkColumns: Int, previewColumns: Int, removesArtworkPadding: Bool) -> Int {
         if previewColumns > 0 { return min(10, previewColumns) }
         let artwork = ArtworkGridGeometry(width: width, columns: artworkColumns, removesPadding: removesArtworkPadding)
@@ -70,6 +135,7 @@ struct GalleryPagePreviewGrid: View {
     let images: PageImageStore
     let current: Int?
     let identifier: String
+    var pageRange: Range<Int>? = nil
     let select: (Int) -> Void
     var body: some View {
         let columns = GalleryPreviewLayout.columns(width: width, artworkColumns: env.gridColumns(for: .manga),
@@ -81,7 +147,7 @@ struct GalleryPagePreviewGrid: View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing), count: columns),
                   alignment: .leading, spacing: geometry.spacing) {
             // Page order is fixed for the lifetime of this gallery.
-            ForEach(gallery.pages.indices, id: \.self) { index in
+            ForEach(pageRange ?? gallery.pages.indices, id: \.self) { index in
                 Button { select(index) } label: {
                     ReaderThumbnail(page: gallery.pages[index], galleryID: gallery.id, images: images)
                         .aspectRatio(0.72, contentMode: .fit).clipped()
@@ -239,18 +305,27 @@ struct ArtworkTagGroup: Identifiable {
 }
 struct ArtworkTagHeading: View {
     let category: ArtworkTagCategory
-    var body: some View { Label(L10n.text(category.title), systemImage: category.symbol).foregroundStyle(category.color) }
+    var showsIcon = true
+    var body: some View {
+        Group {
+            if showsIcon { Label(L10n.text(category.title), systemImage: category.symbol) }
+            else { Text(L10n.text(category.title)) }
+        }.foregroundStyle(category.color)
+    }
 }
+enum ArtworkTagHeadingStyle { case compact, detail }
 struct ArtworkTagCloud: View {
     let groups: [ArtworkTagGroup]
+    var headingStyle: ArtworkTagHeadingStyle = .compact
     var destination: ((ArtworkTag) -> ContentRoute)? = nil
     var action: ((ArtworkTag) -> Void)? = nil
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: headingStyle == .detail ? 12 : 16) {
             ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: headingStyle == .detail ? 4 : 6) {
                     if group.category != .female && group.category != .male {
-                        ArtworkTagHeading(category: group.category).font(.caption.weight(.semibold))
+                        ArtworkTagHeading(category: group.category, showsIcon: headingStyle != .detail)
+                            .font(headingStyle == .detail ? .headline : .caption.weight(.semibold))
                     }
                     FlowLayout(spacing: 6) {
                         ForEach(group.tags) { tag in

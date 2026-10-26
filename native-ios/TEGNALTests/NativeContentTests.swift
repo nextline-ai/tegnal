@@ -48,6 +48,26 @@ final class NativeContentTests: XCTestCase {
         XCTAssertFalse(restored.launchMangaQuery.allowsLanguageExceptions)
     }
 
+    @MainActor func testMangaContentControlsPersistHidingAndArtistExclusionsWithoutDeletingSavedWorks() throws {
+        let name = "manga-controls-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let database = try AppDatabase.inMemory()
+        _ = try database.upsertWork(galleryId: 1234, title: "Saved work")
+        let env = AppEnvironment(database: database, browserPreferences: defaults)
+        env.defaultExcludedTags = "tag:excluded"
+        env.setMangaGalleryHidden(1234, hidden: true)
+        env.blockMangaArtist("Sample Artist")
+        env.blockMangaArtist("sample artist")
+        let restored = AppEnvironment(database: database, browserPreferences: defaults)
+        XCTAssertTrue(restored.hiddenMangaGalleryIDs.contains(1234))
+        XCTAssertEqual(restored.defaultExcludedTags, "tag:excluded artist:Sample_Artist")
+        XCTAssertTrue(restored.launchMangaQuery.text.contains("-artist:Sample_Artist"))
+        XCTAssertNotNil(try database.getWork(galleryId: 1234))
+        restored.setMangaGalleryHidden(1234, hidden: false)
+        XCTAssertTrue(AppEnvironment(database: database, browserPreferences: defaults).hiddenMangaGalleryIDs.isEmpty)
+    }
+
     @MainActor func testBrowserFallbackIsOptInAndPersistsSeparatelyFromLegacyPreference() throws {
         let suite = "browser-preference-test-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -325,6 +345,29 @@ final class NativeContentLiveTests: XCTestCase {
         let query = GalleryQuery(language: "all", text: "language:english", sort: .week)
         let result = try await source.list(query, offset: 0, count: 2)
         XCTAssertEqual(result.ids.count, 2)
+    }
+
+    func testLiveHitomiCatalogConnection() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["TEGNAL_LIVE_TESTS"] == "1")
+        let keys = ["manga.site_address", "manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site",
+                    "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base"]
+        let defaults = MangaUrls.preferences
+        let previous = keys.map { ($0, defaults.object(forKey: $0)) }
+        defer { for (key, value) in previous { defaults.set(value, forKey: key) } }
+        defaults.set("hitomi.la", forKey: "manga.site_address")
+        MangaUrls.resetResolvedBackend()
+        let source = MangaContentSource(transport: ContentTransport())
+        let batch = try await source.list(GalleryQuery(), offset: 0, count: 1)
+        XCTAssertTrue(MangaUrls.hasResolvedBackend)
+        let id = try XCTUnwrap(batch.ids.first)
+        let gallery = try await source.gallery(id)
+        let page = try XCTUnwrap(gallery.pages.first)
+        let thumbnail = try await source.image(page, galleryID: id, thumbnail: true)
+        let decodes = await MainActor.run { UIImage(data: thumbnail) != nil }
+        XCTAssertTrue(decodes)
+        let attachment = XCTAttachment(string: "Configured host: \(MangaUrls.configuredHost)\nData host: \(MangaUrls.dataHost)\nCDN: \(MangaUrls.cdnHost)\nList, metadata and thumbnail decode succeeded.")
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     func testLiveMetadataImageDecodeAndSearchOnDevice() async throws {

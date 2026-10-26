@@ -433,21 +433,6 @@ struct BooruPostView: View {
                     }
                     Link(L10n.text("Open on Website"), destination: server.pageURL(postID: post.postID))
                 }
-                Section(L10n.text("Content Controls")) {
-                    NavigationLink { ContentReportView(page: server.pageURL(postID: post.postID)) } label: {
-                        Label(L10n.text("Report Content"), systemImage: "flag")
-                    }.accessibilityIdentifier("booru.report")
-                    Button(L10n.text("Hide This Post"), systemImage: "eye.slash") { hideContent(rule: "id:\(post.postID)") }
-                        .accessibilityIdentifier("booru.hidePost")
-                    if !post.artists.isEmpty {
-                        Menu(L10n.text("Block Artist"), systemImage: "person.crop.circle.badge.xmark") {
-                            ForEach(post.artists, id: \.self) { artist in
-                                Button(artist) { hideContent(rule: "artist:" + artist) }
-                            }
-                        }
-                    }
-                }
-
                 ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:])) { group in
                     Section {
                         ForEach(group.tags) { tag in
@@ -469,6 +454,20 @@ struct BooruPostView: View {
                     } else if notes.isEmpty { Text(L10n.text("No Notes")).foregroundStyle(.secondary) }
                     ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                         VStack(alignment: .leading, spacing: 6) { Text("#\(index + 1)").font(.caption).foregroundStyle(.secondary); Text(note.body).textSelection(.enabled) }
+                    }
+                }
+                Section(L10n.text("Content Controls")) {
+                    NavigationLink { ContentReportView(page: server.pageURL(postID: post.postID)) } label: {
+                        Label(L10n.text("Report Content"), systemImage: "flag")
+                    }.accessibilityIdentifier("booru.report")
+                    Button(L10n.text("Hide This Post"), systemImage: "eye.slash") { hideContent(rule: "id:\(post.postID)") }
+                        .accessibilityIdentifier("booru.hidePost")
+                    if !post.artists.isEmpty {
+                        Menu(L10n.text("Block Artist"), systemImage: "person.crop.circle.badge.xmark") {
+                            ForEach(post.artists, id: \.self) { artist in
+                                Button(artist) { hideContent(rule: "artist:" + artist) }
+                            }
+                        }
                     }
                 }
             }.navigationTitle(L10n.text("Details")).navigationBarTitleDisplayMode(.inline)

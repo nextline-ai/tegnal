@@ -19,6 +19,9 @@ struct ModeAppearanceSettings: View {
                 }.pickerStyle(.menu).accessibilityIdentifier("settings.previewColumns")
                 Text(L10n.text("Automatic uses twice the artwork grid’s column count for page previews."))
                     .font(.footnote).foregroundStyle(.secondary)
+                Picker(L10n.text("Preview Rows per Page"), selection: $env.mangaPreviewRows) {
+                    ForEach(1...10, id: \.self) { Text(String($0)).tag($0) }
+                }.pickerStyle(.menu).accessibilityIdentifier("settings.previewRows")
                 Toggle(L10n.text("Show Work Titles"), isOn: $env.showsMangaTitles).accessibilityIdentifier("settings.showMangaTitles")
                 Toggle(L10n.text("Show Work Artists"), isOn: $env.showsMangaArtists).accessibilityIdentifier("settings.showMangaArtists")
             }

@@ -1,7 +1,7 @@
 import Foundation
 
 enum ContentError: LocalizedError {
-    case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery, galleryNotFound
+    case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery, galleryNotFound, tooManySearchTerms(Int)
 
     var errorDescription: String? {
         switch self {
@@ -12,6 +12,7 @@ enum ContentError: LocalizedError {
         case .unavailable(403): return L10n.text("The image server declined the request. Try again shortly.")
         case .unavailable: return L10n.text("Unable to connect to the server. Try again shortly.")
         case .invalidQuery: return L10n.text("Check your search. Separate terms with spaces and join words within a tag with underscores.")
+        case .tooManySearchTerms(let limit): return L10n.text("Use up to %@ search terms, including default and excluded tags.", String(limit))
         }
     }
 
@@ -133,6 +134,7 @@ struct NativeGallery: Codable, Identifiable, Sendable {
 }
 
 struct GalleryQuery: Hashable, Sendable {
+    static let maximumSearchTerms = 64
     var language = "korean"
     var artist: String? = nil
     var text = ""

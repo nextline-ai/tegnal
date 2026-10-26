@@ -308,6 +308,16 @@ final class BooruMediaTransition {
     }
 }
 
+/// Native storage survives local WebKit document replacement and viewer reopening.
+struct BooruVideoAudioPreferences {
+    let defaults: UserDefaults
+    init(defaults: UserDefaults = ReaderPreferences.booruDefaults) { self.defaults = defaults }
+    var muted: Bool { defaults.object(forKey: "booru.videoMuted") as? Bool ?? true }
+    func update(muted: Bool) {
+        defaults.set(muted, forKey: "booru.videoMuted")
+    }
+}
+
 struct BooruMediaView: UIViewRepresentable {
     let post: BooruPost
     let server: BooruServer
@@ -374,7 +384,7 @@ struct BooruMediaView: UIViewRepresentable {
             }
             // A snapshot can finish after activity changes. Every new document
             // starts suspended; didFinish applies the current native policy.
-            coordinator.document = url == nil ? "" : Self.document(post: post, url: displayURL, identifier: coordinator.documentID)
+            coordinator.document = url == nil ? "" : Self.document(post: post, url: displayURL, identifier: coordinator.documentID, muted: coordinator.audio.muted)
             coordinator.baseURL = server.baseURL
             let preview = url.flatMap { BooruViewerImageCache.shared.cachedImage(url: $0, server: server) }
                 ?? (post.previewURL ?? post.sampleURL).flatMap { BooruThumbnailCache.shared.cachedImage(url: $0, server: server) }
@@ -425,7 +435,7 @@ struct BooruMediaView: UIViewRepresentable {
             .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "'", with: "&#39;")
     }
-    static func document(post: BooruPost, url: URL?, identifier: String = "", active: Bool = false) -> String {
+    static func document(post: BooruPost, url: URL?, identifier: String = "", active: Bool = false, muted: Bool = true) -> String {
         var source = url?.absoluteString ?? ""
         #if DEBUG
         if BooruUITestSupport.enabled {
@@ -438,8 +448,9 @@ struct BooruMediaView: UIViewRepresentable {
         let isVideo = post.isVideo
         let suspendsImage = post.isAnimated && !isVideo
         let sourceAttribute = active || !isVideo && !suspendsImage ? " src='\(escape(source))'" : ""
+        let videoOptions = (muted ? " muted" : "") + (post.isUgoira ? " loop" : "")
         let media = isVideo
-            ? "<video id='media' data-source='\(escape(source))'\(sourceAttribute) controls playsinline autoplay muted preload='metadata'></video>"
+            ? "<video id='media' data-source='\(escape(source))'\(sourceAttribute) controls playsinline autoplay\(videoOptions) preload='metadata'></video>"
             : "<img id='media' data-source='\(escape(source))'\(sourceAttribute) alt='Post \(post.postID)' />"
         let nonce = UUID().uuidString
         return """
@@ -455,6 +466,16 @@ struct BooruMediaView: UIViewRepresentable {
         window.tegnalDocumentID='\(identifier)';
         const media=document.getElementById('media');
         const send=value=>window.webkit.messageHandlers.media.postMessage({...value,documentID:'\(identifier)'});
+        let audioMuted=\(muted ? "true" : "false");
+        window.setAudioPreferences=muted=>{
+          audioMuted=muted;
+          if(media.tagName==='VIDEO')media.muted=muted;
+        };
+        window.setAudioPreferences(audioMuted);
+        media.addEventListener('volumechange',()=>{
+          if(media.tagName!=='VIDEO'||audioMuted===media.muted)return;
+          audioMuted=media.muted;send({audio:{muted:audioMuted}});
+        });
         const fit=()=>{const w=media.naturalWidth||media.videoWidth||\(max(post.width, 1));const h=media.naturalHeight||media.videoHeight||\(max(post.height, 1));
           const scale=Math.min(document.body.clientWidth/w,document.body.clientHeight/h);const canvas=document.getElementById('canvas');canvas.style.width=(w*scale)+'px';canvas.style.height=(h*scale)+'px';};
         let retries=0,retryTimer=null,pendingMediaError=false;
@@ -494,7 +515,7 @@ struct BooruMediaView: UIViewRepresentable {
         const play=()=>{
           if(!playbackAllowed||media.tagName!=='VIDEO'||document.hidden)return;
           clearTimeout(playTimer);
-          media.muted=true;media.playsInline=true;
+          media.playsInline=true;
           const result=media.play();
           result?.catch(()=>{if(++playAttempts<5)playTimer=setTimeout(play,400*playAttempts);});
         };
@@ -605,6 +626,11 @@ struct BooruMediaView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        let audio: BooruVideoAudioPreferences
+        init(audioDefaults: UserDefaults = ReaderPreferences.booruDefaults) {
+            audio = BooruVideoAudioPreferences(defaults: audioDefaults)
+            super.init()
+        }
         weak var view: WKWebView?
         func observeLifecycle(of view: WKWebView) {
             NotificationCenter.default.removeObserver(self)
@@ -694,6 +720,9 @@ struct BooruMediaView: UIViewRepresentable {
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard restrictedDocumentID != documentID, message.frameInfo.isMainFrame,
                   let value = message.body as? [String: Any], value["documentID"] as? String == documentID else { return }
+            if let settings = value["audio"] as? [String: Any], let muted = settings["muted"] as? Bool {
+                audio.update(muted: muted)
+            }
             if let index = value["note"] as? Int, notes.indices.contains(index) { onNote?(notes[index]) }
             if value["presented"] as? Bool == true { transition.presented(id: documentID) }
             if let status = value["status"] as? String {
@@ -728,7 +757,8 @@ struct BooruMediaView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             ready = true; renderedNotes = nil; updateNotes(webView)
             let canPlay = active && restrictedDocumentID != documentID && !document.isEmpty && !transition.hasPendingDocument && UIApplication.shared.applicationState == .active
-            webView.evaluateJavaScript(canPlay ? "window.resumePlayback?.()" : "window.pausePlayback?.()", completionHandler: nil)
+            let playback = canPlay ? "window.resumePlayback?.()" : "window.pausePlayback?.()"
+            webView.evaluateJavaScript("window.setAudioPreferences?.(\(audio.muted ? "true" : "false"));" + playback, completionHandler: nil)
         }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             guard restrictedDocumentID != documentID, (error as NSError).code != NSURLErrorCancelled else { return }

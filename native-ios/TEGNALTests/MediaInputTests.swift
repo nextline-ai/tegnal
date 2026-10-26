@@ -3,6 +3,61 @@ import WebKit
 @testable import TEGNAL
 
 @MainActor final class MediaInputTests: XCTestCase {
+    func testVideoAudioSurvivesResumeNextVideoAndDocumentRecovery() async throws {
+        let name = "tegnal.video-audio-test." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let coordinator = BooruMediaView.Coordinator(audioDefaults: defaults)
+        coordinator.active = false
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.userContentController.add(coordinator, name: "media")
+        defer { config.userContentController.removeScriptMessageHandler(forName: "media") }
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 800), configuration: config)
+        web.navigationDelegate = coordinator; coordinator.view = web
+        var post = BooruFixtureSource.post(101, server: BooruServer.presets[0]); post.fileExtension = "mp4"
+        let url = try XCTUnwrap(URL(string: BooruTestMedia.mp4))
+        func load(_ id: String, muted: Bool) async throws {
+            coordinator.documentID = id; coordinator.ready = false
+            coordinator.document = BooruMediaView.document(post: post, url: url, identifier: id, muted: muted)
+            web.loadHTMLString(coordinator.document, baseURL: nil)
+            for _ in 0..<200 {
+                if coordinator.ready { break }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            XCTAssertTrue(coordinator.ready)
+            // A DOM query after didFinish waits behind its native audio restore.
+            let rawState = try await web.evaluateJavaScript("media.muted")
+            XCTAssertEqual(rawState as? Bool, coordinator.audio.muted)
+        }
+        XCTAssertTrue(coordinator.audio.muted)
+        try await load("first", muted: true)
+        _ = try await web.evaluateJavaScript("media.muted=false")
+        for _ in 0..<100 {
+            if !coordinator.audio.muted { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertFalse(coordinator.audio.muted)
+        _ = try await web.evaluateJavaScript("media.removeAttribute('autoplay');media.play=()=>Promise.resolve();window.resumePlayback();window.pausePlayback();window.resumePlayback()")
+        let resumed = try await web.evaluateJavaScript("media.muted")
+        XCTAssertEqual(resumed as? Bool, false, "Resuming must not force mute back on")
+        // The next video is a ZIP animation, rendered as a looping video.
+        post.fileExtension = "zip"; post.animationVideoURL = URL(string: "https://cdn.example/animation.webm")
+        try await load("next", muted: coordinator.audio.muted)
+        let loops = try await web.evaluateJavaScript("media.tagName==='VIDEO' && media.loop")
+        XCTAssertEqual(loops as? Bool, true)
+        // Recovery can reuse an older HTML document; native preferences win.
+        try await load("recovered", muted: true)
+        XCTAssertFalse(coordinator.audio.muted)
+        _ = try await web.evaluateJavaScript("media.muted=true")
+        for _ in 0..<100 {
+            if coordinator.audio.muted { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(BooruMediaView.Coordinator(audioDefaults: defaults).audio.muted)
+    }
+
     func testZoomedTranslationUsesExactlyTheVisibleImageRegion() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)

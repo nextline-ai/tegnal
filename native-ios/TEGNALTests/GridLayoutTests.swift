@@ -4,6 +4,154 @@ import GRDB
 @testable import TEGNAL
 
 final class GridLayoutTests: XCTestCase {
+    func testPreviewPaginationKeepsFiveRowsRegardlessOfColumnCountAndCoversEveryPage() {
+        for columns in [1, 2, 6, 10] {
+            let count = GalleryPreviewLayout.pageCount(total: 123, columns: columns, rows: 5)
+            let ranges = (0..<count).map { GalleryPreviewLayout.pageRange($0, total: 123, columns: columns, rows: 5) }
+            XCTAssertEqual(ranges.first?.count, columns * 5)
+            XCTAssertTrue(ranges.allSatisfy { $0.count <= columns * 5 })
+            XCTAssertEqual(ranges.flatMap(Array.init), Array(0..<123), "Changing columns must not skip or duplicate artwork pages")
+            let geometry = ArtworkGridGeometry(width: 390, columns: columns, removesPadding: false, maximumColumns: 10)
+            XCTAssertEqual(GalleryPreviewLayout.height(rows: 5, geometry: geometry),
+                           geometry.cellWidth / 0.72 * 5 + geometry.spacing * 4 + geometry.margin * 2, accuracy: 0.001)
+        }
+        XCTAssertEqual(GalleryPreviewLayout.pageRange(1, total: 123, columns: 4, rows: 3), 12..<24)
+        XCTAssertEqual(GalleryPreviewLayout.pageRange(99, total: 123, columns: 4, rows: 3), 123..<123)
+    }
+
+    @MainActor func testModeContainerConnectsOnlyTheSelectedTreeAndRetainsEachHost() async throws {
+        let controller = RetainedModeController()
+        let manga = AnyView(NavigationStack { Text("Comics") }), booru = AnyView(NavigationStack { Text("Images") })
+        func show(_ mode: AppMode) async {
+            controller.update(mode: mode, manga: manga, booru: booru)
+            await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        }
+        await show(.manga)
+        let mangaHost = try XCTUnwrap(controller.children.first)
+        await show(.booru)
+        let booruHost = try XCTUnwrap(controller.children.first)
+        XCTAssertNil(mangaHost.parent)
+        XCTAssertNil(mangaHost.view.superview)
+        for mode: AppMode in [.manga, .booru, .manga, .booru] {
+            await show(mode)
+            let expected = mode == .manga ? mangaHost : booruHost
+            let inactive = mode == .manga ? booruHost : mangaHost
+            XCTAssertEqual(controller.children.count, 1, "An inactive navigation tree must not keep owning the toolbar")
+            XCTAssertTrue(controller.children.first === expected)
+            XCTAssertTrue(expected.view.superview === controller.view)
+            XCTAssertTrue(expected.view.isUserInteractionEnabled)
+            XCTAssertFalse(expected.view.isHidden)
+            XCTAssertNil(inactive.parent)
+            XCTAssertNil(inactive.view.superview)
+        }
+        controller.update(mode: .manga, manga: manga, booru: booru)
+        await show(.booru)
+        XCTAssertTrue(controller.children.first === booruHost, "Queued updates must apply only the latest requested mode")
+    }
+
+    @MainActor func testModeSlideKeepsChromeFixedAndPanelsJoinedDuringReversal() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene), controller = RetainedModeController()
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        func screen(_ title: String, color: Color) -> AnyView {
+            AnyView(TabView {
+                NavigationStack {
+                    color.ignoresSafeArea().overlay(Text(title))
+                        .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+                }.tabItem { Label("Saved", systemImage: "folder") }
+            })
+        }
+        let manga = screen("Comics", color: .blue), booru = screen("Images", color: .orange)
+        func descendant(_ root: UIView, identifier: String) -> UIView? {
+            if root.accessibilityIdentifier == identifier { return root }
+            return root.subviews.lazy.compactMap { descendant($0, identifier: identifier) }.first
+        }
+        func visibleBars(_ root: UIView) -> [UIView] {
+            guard !root.isHidden, root.alpha > 0.01 else { return [] }
+            if root is UINavigationBar || root is UITabBar { return [root] }
+            return root.subviews.flatMap(visibleBars)
+        }
+        func show(_ mode: AppMode) async {
+            controller.update(mode: mode, manga: manga, booru: booru)
+            await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        }
+        func assertOpaqueScreen() {
+            XCTAssertEqual(controller.children.count, 1, "The outgoing screen must be frozen rather than keeping two live glass trees")
+            let opacities = controller.children.map { child in
+                child.view.layer.presentation().map { CGFloat($0.opacity) } ?? child.view.alpha
+            }
+            XCTAssertGreaterThanOrEqual(opacities.max() ?? 0, 0.999, "A transition must never fade both screens toward black")
+        }
+        await show(.booru)
+        let original = try XCTUnwrap(controller.children.first)
+        try await Task.sleep(for: .milliseconds(40))
+        await show(.manga)
+        let incoming = try XCTUnwrap(controller.children.first { $0 !== original })
+        func assertSlide(to mode: AppMode) throws {
+            assertOpaqueScreen()
+            XCTAssertEqual(controller.children.first?.view.transform, .identity, "The live bars must stay fixed")
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
+            let stage = try XCTUnwrap(descendant(controller.view, identifier: "mode.transition.body"))
+            let outgoing = try XCTUnwrap(stage.subviews.first { $0.accessibilityIdentifier == "mode.transition.outgoing" })
+            let incoming = try XCTUnwrap(stage.subviews.first { $0.accessibilityIdentifier == "mode.transition.incoming" })
+            let oldFrame = try XCTUnwrap(outgoing.layer.presentation()).frame
+            let newFrame = try XCTUnwrap(incoming.layer.presentation()).frame
+            let bodyFrame = stage.convert(stage.bounds, to: controller.view)
+            XCTAssertEqual(bodyFrame.maxY, controller.view.bounds.maxY, accuracy: 0.5, "Content behind and below the floating dock must also slide")
+            let bars = visibleBars(controller.children[0].view)
+            let dock = try XCTUnwrap(bars.first { $0 is UITabBar })
+            XCTAssertFalse(dock.isDescendant(of: stage), "Keep the real dock outside the moving snapshots")
+            XCTAssertEqual(bodyFrame.minY, controller.view.bounds.minY, accuracy: 0.5, "The background behind the top controls must also slide")
+            XCTAssertTrue(bars.contains { $0 is UINavigationBar })
+            for bar in bars {
+                var barBranch = bar
+                while let parent = barBranch.superview, !stage.isDescendant(of: parent) { barBranch = parent }
+                let common = try XCTUnwrap(barBranch.superview)
+                var bodyBranch = stage
+                while bodyBranch.superview !== common, let parent = bodyBranch.superview { bodyBranch = parent }
+                let barIndex = try XCTUnwrap(common.subviews.firstIndex(of: barBranch))
+                let bodyIndex = try XCTUnwrap(common.subviews.firstIndex(of: bodyBranch))
+                XCTAssertGreaterThan(barIndex, bodyIndex, "Real navigation/tab controls must stay above the moving background")
+            }
+            XCTAssertTrue(stage.clipsToBounds)
+            XCTAssertEqual(outgoing.alpha, 1); XCTAssertEqual(incoming.alpha, 1)
+            if mode == .manga {
+                XCTAssertLessThan(newFrame.minX, 0, "Comics must enter from the left")
+                XCTAssertGreaterThan(oldFrame.minX, 0)
+                XCTAssertEqual(newFrame.maxX, oldFrame.minX, accuracy: 0.5, "Panels must share one edge with no blank gap")
+            } else {
+                XCTAssertGreaterThan(newFrame.minX, 0, "Images must enter from the right")
+                XCTAssertLessThan(oldFrame.minX, 0)
+                XCTAssertEqual(oldFrame.maxX, newFrame.minX, accuracy: 0.5)
+            }
+        }
+        func waitForPanels() async throws {
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
+            for _ in 0..<100 {
+                let stage = descendant(controller.view, identifier: "mode.transition.body")
+                if stage?.subviews.contains(where: { $0.accessibilityIdentifier == "mode.transition.incoming" }) == true {
+                    try await Task.sleep(for: .milliseconds(25))
+                    return
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTFail("The mounted body must begin its slide after display preparation")
+        }
+        try await waitForPanels()
+        try assertSlide(to: .manga)
+        XCTAssertEqual(incoming.view.alpha, 1)
+        await show(.booru)
+        try await waitForPanels()
+        try assertSlide(to: .booru)
+        for _ in 0..<7 { try await Task.sleep(for: .milliseconds(40)); assertOpaqueScreen() }
+        XCTAssertNil(descendant(controller.view, identifier: "mode.transition.body"))
+        XCTAssertEqual(controller.children.count, 1)
+        XCTAssertTrue(controller.children.first === original)
+        XCTAssertTrue(original.view.isUserInteractionEnabled)
+    }
+
     func testPreviewColumnsFollowTwiceTheResolvedArtworkColumnsOrAnExplicitChoice() {
         for width: CGFloat in [280, 390, 678, 1024, 1280] {
             for columns in 0...5 {
@@ -38,12 +186,16 @@ final class GridLayoutTests: XCTestCase {
         let database = try AppDatabase.inMemory(), store = try BooruStore()
         let env = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
         XCTAssertEqual(env.mangaPreviewColumns, 0)
-        env.mode = .manga; env.gridColumns = 3; env.mangaPreviewColumns = 6
+        XCTAssertEqual(env.mangaPreviewRows, 5)
+        env.mode = .manga; env.gridColumns = 3; env.mangaPreviewColumns = 6; env.mangaPreviewRows = 7
         let restored = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
         XCTAssertEqual(restored.mangaPreviewColumns, 6)
+        XCTAssertEqual(restored.mangaPreviewRows, 7)
         XCTAssertEqual(restored.gridColumns(for: .manga), 3)
         restored.mangaPreviewColumns = 100; XCTAssertEqual(restored.mangaPreviewColumns, 10)
         restored.mangaPreviewColumns = -1; XCTAssertEqual(restored.mangaPreviewColumns, 0)
+        restored.mangaPreviewRows = 100; XCTAssertEqual(restored.mangaPreviewRows, 10)
+        restored.mangaPreviewRows = -1; XCTAssertEqual(restored.mangaPreviewRows, 1)
     }
 
     @MainActor func testModeSwitchCoalescesOverlappingUserInteractions() {
@@ -54,6 +206,40 @@ final class GridLayoutTests: XCTestCase {
         XCTAssertFalse(motion.acceptInteraction(at: now.advanced(by: .milliseconds(180))))
         XCTAssertTrue(motion.acceptInteraction(at: now.advanced(by: .milliseconds(230))))
         XCTAssertFalse(motion.acceptInteraction(at: now.advanced(by: .milliseconds(280))))
+    }
+
+    @MainActor func testModeThumbHandoffKeepsOneContinuousMotionAndIgnoresStaleCompletion() throws {
+        let motion = AppModeSwitchMotion(), start = ContinuousClock.now
+        motion.prepare(for: .manga)
+        motion.move(to: .booru, reducedMotion: false, at: start)
+        let first = try XCTUnwrap(motion.transition)
+        var previous: CGFloat = 0
+        for milliseconds in stride(from: 0, through: 240, by: 20) {
+            let now = start.advanced(by: .milliseconds(milliseconds))
+            let outgoing = motion.position(for: .manga, at: now)
+            let incoming = motion.position(for: .booru, at: now)
+            XCTAssertEqual(outgoing, incoming, accuracy: 0.001, "Both toolbars must draw the same bubble during the fade")
+            XCTAssertGreaterThanOrEqual(incoming, previous)
+            XCTAssertTrue((0...44).contains(incoming))
+            previous = incoming
+        }
+        let handoff = start.advanced(by: .milliseconds(80))
+        motion.prepare(for: .booru)
+        motion.move(to: .booru, reducedMotion: false, at: handoff)
+        XCTAssertEqual(motion.transition?.id, first.id, "An incoming toolbar must not restart the animation")
+        let reversal = start.advanced(by: .milliseconds(140))
+        let position = motion.position(for: .booru, at: reversal)
+        motion.move(to: .manga, reducedMotion: false, at: reversal)
+        let second = try XCTUnwrap(motion.transition)
+        XCTAssertEqual(motion.position(for: .manga, at: reversal), position, accuracy: 0.001)
+        motion.finish(first.id)
+        XCTAssertEqual(motion.transition?.id, second.id)
+        XCTAssertEqual(motion.position(for: .manga, at: second.deadline), 0, accuracy: 0.001)
+        motion.finish(second.id)
+        XCTAssertEqual(motion.position(for: .manga), 0)
+        motion.move(to: .booru, reducedMotion: true)
+        XCTAssertNil(motion.transition)
+        XCTAssertEqual(motion.position(for: .booru), 44)
     }
 
     @MainActor func testDensityPreferencesPersistIndependentlyAndDefaultToVisibleMetadata() throws {

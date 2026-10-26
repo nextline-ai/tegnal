@@ -137,7 +137,7 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
 
     static func backendConnectionFailed(_ error: Error) -> Bool {
         guard let error = error as? URLError else { return false }
-        return [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost].contains(error.code)
+        return [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost, .secureConnectionFailed, .networkConnectionLost, .timedOut].contains(error.code)
     }
 
     /// Resolve once before the first data request, then reuse the site's saved

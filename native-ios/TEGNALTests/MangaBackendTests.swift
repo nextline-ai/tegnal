@@ -21,6 +21,34 @@ final class MangaBackendTests: XCTestCase {
         return fixture
     }
 
+    func testDerivedDataDomainMatchesCurrentIndexedFrontendWithoutExecutingScript() throws {
+        let script = #"""
+        const domain2 = 'media.example';
+        var domain = (/^dev\./.test(document.location.hostname.toString()) ? 'dev.comics.example' : 'ltn.'+domain2);
+        """#
+        let hosts = try XCTUnwrap(MangaUrls.indexedBackendHosts(in: script))
+        XCTAssertEqual(hosts.dataHost, "ltn.media.example")
+        XCTAssertEqual(hosts.cdn, "media.example")
+        XCTAssertNil(MangaUrls.indexedBackendHosts(in: "const domain2 = 'unrelated.example';"))
+        XCTAssertNil(MangaUrls.indexedBackendHosts(in: "const domain2 = 'broken..example'; var domain = 'ltn.'+domain2;"))
+    }
+
+    func testInterruptedSavedEndpointRefreshesBeforeRetryingTheCatalog() async throws {
+        for failure in [URLError.Code.secureConnectionFailed, .networkConnectionLost, .timedOut] {
+            let fixture = fixture()
+            let transport = fixture.transport(browserFetch: { _, _, _, _, _ in throw URLError(failure) })
+            let source = MangaContentSource(transport: transport)
+            _ = try await source.list(GalleryQuery(), offset: 0, count: 2)
+            fixture.advanceDomain(failure: failure)
+            let gallery = try await source.gallery(1234)
+            XCTAssertEqual(gallery.id, 1234)
+            XCTAssertEqual(MangaUrls.dataHost, "ltn." + fixture.domain)
+            XCTAssertEqual(fixture.count(path: "/"), 2)
+        }
+        XCTAssertFalse(ContentTransport.backendConnectionFailed(URLError(.serverCertificateUntrusted)))
+        XCTAssertFalse(ContentTransport.backendConnectionFailed(URLError(.cancelled)))
+    }
+
     func testFirstListAndMetadataDiscoverTheCustomSitesScriptOnlyOnce() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         async let list = source.list(GalleryQuery(), offset: 0, count: 2)
@@ -35,6 +63,34 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertEqual(MangaUrls.cdnHost, fixture.domain)
         XCTAssertTrue(ContentTransport.allows(URL(string: "https://w1." + fixture.domain + "/image.webp")!))
         XCTAssertFalse(ContentTransport.allows(URL(string: "https://unrelated.example/gg.js")!))
+    }
+
+    func testTenDefaultExclusionsLoadTheFeedAndApplyEveryFilter() async throws {
+        let fixture = fixture()
+        let excluded = (1...10).map { "tag:excluded\($0)" }
+        fixture.indexes["/index-korean.nozomi"] = Array(2000...2011).reversed()
+        fixture.indexes["/tag/included-all.nozomi"] = Array(2000...2011).reversed()
+        for index in 1...10 { fixture.indexes["/tag/excluded\(index)-all.nozomi"] = [Int64(2000 + index)] }
+        let source = MangaContentSource(transport: fixture.transport())
+        for text in ["", "tag:included"] {
+            let query = GalleryQuery(text: text).applyingDefaults(tags: "", excluded: excluded.joined(separator: " "))
+            let batch = try await source.list(query, offset: 0, count: 24)
+            XCTAssertEqual(batch.ids, [2011, 2000], "All ten exclusions must apply to the initial feed and explicit searches")
+            XCTAssertFalse(batch.hasMore)
+        }
+    }
+
+    func testExcessiveSearchTermsReportTheLimitWithoutDroppingFilters() async throws {
+        let fixture = fixture()
+        let exclusions = (1...GalleryQuery.maximumSearchTerms).map { "tag:excluded\($0)" }.joined(separator: " ")
+        let query = GalleryQuery(text: "tag:included").applyingDefaults(tags: "", excluded: exclusions)
+        do {
+            _ = try await MangaContentSource(transport: fixture.transport()).list(query, offset: 0, count: 1)
+            XCTFail("Excessive filters must be reported rather than silently omitted")
+        } catch ContentError.tooManySearchTerms(let limit) {
+            XCTAssertEqual(limit, GalleryQuery.maximumSearchTerms)
+        }
+        XCTAssertEqual(fixture.count(path: "/galleriesindex/version"), 0)
     }
 
     func testLanguageExceptionMergesVisualIndexesWithoutDroppingArtistTypeOrPopularOrder() async throws {
@@ -180,18 +236,20 @@ private final class BackendFixture: @unchecked Sendable {
     let host = "comics-" + UUID().uuidString.lowercased() + ".example"
     private let lock = NSLock()
     private var generation = 1
+    private var staleEndpointFailure: URLError.Code = .cannotFindHost
     private var discoveryAvailable = true
     var indexes: [String: [Int64]] = [:]
     private var requests: [URL] = []
     var domain: String { lock.withLock { domain(generation) } }
     private func domain(_ generation: Int) -> String { "storage-\(generation)." + host }
-    func advanceDomain() { lock.withLock { generation += 1 } }
+    func advanceDomain(failure: URLError.Code = .cannotFindHost) { lock.withLock { generation += 1; staleEndpointFailure = failure } }
     func setDiscoveryAvailable(_ available: Bool) { lock.withLock { discoveryAvailable = available } }
     func count(path: String) -> Int { lock.withLock { requests.filter { $0.path == path }.count } }
     func count(host: String) -> Int { lock.withLock { requests.filter { $0.host == host }.count } }
-    func transport() -> ContentTransport {
+    func transport(browserFetch: ContentTransport.BrowserFetch? = nil) -> ContentTransport {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [BackendFixtureProtocol.self]
+        if let browserFetch { return ContentTransport(configuration: configuration, browserFetch: browserFetch) }
         return ContentTransport(configuration: configuration)
     }
     func reply(_ request: URLRequest) throws -> (Int, Data, [String: String]) {
@@ -205,7 +263,7 @@ private final class BackendFixture: @unchecked Sendable {
                 if url.path == "/assets/common.js" { return (200, Data("const domain = '\(domain(generation))';".utf8), [:]) }
                 return (404, Data(), [:])
             }
-            guard ["ltn.", "atn."].contains(where: { url.host == $0 + domain(generation) }) else { throw URLError(.cannotFindHost) }
+            guard ["ltn.", "atn."].contains(where: { url.host == $0 + domain(generation) }) else { throw URLError(staleEndpointFailure) }
             if url.path.hasSuffix(".webp") { return (200, Data(repeating: 1, count: 64), ["Content-Type": "image/webp"]) }
             if let ids = indexes[url.path] {
                 let data = Data(ids.flatMap { id -> [UInt8] in

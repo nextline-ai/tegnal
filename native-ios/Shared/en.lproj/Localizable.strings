@@ -1149,3 +1149,20 @@
 "Allow Language Filter Exceptions" = "Allow Language Filter Exceptions";
 "Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type." = "Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type.";
 "From the bottom of the page, swipe up for previews." = "From the bottom of the page, swipe up for previews.";
+
+/* Manga reading progress */
+"Use up to %@ search terms, including default and excluded tags." = "Use up to %@ search terms, including default and excluded tags.";
+"Reading Progress" = "Reading Progress";
+"When Reopening a Work" = "When Reopening a Work";
+"Ask Before Continuing" = "Ask Before Continuing";
+"Continue Reading" = "Continue Reading";
+"Start from Beginning" = "Start from Beginning";
+"Continue Reading?" = "Continue Reading?";
+"Continue from page %@?" = "Continue from page %@?";
+
+/* Work details */
+"Show Full Title" = "Show Full Title";
+"Hide This Work" = "Hide This Work";
+"Show This Work" = "Show This Work";
+
+"Preview Rows per Page" = "Preview Rows per Page";

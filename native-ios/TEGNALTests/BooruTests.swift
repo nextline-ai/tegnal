@@ -147,6 +147,36 @@ final class BooruTests: XCTestCase {
 
     }
 
+    func testUgoiraUsesConvertedVideoAndRefreshesOlderSavedZIPPosts() async throws {
+        let row: [String: Any] = ["id": 101, "file_ext": "zip", "tag_string": "ugoira animated",
+            "file_url": "https://cdn.example.com/original.zip", "jpeg_url": "https://cdn.example.com/still.jpg",
+            "media_asset": ["variants": [
+                ["type": "720x720", "url": "https://cdn.example.com/thumb.webp", "file_ext": "webp"],
+                ["type": "sample", "url": "https://cdn.example.com/converted", "file_ext": "webm"]]]]
+        let post = try BooruDecoder.post(row, server: dan)
+        XCTAssertTrue(post.isVideo); XCTAssertTrue(post.isAnimated)
+        for original in [false, true] {
+            XCTAssertEqual(post.viewerURL(original: original, reducedData: true)?.lastPathComponent, "converted")
+        }
+        XCTAssertEqual(post.fileURL?.pathExtension, "zip", "Downloading the original must still retain the archive")
+        let restored = try JSONDecoder().decode(BooruPost.self, from: JSONEncoder().encode(post))
+        XCTAssertEqual(restored.animationVideoURL, post.animationVideoURL)
+        var legacyRow = row; legacyRow["media_asset"] = nil; legacyRow["large_file_url"] = "https://cdn.example.com/legacy.webm"
+        XCTAssertEqual(try BooruDecoder.post(legacyRow, server: dan).viewerURL(original: true)?.lastPathComponent, "legacy.webm")
+        var older = post; older.animationVideoURL = nil
+        XCTAssertNil(older.viewerURL(original: true), "Never hand a ZIP or a still preview to the animation renderer")
+        var savedJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(older)) as? [String: Any])
+        savedJSON.removeValue(forKey: "animationVideoURL")
+        let saved = try JSONDecoder().decode(BooruPost.self, from: JSONSerialization.data(withJSONObject: savedJSON))
+        let body = String(data: try JSONSerialization.data(withJSONObject: row), encoding: .utf8)!
+        let client = mocked { request in
+            XCTAssertEqual(request.url?.path, "/booru/posts/101.json")
+            return (200, body)
+        }
+        let resolved = try await client.details(server: dan, post: saved)
+        XCTAssertEqual(resolved.viewerURL(original: false), post.animationVideoURL)
+    }
+
     func testJSONEnvelopesXMLAndEmptyResponses() throws {
         let json = Data(#"{"@attributes":{"count":1},"post":[{"id":"9"}]}"#.utf8)
         XCTAssertEqual(try BooruDecoder.rows(json, key: "post").count, 1)

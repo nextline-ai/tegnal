@@ -280,7 +280,8 @@ actor MangaContentSource: ContentProviding {
 
     private func search(_ query: GalleryQuery) async throws -> [Int64] {
         let tokens = query.text.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-        guard (!tokens.isEmpty || query.artist != nil || query.language != "all"), tokens.count <= 8, tokens.allSatisfy({ $0.count <= 120 && !$0.contains("\"") }) else {
+        guard tokens.count <= GalleryQuery.maximumSearchTerms else { throw ContentError.tooManySearchTerms(GalleryQuery.maximumSearchTerms) }
+        guard (!tokens.isEmpty || query.artist != nil || query.language != "all"), tokens.allSatisfy({ $0.count <= 120 && !$0.contains("\"") }) else {
             throw ContentError.invalidQuery
         }
         let (versionData, _) = try await transport.getData("galleriesindex/version", limit: 64)

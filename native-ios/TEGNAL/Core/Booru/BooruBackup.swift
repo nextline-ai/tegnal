@@ -50,7 +50,7 @@ struct BooruBackup: Codable, Sendable {
         else { throw BooruError.invalidResponse }
         for server in servers { _ = try BooruServer.validatedURL(server.baseURL.absoluteString) }
         for favorite in favorites {
-            for url in [favorite.post.previewURL, favorite.post.sampleURL, favorite.post.fileURL].compactMap({ $0 }) {
+            for url in [favorite.post.previewURL, favorite.post.sampleURL, favorite.post.fileURL, favorite.post.animationVideoURL].compactMap({ $0 }) {
                 guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil, url.user == nil, url.password == nil else { throw BooruError.invalidResponse }
             }
         }

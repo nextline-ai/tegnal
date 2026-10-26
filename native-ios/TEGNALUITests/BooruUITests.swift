@@ -317,8 +317,31 @@ final class BooruUITests: XCTestCase {
 
     func testRepeatedModeSwitchingKeepsSelectionAndFeed() {
         let app = launch(extra: ["--taste-ui-rich"])
+        app.tabBars.buttons["Saved"].tap()
+        selectMode(app, "manga")
+        XCTAssertTrue(element(app, "manga.createFolder").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Artists"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Tags"].exists)
+        selectMode(app, "booru")
+        XCTAssertTrue(element(app, "booru.allFavorites").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Tags"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Artists"].exists)
+        app.tabBars.buttons["Explore"].tap()
+        dragMode(app, to: "manga"); assertMode(app, "manga")
+        XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
+        dragMode(app, to: "booru"); assertMode(app, "booru")
+        XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 5))
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         let imageID = firstTasteCard(app).identifier
+        let evidence = element(app, "taste.evidence"), highlight = element(app, "taste.highlight"), sort = element(app, "taste.sort")
+        let introduction = app.staticTexts["Inspired by what you love. Made for your next discovery."]
+        XCTAssertLessThanOrEqual(introduction.frame.maxY, evidence.frame.minY)
+        XCTAssertLessThan(evidence.frame.maxY, highlight.frame.minY)
+        XCTAssertLessThan(highlight.frame.maxY, sort.frame.minY)
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "taste.work."))
+        XCTAssertLessThan(sort.frame.maxY, cards.element(boundBy: 0).frame.minY)
+        XCTAssertEqual(highlight.frame.minX, cards.element(boundBy: 0).frame.minX, accuracy: 1)
+        XCTAssertEqual(highlight.frame.maxX, cards.element(boundBy: 1).frame.maxX, accuracy: 1)
         var comicID: String?
         // Include the seam, padding, edges, and the already selected icon.
         let points: [CGVector] = [.init(dx: 0.5, dy: 0.5), .init(dx: 0.05, dy: 0.5),

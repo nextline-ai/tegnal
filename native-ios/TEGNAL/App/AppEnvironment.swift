@@ -292,6 +292,7 @@ public final class AppEnvironment: @unchecked Sendable {
     private var mangaColumns: Int
     private var booruColumns: Int
     private var mangaPreviewColumnCount: Int
+    private var mangaPreviewRowCount: Int
     private var mangaRemovesGridPadding: Bool
     private var booruRemovesGridPadding: Bool
     var showsMangaTitles: Bool { didSet { browserPreferences.set(showsMangaTitles, forKey: "manga.grid.showTitles") } }
@@ -337,6 +338,14 @@ public final class AppEnvironment: @unchecked Sendable {
         }
     }
 
+    var mangaPreviewRows: Int {
+        get { mangaPreviewRowCount }
+        set {
+            mangaPreviewRowCount = min(10, max(1, newValue))
+            browserPreferences.set(mangaPreviewRowCount, forKey: "manga.preview.rows")
+        }
+    }
+
     public var folderColumns: Int {
         get { mode == .manga ? mangaFolderColumns : booruFolderColumns }
         set {
@@ -355,6 +364,23 @@ public final class AppEnvironment: @unchecked Sendable {
     }
     var defaultExcludedTags: String {
         didSet { browserPreferences.set(defaultExcludedTags, forKey: "manga.defaultExcludedTags") }
+    }
+    var hiddenMangaGalleryIDs: Set<Int64> {
+        didSet { browserPreferences.set(hiddenMangaGalleryIDs.sorted().map(String.init), forKey: "manga.hiddenGalleryIDs") }
+    }
+
+    func setMangaGalleryHidden(_ id: Int64, hidden: Bool) {
+        guard id > 0 else { return }
+        if hidden { hiddenMangaGalleryIDs.insert(id) } else { hiddenMangaGalleryIDs.remove(id) }
+    }
+
+    func blockMangaArtist(_ name: String) {
+        let artist = name.split(whereSeparator: \.isWhitespace).joined(separator: "_")
+        guard !artist.isEmpty else { return }
+        let rule = "artist:" + artist
+        let existing = defaultExcludedTags.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !existing.contains(where: { $0.lowercased() == rule.lowercased() || $0.lowercased() == "-" + rule.lowercased() }) else { return }
+        defaultExcludedTags = (existing + [rule]).joined(separator: " ")
     }
 
     @MainActor var taste: TasteController {
@@ -410,6 +436,8 @@ public final class AppEnvironment: @unchecked Sendable {
         if defaultTags != tags { defaultTags = tags }
         let exclusions = browserPreferences.string(forKey: "manga.defaultExcludedTags") ?? ""
         if defaultExcludedTags != exclusions { defaultExcludedTags = exclusions }
+        let hidden = Set((browserPreferences.stringArray(forKey: "manga.hiddenGalleryIDs") ?? []).compactMap(Int64.init))
+        if hiddenMangaGalleryIDs != hidden { hiddenMangaGalleryIDs = hidden }
         let verified = browserPreferences.bool(forKey: "site_verified") && Self.supportsComicsAddress(browserPreferences.string(forKey: "manga.site_address") ?? "")
         if isSiteVerified != verified { isSiteVerified = verified }
         let siteAddress = browserPreferences.string(forKey: "manga.site_address") ?? ""
@@ -472,6 +500,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.mangaColumns = min(5, max(0, mangaColumns))
         self.booruColumns = min(5, max(0, booruColumns))
         self.mangaPreviewColumnCount = min(10, max(0, browserPreferences.integer(forKey: "manga.preview.columns")))
+        self.mangaPreviewRowCount = min(10, max(1, browserPreferences.object(forKey: "manga.preview.rows") as? Int ?? 5))
         self.mangaRemovesGridPadding = browserPreferences.bool(forKey: "manga.grid.noPadding")
         self.booruRemovesGridPadding = browserPreferences.bool(forKey: "booru.grid.noPadding")
         self.showsMangaTitles = browserPreferences.object(forKey: "manga.grid.showTitles") as? Bool ?? true
@@ -481,6 +510,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
         self.defaultTags = browserPreferences.string(forKey: "manga.defaultTags") ?? ""
         self.defaultExcludedTags = browserPreferences.string(forKey: "manga.defaultExcludedTags") ?? ""
+        self.hiddenMangaGalleryIDs = Set((browserPreferences.stringArray(forKey: "manga.hiddenGalleryIDs") ?? []).compactMap(Int64.init))
 
         // New opt-in fallback; the old preference selected native UI versus external Safari.
         self.useEmbeddedBrowser = browserPreferences.bool(forKey: "use_embedded_browser")

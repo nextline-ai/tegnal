@@ -369,7 +369,7 @@ struct BooruFeedView: View {
                 GeometryReader { proxy in
                     Color.clear.preference(key: BooruFeedOffsetKey.self, value: proxy.frame(in: .named("booru.feedViewport")).minY)
                 }.frame(height: 0)
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: pool == nil ? 8 : 16) {
                     if let header {
                         header
                         Group {
@@ -382,7 +382,7 @@ struct BooruFeedView: View {
                         }
                     }
                     if pool == nil { filters }
-                    BooruPostGrid(posts: visiblePosts, showsFavoriteIndicator: true, surroundingPadding: 16, prefetch: {
+                    BooruPostGrid(posts: visiblePosts, showsFavoriteIndicator: true, surroundingPadding: 16, topMarginScale: pool == nil ? 0.5 : 1, prefetch: {
                         if loader.hasMore && !loader.loading { Task { await load(reset: false) } }
                     }, feedback: { saveFeedback = $0 }) { viewerPosition = $0; selectedPost = $0; challenge?.select($0) }.environment(\.discoveryContext, discovery)
                     if loader.loading { ProgressView(L10n.text("Loading")).padding(24) }
@@ -427,7 +427,8 @@ struct BooruFeedView: View {
                                 updateFooterVisibility()
                             }
                     }
-                }.padding(16).padding(.top, pool == nil && header == nil ? 56 : 0)
+                }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, pool == nil ? 8 : 16)
+                    .padding(.top, pool == nil && header == nil ? 56 : 0)
               }
             }
             .coordinateSpace(name: "booru.feedViewport")
@@ -619,6 +620,7 @@ struct BooruPostGrid: View {
     var server: BooruServer? = nil
     var showsFavoriteIndicator = false
     var surroundingPadding: CGFloat = 0
+    var topMarginScale: CGFloat = 1
     var selection: Binding<Set<String>>? = nil
     var prefetch: (() -> Void)? = nil
     var feedback: (WorkSaveFeedback) -> Void = { _ in }
@@ -632,7 +634,7 @@ struct BooruPostGrid: View {
         let favorites = store.favoriteIDs
         let prefetchThresholdIndex = max(0, posts.count - 8)
         let serversByID = Dictionary(uniqueKeysWithValues: store.servers.map { ($0.id, $0) })
-        return ArtworkGrid(mode: browsingMode, surroundingPadding: surroundingPadding) { style in
+        return ArtworkGrid(mode: browsingMode, surroundingPadding: surroundingPadding, topMarginScale: topMarginScale) { style in
             ForEach(Array(posts.enumerated()), id: \.element.id) { index, post in
                 if let server = serversByID[post.serverID] ?? server {
                     Group {

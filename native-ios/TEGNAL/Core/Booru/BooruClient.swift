@@ -372,6 +372,15 @@ actor BooruClient: BooruProviding {
     }
 
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost {
+        // Previously saved ZIP posts may predate conversion metadata support.
+        if server.engine == .danbooru, post.isUgoira, post.animationPlaybackURL == nil {
+            let raw = try await data(server, "posts/\(post.postID).json", [("only", Self.postFields)])
+            guard let row = try JSONSerialization.jsonObject(with: raw) as? [String: Any] else { throw BooruError.invalidResponse }
+            let resolved = try BooruDecoder.post(row, server: server)
+            guard resolved.postID == post.postID else { throw BooruError.invalidResponse }
+            if resolved.viewerURL(original: false) == nil { try await checkDanbooruAccess(server: server, postID: post.postID) }
+            return resolved
+        }
         if server.engine == .danbooru, post.viewerURL(original: false) == nil {
             try await checkDanbooruAccess(server: server, postID: post.postID)
             return post
@@ -539,17 +548,26 @@ enum BooruDecoder {
             ?? variants.first { $0["type"] as? String == "sample" }
         let reduced = small.flatMap { safeURL($0["url"], base: server.baseURL) }
 
+        let fileExtension = (row["file_ext"] as? String ?? file?.pathExtension ?? "").lowercased()
+        let videoVariants = variants.filter { variant in
+            let ext = (variant["file_ext"] as? String ?? safeURL(variant["url"], base: server.baseURL)?.pathExtension ?? "").lowercased()
+            return BooruPost.videoExtensions.contains(ext)
+        }
+        let animationVariant = videoVariants.first { $0["type"] as? String == "sample" } ?? videoVariants.first
+        let legacyVideo = [row["large_file_url"], row["sample_url"]].compactMap { safeURL($0, base: server.baseURL) }
+            .first { BooruPost.videoExtensions.contains($0.pathExtension.lowercased()) }
+        let animationVideo = fileExtension == "zip" ? (animationVariant.flatMap { safeURL($0["url"], base: server.baseURL) } ?? legacyVideo) : nil
         var rating = row["rating"] as? String ?? ""
         if !server.usesModernRatings && rating == "s" { rating = "g" } // Legacy s means safe, not sensitive.
         return .init(serverID: server.id, postID: Int64(id), previewURL: preview, sampleURL: sample, fileURL: file,
                      width: integer(row["image_width"] ?? row["width"]), height: integer(row["image_height"] ?? row["height"]),
                      tags: tags, artists: artists, rating: rating, score: integer(row["score"]),
-                     fileExtension: row["file_ext"] as? String ?? file?.pathExtension ?? "",
+                     fileExtension: fileExtension,
                      poolIDs: (row["pool_ids"] as? [Any] ?? []).map { Int64(integer($0)) }.filter { $0 > 0 },
                      metadataTags: (row["tag_string_meta"] as? String).map { $0.split(whereSeparator: \.isWhitespace).map(String.init) },
                      favoriteCount: row["fav_count"].map(integer), upvoteCount: row["up_score"].map(integer), commentCount: row["comment_count"].map(integer), reducedDataURL: reduced,
                      tagCategories: categories.isEmpty ? nil : categories,
-                     animated: variants.contains { $0["type"] as? String == "full" } ? false : nil)
+                     animated: variants.contains { $0["type"] as? String == "full" } ? false : nil, animationVideoURL: animationVideo)
     }
     static func note(_ row: [String: Any]) -> BooruNote? {
         if let active = row["is_active"], ["false", "0"].contains(String(describing: active).lowercased()) { return nil }

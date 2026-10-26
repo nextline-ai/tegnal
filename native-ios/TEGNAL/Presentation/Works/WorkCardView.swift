@@ -54,6 +54,7 @@ struct ArtworkGrid<Content: View>: View {
     var kind: Kind = .artwork
     /// The surrounding section keeps its own controls inset; the grid can reach the edges.
     var surroundingPadding: CGFloat = 0
+    var topMarginScale: CGFloat = 1
     @ViewBuilder let content: (ArtworkCellStyle) -> Content
     @Environment(AppEnvironment.self) private var env
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -69,7 +70,9 @@ struct ArtworkGrid<Content: View>: View {
             content(style)
         }
         .environment(\.artworkCellStyle, style)
-        .padding(geometry.margin)
+        .padding(.horizontal, geometry.margin)
+        .padding(.bottom, geometry.margin)
+        .padding(.top, geometry.margin * topMarginScale)
         .frame(maxWidth: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if abs(width - $0) > 0.5 { width = $0 } }
         .padding(.horizontal, -surroundingPadding)

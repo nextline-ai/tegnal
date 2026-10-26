@@ -122,8 +122,7 @@ extension View {
 }
 
 
-/// Hide the inactive UIKit tab controller as well as its SwiftUI content. Opacity
-/// alone leaves a second tab bar in the accessibility tree on recent iOS versions.
+/// Retain each library's state while connecting only the selected navigation tree.
 private struct RetainedModeContainer: UIViewControllerRepresentable {
     let mode: AppMode
     let manga: AnyView
@@ -138,61 +137,246 @@ private struct RetainedModeContainer: UIViewControllerRepresentable {
     }
 }
 
-private final class RetainedModeController: UIViewController {
+private final class ModeTransitionFrameTick: NSObject {
+    let action: (CADisplayLink) -> Void
+    init(action: @escaping (CADisplayLink) -> Void) { self.action = action }
+    @objc func advance(_ link: CADisplayLink) { action(link) }
+}
+
+final class RetainedModeController: UIViewController {
     private var hosts: [AppMode: UIHostingController<AnyView>] = [:]
     private var selected: AppMode = .booru
-    private var transition: UIViewPropertyAnimator?
-    private var transitionSnapshot: UIView?
+    private struct Request {
+        let mode: AppMode
+        let manga: AnyView
+        let booru: AnyView
+    }
+    private var pending: Request?
+    private var updateScheduled = false
+    private var transitionAnimator: UIViewPropertyAnimator?
+    private var transitionID: UUID?
+    private var transitionStartLink: CADisplayLink?
+    private var transitionBody: UIView?
+    deinit { transitionStartLink?.invalidate() }
     override var childForStatusBarHidden: UIViewController? { hosts[selected] }
     override var childForStatusBarStyle: UIViewController? { hosts[selected] }
     func update(mode: AppMode, manga: AnyView, booru: AnyView) {
-        let changed = selected != mode
+        // Representable updates run inside SwiftUI's parent transaction. Defer
+        // child-host creation and containment until that transaction has finished.
+        if pending == nil, selected == mode, hosts[mode]?.parent === self { return }
+        pending = Request(mode: mode, manga: manga, booru: booru)
+        guard !updateScheduled else { return }
+        updateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.updateScheduled = false
+            guard let request = self.pending else { return }
+            self.pending = nil
+            self.apply(request)
+        }
+    }
+
+    private func apply(_ request: Request) {
+        let mode = request.mode
+        guard selected != mode || hosts[mode]?.parent !== self else { return }
+        let outgoing = hosts[selected].flatMap { $0.parent === self ? $0 : nil }
+        outgoing?.view.isUserInteractionEnabled = false
+        outgoing?.view.accessibilityElementsHidden = true
+        let animates = outgoing != nil && view.window != nil && !UIAccessibility.isReduceMotionEnabled
+        // Capture only the already rendered body, outside the SwiftUI update
+        // transaction. Never duplicate or move the live navigation/tab materials.
         var snapshot: UIView?
-        if changed {
-            transition?.stopAnimation(true); transition = nil
-            transitionSnapshot?.removeFromSuperview(); transitionSnapshot = nil
-            if !UIAccessibility.isReduceMotionEnabled, let previous = hosts[selected], view.window != nil {
-                snapshot = previous.view.snapshotView(afterScreenUpdates: false)
+        if animates, let outgoing {
+            let surface = transitionBody ?? bodySurface(in: outgoing)
+            let region = transitionBody.map { view.convert($0.bounds, from: $0) } ?? view.bounds
+            if region.width > 0, region.height > 0 {
+                snapshot = surface.resizableSnapshotView(from: surface.convert(region, from: view), afterScreenUpdates: false, withCapInsets: .zero)
+                snapshot?.frame = region
+                if let snapshot { hideSnapshotFromAccessibility(snapshot) }
             }
         }
+        transitionStartLink?.invalidate(); transitionStartLink = nil
+        transitionAnimator?.stopAnimation(true); transitionAnimator = nil; transitionID = nil
+        transitionBody?.removeFromSuperview(); transitionBody = nil
+        for (key, host) in hosts where key != mode { detach(host) }
         selected = mode
+        let active: UIHostingController<AnyView>
         if let host = hosts[mode] {
-            host.rootView = mode == .manga ? manga : booru
+            active = host
         } else {
-            let host = UIHostingController(rootView: mode == .manga ? manga : booru)
-            addChild(host)
-            host.view.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(host.view)
-            NSLayoutConstraint.activate([
-                host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                host.view.topAnchor.constraint(equalTo: view.topAnchor),
-                host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-            ])
-            host.didMove(toParent: self)
+            // The roots own stable bindings and shared observable models. Their
+            // own updates preserve navigation; replacing rootView here re-enters
+            // nested TabView/NavigationStack rendering during a mode change.
+            let host = UIHostingController(rootView: mode == .manga ? request.manga : request.booru)
             hosts[mode] = host
+            active = host
         }
-        // Keep the selected toolbar live immediately. Cross-dissolving this
-        // whole container snapshots its controls and interferes with rapid input.
-        for (key, host) in hosts {
-            host.view.isHidden = key != mode
-            host.view.accessibilityElementsHidden = key != mode
-            host.view.isUserInteractionEnabled = key == mode
-        }
-        if let snapshot {
-            snapshot.frame = view.bounds
-            snapshot.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            snapshot.isUserInteractionEnabled = false
-            snapshot.accessibilityElementsHidden = true
-            view.addSubview(snapshot); transitionSnapshot = snapshot
-            let fade = UIViewPropertyAnimator(duration: 0.18, curve: .easeOut) { snapshot.alpha = 0 }
-            fade.addCompletion { [weak self, weak snapshot] _ in
-                snapshot?.removeFromSuperview()
-                if self?.transitionSnapshot === snapshot { self?.transitionSnapshot = nil; self?.transition = nil }
+        let alreadyAttached = active.parent === self
+        if !alreadyAttached {
+            UIView.performWithoutAnimation {
+                addChild(active)
+                active.view.translatesAutoresizingMaskIntoConstraints = false
+                active.view.backgroundColor = .systemBackground
+                active.view.isOpaque = true
+                view.addSubview(active.view)
+                NSLayoutConstraint.activate([
+                    active.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                    active.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                    active.view.topAnchor.constraint(equalTo: view.topAnchor),
+                    active.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+                ])
+                active.didMove(toParent: self)
             }
-            transition = fade; fade.startAnimation()
+        }
+        // Keep the selected host and both bars still and opaque. Two frozen body
+        // panels move edge-to-edge inside one clipped stage, with no opacity fade.
+        active.view.isHidden = false
+        active.view.accessibilityElementsHidden = false
+        active.view.isUserInteractionEnabled = true
+        active.view.alpha = 1
+        view.bringSubviewToFront(active.view)
+        if let snapshot {
+            let originalRegion = snapshot.frame
+            let stage = transitionPanel(identifier: "mode.transition.body")
+            UIView.performWithoutAnimation { view.layoutIfNeeded() }
+            install(stage, in: active, region: originalRegion)
+            snapshot.frame = stage.bounds
+            stage.addSubview(snapshot)
+            transitionBody = stage
+            let id = UUID()
+            transitionID = id
+            // Newly mounted navigation/tab bars need a display boundary to settle
+            // before computing their shared body region and capturing its content.
+            var frames = 0
+            let target = ModeTransitionFrameTick { [weak self, weak active, weak stage] link in
+                guard let self, let active, let stage, self.transitionID == id, self.selected == mode else {
+                    link.invalidate(); return
+                }
+                frames += 1
+                guard frames >= 2 else { return }
+                link.invalidate(); self.transitionStartLink = nil
+                self.startSlide(mode: mode, active: active, stage: stage, outgoing: snapshot,
+                                originalRegion: originalRegion, id: id)
+            }
+            let link = CADisplayLink(target: target, selector: #selector(ModeTransitionFrameTick.advance(_:)))
+            transitionStartLink = link
+            link.add(to: .main, forMode: .common)
         }
         setNeedsStatusBarAppearanceUpdate()
+    }
+
+    private func hideSnapshotFromAccessibility(_ snapshot: UIView) {
+        snapshot.isUserInteractionEnabled = false
+        snapshot.isAccessibilityElement = false
+        snapshot.accessibilityElementsHidden = true
+        snapshot.accessibilityElements = []
+    }
+
+    private func transitionPanel(identifier: String) -> UIView {
+        let panel = UIView()
+        panel.backgroundColor = .systemBackground
+        panel.isOpaque = true
+        panel.clipsToBounds = true
+        panel.isUserInteractionEnabled = false
+        panel.isAccessibilityElement = false
+        panel.accessibilityElementsHidden = true
+        panel.accessibilityElements = []
+        panel.accessibilityIdentifier = identifier
+        return panel
+    }
+
+    private func startSlide(mode: AppMode, active: UIViewController, stage: UIView, outgoing: UIView,
+                            originalRegion: CGRect, id: UUID) {
+        let region = originalRegion.intersection(view.bounds)
+        let surface = bodySurface(in: active)
+        let sourceRegion = surface.convert(region, from: view)
+        // A reattached host may not have a cached rendered surface yet. Flush its
+        // drawing here, outside the SwiftUI transaction, before taking its snapshot.
+        guard !region.isNull, region.width > 0, region.height > 0,
+              let incoming = surface.resizableSnapshotView(from: sourceRegion, afterScreenUpdates: true, withCapInsets: .zero) else {
+            stage.removeFromSuperview(); transitionBody = nil; transitionID = nil
+            return
+        }
+        hideSnapshotFromAccessibility(incoming)
+        install(stage, in: active, region: region)
+        let outgoingPanel = transitionPanel(identifier: "mode.transition.outgoing")
+        let incomingPanel = transitionPanel(identifier: "mode.transition.incoming")
+        outgoingPanel.frame = stage.bounds; incomingPanel.frame = stage.bounds
+        outgoing.frame = originalRegion.offsetBy(dx: -region.minX, dy: -region.minY)
+        outgoingPanel.addSubview(outgoing)
+        incoming.frame = incomingPanel.bounds
+        incomingPanel.addSubview(incoming)
+        stage.addSubview(outgoingPanel); stage.addSubview(incomingPanel)
+        let distance = region.width * (mode == .booru ? 1.0 : -1.0)
+        incomingPanel.transform = CGAffineTransform(translationX: distance, y: 0)
+        let animation = UIViewPropertyAnimator(duration: AppModeSwitchTransition.seconds, curve: .easeInOut) {
+            outgoingPanel.transform = CGAffineTransform(translationX: -distance, y: 0)
+            incomingPanel.transform = .identity
+        }
+        animation.addCompletion { [weak self, weak stage] _ in
+            guard let self, self.transitionID == id, self.selected == mode else { return }
+            stage?.removeFromSuperview(); self.transitionBody = nil
+            self.transitionAnimator = nil; self.transitionID = nil
+        }
+        transitionAnimator = animation
+        animation.startAnimation()
+    }
+
+    private func tabController(in host: UIViewController) -> UITabBarController? {
+        if let tabs = host as? UITabBarController { return tabs }
+        if let navigation = host as? UINavigationController {
+            return navigation.visibleViewController.flatMap { tabController(in: $0) }
+        }
+        for child in host.children where child.viewIfLoaded?.window != nil {
+            if let tabs = tabController(in: child) { return tabs }
+        }
+        return nil
+    }
+
+    private func navigationController(in host: UIViewController) -> UINavigationController? {
+        if let navigation = host as? UINavigationController { return navigation }
+        if let tabs = host as? UITabBarController {
+            return tabs.selectedViewController.flatMap { navigationController(in: $0) }
+        }
+        for child in host.children where child.viewIfLoaded?.window != nil {
+            if let navigation = navigationController(in: child) { return navigation }
+        }
+        return nil
+    }
+
+    private func bodySurface(in host: UIViewController) -> UIView {
+        // Snapshot the content below BOTH native bars. Its backdrop can slide
+        // behind the navigation controls without duplicating their icons/thumb.
+        navigationController(in: host)?.visibleViewController?.view
+            ?? tabController(in: host)?.selectedViewController?.view ?? host.view
+    }
+
+    private func install(_ stage: UIView, in host: UIViewController, region: CGRect) {
+        let surface = bodySurface(in: host)
+        let container: UIView = navigationController(in: host)?.view ?? tabController(in: host)?.view ?? view
+        var branch = surface
+        while let parent = branch.superview, parent !== container { branch = parent }
+        if branch.superview === container {
+            // Native navigation and tab bars remain above the body. Their live
+            // glass samples the moving content all the way to the screen edges.
+            container.insertSubview(stage, aboveSubview: branch)
+            stage.frame = container.convert(region, from: view)
+        } else {
+            view.addSubview(stage)
+            stage.frame = region
+        }
+    }
+
+    private func detach(_ host: UIHostingController<AnyView>) {
+        guard host.parent === self else { return }
+        host.view.isUserInteractionEnabled = false
+        host.view.accessibilityElementsHidden = true
+        UIView.performWithoutAnimation {
+            host.willMove(toParent: nil)
+            host.view.removeFromSuperview()
+            host.removeFromParent()
+        }
+        host.view.alpha = 1
     }
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import QuartzCore
 
 /// Shared spacing for compact action groups in the navigation bar.
 struct AppToolbarActions<Content: View>: View {
@@ -10,11 +11,107 @@ struct AppToolbarActions<Content: View>: View {
     }
 }
 
-/// Retained navigation trees share the same thumb animation when modes change.
+struct AppModeSwitchTransition: Identifiable {
+    static let seconds = 0.24
+    let id = UUID()
+    let from: CGFloat
+    let to: CGFloat
+    let started: ContinuousClock.Instant
+    var deadline: ContinuousClock.Instant { started.advanced(by: .milliseconds(240)) }
+
+    func position(at now: ContinuousClock.Instant) -> CGFloat {
+        let elapsed = started.duration(to: now).components
+        let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+        let progress = min(1, max(0, seconds / Self.seconds))
+        let eased = progress * progress * (3 - 2 * progress)
+        return from + (to - from) * CGFloat(eased)
+    }
+}
+
+private struct AppModeThumb: UIViewRepresentable {
+    let position: CGFloat
+    let transition: AppModeSwitchTransition?
+    func makeUIView(context: Context) -> AppModeThumbView { AppModeThumbView() }
+    func updateUIView(_ view: AppModeThumbView, context: Context) { view.display(position: position, transition: transition) }
+}
+
+private final class AppModeThumbView: UIView {
+    private let bubble = UIView()
+    private var transitionID: UUID?
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        bubble.isUserInteractionEnabled = false
+        bubble.backgroundColor = .white
+        bubble.layer.cornerRadius = 19
+        bubble.layer.cornerCurve = .continuous
+        addSubview(bubble)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        bubble.bounds = CGRect(x: 0, y: 0, width: 42, height: 38)
+        bubble.center = CGPoint(x: 21, y: 19)
+    }
+    func display(position: CGFloat, transition: AppModeSwitchTransition?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bubble.layer.transform = CATransform3DMakeTranslation(transition?.to ?? position, 0, 0)
+        CATransaction.commit()
+        guard let transition else {
+            bubble.layer.removeAnimation(forKey: "mode.thumb")
+            transitionID = nil
+            return
+        }
+        guard transitionID != transition.id else { return }
+        transitionID = transition.id
+        let elapsed = transition.started.duration(to: .now).components
+        let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+        guard seconds < AppModeSwitchTransition.seconds else { bubble.layer.removeAnimation(forKey: "mode.thumb"); return }
+        // The compositor interpolates the shared curve. No SwiftUI view update
+        // or layout work is needed for each animation frame.
+        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        animation.values = (0...60).map { frame in
+            NSNumber(value: Double(transition.position(at: transition.started.advanced(by: .milliseconds(frame * 4)))))
+        }
+        animation.duration = AppModeSwitchTransition.seconds
+        animation.beginTime = bubble.layer.convertTime(CACurrentMediaTime(), from: nil) - max(0, seconds)
+        animation.calculationMode = .linear
+        animation.fillMode = .backwards
+        bubble.layer.add(animation, forKey: "mode.thumb")
+    }
+}
+
+/// Every retained toolbar samples the same motion clock, including during a
+/// crossfade. A newly visible toolbar continues the motion instead of replaying it.
 @Observable final class AppModeSwitchMotion {
-    var position: CGFloat?
-    var target: AppMode?
+    private(set) var transition: AppModeSwitchTransition?
+    private var restingPosition: CGFloat?
     @ObservationIgnored private var lastInteraction: ContinuousClock.Instant?
+    static func position(_ mode: AppMode) -> CGFloat { mode == .manga ? 0 : 44 }
+    func position(for mode: AppMode, at now: ContinuousClock.Instant = .now) -> CGFloat {
+        transition?.position(at: now) ?? restingPosition ?? Self.position(mode)
+    }
+    func prepare(for mode: AppMode) {
+        if restingPosition == nil { restingPosition = Self.position(mode) }
+    }
+    func move(to mode: AppMode, reducedMotion: Bool, at now: ContinuousClock.Instant = .now) {
+        let target = Self.position(mode)
+        if reducedMotion { transition = nil; restingPosition = target; return }
+        guard transition?.to != target else { return }
+        let from = position(for: mode, at: now)
+        restingPosition = target
+        if abs(from - target) < 0.001 { transition = nil }
+        else { transition = AppModeSwitchTransition(from: from, to: target, started: now) }
+    }
+    func drag(to position: CGFloat) {
+        transition = nil
+        restingPosition = min(44, max(0, position))
+    }
+    func finish(_ id: UUID) {
+        guard transition?.id == id else { return }
+        transition = nil
+    }
     func acceptInteraction(at now: ContinuousClock.Instant = ContinuousClock().now) -> Bool {
         if let lastInteraction, lastInteraction.duration(to: now) < .milliseconds(220) { return false }
         lastInteraction = now
@@ -56,15 +153,15 @@ struct AppModeSwitch: View {
                 mode(.booru)
             }
             .background(alignment: .leading) {
-                Capsule().fill(.white)
-                    .frame(width: 42, height: 38)
-                    .offset(x: motion.position ?? position(current))
+                AppModeThumb(position: motion.position(for: current), transition: motion.transition)
+                    .frame(width: 42, height: 38, alignment: .leading)
+                    .transaction { $0.animation = nil }
             }
             .padding(3)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassCapsule(isInteractive: true)
+        .glassCapsule()
         .overlay {
             if env.modeSwitchHintPending {
                 Capsule().strokeBorder(hintColors[hintPhase], lineWidth: 2.5)
@@ -80,14 +177,21 @@ struct AppModeSwitch: View {
                 withAnimation(.easeInOut(duration: 0.7)) { hintPhase = (hintPhase + 1) % hintColors.count }
             }
         }
+        .task(id: "\(motion.transition?.id.uuidString ?? ""):\(visible):\(scenePhase)") {
+            guard visible, scenePhase == .active, let transition = motion.transition else { return }
+            do {
+                try await Task.sleep(until: transition.deadline, clock: .continuous)
+                motion.finish(transition.id)
+            } catch {}
+        }
         .highPriorityGesture(DragGesture(minimumDistance: 12)
             .updating($dragging) { _, state, _ in state = true }
             .onChanged { value in
                 guard isActiveControl else { return }
                 var transaction = Transaction(); transaction.disablesAnimations = true
                 withTransaction(transaction) {
-                    if dragOrigin == nil { dragOrigin = motion.position ?? position(current) }
-                    motion.position = min(44, max(0, (dragOrigin ?? position(current)) + value.translation.width))
+                    if dragOrigin == nil { dragOrigin = motion.position(for: current) }
+                    motion.drag(to: (dragOrigin ?? position(current)) + value.translation.width)
                 }
             }
             .onEnded { value in
@@ -100,18 +204,17 @@ struct AppModeSwitch: View {
             DispatchQueue.main.async {
                 // Cancellation has no onEnded callback. Keep the absolute thumb
                 // position until it can settle, rather than resetting a translation.
-                if isActiveControl && !dragging && dragOrigin != nil { dragOrigin = nil; settle(activeMode) }
+                if visible && isActiveControl && !dragging && dragOrigin != nil { dragOrigin = nil; settle(activeMode) }
             }
         }
         .onChange(of: activeMode) { _, _ in
-            guard isActiveControl else { return }
             dragOrigin = nil
-            // Read the current selection: retained trees can deliver older changes later.
-            if motion.target != activeMode { settle(activeMode) }
+            if isActiveControl { settle(activeMode) }
         }
         .onAppear {
             visible = true
-            if motion.position == nil { motion.position = position(current); motion.target = current }
+            motion.prepare(for: activeMode)
+            settle(activeMode)
         }
         .onDisappear {
             visible = false
@@ -124,9 +227,12 @@ struct AppModeSwitch: View {
     }
     private func mode(_ mode: AppMode) -> some View {
         Image(systemName: current == mode ? mode.icon + ".fill" : mode.icon)
+            .symbolRenderingMode(.monochrome)
             .font(.system(size: 16, weight: .semibold))
             .frame(width: 42, height: 38)
-            .foregroundStyle(current == mode ? Color.black : Color.secondary)
+            .foregroundStyle(current == mode ? Color.black : Color.gray)
+            .contentTransition(.identity)
+            .transaction { $0.animation = nil }
             .accessibilityHidden(true)
     }
     private func position(_ mode: AppMode) -> CGFloat { mode == .manga ? 0 : 44 }
@@ -141,10 +247,9 @@ struct AppModeSwitch: View {
         else { env.mode = mode }
     }
     private func settle(_ mode: AppMode) {
-        if motion.position == nil { motion.position = position(current) }
-        motion.target = mode
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
-            motion.position = position(mode)
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            motion.move(to: mode, reducedMotion: reduceMotion)
         }
     }
 }

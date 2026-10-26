@@ -15,6 +15,7 @@ struct TasteDashboard: View {
     @State private var detail: TasteTag?
     @State private var comicPrefetchTask: Task<Void, Never>?
     @State private var prefetchAnchor: Int?
+    @State private var viewportWidth: CGFloat = 390
     private var sources: [String] { mode == .comics ? [MangaUrls.source] : env.booru.selectedServers.map(\.canonicalAddress) }
     private var source: String { sources.first ?? "" }
     private var isActiveMode: Bool { env.mode == (mode == .booru ? .booru : .manga) }
@@ -25,9 +26,19 @@ struct TasteDashboard: View {
     }
 
     var body: some View {
+        let layout = ArtworkGridGeometry(width: viewportWidth,
+            columns: typeSize.isAccessibilitySize ? 1 : env.gridColumns(for: mode == .booru ? .booru : .manga),
+            removesPadding: env.removesGridPadding(for: mode == .booru ? .booru : .manga))
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                heading
+            LazyVStack(alignment: .leading, spacing: 12) {
+                TasteDashboardHeading(tags: feed.snapshot?.tags ?? [], mode: mode)
+                    .padding(.bottom, 12)
+                if !sources.isEmpty, env.taste.control.enabled,
+                   let snapshot = feed.snapshot, let report = feed.report,
+                   let insight = report.insights.first, let tag = snapshot.tags.first(where: { $0.id == insight.tagKey }) {
+                    highlight(insight, tag: tag, report: report, snapshot: snapshot)
+                        .padding(.horizontal, layout.margin - 20)
+                }
                 if sources.count <= 1 && !sources.isEmpty { RecommendationFilters(mode: mode, source: source, onChange: refresh) }
                 else if mode == .booru {
                     ForEach(env.booru.selectedServers) { server in
@@ -44,9 +55,6 @@ struct TasteDashboard: View {
                     if let snapshot = feed.snapshot {
                         if snapshot.tags.isEmpty && feed.results.items.isEmpty { gettingStarted }
                         else {
-                            if let report = feed.report, let insight = report.insights.first, let tag = snapshot.tags.first(where: { $0.id == insight.tagKey }) {
-                                highlight(insight, tag: tag, report: report, snapshot: snapshot)
-                            }
                             works
                         }
                     } else if feed.loading {
@@ -56,7 +64,9 @@ struct TasteDashboard: View {
                 }
             }
             .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 32)
-            .frame(maxWidth: env.removesGridPadding(for: mode == .booru ? .booru : .manga) ? .infinity : 960).frame(maxWidth: .infinity)
+            .frame(maxWidth: env.removesGridPadding(for: mode == .booru ? .booru : .manga) ? .infinity : 960)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewportWidth = $0 }
+            .frame(maxWidth: .infinity)
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .tint(TastePresentation.accent)
@@ -101,12 +111,6 @@ struct TasteDashboard: View {
         .navigationDestination(item: $detail) { TasteTagDetail(tag: $0, mode: mode) }
     }
 
-    private var heading: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.text("Smart Recommendations")).font(.largeTitle.bold())
-            Text(L10n.text("Inspired by what you love. Made for your next discovery.")).font(.subheadline).foregroundStyle(.secondary)
-        }.padding(.vertical, 4)
-    }
     private var gettingStarted: some View {
         TasteSurface {
             VStack(alignment: .leading, spacing: 20) {
@@ -153,17 +157,9 @@ struct TasteDashboard: View {
     private var works: some View {
         let items = feed.visibleItems(in: env.booru)
         return Group {
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 8) {
-                    TasteSectionHeading(title: "Picked for you")
-                    evidenceLink
-                }
-            } else {
-                HStack { TasteSectionHeading(title: "Picked for you"); Spacer(); evidenceLink }
-            }
             if !items.isEmpty {
                 let prefetchThresholdIndex = max(0, items.count - lookahead)
-                ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20) { _ in
+                ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20, topMarginScale: 0.5) { _ in
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id))
                             .onAppear {
@@ -198,11 +194,6 @@ struct TasteDashboard: View {
                 message(L10n.text("Some sources could not be loaded: %@", feed.results.failures.joined(separator: ", ")), icon: "wifi.exclamationmark", action: "Try Again") { Task { await feed.loadMore(mode: mode, env: env, language: comicLanguage) } }
             }
         }
-    }
-    private var evidenceLink: some View {
-        NavigationLink { TasteTagList(tags: feed.snapshot?.tags ?? [], mode: mode) } label: {
-            Label(L10n.text("Recommendation evidence"), systemImage: "arrow.up.right").font(.subheadline.weight(.medium))
-        }.accessibilityIdentifier("taste.evidence")
     }
     private var about: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -257,4 +248,20 @@ struct TasteDashboard: View {
         saveFeedback = .perform { try TasteRecommendationAction.toggle(item, env: env, session: feed.discoverySession) }
     }
     private func refresh() { feed.refresh(mode: mode, env: env, language: comicLanguage) }
+}
+
+private struct TasteDashboardHeading: View {
+    let tags: [TasteTag]
+    let mode: TasteMode
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.text("Smart Recommendations")).font(.largeTitle.bold())
+            Text(L10n.text("Inspired by what you love. Made for your next discovery."))
+                .font(.subheadline).foregroundStyle(.secondary)
+            NavigationLink { TasteTagList(tags: tags, mode: mode) } label: {
+                Label(L10n.text("Recommendation evidence"), systemImage: "arrow.up.right")
+                    .font(.subheadline.weight(.medium))
+            }.accessibilityIdentifier("taste.evidence")
+        }.padding(.vertical, 4)
+    }
 }

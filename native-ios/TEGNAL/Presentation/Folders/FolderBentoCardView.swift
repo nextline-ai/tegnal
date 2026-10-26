@@ -2,8 +2,6 @@ import SwiftUI
 
 public struct FolderBentoCardView: View {
     @Environment(\.artworkCellStyle) private var style
-    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
     public let folder: Folder
     public let previews: [Work]
     public let onChangeColor: (() -> Void)?
@@ -47,22 +45,7 @@ public struct FolderBentoCardView: View {
             .clipped()
 
             // Bottom: Folder title & count
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: style.inset(2)) {
-                    Text(folder.displayName)
-                        .font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
-                        .lineLimit(1)
-                        .foregroundColor(textColor)
-
-                    Text(L10n.text("%@ items", String(describing: folder.workCount)))
-                        .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
-                        .foregroundColor(textColor.opacity(0.85))
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, style.inset(10))
-            .padding(.vertical, style.inset(8))
+            FolderCardCaption(title: folder.displayName, count: folder.workCount, color: textColor)
         }
         .background(folderColor)
         .clipShape(RoundedRectangle(cornerRadius: style.radius(16), style: .continuous))
@@ -104,5 +87,29 @@ public struct FolderBentoCardView: View {
             )
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: style.radius(8), style: .continuous))
+    }
+}
+
+/// Both libraries keep the count at the lower trailing edge of the title row.
+struct FolderCardCaption: View {
+    let title: String
+    let count: Int
+    let color: Color
+    @Environment(\.artworkCellStyle) private var style
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: style.inset(6)) {
+            Text(title).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
+                .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+            Text(L10n.text("%@ items", String(count)))
+                .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
+                .monospacedDigit().foregroundStyle(color.opacity(0.85)).fixedSize()
+        }.foregroundStyle(color)
+            .padding(.horizontal, style.inset(10))
+            // Thumbnail inset 6 + caption inset 8 was 14; use 2/3 of that gap.
+            .padding(.top, style.inset(10.0 / 3.0))
+            .padding(.bottom, style.inset(8))
+            .accessibilityElement(children: .combine)
     }
 }
