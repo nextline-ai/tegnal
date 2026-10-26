@@ -561,11 +561,14 @@ extension TasteFeedTests {
         _ = try await RecommendationService.load(mode: .comics, snapshot: snapshot, report: nil, env: env, language: "korean", comicSource: source)
         var requests = await source.queries
         XCTAssertEqual(requests.last?.language, "all")
+        XCTAssertEqual(requests.last?.allowsLanguageExceptions, false)
         XCTAssertFalse(requests.last?.text.contains("implicit_tag") ?? true)
+        env.allowsMangaLanguageExceptions = true
         env.taste.change { $0.setPreferences(.init(includedTags: ["tag:watercolor"], language: "japanese", sort: .month), source: "https://comics.example") }
         _ = try await RecommendationService.load(mode: .comics, snapshot: snapshot, report: nil, env: env, language: "korean", comicSource: source)
         requests = await source.queries
         XCTAssertEqual(requests.last?.language, "japanese")
+        XCTAssertEqual(requests.last?.allowsLanguageExceptions, true)
         XCTAssertEqual(requests.last?.sort, .month)
         XCTAssertTrue(requests.last?.text.contains("tag:watercolor") ?? false)
     }

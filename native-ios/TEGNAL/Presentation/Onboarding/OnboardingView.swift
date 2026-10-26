@@ -109,7 +109,7 @@ public struct OnboardingView: View {
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
             VStack(alignment: .leading, spacing: 12) {
-                Label(L10n.text("Other Manga Viewer"), systemImage: "book.fill").font(.headline)
+                Label(L10n.text("Other Manga Viewer"), systemImage: AppMode.manga.icon + ".fill").font(.headline)
                 Text("user.db · data.db").font(.subheadline).foregroundStyle(.secondary)
                 Button(L10n.text("Choose File"), systemImage: "doc.badge.plus") { showFilePicker = true }
                     .buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.mangaViewerImport")
@@ -134,7 +134,7 @@ public struct OnboardingView: View {
                     Spacer()
                     Image(systemName: "plus").frame(width: 32)
                 }
-                Image(systemName: tutorialMode == .manga ? "book.fill" : "photo.fill")
+                Image(systemName: tutorialMode.icon + ".fill")
                     .font(.system(size: 64)).foregroundStyle(.tint).contentTransition(.symbolEffect(.replace))
                 Text(tutorialMode.title).font(.title2.bold())
             }.padding(24).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))

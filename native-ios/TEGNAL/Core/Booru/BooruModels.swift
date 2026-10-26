@@ -2,6 +2,7 @@ import Foundation
 
 enum AppMode: String, CaseIterable, Identifiable {
     case manga, booru
+    var icon: String { self == .manga ? "book" : "photo" }
     var id: String { rawValue }
     var title: String { L10n.text(self == .manga ? "Comics Mode" : "Image Mode") }
 }

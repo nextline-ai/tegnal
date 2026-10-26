@@ -4,6 +4,48 @@ import GRDB
 @testable import TEGNAL
 
 final class GridLayoutTests: XCTestCase {
+    func testPreviewColumnsFollowTwiceTheResolvedArtworkColumnsOrAnExplicitChoice() {
+        for width: CGFloat in [280, 390, 678, 1024, 1280] {
+            for columns in 0...5 {
+                let artwork = ArtworkGridGeometry(width: width, columns: columns, removesPadding: false)
+                XCTAssertEqual(GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 0,
+                                                            removesArtworkPadding: false), artwork.count * 2)
+                XCTAssertEqual(GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 6,
+                                                            removesArtworkPadding: false), 6)
+            }
+        }
+    }
+
+    func testDensePreviewUsesTheSameProportionalSpacingAndCornersAsArtwork() {
+        let regular = ArtworkGridGeometry(width: 390, columns: 2, removesPadding: false)
+        let preview = ArtworkGridGeometry(width: 390, columns: 6, removesPadding: false, maximumColumns: 10)
+        XCTAssertEqual(preview.count, 6)
+        XCTAssertGreaterThan(preview.spacing, 0); XCTAssertLessThan(preview.spacing, regular.spacing)
+        XCTAssertGreaterThan(preview.margin, 0); XCTAssertLessThan(preview.margin, regular.margin)
+        let style = ArtworkCellStyle(width: preview.cellWidth)
+        XCTAssertEqual(preview.spacing, style.inset(14), accuracy: 0.001)
+        XCTAssertEqual(preview.margin, style.inset(16), accuracy: 0.001)
+        XCTAssertEqual(style.radius(12), preview.cellWidth / 160 * 12, accuracy: 0.001)
+        let noPadding = ArtworkGridGeometry(width: 390, columns: 6, removesPadding: true, maximumColumns: 10)
+        XCTAssertEqual(noPadding.spacing, 0); XCTAssertEqual(noPadding.margin, 0)
+        XCTAssertEqual(ArtworkCellStyle(width: noPadding.cellWidth, removesPadding: true).radius(12), 0)
+    }
+
+    @MainActor func testPreviewColumnPreferenceDefaultsToAutomaticAndPersistsIndependently() throws {
+        let suite = "preview-density-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = try AppDatabase.inMemory(), store = try BooruStore()
+        let env = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
+        XCTAssertEqual(env.mangaPreviewColumns, 0)
+        env.mode = .manga; env.gridColumns = 3; env.mangaPreviewColumns = 6
+        let restored = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
+        XCTAssertEqual(restored.mangaPreviewColumns, 6)
+        XCTAssertEqual(restored.gridColumns(for: .manga), 3)
+        restored.mangaPreviewColumns = 100; XCTAssertEqual(restored.mangaPreviewColumns, 10)
+        restored.mangaPreviewColumns = -1; XCTAssertEqual(restored.mangaPreviewColumns, 0)
+    }
+
     @MainActor func testModeSwitchCoalescesOverlappingUserInteractions() {
         let motion = AppModeSwitchMotion()
         let now = ContinuousClock().now

@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct ReaderPreviewView: View {
-    @ScaledMetric(relativeTo: .caption) private var pageNumberSize: CGFloat = 12
     @Environment(\.dismiss) private var dismiss
     let gallery: NativeGallery
     let images: PageImageStore
@@ -10,24 +9,93 @@ struct ReaderPreviewView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    ArtworkGrid(mode: .manga) { style in
-                        ForEach(gallery.pages.indices, id: \.self) { index in
-                            Button { current = index; dismiss() } label: {
-                                VStack(spacing: style.inset(6)) {
-                                    ReaderThumbnail(page: gallery.pages[index], galleryID: gallery.id, images: images)
-                                        .aspectRatio(0.72, contentMode: .fit).clipped()
-                                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(current == index ? Color.accentColor : .clear, lineWidth: 3))
-                                    Text("\(index + 1)").font(.system(size: style.fontSize(pageNumberSize, minimum: 9), design: .monospaced))
-                                }
-                            }.buttonStyle(.plain).id(index).accessibilityLabel(L10n.text("Pages: %@", String(describing: index + 1)))
-                                .accessibilityIdentifier("reader.preview.\(index + 1)")
-                        }
+                    GalleryPagePreviewGrid(gallery: gallery, images: images, current: current, identifier: "reader.preview") { index in
+                        current = index; dismiss()
                     }
                 }.onAppear { proxy.scrollTo(current, anchor: .center) }
             }
             .navigationTitle(L10n.text("Total pages: %@", String(describing: gallery.pages.count))).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
         }
+    }
+}
+
+/// Loading is latched by the detail screen only after meaningful downward
+/// travel AND reaching the end of its metadata. A visible footer alone is not intent.
+enum GalleryPreviewLoading {
+    static func shouldLoad(metadata: CGRect, viewportHeight: CGFloat) -> Bool {
+        guard viewportHeight > 0 else { return false }
+        let minimumTravel = max(160, min(320, viewportHeight * 0.35))
+        return 20 - metadata.minY >= minimumTravel && metadata.maxY <= viewportHeight - 44
+    }
+}
+
+struct GalleryDetailPreviews: View {
+    let gallery: NativeGallery
+    let images: PageImageStore
+    let enabled: Bool
+    let select: (Int) -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Divider()
+            Text(L10n.text("Preview")).font(.headline)
+            if enabled {
+                GalleryPagePreviewGrid(gallery: gallery, images: images, current: nil,
+                                       identifier: "content.detail.preview", select: select)
+                    .padding(.horizontal, -20)
+            } else {
+                Label(L10n.text("Scroll down to load page previews."), systemImage: "chevron.down")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity).padding(.vertical, 32)
+                    .accessibilityIdentifier("content.detail.previewHint")
+            }
+        }
+    }
+}
+
+enum GalleryPreviewLayout {
+    static func columns(width: CGFloat, artworkColumns: Int, previewColumns: Int, removesArtworkPadding: Bool) -> Int {
+        if previewColumns > 0 { return min(10, previewColumns) }
+        let artwork = ArtworkGridGeometry(width: width, columns: artworkColumns, removesPadding: removesArtworkPadding)
+        return artwork.count * 2
+    }
+}
+
+/// Both detail and reader previews use the source's thumbnail route. The lazy
+/// grid starts only visible/nearby cells instead of downloading the whole work.
+struct GalleryPagePreviewGrid: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var width: CGFloat = 390
+    let gallery: NativeGallery
+    let images: PageImageStore
+    let current: Int?
+    let identifier: String
+    let select: (Int) -> Void
+    var body: some View {
+        let columns = GalleryPreviewLayout.columns(width: width, artworkColumns: env.gridColumns(for: .manga),
+            previewColumns: env.mangaPreviewColumns, removesArtworkPadding: env.removesGridPadding(for: .manga))
+        let removesPadding = env.removesGridPadding(for: .manga)
+        let geometry = ArtworkGridGeometry(width: width, columns: columns, removesPadding: removesPadding,
+                                           maximumColumns: max(10, columns))
+        let style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: removesPadding)
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing), count: columns),
+                  alignment: .leading, spacing: geometry.spacing) {
+            // Page order is fixed for the lifetime of this gallery.
+            ForEach(gallery.pages.indices, id: \.self) { index in
+                Button { select(index) } label: {
+                    ReaderThumbnail(page: gallery.pages[index], galleryID: gallery.id, images: images)
+                        .aspectRatio(0.72, contentMode: .fit).clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: style.radius(12), style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: style.radius(12), style: .continuous)
+                            .strokeBorder(current == index ? Color.accentColor : .clear, lineWidth: 3))
+                }.buttonStyle(.plain).id(index)
+                    .accessibilityLabel(L10n.text("Pages: %@", String(describing: index + 1)))
+                    .accessibilityIdentifier("\(identifier).\(index + 1)")
+            }
+        }
+        .padding(geometry.margin)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if abs(width - $0) > 0.5 { width = $0 } }
     }
 }
 
@@ -39,7 +107,7 @@ struct ReaderThumbnail: View {
     @State private var image: UIImage?
     var body: some View {
         Color.secondary.opacity(0.1).overlay {
-            if let image { Image(uiImage: image).resizable().scaledToFit() }
+            if let image = image ?? images.cachedImage(hash: page.hash, thumbnail: true) { Image(uiImage: image).resizable().scaledToFill() }
             else { Image(systemName: "photo").foregroundStyle(.secondary) }
         }.task(id: "\(page.hash):\(scenePhase)") {
             guard scenePhase == .active, image == nil else { return }

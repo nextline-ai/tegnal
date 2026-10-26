@@ -1,0 +1,62 @@
+{
+  "configurations": [
+    {
+      "id": "87D8EF15-A129-4B32-BA45-BC2834DA037C",
+      "name": "Default",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": false,
+    "environmentVariableEntries": [
+      {
+        "key": "TEGNAL_LIVE_TESTS",
+        "value": "",
+        "isEnabled": true
+      },
+      {
+        "key": "TEGNAL_BOORU_LIVE_TESTS",
+        "value": "",
+        "isEnabled": true
+      },
+      {
+        "key": "TEGNAL_CATALOG_ADDRESS",
+        "value": "",
+        "isEnabled": true
+      }
+    ],
+    "testTimeoutsEnabled": true
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:TEGNAL.xcodeproj",
+        "identifier": "467FC908A4CFDF6B49B8406C",
+        "name": "TEGNALTests"
+      },
+      "parallelizable": false,
+      "skippedTests": [
+        "BooruReleaseLiveTests/testDanbooruPoolsAfterValidation()",
+        "BooruReleaseLiveTests/testGelbooruReportedPostAndPools()",
+        "BooruReleaseLiveTests/testICloudDriveContainerUploadsIsolatedProbe()",
+        "BooruRevisionTests/testLiveLegacyTagSearchOrInteractiveValidationRoute()",
+        "BooruRevisionTests/testLiveLegacyVisibleBrowserListings()",
+        "BooruRevisionTests/testLiveOldGelbooruServersWhenConfigured()",
+        "BooruRevisionTests/testLiveSafebooruThroughBrowserTransport()",
+        "BooruTests/testLiveDanbooruEndpointWhenReachable()",
+        "BooruTests/testLiveGelbooruEndpointWhenAuthorized()",
+        "BooruTests/testLiveSafebooruAPIAndAutocomplete()",
+        "BooruTests/testLiveSafebooruPoolLoadsAllSevenPagesInOrder()",
+        "DocumentCatalogTests/testConfiguredLiveCatalog()",
+        "LibrarySyncTests/testLiveICloudContainerUploadAndCoordinatedRead()",
+        "NativeContentLiveTests/testLiveBrowserLoadsWebsiteWithoutNativeAdapter()",
+        "NativeContentLiveTests/testLiveMetadataImageDecodeAndSearchOnDevice()",
+        "NativeContentLiveTests/testLivePopularPeriodsOnDevice()",
+        "NativeContentLiveTests/testLiveTagSuggestionsOnDevice()",
+        "ReaderUXTests/testInstalledAppleTranslationEngineOnMac()",
+        "ReaderUXTests/testMacTranslationCanvasRecognizesAndDisplaysTranslatedImageText()"
+      ]
+    }
+  ],
+  "version": 1
+}

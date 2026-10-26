@@ -13,6 +13,7 @@ struct NativeReaderView: View {
     let source: any ContentProviding
     let images: PageImageStore
     let savesProgress: Bool
+    let resumesProgress: Bool
     let offline: Bool
     let search: (String) -> Void
     let exit: () -> Void
@@ -49,13 +50,14 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
 
     init(galleryID: Int64, initialPage: Int, source: any ContentProviding, images: PageImageStore,
-         savesProgress: Bool, offline: Bool = false, search: @escaping (String) -> Void, exit: @escaping () -> Void) {
+         savesProgress: Bool, offline: Bool = false, resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void) {
         self.galleryID = galleryID; self.initialPage = initialPage
         self.source = source; self.images = images; self.savesProgress = savesProgress; self.offline = offline
+        self.resumesProgress = resumesProgress
         self.search = search; self.exit = exit
         if let cached = source.cachedGallery(galleryID) {
             _gallery = State(initialValue: cached)
-            let saved = savesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
+            let saved = savesProgress && resumesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
             _currentPage = State(initialValue: ReaderLayout.initialPage(initialPage, saved: saved, total: cached.pages.count,
                                                                      count: ReaderPreferences.defaults.integer(forKey: "reader.pagesPerSpread")))
         }
@@ -93,6 +95,8 @@ struct NativeReaderView: View {
         .background(ReaderExitGesture(enabled: !exiting && sheet == nil && !showJump && !zoomed && translationRequest == nil,
                                       requiresTopSafeZone: mode == ReaderMode.continuous.rawValue,
                                       progress: { _ in }, exit: closeReader))
+        .background(ReaderPreviewGesture(enabled: readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
+                                         reveal: { sheet = .preview }))
         .overlay(alignment: .topTrailing) {
             if let request = translationRequest, let gallery, gallery.pages.indices.contains(request.index) {
                 ReaderTranslationView(page: gallery.pages[request.index], galleryID: galleryID, images: images, rect: request.rect, finished: {
@@ -299,7 +303,7 @@ struct NativeReaderView: View {
             else { value = try await source.gallery(galleryID) }
             try Task.checkCancellation()
             if gallery == nil {
-                let saved = savesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
+                let saved = savesProgress && resumesProgress ? ReaderPreferences.defaults.integer(forKey: "reader_page_\(galleryID)") : 0
                 currentPage = ReaderLayout.initialPage(initialPage, saved: saved, total: value.pages.count, count: pagesPerSpread)
                 gallery = value
             }

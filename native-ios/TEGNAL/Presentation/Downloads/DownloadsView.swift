@@ -184,7 +184,7 @@ private struct DownloadFilesView: View {
                 }
             }
             if item.gallery != nil {
-                Button { reading = true } label: { Label(L10n.text("Read Offline"), systemImage: "book") }
+                Button { reading = true } label: { Label(L10n.text("Read Offline"), systemImage: AppMode.manga.icon) }
             }
             ForEach(store.urls(item), id: \.self) { file in
                 HStack {

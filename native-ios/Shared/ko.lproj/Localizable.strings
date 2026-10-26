@@ -1139,3 +1139,13 @@
 "Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority." = "기본적으로 감상용 압축 이미지를 사용합니다. 이 옵션을 켜면 데이터를 더 절약합니다. 원본 이미지 설정이 우선 적용됩니다.";
 
 "From the bottom of the image, swipe up for details." = "이미지 하단에서 위로 쓸어올리면 상세정보가 열립니다.";
+
+"Scroll down to load page previews." = "아래로 스크롤하면 페이지 미리보기를 불러옵니다.";
+
+"Preview Columns" = "프리뷰 열 수";
+"Automatic (2× Grid)" = "자동 (그리드의 2배)";
+"Automatic uses twice the artwork grid’s column count for page previews." = "자동으로 설정하면 페이지 프리뷰를 작품 그리드 열 수의 2배로 표시합니다.";
+
+"Allow Language Filter Exceptions" = "언어 필터 예외 허용";
+"Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type." = "Game CG, Artist CG, Image Set을 선택한 언어와 관계없이 포함합니다. 끄면 모든 종류에 언어 필터를 적용합니다.";
+"From the bottom of the page, swipe up for previews." = "페이지 아래쪽에서 위로 쓸면 프리뷰가 열립니다.";

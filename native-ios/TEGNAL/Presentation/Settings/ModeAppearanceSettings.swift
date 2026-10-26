@@ -13,6 +13,12 @@ struct ModeAppearanceSettings: View {
             columnPicker("Grid Columns", selection: $env.gridColumns, identifier: "settings.gridColumns")
             Toggle(L10n.text("Show Without Spacing"), isOn: $env.removesGridPadding).accessibilityIdentifier("settings.noGridPadding")
             if env.mode == .manga {
+                Picker(L10n.text("Preview Columns"), selection: $env.mangaPreviewColumns) {
+                    Text(L10n.text("Automatic (2× Grid)")).tag(0)
+                    ForEach(1...10, id: \.self) { Text(String($0)).tag($0) }
+                }.pickerStyle(.menu).accessibilityIdentifier("settings.previewColumns")
+                Text(L10n.text("Automatic uses twice the artwork grid’s column count for page previews."))
+                    .font(.footnote).foregroundStyle(.secondary)
                 Toggle(L10n.text("Show Work Titles"), isOn: $env.showsMangaTitles).accessibilityIdentifier("settings.showMangaTitles")
                 Toggle(L10n.text("Show Work Artists"), isOn: $env.showsMangaArtists).accessibilityIdentifier("settings.showMangaArtists")
             }

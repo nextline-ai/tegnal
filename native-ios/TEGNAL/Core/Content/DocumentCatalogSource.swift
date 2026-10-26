@@ -75,13 +75,14 @@ actor DocumentCatalogSource {
             current = cached.pages[index]
         }
         for attempt in 0..<2 {
-            let candidate = thumbnail ? current.thumbnailURL ?? current.imageURL : current.imageURL
+            // A missing thumbnail must never silently download a reader-sized image.
+            let candidate = thumbnail ? current.thumbnailURL : current.imageURL
             if attempt > 0 || current.sourceSite != site || candidate.map(Self.expired) != false {
                 let document = try await gallery(galleryID, site: site, force: true)
                 guard let index = page.index, document.pages.indices.contains(index) else { throw ContentError.invalidResponse }
                 current = document.pages[index]
             }
-            guard let url = thumbnail ? current.thumbnailURL ?? current.imageURL : current.imageURL else { throw ContentError.invalidResponse }
+            guard let url = thumbnail ? current.thumbnailURL : current.imageURL else { throw ContentError.invalidResponse }
             do {
                 let (data, response) = try await transport.get(url, limit: thumbnail ? 2_000_000 : 24_000_000, galleryID: galleryID)
                 try prepare(site)
@@ -96,7 +97,7 @@ actor DocumentCatalogSource {
 
     func list(_ query: GalleryQuery, offset: Int, count: Int, site: String) async throws -> GalleryBatch {
         try prepare(site)
-        if query.language != "all" { return try await listIncludingVisualCollections(query, offset: offset, count: count, site: site) }
+        if query.language != "all", query.allowsLanguageExceptions { return try await listIncludingVisualCollections(query, offset: offset, count: count, site: site) }
         var feed = feeds[query] ?? Feed(offset: offset)
         if offset < feed.offset || offset > feed.offset + feed.ids.count || Date().timeIntervalSince(feed.created) > 300 {
             feed = Feed(offset: offset)

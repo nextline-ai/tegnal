@@ -1,0 +1,41 @@
+{
+  "configurations": [
+    {
+      "id": "28E32D78-0168-49FB-AFE6-68027384953E",
+      "name": "Default",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": false,
+    "environmentVariableEntries": [
+      {
+        "key": "TEGNAL_LIVE_TESTS",
+        "value": "",
+        "isEnabled": true
+      },
+      {
+        "key": "TEGNAL_BOORU_LIVE_TESTS",
+        "value": "",
+        "isEnabled": true
+      },
+      {
+        "key": "TEGNAL_CATALOG_ADDRESS",
+        "value": "",
+        "isEnabled": true
+      }
+    ],
+    "testTimeoutsEnabled": true
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:TEGNAL.xcodeproj",
+        "identifier": "8AE1CE50D6D27EC420872A41",
+        "name": "TEGNALUITests"
+      },
+      "parallelizable": false
+    }
+  ],
+  "version": 1
+}

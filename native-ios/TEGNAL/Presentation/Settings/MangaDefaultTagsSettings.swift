@@ -5,6 +5,10 @@ struct MangaDefaultTagsSettings: View {
     var body: some View {
         @Bindable var env = env
         Section {
+            Toggle(L10n.text("Allow Language Filter Exceptions"), isOn: $env.allowsMangaLanguageExceptions)
+                .accessibilityIdentifier("settings.mangaLanguageExceptions")
+            Text(L10n.text("Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type."))
+                .font(.footnote).foregroundStyle(.secondary)
             NavigationLink {
                 Form {
                     Section(L10n.text("Default Tags")) {

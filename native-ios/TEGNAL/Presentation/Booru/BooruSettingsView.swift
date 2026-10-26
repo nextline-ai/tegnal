@@ -59,7 +59,7 @@ enum ServerType: Hashable, Identifiable, Sendable {
 
     var icon: String {
         switch self {
-        case .comics: return "book"
+        case .comics: return AppMode.manga.icon
         case .booru: return "checkmark.circle"
         }
     }
@@ -85,7 +85,7 @@ enum ServerType: Hashable, Identifiable, Sendable {
 struct WebsiteModeGuide: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            mode(.manga, description: "Read multi-page works by their work number.", icon: "book.closed")
+            mode(.manga, description: "Read multi-page works by their work number.", icon: AppMode.manga.icon)
             mode(.booru, description: "Browse individual images using tags.", icon: "photo")
         }.accessibilityElement(children: .contain).accessibilityIdentifier("website.modeGuide")
     }

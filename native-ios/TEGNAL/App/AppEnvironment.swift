@@ -291,6 +291,7 @@ public final class AppEnvironment: @unchecked Sendable {
     private var booruTheme: AppTheme
     private var mangaColumns: Int
     private var booruColumns: Int
+    private var mangaPreviewColumnCount: Int
     private var mangaRemovesGridPadding: Bool
     private var booruRemovesGridPadding: Bool
     var showsMangaTitles: Bool { didSet { browserPreferences.set(showsMangaTitles, forKey: "manga.grid.showTitles") } }
@@ -326,6 +327,16 @@ public final class AppEnvironment: @unchecked Sendable {
         }
     }
 
+    /// Zero follows twice the resolved artwork grid column count.
+    var mangaPreviewColumns: Int {
+        get { mangaPreviewColumnCount }
+        set {
+            let value = min(10, max(0, newValue))
+            mangaPreviewColumnCount = value
+            browserPreferences.set(value, forKey: "manga.preview.columns")
+        }
+    }
+
     public var folderColumns: Int {
         get { mode == .manga ? mangaFolderColumns : booruFolderColumns }
         set {
@@ -333,6 +344,10 @@ public final class AppEnvironment: @unchecked Sendable {
             if mode == .manga { mangaFolderColumns = value } else { booruFolderColumns = value }
             browserPreferences.set(value, forKey: mode == .manga ? "folder_columns" : "booru.folder_columns")
         }
+    }
+
+    var allowsMangaLanguageExceptions: Bool {
+        didSet { browserPreferences.set(allowsMangaLanguageExceptions, forKey: "manga.languageExceptions") }
     }
 
     var defaultTags: String {
@@ -372,7 +387,9 @@ public final class AppEnvironment: @unchecked Sendable {
     @ObservationIgnored private var launchFeedsStorage: LaunchFeedWarmup?
 
     var launchMangaQuery: GalleryQuery {
-        GalleryQuery(language: L10n.contentLanguage).applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
+        var query = GalleryQuery(language: L10n.contentLanguage).applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
+        query.allowsLanguageExceptions = allowsMangaLanguageExceptions
+        return query
     }
 
     @MainActor var sync: LibraryCloudSync { syncStorage ?? makeSync() }
@@ -454,12 +471,14 @@ public final class AppEnvironment: @unchecked Sendable {
         let booruColumns = browserPreferences.integer(forKey: "booru.grid_columns")
         self.mangaColumns = min(5, max(0, mangaColumns))
         self.booruColumns = min(5, max(0, booruColumns))
+        self.mangaPreviewColumnCount = min(10, max(0, browserPreferences.integer(forKey: "manga.preview.columns")))
         self.mangaRemovesGridPadding = browserPreferences.bool(forKey: "manga.grid.noPadding")
         self.booruRemovesGridPadding = browserPreferences.bool(forKey: "booru.grid.noPadding")
         self.showsMangaTitles = browserPreferences.object(forKey: "manga.grid.showTitles") as? Bool ?? true
         self.showsMangaArtists = browserPreferences.object(forKey: "manga.grid.showArtists") as? Bool ?? true
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
+        self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
         self.defaultTags = browserPreferences.string(forKey: "manga.defaultTags") ?? ""
         self.defaultExcludedTags = browserPreferences.string(forKey: "manga.defaultExcludedTags") ?? ""
 

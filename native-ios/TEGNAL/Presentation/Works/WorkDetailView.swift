@@ -140,7 +140,7 @@ public struct WorkDetailView: View {
                             showBrowser = true
                         } label: {
                             HStack {
-                                Image(systemName: "book.pages")
+                                Image(systemName: AppMode.manga.icon)
                                 Text(L10n.text("Read"))
                             }
                             .font(.headline)
@@ -479,7 +479,7 @@ struct WorkDetailCover: View {
                     Image(uiImage: image).resizable().scaledToFit().padding(8)
                 } else {
                     VStack(spacing: 12) {
-                        Image(systemName: "book.closed").font(.largeTitle).foregroundStyle(.tertiary)
+                        Image(systemName: AppMode.manga.icon).font(.largeTitle).foregroundStyle(.tertiary)
                         if loading { ProgressView() }
                     }
                 }

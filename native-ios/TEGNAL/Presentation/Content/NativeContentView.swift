@@ -64,9 +64,10 @@ public struct NativeContentView: View {
         let id: Int64
         let page: Int
         let context: DiscoveryContext
+        let resumesProgress: Bool
     }
-    private func openReader(_ id: Int64, _ page: Int, _ context: DiscoveryContext) {
-        presentedReader = ReaderDestination(id: id, page: page, context: context)
+    private func openReader(_ id: Int64, _ page: Int, _ context: DiscoveryContext, _ resumesProgress: Bool = true) {
+        presentedReader = ReaderDestination(id: id, page: page, context: context, resumesProgress: resumesProgress)
     }
     private func navigate(_ route: ContentRoute) {
         switch route {
@@ -114,7 +115,7 @@ public struct NativeContentView: View {
             if let readerSearch { self.readerSearch = nil; path.append(.query(readerSearch)) }
         }) { reader in
             NativeReaderView(galleryID: reader.id, initialPage: reader.page, source: source, images: images,
-                             savesProgress: savesProgress, search: { text in readerSearch = text; presentedReader = nil },
+                             savesProgress: savesProgress, resumesProgress: reader.resumesProgress, search: { text in readerSearch = text; presentedReader = nil },
                              exit: { presentedReader = nil })
                 .environment(\.discoveryContext, reader.context)
         }
@@ -217,7 +218,9 @@ private struct GalleryFeedView: View {
     }
 
     private var effectiveQuery: GalleryQuery {
-        query.applyingDefaults(tags: env.defaultTags, excluded: env.defaultExcludedTags)
+        var result = query.applyingDefaults(tags: env.defaultTags, excluded: env.defaultExcludedTags)
+        result.allowsLanguageExceptions = env.allowsMangaLanguageExceptions
+        return result
     }
 
     private var isActive: Bool { env.mode == .manga && scenePhase == .active }
@@ -242,9 +245,9 @@ private struct GalleryFeedView: View {
                 }
                 }.accessibilityIdentifier("content.sort")
                 }
-                ArtworkGrid(mode: .manga, surroundingPadding: 16) { _ in
-                    let prefetchColumns = env.gridColumns > 0 ? env.gridColumns : 2
-                    let lookahead = prefetchColumns * 2
+                ArtworkGrid(mode: .manga, surroundingPadding: 16) { style in
+                    let prefetchColumns = style.columns
+                    let lookahead = prefetchColumns * 6
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
                     ForEach(Array(loader.ids.enumerated()), id: \.element) { index, id in
                         GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { navigate(.discoveredGallery(id, discovery)) }) { gallery in
@@ -461,7 +464,7 @@ private struct GalleryGridCard: View {
     private let suppliedPreview: GalleryFeedPreview?
     @State private var preview: GalleryFeedPreview
     private var gallery: NativeGallery? { preview.gallery }
-    private var image: UIImage? { preview.image }
+    private var image: UIImage? { preview.displayImage }
 
     init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
         self.id = id
@@ -475,7 +478,7 @@ private struct GalleryGridCard: View {
     var body: some View {
         GalleryCardLayout(title: preview.display?.title ?? L10n.text("Work %@", String(describing: id)), artists: preview.display?.artists ?? "", language: preview.display?.language ?? "") {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
-            else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: "book.closed").foregroundStyle(.secondary) } }
+            else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: AppMode.manga.icon).foregroundStyle(.secondary) } }
         }
         .overlay(alignment: .topLeading) {
             if isBookmarked {
@@ -499,7 +502,11 @@ private struct GalleryGridCard: View {
             if let suppliedPreview { preview = suppliedPreview }
             await preview.load()
         }
-        .onDisappear { preview.discardDisplayContent() }
+        .onDisappear {
+            // Shared previews belong to the loader's bounded viewport window.
+            // A lazy cell disappearing must not erase a prepared nearby cover.
+            if suppliedPreview == nil { preview.discardDisplayContent() }
+        }
     }
 }
 
@@ -515,38 +522,32 @@ private struct RemoteGalleryView: View {
     @State private var error: String?
     @State private var retry = 0
     @State private var bookmark: ContentBookmark?
-    var read: (Int64, Int, DiscoveryContext) -> Void
+    var read: (Int64, Int, DiscoveryContext, Bool) -> Void
+    @State private var previewsEnabled = false
 
     var body: some View {
         Group {
             if let gallery {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        WorkDetailCover(image: cover, loading: !coverFinished)
-                        Text(gallery.title).font(.title2.bold()).textSelection(.enabled).accessibilityIdentifier("content.detail.title")
-                        Text(L10n.text("%@ · %@ · %@ pages", String(describing: gallery.language), String(describing: gallery.type), String(describing: gallery.pages.count)))
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        Button { read(galleryID, 1, discovery) } label: {
-                            Label(L10n.text("Read"), systemImage: "book.pages").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
-                        }.buttonStyle(.borderedProminent).accessibilityIdentifier("content.read")
-                        Button { bookmark = ContentBookmark(id: galleryID) } label: {
-                            Label(L10n.text("Save to Library"), systemImage: "bookmark").frame(maxWidth: .infinity)
-                        }.buttonStyle(.bordered).accessibilityIdentifier("content.bookmark")
-                        if !gallery.artists.isEmpty {
-                            Text(L10n.text("Artists")).font(.headline)
-                            ForEach(gallery.artists, id: \.self) { name in
-                                NavigationLink(name, value: ContentRoute.artist(name)).buttonStyle(.bordered)
+                GeometryReader { viewport in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 22) {
+                            GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
+                                               read: { read(galleryID, 1, discovery, true) },
+                                               bookmark: { bookmark = ContentBookmark(id: galleryID) })
+                                .onGeometryChange(for: Bool.self) { geometry in
+                                    GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
+                                                                     viewportHeight: viewport.size.height)
+                                } action: { shouldLoad in
+                                    if shouldLoad { previewsEnabled = true }
+                                }
+                            GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled) { index in
+                                read(galleryID, index + 1, discovery, false)
                             }
-                        }
-                        NavigationLink(gallery.language, value: ContentRoute.query("language:" + gallery.language))
-                            .font(.body).buttonStyle(.bordered).accessibilityIdentifier("content.detail.language")
-                        if !gallery.tags.isEmpty {
-                            Text(L10n.text("Tags")).font(.headline)
-                            ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags), destination: { tag in
-                                .query(tag.query.replacingOccurrences(of: " ", with: "_"))
-                            })
-                        }
-                    }.padding(20)
+                            .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
+                        }.padding(20)
+                    }
+                    .coordinateSpace(name: "gallery.detailViewport")
+                    .accessibilityIdentifier("content.detail.scroll")
                 }
             } else if let error { ContentFailureView(message: error) { retry += 1 } }
             else { ProgressView(L10n.text("Loading work details")) }
@@ -571,6 +572,42 @@ private struct RemoteGalleryView: View {
                 }
                 coverFinished = true
             } catch { if !Task.isCancelled { self.error = ContentError.message(error) } }
+        }
+    }
+}
+
+private struct GalleryInformation: View {
+    let gallery: NativeGallery
+    let cover: UIImage?
+    let coverFinished: Bool
+    let read: () -> Void
+    let bookmark: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            WorkDetailCover(image: cover, loading: !coverFinished)
+            Text(gallery.title).font(.title2.bold()).textSelection(.enabled).accessibilityIdentifier("content.detail.title")
+            Text(L10n.text("%@ · %@ · %@ pages", String(describing: gallery.language), String(describing: gallery.type), String(describing: gallery.pages.count)))
+                .font(.subheadline).foregroundStyle(.secondary)
+            Button(action: read) {
+                Label(L10n.text("Read"), systemImage: AppMode.manga.icon).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+            }.buttonStyle(.borderedProminent).accessibilityIdentifier("content.read")
+            Button(action: bookmark) {
+                Label(L10n.text("Save to Library"), systemImage: "bookmark").frame(maxWidth: .infinity)
+            }.buttonStyle(.bordered).accessibilityIdentifier("content.bookmark")
+            if !gallery.artists.isEmpty {
+                Text(L10n.text("Artists")).font(.headline)
+                ForEach(gallery.artists, id: \.self) { name in
+                    NavigationLink(name, value: ContentRoute.artist(name)).buttonStyle(.bordered)
+                }
+            }
+            NavigationLink(gallery.language, value: ContentRoute.query("language:" + gallery.language))
+                .font(.body).buttonStyle(.bordered).accessibilityIdentifier("content.detail.language")
+            if !gallery.tags.isEmpty {
+                Text(L10n.text("Tags")).font(.headline)
+                ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags), destination: { tag in
+                    .query(tag.query.replacingOccurrences(of: " ", with: "_"))
+                })
+            }
         }
     }
 }
@@ -608,6 +645,11 @@ final class GalleryFeedPreview {
         display = gallery.map(Display.init)
         coverHash = gallery?.pages.first?.hash
         image = gallery?.pages.first.flatMap { images.cachedImage(hash: $0.hash, thumbnail: true) }
+    }
+
+    var displayImage: UIImage? {
+        guard !cancelled else { return nil }
+        return image ?? coverHash.flatMap { images.cachedImage(hash: $0, thumbnail: true) }
     }
 
     /// Reappearing rows can display an already decoded cover before an async
@@ -724,13 +766,25 @@ final class GalleryFeedLoader {
         guard !suspended, ids.indices.contains(index), count > 0 else { return }
         let returning = previousCoverIndex.map { index < $0 } ?? false
         previousCoverIndex = index
+        retainCovers(around: index, in: ids)
         let end = index + min(returning ? max(1, min(columns, count)) : count, ids.count - index)
         let start = returning ? max(0, end - count) : index
         prefetchWindow = returning ? Array(ids[start..<end].reversed()) : Array(ids[start..<end])
+        for id in prefetchWindow { previews[id]?.restoreCachedContent() }
         let priority = Set(prefetchWindow)
         for (id, flight) in prefetchTasks where !priority.contains(id) { flight.task.cancel() }
         prefetchQueue = prefetchWindow.filter { previews[$0]?.image == nil && previews[$0] != nil }
         startPrefetch()
+    }
+
+    private func retainCovers(around index: Int, in ids: [Int64]) {
+        // Keep a bounded neighborhood above and below the viewport, independent
+        // of the pagination cursor or current scroll direction.
+        let start = min(max(0, index - 36), max(0, ids.count - 72))
+        let end = min(ids.count, start + 72)
+        let retained = Set(ids[start..<end])
+        for id in retainedCoverIDs.subtracting(retained) { previews[id]?.discardDisplayContent() }
+        retainedCoverIDs = retained
     }
 
     private func startPrefetch() {
@@ -797,12 +851,10 @@ final class GalleryFeedLoader {
                 let incoming = batch.ids.filter { seen.insert($0).inserted }
                 let updatedIDs = (reset ? [] : self.ids) + incoming
                 if reset { self.stopPrefetch(cancelCovers: false) }
-                // Keep lightweight identities and text for every loaded row;
-                // only the most recent three pages may pin heavy content.
-                let retained = Set(updatedIDs.suffix(72))
+                // Keep identities/text for loaded rows and decoded covers near
+                // the viewport, rather than only near the pagination cursor.
                 if reset { self.previews = [:]; self.retainedCoverIDs.removeAll(); self.previousCoverIndex = nil }
-                for id in self.retainedCoverIDs.subtracting(retained) { self.previews[id]?.discardDisplayContent() }
-                self.retainedCoverIDs = retained
+                self.retainCovers(around: self.previousCoverIndex ?? max(0, updatedIDs.count - 1), in: updatedIDs)
                 if let images = self.images {
                     for id in incoming { self.previews[id] = GalleryFeedPreview(id: id, source: source, images: images) }
                 }
@@ -811,7 +863,7 @@ final class GalleryFeedLoader {
                 if reset && useLaunchPage { startup?.didPublishManga(query: query, site: site) }
                 self.nextOffset = offset + batch.ids.count
                 self.hasMore = batch.hasMore && !batch.ids.isEmpty && (reset || !incoming.isEmpty)
-                self.prefetchQueue = self.prefetchQueue.filter { retained.contains($0) }
+                self.prefetchQueue = self.prefetchQueue.filter { self.retainedCoverIDs.contains($0) }
                 self.startPrefetch()
             } catch {
                 if !Task.isCancelled, let self, self.generation == token { self.error = ContentError.message(error) }

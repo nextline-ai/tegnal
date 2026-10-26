@@ -478,6 +478,66 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
     }
 }
 
+/// A bottom-origin upward swipe owns its pan before the pager/continuous
+/// scroller, so revealing previews does not also advance the current page.
+struct ReaderPreviewGesture: UIViewRepresentable {
+    let enabled: Bool
+    let reveal: () -> Void
+    func makeUIView(context: Context) -> PreviewGestureView { PreviewGestureView() }
+    func updateUIView(_ view: PreviewGestureView, context: Context) {
+        view.reveal = reveal
+        view.pan.isEnabled = enabled
+    }
+    static func dismantleUIView(_ view: PreviewGestureView, coordinator: ()) {
+        view.pan.view?.removeGestureRecognizer(view.pan)
+    }
+}
+
+final class PreviewGestureView: UIView, UIGestureRecognizerDelegate {
+    var reveal: () -> Void = {}
+    lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        pan.view?.removeGestureRecognizer(pan)
+        pan.delegate = self
+        pan.maximumNumberOfTouches = 1
+        window?.addGestureRecognizer(pan)
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let window,
+              window.bounds.inset(by: window.safeAreaInsets).contains(touch.location(in: window)),
+              ReaderPreviewReveal.isInZone(touch.location(in: window), bounds: window.bounds) else { return false }
+        var view = touch.view
+        while let current = view {
+            if current is UIControl { return false }
+            if let page = current as? PageScrollView, page.zoomScale > 1.01 || page.isZooming { return false }
+            view = current.superview
+        }
+        return true
+    }
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        let velocity = pan.velocity(in: window)
+        return -velocity.y > abs(velocity.x) * 1.25
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        other is UIPanGestureRecognizer && !(other is UIScreenEdgePanGestureRecognizer)
+    }
+    @objc private func dragged(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .ended, let window,
+              ReaderPreviewReveal.shouldReveal(delta: gesture.translation(in: window), velocity: gesture.velocity(in: window)) else { return }
+        reveal()
+    }
+}
+
+enum ReaderPreviewReveal {
+    static func isInZone(_ point: CGPoint, bounds: CGRect) -> Bool {
+        bounds.contains(point) && point.y >= bounds.minY + bounds.height * 0.75
+    }
+    static func shouldReveal(delta: CGPoint, velocity: CGPoint) -> Bool {
+        ReaderDismissal.shouldExit(delta: CGPoint(x: delta.x, y: -delta.y), velocity: CGPoint(x: velocity.x, y: -velocity.y))
+    }
+}
+
 enum ReaderDismissal {
     static func isInExitZone(_ point: CGPoint, bounds: CGRect, safeTop: CGFloat) -> Bool {
         point.y >= bounds.minY + safeTop && point.y <= bounds.minY + safeTop + 64

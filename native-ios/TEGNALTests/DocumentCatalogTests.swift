@@ -30,6 +30,7 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertEqual(GalleryIDParser.parse("https://archive.example/reader/2000.html#2"), [2000])
         XCTAssertEqual(GalleryIDParser.parse("https://share.example/?u=https%3A%2F%2Fcatalog.example%2Fr%2F2000%232"), [2000])
         XCTAssertEqual(ContentRoute.initial("https://catalog.example/r/2000#2"), .reader(2000, 2))
+        XCTAssertEqual(ContentRoute.initial("https://catalog.example/r/2000"), .gallery(2000))
         XCTAssertEqual(ContentRoute.initial("https://catalog.example/?search=artist%3Asample"), .query("artist:sample"))
         XCTAssertNil(ContentRoute.initial("https://foreign.example/r/2000#2"))
     }
@@ -72,6 +73,34 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertEqual(fixture.count("/r/2000"), 1)
     }
 
+    func testPagePreviewsAndReaderUseSeparateServerImageURLs() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        let gallery = try await source.gallery(2000)
+        let page = gallery.pages[1]
+        XCTAssertNotEqual(page.thumbnailURL, page.imageURL)
+        _ = try await source.image(page, galleryID: gallery.id, thumbnail: true)
+        XCTAssertEqual(fixture.count("/1.jpg"), 1)
+        XCTAssertEqual(fixture.count("/1.webp"), 0, "Previews must not download the reader image")
+        _ = try await source.image(page, galleryID: gallery.id, thumbnail: false)
+        XCTAssertEqual(fixture.count("/1.webp"), 1)
+    }
+
+    func testMissingPageThumbnailNeverFallsBackToReaderImage() async throws {
+        let fixture = fixture(); fixture.omitThumbnails = true
+        let source = MangaContentSource(transport: fixture.transport())
+        let gallery = try await source.gallery(2000)
+        XCTAssertNil(gallery.pages[1].thumbnailURL)
+        do {
+            _ = try await source.image(gallery.pages[1], galleryID: gallery.id, thumbnail: true)
+            XCTFail("A missing thumbnail must remain unavailable rather than downloading an original")
+        } catch {
+            guard case ContentError.invalidResponse = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(fixture.count("/1.webp"), 0)
+        _ = try await source.image(gallery.pages[1], galleryID: gallery.id, thumbnail: false)
+        XCTAssertEqual(fixture.count("/1.webp"), 1, "The original remains available to the reader")
+    }
+
     func testPaginationReusesBufferedResultsAndThenFollowsTheCursor() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         _ = try await source.list(GalleryQuery(), offset: 0, count: 2)
@@ -87,18 +116,22 @@ final class DocumentCatalogTests: XCTestCase {
     func testVisualCollectionsBypassImplicitLanguageButRetainTypesAndRanking() async throws {
         let fixture = fixture(); fixture.visualCollections = true
         let source = MangaContentSource(transport: fixture.transport())
-        let latest = try await source.list(GalleryQuery(), offset: 0, count: 5)
+        let strict = try await source.list(GalleryQuery(), offset: 0, count: 5)
+        XCTAssertEqual(strict.ids, [2000, 1999, 1998, 1997, 1996], "Language exceptions are off by default")
+        let latest = try await source.list(GalleryQuery(allowsLanguageExceptions: true), offset: 0, count: 5)
         XCTAssertEqual(latest.ids, [2003, 2002, 2001, 2000, 1999])
-        let popular = try await source.list(GalleryQuery(sort: .week), offset: 0, count: 5)
+        let popular = try await source.list(GalleryQuery(sort: .week, allowsLanguageExceptions: true), offset: 0, count: 5)
         XCTAssertEqual(popular.ids, latest.ids)
-        let onlyManga = try await source.list(GalleryQuery(text: "type:manga"), offset: 0, count: 2)
+        let onlyManga = try await source.list(GalleryQuery(text: "type:manga", allowsLanguageExceptions: true), offset: 0, count: 2)
         XCTAssertEqual(onlyManga.ids, [2000, 1999])
-        let onlyVisual = try await source.list(GalleryQuery(text: "type:gamecg"), offset: 0, count: 5)
+        let onlyVisual = try await source.list(GalleryQuery(text: "type:gamecg", allowsLanguageExceptions: true), offset: 0, count: 5)
         XCTAssertEqual(onlyVisual.ids, [2002])
         let visualRequests = fixture.requests.filter { $0.path == "/ajax/search" }.compactMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }
             .filter { $0.contains { $0.name == "categories" && $0.value == "3,4,6" } }
         XCTAssertFalse(visualRequests.isEmpty)
         XCTAssertTrue(visualRequests.allSatisfy { !$0.contains { $0.name == "search" && ($0.value ?? "").contains("language:korean") } })
+        let strictVisual = try await source.list(GalleryQuery(text: "type:gamecg"), offset: 0, count: 5)
+        XCTAssertTrue(strictVisual.ids.isEmpty, "The language filter also applies to an explicitly selected visual type")
     }
 
     func testFiltersAndSuggestionsTranslateNamespacesWithoutChangingTheirLocalForm() async throws {
@@ -386,6 +419,7 @@ private final class CatalogFixture: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [URL] = []
     var expireFirstManifest = false
+    var omitThumbnails = false
     var visualCollections = false
     let image = Data(repeating: 0x42, count: 64)
     var requests: [URL] { lock.withLock { recorded } }
@@ -406,7 +440,7 @@ private final class CatalogFixture: @unchecked Sendable {
         object["files"] = (0..<2).map { index -> [String: Any] in
             ["id": "file-\(index)", "name": "\(index).jpg",
              "image": ["url": "https://media.example/\(index).webp?expires=\(expiry)&version=\(expiry)", "width": 100, "height": 150],
-             "thumbnail": ["url": "https://media.example/\(index).jpg?expires=\(expiry)&version=\(expiry)"]]
+             "thumbnail": omitThumbnails ? NSNull() : ["url": "https://media.example/\(index).jpg?expires=\(expiry)&version=\(expiry)"]]
         }
         let json = String(decoding: try! JSONSerialization.data(withJSONObject: object), as: UTF8.self)
         return Data("<script>const gallery = \(json); ignoredFunction();</script>".utf8)
@@ -434,6 +468,9 @@ private final class CatalogFixture: @unchecked Sendable {
                     visual["tags"] = [["tag": ["artist", "sample_artist"]]]
                     rows.append(visual)
                 }
+            }
+            if visualCollections, items.contains(where: { $0.name == "search" && ($0.value ?? "").contains("language:korean") }) {
+                rows.removeAll { (($0["category"] as? Int) ?? 2) != 2 }
             }
             rows.sort { ($0["id"] as! Int64) > ($1["id"] as! Int64) }
             return (200, try JSONSerialization.data(withJSONObject: rows), ["Content-Type": "application/json"])

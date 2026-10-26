@@ -103,7 +103,7 @@ struct TasteArtwork: View {
                 } else if let cover {
                     Image(uiImage: cover).resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped()
                 } else if gallery != nil && !failed { ProgressView() }
-                else { Image(systemName: "book.closed").font(.largeTitle).foregroundStyle(.secondary) }
+                else { Image(systemName: AppMode.manga.icon).font(.largeTitle).foregroundStyle(.secondary) }
             }
         }
         .accessibilityHidden(true)

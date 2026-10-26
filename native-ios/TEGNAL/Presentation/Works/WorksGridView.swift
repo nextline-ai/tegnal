@@ -102,11 +102,12 @@ public struct WorksGridView: View {
                 WorkDetailView(galleryId: item.id)
             }
         }
-        .appFullScreenCover(item: Binding(
+        .appSheet(item: Binding(
             get: { activeBrowserUrl.map { IdentifiableString(id: $0) } },
             set: { activeBrowserUrl = $0?.id }
         )) { item in
             ContentEntryView(initialUrl: item.id)
+                .presentationDetents([.large]).presentationDragIndicator(.visible)
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -269,7 +270,7 @@ public struct WorksGridView: View {
     }
 
     private func openManga(for galleryId: Int64) {
-        let urlString = MangaUrls.readerUrl(for: galleryId)
+        let urlString = MangaUrls.galleryUrl(for: galleryId)
         activeBrowserUrl = urlString
     }
 

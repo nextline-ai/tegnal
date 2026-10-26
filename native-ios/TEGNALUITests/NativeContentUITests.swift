@@ -146,7 +146,7 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertFalse(app.webViews.firstMatch.exists)
     }
 
-    func testLibraryWorkOpensRequestedReaderInBrowserAndCloses() {
+    func testLibraryWorkOpensRequestedInformationInBrowserAndCloses() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "--library-jump-test", "--browser-fallback-test", "-AppleLanguages", "(en)"]
         app.launch()
@@ -156,11 +156,138 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Browser ready"].waitForExistence(timeout: 10))
         let address = element(app, "browser.address").value as? String ?? ""
-        XCTAssertTrue(address.contains("/reader/910000001.html#1"), address)
+        XCTAssertTrue(address.contains("/galleries/910000001.html"), address)
         XCTAssertFalse(element(app, "reader.image").exists)
         capture(app, "Library work in browser fallback")
         element(app, "browser.close").tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+    }
+
+    func testSavedInformationDismissesDownwardFromTheGrabber() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--library-jump-test", "-AppleLanguages", "(en)"]
+        app.launch()
+        let card = element(app, "works.card.910000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        let read = element(app, "content.read")
+        XCTAssertTrue(read.waitForExistence(timeout: 10))
+        let navigation = app.navigationBars["Work Details"]
+        XCTAssertTrue(navigation.exists)
+        capture(app, "Saved work uses the draggable information sheet")
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Saved information sheet hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        let grabber = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: navigation.frame.midX, dy: navigation.frame.minY - 8))
+        grabber.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+        XCTAssertTrue(read.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(card.isHittable)
+    }
+
+    func testBottomSwipeRevealsComicPreviewsWithoutAdvancingThePage() {
+        let app = launchReader()
+        for mode in [nil, "수직으로 넘기기", "스크롤로 보기"] as [String?] {
+            if let mode {
+                element(app, "reader.settings").tap()
+                element(app, "reader.settings.mode").tap()
+                app.buttons[mode].tap()
+                element(app, "reader.settings.done").tap()
+                element(app, "reader.menu.close").tap()
+            }
+            let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+            bottom.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+            let first = element(app, "reader.preview.1")
+            XCTAssertTrue(first.waitForExistence(timeout: 5))
+            capture(app, "Bottom swipe reveals previews " + (mode ?? "horizontal"))
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Swipe preview hierarchy " + (mode ?? "horizontal"); hierarchy.lifetime = .keepAlways; add(hierarchy)
+            app.buttons["완료"].tap()
+            menu(app)
+            XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3", "Opening previews must not also scroll or turn the page")
+        }
+    }
+
+    func testExploreInformationDefersPreviewsUntilScrollingAndOpensChosenPage() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)"]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.tap()
+        verifyDeferredDetailPreviews(app)
+    }
+
+    func testSavedWorkOpensTheSameInformationAndDeferredPreviews() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--library-jump-test", "-AppleLanguages", "(en)"]
+        app.launch()
+        let card = element(app, "works.card.910000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.tap()
+        XCTAssertFalse(element(app, "reader.image").exists)
+        verifyDeferredDetailPreviews(app)
+        element(app, "content.close").tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+    }
+
+    func testPreviewColumnSettingCreatesProportionalGridWithoutPageNumbers() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        app.buttons["Settings"].tap()
+        let picker = element(app, "settings.previewColumns")
+        for _ in 0..<4 where !picker.isHittable { app.swipeUp() }
+        XCTAssertTrue(picker.isHittable)
+        XCTAssertTrue(picker.label.contains("Automatic (2× Grid)"))
+        picker.tap()
+        app.buttons["6"].tap()
+        capture(app, "Preview column setting")
+        app.buttons["Explore"].tap()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        let first = element(app, "content.detail.preview.1")
+        let second = element(app, "content.detail.preview.2")
+        let third = element(app, "content.detail.preview.3")
+        let scroll = element(app, "content.detail.scroll")
+        for _ in 0..<6 where !third.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(third.isHittable)
+        XCTAssertGreaterThan(second.frame.minX - first.frame.maxX, 0)
+        XCTAssertLessThan(second.frame.minX - first.frame.maxX, 14)
+        XCTAssertEqual(first.frame.minY, third.frame.minY, accuracy: 1)
+        XCTAssertLessThan(first.frame.width, scroll.frame.width / 5)
+        XCTAssertFalse(first.staticTexts["1"].exists)
+        XCTAssertFalse(second.staticTexts["2"].exists)
+        capture(app, "Dense previews with proportional spacing and no page numbers")
+        third.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.preview").tap()
+        let readerFirst = element(app, "reader.preview.1"), readerSecond = element(app, "reader.preview.2")
+        XCTAssertTrue(readerSecond.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(readerSecond.frame.minX - readerFirst.frame.maxX, 0)
+        XCTAssertLessThan(readerSecond.frame.minX - readerFirst.frame.maxX, 14)
+        XCTAssertLessThan(readerFirst.frame.width, app.frame.width / 5)
+        XCTAssertFalse(readerFirst.staticTexts["1"].exists)
+        capture(app, "Reader uses the same dense preview setting")
+    }
+
+    private func verifyDeferredDetailPreviews(_ app: XCUIApplication) {
+        XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 10))
+        let preview = element(app, "content.detail.preview.3")
+        XCTAssertFalse(preview.exists, "Opening information must not create page thumbnail tasks")
+        let scroll = element(app, "content.detail.scroll")
+        let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+        start.press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        XCTAssertFalse(preview.exists, "A tiny scroll must not trigger page previews")
+        for _ in 0..<6 where !preview.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(preview.isHittable)
+        capture(app, "Information page previews after intentional scrolling")
+        preview.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        XCTAssertEqual(element(app, "reader.position").label, "Page 3 / 3")
+        element(app, "reader.exit").tap()
+        XCTAssertTrue(element(app, "content.detail.preview.3").waitForExistence(timeout: 5))
     }
 
     func testEnglishLocalization() { verifyLocalization("en", explore: "Explore", read: "Read", guide: "Reader Guide", zoom: "Zoom & Translate") }

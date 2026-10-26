@@ -14,6 +14,7 @@ struct ArtworkCellStyle: Equatable {
     var removesPadding = false
     var showsTitle = true
     var showsArtists = true
+    var columns = 1
     var scale: CGFloat { min(1, max(0.2, width / 160)) }
     func inset(_ value: CGFloat) -> CGFloat { removesPadding ? 0 : value * scale }
     func radius(_ value: CGFloat) -> CGFloat { inset(value) }
@@ -25,9 +26,9 @@ struct ArtworkGridGeometry: Equatable {
     let cellWidth: CGFloat
     let spacing: CGFloat
     let margin: CGFloat
-    init(width: CGFloat, columns: Int, minimum: CGFloat = 160, removesPadding: Bool) {
+    init(width: CGFloat, columns: Int, minimum: CGFloat = 160, removesPadding: Bool, maximumColumns: Int = 5) {
         let width = max(1, width)
-        count = columns == 0 ? max(1, Int((width - (removesPadding ? 0 : 32) + 14) / (minimum + 14))) : min(5, max(1, columns))
+        count = columns == 0 ? max(1, Int((width - (removesPadding ? 0 : 32) + 14) / (minimum + 14))) : min(max(1, maximumColumns), max(1, columns))
         let gaps = CGFloat(count - 1)
         // Solve the proportional margins and gaps together with the cell width.
         let proposed = (width - 32 - gaps * 14) / CGFloat(count)
@@ -63,7 +64,7 @@ struct ArtworkGrid<Content: View>: View {
         let geometry = ArtworkGridGeometry(width: width, columns: columns,
             minimum: kind == .folders && sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: mode))
         let style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: env.removesGridPadding(for: mode),
-            showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists)
+            showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists, columns: geometry.count)
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing, alignment: .top), count: geometry.count), alignment: .leading, spacing: geometry.spacing) {
             content(style)
         }

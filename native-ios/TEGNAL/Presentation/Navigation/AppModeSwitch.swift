@@ -52,8 +52,8 @@ struct AppModeSwitch: View {
     var body: some View {
         Button { change(current == .manga ? .booru : .manga) } label: {
             HStack(spacing: 2) {
-                mode(.manga, icon: "book")
-                mode(.booru, icon: "photo")
+                mode(.manga)
+                mode(.booru)
             }
             .background(alignment: .leading) {
                 Capsule().fill(.white)
@@ -122,8 +122,8 @@ struct AppModeSwitch: View {
         .accessibilityValue(current.title)
         .accessibilityIdentifier("app.mode")
     }
-    private func mode(_ mode: AppMode, icon: String) -> some View {
-        Image(systemName: current == mode ? icon + ".fill" : icon)
+    private func mode(_ mode: AppMode) -> some View {
+        Image(systemName: current == mode ? mode.icon + ".fill" : mode.icon)
             .font(.system(size: 16, weight: .semibold))
             .frame(width: 42, height: 38)
             .foregroundStyle(current == mode ? Color.black : Color.secondary)

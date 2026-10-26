@@ -238,7 +238,7 @@ struct RecommendationService {
                 try Task.checkCancellation()
                 guard env.taste.control.enabled else { return .init() }
                 do {
-                    let query = GalleryQuery(language: preferences.language, text: seed.name, sort: GallerySort(rawValue: preferences.sort.rawValue) ?? .latest).applyingDefaults(tags: preferences.includedTags.joined(separator: " "), excluded: env.defaultExcludedTags)
+                    let query = GalleryQuery(language: preferences.language, text: seed.name, sort: GallerySort(rawValue: preferences.sort.rawValue) ?? .latest, allowsLanguageExceptions: env.allowsMangaLanguageExceptions).applyingDefaults(tags: preferences.includedTags.joined(separator: " "), excluded: env.defaultExcludedTags)
                     let batch = try await comicSource.list(query, offset: page * 24, count: 24)
                     let fingerprint = batch.ids.map(String.init).joined(separator: ",")
                     let candidates = batch.ids.filter { fetched.insert($0).inserted && !excluding.contains(MangaUrls.source + "#" + String($0)) }

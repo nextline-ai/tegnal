@@ -1139,3 +1139,13 @@
 "Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority." = "Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority.";
 
 "From the bottom of the image, swipe up for details." = "From the bottom of the image, swipe up for details.";
+
+"Scroll down to load page previews." = "Scroll down to load page previews.";
+
+"Preview Columns" = "Preview Columns";
+"Automatic (2× Grid)" = "Automatic (2× Grid)";
+"Automatic uses twice the artwork grid’s column count for page previews." = "Automatic uses twice the artwork grid’s column count for page previews.";
+
+"Allow Language Filter Exceptions" = "Allow Language Filter Exceptions";
+"Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type." = "Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type.";
+"From the bottom of the page, swipe up for previews." = "From the bottom of the page, swipe up for previews.";

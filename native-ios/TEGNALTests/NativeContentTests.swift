@@ -32,6 +32,22 @@ final class NativeContentTests: XCTestCase {
         """
     }
 
+    @MainActor func testLanguageExceptionsDefaultOffAndPersistIntoLaunchQueries() throws {
+        let name = "language-exceptions-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let database = try AppDatabase.inMemory()
+        let env = AppEnvironment(database: database, browserPreferences: defaults)
+        XCTAssertFalse(env.allowsMangaLanguageExceptions)
+        XCTAssertFalse(env.launchMangaQuery.allowsLanguageExceptions)
+        env.allowsMangaLanguageExceptions = true
+        let restored = AppEnvironment(database: database, browserPreferences: defaults)
+        XCTAssertTrue(restored.allowsMangaLanguageExceptions)
+        XCTAssertTrue(restored.launchMangaQuery.allowsLanguageExceptions)
+        restored.allowsMangaLanguageExceptions = false
+        XCTAssertFalse(restored.launchMangaQuery.allowsLanguageExceptions)
+    }
+
     @MainActor func testBrowserFallbackIsOptInAndPersistsSeparatelyFromLegacyPreference() throws {
         let suite = "browser-preference-test-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

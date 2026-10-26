@@ -4,6 +4,22 @@ import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
+    func testDetailPreviewsRequireMeaningfulScrollAndReachingMetadataEnd() {
+        for height: CGFloat in [320, 678, 1024] {
+            for travel: CGFloat in [0, 12, 48, 120] {
+                let shortInfo = CGRect(x: 20, y: 20 - travel, width: 300, height: 100)
+                XCTAssertFalse(GalleryPreviewLoading.shouldLoad(metadata: shortInfo, viewportHeight: height),
+                               "A visible preview section is not permission to load on a small scroll")
+            }
+            let longInfo = CGRect(x: 20, y: -400, width: 300, height: height + 500)
+            XCTAssertFalse(GalleryPreviewLoading.shouldLoad(metadata: longInfo, viewportHeight: height),
+                           "Do not fetch previews while the user is still reading long metadata")
+            let reachedEnd = CGRect(x: 20, y: -400, width: 300, height: height + 300)
+            XCTAssertTrue(GalleryPreviewLoading.shouldLoad(metadata: reachedEnd, viewportHeight: height))
+        }
+        XCTAssertFalse(GalleryPreviewLoading.shouldLoad(metadata: .zero, viewportHeight: 0))
+    }
+
     @MainActor func testGlassControlsAvoidMacWheelCrashWithoutRemovingIOSInteraction() async throws {
         guard #available(iOS 26, *) else { throw XCTSkip("Requires Liquid Glass") }
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -95,6 +111,18 @@ final class ReaderUXTests: XCTestCase {
         let feedback = WorkSaveFeedback.perform { throw Failure.failed }
         XCTAssertEqual(feedback.result, .failed)
         XCTAssertNotEqual(WorkSaveFeedback(saved).id, WorkSaveFeedback(saved).id)
+    }
+
+    func testPreviewRevealRequiresAnUpwardBottomSwipe() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        XCTAssertTrue(ReaderPreviewReveal.isInZone(CGPoint(x: 195, y: 740), bounds: bounds))
+        XCTAssertFalse(ReaderPreviewReveal.isInZone(CGPoint(x: 195, y: 420), bounds: bounds))
+        XCTAssertFalse(ReaderPreviewReveal.isInZone(CGPoint(x: 500, y: 740), bounds: bounds))
+        XCTAssertTrue(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: -120), velocity: .zero))
+        XCTAssertTrue(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: -30), velocity: .init(x: 0, y: -700)))
+        XCTAssertFalse(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: -12), velocity: .init(x: 0, y: -700)))
+        XCTAssertFalse(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: 120), velocity: .zero))
+        XCTAssertFalse(ReaderPreviewReveal.shouldReveal(delta: .init(x: 120, y: -80), velocity: .zero))
     }
 
     func testExitRecognizesShortFlickAndRejectsAccidentalDrags() {
@@ -344,6 +372,40 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertNotNil(preview.image)
         let requests = await source.imageRequests
         XCTAssertEqual(requests, [1], "Visible and speculative consumers share one request")
+    }
+
+    @MainActor func testEvictedPreviewCanRenderCachedCoverBeforeAppearanceOrTask() async {
+        let source = feedSource()
+        let preview = GalleryFeedPreview(id: 1, source: source, images: PageImageStore(source: source))
+        await preview.load()
+        let prepared = preview.image
+        preview.discardDisplayContent()
+        XCTAssertNil(preview.image)
+        XCTAssertNotNil(prepared)
+        XCTAssertTrue(preview.displayImage === prepared, "The first returning frame must read decoded pixels synchronously")
+        preview.cancel()
+        XCTAssertNil(preview.displayImage, "A replaced query must not show an old cached cover")
+    }
+
+    @MainActor func testPreparedCoverWindowFollowsViewportInsteadOfNewestPage() async {
+        let source = feedSource(), images = PageImageStore(source: source)
+        let loader = GalleryFeedLoader(source: source, images: images)
+        await loader.load(GalleryQuery(), reset: true).value
+        await loadCovers(loader)
+        let prepared = loader.previews[1]?.image
+        loader.prioritizeCovers(startingAt: 0, count: 12, columns: 2)
+        for _ in 0..<4 { await loader.load(GalleryQuery(), reset: false).value }
+        XCTAssertTrue(loader.previews[1]?.image === prepared, "Appending IDs must not evict covers near the viewport")
+        loader.prioritizeCovers(startingAt: 84, count: 12, columns: 2)
+        XCTAssertNil(loader.previews[1]?.image, "Distant rows must release their pinned pixels")
+        loader.prioritizeCovers(startingAt: 0, count: 12, columns: 2)
+        XCTAssertTrue(loader.previews[1]?.image === prepared, "Reverse scrolling must restore the approaching window synchronously")
+        for index in stride(from: 0, to: loader.ids.count, by: 2) {
+            loader.prioritizeCovers(startingAt: index, count: 12, columns: 2)
+            for id in loader.ids[index..<min(index + 2, loader.ids.count)] { await loader.previews[id]?.load() }
+        }
+        XCTAssertLessThanOrEqual(loader.previews.values.filter { $0.image != nil }.count, 72)
+        loader.cancel()
     }
 
     @MainActor func testOffscreenCardReleasesPinnedContentAndReusesImageCache() async {

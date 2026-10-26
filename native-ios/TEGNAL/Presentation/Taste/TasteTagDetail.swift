@@ -92,7 +92,7 @@ private struct TasteEvidenceRow: View {
                             else { Color.secondary.opacity(0.1) }
                         }
                     }
-                    else { Color.secondary.opacity(0.1).overlay { Image(systemName: mode == .booru ? "photo" : "book.closed").foregroundStyle(.secondary) } }
+                    else { Color.secondary.opacity(0.1).overlay { Image(systemName: mode == .booru ? "photo" : AppMode.manga.icon).foregroundStyle(.secondary) } }
                 }.frame(width: 52, height: 64).clipped().clipShape(RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(work?.title ?? L10n.text("Work %@", String(item.id))).font(.subheadline.weight(.medium)).lineLimit(2).foregroundStyle(.primary)

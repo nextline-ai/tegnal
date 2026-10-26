@@ -44,18 +44,22 @@ final class MangaBackendTests: XCTestCase {
             "/artist/sample-all.nozomi": [2002, 1998], "/type/manga-all.nozomi": [2000, 1997],
             "/popular/week-all.nozomi": [1997, 2001, 2002, 2000, 2003, 1999]]
         let source = MangaContentSource(transport: fixture.transport())
-        let first = try await source.list(GalleryQuery(), offset: 0, count: 3)
+        let strict = try await source.list(GalleryQuery(), offset: 0, count: 10)
+        XCTAssertEqual(strict.ids, [2000, 1997], "Language exceptions are off by default")
+        let first = try await source.list(GalleryQuery(allowsLanguageExceptions: true), offset: 0, count: 3)
         XCTAssertEqual(first.ids, [2003, 2002, 2001])
-        let second = try await source.list(GalleryQuery(), offset: 3, count: 3)
+        let second = try await source.list(GalleryQuery(allowsLanguageExceptions: true), offset: 3, count: 3)
         XCTAssertEqual(second.ids, [2000, 1999, 1997])
         XCTAssertFalse(second.hasMore)
         XCTAssertEqual(fixture.count(path: "/type/gamecg-all.nozomi"), 1, "Pagination must reuse the bounded prefix")
-        let artist = try await source.list(GalleryQuery(artist: "sample"), offset: 0, count: 10)
+        let artist = try await source.list(GalleryQuery(artist: "sample", allowsLanguageExceptions: true), offset: 0, count: 10)
         XCTAssertEqual(artist.ids, [2002])
-        let manga = try await source.list(GalleryQuery(text: "type:manga"), offset: 0, count: 10)
+        let manga = try await source.list(GalleryQuery(text: "type:manga", allowsLanguageExceptions: true), offset: 0, count: 10)
         XCTAssertEqual(manga.ids, [2000, 1997])
-        let popular = try await source.list(GalleryQuery(sort: .week), offset: 0, count: 10)
+        let popular = try await source.list(GalleryQuery(sort: .week, allowsLanguageExceptions: true), offset: 0, count: 10)
         XCTAssertEqual(popular.ids, [1997, 2001, 2002, 2000, 2003, 1999])
+        let strictPopular = try await source.list(GalleryQuery(sort: .week), offset: 0, count: 10)
+        XCTAssertEqual(strictPopular.ids, [1997, 2000], "Turning exceptions off must not reuse the permissive search cache")
     }
 
     func testSavedEndpointsSurviveNewSourcesWithoutRediscovery() async throws {

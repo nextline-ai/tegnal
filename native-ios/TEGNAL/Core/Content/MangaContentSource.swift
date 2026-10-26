@@ -183,7 +183,7 @@ actor MangaContentSource: ContentProviding {
               offset >= 0, offset < 10_000_000, (1...100).contains(count) else { throw ContentError.invalidQuery }
         let site = try prepareSite()
         if try await resolve(site) == .document { return try await documents.list(query, offset: offset, count: count, site: site) }
-        if query.language != "all", query.sort == .latest, query.artist == nil, query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if query.language != "all", query.allowsLanguageExceptions, query.sort == .latest, query.artist == nil, query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let target = ((offset + count + 128) / 128) * 128
             var ids = Set(try await indexPrefix("index-\(query.language).nozomi", count: target))
             var more = indexPrefixes["index-\(query.language).nozomi"]?.more ?? false
@@ -316,7 +316,7 @@ actor MangaContentSource: ContentProviding {
         }
         if query.language != "all" || included == nil {
             var matches = Set(try await fullList("index-\(query.language).nozomi"))
-            if query.language != "all" {
+            if query.language != "all", query.allowsLanguageExceptions {
                 for type in Self.visualTypes { matches.formUnion(try await fullList("type/\(type)-all.nozomi")) }
             }
             included = included.map { $0.intersection(matches) } ?? matches

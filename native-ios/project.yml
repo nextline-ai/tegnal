@@ -5,6 +5,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  postGenCommand: python3 ../script/sync_test_plan_ids.py
 
 settings:
   base:
@@ -105,7 +106,11 @@ schemes:
       targets:
         TEGNAL: all
     test:
-      targets: [TEGNALTests, TEGNALUITests]
+      testPlans:
+        - path: TestPlans/Smoke.xctestplan
+          defaultPlan: true
+        - path: TestPlans/Unit.xctestplan
+        - path: TestPlans/UI.xctestplan
   NativeContentDeviceValidation:
     build:
       targets:

@@ -1139,3 +1139,13 @@
 "Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority." = "標準では鑑賞用の圧縮画像を使用します。この設定でデータをさらに節約できます。元の画像の設定が優先されます。";
 
 "From the bottom of the image, swipe up for details." = "画像の下部から上にスワイプすると詳細を表示します。";
+
+"Scroll down to load page previews." = "下にスクロールするとページのプレビューを読み込みます。";
+
+"Preview Columns" = "プレビューの列数";
+"Automatic (2× Grid)" = "自動（グリッドの2倍）";
+"Automatic uses twice the artwork grid’s column count for page previews." = "自動では、ページのプレビューを作品グリッドの列数の2倍で表示します。";
+
+"Allow Language Filter Exceptions" = "言語フィルターの例外を許可";
+"Include Game CG, Artist CG and Image Set regardless of the selected language. Off applies the language filter to every type." = "Game CG、Artist CG、Image Setを選択した言語にかかわらず含めます。オフの場合はすべての種類に言語フィルターを適用します。";
+"From the bottom of the page, swipe up for previews." = "ページの下部から上にスワイプするとプレビューが開きます。";

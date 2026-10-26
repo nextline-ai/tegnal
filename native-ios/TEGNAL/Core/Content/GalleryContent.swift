@@ -137,6 +137,7 @@ struct GalleryQuery: Hashable, Sendable {
     var artist: String? = nil
     var text = ""
     var sort = GallerySort.latest
+    var allowsLanguageExceptions = false
 
     func applyingDefaults(tags: String, excluded: String) -> Self {
         var result = self
@@ -206,7 +207,7 @@ enum ContentRoute: Hashable {
         guard let url = URL(string: raw), url.scheme == "https",
               !MangaUrls.configuredHost.isEmpty, url.host?.lowercased() == MangaUrls.configuredHost else { return nil }
         if let id = GalleryIDParser.parse(raw).first {
-            if url.path.hasPrefix("/reader/") || url.path.hasPrefix("/r/") {
+            if url.path.hasPrefix("/reader/") || (url.path.hasPrefix("/r/") && url.fragment != nil) {
                 return .reader(id, max(1, Int(url.fragment ?? "1") ?? 1))
             }
             return .gallery(id)
