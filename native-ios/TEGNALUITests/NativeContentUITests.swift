@@ -16,7 +16,7 @@ final class NativeContentUITests: XCTestCase {
     }
     private func launchReader(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"] + extra
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"] + extra
         app.launch()
         let card = element(app, "content.gallery.900000001")
         XCTAssertTrue(card.waitForExistence(timeout: 15))
@@ -105,7 +105,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testSettingsSwitchExploreBetweenNativeAndBuiltInBrowser() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--native-content-tab-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         app.tabBars.buttons["Explore"].tap()
         XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
@@ -148,7 +148,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testLibraryWorkOpensRequestedInformationInBrowserAndCloses() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--library-jump-test", "--browser-fallback-test", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--library-jump-test", "--browser-fallback-test", "-AppleLanguages", "(en)"]
         app.launch()
         let card = element(app, "works.card.910000001")
         XCTAssertTrue(card.waitForExistence(timeout: 10))
@@ -165,7 +165,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testSavedInformationDismissesDownwardFromTheGrabber() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--library-jump-test", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--library-jump-test", "-AppleLanguages", "(en)"]
         app.launch()
         let card = element(app, "works.card.910000001")
         XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
@@ -190,6 +190,9 @@ final class NativeContentUITests: XCTestCase {
                 element(app, "reader.settings").tap()
                 element(app, "reader.settings.mode").tap()
                 app.buttons[mode].tap()
+                if mode == "스크롤로 보기" {
+                    element(app, "reader.settings.continuousPreviewSwipe").switches.firstMatch.tap()
+                }
                 element(app, "reader.settings.done").tap()
                 element(app, "reader.menu.close").tap()
             }
@@ -208,7 +211,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testExploreInformationDefersPreviewsUntilScrollingAndOpensChosenPage() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(en)"]
         app.launch()
         let card = element(app, "content.gallery.900000001")
         XCTAssertTrue(card.waitForExistence(timeout: 10))
@@ -218,7 +221,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testSavedWorkOpensTheSameInformationAndDeferredPreviews() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--library-jump-test", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--library-jump-test", "-AppleLanguages", "(en)"]
         app.launch()
         let card = element(app, "works.card.910000001")
         XCTAssertTrue(card.waitForExistence(timeout: 10))
@@ -231,7 +234,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testPreviewColumnSettingCreatesProportionalGridWithoutPageNumbers() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--native-content-tab-test", "-AppleLanguages", "(en)"]
         app.launch()
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
         app.buttons["Settings"].tap()
@@ -297,7 +300,7 @@ final class NativeContentUITests: XCTestCase {
 
     private func verifyLocalization(_ language: String, explore: String, read: String, guide: String, zoom: String) {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "--reader-help-test",
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--native-content-tab-test", "--reader-help-test",
                                "-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons[explore].waitForExistence(timeout: 10))
@@ -447,7 +450,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testComicInformationUsesReadableTagsWithoutGenderHeadings() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
         app.launch()
         let card = element(app, "content.gallery.900000001")
         XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
@@ -618,7 +621,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testExploreTabAndDetailSearch() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-tab-test"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-tab-test"]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["탐색"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.tabBars.buttons["전체"].exists)
@@ -643,7 +646,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testFolderQuickJumpToOldestAndMonth() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--library-jump-test"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--library-jump-test"]
         app.launch()
         let jump = element(app, "works.jump")
         XCTAssertTrue(jump.waitForExistence(timeout: 10))
@@ -670,7 +673,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testExploreScrollSearchAndTagCompletion() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-long-feed"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-long-feed"]
         app.launch()
         let search = element(app, "content.search")
         XCTAssertTrue(search.waitForExistence(timeout: 10))
@@ -696,7 +699,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testSlowThumbnailDoesNotHoldFeedLoading() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--slow-detail-cover-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--slow-detail-cover-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let card = element(app, "content.gallery.900000001")
         XCTAssertTrue(card.waitForExistence(timeout: 5), "The list must not wait for the 20-second cover response")
@@ -709,7 +712,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testExplorePreparedCardsAcrossInfiniteScroll() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--native-content-long-feed", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
         app.launch()
         XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
         let nextPage = element(app, "content.gallery.900000025")
@@ -733,7 +736,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testExploreReverseScrollKeepsPreparedTextAndCardHeight() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--native-content-long-feed", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let first = element(app, "content.gallery.900000001")
         XCTAssertTrue(first.waitForExistence(timeout: 10))
@@ -763,7 +766,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testPreparedExploreCoverKeepsDetailLayoutAndDismissesDownward() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let card = element(app, "content.gallery.900000001")
         XCTAssertTrue(card.waitForExistence(timeout: 15))
@@ -793,7 +796,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testImageFailureStillAllowsExit() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-image-error"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-image-error"]
         app.launch()
         XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
         element(app, "content.gallery.900000001").tap()
@@ -808,7 +811,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testBrowseLongPressAndNetworkRetry() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-initial-error"]
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-initial-error"]
         app.launch()
         let retry = element(app, "content.retry")
         XCTAssertTrue(retry.waitForExistence(timeout: 10))

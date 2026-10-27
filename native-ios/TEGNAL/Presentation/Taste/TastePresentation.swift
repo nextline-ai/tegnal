@@ -187,7 +187,7 @@ struct TasteOpenedWork: View {
                 })
                 .environment(env.booru).environment(\.discoveryContext, context)
         } else if item.item.source == MangaUrls.source {
-            ContentEntryView(initialUrl: MangaUrls.galleryUrl(for: item.item.id))
+            ContentEntryView(initialUrl: MangaThumbnailOpening.stored().url(for: item.item.id))
                 .environment(\.discoveryContext, context)
         } else {
             NavigationStack {
@@ -204,22 +204,26 @@ private struct TasteWorkPresentation: ViewModifier {
     @State private var viewerPosition: BooruPost?
     var feed: TasteFeedState?
     var context: (TasteRecommendation) -> DiscoveryContext
-    private func selection(comics: Bool) -> Binding<TasteRecommendation?> {
+    @SwiftUI.AppStorage(MangaThumbnailOpening.preferenceKey, store: ReaderPreferences.defaults) private var showsInformationBeforeReading = false
+    private func usesInformationSheet(_ value: TasteRecommendation) -> Bool {
+        value.item.source == MangaUrls.source && showsInformationBeforeReading
+    }
+    private func selection(information: Bool) -> Binding<TasteRecommendation?> {
         Binding(get: {
-            guard let item, (item.item.source == MangaUrls.source) == comics else { return nil }
+            guard let item, usesInformationSheet(item) == information else { return nil }
             return item
         }, set: { next in
-            if next != nil || item.map({ ($0.item.source == MangaUrls.source) == comics }) == true { item = next }
+            if next != nil || item.map({ usesInformationSheet($0) == information }) == true { item = next }
         })
     }
     func body(content: Content) -> some View {
         content
             .onChange(of: item?.id) { _, _ in viewerPosition = nil }
-            .appSheet(item: selection(comics: true)) { item in
+            .appSheet(item: selection(information: true)) { item in
                 TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item))
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
-            .appFullScreenCover(item: selection(comics: false)) { item in
+            .appFullScreenCover(item: selection(information: false)) { item in
                 TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item))
             }
     }

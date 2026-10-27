@@ -7,6 +7,7 @@ public struct SettingsView: View {
     @State private var showReader = false
     @State private var showOnboarding = false
     @State private var showConnection = false
+    @SwiftUI.AppStorage(MangaThumbnailOpening.preferenceKey, store: ReaderPreferences.defaults) private var showsInformationBeforeReading = false
     public init() {}
     public var body: some View {
         @Bindable var env = env
@@ -18,6 +19,8 @@ public struct SettingsView: View {
                 }.accessibilityIdentifier("settings.connection")
                 Toggle(L10n.text("Use Embedded Browser"), isOn: $env.useEmbeddedBrowser)
                     .accessibilityIdentifier("settings.embeddedBrowser")
+                Toggle(L10n.text("Show Work Information Before Reading"), isOn: $showsInformationBeforeReading)
+                    .accessibilityIdentifier("settings.mangaInfoBeforeReading")
             } header: { Text(L10n.text("Browsing")) } footer: {
                 Text(L10n.text("Use the website if the native viewer stops working. Turn off to return to the native viewer."))
             }
@@ -68,6 +71,7 @@ struct ComicsSetupView: View {
 
 struct ComicsConnectionCard: View {
     @State private var showConnection = false
+    @SwiftUI.AppStorage(MangaThumbnailOpening.preferenceKey, store: ReaderPreferences.defaults) private var showsInformationBeforeReading = false
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("Connect a Website")).font(.headline).accessibilityIdentifier("comics.connectionCard")

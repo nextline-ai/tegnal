@@ -51,6 +51,7 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.prefetch", store: ReaderPreferences.defaults) private var prefetch = 3
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.defaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
+    @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousPreviewSwipe = false
 
     init(galleryID: Int64, initialPage: Int, source: any ContentProviding, images: PageImageStore,
          savesProgress: Bool, offline: Bool = false, resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void) {
@@ -101,7 +102,7 @@ struct NativeReaderView: View {
         .background(ReaderExitGesture(enabled: readerActive && sheet == nil && !showJump && !zoomed,
                                       requiresTopSafeZone: mode == ReaderMode.continuous.rawValue,
                                       progress: { _ in }, exit: closeReader))
-        .background(ReaderPreviewGesture(enabled: readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
+        .background(ReaderPreviewGesture(enabled: ReaderPreviewReveal.isEnabled(mode: mode, continuousOptIn: continuousPreviewSwipe) && readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
                                          reveal: { sheet = .preview }))
         .overlay(alignment: .topTrailing) {
             if let request = translationRequest, let gallery, gallery.pages.indices.contains(request.index) {

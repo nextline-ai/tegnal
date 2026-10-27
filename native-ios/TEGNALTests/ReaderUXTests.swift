@@ -4,6 +4,43 @@ import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
+    func testContinuousPreviewSwipeDefaultsOffAndPagedModesRemainEnabled() throws {
+        let suite = "reader-preview-swipe-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(ReaderPreviewReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
+                                                    continuousOptIn: defaults.bool(forKey: "reader.continuousPreviewSwipe")))
+        for mode in [ReaderMode.horizontal, .vertical] {
+            for optIn in [false, true] { XCTAssertTrue(ReaderPreviewReveal.isEnabled(mode: mode.rawValue, continuousOptIn: optIn)) }
+        }
+        defaults.set(true, forKey: "reader.continuousPreviewSwipe")
+        let restored = try XCTUnwrap(UserDefaults(suiteName: suite))
+        XCTAssertTrue(ReaderPreviewReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
+                                                   continuousOptIn: restored.bool(forKey: "reader.continuousPreviewSwipe")))
+        defaults.set(false, forKey: "reader.continuousPreviewSwipe")
+        XCTAssertFalse(ReaderPreviewReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
+                                                    continuousOptIn: restored.bool(forKey: "reader.continuousPreviewSwipe")))
+    }
+
+    func testMangaThumbnailsDefaultToReaderAndInformationOptInRetainsDiscovery() throws {
+        let suite = "manga-thumbnail-opening-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let context = DiscoveryContext(origin: .recommendation, query: "artist:sample", session: "thumbnail-opening-test")
+        let opening = MangaThumbnailOpening.stored(in: defaults)
+        XCTAssertEqual(opening, .viewer)
+        XCTAssertEqual(opening.route(for: 12345, context: context), .discoveredReader(12345, 1, context))
+        XCTAssertEqual(opening.url(for: 12345), MangaUrls.readerUrl(for: 12345))
+        defaults.set(true, forKey: MangaThumbnailOpening.preferenceKey)
+        let restored = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let information = MangaThumbnailOpening.stored(in: restored)
+        XCTAssertEqual(information, .information)
+        XCTAssertEqual(information.route(for: 12345, context: context), .discoveredGallery(12345, context))
+        XCTAssertEqual(information.url(for: 12345), MangaUrls.galleryUrl(for: 12345))
+        defaults.set(false, forKey: MangaThumbnailOpening.preferenceKey)
+        XCTAssertEqual(MangaThumbnailOpening.stored(in: restored).route(for: 12345, context: context), .discoveredReader(12345, 1, context))
+    }
+
     func testReaderResumeChoicesPreserveExplicitPagesAndDefaultToConfirmation() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "reader-resume-\(UUID().uuidString)"))
         XCTAssertEqual(ReaderResumeBehavior.stored(in: defaults), .ask)

@@ -43,6 +43,20 @@ enum ReaderMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum MangaThumbnailOpening: Equatable {
+    case viewer, information
+    static let preferenceKey = "manga.showInformationBeforeReading"
+    static func stored(in defaults: UserDefaults = ReaderPreferences.defaults) -> Self {
+        defaults.bool(forKey: preferenceKey) ? .information : .viewer
+    }
+    func route(for id: Int64, context: DiscoveryContext) -> ContentRoute {
+        self == .information ? .discoveredGallery(id, context) : .discoveredReader(id, 1, context)
+    }
+    func url(for id: Int64) -> String {
+        self == .information ? MangaUrls.galleryUrl(for: id) : MangaUrls.readerUrl(for: id)
+    }
+}
+
 enum ReaderResumeBehavior: String, CaseIterable, Identifiable {
     case ask, continueReading, fromBeginning
     var id: String { rawValue }
@@ -100,6 +114,7 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("reader.prefetch", store: ReaderPreferences.defaults) private var prefetch = 3
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.defaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
+    @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousPreviewSwipe = false
 
     init(booru: Bool = false) {
         self.booru = booru
@@ -138,6 +153,10 @@ struct ReaderSettingsView: View {
                         ForEach(ReaderMode.allCases) { Text($0.title).tag($0.rawValue) }
                     }.accessibilityIdentifier("reader.settings.mode")
                         if mode == ReaderMode.continuous.rawValue {
+                            Toggle(L10n.text("Swipe Up for Previews"), isOn: $continuousPreviewSwipe)
+                                .accessibilityIdentifier("reader.settings.continuousPreviewSwipe")
+                            Text(L10n.text("Off by default in Continuous Scroll. Previews remain available in the quick menu."))
+                                .font(.footnote).foregroundStyle(.secondary)
                             Text(L10n.text("In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls."))
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
@@ -177,7 +196,7 @@ struct ReaderSettingsView: View {
                     Text(L10n.text("Prefetching reduces the wait for the next page and uses data. Images are kept only in app memory."))
                 } }
                 Section(L10n.text("Gesture Guide")) {
-                    Text(L10n.text(booru ? "From the bottom of the image, swipe up for details." : "From the bottom of the page, swipe up for previews."))
+                    Text(L10n.text(booru ? "From the bottom of the image, swipe up for details." : mode == ReaderMode.continuous.rawValue && !continuousPreviewSwipe ? "Open previews from the quick menu." : "From the bottom of the page, swipe up for previews."))
                         .font(.subheadline).foregroundStyle(.secondary)
                     if booru { Text(L10n.text("For videos, tap with two fingers to open the quick menu. Playback controls remain available.")).font(.subheadline).foregroundStyle(.secondary) }
                     if !booru { Button(L10n.text("Reader Guide")) { showHelp = true }.accessibilityIdentifier("reader.settings.help") }

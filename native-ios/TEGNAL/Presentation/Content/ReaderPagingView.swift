@@ -530,6 +530,9 @@ final class PreviewGestureView: UIView, UIGestureRecognizerDelegate {
 }
 
 enum ReaderPreviewReveal {
+    static func isEnabled(mode: String, continuousOptIn: Bool) -> Bool {
+        mode != ReaderMode.continuous.rawValue || continuousOptIn
+    }
     static func isInZone(_ point: CGPoint, bounds: CGRect) -> Bool {
         bounds.contains(point) && point.y >= bounds.minY + bounds.height * 0.75
     }

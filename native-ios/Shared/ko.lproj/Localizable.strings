@@ -1182,3 +1182,11 @@
 "View on GitHub" = "GitHub 바로가기";
 
 "Join us on Discord" = "Discord에 참여하세요";
+
+"Swipe Up for Previews" = "위로 쓸어올려 프리뷰 보기";
+
+"Off by default in Continuous Scroll. Previews remain available in the quick menu." = "스크롤 보기에서는 기본으로 꺼져 있습니다. 빠른 메뉴에서 프리뷰를 열 수 있습니다.";
+
+"Open previews from the quick menu." = "빠른 메뉴에서 프리뷰를 열 수 있습니다.";
+
+"Show Work Information Before Reading" = "읽기 전에 작품 정보 표시";

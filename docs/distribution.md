@@ -22,8 +22,8 @@
 4. IPA 이름과 Release 태그를 정한 뒤 아래 명령으로 소스를 갱신합니다. 같은 앱 버전의 핫픽스는 빌드 번호를 올리고 `v1.0.0-8`처럼 태그에 빌드 번호를 포함합니다. macOS의 `codesign`과 Python 3가 필요합니다.
 
 ```sh
-python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-25.ipa \
-  --download-url https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-25.ipa \
+python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-26.ipa \
+  --download-url https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-26.ipa \
   --date 2026-10-28 \
   --notes 'What changed in this release.'
 ```

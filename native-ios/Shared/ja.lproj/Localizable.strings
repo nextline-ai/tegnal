@@ -1182,3 +1182,11 @@
 "View on GitHub" = "GitHubで見る";
 
 "Join us on Discord" = "Discordに参加しよう";
+
+"Swipe Up for Previews" = "上にスワイプしてプレビュー";
+
+"Off by default in Continuous Scroll. Previews remain available in the quick menu." = "連続スクロールでは初期設定でオフです。クイックメニューからプレビューを開けます。";
+
+"Open previews from the quick menu." = "クイックメニューからプレビューを開けます。";
+
+"Show Work Information Before Reading" = "読む前に作品情報を表示";

@@ -252,7 +252,7 @@ private struct GalleryFeedView: View {
                     let lookahead = prefetchColumns * 6
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
                     ForEach(visibleEntries, id: \.element) { index, id in
-                        GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { navigate(.discoveredGallery(id, discovery)) }) { gallery in
+                        GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
                             saveFeedback = .perform { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
                         }
                         .onAppear {

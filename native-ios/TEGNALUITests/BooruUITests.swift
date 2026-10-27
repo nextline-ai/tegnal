@@ -271,7 +271,7 @@ final class BooruUITests: XCTestCase {
     }
 
     func testLegacySoloExclusionFiltersActualSoleTagInComicRecommendations() {
-        let app = launch(extra: ["--taste-ui-rich", "--taste-sole-exclusion-test"])
+        let app = launch(extra: ["--taste-ui-rich", "--taste-sole-exclusion-test", "-manga.showInformationBeforeReading", "YES"])
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         selectMode(app, "manga")
         let card = firstTasteCard(app), id = card.identifier
@@ -365,7 +365,7 @@ final class BooruUITests: XCTestCase {
     }
 
     func testTasteComicCardsAndModeRetention() {
-        let app = launch(extra: ["--taste-ui-rich"])
+        let app = launch(extra: ["--taste-ui-rich", "-manga.showInformationBeforeReading", "YES"])
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         let image = firstTasteCard(app)
         let imageID = image.identifier

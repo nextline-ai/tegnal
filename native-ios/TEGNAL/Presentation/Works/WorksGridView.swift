@@ -20,6 +20,7 @@ public struct WorksGridView: View {
     @State private var showAddSheet = false
     @State private var selectedDetailGalleryId: Int64?
     @State private var activeBrowserUrl: String?
+    @State private var activeBrowserShowsInformation = false
     @State private var workPendingDelete: Work?
     @State private var workPendingMoveToNewFolder: Work?
     @State private var showNewFolderAlert = false
@@ -102,12 +103,12 @@ public struct WorksGridView: View {
                 WorkDetailView(galleryId: item.id)
             }
         }
-        .appSheet(item: Binding(
-            get: { activeBrowserUrl.map { IdentifiableString(id: $0) } },
-            set: { activeBrowserUrl = $0?.id }
-        )) { item in
+        .appSheet(item: browserSelection(information: true)) { item in
             ContentEntryView(initialUrl: item.id)
                 .presentationDetents([.large]).presentationDragIndicator(.visible)
+        }
+        .appFullScreenCover(item: browserSelection(information: false)) { item in
+            ContentEntryView(initialUrl: item.id)
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -269,9 +270,17 @@ public struct WorksGridView: View {
         catch { showToast(error.localizedDescription) }
     }
 
+    private func browserSelection(information: Bool) -> Binding<IdentifiableString?> {
+        Binding(get: {
+            activeBrowserShowsInformation == information ? activeBrowserUrl.map { IdentifiableString(id: $0) } : nil
+        }, set: { item in
+            if activeBrowserShowsInformation == information { activeBrowserUrl = item?.id }
+        })
+    }
     private func openManga(for galleryId: Int64) {
-        let urlString = MangaUrls.galleryUrl(for: galleryId)
-        activeBrowserUrl = urlString
+        let opening = MangaThumbnailOpening.stored()
+        activeBrowserShowsInformation = opening == .information
+        activeBrowserUrl = opening.url(for: galleryId)
     }
 
     private struct WorkSnapshot: Equatable {
