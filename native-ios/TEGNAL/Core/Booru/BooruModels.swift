@@ -412,3 +412,25 @@ enum BooruSortValidation {
         return sorted
     }
 }
+
+/// An optional default search condition, not a content restriction.
+enum BooruSafeRating: String, CaseIterable, Identifiable {
+    case general = "g", sensitive = "s", questionable = "q"
+    var id: String { rawValue }
+    var tag: String { "rating:" + rawValue }
+    var title: String {
+        switch self {
+        case .general: L10n.text("All Ages")
+        case .sensitive: "12+"
+        case .questionable: "15+"
+        }
+    }
+    func applyingDefault(to query: String) -> String {
+        // An explicitly entered rating overrides this optional default.
+        let hasRating = query.split(whereSeparator: \.isWhitespace).contains {
+            $0.trimmingCharacters(in: CharacterSet(charactersIn: "-~")).lowercased().hasPrefix("rating:")
+        }
+        guard !hasRating else { return query }
+        return query.isEmpty ? tag : query + " " + tag
+    }
+}

@@ -31,23 +31,57 @@ struct DeveloperInfoSection: View {
                     Text("contact@nextline.work").foregroundStyle(.secondary)
                 }
             }.accessibilityIdentifier("developer.email")
-            Link(destination: community) {
-                HStack(spacing: 12) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(L10n.text("Community & Bug Reports"))
-                            Text("Discord").font(.caption).foregroundStyle(.secondary)
-                        }
-                    } icon: { Image(systemName: "bubble.left.and.bubble.right") }
-                    Spacer(minLength: 8)
-                    Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(.secondary)
-                }
-            }.accessibilityIdentifier("developer.community")
+            VStack(spacing: 10) {
+                developerButton("Discord", destination: community, identifier: "developer.community")
+                developerButton("GitHub", destination: URL(string: "https://github.com/nextline-ai/tegnal")!, identifier: "developer.github")
+            }.padding(.vertical, 8)
+
         } header: {
             Text(L10n.text("Developer"))
         }
     }
+    private func developerButton(_ service: String, destination: URL, identifier: String) -> some View {
+        Link(destination: destination) {
+            Image("Developer" + service + "_" + (L10n.language == "ko" ? "kr" : "en"))
+                .resizable().scaledToFit().frame(maxWidth: 400)
+                .frame(maxWidth: .infinity)
+        }.buttonStyle(.plain)
+            .accessibilityLabel(service == "Discord" ? L10n.text("Community & Bug Reports") + " · Discord" : L10n.text("View on GitHub"))
+            .accessibilityIdentifier(identifier)
+    }
 }
+
+/// A compact native invitation, separate from the developer section's large buttons.
+struct DiscordInvitationBanner: View {
+    @Environment(AppEnvironment.self) private var env
+    private let discordColor = Color(red: 88 / 255, green: 101 / 255, blue: 242 / 255)
+    var body: some View {
+        if env.discordInvitationVisible {
+            HStack(spacing: 8) {
+                Link(destination: URL(string: "https://discord.gg/vUTGZNMaMB")!) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.body).foregroundStyle(.white)
+                            .frame(width: 24)
+                        Text(L10n.text("Join us on Discord")).font(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }.frame(minHeight: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).foregroundStyle(.white)
+                    .accessibilityIdentifier("discord.invitation.join")
+                Button { env.dismissDiscordInvitation() } label: {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white).frame(width: 28, height: 44)
+                        .contentShape(Rectangle())
+                }.buttonStyle(.borderless).accessibilityLabel(L10n.text("Close"))
+                    .accessibilityIdentifier("discord.invitation.close")
+            }.accessibilityIdentifier("discord.invitation")
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 12))
+                .listRowBackground(discordColor)
+                .onAppear { env.recordDiscordInvitationDisplay() }
+        }
+    }
+}
+
 
 private struct DeveloperLogo: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme

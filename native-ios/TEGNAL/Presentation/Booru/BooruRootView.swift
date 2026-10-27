@@ -297,6 +297,7 @@ struct BooruFeedView: View {
     @State private var isSearchBarVisible = true
     @State private var searchScroll = ScrollSearchVisibility()
     @State private var scrollPosition = BooruFeedScrollPosition()
+    @State private var searchViewportHeight: CGFloat = 0
     @State private var searchSlotPinned = false
     @State private var paginationFooterVisible = false
     @State private var loadedRequest: String?
@@ -334,18 +335,18 @@ struct BooruFeedView: View {
     var body: some View {
         Group {
             if useEmbeddedBrowser && challenge == nil {
-                BooruEmbeddedBrowserView(servers: servers, query: query, poolID: pool?.id, sort: sort, preferredServerID: browserServerID)
+                BooruEmbeddedBrowserView(servers: servers, query: effectiveQuery, poolID: pool?.id, sort: sort, preferredServerID: browserServerID)
             } else { nativeFeed }
         }
         .workSaveFeedback($saveFeedback, identifier: "booru.saveStatus")
         .navigationTitle(challenge?.session.definition.title ?? pool?.name.replacingOccurrences(of: "_", with: " ") ?? L10n.text("Explore"))
         .navigationBarTitleDisplayMode(.inline)
         .appSheet(item: $validating) { server in
-            BooruValidationView(server: server, initialURL: server.browsingURL(query: sort.query(query, engine: server.engine), poolID: pool?.id))
+            BooruValidationView(server: server, initialURL: server.browsingURL(query: sort.query(effectiveQuery, engine: server.engine), poolID: pool?.id))
         }
         .appSheet(isPresented: $challengeBrowser) {
             NavigationStack {
-                BooruEmbeddedBrowserView(servers: servers, query: query, poolID: pool?.id, sort: sort, preferredServerID: browserServerID)
+                BooruEmbeddedBrowserView(servers: servers, query: effectiveQuery, poolID: pool?.id, sort: sort, preferredServerID: browserServerID)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { challengeBrowser = false } } }
             }.tint(.purple)
         }
@@ -469,6 +470,7 @@ struct BooruFeedView: View {
             proxy.size.height
         } action: { height in
             scrollPosition.viewportHeight = height
+            searchViewportHeight = height
             updateFooterVisibility()
         }
         .task(id: "\(paginationFooterVisible):\(loader.loading):\(loader.posts.count):\(requestKey):\(isActive)") {
@@ -497,22 +499,23 @@ struct BooruFeedView: View {
             // A scene cancellation may leave a successfully published partial
             // first page. Preserve that page and its cursor when returning.
             if loader.didLoad && loader.contentID == key { loadedRequest = key; return }
-            await load(reset: true, useLaunchPage: loadedRequest == nil && !loader.didLoad && retry == 0 && query.isEmpty && sort == .latest)
+            await load(reset: true, useLaunchPage: env.booruSearchRevision == 0 && loadedRequest == nil && !loader.didLoad && retry == 0 && query.isEmpty && sort == .latest)
             if !Task.isCancelled && !loader.unsupportedSort { loadedRequest = key }
         }
         .onReceive(NotificationCenter.default.publisher(for: .booruClientValidated)) { if let id = $0.object as? String, servers.contains(where: { $0.id == id }) { retry += 1 } }
         .transientMessage($sortMessage)
-        .task(id: "\(searchFocused):\(searchText)") { await complete() }
+        .task(id: "\(searchFocused):\(searchText):\(requestKey)") { await complete() }
     }
     private var searchControls: some View {
         VStack(spacing: 0) {
             ScrollSearchBar(text: $searchText, focused: $searchFocused, prompt: L10n.text("Search tags"), identifier: "booru.search") { submit(searchText) }
-            if searchFocused && (searchText.isEmpty && !searchHistory.isEmpty || !suggestions.isEmpty || suggestionError != nil || suggesting) {
-                searchSuggestions.searchResultsPanel(height: searchText.isEmpty ? 260 : max(60, min(280, CGFloat(suggestions.count) * 47)))
+            if searchFocused && (searchText.isEmpty && (!searchHistory.isEmpty || !savedSearches.isEmpty) || !suggestions.isEmpty || suggestionError != nil || suggesting) {
+                searchSuggestions.searchResultsPanel(height: searchText.isEmpty ? SearchHistoryPanel.height(availableHeight: searchViewportHeight) : max(60, min(280, CGFloat(suggestions.count) * 47)))
             }
         }
     }
-    private var requestKey: String { query + "|\(sort.rawValue)|\(retry)|" + servers.map { $0.id + $0.canonicalAddress + $0.engine.rawValue }.joined(separator: ",") }
+    private var effectiveQuery: String { env.booruQuery(query) }
+    private var requestKey: String { effectiveQuery + "|\(sort.rawValue)|\(retry)|\(env.booruSearchRevision)|" + servers.map { $0.id + $0.canonicalAddress + $0.engine.rawValue }.joined(separator: ",") }
     private var sortOptions: [BooruSort] { BooruSort.options(for: servers, local: challenge?.session.sourceKind == "folder") }
     private var filters: some View {
         let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout())
@@ -526,14 +529,12 @@ struct BooruFeedView: View {
     @ViewBuilder private var searchSuggestions: some View {
         VStack(alignment: .leading, spacing: 0) {
             if searchText.isEmpty {
-                List {
-                    SearchHistorySection(history: searchHistory, saved: servers.flatMap { store.savedTags(serverID: $0.id, kind: "search") }, open: { searchText = $0; submit($0) }, star: { query in
-                        let allSaved = servers.allSatisfy { store.savedTags(serverID: $0.id, kind: "search").contains(query) }
-                        store.perform { for server in servers where allSaved || !store.savedTags(serverID: server.id, kind: "search").contains(query) { try store.toggleTag(query, serverID: server.id, kind: "search") } }
-                    }, remove: { query in store.perform { for server in servers { try store.deleteSearch(query, serverID: server.id) } } }, clear: {
-                        store.perform { for server in servers { try store.clearHistory(serverID: server.id) } }
-                    })
-                }.listStyle(.plain).scrollContentBackground(.hidden)
+                SearchHistoryPanel(history: searchHistory, saved: savedSearches, open: { searchText = $0; submit($0) }, star: { query in
+                    let allSaved = servers.allSatisfy { store.savedTags(serverID: $0.id, kind: "search").contains(query) }
+                    store.perform { for server in servers where allSaved || !store.savedTags(serverID: server.id, kind: "search").contains(query) { try store.toggleTag(query, serverID: server.id, kind: "search") } }
+                }, remove: { query in store.perform { for server in servers { try store.deleteSearch(query, serverID: server.id) } } }, clear: {
+                    store.perform { for server in servers { try store.clearHistory(serverID: server.id) } }
+                })
 
             } else {
                 ScrollView {
@@ -546,8 +547,8 @@ struct BooruFeedView: View {
                                     Image(systemName: tag.isArtist ? "person" : "number").foregroundStyle(.secondary)
                                     Text(tag.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
                                     Spacer(minLength: 4)
-                                    Text(tag.count.formatted()).font(.caption).foregroundStyle(.secondary)
-                                }.frame(minHeight: 46).padding(.horizontal, 12).contentShape(Rectangle())
+                                    if tag.count > 0 { Text(tag.count.formatted()).font(.caption).foregroundStyle(.secondary) }
+                                }.searchSuggestionRow()
                             }.accessibilityIdentifier("booru.suggestion.\(tag.name)")
                             if tag.id != suggestions.last?.id { Divider() }
                         }
@@ -559,6 +560,7 @@ struct BooruFeedView: View {
             }
         }.buttonStyle(.plain)
     }
+    private var savedSearches: [String] { servers.flatMap { store.savedTags(serverID: $0.id, kind: "search") } }
     private var searchHistory: [String] {
         var seen = Set<String>()
         return servers.flatMap { store.history(serverID: $0.id) }.filter { seen.insert($0).inserted }
@@ -577,7 +579,7 @@ struct BooruFeedView: View {
     private func load(reset: Bool, useLaunchPage: Bool = false) async {
         guard isActive else { return }
         let requested = sort
-        await loader.load(servers: servers, source: source, query: query, poolID: pool?.id, sort: requested, reset: reset,
+        await loader.load(servers: servers, source: source, query: effectiveQuery, poolID: pool?.id, sort: requested, reset: reset,
                           contentID: requestKey, startup: startup, useLaunchPage: useLaunchPage,
                           onGoldRestricted: { store.recordGoldRestrictions(serverID: $0, postIDs: $1) })
         guard !Task.isCancelled, sort == requested else { return }
@@ -594,21 +596,17 @@ struct BooruFeedView: View {
         defer { if !Task.isCancelled { suggesting = false } }
         do {
             try await Task.sleep(for: .milliseconds(300))
-            let tasteStore = store.tasteStore
-            let found = await withTaskGroup(of: [BooruTag].self, returning: [BooruTag].self) { group in
-                for server in servers { group.addTask {
-                    let suggestions = (try? await source.suggestions(server: server, token: completion.token)) ?? []
-                    let metadata = suggestions.filter(\.isMetadata).map(\.name)
-                    if !metadata.isEmpty { try? tasteStore.record(.taxonomy, item: .init(source: server.canonicalAddress, id: 0, tags: [], metadata: metadata), context: .unknown) }
-                    return suggestions
-                } }
-                var values: [BooruTag] = []
-                for await tags in group { values += tags }
-                return values
-            }
+            let result = await BooruTagSuggestionSearch.load(servers: servers, source: source, token: completion.token)
             try Task.checkCancellation()
-            var seen = Set<String>()
-            suggestions = Array(found.sorted { $0.count > $1.count }.filter { seen.insert($0.name).inserted }.prefix(12))
+            guard searchFocused, BooruCompletion(searchText) == completion else { return }
+            for response in result.responses {
+                let metadata = response.tags.filter(\.isMetadata).map(\.name)
+                if !metadata.isEmpty {
+                    try? store.tasteStore.record(.taxonomy, item: .init(source: response.server.canonicalAddress, id: 0, tags: [], metadata: metadata), context: .unknown)
+                }
+            }
+            suggestions = result.tags
+            suggestionError = result.error
         } catch { if !Task.isCancelled { suggestionError = error.localizedDescription } }
     }
 }

@@ -3,6 +3,7 @@ import WebKit
 
 /// A full website fallback with the same isolated cookie profile as Validate Client.
 struct BooruEmbeddedBrowserView: View {
+    @Environment(AppEnvironment.self) private var env
     let servers: [BooruServer]
     let query: String
     let poolID: Int64?
@@ -27,7 +28,7 @@ struct BooruEmbeddedBrowserView: View {
                     Button(L10n.text("Show Image Grid"), systemImage: "square.grid.2x2") { useEmbeddedBrowser = false }
                         .labelStyle(.iconOnly).accessibilityIdentifier("booru.nativeGrid")
                 }.font(.subheadline).padding(.horizontal, 20).frame(height: 44)
-                BooruWebsiteView(server: server, url: server.browsingURL(query: sort.query(query, engine: server.engine), poolID: poolID))
+                BooruWebsiteView(server: server, url: server.browsingURL(query: sort.query(query, engine: server.engine), poolID: poolID), refreshRevision: env.booruSearchRevision)
                     .id(server.id)
             }
         } else { ContentUnavailableView(L10n.text("No Servers"), systemImage: "globe") }
@@ -37,15 +38,17 @@ struct BooruEmbeddedBrowserView: View {
 private struct BooruWebsiteView: View {
     let server: BooruServer
     let url: URL
+    let refreshRevision: Int
     @Environment(AppEnvironment.self) private var env
     @Environment(\.booruBrowsingMode) private var browsingMode
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: BooruValidationModel
     @State private var loadedURL: URL?
+    @State private var loadedRevision: Int?
     @State private var visible = false
     private var active: Bool { visible && env.mode == browsingMode && scenePhase == .active }
-    init(server: BooruServer, url: URL) {
-        self.server = server; self.url = url
+    init(server: BooruServer, url: URL, refreshRevision: Int) {
+        self.server = server; self.url = url; self.refreshRevision = refreshRevision
         _model = State(initialValue: BooruValidationModel(server: server))
     }
     var body: some View {
@@ -70,12 +73,13 @@ private struct BooruWebsiteView: View {
             }.labelStyle(.iconOnly).padding(.horizontal, 20).frame(height: 44)
         }
         .onAppear { visible = true }
-        .task(id: "\(url.absoluteString):\(active)") {
+        .task(id: "\(url.absoluteString):\(refreshRevision):\(active)") {
             model.setActive(active)
             guard active else { return }
-            if loadedURL != url {
+            if loadedURL != url || loadedRevision != refreshRevision {
                 model.load(url)
                 loadedURL = url
+                loadedRevision = refreshRevision
             } else if model.webView.navigationDelegate !== model {
                 // The retained transport took ownership while this tab was away.
                 model.load(model.address ?? url)

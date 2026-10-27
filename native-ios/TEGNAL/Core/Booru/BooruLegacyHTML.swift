@@ -78,6 +78,23 @@ enum BooruLegacyHTML {
         return String(rating.prefix(1))
     }
 
+    static func autocompleteTags(_ data: Data, matching token: String) throws -> [BooruTag] {
+        let html = try BooruHTML.html(data)
+        var result = try tags(data), seen = Set(result.map(\.name))
+        for row in BooruHTML.matches("<tr\\b[^>]*>(.*?)</tr>", html) {
+            for link in BooruHTML.matches("<a\\b([^>]*)>(.*?)</a>", row[1]) {
+                let attrs = BooruHTML.attributes(link[1])
+                guard let href = attrs["href"], let parts = URLComponents(string: href),
+                      let name = parts.queryItems?.first(where: { $0.name == "tags" })?.value,
+                      !name.isEmpty, !name.contains(" "), !name.contains("*"), seen.insert(name).inserted else { continue }
+                let numbers = BooruHTML.matches("<td\\b[^>]*>\\s*([0-9,]+)\\s*</td>", row[1])
+                let count = numbers.last.flatMap { Int($0[1].replacingOccurrences(of: ",", with: "")) } ?? 0
+                result.append(BooruTag(name: name, count: count, category: 0))
+            }
+        }
+        return Array(result.filter { $0.name.localizedCaseInsensitiveContains(token) }.sorted { $0.count > $1.count }.prefix(12))
+    }
+
     static func tags(_ data: Data) throws -> [BooruTag] {
         let html = try BooruHTML.html(data)
         var seen = Set<String>()

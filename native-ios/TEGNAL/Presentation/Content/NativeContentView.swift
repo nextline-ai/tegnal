@@ -198,6 +198,7 @@ private struct GalleryFeedView: View {
     @State private var suggesting = false
     @State private var searchScroll = ScrollSearchVisibility()
     @State private var paginationViewport = GalleryPaginationViewport()
+    @State private var searchViewportHeight: CGFloat = 0
     @State private var footerVisible = false
     @State private var bookmarkedIDs = Set<Int64>()
     @State private var history: [String] = []
@@ -285,6 +286,7 @@ private struct GalleryFeedView: View {
         .coordinateSpace(name: "gallery.feedViewport")
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
             paginationViewport.height = height
+            searchViewportHeight = height
             updateFooterVisibility()
         }
         .scrollDismissesKeyboard(.interactively)
@@ -296,23 +298,13 @@ private struct GalleryFeedView: View {
         VStack(spacing: 0) {
             ScrollSearchBar(text: $searchText, focused: $isSearchFocused, prompt: L10n.text("Search, number, or link"), identifier: "content.search", submit: submitSearch)
             if isSearchFocused && searchText.isEmpty {
-                List {
-                    SearchHistorySection(history: history, saved: savedSearches, open: { searchText = $0; submitSearch() }, star: { query in
-                        do { try env.database.toggleSavedSearch(query); reloadSearches() } catch { toast = error.localizedDescription }
-                    }, remove: { query in
-                        do { try env.database.deleteSearch(query); reloadSearches() } catch { toast = error.localizedDescription }
-                    }, clear: {
-                        do { try env.database.clearSearchHistory(); reloadSearches() } catch { toast = error.localizedDescription }
-                    })
-                    if !savedSearches.isEmpty {
-                        Section(L10n.text("Saved Searches")) {
-                            ForEach(savedSearches, id: \.self) { value in
-                                Button { searchText = value; submitSearch() } label: { Label(value, systemImage: "star.fill") }
-                                    .swipeActions { Button(L10n.text("Remove"), role: .destructive) { try? env.database.toggleSavedSearch(value); reloadSearches() } }
-                            }
-                        }
-                    }
-                }.listStyle(.plain).scrollContentBackground(.hidden).searchResultsPanel(height: 260)
+                SearchHistoryPanel(history: history, saved: savedSearches, open: { searchText = $0; submitSearch() }, star: { query in
+                    do { try env.database.toggleSavedSearch(query); reloadSearches() } catch { toast = error.localizedDescription }
+                }, remove: { query in
+                    do { try env.database.deleteSearch(query); reloadSearches() } catch { toast = error.localizedDescription }
+                }, clear: {
+                    do { try env.database.clearSearchHistory(); reloadSearches() } catch { toast = error.localizedDescription }
+                }).searchResultsPanel(height: SearchHistoryPanel.height(availableHeight: searchViewportHeight))
             } else if isSearchFocused, !suggestions.isEmpty {
                 ScrollView {
                     VStack(spacing: 0) {
@@ -327,7 +319,7 @@ private struct GalleryFeedView: View {
                                     Text(item.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
                                     Spacer(minLength: 4)
                                     if let count = item.count { Text(count.formatted()).font(.caption).foregroundStyle(.secondary) }
-                                }.frame(minHeight: 46).padding(.horizontal, 12).contentShape(Rectangle())
+                                }.searchSuggestionRow()
                             }.buttonStyle(.plain).accessibilityIdentifier("content.suggestion.\(item.token)")
                             if item.id != suggestions.last?.id { Divider() }
                         }

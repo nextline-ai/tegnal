@@ -2,6 +2,67 @@ import XCTest
 @testable import TEGNAL
 
 final class BooruTests: XCTestCase {
+    @MainActor func testSafeModeDefaultsPersistAndReachWarmupPaginationWithoutExtraFilters() async throws {
+        let suite = "safe-mode-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = try AppDatabase.inMemory(), store = try BooruStore()
+        let env = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
+        XCTAssertFalse(env.booruSafeMode)
+        XCTAssertEqual(env.booruQuery("scenery"), "scenery")
+        XCTAssertEqual(env.booruSearchRevision, 0)
+        env.mode = .manga
+        env.booruSafeMode = true
+        XCTAssertEqual(env.booruSearchRevision, 1)
+        env.booruSafeMode = true
+        XCTAssertEqual(env.booruSearchRevision, 1, "An unchanged switch must not schedule another refresh")
+        XCTAssertEqual(env.mode, .booru)
+        env.mode = .manga
+        XCTAssertEqual(env.mode, .booru)
+        for rating in BooruSafeRating.allCases {
+            let previous = env.booruSafeRating, revision = env.booruSearchRevision
+            env.booruSafeRating = rating
+            XCTAssertEqual(env.booruSearchRevision, revision + (previous == rating ? 0 : 1))
+            XCTAssertEqual(env.booruQuery(""), rating.tag)
+            XCTAssertEqual(env.booruQuery("scenery -spoilers"), "scenery -spoilers " + rating.tag)
+            XCTAssertEqual(env.booruQuery("scenery rating:q"), "scenery rating:q")
+            XCTAssertEqual(env.booruQuery("-rating:e scenery"), "-rating:e scenery")
+            XCTAssertEqual(env.booruQuery(env.booruQuery("scenery")), "scenery " + rating.tag)
+        }
+        XCTAssertEqual(BooruSafeRating.questionable.title, "15+")
+        defaults.set("manga", forKey: "content_mode")
+        let restored = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
+        XCTAssertTrue(restored.booruSafeMode)
+        XCTAssertEqual(restored.booruSafeRating, .questionable)
+        XCTAssertEqual(restored.mode, .booru)
+        for engine in BooruEngine.allCases {
+            let server = BooruServer(id: engine.rawValue, name: "Custom", baseURL: URL(string: "https://images.example")!, engine: engine)
+            let source = LaunchBooruSource(nativeCounts: [server.id: 2])
+            let warmup = LaunchFeedWarmup(manga: FixtureContentSource(), booru: source, thumbnail: { _, _ in })
+            let query = restored.booruQuery("")
+            await warmup.run(mangaQuery: nil, site: "", servers: [server], preferredMode: .booru, booruQuery: query)
+            let loader = BooruFeedLoader()
+            await loader.load(servers: [server], source: source, query: query, reset: true, startup: warmup, useLaunchPage: true)
+            await loader.load(servers: [server], source: source, query: query, reset: false)
+            await loader.load(servers: [server], source: source, query: query, reset: true)
+            let requests = await source.requests
+            XCTAssertEqual(requests.map(\.query), ["rating:q", "rating:q", "rating:q"])
+            XCTAssertEqual(requests.map(\.page), [0, 1, 0])
+            let items = URLComponents(url: server.browsingURL(query: query), resolvingAgainstBaseURL: false)?.queryItems
+            XCTAssertEqual(items?.first { $0.name == "tags" }?.value, "rating:q")
+        }
+        let explicit = "scenery rating:q"
+        let revision = restored.booruSearchRevision
+        restored.booruSafeMode = false
+        XCTAssertEqual(restored.booruSearchRevision, revision + 1)
+        XCTAssertEqual(restored.booruQuery(explicit), explicit, "Refreshes must also happen when the query text is unchanged")
+        restored.booruSafeRating = .sensitive
+        XCTAssertEqual(restored.booruSearchRevision, revision + 2)
+        XCTAssertEqual(restored.booruQuery("scenery"), "scenery")
+        restored.mode = .manga
+        XCTAssertEqual(restored.mode, .manga)
+    }
+
     @MainActor func testManualServerQueriesSurviveWarmupPaginationAndRefresh() async throws {
         let defaults = ReaderPreferences.booruDefaults
         let previous = defaults.object(forKey: "booru.rating")
@@ -175,6 +236,86 @@ final class BooruTests: XCTestCase {
         }
         let resolved = try await client.details(server: dan, post: saved)
         XCTAssertEqual(resolved.viewerURL(original: false), post.animationVideoURL)
+    }
+
+    func testAutocompleteUsesEachSitesTagServiceAndCanonicalValues() async throws {
+        let sites: [(BooruServer, String)] = [
+            (dan, "danbooru"),
+            (.init(id: "gel", name: "Gelbooru", baseURL: URL(string: "https://gelbooru.com")!, engine: .gelbooru), "gelbooru"),
+            (.init(id: "safe", name: "Safebooru", baseURL: URL(string: "https://safebooru.org")!, engine: .gelbooru), "safebooru"),
+            (.init(id: "old", name: "Old", baseURL: URL(string: "https://old.example")!, engine: .oldGelbooru), "old"),
+            (.init(id: "moe", name: "Moe", baseURL: URL(string: "https://moe.example")!, engine: .moebooru), "moebooru")]
+        for (server, kind) in sites {
+            let client = mocked { request in
+                let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+                func value(_ name: String) -> String? { query.first { $0.name == name }?.value }
+                switch kind {
+                case "danbooru":
+                    XCTAssertEqual(request.url?.path, "/booru/autocomplete.json")
+                    XCTAssertEqual(value("search[type]"), "tag_query"); XCTAssertEqual(value("search[query]"), "miku")
+                    return (200, #"[{"type":"tag-word","value":"hatsune_miku","label":"Miku","category":4,"post_count":1234},{"type":"tag","value":"highres","category":5,"post_count":100}]"#)
+                case "moebooru":
+                    XCTAssertEqual(request.url?.path, "/tag/autocomplete_name.json"); XCTAssertEqual(value("term"), "miku")
+                    return (200, #"["hatsune_miku","miku_day"]"#)
+                case "gelbooru":
+                    XCTAssertEqual(value("page"), "autocomplete2"); XCTAssertEqual(value("term"), "miku")
+                    XCTAssertNil(value("api_key"))
+                default:
+                    XCTAssertEqual(request.url?.path, "/autocomplete.php"); XCTAssertEqual(value("q"), "miku")
+                }
+                return (200, #"[{"label":"hatsune miku (1,234)","value":"hatsune_miku"},{"label":"miku day (100)","value":"miku_day"}]"#)
+            }
+            let tags = try await client.suggestions(server: server, token: "miku")
+            XCTAssertEqual(tags.count, 2)
+            XCTAssertEqual(tags.first?.name, "hatsune_miku", "A canonical or alias match need not start with the typed prefix")
+            if kind != "moebooru" { XCTAssertEqual(tags.first?.count, 1234) }
+            if kind == "danbooru" { XCTAssertTrue(tags[1].isMetadata) }
+        }
+    }
+
+    func testAutocompleteFallsBackToTagIndexesWithoutHidingServiceErrors() async throws {
+        for engine in BooruEngine.allCases {
+            let server = BooruServer(id: engine.rawValue, name: "Test", baseURL: URL(string: "https://tags.example")!, engine: engine)
+            var primaryRequests = 0
+            let client = mocked { request in
+                let parts = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
+                let query = Dictionary(uniqueKeysWithValues: (parts.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+                if request.url!.path.contains("autocomplete") { primaryRequests += 1; return (404, "{}") }
+                let pattern: String
+                switch engine {
+                case .danbooru: pattern = query["search[name_matches]"] ?? ""
+                case .moebooru: pattern = query["name"] ?? ""
+                case .gelbooru: pattern = query["name_pattern"] ?? ""
+                case .oldGelbooru: pattern = query["tags"] ?? ""; XCTAssertEqual(query["page"], "tags")
+                }
+                XCTAssertTrue(pattern.hasPrefix(engine == .gelbooru ? "%" : "*"))
+                XCTAssertTrue(pattern.hasSuffix(engine == .gelbooru ? "%" : "*"))
+                let name = pattern.contains("sky") ? "blue_sky" : "hatsune_miku"
+                if engine == .oldGelbooru { return (200, "<html><table><tr><td><a href='index.php?page=post&amp;s=list&amp;tags=\(name)'>\(name)</a></td><td>1234</td></tr></table></html>") }
+                return (200, "[{\"name\":\"\(name)\",\"count\":1234}]")
+            }
+            let first = try await client.suggestions(server: server, token: "miku")
+            let second = try await client.suggestions(server: server, token: "sky")
+            XCTAssertEqual(first.first?.name, "hatsune_miku")
+            XCTAssertEqual(second.first?.name, "blue_sky")
+            XCTAssertEqual(primaryRequests, 1, "Do not re-probe a missing endpoint on every keystroke")
+        }
+        for status in [401, 403, 429, 500] {
+            var requests = 0
+            let client = mocked { _ in requests += 1; return (status, "{}") }
+            do { _ = try await client.suggestions(server: dan, token: "miku"); XCTFail("Service failure must not become an empty tag list") }
+            catch { XCTAssertTrue(error is BooruError) }
+            XCTAssertEqual(requests, 1)
+        }
+    }
+
+    func testAutocompleteMergePreservesRankingAndPartialFailures() async {
+        let servers = ["slow", "fast", "blocked"].map { BooruServer(id: $0, name: $0, baseURL: URL(string: "https://\($0).example")!, engine: .danbooru) }
+        let result = await BooruTagSuggestionSearch.load(servers: servers, source: AutocompleteBooruSource(), token: "miku")
+        XCTAssertEqual(result.tags.map(\.name), ["hatsune_miku", "cloud", "very_popular"])
+        XCTAssertEqual(result.responses.map(\.server.id), ["slow", "fast", "blocked"])
+        XCTAssertTrue(result.error?.contains("blocked") == true)
+        XCTAssertEqual(result.responses.filter { $0.error != nil }.count, 1)
     }
 
     func testJSONEnvelopesXMLAndEmptyResponses() throws {
@@ -906,5 +1047,20 @@ private actor GoldPageSource: BooruProviding {
     func suggestions(server: BooruServer, token: String) async throws -> [BooruTag] { [] }
     func pools(server: BooruServer, query: String, page: Int) async throws -> [BooruPool] { [] }
     func poolPosts(server: BooruServer, poolID: Int64, page: Int) async throws -> BooruBatch { try await posts(server: server, query: "", page: page) }
+    func notes(server: BooruServer, postID: Int64) async throws -> [BooruNote] { [] }
+}
+
+private actor AutocompleteBooruSource: BooruProviding {
+    func suggestions(server: BooruServer, token: String) async throws -> [BooruTag] {
+        if server.id == "blocked" { throw BooruError.validationRequired }
+        if server.id == "slow" {
+            try await Task.sleep(for: .milliseconds(30))
+            return [.init(name: "hatsune_miku", count: 1, category: 4), .init(name: "very_popular", count: 10000, category: 0)]
+        }
+        return [.init(name: "cloud", count: 50, category: 0), .init(name: "hatsune_miku", count: 10, category: 4)]
+    }
+    func posts(server: BooruServer, query: String, page: Int) async throws -> BooruBatch { .init(posts: [], hasMore: false) }
+    func pools(server: BooruServer, query: String, page: Int) async throws -> [BooruPool] { [] }
+    func poolPosts(server: BooruServer, poolID: Int64, page: Int) async throws -> BooruBatch { .init(posts: [], hasMore: false) }
     func notes(server: BooruServer, postID: Int64) async throws -> [BooruNote] { [] }
 }

@@ -1166,3 +1166,19 @@
 "Show This Work" = "この作品を再表示";
 
 "Preview Rows per Page" = "プレビュー1ページの行数";
+
+"Safe Mode" = "セーフモード";
+
+"All Ages" = "全年齢";
+
+"Age Guide" = "年齢ガイド";
+
+"Default Search Tag" = "デフォルト検索タグ";
+
+"Turn off Safe Mode in More to use Comics Mode." = "コミックモードを使うには「その他」でセーフモードをオフにしてください。";
+
+"Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches." = "選んだレーティングタグを1つだけ画像検索に追加します。年齢は閲覧の目安で、いつでもオフにしたり自分でレーティングを入力したりできます。サイトによってはレーティング検索に対応していないため、有効な間はコミックモードを利用できません。";
+
+"View on GitHub" = "GitHubで見る";
+
+"Join us on Discord" = "Discordに参加しよう";

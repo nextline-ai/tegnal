@@ -13,6 +13,46 @@ extension BooruProviding {
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost { post }
 }
 
+struct BooruTagSuggestionSearch: Sendable {
+    struct Response: Sendable {
+        let index: Int
+        let server: BooruServer
+        let tags: [BooruTag]
+        let error: String?
+    }
+    let responses: [Response]
+    var tags: [BooruTag] {
+        var found: [BooruTag] = [], seen = Set<String>()
+        // Preserve each site's alias/word-match ranking and give every selected
+        // server a turn, regardless of which network request finished first.
+        for rank in 0..<12 {
+            for response in responses where response.tags.indices.contains(rank) {
+                let tag = response.tags[rank]
+                if seen.insert(tag.name).inserted { found.append(tag) }
+                if found.count == 12 { return found }
+            }
+        }
+        return found
+    }
+    var error: String? {
+        let messages = responses.compactMap { response in response.error.map { response.server.displayName + ": " + $0 } }
+        return messages.isEmpty ? nil : messages.joined(separator: "\n")
+    }
+    static func load(servers: [BooruServer], source: any BooruProviding, token: String) async -> Self {
+        await withTaskGroup(of: Response.self) { group in
+            for (index, server) in servers.enumerated() {
+                group.addTask {
+                    do { return Response(index: index, server: server, tags: try await source.suggestions(server: server, token: token), error: nil) }
+                    catch { return Response(index: index, server: server, tags: [], error: error.localizedDescription) }
+                }
+            }
+            var responses: [Response] = []
+            for await response in group { responses.append(response) }
+            return Self(responses: responses.sorted { $0.index < $1.index })
+        }
+    }
+}
+
 /// Reject API redirects across origins so credentials cannot follow a server redirect.
 final class BooruRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let publicMedia: Bool
@@ -51,6 +91,7 @@ actor BooruClient: BooruProviding {
     private var accessFlights: [String: AccessFlight] = [:]
     private let session: URLSession
     private let browserFallback: Bool
+    private var autocompleteFallbackUntil: [String: Date] = [:]
     private var wholePools: [String: [Int64]] = [:]
     private var poolOffsets: [String: [Int: Int]] = [:]
     private var publicOffsets: [String: [Int: Int]] = [:]
@@ -213,32 +254,50 @@ actor BooruClient: BooruProviding {
     }
 
     func suggestions(server: BooruServer, token: String) async throws -> [BooruTag] {
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !token.isEmpty else { return [] }
+        let key = server.canonicalAddress + ":" + server.engine.rawValue
+        if (autocompleteFallbackUntil[key] ?? .distantPast) < Date() {
+            do {
+                let raw: Data
+                switch server.engine {
+                case .danbooru:
+                    raw = try await data(server, "autocomplete.json", [("search[type]", "tag_query"), ("search[query]", token), ("limit", "12")])
+                case .moebooru:
+                    raw = try await data(server, "tag/autocomplete_name.json", [("term", token)])
+                case .gelbooru, .oldGelbooru:
+                    if server.isGelbooruWebsite {
+                        raw = try await data(server, "index.php", [("page", "autocomplete2"), ("type", "tag_query"), ("term", token), ("limit", "12")], authenticated: false)
+                    } else {
+                        raw = try await data(server, "autocomplete.php", [("q", token)], authenticated: false)
+                    }
+                }
+                return try BooruDecoder.suggestions(raw, server: server)
+            } catch {
+                try Task.checkCancellation()
+                // Older forks may lack the website's autocomplete route. Never
+                // turn authentication, validation or rate-limit errors into [].
+                switch error {
+                case BooruError.unavailable(404), BooruError.unavailable(405), BooruError.invalidResponse:
+                    autocompleteFallbackUntil[key] = Date().addingTimeInterval(300)
+                default: throw error
+                }
+            }
+        }
         let raw: Data
         switch server.engine {
-        case .oldGelbooru:
-            // Old instances have no tag API. Read matching tags from the search sidebar.
-            raw = try await data(server, "index.php", [("page", "post"), ("s", "list"), ("tags", token + "*")], authenticated: false)
-            return try BooruLegacyHTML.tags(raw).filter { $0.name.hasPrefix(token) }.prefix(12).map { $0 }
         case .danbooru:
-            raw = try await data(server, "tags.json", [("search[name_matches]", token + "*"), ("search[order]", "count"), ("limit", "12")])
-        case .gelbooru:
-            if browserFallback && server.isGelbooruWebsite, try BooruKeychain.read(serverID: server.id).isEmpty {
-                let html = try await data(server, "index.php", [("page", "post"), ("s", "list"), ("tags", token + "*")], authenticated: false)
-                return Array(try BooruLegacyHTML.tags(html).filter { $0.name.hasPrefix(token) }.prefix(12))
-            }
-            do {
-                raw = try await data(server, "index.php", [("page", "dapi"), ("s", "tag"), ("q", "index"), ("json", "1"), ("name_pattern", token + "%"), ("orderby", "count"), ("order", "DESC"), ("limit", "12")])
-            } catch BooruError.authentication {
-                let html = try await data(server, "index.php", [("page", "post"), ("s", "list"), ("tags", token + "*")], authenticated: false)
-                return Array(try BooruLegacyHTML.tags(html).filter { $0.name.hasPrefix(token) }.prefix(12))
-            }
+            raw = try await data(server, "tags.json", [("search[name_matches]", "*" + token + "*"), ("search[order]", "count"), ("limit", "12")])
         case .moebooru:
-            raw = try await data(server, "tag.json", [("name", token + "*"), ("order", "count"), ("limit", "12")])
+            raw = try await data(server, "tag.json", [("name", "*" + token + "*"), ("order", "count"), ("limit", "12")])
+        case .gelbooru:
+            raw = try await data(server, "index.php", [("page", "dapi"), ("s", "tag"), ("q", "index"), ("json", "1"), ("name_pattern", "%" + token + "%"), ("orderby", "count"), ("order", "DESC"), ("limit", "12")])
+        case .oldGelbooru:
+            // Query the site's tag directory, not tags attached to one post page.
+            raw = try await data(server, "index.php", [("page", "tags"), ("s", "list"), ("tags", "*" + token + "*")], authenticated: false)
+            return try BooruLegacyHTML.autocompleteTags(raw, matching: token)
         }
-        return try BooruDecoder.rows(raw, key: "tag").compactMap { row in
-            guard let name = row["name"] as? String else { return nil }
-            return BooruTag(name: name, count: BooruDecoder.integer(row["post_count"] ?? row["count"]), category: BooruDecoder.integer(row["category"] ?? row["type"]), isMetadata: server.engine == .danbooru && BooruDecoder.integer(row["category"]) == 5)
-        }
+        return try BooruDecoder.suggestions(raw, server: server)
     }
 
     func pools(server: BooruServer, query: String, page: Int) async throws -> [BooruPool] {
@@ -569,6 +628,25 @@ enum BooruDecoder {
                      tagCategories: categories.isEmpty ? nil : categories,
                      animated: variants.contains { $0["type"] as? String == "full" } ? false : nil, animationVideoURL: animationVideo)
     }
+    static func suggestions(_ data: Data, server: BooruServer) throws -> [BooruTag] {
+        if let names = try? JSONSerialization.jsonObject(with: data) as? [String] {
+            return Array(names.filter { !$0.isEmpty }.prefix(12)).map { BooruTag(name: $0, count: 0, category: 0) }
+        }
+        var seen = Set<String>()
+        return Array(try rows(data, key: "tag").compactMap { row -> BooruTag? in
+            // value is the canonical tag; label may contain spaces, an alias or a count.
+            guard let name = (row["value"] ?? row["name"]) as? String, !name.isEmpty, seen.insert(name).inserted else { return nil }
+            let count: Int
+            if let value = row["post_count"] ?? row["count"] { count = integer(value) }
+            else if let label = row["label"] as? String,
+                    let match = BooruHTML.matches(#"\(([0-9,]+)\)\s*$"#, label).first {
+                count = Int(match[1].replacingOccurrences(of: ",", with: "")) ?? 0
+            } else { count = 0 }
+            let category = integer(row["category"] ?? row["type"])
+            return BooruTag(name: name, count: count, category: category, isMetadata: server.engine == .danbooru && category == 5)
+        }.prefix(12))
+    }
+
     static func note(_ row: [String: Any]) -> BooruNote? {
         if let active = row["is_active"], ["false", "0"].contains(String(describing: active).lowercased()) { return nil }
         guard let body = row["body"] as? String else { return nil }

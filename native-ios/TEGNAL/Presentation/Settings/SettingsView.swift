@@ -11,6 +11,7 @@ public struct SettingsView: View {
     public var body: some View {
         @Bindable var env = env
         List {
+            if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
             Section {
                 Button { showConnection = true } label: {
                     Label(L10n.text("Website Connection"), systemImage: "globe")
@@ -41,6 +42,7 @@ public struct SettingsView: View {
             SettingsSupportSection(showOnboarding: $showOnboarding)
             DeveloperInfoSection()
         }
+        .onAppear { env.presentDiscordInvitationIfDue() }
         .listStyle(.insetGrouped)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)

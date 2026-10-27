@@ -93,6 +93,9 @@ struct TasteDashboard: View {
         .transientMessage(Binding(get: { feed.sortMessage }, set: { feed.sortMessage = $0 }))
         .workSaveFeedback($saveFeedback, identifier: "taste.saveStatus")
         .onChange(of: sources) { _, _ in ensureLoaded() }
+        .onChange(of: env.booruSearchRevision) { _, _ in
+            if mode == .booru { feed.clear(); ensureLoaded() }
+        }
         .onAppear { ensureLoaded() }
         .onDisappear { cancelPrefetch(); feed.cancelLoading() }
         .onChange(of: scenePhase) { _, phase in

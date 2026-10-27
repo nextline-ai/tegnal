@@ -314,6 +314,7 @@ struct BooruMoreView: View {
     @SwiftUI.AppStorage("booru.useEmbeddedBrowser", store: ReaderPreferences.booruDefaults) private var useEmbeddedBrowser = false
     var body: some View {
         Form {
+            if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
             Section {
                 NavigationLink { ChallengeLibraryView(source: source) } label: { Label { Text(L10n.text("Challenge Roulette")) } icon: { Image(systemName: "dice").foregroundStyle(.purple) } }
                     .accessibilityIdentifier("booru.challengesLink")
@@ -352,6 +353,7 @@ struct BooruMoreView: View {
             SearchHistorySettings(booru: true)
             TasteSettingsSection(mode: .booru)
             CloudSyncSection()
+            BooruSafeModeSettings()
             Section {
                 NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }
                     .accessibilityIdentifier("booru.libraryManagement")
@@ -367,6 +369,7 @@ struct BooruMoreView: View {
             SettingsSupportSection(showOnboarding: $showOnboarding)
             DeveloperInfoSection()
         }
+        .onAppear { env.presentDiscordInvitationIfDue() }
         .toolbar { ToolbarItem(placement: .topBarTrailing) { BooruServerMenu() } }
         .alert(L10n.text("Clear Image Cache?"), isPresented: $confirmClearCache) {
             Button(L10n.text("Clear Image Cache"), role: .destructive) { Task { await BooruThumbnailCache.shared.clear(); await BooruViewerImageCache.shared.clear(); cacheCleared = true } }

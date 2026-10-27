@@ -160,7 +160,7 @@ struct RecommendationService {
                                 var candidates = cursor.pendingPosts[key] ?? []
                                 if candidates.isEmpty {
                                     let page = cursor.pages[key, default: 0]
-                                    let query = ([seed.name] + preferences.includedTags).joined(separator: " ")
+                                    let query = env.booruQuery(([seed.name] + preferences.includedTags).joined(separator: " "))
                                     let sort: BooruSort = preferences.sort.booruSort ?? .latest
                                     // Give each listing the same document-loading allowance as Explore.
                                     // A slow detail page must not discard a successful listing.

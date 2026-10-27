@@ -95,3 +95,24 @@ private struct AcknowledgmentsView: View {
         return text
     }
 }
+
+struct BooruSafeModeSettings: View {
+    @Environment(AppEnvironment.self) private var env
+    var body: some View {
+        @Bindable var env = env
+        Section {
+            Toggle(L10n.text("Safe Mode"), isOn: $env.booruSafeMode)
+                .accessibilityIdentifier("booru.safeMode")
+            if env.booruSafeMode {
+                Picker(L10n.text("Age Guide"), selection: $env.booruSafeRating) {
+                    ForEach(BooruSafeRating.allCases) { rating in
+                        Text(rating.title).tag(rating)
+                    }
+                }.accessibilityIdentifier("booru.safeRating")
+                LabeledContent(L10n.text("Default Search Tag"), value: env.booruSafeRating.tag)
+            }
+        } header: { Text(L10n.text("Safe Mode")) } footer: {
+            Text(L10n.text("Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches."))
+        }
+    }
+}

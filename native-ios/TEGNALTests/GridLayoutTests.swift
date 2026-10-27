@@ -4,6 +4,45 @@ import GRDB
 @testable import TEGNAL
 
 final class GridLayoutTests: XCTestCase {
+    @MainActor func testDiscordInvitationCadenceAndDismissalPersistAcrossSettingsAndRelaunch() throws {
+        let suite = "discord-invitation-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = try AppDatabase.inMemory(), store = try BooruStore()
+        func environment() -> AppEnvironment { AppEnvironment(database: database, browserPreferences: defaults, booru: store) }
+        let now = Date(timeIntervalSince1970: 1_800_000_000), day: TimeInterval = 86400
+        // Ignore the earlier implementation's display date, which could be consumed offscreen.
+        defaults.set(now.addingTimeInterval(3 * day).timeIntervalSince1970, forKey: "discord.invitation.nextShow")
+        let prepared = environment()
+        prepared.presentDiscordInvitationIfDue(at: now)
+        XCTAssertTrue(prepared.discordInvitationVisible)
+        // Preparing a screen alone must not consume an unseen invitation.
+        let env = environment()
+        env.presentDiscordInvitationIfDue(at: now)
+        XCTAssertTrue(env.discordInvitationVisible)
+        env.recordDiscordInvitationDisplay(at: now)
+        // Navigating between settings keeps the current invitation visible and its date unchanged.
+        env.presentDiscordInvitationIfDue(at: now.addingTimeInterval(day))
+        env.recordDiscordInvitationDisplay(at: now.addingTimeInterval(day))
+        XCTAssertTrue(env.discordInvitationVisible)
+        let beforeDue = environment()
+        beforeDue.presentDiscordInvitationIfDue(at: now.addingTimeInterval(3 * day - 1))
+        XCTAssertFalse(beforeDue.discordInvitationVisible)
+        let relaunched = environment()
+        relaunched.presentDiscordInvitationIfDue(at: now.addingTimeInterval(3 * day))
+        XCTAssertTrue(relaunched.discordInvitationVisible)
+        relaunched.recordDiscordInvitationDisplay(at: now.addingTimeInterval(3 * day))
+        relaunched.dismissDiscordInvitation(at: now.addingTimeInterval(3 * day))
+        XCTAssertFalse(relaunched.discordInvitationVisible)
+        relaunched.presentDiscordInvitationIfDue(at: now.addingTimeInterval(4 * day))
+        XCTAssertFalse(relaunched.discordInvitationVisible)
+        let afterDismissal = environment()
+        afterDismissal.presentDiscordInvitationIfDue(at: now.addingTimeInterval(10 * day - 1))
+        XCTAssertFalse(afterDismissal.discordInvitationVisible)
+        afterDismissal.presentDiscordInvitationIfDue(at: now.addingTimeInterval(10 * day))
+        XCTAssertTrue(afterDismissal.discordInvitationVisible)
+    }
+
     func testPreviewPaginationKeepsFiveRowsRegardlessOfColumnCountAndCoversEveryPage() {
         for columns in [1, 2, 6, 10] {
             let count = GalleryPreviewLayout.pageCount(total: 123, columns: columns, rows: 5)

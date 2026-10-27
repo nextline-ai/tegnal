@@ -179,7 +179,7 @@ final class LaunchFeedWarmup {
         await booruPages.invalidate(key)
     }
 
-    func run(mangaQuery: GalleryQuery?, site: String, servers: [BooruServer], preferredMode: AppMode = .manga) async {
+    func run(mangaQuery: GalleryQuery?, site: String, servers: [BooruServer], preferredMode: AppMode = .manga, booruQuery: String = "") async {
         guard !Task.isCancelled else { return }
         let previous = work, token = UUID()
         previous?.cancel(); generation = token
@@ -189,7 +189,7 @@ final class LaunchFeedWarmup {
             await previous?.value
             guard let self, !Task.isCancelled else { return }
             var jobs = mangaQuery.map { [Job.manga(MangaKey(site: site, query: $0))] } ?? []
-            jobs += servers.map { .booru(BooruKey(server: $0, query: "", sort: .latest)) }
+            jobs += servers.map { .booru(BooruKey(server: $0, query: booruQuery, sort: .latest)) }
             if preferredMode == .booru, mangaQuery != nil, !servers.isEmpty { jobs.swapAt(0, 1) }
             jobs.removeAll { self.completed.contains($0) }
             var prepared: [Prepared] = []
@@ -271,8 +271,51 @@ public final class AppEnvironment: @unchecked Sendable {
     let booru: BooruStore
     let modeSwitchMotion = AppModeSwitchMotion()
 
+    private var selectedMode: AppMode
     var mode: AppMode {
-        didSet { browserPreferences.set(mode.rawValue, forKey: "content_mode") }
+        get { selectedMode }
+        set {
+            selectedMode = booruSafeMode ? .booru : newValue
+            browserPreferences.set(selectedMode.rawValue, forKey: "content_mode")
+        }
+    }
+    private(set) var booruSearchRevision = 0
+    var booruSafeMode: Bool {
+        didSet {
+            guard booruSafeMode != oldValue else { return }
+            browserPreferences.set(booruSafeMode, forKey: "booru.safeMode")
+            if booruSafeMode { mode = .booru }
+            booruSearchRevision += 1
+        }
+    }
+    var booruSafeRating: BooruSafeRating {
+        didSet {
+            guard booruSafeRating != oldValue else { return }
+            browserPreferences.set(booruSafeRating.rawValue, forKey: "booru.safeRating")
+            booruSearchRevision += 1
+        }
+    }
+    func booruQuery(_ query: String) -> String {
+        booruSafeMode ? booruSafeRating.applyingDefault(to: query) : query
+    }
+    private(set) var discordInvitationVisible = false
+    @ObservationIgnored private var discordInvitationRecorded = false
+    // Separate the corrected cadence from the earlier prematurely consumed display date.
+    private let discordInvitationNextKey = "discord.invitation.nextPresentation"
+    func presentDiscordInvitationIfDue(at now: Date = .now) {
+        guard !discordInvitationVisible,
+              browserPreferences.double(forKey: discordInvitationNextKey) <= now.timeIntervalSince1970 else { return }
+        discordInvitationVisible = true
+        discordInvitationRecorded = false
+    }
+    func recordDiscordInvitationDisplay(at now: Date = .now) {
+        guard discordInvitationVisible, !discordInvitationRecorded else { return }
+        discordInvitationRecorded = true
+        browserPreferences.set(now.addingTimeInterval(3 * 86400).timeIntervalSince1970, forKey: discordInvitationNextKey)
+    }
+    func dismissDiscordInvitation(at now: Date = .now) {
+        discordInvitationVisible = false
+        browserPreferences.set(now.addingTimeInterval(7 * 86400).timeIntervalSince1970, forKey: discordInvitationNextKey)
     }
     private(set) var modeSwitchHintPending: Bool
     func acknowledgeModeSwitch() {
@@ -487,7 +530,10 @@ public final class AppEnvironment: @unchecked Sendable {
         self.appLanguage = browserPreferences.string(forKey: "app.language") ?? "system"
         L10n.appLanguage = browserPreferences.string(forKey: "app.language") ?? "system"
         self.booru = booru
-        self.mode = AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
+        let safeMode = browserPreferences.bool(forKey: "booru.safeMode")
+        self.booruSafeMode = safeMode
+        self.booruSafeRating = BooruSafeRating(rawValue: browserPreferences.string(forKey: "booru.safeRating") ?? "") ?? .general
+        self.selectedMode = safeMode ? .booru : AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
         self.database = database
         self.coverQueueActor = coverQueue ?? CoverQueueActor(database: database)
         self.coverQueueState = CoverQueueState()

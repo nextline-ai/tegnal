@@ -232,13 +232,14 @@ struct TEGNALApp: App {
         let query: GalleryQuery?
         let site: String
         let servers: [BooruServer]
+        let booruQuery: String
     }
     private var launchRequest: LaunchRequest {
         let enabled = !isContentUITest || ProcessInfo.processInfo.arguments.contains("--launch-warmup-test")
         let servers = env.booru.selectedServers
         return LaunchRequest(active: enabled && scenePhase == .active && launchThermalAllowed && env.isOnboardingCompleted,
-                             query: env.isSiteVerified ? env.launchMangaQuery : nil, site: env.mangaSiteAddress,
-                             servers: servers)
+                             query: env.isSiteVerified && !env.booruSafeMode ? env.launchMangaQuery : nil, site: env.mangaSiteAddress,
+                             servers: servers, booruQuery: env.booruQuery(""))
     }
     private var splashEnabled: Bool { !isContentUITest || ProcessInfo.processInfo.arguments.contains("--splash-ui-test") }
 
@@ -278,9 +279,10 @@ struct TEGNALApp: App {
             }
             .task(id: launchRequest) {
                 let request = launchRequest
-                guard request.active else { return }
+                // After a settings change, visible feeds own the fresh request.
+                guard request.active, env.booruSearchRevision == 0 else { return }
                 await env.launchFeeds.run(mangaQuery: request.query, site: request.site, servers: request.servers,
-                                          preferredMode: env.mode)
+                                          preferredMode: env.mode, booruQuery: request.booruQuery)
             }
             .task(id: "\(scenePhase):\(env.sync.enabled):\(isSplashScreenVisible):\(isResumeSplashVisible)") {
                 guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible, !isResumeSplashVisible else { return }
