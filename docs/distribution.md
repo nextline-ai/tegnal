@@ -22,9 +22,9 @@
 4. IPA 이름과 Release 태그를 정한 뒤 아래 명령으로 소스를 갱신합니다. 같은 앱 버전의 핫픽스는 빌드 번호를 올리고 `v1.0.0-8`처럼 태그에 빌드 번호를 포함합니다. macOS의 `codesign`과 Python 3가 필요합니다.
 
 ```sh
-python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-13.ipa \
-  --download-url https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-13.ipa \
-  --date 2026-10-24 \
+python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-25.ipa \
+  --download-url https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-25.ipa \
+  --date 2026-10-28 \
   --notes 'What changed in this release.'
 ```
 
@@ -35,6 +35,16 @@ python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0
 릴리스 본문 상단에는 [`release-buttons.md`](release-buttons.md)의 버튼 블록을 복사해 TestFlight와 Discord를 함께 안내합니다. 두 버튼은 휴대폰 화면에서 전체 너비로 쌓이고, 넓은 본문에서는 나란히 표시됩니다. 릴리스에서는 태그와 관계없이 표시되도록 `main`의 절대 이미지 주소를 사용합니다.
 
 7. GitHub Pages 배포 후 페이지·소스·아이콘과 IPA 다운로드가 모두 정상 응답하는지 확인합니다. iPhone/iPad의 Safari에서 각 소스 등록과 실제 설치도 확인합니다.
+
+## 스크린샷 갱신
+
+[네이티브 촬영 도구](native-screenshots.md)를 사용하면 앱 복제·빌드 한 번으로 기존 세 기기의 전체 촬영 세트를 갱신할 수 있습니다.
+
+```sh
+scripts/capture-native-screenshots.sh all
+```
+
+개인 원본 이미지는 Git에서 제외된 경로에 보관합니다. 촬영 결과와 파일별 체크섬을 검수한 뒤 버전 릴리스에 전체 스크린샷 ZIP을 첨부합니다.
 
 ## 권한과 서명
 

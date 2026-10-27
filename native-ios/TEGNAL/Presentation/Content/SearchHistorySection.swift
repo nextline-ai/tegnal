@@ -44,10 +44,12 @@ struct SearchHistoryPanel: View {
     let remove: (String) -> Void
     let clear: () -> Void
     @State private var confirmingClear = false
-    private var recentHistory: [String] { Array(history.prefix(5)) }
-    private var savedQueries: [String] {
+    private var recentHistory: [SearchHistoryPanelEntry] {
+        history.prefix(5).map { SearchHistoryPanelEntry(query: $0, section: .history) }
+    }
+    private var savedQueries: [SearchHistoryPanelEntry] {
         var seen = Set<String>()
-        return saved.filter { seen.insert($0).inserted }
+        return saved.filter { seen.insert($0).inserted }.map { SearchHistoryPanelEntry(query: $0, section: .saved) }
     }
     static func height(availableHeight: CGFloat) -> CGFloat {
         // The search field occupies 56 points; leave a small gap above the keyboard.
@@ -61,36 +63,42 @@ struct SearchHistoryPanel: View {
                     Text(L10n.text("Nothing Saved Yet")).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading).searchSuggestionRow()
                 }
-                ForEach(recentHistory, id: \.self) { query in
-                    HStack(spacing: 8) {
-                        Button { open(query) } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "clock").foregroundStyle(.secondary)
-                                Text(query).foregroundStyle(.primary).lineLimit(1)
-                                Spacer(minLength: 4)
-                            }.frame(maxWidth: .infinity, minHeight: 46).contentShape(Rectangle())
-                        }.accessibilityIdentifier("history.query." + query)
-                        Button { star(query) } label: {
-                            Image(systemName: saved.contains(query) ? "star.fill" : "star")
-                                .foregroundStyle(.yellow).frame(width: 36, height: 46)
-                        }.accessibilityLabel(L10n.text("Saved Searches")).accessibilityIdentifier("history.star." + query)
-                    }.searchSuggestionRow()
-                        .contextMenu { Button(L10n.text("Remove"), role: .destructive) { remove(query) } }
-                        .accessibilityAction(named: L10n.text("Remove")) { remove(query) }
-                    if query != recentHistory.last { Divider() }
+                ForEach(recentHistory) { entry in
+                    let query = entry.query
+                    VStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            Button { open(query) } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "clock").foregroundStyle(.secondary)
+                                    Text(query).foregroundStyle(.primary).lineLimit(1)
+                                    Spacer(minLength: 4)
+                                }.frame(maxWidth: .infinity, minHeight: 46).contentShape(Rectangle())
+                            }.accessibilityIdentifier("history.query." + query)
+                            Button { star(query) } label: {
+                                Image(systemName: saved.contains(query) ? "star.fill" : "star")
+                                    .foregroundStyle(.yellow).frame(width: 36, height: 46)
+                            }.accessibilityLabel(L10n.text("Saved Searches")).accessibilityIdentifier("history.star." + query)
+                        }.searchSuggestionRow()
+                            .contextMenu { Button(L10n.text("Remove"), role: .destructive) { remove(query) } }
+                            .accessibilityAction(named: L10n.text("Remove")) { remove(query) }
+                        if entry.id != recentHistory.last?.id { Divider() }
+                    }
                 }
                 if !savedQueries.isEmpty {
                     SearchHistoryPanelHeader(title: "Saved Searches").padding(.top, 20)
-                    ForEach(savedQueries, id: \.self) { query in
-                        Button { open(query) } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "star.fill").foregroundStyle(.yellow)
-                                Text(query).foregroundStyle(.primary).lineLimit(1)
-                                Spacer(minLength: 4)
-                            }.searchSuggestionRow()
-                        }.accessibilityIdentifier("history.saved." + query)
-                            .contextMenu { Button(L10n.text("Remove"), role: .destructive) { star(query) } }
-                        if query != savedQueries.last { Divider() }
+                    ForEach(savedQueries) { entry in
+                        let query = entry.query
+                        VStack(spacing: 0) {
+                            Button { open(query) } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "star.fill").foregroundStyle(.yellow)
+                                    Text(query).foregroundStyle(.primary).lineLimit(1)
+                                    Spacer(minLength: 4)
+                                }.searchSuggestionRow()
+                            }.accessibilityIdentifier("history.saved." + query)
+                                .contextMenu { Button(L10n.text("Remove"), role: .destructive) { star(query) } }
+                            if entry.id != savedQueries.last?.id { Divider() }
+                        }
                     }
                 }
             }
@@ -100,6 +108,13 @@ struct SearchHistoryPanel: View {
                 Button(L10n.text("Cancel"), role: .cancel) {}
             } message: { Text(L10n.text("Search history will be deleted. Saved searches will be kept.")) }
     }
+}
+
+private struct SearchHistoryPanelEntry: Identifiable {
+    enum Section: String { case history, saved }
+    let query: String
+    let section: Section
+    var id: String { section.rawValue + ":" + query }
 }
 
 private struct SearchHistoryPanelHeader: View {

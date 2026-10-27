@@ -20,6 +20,15 @@
       "versions": [
         {
           "version": "1.0.0",
+          "buildVersion": "25",
+          "date": "2026-10-28",
+          "localizedDescription": "1.0.0 (25): site-native Booru autocomplete, compact search history and a fix for saved-search rows, optional rating defaults, smoother mode switching, refreshed details and previews, ZIP animation playback and persistent video mute settings.",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-25.ipa",
+          "size": 11307208,
+          "minOSVersion": "17.0"
+        },
+        {
+          "version": "1.0.0",
           "buildVersion": "13",
           "date": "2026-10-24",
           "localizedDescription": "1.0.0 (13): unified website setup with automatic mode detection, clearer onboarding and imports, smoother reverse scrolling, connection recovery and VPN/HTTPS bypass troubleshooting. TestFlight is the recommended update channel.",
