@@ -1190,3 +1190,9 @@
 "Open previews from the quick menu." = "クイックメニューからプレビューを開けます。";
 
 "Show Work Information Before Reading" = "読む前に作品情報を表示";
+
+"Translating…" = "翻訳中…";
+
+"Original Text" = "原文";
+
+"Translation requires iOS 17.4 or later." = "翻訳はiOS 17.4以降で利用できます。";

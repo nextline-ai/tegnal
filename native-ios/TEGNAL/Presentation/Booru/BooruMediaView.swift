@@ -459,8 +459,8 @@ struct BooruMediaView: UIViewRepresentable {
         <meta name="referrer" content="origin"><style>
         html,body{margin:0;width:100%;height:100%;background:#000;color:white;-webkit-touch-callout:none;-webkit-user-select:none}body{display:flex;align-items:center;justify-content:center}
         #canvas{position:relative;flex:none}#media{display:block;width:100%;height:100%;object-fit:contain;visibility:hidden}
-        #notes{position:absolute;inset:0;pointer-events:none}.note{position:absolute;box-sizing:border-box;border:2px solid #ffd45a;background:#ffd45a30;color:white;pointer-events:auto;padding:0;min-width:18px;min-height:18px;text-align:left}
-        .note span{background:#202020dd;padding:2px 5px;font:12px -apple-system;border-radius:4px}
+        #notes{position:absolute;inset:0;pointer-events:none}.note{position:absolute;box-sizing:border-box;border:0;outline:0;border-radius:0;appearance:none;background:rgba(0,0,0,0.2);color:white;pointer-events:auto;padding:0;min-width:18px;min-height:18px;display:flex;align-items:center;justify-content:center;text-align:center}
+        .note span{background:transparent;color:white;padding:0;font:12px -apple-system;text-shadow:none}
         </style></head><body><div id="canvas">\(media)<div id="notes"></div></div>
         <script nonce="\(nonce)">
         window.tegnalDocumentID='\(identifier)';

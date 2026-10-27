@@ -29,6 +29,7 @@ struct TasteDashboard: View {
         let layout = ArtworkGridGeometry(width: viewportWidth,
             columns: typeSize.isAccessibilitySize ? 1 : env.gridColumns(for: mode == .booru ? .booru : .manga),
             removesPadding: env.removesGridPadding(for: mode == .booru ? .booru : .manga))
+        ScrollViewReader { scrollProxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 TasteDashboardHeading(tags: feed.snapshot?.tags ?? [], mode: mode)
@@ -110,8 +111,14 @@ struct TasteDashboard: View {
         .onChange(of: env.booru.confirmedGoldRestrictedIDs) { _, _ in cancelPrefetch() }
         .onChange(of: env.taste.control.enabled) { _, enabled in if enabled { ensureLoaded() } }
         .refreshable { refresh(); await feed.waitForRefresh() }
-        .tasteWorkPresentation($opened, feed: feed) { .recommended($0.reason.name, session: feed.discoverySession) }
+        .tasteWorkPresentation($opened, feed: feed, willClose: { viewed in
+            let items = feed.visibleItems(in: env.booru)
+            guard BooruViewerReturn.targetID(openedID: opened?.post?.id, viewedID: viewed.id, availableIDs: items.lazy.compactMap { $0.post?.id }) != nil,
+                  let target = items.first(where: { $0.post?.id == viewed.id }) else { return }
+            BooruViewerReturn.scroll(to: target.id, using: scrollProxy)
+        }) { .recommended($0.reason.name, session: feed.discoverySession) }
         .navigationDestination(item: $detail) { TasteTagDetail(tag: $0, mode: mode) }
+        }
     }
 
     private var gettingStarted: some View {
@@ -165,6 +172,7 @@ struct TasteDashboard: View {
                 ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20, topMarginScale: 0.5) { _ in
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id))
+                            .id(item.id)
                             .onAppear {
                                 guard isActiveMode, scenePhase == .active else { return }
                                 if index >= prefetchThresholdIndex && feed.results.failures.isEmpty && feed.results.cursor.hasMore && !feed.loading && !feed.loadingMore {

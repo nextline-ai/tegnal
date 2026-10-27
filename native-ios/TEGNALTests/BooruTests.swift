@@ -2,6 +2,16 @@ import XCTest
 @testable import TEGNAL
 
 final class BooruTests: XCTestCase {
+    func testViewerReturnUsesTheLastLoadedPostWithoutJumpingOnAnUnchangedOrRemovedPost() {
+        let initial = ["first:101", "first:102", "second:101"]
+        XCTAssertNil(BooruViewerReturn.targetID(openedID: "first:101", viewedID: "first:101", availableIDs: initial))
+        XCTAssertNil(BooruViewerReturn.targetID(openedID: nil, viewedID: "first:102", availableIDs: initial))
+        XCTAssertEqual(BooruViewerReturn.targetID(openedID: "first:101", viewedID: "second:101", availableIDs: initial), "second:101")
+        let paginated = initial + ["second:102", "second:103"]
+        XCTAssertEqual(BooruViewerReturn.targetID(openedID: "first:101", viewedID: "second:103", availableIDs: paginated.lazy), "second:103")
+        XCTAssertNil(BooruViewerReturn.targetID(openedID: "first:101", viewedID: "second:103", availableIDs: initial))
+    }
+
     @MainActor func testSafeModeDefaultsPersistAndReachWarmupPaginationWithoutExtraFilters() async throws {
         let suite = "safe-mode-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

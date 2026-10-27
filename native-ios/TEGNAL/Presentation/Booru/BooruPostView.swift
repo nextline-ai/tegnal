@@ -1,4 +1,6 @@
 import SwiftUI
+import Translation
+import NaturalLanguage
 
 struct BooruViewerBatch {
     let posts: [BooruPost]
@@ -75,6 +77,7 @@ struct BooruPostView: View {
     @State private var posts: [BooruPost]
     var loadMore: (() async -> BooruViewerBatch)?
     var positionChanged: (BooruPost) -> Void
+    var willClose: (BooruPost) -> Void
     var contextForPost: ((BooruPost) -> DiscoveryContext)?
     private var activeDiscovery: DiscoveryContext { contextForPost?(post) ?? discovery }
     @State private var pagination = BooruViewerPagination()
@@ -119,8 +122,7 @@ struct BooruPostView: View {
     @SwiftUI.AppStorage("reader.autoSeconds", store: ReaderPreferences.booruDefaults) private var autoSeconds = 10.0
     @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
     @SwiftUI.AppStorage("booru.original", store: ReaderPreferences.booruDefaults) private var loadOriginal = false
-    @SwiftUI.AppStorage("booru.showNotes", store: ReaderPreferences.booruDefaults) private var defaultNotes = true
-    @State private var showNotes = true
+    @SwiftUI.AppStorage("booru.showNotes", store: ReaderPreferences.booruDefaults) private var showNotes = true
     @State private var original = false
     @State private var info = false
     @State private var selectedNote: BooruNote?
@@ -128,11 +130,10 @@ struct BooruPostView: View {
     @State private var loadingIndicatorID: String?
     @State private var retry = 0
     @State private var refreshedMediaID: String?
-    init(post: BooruPost, posts: [BooruPost], server: BooruServer, source: any BooruProviding, loadMore: (() async -> BooruViewerBatch)? = nil, positionChanged: @escaping (BooruPost) -> Void = { _ in }, contextForPost: ((BooruPost) -> DiscoveryContext)? = nil, challenge: ChallengeSessionController? = nil) {
+    init(post: BooruPost, posts: [BooruPost], server: BooruServer, source: any BooruProviding, loadMore: (() async -> BooruViewerBatch)? = nil, positionChanged: @escaping (BooruPost) -> Void = { _ in }, willClose: @escaping (BooruPost) -> Void = { _ in }, contextForPost: ((BooruPost) -> DiscoveryContext)? = nil, challenge: ChallengeSessionController? = nil) {
         self.challenge = challenge
-        _posts = State(initialValue: posts); self.loadMore = loadMore; self.positionChanged = positionChanged; self.contextForPost = contextForPost; self.initialServer = server; self.source = source; _post = State(initialValue: post)
+        _posts = State(initialValue: posts); self.loadMore = loadMore; self.positionChanged = positionChanged; self.willClose = willClose; self.contextForPost = contextForPost; self.initialServer = server; self.source = source; _post = State(initialValue: post)
         _original = State(initialValue: ReaderPreferences.booruDefaults.bool(forKey: "booru.original"))
-        _showNotes = State(initialValue: ReaderPreferences.booruDefaults.object(forKey: "booru.showNotes") as? Bool ?? true)
     }
     private var index: Int { posts.firstIndex(where: { $0.id == post.id }) ?? 0 }
     private var isActive: Bool { !exiting && env.mode == browsingMode && scenePhase == .active }
@@ -142,7 +143,7 @@ struct BooruPostView: View {
     private var resolvesMissingMedia: Bool { server.engine.usesGelbooruPages || server.engine == .danbooru }
     private var mediaReady: Bool { ["ready", "playing", "ended"].contains(mediaStatus) }
     private var waitingForMedia: Bool { mediaStatus == "loading" || loadingMore && wantsNext }
-    private var mayLoadNotes: Bool { isActive && (mediaReady || info) }
+    private var mayLoadNotes: Bool { isActive && (showNotes && mediaReady || info) }
     var body: some View {
         NavigationStack {
             ZStack {
@@ -256,7 +257,6 @@ struct BooruPostView: View {
             }
             .onChange(of: loadOriginal) { _, value in original = value }
             .onChange(of: post.viewerURL(original: original, reducedData: reducedData)) { _, _ in mediaStatus = "loading" }
-            .onChange(of: defaultNotes) { _, value in showNotes = value }
             .onChange(of: post.isVideo, initial: true) { _, video in
                 if video && !videoMenuHintSeen { videoMenuHintSeen = true; toast = L10n.text("Tap with two fingers for the video menu") }
             }
@@ -300,7 +300,7 @@ struct BooruPostView: View {
             .appSheet(isPresented: $info) { details }
             .appSheet(item: $selectedNote) { note in
                 NavigationStack {
-                    ScrollView { Text(note.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(24) }
+                    BooruNoteTranslationView(text: note.body)
                         .navigationTitle(L10n.text("Notes")).navigationBarTitleDisplayMode(.inline)
                         .toolbar { ToolbarItem(placement: .confirmationAction) {
                             Button(L10n.text("Done")) { selectedNote = nil }.accessibilityIdentifier("booru.noteClose").keyboardShortcut(.cancelAction)
@@ -376,6 +376,7 @@ struct BooruPostView: View {
         guard !exiting else { return }
         exiting = true
         pagination.isActive = false; pagination.cancelAdvance()
+        willClose(post)
         dismiss()
     }
     private func gesture(_ gesture: BooruMediaGesture) {
@@ -633,4 +634,75 @@ private final class VideoMenuGestureView: UIView, UIGestureRecognizerDelegate {
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     @objc private func openMenu() { action() }
+}
+
+/// A note opens directly into Apple Translation using the image viewer's target language.
+private struct BooruNoteTranslationView: View {
+    let text: String
+    var body: some View {
+        if #available(iOS 18.0, *) {
+            AutomaticallyTranslatedBooruNote(text: text, target: ReaderTranslationLanguage.resolved(ReaderTranslationLanguage.preference(booru: true)))
+        } else if #available(iOS 17.4, *) {
+            SystemTranslatedBooruNote(text: text)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(L10n.text("Translation requires iOS 17.4 or later.")).foregroundStyle(.secondary)
+                    Text(text).textSelection(.enabled)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+            }
+        }
+    }
+}
+
+@available(iOS 17.4, *)
+private struct SystemTranslatedBooruNote: View {
+    let text: String
+    @State private var translating = false
+    var body: some View {
+        ScrollView { Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(24) }
+            .translationPresentation(isPresented: $translating, text: text)
+            .task { translating = true }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct AutomaticallyTranslatedBooruNote: View {
+    let text: String
+    let target: String
+    @State private var translated: String?
+    @State private var failure: String?
+    @State private var configuration: TranslationSession.Configuration?
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let translated {
+                    Text(translated).textSelection(.enabled).accessibilityIdentifier("booru.note.translation")
+                } else if let failure {
+                    Text(failure).foregroundStyle(.secondary)
+                    Button(L10n.text("Try Again")) { self.failure = nil; configuration?.invalidate() }
+                } else { ProgressView(L10n.text("Translating…")).accessibilityIdentifier("booru.note.translating") }
+                if translated != text {
+                    Divider()
+                    Text(L10n.text("Original Text")).font(.caption).foregroundStyle(.secondary)
+                    Text(text).textSelection(.enabled).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("booru.note.original")
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+        }
+        .task {
+            let recognizer = NLLanguageRecognizer(); recognizer.processString(text)
+            let source = recognizer.dominantLanguage.map { Locale.Language(identifier: $0.rawValue) }
+            let destination = Locale.Language(identifier: target)
+            if let source, source.languageCode == destination.languageCode { translated = text }
+            else { configuration = .init(source: source, target: destination) }
+        }
+        .translationTask(configuration) { session in
+            do {
+                let response = try await session.translate(text)
+                try Task.checkCancellation()
+                translated = response.targetText
+            } catch { if !Task.isCancelled { failure = error.localizedDescription } }
+        }
+    }
 }

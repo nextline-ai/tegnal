@@ -187,7 +187,9 @@ struct BooruFolderContentsView: View {
             }.presentationDetents([.medium, .large])
         }
         .appFullScreenCover(item: $selectedPost) { post in
-            if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: posts, server: server, source: source, positionChanged: { viewerPosition = $0 }) }
+            if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: posts, server: server, source: source, positionChanged: { viewerPosition = $0 }, willClose: { viewed in
+                BooruViewerReturn.restore(openedID: selectedPost?.id, viewedID: viewed.id, availableIDs: posts.lazy.map(\.id), using: proxy)
+            }) }
         }
         }
     }

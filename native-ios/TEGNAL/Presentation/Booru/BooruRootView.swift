@@ -333,6 +333,7 @@ struct BooruFeedView: View {
         if paginationFooterVisible != visible { paginationFooterVisible = visible }
     }
     var body: some View {
+        ScrollViewReader { scrollProxy in
         Group {
             if useEmbeddedBrowser && challenge == nil {
                 BooruEmbeddedBrowserView(servers: servers, query: effectiveQuery, poolID: pool?.id, sort: sort, preferredServerID: browserServerID)
@@ -360,7 +361,10 @@ struct BooruFeedView: View {
                     if visiblePosts.count > count || !loader.hasMore { break }
                 }
                 return BooruViewerBatch(posts: visiblePosts, hasMore: loader.hasMore, failure: loader.error)
-            }, positionChanged: { viewerPosition = $0; challenge?.select($0) }, challenge: challenge).environment(\.discoveryContext, discovery) }
+            }, positionChanged: { viewerPosition = $0; challenge?.select($0) }, willClose: { viewed in
+                BooruViewerReturn.restore(openedID: selectedPost?.id, viewedID: viewed.id, availableIDs: visiblePosts.lazy.map(\.id), using: scrollProxy)
+            }, challenge: challenge).environment(\.discoveryContext, discovery) }
+        }
         }
     }
     private var nativeFeed: some View {
@@ -768,4 +772,19 @@ private struct BooruFeedOffsetKey: PreferenceKey {
 private struct BooruSearchSlotKey: PreferenceKey {
     static var defaultValue: CGFloat? = nil
     static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
+}
+
+enum BooruViewerReturn {
+    static func targetID<IDs: Sequence>(openedID: String?, viewedID: String, availableIDs: IDs) -> String? where IDs.Element == String {
+        guard let openedID, viewedID != openedID, availableIDs.contains(viewedID) else { return nil }
+        return viewedID
+    }
+    @MainActor static func scroll(to id: String, using proxy: ScrollViewProxy) {
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) { proxy.scrollTo(id, anchor: .center) }
+    }
+    @MainActor static func restore<IDs: Sequence>(openedID: String?, viewedID: String, availableIDs: IDs, using proxy: ScrollViewProxy) where IDs.Element == String {
+        guard let target = targetID(openedID: openedID, viewedID: viewedID, availableIDs: availableIDs) else { return }
+        scroll(to: target, using: proxy)
+    }
 }

@@ -1190,3 +1190,9 @@
 "Open previews from the quick menu." = "빠른 메뉴에서 프리뷰를 열 수 있습니다.";
 
 "Show Work Information Before Reading" = "읽기 전에 작품 정보 표시";
+
+"Translating…" = "번역 중…";
+
+"Original Text" = "원문";
+
+"Translation requires iOS 17.4 or later." = "번역은 iOS 17.4 이상에서 사용할 수 있습니다.";

@@ -3,6 +3,48 @@ import WebKit
 @testable import TEGNAL
 
 @MainActor final class MediaInputTests: XCTestCase {
+    func testNotesRenderTranslucentBlackBoxesAndWhiteNumbersAndForwardTheTappedBody() async throws {
+        let coordinator = BooruMediaView.Coordinator()
+        coordinator.active = false
+        coordinator.documentID = "notes-style-test"
+        coordinator.width = 100; coordinator.height = 100
+        let note = BooruNote(id: 7, x: 10, y: 20, width: 30, height: 40, body: "Translate this note")
+        coordinator.notes = [note]; coordinator.showNotes = true
+        var tapped: BooruNote?
+        coordinator.onNote = { tapped = $0 }
+        let config = WKWebViewConfiguration()
+        config.userContentController.add(coordinator, name: "media")
+        defer { config.userContentController.removeScriptMessageHandler(forName: "media") }
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 800), configuration: config)
+        web.navigationDelegate = coordinator; coordinator.view = web
+        let png = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).pngData { context in
+            UIColor.black.setFill(); context.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+        }
+        let url = try XCTUnwrap(URL(string: "data:image/png;base64," + png.base64EncodedString()))
+        var post = BooruFixtureSource.post(101, server: BooruServer.presets[0]); post.fileExtension = "png"
+        coordinator.document = BooruMediaView.document(post: post, url: url, identifier: coordinator.documentID)
+        web.loadHTMLString(coordinator.document, baseURL: nil)
+        for _ in 0..<200 {
+            if coordinator.ready { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertTrue(coordinator.ready)
+        let style = try await web.evaluateJavaScript("""
+        (()=>{const b=document.querySelector('.note'),n=b.querySelector('span'),s=getComputedStyle(b),t=getComputedStyle(n);
+        return [s.borderWidth,s.outlineWidth,s.backgroundColor,t.color,t.backgroundColor,t.padding,t.borderWidth,t.textShadow,s.display,s.alignItems,s.justifyContent,n.textContent]})()
+        """) as? [String]
+        XCTAssertEqual(style, ["0px", "0px", "rgba(0, 0, 0, 0.2)", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)", "0px", "0px", "none", "flex", "center", "center", "1"])
+        _ = try await web.evaluateJavaScript("document.querySelector('.note').click()")
+        for _ in 0..<100 {
+            if tapped != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(tapped, note)
+        coordinator.showNotes = false; coordinator.updateNotes(web)
+        let hidden = try await web.evaluateJavaScript("document.getElementById('notes').hidden")
+        XCTAssertEqual(hidden as? Bool, true)
+    }
+
     func testVideoAudioSurvivesResumeNextVideoAndDocumentRecovery() async throws {
         let name = "tegnal.video-audio-test." + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

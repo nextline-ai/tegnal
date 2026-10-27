@@ -37,8 +37,7 @@ struct SettingsSupportSection: View {
         }
     }
     private var version: String {
-        let info = Bundle.main.infoDictionary ?? [:]
-        return "\(info["CFBundleShortVersionString"] as? String ?? "") (\(info["CFBundleVersion"] as? String ?? ""))"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
 }
 
