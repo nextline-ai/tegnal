@@ -4,7 +4,7 @@ import WebKit
 /// The same developer identity and support destinations in both library modes.
 struct DeveloperInfoSection: View {
     private let website = URL(string: "https://nextline.work")!
-    private let community = URL(string: "https://discord.gg/vUTGZNMaMB")!
+    private let community = URL(string: "https://discord.gg/DFT9Hm66Gz")!
 
     var body: some View {
         Section {
@@ -58,7 +58,7 @@ struct DiscordInvitationBanner: View {
     var body: some View {
         if env.discordInvitationVisible {
             HStack(spacing: 8) {
-                Link(destination: URL(string: "https://discord.gg/vUTGZNMaMB")!) {
+                Link(destination: URL(string: "https://discord.gg/DFT9Hm66Gz")!) {
                     HStack(spacing: 10) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
                             .font(.body).foregroundStyle(.white)
