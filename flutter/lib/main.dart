@@ -15,7 +15,6 @@ import 'core/drive_sync_controller.dart';
 import 'ui/design_system.dart';
 import 'data/download_manager.dart';
 import 'data/library_store.dart';
-import 'data/bundled_sources.dart';
 import 'ui/l10n.dart';
 
 Future<void> main() async {
@@ -32,7 +31,6 @@ Future<void> main() async {
     final support = await getApplicationSupportDirectory();
     await support.create(recursive: true);
     final store = LibraryStore(sqlite3.open('${support.path}/tegnal.sqlite'));
-    BundledSources.seedOnce(store);
     final controller = AppController(store);
     final downloads = DownloadManager(
       store,

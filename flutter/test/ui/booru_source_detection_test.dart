@@ -91,7 +91,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Image Mode · Danbooru'), findsOneWidget);
+    expect(find.text('Image Mode'), findsOneWidget);
     expect(detector.calls, 0);
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
@@ -116,8 +116,13 @@ void main() {
       find.textContaining('Couldn’t identify this website'),
       findsOneWidget,
     );
-    expect(find.widgetWithText(ChoiceChip, 'Moebooru'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Moebooru'));
+    expect(
+      find.widgetWithText(ChoiceChip, 'JSON Board API (post.json)'),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.widgetWithText(ChoiceChip, 'JSON Board API (post.json)'),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
@@ -141,11 +146,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 401));
     await tester.pumpAndSettle();
     expect(find.text('Try Again'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, 'Danbooru'), findsOneWidget);
+    expect(
+      find.widgetWithText(ChoiceChip, 'JSON Board API (posts.json)'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Try Again'));
     await tester.pumpAndSettle();
-    expect(find.text('Image Mode · Gelbooru'), findsOneWidget);
+    expect(find.text('Image Mode'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
 

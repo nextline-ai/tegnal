@@ -114,7 +114,7 @@ void main() {
   }
 
   testWidgets(
-    'onboarding makes Violet the first primary import and imports its real user.db',
+    'onboarding offers SQLite import first and preserves compatible database data',
     (tester) async {
       await mount(tester, OnboardingScreen(controller: controller));
       final shortcut = find.byKey(const ValueKey('onboarding-violet-shortcut'));
@@ -123,6 +123,9 @@ void main() {
       await tester.pumpAndSettle();
       final violet = find.byKey(const ValueKey('onboarding-violet-import'));
       expect(tester.widget(violet), isA<FilledButton>());
+      expect(find.text('Import SQLite Backup'), findsWidgets);
+      expect(find.text('Import from Violet'), findsNothing);
+      expect(find.text('Anime Boxes'), findsNothing);
       expect(
         tester.getTopLeft(violet).dy,
         lessThan(tester.getTopLeft(find.text('TEGNAL JSON Backup')).dy),
@@ -133,13 +136,13 @@ void main() {
   );
 
   testWidgets(
-    'settings exposes Violet import near the top and uses the same validated importer',
+    'settings exposes generic import near the top and uses the validated importer',
     (tester) async {
       await mount(
         tester,
         SettingsScreen(controller: controller, downloads: downloads),
       );
-      final violet = find.text('Import from Violet');
+      final violet = find.text('Import from Other Apps').first;
       expect(violet.hitTestable(), findsOneWidget);
       await tester.tap(violet);
       await finishImport(tester);

@@ -1,6 +1,6 @@
 # TEGNAL Flutter
 
-> **Android beta:** [Download the signed APK](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.1). Version `1.0.0-beta.1+3` bundles Hitomi and Danbooru connections through an explicit one-time user-database bootstrap. Saved connections survive removal of the bootstrap code; existing/deleted connections and user selection are respected. Image favorites use persistent site folders matching the native app. Google Drive synchronization is temporarily disabled; translation hands off to the installed Google Translate app.
+> **Android:** [Public beta APK](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.1). Current source is the `1.0.0-beta.2+4` Play preparation candidate: no bundled connections, generic import labels, existing user connections preserved. It has not been submitted or approved. See [submission preparation](../docs/google-play/submission-checklist.md).
 
 
 Android-first port of TEGNAL, with Windows and Linux runners. This is an implementation in progress, not a claim of complete native parity. The native Apple application remains the behavioral reference. See the [delivery roadmap](../docs/flutter-roadmap.md) for current implementation, validation gates and remaining work, and [the parity contract](../docs/flutter-parity.md) for the full native behavior matrix.

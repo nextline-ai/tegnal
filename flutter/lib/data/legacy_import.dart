@@ -59,7 +59,7 @@ class LegacyImport {
       final file = File(path);
       _require(
         await file.length() <= _maxAnimeBytes,
-        'Anime Boxes backup exceeds 64 MiB.',
+        'Image-library backup exceeds 64 MiB.',
       );
       return inspectAnimeBoxes(await file.readAsString());
     }
@@ -102,7 +102,7 @@ class LegacyImport {
       final file = File(path);
       _require(
         await file.length() <= _maxAnimeBytes,
-        'Anime Boxes backup exceeds 64 MiB.',
+        'Image-library backup exceeds 64 MiB.',
       );
       final text = await file.readAsString();
       _checkCancel(isCancelled);
@@ -473,16 +473,16 @@ class LegacyImport {
   _LegacyPlan _animePlan(String text) {
     _require(
       utf8.encode(text).length <= _maxAnimeBytes,
-      'Anime Boxes backup exceeds 64 MiB.',
+      'Image-library backup exceeds 64 MiB.',
     );
     final value = jsonDecode(text);
-    _require(value is Map<String, dynamic>, 'Invalid Anime Boxes backup.');
+    _require(value is Map<String, dynamic>, 'Invalid image-library backup.');
     final root = value as Map<String, dynamic>;
     _require(
       root['backupVersion'] == '1.0' &&
           root['servers'] is List &&
           root['favorites'] is List,
-      'Choose an Anime Boxes .abbj backup (version 1.0).',
+      'Choose an .abbj image-library backup (version 1.0).',
     );
     final sources = <String, SourceConfig>{}, selected = <String>{};
     var skipped = 0;

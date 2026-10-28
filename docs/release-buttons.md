@@ -3,4 +3,4 @@
   <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="https://raw.githubusercontent.com/nextline-ai/tegnal/main/design-output/SVG/button/Discord_button_kr_mobile.svg"><img src="https://raw.githubusercontent.com/nextline-ai/tegnal/main/design-output/SVG/button/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
 </p>
 
-<p align="center"><a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk"><img src="https://img.shields.io/badge/Android-Beta%20APK-3DDC84?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 베타 APK 다운로드"></a></p>
+<p align="center"><a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="https://raw.githubusercontent.com/nextline-ai/tegnal/main/design-output/SVG/button/Android_button_kr_mobile.svg"><img src="https://raw.githubusercontent.com/nextline-ai/tegnal/main/design-output/SVG/button/Android_button_kr.svg" alt="Android 베타 APK 다운로드"></picture></a></p>

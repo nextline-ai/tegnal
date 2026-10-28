@@ -42,8 +42,8 @@ Future<void> showImportLegacy(
   try {
     final file = await openFile(
       acceptedTypeGroups: [
-        const XTypeGroup(
-          label: 'Violet / Anime Boxes',
+        XTypeGroup(
+          label: L10n.tr(context, 'Library backups (.db, .abbj)'),
           extensions: ['db', 'abbj'],
           mimeTypes: [
             'application/octet-stream',
@@ -410,11 +410,11 @@ class _SourceFormState extends State<_SourceForm> {
   }
 
   static String _engineName(SourceKind kind) => switch (kind) {
-    SourceKind.danbooru => 'Danbooru',
-    SourceKind.gelbooru => 'Gelbooru',
-    SourceKind.oldGelbooru => 'Old Gelbooru (v0.1.11)',
-    SourceKind.moebooru => 'Moebooru',
-    SourceKind.manga => 'Manga',
+    SourceKind.danbooru => 'JSON Board API (posts.json)',
+    SourceKind.gelbooru => 'DAPI JSON Board API',
+    SourceKind.oldGelbooru => 'Legacy HTML Board',
+    SourceKind.moebooru => 'JSON Board API (post.json)',
+    SourceKind.manga => 'Comics Mode',
   };
 
   @override
@@ -520,16 +520,11 @@ class _SourceFormState extends State<_SourceForm> {
                                     ? 'Comics Mode'
                                     : 'Image Mode',
                               );
-                              final engineSuffix = kind == SourceKind.manga
-                                  ? ''
-                                  : ' · ${_engineName(kind)}';
                               return Row(
                                 children: [
                                   const Icon(Icons.check_circle, size: 26),
                                   const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text('$modeLabel$engineSuffix'),
-                                  ),
+                                  Expanded(child: Text(modeLabel)),
                                 ],
                               );
                             },
@@ -565,7 +560,7 @@ class _SourceFormState extends State<_SourceForm> {
                                   label: Text(
                                     kind == SourceKind.manga
                                         ? L10n.tr(context, 'Comics Mode')
-                                        : _engineName(kind),
+                                        : L10n.tr(context, _engineName(kind)),
                                   ),
                                   selected: _manualKind == kind,
                                   onSelected: (_) => setState(() {
@@ -1427,10 +1422,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _SettingsGroup(
                 children: [
                   _SettingsRow(
-                    title: 'Import from Violet',
+                    title: 'Import from Other Apps',
                     subtitle: L10n.tr(
                       context,
-                      'Choose Violet user.db or a catalog database.',
+                      'Choose a SQLite database or an .abbj image-library backup.',
                     ),
                     icon: Icons.move_to_inbox_outlined,
                     color: const Color(0xFFAF52DE),
@@ -1875,10 +1870,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => showLicensePage(
                       context: context,
                       applicationName: 'TEGNAL',
-                      applicationVersion: '1.0.0-beta.1',
+                      applicationVersion: '1.0.0-beta.2',
                     ),
                   ),
-                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.1'),
+                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.2'),
                 ],
               ),
               _SettingsGroup(
@@ -2285,8 +2280,8 @@ class _LibraryManagementScreenState extends State<_LibraryManagementScreen> {
                   ),
                 ),
               _SettingsRow(
-                title: 'Import from Violet',
-                subtitle: 'Violet / Anime Boxes',
+                title: 'Import from Other Apps',
+                subtitle: L10n.tr(context, 'SQLite and image-library backups'),
                 icon: Icons.move_to_inbox_outlined,
                 onTap: _busy ? null : () => _run(widget.onImport),
               ),

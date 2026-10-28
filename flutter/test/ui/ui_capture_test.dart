@@ -312,9 +312,9 @@ void main() {
         );
       }
       expect(created.map((folder) => folder.color), [
-        0xFF0891B2,
         0xFFD97706,
         0xFFDB2777,
+        0xFF4F46E5,
       ]);
       final libraryScroll = find
           .descendant(

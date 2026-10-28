@@ -278,7 +278,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                     child: ListTile(
                       leading: const Icon(Icons.file_download_outlined),
                       title: Text(L10n.tr(context, 'Import from Other Apps')),
-                      subtitle: Text(L10n.tr(context, 'Import from Violet')),
+                      subtitle: Text(
+                        L10n.tr(context, 'SQLite and image-library backups'),
+                      ),
                       onTap: () {
                         c.setPreference(
                           'onboarding.importReminderDismissed',
