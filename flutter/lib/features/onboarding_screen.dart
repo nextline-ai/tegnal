@@ -4,6 +4,7 @@ import '../core/app_controller.dart';
 import '../core/content.dart';
 import '../ui/design_system.dart';
 import '../ui/l10n.dart';
+import '../ui/metadata_fill.dart';
 import 'settings_screen.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -114,6 +115,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
               children: [
+                MetadataFillNotice(
+                  controller: widget.controller,
+                  onConnect: () => showAddSource(
+                    context,
+                    widget.controller,
+                    mode: AppMode.manga,
+                  ),
+                ),
                 if (!widget.importsOnly) _progress(),
                 if (!widget.importsOnly) const SizedBox(height: 24),
                 if (_step == 0 && !widget.importsOnly)

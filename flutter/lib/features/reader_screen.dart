@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/physics.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -46,6 +47,19 @@ int _readerDecodeLimit(BuildContext context) {
   return (size.longestSide * scale * 2).ceil().clamp(1024, 3000);
 }
 
+/// Keeps the prior route visible during the reader's interactive dismissal.
+Route<void> readerRoute({required WidgetBuilder builder}) =>
+    PageRouteBuilder<void>(
+      opaque: false,
+      transitionDuration: const Duration(milliseconds: 180),
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (context, _, _) => builder(context),
+      transitionsBuilder: (context, animation, _, child) =>
+          MediaQuery.disableAnimationsOf(context)
+          ? child
+          : FadeTransition(opacity: animation, child: child),
+    );
+
 /// A reader owns only its viewing session. Reading position and preferences are
 /// persisted by the controller; completed downloads are always preferred.
 class ReaderScreen extends StatefulWidget {
@@ -86,7 +100,7 @@ class ReaderExitGesturePolicy {
 }
 
 class _ReaderScreenState extends State<ReaderScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late ReaderPreferences _prefs;
   late final List<ContentItem> _sequence;
   int _postIndex = 0;
@@ -109,6 +123,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   final ScrollController _scroll = ScrollController();
   final FocusNode _focus = FocusNode();
   final GlobalKey _translationImageKey = GlobalKey();
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   final Map<int, double> _ratios = {};
   final Map<String, _ReaderManifest> _manifestCache = {};
   final Map<String, Future<_ReaderManifest>> _manifestFlights = {};
@@ -139,6 +154,8 @@ class _ReaderScreenState extends State<ReaderScreen>
   Offset? _exitLast;
   Duration? _exitLastTime;
   double _exitVelocityY = 0;
+  late final AnimationController _exitOffset;
+  bool _exitClosing = false;
 
   String _t(String key) => L10n.tr(context, key);
   bool get _video => _resolvedItem.mediaType == 'video';
@@ -158,6 +175,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void initState() {
     super.initState();
+    _exitOffset = AnimationController.unbounded(vsync: this);
     _sequence = ReaderSequence.ordered(widget.item, widget.sequence);
     _postIndex = _sequence.indexOf(widget.item);
     _resolvedItem = _item;
@@ -720,11 +738,17 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   bool get _exitGestureEnabled =>
-      !_zoomed && !_chrome && !_settingsOpen && !_loading && _error == null;
+      !_exitClosing &&
+      !_zoomed &&
+      !_chrome &&
+      !_settingsOpen &&
+      !_loading &&
+      _error == null;
 
   void _pointerDown(PointerDownEvent event) {
     _activePointers.add(event.pointer);
     if (_activePointers.length != 1 || !_exitGestureEnabled) {
+      _restoreExitPosition();
       _clearExitPointer();
       return;
     }
@@ -738,6 +762,8 @@ class _ReaderScreenState extends State<ReaderScreen>
       _clearExitPointer();
       return;
     }
+    _exitOffset.stop();
+    _exitOffset.value = 0;
     _exitPointer = event.pointer;
     _exitStart = event.localPosition;
     _exitLast = event.localPosition;
@@ -746,7 +772,12 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _pointerMove(PointerMoveEvent event) {
-    if (_exitPointer != event.pointer || !_exitGestureEnabled) return;
+    if (_exitPointer != event.pointer) return;
+    if (!_exitGestureEnabled) {
+      _clearExitPointer();
+      _restoreExitPosition();
+      return;
+    }
     final previous = _exitLast;
     final previousTime = _exitLastTime;
     if (previous != null && previousTime != null) {
@@ -760,6 +791,21 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     _exitLast = event.localPosition;
     _exitLastTime = event.timeStamp;
+    final delta = event.localPosition - _exitStart!;
+    final mayDismiss =
+        !_continuous ||
+        ReaderExitGesturePolicy.startsInContinuousExitZone(
+          _exitStart!.dy,
+          MediaQuery.paddingOf(context).top,
+        );
+    if (mayDismiss &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        delta.dy > 0 &&
+        delta.dy > delta.dx.abs() * 1.25) {
+      _exitOffset.value = delta.dy;
+    } else if (_exitOffset.value != 0) {
+      _exitOffset.value = 0;
+    }
   }
 
   void _pointerUp(PointerEvent event) {
@@ -773,6 +819,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           delta.dy.abs() > delta.dx.abs() * 1.3 &&
           (!_continuous || _prefs.continuousPreviewSwipe)) {
         _clearExitPointer();
+        _restoreExitPosition();
         unawaited(_item.mode == AppMode.manga ? _preview() : _info());
       } else if (_exitGestureEnabled &&
           (!_continuous ||
@@ -782,19 +829,22 @@ class _ReaderScreenState extends State<ReaderScreen>
               )) &&
           ReaderExitGesturePolicy.shouldExit(delta, _exitVelocityY)) {
         _clearExitPointer();
-        Navigator.of(context).maybePop();
+        unawaited(_finishExit());
       } else if (_exitGestureEnabled &&
           _postSequence &&
           !_zoomed &&
           ReaderExitGesturePolicy.shouldAdvancePost(delta)) {
         _clearExitPointer();
+        _restoreExitPosition();
         final direction = delta.dx < 0 ? 1 : -1;
         _go(_position + (_prefs.rightToLeft ? -direction : direction));
       } else {
         _clearExitPointer();
+        _restoreExitPosition();
       }
     } else if (_exitPointer == event.pointer) {
       _clearExitPointer();
+      _restoreExitPosition();
     }
     _activePointers.remove(event.pointer);
   }
@@ -802,6 +852,48 @@ class _ReaderScreenState extends State<ReaderScreen>
   void _pointerCancel(PointerCancelEvent event) {
     _activePointers.remove(event.pointer);
     _clearExitPointer();
+    _restoreExitPosition();
+  }
+
+  void _restoreExitPosition() {
+    if (_exitClosing || _exitOffset.value == 0) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _exitOffset.value = 0;
+      return;
+    }
+    _exitOffset.animateWith(
+      SpringSimulation(
+        const SpringDescription(mass: 1, stiffness: 500, damping: 42),
+        _exitOffset.value,
+        0,
+        0,
+      ),
+    );
+  }
+
+  Future<void> _finishExit() async {
+    if (_exitClosing) return;
+    _exitClosing = true;
+    if (!MediaQuery.disableAnimationsOf(context)) {
+      try {
+        await _exitOffset
+            .animateTo(
+              MediaQuery.sizeOf(context).height,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+            )
+            .orCancel;
+      } on TickerCanceled {
+        return;
+      }
+    }
+    if (mounted) {
+      final popped = await Navigator.of(context).maybePop();
+      if (mounted && !popped) {
+        _exitClosing = false;
+        _restoreExitPosition();
+      }
+    }
   }
 
   void _clearExitPointer() {
@@ -820,7 +912,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       widget.controller.save(_resolvedItem);
     }
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context)
+    _messengerKey.currentState!
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
@@ -1746,108 +1838,133 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   @override
-  Widget build(BuildContext context) => Theme(
-    data: tegnalTheme(Brightness.dark),
-    child: AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.black,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.black,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: Colors.black,
-      ),
-      child: PopScope(
-        canPop: !_chrome,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && _chrome) setState(() => _chrome = false);
-        },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: Focus(
-            focusNode: _focus,
-            autofocus: true,
-            onKeyEvent: _key,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final resized =
-                    _viewport.width > 0 &&
-                    _viewport.width != constraints.maxWidth;
-                final retainedIndex = _index;
-                if (_viewport != constraints.biggest) _pageOffsets = null;
-                _viewport = constraints.biggest;
-                if (resized && _continuous) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _go(retainedIndex, animate: false);
-                  });
-                }
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Listener(
-                        onPointerDown: _pointerDown,
-                        onPointerMove: _pointerMove,
-                        onPointerUp: _pointerUp,
-                        onPointerCancel: _pointerCancel,
-                        child: RepaintBoundary(
-                          key: _translationImageKey,
-                          child: ColoredBox(
-                            color: Colors.black,
-                            child: _body(),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (_prefs.dimming > 0)
+  Widget build(BuildContext context) => ScaffoldMessenger(
+    key: _messengerKey,
+    child: Theme(
+      data: tegnalTheme(Brightness.dark),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.black,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: Colors.black,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.black,
+        ),
+        child: PopScope(
+          canPop: !_chrome,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && _chrome) setState(() => _chrome = false);
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Focus(
+              focusNode: _focus,
+              autofocus: true,
+              onKeyEvent: _key,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final resized =
+                      _viewport.width > 0 &&
+                      _viewport.width != constraints.maxWidth;
+                  final retainedIndex = _index;
+                  if (_viewport != constraints.biggest) _pageOffsets = null;
+                  _viewport = constraints.biggest;
+                  if (resized && _continuous) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _go(retainedIndex, animate: false);
+                    });
+                  }
+                  return Stack(
+                    children: [
                       Positioned.fill(
-                        child: IgnorePointer(
-                          child: ColoredBox(
-                            color: Color.fromRGBO(0, 0, 0, _prefs.dimming),
+                        child: AnimatedBuilder(
+                          animation: _exitOffset,
+                          builder: (context, _) => ColoredBox(
+                            color: Colors.black.withValues(
+                              alpha:
+                                  (1 -
+                                          _exitOffset.value /
+                                              constraints.maxHeight)
+                                      .clamp(0.0, 1.0),
+                            ),
                           ),
                         ),
                       ),
-                    if (_loading || _error != null || _video)
-                      Align(alignment: Alignment.topCenter, child: _topBar()),
-                    if (_sourcePages.isNotEmpty && !_loading && _chrome)
-                      Align(
-                        alignment: _prefs.bottomMenu
-                            ? Alignment.bottomCenter
-                            : Alignment.center,
-                        child: _controls(),
+                      Positioned.fill(
+                        child: Listener(
+                          onPointerDown: _pointerDown,
+                          onPointerMove: _pointerMove,
+                          onPointerUp: _pointerUp,
+                          onPointerCancel: _pointerCancel,
+                          child: AnimatedBuilder(
+                            animation: _exitOffset,
+                            child: RepaintBoundary(
+                              key: _translationImageKey,
+                              child: ColoredBox(
+                                color: Colors.black,
+                                child: _body(),
+                              ),
+                            ),
+                            builder: (context, child) => Transform.translate(
+                              key: const ValueKey('reader-exit-transform'),
+                              offset: Offset(0, math.max(0, _exitOffset.value)),
+                              child: child,
+                            ),
+                          ),
+                        ),
                       ),
-                    if (_sourcePages.isNotEmpty &&
-                        !_loading &&
-                        !_video &&
-                        !_chrome &&
-                        _pages.length > 1 &&
-                        _prefs.showPageNumber)
-                      Positioned(
-                        bottom: MediaQuery.paddingOf(context).bottom + 10,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
+                      if (_prefs.dimming > 0)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: ColoredBox(
+                              color: Color.fromRGBO(0, 0, 0, _prefs.dimming),
                             ),
-                            decoration: BoxDecoration(
-                              color: const Color(0x99000000),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${_position + 1} / $_count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
+                          ),
+                        ),
+                      if (_loading || _error != null || _video)
+                        Align(alignment: Alignment.topCenter, child: _topBar()),
+                      if (_sourcePages.isNotEmpty && !_loading && _chrome)
+                        Align(
+                          alignment: _prefs.bottomMenu
+                              ? Alignment.bottomCenter
+                              : Alignment.center,
+                          child: _controls(),
+                        ),
+                      if (_sourcePages.isNotEmpty &&
+                          !_loading &&
+                          !_video &&
+                          !_chrome &&
+                          _pages.length > 1 &&
+                          _prefs.showPageNumber)
+                        Positioned(
+                          bottom: MediaQuery.paddingOf(context).bottom + 10,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0x99000000),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${_position + 1} / $_count',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1858,6 +1975,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void dispose() {
     ++_generation;
+    _exitOffset.dispose();
     _auto?.cancel();
     _prefetchDebounce?.cancel();
     _postPrefetch.close();

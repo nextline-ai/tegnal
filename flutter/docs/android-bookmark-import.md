@@ -15,7 +15,7 @@ The picker previews counts before asking to merge. The source file is opened rea
 | `BookmarkUser` / `HistoryUser` (when present) | Original records retained locally where there is no native equivalent. |
 | `DownloadItem` | Not imported. External file paths, request headers and download credentials are not copied. |
 
-No source connection is created and no metadata or image request is made by import. The user must connect a compatible source to open ID-only works. Metadata enrichment remains an explicit action. A backup without titles or cover URLs cannot supply those fields offline.
+No source connection is created by import. After a successful import, the app automatically fills missing covers, titles and tags using the user’s configured compatible source and shows progress above the main screen. Without a source, the queue waits for a connection and explains that state. The user can pause or resume the queue. A backup without titles or cover URLs cannot supply those fields offline. Remote cover URLs remain portable; fetched cover bytes use the existing session-scoped disk cache.
 
 Native works, folders, artists and search data participate in the existing TEGNAL JSON backup. Original archival records use local `legacy.*` storage and are **not included in JSON export**; retain the original SQLite backup if those records are needed for future migration. Import does not promise restoration of downloaded image files.
 

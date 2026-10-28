@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.3/TEGNAL-1.0.0-beta.3-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Android_button_en_mobile.svg"><img src="design-output/SVG/button/Android_button_en.svg" alt="Download Android beta APK"></picture></a>
+  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.4/TEGNAL-1.0.0-beta.4-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Android_button_en_mobile.svg"><img src="design-output/SVG/button/Android_button_en.svg" alt="Download Android beta APK"></picture></a>
 </p>
 
 <h1 align="center">TEGNAL</h1>
@@ -56,21 +56,22 @@ Every AI feature runs **100% locally on your device** without sending your data 
 
 ## 🤖 Android Download (Beta)
 
-**Android 1.0.0-beta.3 · Requires Android 7.0 or later.** These links download installable **APK files directly**. This is not a Google Play release.
+**Android 1.0.0-beta.4 · Requires Android 7.0 or later.** These links download installable **APK files directly**. This is not a Google Play release.
 
 | Download | Devices |
 | --- | --- |
-| **[Android beta APK — ARM64 recommended](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.3/TEGNAL-1.0.0-beta.3-android-arm64.apk)** | Most current 64-bit ARM phones |
-| [Android beta APK — Universal](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.3/TEGNAL-1.0.0-beta.3-android.apk) | 32-bit ARM, ARM64 and x86-64; choose this if unsure |
+| **[Android beta APK — ARM64 recommended](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.4/TEGNAL-1.0.0-beta.4-android-arm64.apk)** | Most current 64-bit ARM phones |
+| [Android beta APK — Universal](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.4/TEGNAL-1.0.0-beta.4-android.apk) | 32-bit ARM, ARM64 and x86-64; choose this if unsure |
 
 Open the downloaded APK to install it. If Android prompts you, allow app installation for the browser or file manager you used. Install subsequent APKs the same way to update. Both variants use the same signing certificate.
 
 - Fresh installations have no bundled website connections. Updates preserve connections already saved in user data.
 - Image mode organizes saved works into **site-specific Booru folders**. Manga folder organization stays unchanged.
 - Onboarding and Settings support **bookmark SQLite backups from other manga viewers**. Older import formats remain a separate Settings option; TEGNAL JSON backups are also supported. Image translation opens the installed Google Translate app; Google Drive sync is currently disabled.
+- After import, missing covers, titles and tags are filled from the configured source, with a top progress notice and pause control. Settings includes Discord/GitHub shortcuts, and the reader animates downward dismissal.
 - The iCloud, Apple Vision and Apple on-device translation features described below apply to the **Apple version**, not the Android beta.
 
-[Beta release notes and checksums](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.3)
+[Beta release notes and checksums](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.4)
 
 ## 📲 How to Install on Apple Devices
 

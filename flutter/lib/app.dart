@@ -18,6 +18,7 @@ import 'features/reader_screen.dart';
 import 'ui/l10n.dart';
 import 'ui/navigation.dart';
 import 'ui/privacy_cover.dart';
+import 'ui/metadata_fill.dart';
 
 class TegnalApp extends StatefulWidget {
   const TegnalApp({
@@ -103,15 +104,18 @@ class _TegnalAppState extends State<TegnalApp> {
       _ => ThemeMode.system,
     },
     // Content updates rebuild the shell, not MaterialApp and its themes.
-    home: ListenableBuilder(
-      listenable: controller,
-      builder: (_, _) => controller.onboardingComplete
-          ? AppShell(
-              controller: controller,
-              downloads: widget.downloads,
-              driveSync: widget.driveSync,
-            )
-          : OnboardingScreen(controller: controller),
+    home: MetadataFillScope(
+      controller: controller,
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (_, _) => controller.onboardingComplete
+            ? AppShell(
+                controller: controller,
+                downloads: widget.downloads,
+                driveSync: widget.driveSync,
+              )
+            : OnboardingScreen(controller: controller),
+      ),
     ),
   );
 }
@@ -233,8 +237,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       return;
     }
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
+      readerRoute(
         builder: (_) => ReaderScreen(
           controller: widget.controller,
           downloads: widget.downloads,
@@ -265,6 +268,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final c = widget.controller;
     return Column(
       children: [
+        MetadataFillNotice(
+          controller: c,
+          onConnect: () => showAddSource(context, c, mode: AppMode.manga),
+        ),
         if (c.store.setting('onboarding.importReminderDismissed', false) !=
             true)
           Padding(

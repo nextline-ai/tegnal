@@ -114,6 +114,7 @@ void main() {
     List<ContentItem> sequence = const [],
     int? initialPageIndex,
     Duration settleDuration = const Duration(seconds: 1),
+    bool reduceMotion = false,
   }) async {
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -122,12 +123,17 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: tegnalTheme(Brightness.light),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(disableAnimations: reduceMotion),
+          child: child!,
+        ),
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
               child: TextButton(
                 onPressed: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
+                  readerRoute(
                     builder: (_) => ReaderScreen(
                       controller: controller,
                       downloads: downloads,
@@ -585,6 +591,60 @@ void main() {
     await tester.pump();
     expect(controller.isSaved(item), isFalse);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'exit drag follows finger, springs back, and animates dismissal',
+    (tester) async {
+      await launch(tester, item: booruItem(1));
+      final transform = find.byKey(const ValueKey('reader-exit-transform'));
+      double offset() =>
+          tester.widget<Transform>(transform).transform.getTranslation().y;
+      final start = tester.getRect(find.byType(ReaderScreen)).center;
+      final cancel = await tester.startGesture(start);
+      await tester.pump(const Duration(seconds: 1));
+      await cancel.moveBy(const Offset(0, 60));
+      await tester.pump();
+      expect(offset(), closeTo(60, 0.1));
+      await cancel.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(offset(), inExclusiveRange(0, 60));
+      await tester.pump(const Duration(seconds: 1));
+      expect(offset(), closeTo(0, 0.1));
+      expect(find.byType(ReaderScreen), findsOneWidget);
+
+      final exit = await tester.startGesture(start);
+      await exit.moveBy(const Offset(0, 120));
+      await tester.pump();
+      expect(offset(), closeTo(120, 0.1));
+      expect(find.text('Open reader'), findsOneWidget);
+      await exit.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(offset(), greaterThan(120));
+      expect(find.byType(ReaderScreen), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byType(ReaderScreen), findsNothing);
+    },
+  );
+
+  testWidgets('reduced motion skips drag and dismissal animation', (
+    tester,
+  ) async {
+    await launch(tester, item: booruItem(1), reduceMotion: true);
+    final gesture = await tester.startGesture(
+      tester.getRect(find.byType(ReaderScreen)).center,
+    );
+    await gesture.moveBy(const Offset(0, 120));
+    await tester.pump();
+    final transform = tester.widget<Transform>(
+      find.byKey(const ValueKey('reader-exit-transform')),
+    );
+    expect(transform.transform.getTranslation().y, 0);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byType(ReaderScreen), findsNothing);
   });
 
   testWidgets('a downward swipe dismisses the reader without stealing paging', (

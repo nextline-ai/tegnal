@@ -185,7 +185,7 @@ class DownloadsScreen extends StatelessWidget {
 
   void _open(BuildContext context, DownloadEntry entry) =>
       Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute<void>(
+        readerRoute(
           builder: (_) => ReaderScreen(
             controller: controller,
             item: entry.item,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/rendering.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -34,6 +35,9 @@ import 'detail_screen.dart';
 import 'onboarding_screen.dart';
 import 'insights_screen.dart';
 import 'reader_guide.dart';
+
+const _discordAddress = 'https://discord.gg/DFT9Hm66Gz';
+const _githubAddress = 'https://github.com/nextline-ai/tegnal';
 
 /// The primary importer accepts only the Android bookmark database schema.
 Future<void> showImportAndroidBookmarks(
@@ -77,7 +81,7 @@ Future<void> showImportAndroidBookmarks(
       ),
     );
     if (imported == null) return;
-    controller.libraryRestored();
+    controller.libraryRestored(fillMissingMetadata: true);
     if (context.mounted && imported is AndroidBookmarksSummary) {
       await _showAndroidBookmarksSummary(context, imported);
     }
@@ -231,7 +235,7 @@ Future<void> showImportLegacy(
         ),
       );
       if (imported == null) return;
-      controller.libraryRestored();
+      controller.libraryRestored(fillMissingMetadata: true);
       if (context.mounted) {
         await showMessage(
           context,
@@ -339,7 +343,7 @@ Future<void> showRestoreLibraryBackup(
     );
     if (!confirmed || !context.mounted) return;
     codec.importJson(text);
-    controller.libraryRestored();
+    controller.libraryRestored(fillMissingMetadata: true);
     if (context.mounted) {
       await showMessage(
         context,
@@ -868,7 +872,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
         if (confirmed) {
           codec.importJson(text);
-          widget.controller.libraryRestored();
+          widget.controller.libraryRestored(fillMissingMetadata: true);
           if (mounted) {
             await showMessage(
               context,
@@ -1504,47 +1508,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
               navigationScrollInset(context, gap: 28),
             ),
             children: [
-              if (c.store.setting('discord.invitation.dismissed', false) !=
-                  true)
+              if (c.discordInvitationVisible)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 36),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF5865F2),
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextButton.icon(
-                            style: TextButton.styleFrom(
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
+                  child: _InvitationDisplay(
+                    onDisplay: c.recordDiscordInvitationDisplay,
+                    child: Container(
+                      key: const ValueKey('discord.invitation'),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF5865F2),
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextButton.icon(
+                              key: const ValueKey('discord.invitation.join'),
+                              style: TextButton.styleFrom(
+                                alignment: Alignment.centerLeft,
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
                               ),
-                            ),
-                            onPressed: () =>
-                                _openLink('https://discord.gg/DFT9Hm66Gz'),
-                            icon: const Icon(Icons.forum, color: Colors.white),
-                            label: Text(
-                              L10n.tr(context, 'Join us on Discord'),
-                              style: const TextStyle(
+                              onPressed: () => _openLink(_discordAddress),
+                              icon: const Icon(
+                                Icons.forum,
                                 color: Colors.white,
-                                fontSize: 17,
+                              ),
+                              label: Text(
+                                L10n.tr(context, 'Join us on Discord'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w400,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => c.setPreference(
-                            'discord.invitation.dismissed',
-                            true,
+                          IconButton(
+                            key: const ValueKey('discord.invitation.close'),
+                            onPressed: c.dismissDiscordInvitation,
+                            tooltip: L10n.tr(context, 'Close'),
+                            icon: const Icon(Icons.close, color: Colors.white),
                           ),
-                          tooltip: L10n.tr(context, 'Close'),
-                          icon: const Icon(Icons.close, color: Colors.white),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -2004,10 +2014,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => showLicensePage(
                       context: context,
                       applicationName: 'TEGNAL',
-                      applicationVersion: '1.0.0-beta.3',
+                      applicationVersion: '1.0.0-beta.4',
                     ),
                   ),
-                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.3'),
+                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.4'),
                 ],
               ),
               _SettingsGroup(
@@ -2026,16 +2036,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: 'contact@nextline.work',
                     onTap: () => _openLink('mailto:contact@nextline.work'),
                   ),
-                  _SettingsRow(
-                    title: 'Community & Bug Reports',
-                    icon: Icons.forum_outlined,
-                    onTap: () => _openLink('https://discord.gg/DFT9Hm66Gz'),
-                  ),
-                  _SettingsRow(
-                    title: 'View on GitHub',
-                    icon: Icons.code,
-                    onTap: () =>
-                        _openLink('https://github.com/nextline-ai/tegnal'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Column(
+                      children: [
+                        _DeveloperBadge(
+                          key: const ValueKey('developer.community'),
+                          service: 'discord',
+                          label:
+                              '${L10n.tr(context, 'Community & Bug Reports')} · Discord',
+                          onPressed: () => _openLink(_discordAddress),
+                        ),
+                        const SizedBox(height: 10),
+                        _DeveloperBadge(
+                          key: const ValueKey('developer.github'),
+                          service: 'github',
+                          label: L10n.tr(context, 'View on GitHub'),
+                          onPressed: () => _openLink(_githubAddress),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -2094,6 +2117,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 /// Modern inset groups use the same generous corners and separators as the
 /// native app, independently of the package's older default list styling.
+/// The native developer badges rasterized at 3x; existing user PNGs are untouched.
+class _DeveloperBadge extends StatelessWidget {
+  const _DeveloperBadge({
+    super.key,
+    required this.service,
+    required this.label,
+    required this.onPressed,
+  });
+  final String service;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final korean = Localizations.localeOf(context).languageCode == 'ko';
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Semantics(
+          container: true,
+          label: label,
+          button: true,
+          link: true,
+          onTap: onPressed,
+          excludeSemantics: true,
+          child: Tooltip(
+            message: label,
+            child: TextButton(
+              onPressed: onPressed,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              child: AspectRatio(
+                aspectRatio: 660.66 / (korean ? 203.75 : 220.835),
+                child: Image.asset(
+                  'assets/branding/developer-$service-${korean ? 'ko' : 'en'}.png',
+                  width: 400,
+                  fit: BoxFit.contain,
+                  excludeFromSemantics: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A route can be prepared under an inactive tab without being seen. Record
+/// cadence only after the banner actually paints, rather than during build.
+class _InvitationDisplay extends SingleChildRenderObjectWidget {
+  const _InvitationDisplay({required this.onDisplay, required super.child});
+  final VoidCallback onDisplay;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderInvitationDisplay(onDisplay);
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderInvitationDisplay renderObject,
+  ) {
+    renderObject.onDisplay = onDisplay;
+  }
+}
+
+class _RenderInvitationDisplay extends RenderProxyBox {
+  _RenderInvitationDisplay(this.onDisplay);
+  VoidCallback onDisplay;
+  bool _recordScheduled = false;
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    super.paint(context, offset);
+    if (_recordScheduled) return;
+    _recordScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (attached) onDisplay();
+    });
+  }
+}
+
 class _SettingsGroup extends StatelessWidget {
   const _SettingsGroup({this.title, this.footer, required this.children});
   final String? title;
@@ -2348,22 +2455,7 @@ class _LibraryManagementScreenState extends State<_LibraryManagementScreen> {
                               : null,
                           onTap: c.metadataFillRunning
                               ? c.pauseMetadataFill
-                              : () => c.fillMissingMetadata(
-                                  cacheCover: (item) async {
-                                    final url = item.thumbnailUrl;
-                                    if (url != null && url.scheme == 'https') {
-                                      await SessionImageLoader(
-                                        maximumBytes: 16 * 1024 * 1024,
-                                      ).load(
-                                        url,
-                                        headers: {
-                                          if (item.pageUrl != null)
-                                            'Referer': item.pageUrl.toString(),
-                                        },
-                                      );
-                                    }
-                                  },
-                                ),
+                              : () => c.fillMissingMetadata(),
                         ),
                         if (c.metadataFillRunning)
                           Padding(

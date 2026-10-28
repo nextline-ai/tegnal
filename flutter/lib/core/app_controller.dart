@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/booru_source.dart';
@@ -42,6 +44,13 @@ class AppController extends ChangeNotifier {
       taste.seed(AppMode.values.expand((value) => store.items(value)));
     }
     _knownSavedKeys.addAll(store.savedKeys());
+    _metadataAutomaticPending =
+        store.setting('metadata.fillPending', false) == true;
+    _metadataUserPaused = store.setting('metadata.fillPaused', false) == true;
+    _metadataCoverFailures.addAll(
+      (store.setting('metadata.coverRetryIds', <String>[]) as List)
+          .cast<String>(),
+    );
   }
   final LibraryStore store;
   late final LocalTasteController taste;
@@ -206,6 +215,7 @@ class AppController extends ChangeNotifier {
     store.setSetting('source.${source.mode.name}', source.id);
     _resetExplore(source.mode);
     changed();
+    if (source.mode == AppMode.manga) _resumeMetadataFill(sourceChanged: true);
   }
 
   void selectSources(List<SourceConfig> selected) {
@@ -259,7 +269,13 @@ class AppController extends ChangeNotifier {
     changed();
   }
 
-  void libraryRestored() {
+  void libraryRestored({bool fillMissingMetadata = false}) {
+    // Import invalidates pending responses, but the old single flight must
+    // finish before another request is started.
+    if (metadataFillRunning) {
+      _metadataGeneration++;
+      metadataFillRunning = false;
+    }
     final current = [for (final value in AppMode.values) ...store.items(value)];
     for (final entry in current) {
       if (!_knownSavedKeys.contains(entry.item.key)) {
@@ -277,6 +293,11 @@ class AppController extends ChangeNotifier {
     }
     _clients.clear();
     changed();
+    if (fillMissingMetadata) {
+      unawaited(this.fillMissingMetadata());
+    } else {
+      _resumeMetadataFill();
+    }
   }
 
   /// Native defaults augment requests without rewriting the user's saved query.
@@ -572,6 +593,7 @@ class AppController extends ChangeNotifier {
   }
 
   bool discordInvitationVisible = false;
+  bool _discordInvitationRecorded = false;
   void presentDiscordInvitationIfDue({DateTime? at}) {
     final now = at ?? DateTime.now();
     final next = (store.setting(
@@ -582,9 +604,20 @@ class AppController extends ChangeNotifier {
       return;
     }
     discordInvitationVisible = true;
+    _discordInvitationRecorded = false;
+  }
+
+  /// Like native onAppear, preparing an offscreen Settings route consumes no
+  /// display date. The banner records its first actual paint instead.
+  void recordDiscordInvitationDisplay({DateTime? at}) {
+    if (!discordInvitationVisible || _discordInvitationRecorded) return;
+    _discordInvitationRecorded = true;
     store.setSetting(
       'discord.invitation.nextPresentation',
-      now.add(const Duration(days: 3)).millisecondsSinceEpoch / 1000,
+      (at ?? DateTime.now())
+              .add(const Duration(days: 3))
+              .millisecondsSinceEpoch /
+          1000,
     );
   }
 
@@ -601,55 +634,257 @@ class AppController extends ChangeNotifier {
   }
 
   bool metadataFillRunning = false;
+  bool metadataFillWaitingForSource = false;
   int metadataFillCompleted = 0;
   int metadataFillTotal = 0;
   int metadataFillFailed = 0;
+  String? metadataFillError;
+  bool metadataFillNoticeDismissed = false;
   int _metadataGeneration = 0;
+  bool _metadataAutomaticPending = false;
+  bool _metadataUserPaused = false;
+  bool _metadataForeground = true;
+  bool _metadataRequested = false;
+  Future<void>? _metadataFlight;
+  Future<void> Function(ContentItem)? _metadataCoverCache;
+  final Set<String> _metadataCoverFailures = {};
+
+  bool get metadataFillPaused =>
+      _metadataAutomaticPending && _metadataUserPaused;
+  bool get metadataFillNoticeVisible =>
+      !metadataFillNoticeDismissed &&
+      (metadataFillRunning ||
+          metadataFillWaitingForSource ||
+          metadataFillPaused ||
+          metadataFillError != null);
 
   bool needsMetadata(ContentItem item) =>
       item.thumbnailUrl == null ||
       item.title.trim().isEmpty ||
       item.title == '#${item.id}' ||
-      item.tags.isEmpty;
+      item.tags.isEmpty ||
+      _metadataCoverFailures.contains(item.key);
+
+  /// The app host supplies the same encoded-image cache used by visible covers.
+  void setMetadataCoverCache(Future<void> Function(ContentItem)? cache) {
+    _metadataCoverCache = cache;
+    _resumeMetadataFill();
+  }
+
+  void setMetadataFillForeground(bool active, {bool notify = true}) {
+    if (_disposed || active == _metadataForeground) return;
+    _metadataForeground = active;
+    if (!active && metadataFillRunning) {
+      _metadataGeneration++;
+      metadataFillRunning = false;
+      _metadataRequested = true;
+    }
+    if (notify) changed();
+    if (active) _resumeMetadataFill();
+  }
+
+  void _resumeMetadataFill({bool sourceChanged = false}) {
+    if (_disposed ||
+        !_metadataAutomaticPending ||
+        _metadataUserPaused ||
+        !_metadataForeground) {
+      return;
+    }
+    if (sourceChanged) {
+      metadataFillError = null;
+      metadataFillWaitingForSource = false;
+    }
+    if (metadataFillError != null) {
+      return; // Explicit retry after a failed pass.
+    }
+    _metadataRequested = true;
+    unawaited(_ensureMetadataFill());
+  }
 
   Future<void> fillMissingMetadata({
     Future<void> Function(ContentItem)? cacheCover,
-  }) async {
-    if (metadataFillRunning) return;
+  }) {
+    if (_disposed) return Future.value();
+    if (cacheCover != null) _metadataCoverCache = cacheCover;
+    _metadataAutomaticPending = true;
+    _metadataUserPaused = false;
+    _metadataRequested = true;
+    metadataFillNoticeDismissed = false;
+    metadataFillError = null;
+    store.setSetting('metadata.fillPending', true);
+    store.setSetting('metadata.fillPaused', false);
+    return _ensureMetadataFill();
+  }
+
+  Future<void> _ensureMetadataFill() {
+    if (_disposed || !_metadataForeground || _metadataUserPaused) {
+      return Future.value();
+    }
+    final existing = _metadataFlight;
+    if (existing != null) return existing;
+    // Defer notifications until after the current widget build/import callback.
+    final future = Future<void>.microtask(_drainMetadataFill);
+    _metadataFlight = future;
+    future.whenComplete(() {
+      if (identical(_metadataFlight, future)) _metadataFlight = null;
+      if (!_disposed &&
+          _metadataRequested &&
+          _metadataAutomaticPending &&
+          _metadataForeground &&
+          !_metadataUserPaused &&
+          metadataFillError == null &&
+          !metadataFillWaitingForSource) {
+        unawaited(_ensureMetadataFill());
+      }
+    });
+    return future;
+  }
+
+  Future<void> _drainMetadataFill() async {
+    if (_disposed || !_metadataForeground || _metadataUserPaused) return;
     final generation = ++_metadataGeneration;
-    final pending = savedItems(mode: AppMode.manga)
-        .where((entry) => needsMetadata(entry.item))
-        .toList();
-    metadataFillRunning = true;
+    final attempted = <String>{};
+    var consecutiveFailures = 0;
+    var connectionStopped = false;
+    final clock = Stopwatch()..start();
+    var lastNotification = Duration.zero;
     metadataFillCompleted = 0;
     metadataFillFailed = 0;
-    metadataFillTotal = pending.length;
-    changed();
-    for (final entry in pending) {
-      if (_disposed || generation != _metadataGeneration) return;
-      try {
-        final updated = await detail(entry.item, recordOpen: false);
-        if (_disposed || generation != _metadataGeneration) return;
-        // A work removed during the request must never be re-created.
-        if (isSaved(entry.item)) {
-          store.saveItem(updated);
-          if (cacheCover != null) await cacheCover(updated);
+    metadataFillTotal = 0;
+    metadataFillWaitingForSource = false;
+    metadataFillError = null;
+    try {
+      do {
+        _metadataRequested = false;
+        final pending = savedItems(mode: AppMode.manga)
+            .where(
+              (entry) =>
+                  needsMetadata(entry.item) &&
+                  !attempted.contains(entry.item.key),
+            )
+            .toList(); // Store orders newest saved works first, as native does.
+        metadataFillTotal = metadataFillCompleted + pending.length;
+        if (pending.isEmpty) break;
+        if (selectedSource(AppMode.manga) == null) {
+          metadataFillWaitingForSource = true;
+          changed();
+          return;
         }
-      } catch (_) {
-        metadataFillFailed++;
+        metadataFillRunning = true;
+        changed();
+        for (final entry in pending) {
+          if (!_metadataCanContinue(generation)) return;
+          attempted.add(entry.item.key);
+          try {
+            final remote = await detail(entry.item, recordOpen: false);
+            if (!_metadataCanContinue(generation)) return;
+            final current = saved(entry.item);
+            if (current != null) {
+              final updated = _mergeMissingMetadata(current.item, remote);
+              // Save useful metadata even if cover fetching later fails.
+              store.saveItem(updated);
+              if (_metadataCoverCache != null) {
+                // Persist before the await, including pause/background/process
+                // termination while an image request is still outstanding.
+                _metadataCoverFailures.add(updated.key);
+                _persistMetadataCoverFailures();
+                await _metadataCoverCache!(updated);
+                if (!_metadataCanContinue(generation)) return;
+                _metadataCoverFailures.remove(updated.key);
+                _persistMetadataCoverFailures();
+              }
+              if (needsMetadata(updated)) {
+                throw const ContentException('Invalid work metadata.');
+              }
+            }
+            consecutiveFailures = 0;
+          } catch (error) {
+            if (!_metadataCanContinue(generation)) return;
+            metadataFillFailed++;
+            // A missing work is isolated. Repeated transport/access failures
+            // stop an offline library from spending hours on identical timeouts.
+            if (error is ContentException &&
+                const {404, 410}.contains(error.statusCode)) {
+              consecutiveFailures = 0;
+            } else {
+              consecutiveFailures++;
+            }
+            connectionStopped = consecutiveFailures >= 3;
+          }
+          metadataFillCompleted++;
+          if (metadataFillCompleted >= metadataFillTotal ||
+              clock.elapsed - lastNotification >=
+                  const Duration(milliseconds: 300)) {
+            lastNotification = clock.elapsed;
+            changed();
+          }
+          if (connectionStopped) break;
+          // One request/cover at a time, without decoding the entire library.
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+        }
+      } while (!connectionStopped &&
+          _metadataRequested &&
+          _metadataCanContinue(generation));
+      if (!_metadataCanContinue(generation)) return;
+      _persistMetadataCoverFailures();
+      if (metadataFillFailed > 0) {
+        metadataFillError = 'Some information could not be filled. Check the connection and retry.';
+      } else {
+        _metadataAutomaticPending = false;
+        store.setSetting('metadata.fillPending', false);
       }
-      metadataFillCompleted++;
-      changed();
+    } catch (_) {
+      if (_disposed || generation != _metadataGeneration) return;
+      metadataFillError = 'Some information could not be filled. Check the connection and retry.';
+    } finally {
+      if (!_disposed && generation == _metadataGeneration) {
+        metadataFillRunning = false;
+        changed();
+      }
     }
-    if (generation == _metadataGeneration) {
-      metadataFillRunning = false;
-      changed();
+  }
+
+  bool _metadataCanContinue(int generation) =>
+      !_disposed &&
+      generation == _metadataGeneration &&
+      _metadataForeground &&
+      !_metadataUserPaused;
+
+  void _persistMetadataCoverFailures() => store.setSetting(
+    'metadata.coverRetryIds',
+    _metadataCoverFailures.toList(),
+  );
+
+  ContentItem _mergeMissingMetadata(ContentItem existing, ContentItem remote) {
+    if (remote.id != existing.id || remote.mode != AppMode.manga) {
+      throw const ContentException('Invalid work metadata.');
     }
+    final payload = remote.toJson();
+    if (existing.title.trim().isNotEmpty &&
+        existing.title != '#${existing.id}') {
+      payload['title'] = existing.title;
+    }
+    if (existing.thumbnailUrl != null) {
+      payload['thumbnailUrl'] = existing.thumbnailUrl.toString();
+    }
+    if (existing.tags.isNotEmpty) payload['tags'] = existing.tags;
+    if (existing.artists.isNotEmpty) payload['artists'] = existing.artists;
+    payload['metadata'] = {...remote.metadata, ...existing.metadata};
+    return ContentItem.fromJson(payload);
   }
 
   void pauseMetadataFill() {
     _metadataGeneration++;
+    _metadataUserPaused = true;
+    _metadataRequested = false;
     metadataFillRunning = false;
+    metadataFillWaitingForSource = false;
+    store.setSetting('metadata.fillPaused', true);
+    changed();
+  }
+
+  void dismissMetadataFillNotice() {
+    metadataFillNoticeDismissed = true;
     changed();
   }
 
@@ -723,6 +958,7 @@ class AppController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _metadataGeneration++;
     for (final source in _clients.values) {
       source.close();
     }

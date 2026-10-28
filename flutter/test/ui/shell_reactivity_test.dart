@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/app.dart';
 import 'package:tegnal/core/app_controller.dart';
@@ -164,6 +165,17 @@ void main() {
   testWidgets(
     'root content extends under dock and reserves physical safe inset',
     (tester) async {
+      const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+      final opened = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(launcher, (call) async {
+            opened.add((call.arguments as Map)['url'] as String);
+            return true;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(launcher, null),
+      );
       await pumpShell(tester, bottomViewPadding: 34);
       await selectTab(tester, 'More');
 
@@ -192,15 +204,18 @@ void main() {
           )
           .first;
       await tester.scrollUntilVisible(
-        find.text('View on GitHub'),
+        find.byKey(const ValueKey('developer.github')),
         500,
         scrollable: settingsScroll,
       );
       await tester.drag(settingsScroll, const Offset(0, -400));
       await tester.pumpAndSettle();
-      final lastAction = find.text('View on GitHub');
+      final lastAction = find.byKey(const ValueKey('developer.github'));
       expect(lastAction.hitTestable(), findsOneWidget);
       expect(tester.getRect(lastAction).bottom, lessThan(dockRect.top));
+      await tester.tap(lastAction);
+      await tester.pumpAndSettle();
+      expect(opened, ['https://github.com/nextline-ai/tegnal']);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

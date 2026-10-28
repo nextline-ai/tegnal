@@ -35,6 +35,7 @@ const _captureStage = String.fromEnvironment(
 const _enabled = bool.fromEnvironment('TEGNAL_CAPTURE_UI');
 const _parityFlowsOnly = bool.fromEnvironment('TEGNAL_CAPTURE_PARITY_FLOWS');
 const _libraryOnly = bool.fromEnvironment('TEGNAL_CAPTURE_LIBRARY_ONLY');
+const _communityOnly = bool.fromEnvironment('TEGNAL_CAPTURE_COMMUNITY');
 const _bugfixesOnly = bool.fromEnvironment('TEGNAL_CAPTURE_BUGFIXES');
 const _polishOnly = bool.fromEnvironment('TEGNAL_CAPTURE_POLISH');
 const _refinementsOnly = bool.fromEnvironment('TEGNAL_CAPTURE_REFINEMENTS');
@@ -90,7 +91,9 @@ void main() {
     });
 
     final output = Directory(
-      _setupRefinement
+      _communityOnly
+          ? 'build/ui-captures/community'
+          : _setupRefinement
           ? 'build/ui-captures/setup-refinement'
           : _nativeParity
           ? 'build/ui-captures/native-parity/$_captureStage'
@@ -287,6 +290,62 @@ void main() {
     }
 
     await mount();
+    if (_communityOnly) {
+      await tab(3);
+      await capture('booru-invitation');
+      for (final mode in [AppMode.booru, AppMode.manga]) {
+        if (controller.mode != mode) {
+          controller.setMode(mode);
+          await settle();
+        }
+        final screen = find.byType(SettingsScreen).hitTestable();
+        final scroll = find
+            .descendant(of: screen, matching: find.byType(Scrollable))
+            .first;
+        final badge = find.descendant(
+          of: screen,
+          matching: find.byKey(const ValueKey('developer.community')),
+        );
+        await tester.scrollUntilVisible(badge, 500, scrollable: scroll);
+        final github = find.descendant(
+          of: screen,
+          matching: find.byKey(const ValueKey('developer.github')),
+        );
+        await Scrollable.ensureVisible(tester.element(github), alignment: .5);
+        await tester.drag(scroll, const Offset(0, -600));
+        await settle();
+        final dock = tester.getRect(find.byType(TegnalTabBar));
+        expect(github.hitTestable(), findsOneWidget);
+        expect(tester.getRect(github).bottom, lessThan(dock.top));
+        for (var attempt = 0; attempt < 20; attempt++) {
+          final loaded = tester
+              .widgetList<RawImage>(
+                find.descendant(of: screen, matching: find.byType(RawImage)),
+              )
+              .where((image) => image.image != null)
+              .length;
+          if (loaded >= 2) break;
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 80)),
+          );
+          await tester.pump();
+        }
+        expect(badge.hitTestable(), findsOneWidget);
+        expect(
+          tester
+              .widgetList<RawImage>(
+                find.descendant(of: screen, matching: find.byType(RawImage)),
+              )
+              .where((image) => image.image != null)
+              .length,
+          greaterThanOrEqualTo(2),
+        );
+        await capture('${mode.name}-developer');
+      }
+      expect(errors, isEmpty);
+      expect(offlineImages.unexpectedRequests, isEmpty);
+      return;
+    }
     if (_setupRefinement) {
       await waitForDecodedArtwork(24);
       final originalFolderCount = controller.folders(AppMode.booru).length;

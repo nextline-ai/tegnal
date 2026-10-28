@@ -180,7 +180,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   void _readAt(int? initialPageIndex) =>
       Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute<void>(
+        readerRoute(
           builder: (_) => ReaderScreen(
             controller: widget.controller,
             item: _item,
