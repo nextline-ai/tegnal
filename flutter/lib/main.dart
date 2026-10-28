@@ -10,10 +10,12 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'app.dart';
 import 'core/app_controller.dart';
+import 'core/app_features.dart';
 import 'core/drive_sync_controller.dart';
 import 'ui/design_system.dart';
 import 'data/download_manager.dart';
 import 'data/library_store.dart';
+import 'data/bundled_sources.dart';
 import 'ui/l10n.dart';
 
 Future<void> main() async {
@@ -30,17 +32,21 @@ Future<void> main() async {
     final support = await getApplicationSupportDirectory();
     await support.create(recursive: true);
     final store = LibraryStore(sqlite3.open('${support.path}/tegnal.sqlite'));
+    BundledSources.seedOnce(store);
     final controller = AppController(store);
     final downloads = DownloadManager(
       store,
       Directory('${support.path}/downloads'),
       refreshPages: controller.pages,
     );
-    final driveSync = DriveSyncController(
-      library: controller,
-      stateDirectory: Directory('${support.path}/drive-sync'),
-    );
-    await driveSync.initialize();
+    DriveSyncController? driveSync;
+    if (AppFeatures.googleDriveSyncEnabled) {
+      driveSync = DriveSyncController(
+        library: controller,
+        stateDirectory: Directory('${support.path}/drive-sync'),
+      );
+      await driveSync.initialize();
+    }
     runApp(
       TegnalApp(
         controller: controller,
@@ -55,6 +61,7 @@ Future<void> main() async {
       MaterialApp(
         theme: tegnalTheme(Brightness.light),
         darkTheme: tegnalTheme(Brightness.dark),
+        themeMode: ThemeMode.dark,
         home: const _StartupFailure(),
       ),
     );

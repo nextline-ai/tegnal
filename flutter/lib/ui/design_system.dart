@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 /// The collection's accents and semantic Material color roles.
 abstract final class TegnalColors {
-  static const accent = Color(0xFF1677FF);
+  static const accent = Color(0xFF009DFF);
   static const green = Color(0xFF269E58);
   static const red = Color(0xFFDB3548);
   static const orange = Color(0xFFE57B24);
@@ -32,15 +32,19 @@ ThemeData tegnalTheme(Brightness brightness) {
         seedColor: TegnalColors.accent,
         brightness: brightness,
       ).copyWith(
-        primary: dark ? const Color(0xFF0A84FF) : TegnalColors.accent,
+        primary: dark ? const Color(0xFF009DFF) : TegnalColors.accent,
         onPrimary: dark ? const Color(0xFF002E68) : Colors.white,
         surface: dark ? Colors.black : const Color(0xFFFAFAFC),
         surfaceContainerLowest: dark ? const Color(0xFF08080A) : Colors.white,
         surfaceContainerLow: dark
             ? const Color(0xFF1C1C1E)
             : const Color(0xFFF5F5F8),
+        onSurface: dark ? Colors.white : const Color(0xFF151517),
+        onSurfaceVariant: dark
+            ? const Color(0xFF98989E)
+            : const Color(0xFF68686E),
         surfaceContainer: dark
-            ? const Color(0xFF1B1B1F)
+            ? const Color(0xFF1C1C1E)
             : const Color(0xFFF0F0F5),
         surfaceContainerHigh: dark
             ? const Color(0xFF25252A)
@@ -87,6 +91,7 @@ ThemeData tegnalTheme(Brightness brightness) {
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
+      fillColor: dark ? const Color(0xFF202020) : const Color(0xFFEFEFF1),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
         borderSide: BorderSide.none,

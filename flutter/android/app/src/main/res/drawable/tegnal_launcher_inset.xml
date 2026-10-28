@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive layers are 108dp; the launcher displays their central 72dp.
+     Place the complete supplied square in that viewport to retain its margins. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/tegnal_launcher_foreground"
+    android:insetLeft="16.6667%"
+    android:insetTop="16.6667%"
+    android:insetRight="16.6667%"
+    android:insetBottom="16.6667%" />

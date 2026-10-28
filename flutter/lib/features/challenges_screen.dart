@@ -1324,9 +1324,11 @@ class _ChallengeReferencesState extends State<_ChallengeReferences> {
         }
         items = [];
         for (final source in sources) {
-          final page = await widget.controller
-              .client(source)
-              .search(widget.session.mission!.tags.join(' '), page: _page + 1);
+          final page = await widget.controller.searchSource(
+            source,
+            widget.session.mission!.tags.join(' '),
+            page: _page + 1,
+          );
           items.addAll(page.items.where(_matches));
           if (!page.hasMore) finished.add(source.id);
           more = more || page.hasMore;

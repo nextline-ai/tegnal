@@ -3,8 +3,11 @@ import 'package:material_ui/material_ui.dart';
 import '../core/app_controller.dart';
 import '../core/content.dart';
 import '../core/library.dart';
+import '../data/library_store.dart';
 import '../ui/common.dart';
 import '../ui/content_tile.dart';
+import '../ui/artwork_layout.dart';
+import '../ui/folder_tools.dart';
 import '../ui/l10n.dart';
 import '../ui/page_header.dart';
 import '../ui/native_symbols.dart';
@@ -38,44 +41,53 @@ class _LibraryScreenState extends State<LibraryScreen> {
     builder: (context, _) {
       final mode = _mode;
       final allFolders = widget.controller.folders(mode);
-      final unfiledIds = _unfiledFolderIds(widget.controller, mode);
+      final unfiledIds = _unfiledFolderIds(widget.controller, mode, allFolders);
       final folders = allFolders
           .where((folder) => !unfiledIds.contains(folder.id))
           .toList();
-      final saved = widget.controller.savedItems(mode: mode);
-      final unfiled = saved
-          .where(
-            (entry) =>
-                entry.folderIds.isEmpty ||
-                entry.folderIds.every(unfiledIds.contains),
-          )
-          .toList();
+      final overview = widget.controller.store.libraryOverview(
+        mode,
+        unfiledFolderIds: unfiledIds,
+      );
+      final unfiled = overview.unfiled;
+      final layout = ArtworkLayout.snapshot(widget.controller, mode);
       final unfiledColor =
           allFolders
               .where((folder) => unfiledIds.contains(folder.id))
               .firstOrNull
               ?.color ??
-          0xFF66BB6A;
-      final cards = [
-        _folderCard(
-          context,
-          'unsorted',
-          L10n.tr(context, 'Unfiled'),
-          unfiled,
-          Color(unfiledColor),
-        ),
-        for (final folder in folders)
-          _folderCard(
-            context,
-            folder.id,
-            folder.name,
-            saved
-                .where((entry) => entry.folderIds.contains(folder.id))
-                .toList(),
-            Color(folder.color),
-            folder: folder,
-          ),
-      ];
+          widget.controller.store.setting(
+            'unfiledColor.${mode.name}',
+            0xFF66BB6A,
+          ) as int;
+      final unfiledFolder = allFolders
+          .where((folder) => unfiledIds.contains(folder.id))
+          .firstOrNull;
+      final unfiledPosition =
+          unfiledFolder?.position ??
+          (widget.controller.store.setting(
+            'unfiledPosition.${mode.name}',
+            -1,
+          ) as num).toInt();
+      final orderedFolders = <LibraryFolder>[
+        if (mode == AppMode.manga &&
+            (unfiledFolder != null ||
+                unfiled.count > 0 ||
+                widget.controller.store.setting(
+                      'unfiledVisible.${mode.name}',
+                      true,
+                    ) ==
+                    true))
+          unfiledFolder ??
+              LibraryFolder(
+                id: 'unsorted',
+                mode: mode,
+                name: L10n.tr(context, 'Unfiled'),
+                color: unfiledColor,
+                position: unfiledPosition,
+              ),
+        ...folders,
+      ]..sort((a, b) => a.position.compareTo(b.position));
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
         body: TegnalFloatingHeader(
@@ -86,6 +98,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  onPressed: () =>
+                      _editFolder(context, widget.controller, mode: mode),
+                  style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
+                  icon: Icon(
+                    Icons.create_new_folder_outlined,
+                    size: 30,
+                    semanticLabel: L10n.tr(context, 'Create Folder'),
+                  ),
+                ),
                 if (mode == AppMode.booru)
                   IconButton(
                     onPressed: () =>
@@ -98,16 +120,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       semanticLabel: L10n.tr(context, 'Servers'),
                     ),
                   ),
-                IconButton(
-                  onPressed: () =>
-                      _editFolder(context, widget.controller, mode: mode),
-                  style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
-                  icon: Icon(
-                    Icons.create_new_folder_outlined,
-                    size: 30,
-                    semanticLabel: L10n.tr(context, 'Create Folder'),
-                  ),
-                ),
                 if (mode == AppMode.manga)
                   IconButton(
                     onPressed: () => _addWork(context, mode),
@@ -129,28 +141,49 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: SizedBox(height: tegnalHeaderExtent),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 30),
+                padding: const EdgeInsets.fromLTRB(16, 11, 16, 14),
                 sliver: SliverToBoxAdapter(
-                  child: _allFavorites(context, saved),
+                  child: _allFavorites(context, overview.totalCount),
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(
+                  horizontal: layout.removesPadding ? 0 : 16,
+                ),
                 sliver: SliverLayoutBuilder(
                   builder: (context, constraints) => SliverGrid(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: (constraints.crossAxisExtent / 220)
-                          .floor()
-                          .clamp(2, 6),
-                      mainAxisSpacing: 14,
-                      crossAxisSpacing: 14,
-                      childAspectRatio: .93,
+                      crossAxisCount: layout.columns(
+                        constraints.crossAxisExtent,
+                        folders: true,
+                      ),
+                      mainAxisSpacing: layout.removesPadding ? 0 : 14,
+                      crossAxisSpacing: layout.removesPadding ? 0 : 14,
+                      childAspectRatio: 1.04,
                     ),
-                    delegate: SliverChildListDelegate(cards),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final folder = orderedFolders[index];
+                      final builtIn =
+                          folder.id == 'unsorted' ||
+                          unfiledIds.contains(folder.id);
+                      return _folderCard(
+                        context,
+                        builtIn ? 'unsorted' : folder.id,
+                        builtIn ? L10n.tr(context, 'Unfiled') : folder.name,
+                        builtIn
+                            ? unfiled
+                            : overview.folders[folder.id] ??
+                                  const LibraryFolderOverview(),
+                        Color(builtIn ? unfiledColor : folder.color),
+                        layout: layout,
+                        folder: folder,
+                        unfiled: builtIn,
+                      );
+                    }, childCount: orderedFolders.length),
                   ),
                 ),
               ),
-              if (saved.isEmpty)
+              if (overview.totalCount == 0)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(28, 24, 28, 8),
@@ -168,9 +201,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     ),
                   ),
                 ),
-              SliverToBoxAdapter(
-                child: SizedBox(height: navigationScrollInset(context)),
-              ),
+              SliverToBoxAdapter(child: const NavigationScrollSpacer()),
             ],
           ),
         ),
@@ -178,59 +209,56 @@ class _LibraryScreenState extends State<LibraryScreen> {
     },
   );
 
-  Widget _allFavorites(BuildContext context, List<SavedItem> saved) =>
-      Semantics(
-        button: true,
-        label: '${L10n.tr(context, 'All Favorites')}, ${saved.length}',
-        child: TextButton(
-          onPressed: () => _openFolder(null, L10n.tr(context, 'All Favorites')),
-          style: TextButton.styleFrom(
-            padding: EdgeInsets.zero,
-            backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
+  Widget _allFavorites(BuildContext context, int count) => Semantics(
+    button: true,
+    label: '${L10n.tr(context, 'All Favorites')}, $count',
+    child: TextButton(
+      onPressed: () => _openFolder(null, L10n.tr(context, 'All Favorites')),
+      style: TextButton.styleFrom(
+        padding: EdgeInsets.zero,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        child: Row(
+          children: [
+            Icon(
+              Icons.grid_view,
+              size: 26,
+              color: Theme.of(context).colorScheme.primary,
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.grid_view,
-                  size: 26,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                L10n.tr(context, 'All Favorites'),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    L10n.tr(context, 'All Favorites'),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-                Text(
-                  '${saved.length}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Theme.of(context).colorScheme.primary
-                        .withValues(alpha: .7),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Icon(
-                  Icons.chevron_right,
-                  size: 24,
-                  color: Theme.of(context).colorScheme.primary
-                      .withValues(alpha: .7),
-                ),
-              ],
+              ),
             ),
-          ),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 17,
+                color: Theme.of(context).colorScheme.primary
+                    .withValues(alpha: .7),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(
+              Icons.chevron_right,
+              size: 24,
+              color: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: .7),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   void _openFolder(String? id, String title) => Navigator.of(context).push(
     MaterialPageRoute<void>(
@@ -260,119 +288,139 @@ class _LibraryScreenState extends State<LibraryScreen> {
     BuildContext context,
     String? id,
     String name,
-    List<SavedItem> entries,
+    LibraryFolderOverview overview,
     Color color, {
+    required ArtworkLayout layout,
     LibraryFolder? folder,
-  }) => Semantics(
-    button: true,
-    label: '$name, ${entries.length}',
-    child: GestureDetector(
-      onTap: () => _openFolder(id, name),
-      onLongPress: folder == null
-          ? null
-          : () => _folderActions(context, folder),
-      onSecondaryTap: folder == null
-          ? null
-          : () => _folderActions(context, folder),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: ColoredBox(
-          color: color,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-                  child: Column(
-                    children: [
-                      for (var row = 0; row < 2; row++) ...[
-                        if (row > 0) const SizedBox(height: 4),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              for (var column = 0; column < 2; column++) ...[
-                                if (column > 0) const SizedBox(width: 4),
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: SizedBox.expand(
-                                      child: row * 2 + column < entries.length
-                                          ? _cover(
-                                              entries[row * 2 + column].item,
-                                              color,
-                                            )
-                                          : ColoredBox(
-                                              color: Colors.white.withValues(
-                                                alpha: .13,
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(11, 12, 9, 10),
-                child: Row(
-                  children: [
-                    Expanded(
+    bool unfiled = false,
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final plain = layout.removesPadding;
+      final scale = (constraints.maxWidth / 160).clamp(.2, 1.0);
+      final argb = color.toARGB32();
+      final luminance =
+          .2126 * ((argb >> 16) & 255) +
+          .7152 * ((argb >> 8) & 255) +
+          .0722 * (argb & 255);
+      final textColor = _mode == AppMode.manga && luminance > 255 * .48
+          ? Colors.black
+          : Colors.white;
+      return Semantics(
+        button: true,
+        label: '$name, ${overview.count}',
+        child: GestureDetector(
+          onTap: () => _openFolder(id, name),
+          onLongPress: folder == null
+              ? null
+              : () => _folderActions(context, folder, unfiled: unfiled),
+          onSecondaryTap: folder == null
+              ? null
+              : () => _folderActions(context, folder, unfiled: unfiled),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(layout.removesPadding ? 0 : 16),
+            child: ColoredBox(
+              color: color,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        plain ? 0 : 6 * scale,
+                        plain ? 0 : 6 * scale,
+                        plain ? 0 : 6 * scale,
+                        0,
+                      ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          for (var row = 0; row < 2; row++) ...[
+                            if (row > 0)
+                              SizedBox(height: plain ? 0 : 4 * scale),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  for (
+                                    var column = 0;
+                                    column < 2;
+                                    column++
+                                  ) ...[
+                                    if (column > 0)
+                                      SizedBox(width: plain ? 0 : 4 * scale),
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(
+                                          plain ? 0 : 8 * scale,
+                                        ),
+                                        child: SizedBox.expand(
+                                          child:
+                                              row * 2 + column <
+                                                  overview.previews.length
+                                              ? _cover(
+                                                  overview.previews[row * 2 +
+                                                      column],
+                                                  color,
+                                                )
+                                              : ColoredBox(
+                                                  color: Colors.white
+                                                      .withValues(alpha: .13),
+                                                ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      plain ? 0 : 10 * scale,
+                      plain ? 0 : 3.33 * scale,
+                      plain ? 0 : 10 * scale,
+                      plain ? 0 : 8 * scale,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
+                          child: Text(
                             name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 17,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            L10n.tr(
-                              context,
-                              '%@ items',
-                            ).replaceAll('%@', '${entries.length}'),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withValues(alpha: .85),
-                            ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          L10n.tr(
+                            context,
+                            '%@ items',
+                          ).replaceAll('%@', '${overview.count}'),
+                          style: TextStyle(
+                            fontSize: (11 * scale).clamp(9.0, 11.0),
+                            fontWeight: FontWeight.w600,
+                            color: textColor.withValues(alpha: .85),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    if (folder != null)
-                      IconButton(
-                        onPressed: () => _folderActions(context, folder),
-                        style: IconButton.styleFrom(
-                          padding: const EdgeInsets.all(6),
-                        ),
-                        icon: Icon(
-                          Icons.more_horiz,
-                          size: 24,
-                          color: Colors.white.withValues(alpha: .85),
-                          semanticLabel: L10n.tr(context, 'Edit Folder'),
-                        ),
-                      ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
-    ),
+      );
+    },
   );
 
   Widget _cover(ContentItem item, Color color) => item.thumbnailUrl == null
@@ -397,95 +445,163 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _folderActions(
     BuildContext context,
-    LibraryFolder folder,
-  ) async {
+    LibraryFolder folder, {
+    bool unfiled = false,
+  }) async {
     final action = await showModalBottomSheet<String>(
       context: context,
       useRootNavigator: true,
       builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: DefaultTextStyle(
-                  style: Theme.of(context).textTheme.titleLarge!,
-                  child: Text(folder.name),
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                folder.name,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              ...[
-                ListTile(
-                  title: Text(L10n.tr(context, 'Edit Folder')),
-                  onTap: () => Navigator.pop(context, 'edit'),
-                ),
-                ListTile(
-                  title: Text(L10n.tr(context, 'Move Up')),
-                  onTap: () => Navigator.pop(context, 'up'),
-                ),
-                ListTile(
-                  title: Text(L10n.tr(context, 'Move Down')),
-                  onTap: () => Navigator.pop(context, 'down'),
-                ),
-                ListTile(
-                  title: Text(L10n.tr(context, 'Delete Folder')),
-                  onTap: () => Navigator.pop(context, 'delete'),
-                  textColor: Theme.of(context).colorScheme.error,
-                ),
-              ],
-              const Divider(),
+            ),
+            ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: Text(L10n.tr(context, 'Change Color')),
+              onTap: () => Navigator.pop(context, 'color'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.swap_vert),
+              title: Text(L10n.tr(context, 'Reorder Folders')),
+              onTap: () => Navigator.pop(context, 'order'),
+            ),
+            if (!unfiled)
               ListTile(
-                title: Text(L10n.tr(context, 'Cancel')),
-                onTap: () => Navigator.pop(context),
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(L10n.tr(context, 'Rename Folder')),
+                onTap: () => Navigator.pop(context, 'rename'),
               ),
-            ],
-          ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: Text(L10n.tr(context, 'Delete Folder')),
+              textColor: Theme.of(context).colorScheme.error,
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+            const Divider(),
+            ListTile(
+              title: Text(L10n.tr(context, 'Cancel')),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
         ),
       ),
     );
     if (!context.mounted) return;
-    if (action == 'edit') {
-      await _editFolder(context, widget.controller, folder: folder);
+    if (action == 'delete' && unfiled) {
+      final ids = _unfiledFolderIds(widget.controller, folder.mode);
+      final populated = widget.controller
+          .savedItems(mode: folder.mode)
+          .any(
+            (entry) =>
+                entry.folderIds.isEmpty || entry.folderIds.every(ids.contains),
+          );
+      if (populated) {
+        await showMessage(
+          context,
+          'Error',
+          'Move or remove the works in Uncategorized before deleting it.',
+        );
+      } else {
+        if (folder.id != 'unsorted') widget.controller.deleteFolder(folder);
+        widget.controller.setPreference(
+          'unfiledVisible.${folder.mode.name}',
+          false,
+        );
+      }
       return;
     }
-    if (action == 'delete' &&
+    if (action == 'rename') {
+      await _editFolder(context, widget.controller, folder: folder);
+    } else if (action == 'color') {
+      await showFolderColorPicker(
+        context,
+        title: folder.name,
+        color: folder.color,
+        onChanged: (color) {
+          if (unfiled && folder.id == 'unsorted') {
+            _guard(context, () {
+              _customizeUnfiled(widget.controller, folder.mode, color: color);
+              widget.controller.changed();
+            });
+          } else {
+            _guard(
+              context,
+              () => widget.controller.updateFolder(
+                LibraryFolder(
+                  id: folder.id,
+                  mode: folder.mode,
+                  name: folder.name,
+                  color: color,
+                  position: folder.position,
+                ),
+              ),
+            );
+          }
+        },
+      );
+    } else if (action == 'order') {
+      final folders = widget.controller.folders(folder.mode);
+      final nativeUnfiled = _unfiledFolderIds(widget.controller, folder.mode);
+      final list = <LibraryFolder>[
+        if (folder.mode == AppMode.manga && nativeUnfiled.isEmpty)
+          LibraryFolder(
+            id: 'unsorted',
+            mode: folder.mode,
+            name: L10n.tr(context, 'Unfiled'),
+            color: widget.controller.store.setting(
+              'unfiledColor.${folder.mode.name}',
+              0xFF66BB6A,
+            ) as int,
+            position: (widget.controller.store.setting(
+              'unfiledPosition.${folder.mode.name}',
+              -1,
+            ) as num).toInt(),
+          ),
+        ...folders,
+      ]..sort((a, b) => a.position.compareTo(b.position));
+      final ordered = await showFolderOrder(context, list);
+      if (ordered == null || !context.mounted) return;
+      _guard(context, () {
+        widget.controller.store.transaction(() {
+          for (final (index, item) in ordered.indexed) {
+            if (item.id == 'unsorted') {
+              _customizeUnfiled(
+                widget.controller,
+                folder.mode,
+                position: index,
+              );
+            } else {
+              widget.controller.store.saveFolder(
+                LibraryFolder(
+                  id: item.id,
+                  mode: item.mode,
+                  name: item.name,
+                  color: item.color,
+                  position: index,
+                ),
+              );
+            }
+          }
+        });
+        widget.controller.changed();
+      });
+    } else if (action == 'delete' &&
         await confirmAction(
           context,
           'Delete Folder',
-          'Works in this folder will be moved to Unfiled.',
+          folder.mode == AppMode.booru
+              ? 'Works in this folder will return to their site folders.'
+              : 'Works in this folder will be moved to Unfiled.',
         )) {
       if (context.mounted) {
         _guard(context, () => widget.controller.deleteFolder(folder));
-      }
-    }
-    if (action == 'up' || action == 'down') {
-      final folders = widget.controller.folders(folder.mode);
-      final index = folders.indexWhere((value) => value.id == folder.id);
-      final next = index + (action == 'up' ? -1 : 1);
-      if (index < 0 || next < 0 || next >= folders.length) return;
-      final other = folders[next];
-      if (context.mounted) {
-        _guard(context, () {
-          widget.controller.updateFolder(
-            LibraryFolder(
-              id: folder.id,
-              mode: folder.mode,
-              name: folder.name,
-              color: folder.color,
-              position: next,
-            ),
-          );
-          widget.controller.updateFolder(
-            LibraryFolder(
-              id: other.id,
-              mode: other.mode,
-              name: other.name,
-              color: other.color,
-              position: index,
-            ),
-          );
-        });
       }
     }
   }
@@ -518,8 +634,43 @@ class _SavedCollectionState extends State<_SavedCollection> {
   final Set<String> _selected = {};
   final ScrollController _scroll = ScrollController();
 
+  List<SavedItem>? _snapshotItems;
+  Map<String, String>? _searchFields;
+  List<LibraryFolder>? _snapshotFolders;
+  Set<String>? _snapshotUnfiled;
+  ArtworkLayout? _snapshotLayout;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_invalidateSnapshot);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SavedCollection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_invalidateSnapshot);
+      widget.controller.addListener(_invalidateSnapshot);
+    }
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.mode != widget.mode ||
+        oldWidget.folderId != widget.folderId) {
+      _invalidateSnapshot();
+    }
+  }
+
+  void _invalidateSnapshot() {
+    _snapshotItems = null;
+    _searchFields = null;
+    _snapshotFolders = null;
+    _snapshotUnfiled = null;
+    _snapshotLayout = null;
+  }
+
   @override
   void dispose() {
+    widget.controller.removeListener(_invalidateSnapshot);
     _scroll.dispose();
     super.dispose();
   }
@@ -532,12 +683,22 @@ class _SavedCollectionState extends State<_SavedCollection> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) {
-      final unfiledIds = _unfiledFolderIds(widget.controller, widget.mode);
-      final items = widget.controller
+      final layout = _snapshotLayout ??= ArtworkLayout.snapshot(
+        widget.controller,
+        widget.mode,
+      );
+      final folders = _snapshotFolders ??= widget.controller.folders(
+        widget.mode,
+      );
+      final unfiledIds = _snapshotUnfiled ??= _unfiledFolderIds(
+        widget.controller,
+        widget.mode,
+        folders,
+      );
+      final allItems = _snapshotItems ??= widget.controller
           .savedItems(
             mode: widget.mode,
             folderId: widget.folderId == 'unsorted' ? null : widget.folderId,
-            query: _query,
           )
           .where(
             (entry) =>
@@ -546,9 +707,20 @@ class _SavedCollectionState extends State<_SavedCollection> {
                 entry.folderIds.every(unfiledIds.contains),
           )
           .toList();
+      final needle = _query.trim().toLowerCase();
+      final items = needle.isEmpty
+          ? allItems
+          : allItems.where((entry) {
+              final fields = _searchFields ??= {
+                for (final saved in allItems)
+                  saved.item.key:
+                      '${saved.item.title} ${saved.item.id} ${saved.item.tags.join(' ')} ${saved.item.artists.join(' ')} ${saved.note}'
+                          .toLowerCase(),
+              };
+              return fields[entry.item.key]!.contains(needle);
+            }).toList();
       final title =
-          widget.controller
-              .folders(widget.mode)
+          folders
               .where((folder) => folder.id == widget.folderId)
               .firstOrNull
               ?.name ??
@@ -560,17 +732,23 @@ class _SavedCollectionState extends State<_SavedCollection> {
             controller: _scroll,
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+                padding: const EdgeInsets.fromLTRB(16, 3, 16, 18),
                 sliver: SliverToBoxAdapter(
                   child: TextField(
                     onChanged: (value) => setState(() => _query = value),
                     decoration: InputDecoration(
+                      isDense: true,
+                      constraints: const BoxConstraints.tightFor(height: 44),
                       hintText: L10n.tr(context, 'Search saved works'),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 14,
                       ),
                       prefixIcon: const Icon(Icons.search),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(28),
                         borderSide: BorderSide.none,
@@ -591,24 +769,16 @@ class _SavedCollectionState extends State<_SavedCollection> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(horizontal: layout.margin),
                   sliver: SliverLayoutBuilder(
                     builder: (context, constraints) => SliverGrid(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: widget.mode == AppMode.booru
-                            ? (constraints.crossAxisExtent / 170).floor().clamp(
-                                3,
-                                8,
-                              )
-                            : (constraints.crossAxisExtent / 185).floor().clamp(
-                                2,
-                                7,
-                              ),
-                        mainAxisSpacing: widget.mode == AppMode.booru ? 10 : 18,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: widget.mode == AppMode.booru
-                            ? .78
-                            : .61,
+                        crossAxisCount: layout.columns(
+                          constraints.crossAxisExtent,
+                        ),
+                        mainAxisSpacing: layout.spacing,
+                        crossAxisSpacing: layout.spacing,
+                        childAspectRatio: layout.aspectRatio,
                       ),
                       delegate: SliverChildBuilderDelegate((context, index) {
                         final saved = items[index];
@@ -629,7 +799,7 @@ class _SavedCollectionState extends State<_SavedCollection> {
                                   if (_selecting) {
                                     _toggle(saved.item);
                                   } else {
-                                    widget.controller.unsave(saved.item);
+                                    manage();
                                   }
                                 },
                                 onSecondaryTap: () {
@@ -641,7 +811,9 @@ class _SavedCollectionState extends State<_SavedCollection> {
                                 },
                                 child: ContentTile(
                                   item: saved.item,
+                                  layout: layout,
                                   saved: true,
+                                  showSavedBadge: false,
                                   selecting: _selecting,
                                   selected: _selected.contains(saved.item.key),
                                   onTap: () => _selecting
@@ -650,130 +822,168 @@ class _SavedCollectionState extends State<_SavedCollection> {
                                 ),
                               ),
                             ),
-                            if (!_selecting)
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: IconButton(
-                                  tooltip: L10n.tr(context, 'More Settings'),
-                                  visualDensity: VisualDensity.compact,
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0x99000000),
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  onPressed: manage,
-                                  icon: const Icon(Icons.more_vert),
-                                ),
-                              ),
                           ],
                         );
                       }, childCount: items.length),
                     ),
                   ),
                 ),
-              SliverToBoxAdapter(
-                child: SizedBox(height: navigationScrollInset(context)),
-              ),
+              SliverToBoxAdapter(child: const NavigationScrollSpacer()),
             ],
           ),
         ),
-        appBar: AppBar(
-          leading: const TegnalBackButton(),
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          actions: [
-            _selecting
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _tool(
-                        Icons.check_circle_outline,
-                        'Select All',
-                        () => setState(() {
-                          final allSelected = items.every(
-                            (entry) => _selected.contains(entry.item.key),
-                          );
-                          if (allSelected) {
-                            _selected.removeAll(
-                              items.map((entry) => entry.item.key),
-                            );
-                          } else {
-                            _selected.addAll(
-                              items.map((entry) => entry.item.key),
-                            );
-                          }
-                        }),
-                      ),
-                      _tool(
-                        Icons.folder_outlined,
-                        widget.mode == AppMode.manga
-                            ? 'Add to Folder'
-                            : 'Move to Another Folder',
-                        _selected.isEmpty ? null : _moveSelected,
-                      ),
-                      _tool(
-                        Icons.delete_outline,
-                        'Remove from Saved',
-                        _selected.isEmpty ? null : _removeSelected,
-                      ),
-                      _tool(
-                        Icons.close,
-                        'Cancel',
-                        () => setState(() {
-                          _selecting = false;
-                          _selected.clear();
-                        }),
-                      ),
-                    ],
-                  )
-                : TextButton(
-                    onPressed: items.isEmpty
-                        ? null
-                        : () => setState(() => _selecting = true),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.all(8),
-                    ),
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(tegnalHeaderExtent),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Row(
+                children: [
+                  const TegnalBackButton(),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Text(
-                      L10n.tr(context, 'Select'),
-                      style: const TextStyle(fontSize: 15),
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-            if (!_selecting)
-              PopupMenuButton<String>(
-                tooltip: L10n.tr(context, 'Quick Jump'),
-                icon: const Icon(Icons.arrow_upward_rounded),
-                onSelected: (value) {
-                  if (value == 'top') {
-                    _scroll.animateTo(
-                      0,
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOut,
-                    );
-                  } else if (value == 'bottom') {
-                    _scroll.animateTo(
-                      _scroll.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOut,
-                    );
-                  } else {
-                    _jumpToMonth(items, value);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'top',
-                    child: Text(L10n.tr(context, 'Jump to Top')),
+                  const SizedBox(width: 8),
+                  ChromeSurface(
+                    enabled: false,
+                    borderRadius: BorderRadius.circular(26),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.mode == AppMode.booru)
+                            _tool(
+                              Icons.dns_rounded,
+                              'Servers',
+                              () => showBooruSourcePicker(
+                                context,
+                                widget.controller,
+                              ),
+                            ),
+
+                          _selecting
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _tool(
+                                      Icons.check_circle_outline,
+                                      'Select All',
+                                      () => setState(() {
+                                        final allSelected = items.every(
+                                          (entry) => _selected.contains(
+                                            entry.item.key,
+                                          ),
+                                        );
+                                        if (allSelected) {
+                                          _selected.removeAll(
+                                            items.map(
+                                              (entry) => entry.item.key,
+                                            ),
+                                          );
+                                        } else {
+                                          _selected.addAll(
+                                            items.map(
+                                              (entry) => entry.item.key,
+                                            ),
+                                          );
+                                        }
+                                      }),
+                                    ),
+                                    _tool(
+                                      Icons.folder_outlined,
+                                      widget.mode == AppMode.manga
+                                          ? 'Add to Folder'
+                                          : 'Move to Another Folder',
+                                      _selected.isEmpty ? null : _moveSelected,
+                                    ),
+                                    _tool(
+                                      Icons.delete_outline,
+                                      'Remove from Saved',
+                                      _selected.isEmpty
+                                          ? null
+                                          : _removeSelected,
+                                    ),
+                                    _tool(
+                                      Icons.close,
+                                      'Cancel',
+                                      () => setState(() {
+                                        _selecting = false;
+                                        _selected.clear();
+                                      }),
+                                    ),
+                                  ],
+                                )
+                              : TextButton(
+                                  onPressed: items.isEmpty
+                                      ? null
+                                      : () => setState(() => _selecting = true),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.all(8),
+                                  ),
+                                  child: Text(
+                                    L10n.tr(context, 'Select'),
+                                    style: const TextStyle(fontSize: 15),
+                                  ),
+                                ),
+                          if (!_selecting)
+                            PopupMenuButton<String>(
+                              tooltip: L10n.tr(context, 'Quick Jump'),
+                              icon: const Icon(Icons.arrow_upward_rounded),
+                              onSelected: (value) {
+                                if (value == 'top') {
+                                  _scroll.animateTo(
+                                    0,
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeOut,
+                                  );
+                                } else if (value == 'bottom') {
+                                  _scroll.animateTo(
+                                    _scroll.position.maxScrollExtent,
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeOut,
+                                  );
+                                } else {
+                                  _jumpToMonth(items, value);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'top',
+                                  child: Text(L10n.tr(context, 'Jump to Top')),
+                                ),
+                                PopupMenuItem(
+                                  value: 'bottom',
+                                  child: Text(
+                                    L10n.tr(context, 'Jump to Bottom'),
+                                  ),
+                                ),
+                                if (items.isNotEmpty) const PopupMenuDivider(),
+                                for (final month in _months(items))
+                                  PopupMenuItem(
+                                    value: month,
+                                    child: Text(month),
+                                  ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                  PopupMenuItem(
-                    value: 'bottom',
-                    child: Text(L10n.tr(context, 'Jump to Bottom')),
-                  ),
-                  if (items.isNotEmpty) const PopupMenuDivider(),
-                  for (final month in _months(items))
-                    PopupMenuItem(value: month, child: Text(month)),
                 ],
               ),
-          ],
+            ),
+          ),
         ),
       );
     },
@@ -815,12 +1025,18 @@ class _SavedCollectionState extends State<_SavedCollection> {
   }
 
   Widget _tool(IconData icon, String label, VoidCallback? onPressed) =>
-      IconButton(
-        onPressed: onPressed,
-        style: IconButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+      SizedBox(
+        width: 34,
+        height: 44,
+        child: IconButton(
+          onPressed: onPressed,
+          style: IconButton.styleFrom(
+            minimumSize: const Size(34, 44),
+            maximumSize: const Size(34, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
+          ),
+          icon: Icon(icon, size: 26, semanticLabel: L10n.tr(context, label)),
         ),
-        icon: Icon(icon, size: 28, semanticLabel: L10n.tr(context, label)),
       );
 
   List<SavedItem> get _selectedItems => widget.controller
@@ -858,10 +1074,11 @@ class _SavedCollectionState extends State<_SavedCollection> {
                 ),
               ),
               ...[
-                ListTile(
-                  title: Text(L10n.tr(context, 'Unfiled')),
-                  onTap: () => Navigator.pop(context, 'unsorted'),
-                ),
+                if (widget.mode == AppMode.manga)
+                  ListTile(
+                    title: Text(L10n.tr(context, 'Unfiled')),
+                    onTap: () => Navigator.pop(context, 'unsorted'),
+                  ),
                 for (final folder in folders)
                   ListTile(
                     title: Row(
@@ -951,18 +1168,14 @@ Future<void> _editFolder(
   if (result != null && context.mounted) {
     _guard(context, () {
       if (folder == null) {
-        controller.createFolder(
-          result.name,
-          mode: targetMode,
-          color: result.color,
-        );
+        controller.createFolder(result.name, mode: targetMode);
       } else {
         controller.updateFolder(
           LibraryFolder(
             id: folder.id,
             mode: targetMode,
             name: result.name,
-            color: result.color,
+            color: folder.color,
             position: folder.position,
           ),
         );
@@ -972,9 +1185,8 @@ Future<void> _editFolder(
 }
 
 class _FolderEditResult {
-  const _FolderEditResult(this.name, this.color);
+  const _FolderEditResult(this.name);
   final String name;
-  final int color;
 }
 
 class _FolderEditorDialog extends StatefulWidget {
@@ -989,7 +1201,6 @@ class _FolderEditorDialogState extends State<_FolderEditorDialog> {
   late final TextEditingController _name = TextEditingController(
     text: widget.folder?.name ?? '',
   );
-  late int _color = widget.folder?.color ?? 0xFF5E5CE6;
   bool _invalid = false;
 
   @override
@@ -1004,13 +1215,16 @@ class _FolderEditorDialogState extends State<_FolderEditorDialog> {
       setState(() => _invalid = true);
       return;
     }
-    Navigator.pop(context, _FolderEditResult(name, _color));
+    Navigator.pop(context, _FolderEditResult(name));
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(
-      L10n.tr(context, widget.folder == null ? 'Create Folder' : 'Edit Folder'),
+      L10n.tr(
+        context,
+        widget.folder == null ? 'Create Folder' : 'Rename Folder',
+      ),
     ),
     content: Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -1037,45 +1251,6 @@ class _FolderEditorDialogState extends State<_FolderEditorDialog> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final value in [
-                0xFF5E5CE6,
-                0xFF007AFF,
-                0xFF34C759,
-                0xFFFF9500,
-                0xFFFF2D55,
-                0xFF8E8E93,
-              ])
-                Semantics(
-                  button: true,
-                  selected: _color == value,
-                  label:
-                      '${L10n.tr(context, 'Folder color')} ${value.toRadixString(16)}',
-                  child: GestureDetector(
-                    onTap: () => setState(() => _color = value),
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: Color(value),
-                        shape: BoxShape.circle,
-                      ),
-                      child: _color == value
-                          ? const Icon(
-                              Icons.check,
-                              size: 24,
-                              color: Colors.white,
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-            ],
-          ),
         ],
       ),
     ),
@@ -1512,12 +1687,16 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
 
 /// Imported native backups retain their built-in Unfiled folder as a real row.
 /// Present that row together with works that have no folder membership.
-Set<String> _unfiledFolderIds(AppController controller, AppMode mode) {
+Set<String> _unfiledFolderIds(
+  AppController controller,
+  AppMode mode, [
+  Iterable<LibraryFolder>? folders,
+]) {
   final key = mode == AppMode.booru ? 'backup.images' : 'backup.comics';
   final metadata =
       controller.store.portable(key)?['folderMetadata'] as Map? ?? {};
   return {
-    for (final folder in controller.folders(mode))
+    for (final folder in folders ?? controller.folders(mode))
       if ((metadata[folder.id] is Map &&
               (metadata[folder.id] as Map)['nativeID'] == 'unsorted') ||
           (mode == AppMode.manga &&
@@ -1525,4 +1704,53 @@ Set<String> _unfiledFolderIds(AppController controller, AppMode mode) {
               (metadata[folder.id] as Map)['name'] == '미분류'))
         folder.id,
   };
+}
+
+void _customizeUnfiled(
+  AppController controller,
+  AppMode mode, {
+  int? color,
+  int? position,
+}) {
+  final ids = _unfiledFolderIds(controller, mode);
+  final existing = controller
+      .folders(mode)
+      .where((folder) => ids.contains(folder.id))
+      .firstOrNull;
+  final id = existing?.id ?? 'builtin-unfiled-${mode.name}';
+  final key = mode == AppMode.booru ? 'backup.images' : 'backup.comics';
+  final portable = controller.store.portable(key) ?? <String, dynamic>{};
+  final metadata = Map<String, dynamic>.from(
+    portable['folderMetadata'] as Map? ?? {},
+  );
+  metadata[id] = <String, dynamic>{
+    ...?metadata[id] as Map?,
+    if (mode == AppMode.booru) 'nativeID': 'unsorted',
+    'name': mode == AppMode.manga ? '미분류' : '',
+  };
+  controller.store.transaction(() {
+    controller.store.saveFolder(
+      LibraryFolder(
+        id: id,
+        mode: mode,
+        name: mode == AppMode.manga ? '미분류' : 'Uncategorized',
+        color:
+            color ??
+            existing?.color ??
+            controller.store.setting('unfiledColor.${mode.name}', 0xFF66BB6A)
+                as int,
+        position:
+            position ??
+            existing?.position ??
+            (controller.store.setting(
+              'unfiledPosition.${mode.name}',
+              -1,
+            ) as num).toInt(),
+      ),
+    );
+    controller.store.setPortable(key, {
+      ...portable,
+      'folderMetadata': metadata,
+    });
+  });
 }

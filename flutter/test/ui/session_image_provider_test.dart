@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -246,6 +247,269 @@ void main() {
       expect(first, reordered);
       expect(first.hashCode, reordered.hashCode);
       expect(first, isNot(different));
+    },
+  );
+  test('encoded cache coalesces, reuses and separates authorization', () async {
+    var calls = 0;
+    final gate = Completer<void>();
+    final cache = SessionImageByteCache(maximumBytes: 4);
+    final loader = SessionImageLoader(
+      cache: cache,
+      clientFactory: (_) => MockClient((_) async {
+        calls++;
+        await gate.future;
+        return http.Response.bytes([1, 2], 200);
+      }),
+    );
+    final url = Uri.https('cache.example', '/image');
+    final a = loader.load(url, headers: {'Authorization': 'a'});
+    final b = loader.load(url, headers: {'Authorization': 'a'});
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, 1);
+    gate.complete();
+    await Future.wait([a, b]);
+    await loader.load(url, headers: {'Authorization': 'a'});
+    expect(calls, 1);
+    await loader.load(url, headers: {'Authorization': 'b'});
+    expect(calls, 2);
+    await loader.load(Uri.https('cache.example', '/other'));
+    await loader.load(url, headers: {'Authorization': 'a'});
+    expect(calls, 4);
+  });
+
+  test('cache obeys no-store and clearing during a request', () async {
+    var calls = 0;
+    final gate = Completer<void>();
+    final cache = SessionImageByteCache();
+    final loader = SessionImageLoader(
+      cache: cache,
+      clientFactory: (_) => MockClient((request) async {
+        calls++;
+        if (request.url.path == '/pending') await gate.future;
+        return http.Response.bytes(
+          [1],
+          200,
+          headers: request.url.path == '/private'
+              ? {'cache-control': 'no-store'}
+              : {},
+        );
+      }),
+    );
+    final privateUrl = Uri.https('cache.example', '/private');
+    await loader.load(privateUrl);
+    await loader.load(privateUrl);
+    expect(calls, 2);
+    final pending = Uri.https('cache.example', '/pending');
+    final first = loader.load(pending);
+    await Future<void>.delayed(Duration.zero);
+    cache.clear();
+    gate.complete();
+    await first;
+    await loader.load(pending);
+    expect(calls, 4);
+  });
+  test('disk tier reuses evicted memory and enforces its size limit', () async {
+    final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+    addTearDown(() => dir.delete(recursive: true));
+    var calls = 0;
+    final cache = SessionImageByteCache(
+      maximumBytes: 0,
+      maximumDiskBytes: 4,
+      useDisk: true,
+      diskDirectory: dir,
+    );
+    final loader = SessionImageLoader(
+      cache: cache,
+      clientFactory: (_) => MockClient((_) async {
+        calls++;
+        return http.Response.bytes([1, 2], 200);
+      }),
+    );
+    final first = Uri.https('disk.example', '/first');
+    await loader.load(first);
+    await loader.load(first);
+    expect(calls, 1);
+    await loader.load(Uri.https('disk.example', '/second'));
+    await loader.load(Uri.https('disk.example', '/third'));
+    await cache.waitForDiskWrites();
+    final files = await Directory('${dir.path}/tegnal-image-cache')
+        .list()
+        .where((e) => e.path.endsWith('.data'))
+        .toList();
+    expect(files.length, 2);
+    await loader.load(first);
+    expect(calls, 4);
+    await cache.clear();
+    await loader.load(first);
+    expect(calls, 5);
+    await cache.clear();
+  });
+
+  test('disk tier honors no-store and isolates auth', () async {
+    final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+    addTearDown(() => dir.delete(recursive: true));
+    var calls = 0;
+    final cache = SessionImageByteCache(
+      maximumBytes: 0,
+      useDisk: true,
+      diskDirectory: dir,
+    );
+    final loader = SessionImageLoader(
+      cache: cache,
+      clientFactory: (_) => MockClient((request) async {
+        calls++;
+        return http.Response.bytes(
+          [1],
+          200,
+          headers: request.url.path == '/private'
+              ? {'cache-control': 'no-store'}
+              : {'cache-control': 'max-age=1200', 'age': '1200'},
+        );
+      }),
+    );
+    final url = Uri.https('disk.example', '/private');
+    await loader.load(url, headers: {'Authorization': 'a'});
+    await loader.load(url, headers: {'Authorization': 'a'});
+    await loader.load(Uri.https('disk.example', '/expired'));
+    await loader.load(Uri.https('disk.example', '/expired'));
+    expect(calls, 4);
+  });
+  test(
+    'disk cache separates authorization and clears pending writes',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+      addTearDown(() => dir.delete(recursive: true));
+      final gate = Completer<void>();
+      var calls = 0;
+      final cache = SessionImageByteCache(
+        maximumBytes: 0,
+        useDisk: true,
+        diskDirectory: dir,
+      );
+      final loader = SessionImageLoader(
+        cache: cache,
+        clientFactory: (_) => MockClient((request) async {
+          calls++;
+          if (request.url.path == '/pending') await gate.future;
+          return http.Response.bytes([1], 200);
+        }),
+      );
+      final image = Uri.https('disk.example', '/image');
+      await loader.load(image, headers: {'Authorization': 'a'});
+      await loader.load(image, headers: {'Authorization': 'b'});
+      await loader.load(image, headers: {'Authorization': 'a'});
+      expect(calls, 2);
+      final pending = Uri.https('disk.example', '/pending');
+      final load = loader.load(pending);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await cache.clear();
+      gate.complete();
+      await load;
+      await loader.load(pending);
+      expect(calls, 4);
+      await cache.clear();
+    },
+  );
+  test('clear prevents queued disk writes repopulating the cache', () async {
+    final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+    final cache = SessionImageByteCache(
+      maximumBytes: 0,
+      useDisk: true,
+      diskDirectory: dir,
+    );
+    addTearDown(() async {
+      await cache.clear();
+      await dir.delete(recursive: true);
+    });
+    final loader = SessionImageLoader(
+      cache: cache,
+      clientFactory: (_) => MockClient(
+        (_) async => http.Response.bytes(List.filled(1024 * 1024, 1), 200),
+      ),
+    );
+    await loader.load(Uri.https('disk.example', '/queued'));
+    await cache.clear();
+    await cache.waitForDiskWrites();
+    expect(await Directory('${dir.path}/tegnal-image-cache').exists(), isFalse);
+  });
+  test('unrelated cache misses do not wait for a pending disk write', () async {
+    final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+    final gate = Completer<void>();
+    final writing = Completer<void>();
+    final cache = SessionImageByteCache(
+      maximumBytes: 0,
+      useDisk: true,
+      diskDirectory: dir,
+      beforeDiskWrite: () {
+        if (!writing.isCompleted) writing.complete();
+        return gate.future;
+      },
+    );
+    addTearDown(() async {
+      if (!gate.isCompleted) gate.complete();
+      await cache.clear();
+      await dir.delete(recursive: true);
+    });
+    final requested = <String>[];
+    final loader = SessionImageLoader(
+      cache: cache,
+      clientFactory: (_) => MockClient((request) async {
+        requested.add(request.url.path);
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+    final first = Uri.https('disk.example', '/one');
+    await loader.load(first);
+    await writing.future;
+    final again = loader.load(first);
+    final unrelated = await loader
+        .load(Uri.https('disk.example', '/two'))
+        .timeout(const Duration(seconds: 2));
+    expect(unrelated, [1, 2, 3]);
+    expect(requested, ['/one', '/two']);
+    gate.complete();
+    expect(await again, [1, 2, 3]);
+    expect(requested, ['/one', '/two']);
+  });
+  test(
+    'memory pressure releases encoded bytes without deleting disk cache',
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+      final memory = SessionImageByteCache();
+      final disk = SessionImageByteCache(useDisk: true, diskDirectory: dir);
+      var memoryCalls = 0, diskCalls = 0;
+      final memoryLoader = SessionImageLoader(
+        cache: memory,
+        clientFactory: (_) => MockClient((_) async {
+          memoryCalls++;
+          return http.Response.bytes([1], 200);
+        }),
+      );
+      final diskLoader = SessionImageLoader(
+        cache: disk,
+        clientFactory: (_) => MockClient((_) async {
+          diskCalls++;
+          return http.Response.bytes([1], 200);
+        }),
+      );
+      final url = Uri.https('pressure.example', '/image');
+      WidgetsBinding.instance.addObserver(memory);
+      WidgetsBinding.instance.addObserver(disk);
+      addTearDown(() async {
+        WidgetsBinding.instance.removeObserver(memory);
+        WidgetsBinding.instance.removeObserver(disk);
+        await disk.clear();
+        await dir.delete(recursive: true);
+      });
+      await memoryLoader.load(url);
+      await diskLoader.load(url);
+      await disk.waitForDiskWrites();
+      WidgetsBinding.instance.handleMemoryPressure();
+      await memoryLoader.load(url);
+      await diskLoader.load(url);
+      expect(memoryCalls, 2);
+      expect(diskCalls, 1);
     },
   );
 }

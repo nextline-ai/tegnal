@@ -7,6 +7,8 @@ import '../core/app_controller.dart';
 import '../core/content.dart';
 import '../core/library.dart';
 import '../ui/content_tile.dart';
+import '../ui/artwork_layout.dart';
+import '../ui/grid_bookmark_snapshot.dart';
 import '../ui/l10n.dart';
 import '../ui/page_header.dart';
 import '../ui/source_picker.dart';
@@ -72,6 +74,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
+    final state = widget.controller.explore(widget.mode);
+    if (state.loading || !state.hasMore) return;
     if (_scroll.position.extentAfter < 700) {
       widget.controller.search(more: true, forMode: widget.mode);
     }
@@ -176,9 +180,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     ];
   }
 
-  bool _isSearchSaved(String query) =>
-      _savedSearches.any((entry) => entry.query == query);
-
   void _toggleSavedSearch(String query) {
     if (widget.mode == AppMode.manga) {
       final data =
@@ -264,99 +265,157 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  Widget _historyPanel() {
-    final history = _visibleHistory;
-    final savedOnly = _savedSearches
-        .where((entry) => !history.any((item) => item.query == entry.query))
-        .toList();
-    final entries = [...history, ...savedOnly];
-    if (entries.isEmpty) return const SizedBox.shrink();
+  Widget _historyPanel(
+    BuildContext context,
+    List<SearchEntry> history,
+    List<SearchEntry> saved,
+  ) {
+    final savedQueries = saved.map((entry) => entry.query).toSet();
+    if (history.isEmpty && saved.isEmpty) return const SizedBox.shrink();
+    final available =
+        MediaQuery.sizeOf(context).height -
+        MediaQuery.viewInsetsOf(context).bottom -
+        210;
+    Widget row(SearchEntry entry, {required bool historical}) => SizedBox(
+      height: 46,
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        minLeadingWidth: 20,
+        leading: Icon(
+          historical ? Icons.history : Icons.star,
+          color: historical
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : const Color(0xFFFFCC00),
+          size: 20,
+        ),
+        title: Text(
+          entry.query,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w400),
+        ),
+        onTap: () => _search(entry.query),
+        trailing: historical
+            ? SizedBox(
+                width: 40,
+                height: 40,
+                child: IconButton(
+                  tooltip: L10n.tr(context, 'Saved Searches'),
+                  onPressed: () => _toggleSavedSearch(entry.query),
+                  icon: Icon(
+                    savedQueries.contains(entry.query)
+                        ? Icons.star
+                        : Icons.star_border,
+                    color: const Color(0xFFFFCC00),
+                    size: 22,
+                  ),
+                ),
+              )
+            : null,
+      ),
+    );
     return Material(
       elevation: 8,
-      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      color: Theme.of(context).colorScheme.surfaceContainer,
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        height: 260,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      L10n.tr(context, 'Search History'),
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: history.isEmpty ? null : _clearHistory,
-                    tooltip: L10n.tr(context, 'Clear History'),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: entries.length,
-                itemBuilder: (context, index) {
-                  final entry = entries[index];
-                  final key = ValueKey('${entry.sourceId}:${entry.query}');
-                  return Dismissible(
-                    key: key,
-                    direction: history.contains(entry)
-                        ? DismissDirection.endToStart
-                        : DismissDirection.none,
-                    onDismissed: (_) => _removeSearch(entry),
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      child: Icon(
-                        Icons.delete_outline,
-                        color: Theme.of(context).colorScheme.onErrorContainer,
-                      ),
-                    ),
-                    child: ListTile(
-                      dense: true,
-                      leading: Icon(
-                        history.contains(entry) ? Icons.history : Icons.star,
-                      ),
-                      title: Text(
-                        entry.query,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () {
-                        _query.text = entry.query;
-                        _search();
-                      },
-                      trailing: IconButton(
-                        tooltip: L10n.tr(context, 'Saved Searches'),
-                        onPressed: () => _toggleSavedSearch(entry.query),
-                        icon: Icon(
-                          _isSearchSaved(entry.query)
-                              ? Icons.star
-                              : Icons.star_border,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: available.clamp(120.0, 360.0)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          L10n.tr(context, 'Search History'),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                      SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: IconButton(
+                          onPressed: history.isEmpty ? null : _clearHistory,
+                          tooltip: L10n.tr(context, 'Clear History'),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            size: 24,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              for (final entry in history)
+                Dismissible(
+                  key: ValueKey('${entry.sourceId}:${entry.query}'),
+                  direction: DismissDirection.endToStart,
+                  onDismissed: (_) => _removeSearch(entry),
+                  background: ColoredBox(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                  ),
+                  child: Column(
+                    children: [
+                      row(entry, historical: true),
+                      const Divider(height: .5),
+                    ],
+                  ),
+                ),
+              if (saved.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      L10n.tr(context, 'Saved Searches'),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+                for (final entry in saved.take(2))
+                  Column(
+                    children: [
+                      row(entry, historical: false),
+                      const Divider(height: .5),
+                    ],
+                  ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _suggestionPanel() {
-    if (_query.text.trim().isEmpty) return _historyPanel();
+  Widget _suggestionPanel(
+    BuildContext context,
+    List<SearchEntry> history,
+    List<SearchEntry> saved,
+  ) {
+    if (_query.text.trim().isEmpty) {
+      return _historyPanel(context, history, saved);
+    }
     if (_suggestions.isEmpty) return const SizedBox.shrink();
     return Material(
       elevation: 8,
@@ -381,7 +440,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _searchField() => Column(
+  Widget _searchField(
+    BuildContext context,
+    List<SearchEntry> history,
+    List<SearchEntry> saved,
+  ) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
       TextField(
@@ -390,14 +453,25 @@ class _ExploreScreenState extends State<ExploreScreen> {
         focusNode: _queryFocus,
         onChanged: _complete,
         onSubmitted: _search,
+        style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
+          isDense: true,
+          constraints: const BoxConstraints.tightFor(height: 44),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 44,
+            minHeight: 44,
+          ),
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 44,
+            minHeight: 44,
+          ),
           hintText: L10n.tr(
             context,
-            widget.mode == AppMode.booru ? 'Search Tags' : 'Search',
+            widget.mode == AppMode.booru ? 'Search tags' : 'Search',
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
-            vertical: 14,
+            vertical: 12,
           ),
           prefixIcon: const Icon(Icons.search),
           border: OutlineInputBorder(
@@ -405,21 +479,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
             borderSide: BorderSide.none,
           ),
           filled: true,
-          suffixIcon: IconButton(
-            onPressed: () {
-              _query.clear();
-              _queryFocus.requestFocus();
-              _complete('');
-            },
-            icon: const Icon(Icons.close),
-            tooltip: L10n.tr(context, 'Clear'),
-          ),
+          suffixIcon: _query.text.isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    _query.clear();
+                    _queryFocus.requestFocus();
+                    _complete('');
+                  },
+                  icon: const Icon(Icons.close),
+                  tooltip: L10n.tr(context, 'Clear'),
+                ),
         ),
       ),
       if (_queryFocus.hasFocus)
         Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: _suggestionPanel(),
+          child: _suggestionPanel(context, history, saved),
         ),
     ],
   );
@@ -580,6 +656,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final state = controller.explore(widget.mode);
+    final layout = ArtworkLayout.snapshot(controller, widget.mode);
+    final bookmarks = GridBookmarkSnapshot(
+      state.items,
+      controller.store.savedKeysMatching,
+    );
+    final showingHistory = _queryFocus.hasFocus && _query.text.trim().isEmpty;
+    final history = showingHistory ? _visibleHistory : const <SearchEntry>[];
+    final savedSearches = showingHistory
+        ? _savedSearches
+        : const <SearchEntry>[];
     final configuredSources = controller.sources(widget.mode);
     final selectedSources = controller.selectedSources(widget.mode);
     final source = selectedSources.firstOrNull;
@@ -612,9 +698,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
             configuredSources.isEmpty ||
                 (widget.mode == AppMode.booru && selectedSources.isEmpty)
             ? null
-            : Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: _searchField(),
+            : Builder(
+                builder: (context) =>
+                    _searchField(context, history, savedSearches),
               ),
         child: configuredSources.isEmpty
             ? EmptyState(
@@ -647,94 +733,104 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
                           const SliverToBoxAdapter(
-                            child: SizedBox(height: tegnalHeaderExtent + 70),
+                            child: SizedBox(height: tegnalHeaderExtent + 44),
                           ),
                           SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             sliver: SliverToBoxAdapter(
                               child: Column(
                                 children: [
-                                  const SizedBox(height: 16),
                                   Row(
                                     children: [
-                                      Expanded(
+                                      if (widget.mode == AppMode.manga)
+                                        Expanded(
+                                          child: TextButton(
+                                            onPressed: _chooseLanguage,
+                                            style: TextButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 8,
+                                                  ),
+                                              alignment: Alignment.centerLeft,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    L10n.tr(
+                                                      context,
+                                                      const {
+                                                            'all': 'All',
+                                                            'korean': 'Korean',
+                                                            'japanese':
+                                                                'Japanese',
+                                                            'english':
+                                                                'English',
+                                                          }[state
+                                                              .contentLanguage] ??
+                                                          'All',
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Icon(
+                                                  Icons.expand_more,
+                                                  size: 18,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      if (widget.mode == AppMode.booru)
+                                        const Spacer(),
+                                      SizedBox(
+                                        height: 40,
                                         child: TextButton(
-                                          onPressed: _chooseSource,
+                                          onPressed: _chooseSort,
                                           style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
+                                              horizontal: 14,
                                               vertical: 8,
                                             ),
-                                            alignment: Alignment.centerLeft,
+                                            backgroundColor: Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withValues(alpha: .09),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(24),
+                                            ),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Flexible(
-                                                child: Text(
-                                                  controller
-                                                              .selectedSources(
-                                                                widget.mode,
-                                                              )
-                                                              .length >
-                                                          1
-                                                      ? '${controller.selectedSources(widget.mode).length} ${L10n.tr(context, 'Servers')}'
-                                                      : source!.name,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant,
-                                                  ),
-                                                ),
+                                              const Icon(
+                                                Icons.swap_vert,
+                                                size: 24,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Icon(
-                                                Icons.expand_more,
-                                                size: 18,
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                L10n.tr(context, sortTitle),
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: _chooseSort,
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 10,
-                                          ),
-                                          backgroundColor: Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withValues(alpha: .09),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              24,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              Icons.swap_vert,
-                                              size: 24,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              L10n.tr(context, sortTitle),
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
                                         ),
                                       ),
                                     ],
@@ -826,38 +922,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                     ),
                             ),
                           SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: layout.margin,
+                            ),
                             sliver: SliverLayoutBuilder(
                               builder: (context, constraints) =>
                                   SliverGrid.builder(
                                     gridDelegate:
                                         SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount:
-                                              widget.mode == AppMode.booru
-                                              ? (constraints.crossAxisExtent /
-                                                        170)
-                                                    .floor()
-                                                    .clamp(3, 8)
-                                              : (constraints.crossAxisExtent /
-                                                        185)
-                                                    .floor()
-                                                    .clamp(2, 7),
-                                          mainAxisSpacing:
-                                              widget.mode == AppMode.booru
-                                              ? 10
-                                              : 18,
-                                          crossAxisSpacing: 10,
-                                          childAspectRatio:
-                                              widget.mode == AppMode.manga
-                                              ? .61
-                                              : .78,
+                                          crossAxisCount: layout.columns(
+                                            constraints.crossAxisExtent,
+                                          ),
+                                          mainAxisSpacing: layout.spacing,
+                                          crossAxisSpacing: layout.spacing,
+                                          childAspectRatio: layout.aspectRatio,
                                         ),
                                     itemCount: state.items.length,
                                     itemBuilder: (context, index) {
                                       final item = state.items[index];
                                       return ContentTile(
                                         item: item,
-                                        saved: controller.isSaved(item),
+                                        layout: layout,
+                                        saved: bookmarks.contains(index),
                                         onTap: () =>
                                             widget.mode != AppMode.booru ||
                                                 widget.onOpenSequence == null
@@ -877,29 +963,31 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             ),
                           ),
                           SliverToBoxAdapter(
-                            child: Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                24,
-                                24,
-                                24,
-                                navigationScrollInset(context, gap: 24),
-                              ),
-                              child: Center(
-                                child: state.loading
-                                    ? const CircularProgressIndicator(
-                                        strokeWidth: 3,
-                                      )
-                                    : state.hasMore
-                                    ? TextButton(
-                                        onPressed: () => controller.search(
-                                          more: true,
-                                          forMode: widget.mode,
-                                        ),
-                                        child: Text(
-                                          L10n.tr(context, 'Load More'),
-                                        ),
-                                      )
-                                    : const SizedBox(height: 16),
+                            child: Builder(
+                              builder: (context) => Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  24,
+                                  24,
+                                  24,
+                                  navigationScrollInset(context, gap: 24),
+                                ),
+                                child: Center(
+                                  child: state.loading
+                                      ? const CircularProgressIndicator(
+                                          strokeWidth: 3,
+                                        )
+                                      : state.hasMore
+                                      ? TextButton(
+                                          onPressed: () => controller.search(
+                                            more: true,
+                                            forMode: widget.mode,
+                                          ),
+                                          child: Text(
+                                            L10n.tr(context, 'Load More'),
+                                          ),
+                                        )
+                                      : const SizedBox(height: 16),
+                                ),
                               ),
                             ),
                           ),
@@ -911,6 +999,38 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
       ),
     );
+  }
+
+  Future<void> _chooseLanguage() async {
+    final state = widget.controller.explore(AppMode.manga);
+    final value = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      builder: (sheet) => RadioGroup<String>(
+        groupValue: state.contentLanguage,
+        onChanged: (value) => Navigator.pop(sheet, value),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final language in const {
+              'all': 'All',
+              'korean': 'Korean',
+              'japanese': 'Japanese',
+              'english': 'English',
+            }.entries)
+              RadioListTile<String>(
+                value: language.key,
+                title: Text(L10n.tr(context, language.value)),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (value != null && mounted) {
+      state.contentLanguage = value;
+      widget.controller.search(forMode: AppMode.manga);
+    }
   }
 
   Future<void> _chooseSort() async {

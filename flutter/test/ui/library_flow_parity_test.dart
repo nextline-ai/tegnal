@@ -326,38 +326,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('saved work long-press unsaves; overflow keeps editing actions', (
-    tester,
-  ) async {
-    final saved = work(81, 'Saved item');
-    store.saveItem(saved);
-    await pumpAtPhoneSize(
-      tester,
-      LibraryScreen(
-        controller: controller,
-        mode: AppMode.manga,
-        onOpen: (_) {},
-      ),
-    );
-    await tester.tap(find.widgetWithText(TextButton, 'All Favorites'));
-    await tester.pumpAndSettle();
-    await tester.longPress(find.byType(ContentTile).first);
-    await tester.pumpAndSettle();
-    expect(store.saved(saved.key), isNull);
-
-    final remaining = work(82, 'Manage this item');
-    controller.save(remaining);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.more_vert).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Edit Note and Folders'), findsOneWidget);
-    await tester.tap(find.text('Edit Note and Folders'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(store.saved(remaining.key)?.item.title, remaining.title);
-  });
+  testWidgets(
+    'saved work context menu preserves the work and exposes editing',
+    (tester) async {
+      final saved = work(81, 'Saved item');
+      store.saveItem(saved);
+      await pumpAtPhoneSize(
+        tester,
+        LibraryScreen(
+          controller: controller,
+          mode: AppMode.manga,
+          onOpen: (_) {},
+        ),
+      );
+      await tester.tap(find.widgetWithText(TextButton, 'All Favorites'));
+      await tester.pumpAndSettle();
+      await tester.longPress(find.byType(ContentTile).first);
+      await tester.pumpAndSettle();
+      expect(store.saved(saved.key)?.item.title, saved.title);
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.text('Edit Note and Folders'), findsOneWidget);
+      await tester.tap(find.text('Edit Note and Folders'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(store.saved(saved.key)?.item.title, saved.title);
+    },
+  );
 
   testWidgets('Manga artists open local works filtered by the saved kind', (
     tester,

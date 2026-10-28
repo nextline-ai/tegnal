@@ -18,7 +18,9 @@ class LegacyImportSummary extends BackupSummary {
     this.duplicates = 0,
     this.skipped = 0,
     this.serverCount = 0,
+    this.isCatalog = false,
   });
+  final bool isCatalog;
   final int artistCount,
       catalogCount,
       matchedCount,
@@ -82,6 +84,7 @@ class LegacyImport {
         workCount: matched,
         matchedCount: matched,
         catalogCount: matched,
+        isCatalog: true,
       );
     } finally {
       source.close();
@@ -250,7 +253,8 @@ class LegacyImport {
         'gallery_id': id,
         if (previous?['bookmarked_at'] != null)
           'bookmarked_at': previous!['bookmarked_at']
-        else 'bookmarked_at': ?date,
+        else
+          'bookmarked_at': ?date,
         'folders': {
           ...?(previous?['folders'] as List?)?.cast<String>(),
           name,

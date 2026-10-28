@@ -176,6 +176,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           height: 1.4,
         ),
       ),
+      TextButton.icon(
+        key: const ValueKey('onboarding-violet-shortcut'),
+        onPressed: _working ? null : () => setState(() => _step = 1),
+        icon: const Icon(Icons.move_to_inbox_outlined),
+        label: Text(_t('Import from Violet')),
+      ),
       const SizedBox(height: 20),
       _websiteModeGuide(),
       const SizedBox(height: 20),
@@ -279,6 +285,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 20),
       _importCard(
+        key: const ValueKey('onboarding-violet-card'),
+        title: 'Import from Violet',
+        subtitle: 'Import saved works, folders and artists from Violet user.db. A catalog database can fill missing work information.',
+        icon: Icons.move_to_inbox_outlined,
+        action: FilledButton.icon(
+          key: const ValueKey('onboarding-violet-import'),
+          onPressed: _working
+              ? null
+              : () =>
+                    _import(() => showImportLegacy(context, widget.controller)),
+          icon: const Icon(Icons.input),
+          label: Text(_t('Import from Violet')),
+        ),
+      ),
+      const SizedBox(height: 12),
+      _importCard(
         title: 'TEGNAL JSON Backup',
         subtitle: 'Restore saved works, folders, and settings from a backup.',
         icon: Icons.inventory_2_outlined,
@@ -294,8 +316,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 12),
       _importCard(
-        title: 'Other Manga Viewer',
-        subtitle: 'Violet, Anime Boxes, or another manga viewer.',
+        title: 'Anime Boxes',
+        subtitle: 'Import an Anime Boxes .abbj backup.',
         icon: Icons.menu_book_outlined,
         action: OutlinedButton.icon(
           onPressed: _working
@@ -310,11 +332,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   );
 
   Widget _importCard({
+    Key? key,
     required String title,
     required String subtitle,
     required IconData icon,
     required Widget action,
   }) => Container(
+    key: key,
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
       color: Theme.of(context).colorScheme.surfaceContainerLow,

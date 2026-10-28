@@ -76,7 +76,7 @@ class _TegnalPrivacyCoverState extends State<TegnalPrivacyCover>
     } on MissingPluginException {
       // Widget tests and non-Android embedding hosts have no native cover.
     } on PlatformException {
-      // The Flutter cover remains active if the native channel is unavailable.
+      // Native appearance updates are best-effort; Android owns its cover.
     }
   }
 
@@ -108,6 +108,9 @@ class _TegnalPrivacyCoverState extends State<TegnalPrivacyCover>
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
+        // Android's Activity owns the opaque resume cover and task snapshot
+        // protection. A second Flutter cover produces two branded slides.
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) return;
         _inactiveTimer?.cancel();
         _inactiveTimer = null;
         _show();

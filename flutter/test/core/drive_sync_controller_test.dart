@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/app_controller.dart';
+import 'package:tegnal/core/app_features.dart';
 import 'package:tegnal/core/content.dart';
 import 'package:tegnal/core/drive_sync_controller.dart';
 import 'package:tegnal/data/backup_codec.dart';
@@ -16,6 +17,7 @@ import 'package:tegnal/data/sync_snapshot.dart';
 class _Auth implements DriveAuth {
   _Auth(this.account);
   final String account;
+  int connects = 0, restores = 0, disconnects = 0;
   @override
   DriveIdentity? identity;
   @override
@@ -23,10 +25,17 @@ class _Auth implements DriveAuth {
   @override
   String? get configurationMessage => null;
   @override
-  Future<DriveIdentity> connect() async =>
-      identity = DriveIdentity(id: account, email: '$account@example.invalid');
+  Future<DriveIdentity> connect() async {
+    connects++;
+    return identity = DriveIdentity(
+      id: account,
+      email: '$account@example.invalid',
+    );
+  }
+
   @override
   Future<bool> restore() async {
+    restores++;
     await connect();
     return true;
   }
@@ -34,7 +43,11 @@ class _Auth implements DriveAuth {
   @override
   Future<String> accessToken({bool interactive = false}) async => 'fixture';
   @override
-  Future<void> disconnect() async => identity = null;
+  Future<void> disconnect() async {
+    disconnects++;
+    identity = null;
+  }
+
   @override
   void dispose() {}
 }
@@ -146,6 +159,44 @@ void main() {
     }
     await temporary.delete(recursive: true);
   });
+  test('disabled Drive never restores or connects and preserves stored sync choices', () async {
+    expect(AppFeatures.googleDriveSyncEnabled, isFalse);
+    final store = LibraryStore.memory();
+    final library = AppController(store);
+    final auth = _Auth('preserved-account');
+    final state = Directory('${temporary.path}/disabled-state');
+    final sync = DriveSyncController(
+      library: library,
+      stateDirectory: state,
+      auth: auth,
+      repositoryFactory: (_) =>
+          throw StateError('Disabled Drive must not construct a repository'),
+    );
+    addTearDown(() {
+      sync.dispose();
+      library.dispose();
+      store.close();
+    });
+    store.setSetting('drive.connected', true);
+    store.setSetting('drive.autoSync', true);
+    await sync.initialize();
+    library.createFolder('Kept locally');
+    sync.setForeground(true);
+    sync.setAutoSync(false);
+    await sync.connect();
+    await sync.synchronize();
+    await sync.disconnect();
+    expect(auth.restores, 0);
+    expect(auth.connects, 0);
+    expect(auth.disconnects, 0);
+    expect(sync.connected, isFalse);
+    expect(sync.autoSync, isFalse);
+    expect(store.setting('drive.connected'), isTrue);
+    expect(store.setting('drive.autoSync'), isTrue);
+    expect(library.folders().single.name, 'Kept locally');
+    expect(await state.exists(), isFalse);
+  });
+
   Future<_Device> device({
     String account = 'account-a',
     Directory? directory,
@@ -159,6 +210,7 @@ void main() {
     final folder =
         directory ?? Directory('${temporary.path}/device-${devices.length}');
     final sync = DriveSyncController(
+      featureEnabled: true,
       library: library,
       stateDirectory: folder,
       auth: _Auth(account),
@@ -462,6 +514,7 @@ void main() {
     Future<DriveSyncController> open(String account, _History graph) async {
       active?.dispose();
       final controller = DriveSyncController(
+        featureEnabled: true,
         library: library,
         stateDirectory: directory,
         auth: _Auth(account),
@@ -581,6 +634,7 @@ void main() {
     );
     final auth = _Auth('account-a');
     final sync = DriveSyncController(
+      featureEnabled: true,
       library: library,
       stateDirectory: Directory(path),
       auth: auth,

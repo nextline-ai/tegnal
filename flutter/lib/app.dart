@@ -7,6 +7,7 @@ import 'core/drive_sync_controller.dart';
 import 'ui/design_system.dart';
 import 'data/download_manager.dart';
 import 'features/artists_screen.dart';
+import 'features/browser_screen.dart';
 import 'features/detail_screen.dart';
 import 'features/explore_screen.dart';
 import 'features/insights_screen.dart';
@@ -18,7 +19,7 @@ import 'ui/l10n.dart';
 import 'ui/navigation.dart';
 import 'ui/privacy_cover.dart';
 
-class TegnalApp extends StatelessWidget {
+class TegnalApp extends StatefulWidget {
   const TegnalApp({
     super.key,
     required this.controller,
@@ -29,44 +30,86 @@ class TegnalApp extends StatelessWidget {
   final DownloadManager downloads;
   final DriveSyncController? driveSync;
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
-    builder: (context, _) => MaterialApp(
-      title: 'TEGNAL',
-      debugShowCheckedModeBanner: false,
-      locale: controller.language == 'system'
-          ? null
-          : Locale(controller.language),
-      supportedLocales: const [Locale('en'), Locale('ko'), Locale('ja')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      builder: (context, child) {
-        final dark = Theme.of(context).brightness == Brightness.dark;
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-            statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-            systemNavigationBarColor: Colors.transparent,
-            systemNavigationBarContrastEnforced: false,
-            systemNavigationBarIconBrightness: dark
-                ? Brightness.light
-                : Brightness.dark,
-          ),
-          child: TegnalPrivacyCover(child: child!),
-        );
-      },
-      theme: tegnalTheme(Brightness.light),
-      darkTheme: tegnalTheme(Brightness.dark),
-      themeMode: switch (controller.appearance) {
-        'dark' => ThemeMode.dark,
-        'light' => ThemeMode.light,
-        _ => ThemeMode.system,
-      },
-      home: controller.onboardingComplete
+  State<TegnalApp> createState() => _TegnalAppState();
+}
+
+class _TegnalAppState extends State<TegnalApp> {
+  late final ThemeData _lightTheme = tegnalTheme(Brightness.light);
+  late final ThemeData _darkTheme = tegnalTheme(Brightness.dark);
+  late (String, String, bool) _presentation;
+  AppController get controller => widget.controller;
+  (String, String, bool) get _currentPresentation => (
+    controller.language,
+    controller.appearance,
+    controller.onboardingComplete,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _presentation = _currentPresentation;
+    controller.addListener(_configurationChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant TegnalApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != controller) {
+      oldWidget.controller.removeListener(_configurationChanged);
+      controller.addListener(_configurationChanged);
+      _presentation = _currentPresentation;
+    }
+  }
+
+  void _configurationChanged() {
+    final next = _currentPresentation;
+    if (next != _presentation) setState(() => _presentation = next);
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_configurationChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'TEGNAL',
+    debugShowCheckedModeBanner: false,
+    locale: _presentation.$1 == 'system' ? null : Locale(_presentation.$1),
+    supportedLocales: const [Locale('en'), Locale('ko'), Locale('ja')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    builder: (context, child) {
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarContrastEnforced: false,
+          systemNavigationBarIconBrightness: dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+        child: TegnalPrivacyCover(child: child!),
+      );
+    },
+    theme: _lightTheme,
+    darkTheme: _darkTheme,
+    themeMode: switch (_presentation.$2) {
+      'dark' => ThemeMode.dark,
+      'light' => ThemeMode.light,
+      _ => ThemeMode.system,
+    },
+    // Content updates rebuild the shell, not MaterialApp and its themes.
+    home: ListenableBuilder(
+      listenable: controller,
+      builder: (_, _) => controller.onboardingComplete
           ? AppShell(
               controller: controller,
-              downloads: downloads,
-              driveSync: driveSync,
+              downloads: widget.downloads,
+              driveSync: widget.driveSync,
             )
           : OnboardingScreen(controller: controller),
     ),
@@ -172,7 +215,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void _open(ContentItem item) => _openSequence(item, [item]);
 
   void _openSequence(ContentItem item, List<ContentItem> sequence) {
-    if (item.mode == AppMode.manga) {
+    if (item.pageUrl != null &&
+        widget.controller.modePreference('useEmbeddedBrowser', item.mode)) {
+      Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute<void>(
+          builder: (_) => BrowserScreen(url: item.pageUrl!),
+        ),
+      );
+      return;
+    }
+    if (item.mode == AppMode.manga &&
+        widget.controller.modePreference(
+          'showInformationBeforeReading',
+          item.mode,
+        )) {
       _details(item);
       return;
     }
@@ -222,7 +278,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                     child: ListTile(
                       leading: const Icon(Icons.file_download_outlined),
                       title: Text(L10n.tr(context, 'Import from Other Apps')),
-                      subtitle: const Text('Anime Boxes · Other Manga Viewer'),
+                      subtitle: Text(L10n.tr(context, 'Import from Violet')),
                       onTap: () {
                         c.setPreference(
                           'onboarding.importReminderDismissed',
@@ -368,8 +424,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       );
     }
     final wide = MediaQuery.sizeOf(context).width >= 840;
-    final navigationBottom = MediaQuery.paddingOf(context).bottom
-        .clamp(12.0, double.infinity);
+    final navigationBottom = (MediaQuery.paddingOf(context).bottom - 12).clamp(
+      12.0,
+      double.infinity,
+    );
     return CallbackShortcuts(
       bindings: {
         for (var i = 0; i < 5; i++)
@@ -436,8 +494,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                         if (!wide &&
                             MediaQuery.viewInsetsOf(context).bottom == 0)
                           Positioned(
-                            left: 16,
-                            right: 16,
+                            left: 20,
+                            right: 20,
                             bottom: navigationBottom,
                             child: TegnalTabBar(
                               labels: labels,

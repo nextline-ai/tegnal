@@ -53,18 +53,23 @@ void main() {
           matching: find.byType(Scrollable),
         )
         .first;
-    final themeValue = find.byKey(const ValueKey('settings-value-Theme'));
-    await tester.scrollUntilVisible(themeValue, 160, scrollable: scrollable);
-    final themeRect = tester.getRect(themeValue);
-    final themeChevron = tester.getRect(
-      find.byKey(const ValueKey('settings-chevron-Theme')),
+    final themeSegments = find.byType(SegmentedButton<String>);
+    await tester.scrollUntilVisible(themeSegments, 160, scrollable: scrollable);
+    expect(tester.widget<SegmentedButton<String>>(themeSegments).selected, {
+      'dark',
+    });
+    await tester.tap(find.text('Light Mode'));
+    await tester.pump();
+    expect(store.setting('appearance.manga'), 'light');
+    final languageChevron = find.byKey(
+      const ValueKey('settings-chevron-Language'),
     );
-    final languageChevron = tester.getRect(
-      find.byKey(const ValueKey('settings-chevron-Language')),
+    await tester.scrollUntilVisible(
+      languageChevron,
+      160,
+      scrollable: scrollable,
     );
-    expect((themeChevron.right - 388).abs(), lessThan(1));
-    expect((languageChevron.right - 388).abs(), lessThan(1));
-    expect((themeChevron.left - themeRect.right - 8).abs(), lessThan(1));
+    expect((tester.getRect(languageChevron).right - 388).abs(), lessThan(1));
 
     final systemAiValue = find.byKey(
       const ValueKey('settings-value-System AI'),

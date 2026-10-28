@@ -2,6 +2,7 @@
 <!-- Website cookies, local storage, and sign-ins stay on this device. -->
 <full-backup-content>
     <exclude domain="root" path="app_webview/" />
+    <exclude domain="sharedpref" path="verified_browser_routes.xml" />
     <!-- A restored device must establish its own Drive comparison baseline. -->
     <exclude domain="file" path="drive-sync/" />
 </full-backup-content>

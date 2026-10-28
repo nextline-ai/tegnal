@@ -9,6 +9,7 @@ import 'package:tegnal/core/content.dart';
 import 'package:tegnal/data/download_manager.dart';
 import 'package:tegnal/data/library_store.dart';
 import 'package:tegnal/features/settings_screen.dart';
+import 'package:tegnal/features/insights_screen.dart';
 import 'package:tegnal/features/library_screen.dart';
 import 'package:tegnal/features/onboarding_screen.dart';
 import 'package:tegnal/ui/content_tile.dart';
@@ -81,6 +82,59 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
+  testWidgets(
+    'content notifications preserve the app configuration and themes',
+    (tester) async {
+      await pumpShell(tester);
+      final initial = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      controller.changed();
+      await tester.pump();
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)),
+        same(initial),
+      );
+
+      controller.setPreference('appearance.booru', 'light');
+      await tester.pumpAndSettle();
+      final light = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(light.themeMode, ThemeMode.light);
+      expect(light.theme, same(initial.theme));
+      expect(light.darkTheme, same(initial.darkTheme));
+      controller.setPreference('language', 'ko');
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+        const Locale('ko'),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('hidden Smart tab defers reports until it is visible again', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    await tester.tap(find.byTooltip('Smart'));
+    await tester.pumpAndSettle();
+    final screen = find.byType(InsightsScreen, skipOffstage: false);
+    final body = find.descendant(
+      of: screen,
+      matching: find.byType(Scaffold, skipOffstage: false),
+      skipOffstage: false,
+    );
+    final initial = tester.widget<Scaffold>(body);
+    await selectTab(tester, 'Saved');
+    controller.changed();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Scaffold>(body), same(initial));
+    await tester.tap(find.byTooltip('Smart'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Scaffold>(body), isNot(same(initial)));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('dock stays translucent and privacy cover wraps app content', (
     tester,
   ) async {
@@ -124,12 +178,29 @@ void main() {
         ),
       );
       expect(
-        settingsLists.any((list) {
-          final padding = list.padding as EdgeInsets?;
-          return padding?.bottom == 64 + 34 + 28;
-        }),
+        settingsLists.any(
+          (list) =>
+              ((list.padding as EdgeInsets?)?.bottom ?? 0) >=
+              34 + dockRect.height,
+        ),
         isTrue,
       );
+      final settingsScroll = find
+          .descendant(
+            of: find.byType(SettingsScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        find.text('View on GitHub'),
+        500,
+        scrollable: settingsScroll,
+      );
+      await tester.drag(settingsScroll, const Offset(0, -400));
+      await tester.pumpAndSettle();
+      final lastAction = find.text('View on GitHub');
+      expect(lastAction.hitTestable(), findsOneWidget);
+      expect(tester.getRect(lastAction).bottom, lessThan(dockRect.top));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -265,13 +336,23 @@ void main() {
   ) async {
     await pumpShell(tester);
     await selectTab(tester, 'More');
+    await tester.scrollUntilVisible(
+      find.text('Reader Settings'),
+      350,
+      scrollable: find
+          .descendant(
+            of: find.byType(SettingsScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.tap(find.text('Reader Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(BackButton), findsOneWidget);
+    expect(find.byType(ReaderDefaultsScreen), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byType(BackButton), findsNothing);
+    expect(find.byType(ReaderDefaultsScreen), findsNothing);
     await selectTab(tester, 'Saved');
     expect(find.text('All Favorites'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -283,19 +364,29 @@ void main() {
     (tester) async {
       await pumpShell(tester);
       await selectTab(tester, 'More');
+      await tester.scrollUntilVisible(
+        find.text('Reader Settings'),
+        350,
+        scrollable: find
+            .descendant(
+              of: find.byType(SettingsScreen),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.tap(find.text('Reader Settings'));
       await tester.pumpAndSettle();
-      expect(find.byType(BackButton), findsOneWidget);
+      expect(find.byType(ReaderDefaultsScreen), findsOneWidget);
       controller.setMode(AppMode.manga);
       await tester.pumpAndSettle();
       expect(
         tester.widget<TegnalTabBar>(find.byType(TegnalTabBar)).selected,
         3,
       );
-      expect(find.byType(BackButton), findsNothing);
+      expect(find.byType(ReaderDefaultsScreen), findsNothing);
       controller.setMode(AppMode.booru);
       await tester.pumpAndSettle();
-      expect(find.byType(BackButton), findsOneWidget);
+      expect(find.byType(ReaderDefaultsScreen), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Reader Settings'), findsOneWidget);

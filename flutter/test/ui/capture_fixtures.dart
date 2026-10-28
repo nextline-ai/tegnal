@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/app_controller.dart';
@@ -23,6 +24,7 @@ class CaptureFixtures {
   static const mangaSourceId = 'ui-capture-manga-source';
 
   Future<AppController> load() async {
+    store.setSetting('reader.helpHidden', true);
     final manifest = jsonDecode(
       await File('${marketingDirectory.path}/asset-manifest.json')
           .readAsString(),
@@ -44,6 +46,12 @@ class CaptureFixtures {
         ),
       );
     }
+    final folderRanks = <String, int>{
+      for (final (index, dynamic folder)
+          in (nativeSeed['folders'] as List).indexed)
+        folder['id'] as String: index,
+    };
+    final ranks = <int, int>{};
     final mangaFolder = LibraryFolder(
       id: 'ui-capture-manga-folder',
       mode: AppMode.manga,
@@ -52,32 +60,41 @@ class CaptureFixtures {
       position: 0,
     );
     store.saveFolder(mangaFolder);
+    store.setSetting('showInformationBeforeReading.manga', true);
     final previewUris = <Uri>[
-      for (final (index, dynamic record) in manifest.indexed)
-        if (File(
-              '${marketingDirectory.path}/${(record as Map)['file']}',
-            ).lengthSync() <=
-            2 * 1024 * 1024)
-          Uri.https('ui-capture.invalid', '/image/$index.png'),
+      for (var index = 0; index < manifest.length; index++)
+        Uri.https('ui-capture.invalid', '/image/$index.png'),
     ];
-    if (previewUris.isEmpty) {
-      throw StateError('Capture requires at least one bounded local preview.');
-    }
     for (final (index, dynamic record) in manifest.indexed) {
       final entry = Map<String, dynamic>.from(record as Map);
       final folderId = entry['folder_id'] as String;
       final uri = Uri.https('ui-capture.invalid', '/image/$index.png');
+      final mediaUri = Uri.https('ui-capture.invalid', '/media/$index.png');
       final imageBytes = await File(
         '${marketingDirectory.path}/${entry['file']}',
       ).readAsBytes();
-      images[uri.path] = imageBytes;
+      // Keep every artwork's identity while bounding screenshot-only decoding.
+      // Cycling a handful of small source files concealed geometry regressions
+      // and produced thumbnails unrelated to the native reference folders.
+      final codec = await ui.instantiateImageCodec(
+        imageBytes,
+        targetWidth: 640,
+      );
+      final frame = await codec.getNextFrame();
+      final bounded = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      images[uri.path] = bounded!.buffer.asUint8List();
+      images[mediaUri.path] = imageBytes;
+      frame.image.dispose();
+      codec.dispose();
       final item = ContentItem(
         sourceId: sourceId,
         id: index + 1,
         mode: AppMode.booru,
         title: '${entry['folder_name']} ${index % 4 + 1}',
         thumbnailUrl: previewUris[index % previewUris.length],
-        mediaUrl: uri,
+        mediaUrl: mediaUri,
         pageUrl: Uri.https('ui-capture.invalid', '/posts/${index + 1}'),
         width: entry['width'] as int,
         height: entry['height'] as int,
@@ -92,13 +109,16 @@ class CaptureFixtures {
         ],
         score: 120 - index,
       );
+      final rank = (index % 4) * 6 + folderRanks[folderId]!;
+      ranks[item.id] = rank;
       items.add(item);
       store.saveItem(
         item,
         folderIds: folderId == 'unsorted' ? [] : [folderId],
-        savedAt: DateTime.utc(2026, 10, 1).subtract(Duration(minutes: index)),
+        savedAt: DateTime.utc(2026, 10, 1).subtract(Duration(minutes: rank)),
       );
     }
+    items.sort((a, b) => ranks[a.id]!.compareTo(ranks[b.id]!));
     for (var index = 0; index < 4; index++) {
       final id = 100001 + index;
       final imageUri = previewUris[index % previewUris.length];
@@ -144,47 +164,41 @@ class CaptureFixtures {
         kind: SourceKind.manga,
       ),
     );
-    for (final name in ['studio_sora', 'mori', 'aoi', 'suzume']) {
-      store.saveArtist(
-        ArtistEntry(name: name, mode: AppMode.booru, sourceId: sourceId),
-      );
+    for (final dynamic tag in (nativeSeed['savedTags'] as List)) {
+      if (tag['kind'] == 'tag') {
+        store.saveArtist(
+          ArtistEntry(
+            name: tag['name'] as String,
+            mode: AppMode.booru,
+            sourceId: sourceId,
+            kind: 1,
+          ),
+        );
+      }
     }
-    for (final name in ['scenery', 'flowers', 'sky']) {
-      store.saveArtist(
-        ArtistEntry(
-          name: name,
-          mode: AppMode.booru,
-          sourceId: sourceId,
-          kind: 1,
-        ),
-      );
-    }
-    for (final (index, query) in [
-      'original scenery',
-      'flowers sky',
-      'landscape sunset',
-      'still_life',
-    ].indexed) {
+    for (final dynamic record in (nativeSeed['history'] as List)) {
       store.recordSearch(
         AppMode.booru,
         sourceId,
-        query,
-        usedAt: DateTime.utc(2026, 10, 10 + index),
+        record['query'] as String,
+        usedAt: DateTime.fromMillisecondsSinceEpoch(
+          ((record['usedAt'] as num) * 1000).round(),
+        ),
       );
     }
     store.setPortable('backup.images', {
       'savedTags': [
-        for (final name in [
-          'original scenery',
-          'flowers sky',
-          'landscape sunset',
-        ])
-          {'kind': 'search', 'name': name, 'serverID': sourceId},
+        for (final dynamic tag in (nativeSeed['savedTags'] as List))
+          if (tag['kind'] == 'search')
+            {'kind': 'search', 'name': tag['name'], 'serverID': sourceId},
       ],
     });
     store.setSetting('onboarding', true);
     store.setSetting('onboarding.importReminderDismissed', true);
     store.setSetting('mode', 'booru');
+    // The native marketing reference explicitly uses two folder / three artwork columns.
+    store.setSetting('folderColumns.booru', 2);
+    store.setSetting('gridColumns.booru', 3);
     store.setSetting('appearance', 'dark');
     store.setSetting('language', 'ko');
     store.setSetting('selected.booru', [sourceId]);
@@ -261,13 +275,12 @@ class CaptureHttpOverrides extends HttpOverrides {
   int imageRequests = 0;
   int imageResponsesCompleted = 0;
   @override
-  HttpClient createHttpClient(SecurityContext? context) =>
-      _FixtureClient(
-        images,
-        unexpectedRequests,
-        onRequest: () => imageRequests++,
-        onResponseComplete: () => imageResponsesCompleted++,
-      );
+  HttpClient createHttpClient(SecurityContext? context) => _FixtureClient(
+    images,
+    unexpectedRequests,
+    onRequest: () => imageRequests++,
+    onResponseComplete: () => imageResponsesCompleted++,
+  );
 }
 
 class _FixtureClient extends Fake implements HttpClient {
@@ -295,13 +308,9 @@ class _FixtureClient extends Fake implements HttpClient {
       );
     }
     onRequest();
-    return _FixtureRequest(
-      method,
-      url,
-      images[url.path]!,
-      onResponseComplete,
-    );
+    return _FixtureRequest(method, url, images[url.path]!, onResponseComplete);
   }
+
   @override
   Future<HttpClientRequest> getUrl(Uri url) => openUrl('GET', url);
   @override
@@ -353,6 +362,7 @@ class _FixtureRequest extends Fake implements HttpClientRequest {
       _body.add(chunk);
     }
   }
+
   @override
   Future<HttpClientResponse> close() async =>
       _FixtureResponse(bytes, onResponseComplete);
@@ -364,14 +374,17 @@ class _FixtureHeaders extends Fake implements HttpHeaders {
   void add(String name, Object value, {bool preserveHeaderCase = false}) {
     _values.putIfAbsent(name.toLowerCase(), () => []).add('$value');
   }
+
   @override
   void set(String name, Object value, {bool preserveHeaderCase = false}) {
     _values[name.toLowerCase()] = ['$value'];
   }
+
   @override
   void remove(String name, Object value) {
     _values[name.toLowerCase()]?.remove('$value');
   }
+
   @override
   void removeAll(String name) => _values.remove(name.toLowerCase());
   @override
@@ -382,8 +395,6 @@ class _FixtureHeaders extends Fake implements HttpHeaders {
   void forEach(void Function(String name, List<String> values) action) {
     _values.forEach(action);
   }
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FixtureResponse extends Stream<List<int>> implements HttpClientResponse {

@@ -58,6 +58,7 @@ void main() {
           ),
         );
       final store = LibraryStore.memory();
+      store.setSetting('reader.helpHidden', true);
       final controller = AppController(
         store,
         sourceFactory: (_) => _ReaderSource(image.uri),
@@ -116,10 +117,10 @@ void main() {
       await tester.tapAt(tester.getCenter(find.byType(ReaderScreen)));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Download work'), findsOneWidget);
-      await tester.tap(find.text('Save to library'));
+      await tester.tap(find.text('Bookmark'));
       await tester.pump();
       expect(controller.isSaved(item), isTrue);
-      await tester.tap(find.text('Save to folder'));
+      await tester.tap(find.text('Save to Folder'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Read later'));
@@ -136,12 +137,27 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(controller.saved(item)!.note, 'Remember this page');
-      await tester.tap(find.text('Reader settings'));
+      await tester.tap(find.text('More Settings'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.scrollUntilVisible(
+        find.byType(SegmentedButton<ReadingMode>),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.byType(SegmentedButton<ReadingMode>), findsOneWidget);
       expect(find.byType(Switch), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.byType(Slider),
+        160,
+        scrollable: find.byType(Scrollable).last,
+      );
       expect(find.byType(Slider), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.text('Vertical'),
+        -160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Vertical'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -187,6 +203,7 @@ void main() {
         'tegnal-reader-layout-',
       );
       final store = LibraryStore.memory();
+      store.setSetting('reader.helpHidden', true);
       final controller = AppController(
         store,
         sourceFactory: (_) =>
@@ -232,14 +249,19 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.tapAt(const Offset(160, 200));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Save to folder'), findsOneWidget);
+      expect(find.text('Save to Folder'), findsOneWidget);
       expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.text('Reader settings'));
+      await tester.ensureVisible(find.text('More Settings'));
       await tester.pump();
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Reader settings'));
+      await tester.tap(find.text('More Settings'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.scrollUntilVisible(
+        find.byType(SegmentedButton<ReadingMode>),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.byType(SegmentedButton<ReadingMode>), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

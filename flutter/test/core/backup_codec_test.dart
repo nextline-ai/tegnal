@@ -397,6 +397,7 @@ void main() {
     expect(output['selectedServerIDs'], ['existing', 'collision-import-1']);
     expect(output['blacklist'], {
       'existing': 'spoilers\nartist_*',
+      'collision': '',
       'collision-import-1': 'gore',
     });
     expect(output['savedTags'].map((dynamic t) => t['serverID']).toSet(), {
@@ -501,7 +502,10 @@ void main() {
     );
     store.setSetting('apiKey', 'not-exported');
     final output = jsonDecode(codec.exportJson());
-    expect(output['images']['folders'].single['id'], 'unsorted');
+    expect(
+      output['images']['folders'].single['id'],
+      'site:https://server.invalid',
+    );
     final post = output['images']['favorites'].single['post'];
     for (final key in [
       'serverID',

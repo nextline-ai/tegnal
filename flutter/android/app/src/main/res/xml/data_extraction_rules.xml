@@ -3,10 +3,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" path="app_webview/" />
+        <exclude domain="sharedpref" path="verified_browser_routes.xml" />
         <exclude domain="file" path="drive-sync/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="root" path="app_webview/" />
+        <exclude domain="sharedpref" path="verified_browser_routes.xml" />
         <exclude domain="file" path="drive-sync/" />
     </device-transfer>
 </data-extraction-rules>

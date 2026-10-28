@@ -10,6 +10,7 @@ import '../data/drive_auth.dart';
 import '../data/drive_repository.dart';
 import '../data/sync_snapshot.dart';
 import 'app_controller.dart';
+import 'app_features.dart';
 
 enum DriveResolution { useDevice, useDrive, combine }
 
@@ -27,10 +28,12 @@ class DriveSyncController extends ChangeNotifier {
     required this.library,
     required this.stateDirectory,
     DriveAuth? auth,
+    this.featureEnabled = AppFeatures.googleDriveSyncEnabled,
     DriveRepository Function(DriveAuth)? repositoryFactory,
   }) : auth = auth ?? GoogleDriveAuth(),
        _repositoryFactory = repositoryFactory ?? GoogleDriveRepository.new;
 
+  final bool featureEnabled;
   final AppController library;
   final Directory stateDirectory;
   final DriveAuth auth;
@@ -44,13 +47,18 @@ class DriveSyncController extends ChangeNotifier {
   String? error;
   DateTime? lastSync;
   DriveConflict? conflict;
-  bool get configured => auth.configured;
-  bool get connected => auth.identity != null && _repository != null;
+  bool get configured => featureEnabled && auth.configured;
+  bool get connected =>
+      featureEnabled && auth.identity != null && _repository != null;
   String? get accountEmail => auth.identity?.email;
-  String? get configurationMessage => auth.configurationMessage;
-  bool get autoSync => library.store.setting('drive.autoSync', false) == true;
+  String? get configurationMessage => featureEnabled
+      ? auth.configurationMessage
+      : 'Google Drive sync is temporarily disabled.';
+  bool get autoSync =>
+      featureEnabled && library.store.setting('drive.autoSync', false) == true;
 
   Future<void> initialize() async {
+    if (!featureEnabled) return;
     library.addListener(_libraryChanged);
     try {
       await stateDirectory.create(recursive: true);
@@ -131,6 +139,7 @@ class DriveSyncController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    if (!featureEnabled) return;
     if (busy) return;
     ++_epoch;
     _debounce?.cancel();
@@ -157,6 +166,7 @@ class DriveSyncController extends ChangeNotifier {
   }
 
   void setAutoSync(bool value) {
+    if (!featureEnabled) return;
     library.store.setSetting('drive.autoSync', value);
     if (!value) {
       _debounce?.cancel();
@@ -181,6 +191,7 @@ class DriveSyncController extends ChangeNotifier {
 
   void _schedule() {
     if (_disposed ||
+        !featureEnabled ||
         !connected ||
         !autoSync ||
         !_foreground ||
@@ -460,6 +471,11 @@ class DriveSyncController extends ChangeNotifier {
 
   Future<void> _run(Future<void> Function() operation) async {
     if (busy || _disposed) return;
+    if (!featureEnabled) {
+      error = 'Google Drive sync is temporarily disabled.';
+      _notify();
+      return;
+    }
     busy = true;
     error = null;
     _notify();

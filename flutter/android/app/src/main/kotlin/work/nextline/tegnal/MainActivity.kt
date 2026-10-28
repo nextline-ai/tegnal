@@ -3,6 +3,7 @@ package work.nextline.tegnal
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -22,6 +23,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         BrowserSession.register(this, flutterEngine)
+        InstalledTranslation.register(this, flutterEngine)
         mangaTransport?.dispose()
         mangaTransport = MangaHttpTransport.register(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "work.nextline.tegnal/privacy")
@@ -91,10 +93,29 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         privacyCover.hide()
+        preferHighRefreshRate()
+    }
+
+    private fun preferHighRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay ?: return
+        val current = display.mode
+        val preferred = display.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth &&
+                it.physicalHeight == current.physicalHeight &&
+                it.refreshRate <= 120.5f }
+            .maxByOrNull { it.refreshRate }
+        window.attributes = window.attributes.apply {
+            // This is a preference: Android may choose a lower rate for power,
+            // thermal, user or display policy reasons. Zero means no preference.
+            preferredDisplayModeId = if (current.refreshRate <= 120.5f && preferred != null && preferred.refreshRate > 60f) preferred.modeId else 0
+        }
     }
 
     override fun onDestroy() {
         privacyCover.dispose()
+        BrowserSession.dispose()
         mangaTransport?.dispose()
         mangaTransport = null
         super.onDestroy()

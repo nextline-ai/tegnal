@@ -4,6 +4,25 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../core/content.dart';
 import '../core/library.dart';
+import '../core/folder_color.dart';
+
+/// Counts plus at most four decoded covers for a library's folder grid.
+class LibraryOverview {
+  const LibraryOverview({
+    required this.totalCount,
+    required this.unfiled,
+    required this.folders,
+  });
+  final int totalCount;
+  final LibraryFolderOverview unfiled;
+  final Map<String, LibraryFolderOverview> folders;
+}
+
+class LibraryFolderOverview {
+  const LibraryFolderOverview({this.count = 0, this.previews = const []});
+  final int count;
+  final List<ContentItem> previews;
+}
 
 /// One transactional database for both libraries. Never replaces a corrupt DB
 /// with an empty library; opening errors are surfaced to the app instead.
@@ -37,6 +56,8 @@ class LibraryStore {
   factory LibraryStore.memory() => LibraryStore(sqlite3.openInMemory());
   final Database database;
   int _transactionDepth = 0;
+  bool _booruFoldersNeedRepair = true;
+  bool _repairingBooruFolders = false;
 
   T transaction<T>(T Function() body) {
     if (_transactionDepth > 0) {
@@ -50,6 +71,7 @@ class LibraryStore {
       return result;
     } catch (_) {
       database.execute('ROLLBACK');
+      _booruFoldersNeedRepair = true;
       rethrow;
     } finally {
       _transactionDepth--;
@@ -76,6 +98,7 @@ class LibraryStore {
       .map((r) => SourceConfig.fromJson(_json(r['payload'])))
       .toList();
   void saveSource(SourceConfig source) {
+    _booruFoldersNeedRepair = true;
     SourceConfig.validateUrl(source.baseUrl.toString());
     database.execute(
       'INSERT INTO sources VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET mode=excluded.mode,payload=excluded.payload',
@@ -83,16 +106,169 @@ class LibraryStore {
     );
   }
 
-  void removeSource(String id) =>
-      database.execute('DELETE FROM sources WHERE id=?', [id]);
+  void removeSource(String id) {
+    database.execute('DELETE FROM sources WHERE id=?', [id]);
+    _booruFoldersNeedRepair = true;
+  }
 
-  List<LibraryFolder> folders(AppMode mode) => database
+  List<LibraryFolder> folders(AppMode mode) {
+    if (mode == AppMode.booru) _repairBooruSiteFolders();
+    final legacy = mode == AppMode.booru ? _legacyBooruFolderIds() : <String>{};
+    return _storedFolders(mode)
+        .where((folder) => !legacy.contains(folder.id))
+        .toList();
+  }
+
+  List<LibraryFolder> _storedFolders(AppMode mode) => database
       .select('SELECT * FROM folders WHERE mode=? ORDER BY position,name', [
         mode.name,
       ])
       .map((r) => LibraryFolder.fromJson(r))
       .toList();
+
+  // Native site folders are real folders, created on first save. Keep legacy
+  // rows intact for imported metadata, but never expose a shared image Unfiled.
+  Set<String> _legacyBooruFolderIds() {
+    final metadata = portable('backup.images')?['folderMetadata'] as Map? ?? {};
+    return {
+      'unsorted',
+      'anime-boxes',
+      'builtin-unfiled-booru',
+      for (final source in sources(AppMode.booru)) 'site:source:${source.id}',
+      for (final entry in metadata.entries)
+        if (entry.value is Map &&
+            [
+              'unsorted',
+              'anime-boxes',
+            ].contains((entry.value as Map)['nativeID']))
+          entry.key as String,
+    };
+  }
+
+  LibraryFolder _defaultBooruFolder(String sourceId) {
+    final source = sources(AppMode.booru)
+        .where((source) => source.id == sourceId)
+        .firstOrNull;
+    final id = source == null
+        ? 'site:source:$sourceId'
+        : 'site:${source.canonicalAddress}';
+    final existing = _storedFolders(AppMode.booru);
+    final metadata = portable('backup.images')?['folderMetadata'] as Map? ?? {};
+    final current = existing
+        .where(
+          (folder) =>
+              folder.id == id ||
+              (metadata[folder.id] is Map &&
+                  (metadata[folder.id] as Map)['nativeID'] == id),
+        )
+        .firstOrNull;
+    if (current != null) return current;
+    final name = source?.name
+        .trim()
+        .replaceFirst(RegExp(r'^https?://', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'/+$'), '');
+    final fallback = source == null
+        ? null
+        : existing
+              .where((folder) => folder.id == 'site:source:$sourceId')
+              .firstOrNull;
+    final folder = LibraryFolder(
+      id: id,
+      mode: AppMode.booru,
+      name: fallback != null && fallback.name != sourceId
+          ? fallback.name
+          : name == null || name.isEmpty
+          ? (source?.baseUrl.host ??
+                (sourceId.isEmpty ? 'Unknown site' : sourceId))
+          : name,
+      color:
+          fallback?.color ??
+          FolderColors.next(existing.map((folder) => folder.color).toList()),
+      position: fallback?.position ?? existing.length,
+    );
+    saveFolder(folder);
+    return folder;
+  }
+
+  void _repairBooruSiteFolders() {
+    if (!_booruFoldersNeedRepair || _repairingBooruFolders) return;
+    _repairingBooruFolders = true;
+    try {
+      transaction(() {
+        final legacy = _legacyBooruFolderIds();
+        final placeholders = List.filled(legacy.length, '?').join(',');
+        // Extract only identity for unclassified rows; never decode full works.
+        final rows = database.select(
+          "SELECT i.key, json_extract(i.payload, '\$.sourceId') AS source_id FROM items i WHERE i.mode='booru' AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.item_key=i.key AND m.folder_id NOT IN ($placeholders))",
+          legacy.toList(),
+        );
+        final destinations = <String, String>{};
+        for (final row in rows) {
+          final sourceId = row['source_id'] as String;
+          final folderId = destinations.putIfAbsent(
+            sourceId,
+            () => _defaultBooruFolder(sourceId).id,
+          );
+          database.execute('DELETE FROM memberships WHERE item_key=?', [
+            row['key'],
+          ]);
+          database.execute('INSERT INTO memberships VALUES (?,?)', [
+            row['key'],
+            folderId,
+          ]);
+        }
+      });
+      _booruFoldersNeedRepair = false;
+    } finally {
+      _repairingBooruFolders = false;
+    }
+  }
+
+  /// User creation follows each native library's duplicate-name and color rules.
+  /// Import/upsert paths keep their explicit colors through [saveFolder].
+  LibraryFolder createFolder(
+    String name, {
+    required String id,
+    required AppMode mode,
+    int? color,
+  }) => transaction(() {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw const FormatException('A folder needs a name and valid color.');
+    }
+    final existing = folders(mode);
+    if (mode == AppMode.manga) {
+      final duplicate = existing
+          .where((folder) => folder.name == trimmed)
+          .firstOrNull;
+      if (duplicate != null) return duplicate;
+    }
+    final current = existing.where((folder) => folder.id == id).firstOrNull;
+    final folder = LibraryFolder(
+      id: id,
+      mode: mode,
+      name: trimmed,
+      color:
+          color ??
+          current?.color ??
+          FolderColors.next(existing.map((folder) => folder.color).toList()),
+      position:
+          current?.position ??
+          (mode == AppMode.manga
+              ? existing.fold<int>(
+                      0,
+                      (max, folder) =>
+                          folder.position > max ? folder.position : max,
+                    ) +
+                    1
+              : existing.length),
+    );
+    saveFolder(folder);
+    return folder;
+  });
+
   void saveFolder(LibraryFolder folder) {
+    if (folder.mode == AppMode.booru) _booruFoldersNeedRepair = true;
     if (folder.name.trim().isEmpty ||
         folder.color < 0 ||
         folder.color > 0xFFFFFFFF) {
@@ -116,10 +292,13 @@ class LibraryStore {
     );
   }
 
-  void deleteFolder(String id) =>
-      database.execute('DELETE FROM folders WHERE id=?', [id]);
+  void deleteFolder(String id) {
+    database.execute('DELETE FROM folders WHERE id=?', [id]);
+    _booruFoldersNeedRepair = true;
+  }
 
   List<SavedItem> items(AppMode mode, {String? folderId, String query = ''}) {
+    if (mode == AppMode.booru) _repairBooruSiteFolders();
     final rows = database.select(
       'SELECT * FROM items WHERE mode=? ORDER BY saved_at DESC',
       [mode.name],
@@ -156,6 +335,96 @@ class LibraryStore {
         .toList();
   }
 
+  /// Metadata-only membership lookup: avoids decoding a saved work just to
+  /// determine whether its key is present. Startup may request both modes.
+  Set<String> savedKeys([AppMode? mode]) => database
+      .select(
+        mode == null
+            ? 'SELECT key FROM items'
+            : 'SELECT key FROM items WHERE mode=?',
+        mode == null ? const [] : [mode.name],
+      )
+      .map((row) => row['key'] as String)
+      .toSet();
+
+  /// A grid asks only about the small group of works it is about to build.
+  Set<String> savedKeysMatching(Iterable<String> keys) {
+    final requested = keys.toSet().toList();
+    final result = <String>{};
+    for (var start = 0; start < requested.length; start += 400) {
+      final group = requested.skip(start).take(400).toList();
+      result.addAll(
+        database
+            .select(
+              'SELECT key FROM items WHERE key IN (${List.filled(group.length, '?').join(',')})',
+              group,
+            )
+            .map((row) => row['key'] as String),
+      );
+    }
+    return result;
+  }
+
+  /// Like native folder snapshots, read counts and only four covers per folder.
+  /// Full saved records stay in the collection route rather than this overview.
+  LibraryOverview libraryOverview(
+    AppMode mode, {
+    Set<String> unfiledFolderIds = const {},
+  }) {
+    if (mode == AppMode.booru) _repairBooruSiteFolders();
+    final counts = <String, int>{
+      for (final row in database.select(
+        'SELECT m.folder_id, COUNT(*) AS total FROM memberships m JOIN items i ON i.key=m.item_key WHERE i.mode=? GROUP BY m.folder_id',
+        [mode.name],
+      ))
+        row['folder_id'] as String: row['total'] as int,
+    };
+    final previews = <String, List<ContentItem>>{};
+    for (final row in database.select(
+      'WITH ranked AS (SELECT m.folder_id, i.key, ROW_NUMBER() OVER (PARTITION BY m.folder_id ORDER BY i.saved_at DESC) AS rank FROM memberships m JOIN items i ON i.key=m.item_key WHERE i.mode=?) SELECT r.folder_id,i.payload FROM ranked r JOIN items i ON i.key=r.key WHERE r.rank<=4 ORDER BY r.folder_id,r.rank',
+      [mode.name],
+    )) {
+      previews
+          .putIfAbsent(row['folder_id'] as String, () => [])
+          .add(ContentItem.fromJson(_json(row['payload'])));
+    }
+    final unfiled = unfiledFolderIds.isEmpty
+        ? 'NOT EXISTS (SELECT 1 FROM memberships m WHERE m.item_key=i.key)'
+        : 'NOT EXISTS (SELECT 1 FROM memberships m WHERE m.item_key=i.key AND m.folder_id NOT IN (${List.filled(unfiledFolderIds.length, '?').join(',')}))';
+    final args = <Object?>[mode.name, ...unfiledFolderIds];
+    return LibraryOverview(
+      totalCount:
+          database.select('SELECT COUNT(*) AS total FROM items WHERE mode=?', [
+                mode.name,
+              ]).single['total']
+              as int,
+      unfiled: LibraryFolderOverview(
+        count:
+            database
+                    .select(
+                      'SELECT COUNT(*) AS total FROM items i WHERE i.mode=? AND $unfiled',
+                      args,
+                    )
+                    .single['total']
+                as int,
+        previews: [
+          for (final row in database.select(
+            'SELECT i.payload FROM items i WHERE i.mode=? AND $unfiled ORDER BY i.saved_at DESC LIMIT 4',
+            args,
+          ))
+            ContentItem.fromJson(_json(row['payload'])),
+        ],
+      ),
+      folders: {
+        for (final entry in counts.entries)
+          entry.key: LibraryFolderOverview(
+            count: entry.value,
+            previews: previews[entry.key] ?? const [],
+          ),
+      },
+    );
+  }
+
   SavedItem? saved(String key) {
     final rows = database.select('SELECT * FROM items WHERE key=?', [key]);
     if (rows.isEmpty) {
@@ -185,7 +454,17 @@ class LibraryStore {
       throw const FormatException('Invalid content ID.');
     }
     transaction(() {
-      final previous = saved(item.key)?.item;
+      var targetFolderIds = folderIds;
+      final previousSaved = saved(item.key);
+      final previous = previousSaved?.item;
+      if (item.mode == AppMode.booru) {
+        final requested = targetFolderIds ?? previousSaved?.folderIds ?? [];
+        final legacy = _legacyBooruFolderIds();
+        targetFolderIds = requested.isEmpty || requested.every(legacy.contains)
+            ? [_defaultBooruFolder(item.sourceId).id]
+            : requested;
+        _booruFoldersNeedRepair = true;
+      }
       final payload = item.toJson();
       if (previous != null) {
         payload['metadata'] = {...previous.metadata, ...item.metadata};
@@ -198,8 +477,8 @@ class LibraryStore {
         }
       }
       if (item.mode == AppMode.booru &&
-          folderIds != null &&
-          folderIds.where((id) => id != 'unsorted').toSet().length > 1) {
+          targetFolderIds != null &&
+          targetFolderIds.where((id) => id != 'unsorted').toSet().length > 1) {
         throw const FormatException(
           'An image belongs to one folder at a time.',
         );
@@ -226,11 +505,11 @@ class LibraryStore {
           item.key,
         ]);
       }
-      if (folderIds != null) {
+      if (targetFolderIds != null) {
         database.execute('DELETE FROM memberships WHERE item_key=?', [
           item.key,
         ]);
-        for (final id in folderIds.toSet()) {
+        for (final id in targetFolderIds.toSet()) {
           if (id == 'unsorted') {
             continue;
           }
@@ -268,6 +547,11 @@ class LibraryStore {
       [key, page, DateTime.now().toUtc().toIso8601String()],
     );
   }
+
+  void pruneHistory(AppMode mode, DateTime before) => database.execute(
+    'DELETE FROM history WHERE mode=? AND used_at < ?',
+    [mode.name, before.toUtc().toIso8601String()],
+  );
 
   List<SearchEntry> history(AppMode mode, {int? limit = 100}) => database
       .select(
@@ -336,10 +620,14 @@ class LibraryStore {
     return r.isEmpty ? null : _json(r.first['payload']);
   }
 
-  void setPortable(String key, Map<String, dynamic> value) => database.execute(
-    'INSERT INTO portable VALUES (?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload',
-    [key, jsonEncode(value)],
-  );
+  void setPortable(String key, Map<String, dynamic> value) {
+    if (key == 'backup.images') _booruFoldersNeedRepair = true;
+    database.execute(
+      'INSERT INTO portable VALUES (?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload',
+      [key, jsonEncode(value)],
+    );
+  }
+
   List<Map<String, dynamic>> downloads() => database
       .select('SELECT payload FROM downloads')
       .map((r) => _json(r['payload']))

@@ -44,7 +44,7 @@ void main() {
     expect(find.byType(Image), findsNothing);
     expect(find.semantics.byLabel('Sensitive reader'), findsOneWidget);
     semantics.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('inactive waits briefly and soft keyboard focus does not flash', (
     tester,
@@ -111,7 +111,8 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
-    expect(find.byType(Image), findsOneWidget);
+    // Android's native Activity supplies the cover.
+    expect(find.byType(Image), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
@@ -139,7 +140,7 @@ void main() {
       ),
     );
     expect(transition.position.value.dy, lessThan(0));
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('reduced motion fades the dark artwork after the resume hold', (
     tester,
@@ -166,5 +167,5 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 17));
     expect(find.byType(Image), findsNothing);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 }

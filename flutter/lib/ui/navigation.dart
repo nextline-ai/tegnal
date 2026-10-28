@@ -37,49 +37,50 @@ class TegnalTabBar extends StatelessWidget {
           respectReduceMotion: false,
           child: Material(
             color: Colors.transparent,
-            child: Row(
-              children: [
-                for (var i = 0; i < 4; i++)
-                  Expanded(
-                    child: Semantics(
-                      selected: selected == i,
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 64),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 8,
-                          ),
-                          foregroundColor: selected == i
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.onSurface,
-                          backgroundColor: selected == i
-                              ? Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest
-                              : Colors.transparent,
-                        ),
-                        onPressed: () => onSelect(i),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(_tabIcon(i, mode, selected == i), size: 30),
-                            const SizedBox(height: 4),
-                            Text(
-                              L10n.tr(context, labels[i]),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  for (var i = 0; i < 4; i++)
+                    Expanded(
+                      child: Semantics(
+                        selected: selected == i,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 54),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 4,
                             ),
-                          ],
+                            foregroundColor: selected == i
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSurface,
+                            backgroundColor: selected == i
+                                ? Theme.of(context).colorScheme.surface
+                                : Colors.transparent,
+                          ),
+                          onPressed: () => onSelect(i),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_tabIcon(i, mode, selected == i), size: 28),
+                              const SizedBox(height: 4),
+                              Text(
+                                L10n.tr(context, labels[i]),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -90,8 +91,8 @@ class TegnalTabBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(40),
         respectReduceMotion: false,
         child: SizedBox(
-          width: 64,
-          height: 64,
+          width: tegnalCompactDockHeight,
+          height: tegnalCompactDockHeight,
           child: IconButton(
             tooltip: L10n.tr(context, labels[4]),
             isSelected: selected == 4,
@@ -105,7 +106,7 @@ class TegnalTabBar extends StatelessWidget {
               color: selected == 4
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onSurface,
-              size: 36,
+              size: 32,
             ),
           ),
         ),
@@ -151,7 +152,7 @@ class TegnalSidebar extends StatelessWidget {
                     color: Theme.of(context).colorScheme.primary,
                     size: 30,
                   )
-                : Icon(_tabIcon(i, mode, selected == i), size: 30),
+                : Icon(_tabIcon(i, mode, selected == i), size: 28),
             label: Text(L10n.tr(context, labels[i])),
           ),
       ],

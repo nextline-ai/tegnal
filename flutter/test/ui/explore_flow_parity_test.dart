@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tegnal/core/app_controller.dart';
 import 'package:tegnal/core/content.dart';
@@ -127,6 +128,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('returning from verification retries the failed search', (
+    tester,
+  ) async {
+    const browser = MethodChannel('work.nextline.tegnal/browser');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(browser, (call) async {
+          if (call.method == 'open') {
+            source.failNext = false;
+            return null;
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(browser, null),
+    );
+    source.failNext = true;
+    await controller.search(forMode: AppMode.booru);
+    expect(controller.explore(AppMode.booru).error, isNotNull);
+    await pumpExplore(tester);
+    await tester.tap(find.text('Validate Client'));
+    await tester.pumpAndSettle();
+    expect(source.searchCalls, 2);
+    expect(controller.explore(AppMode.booru).error, isNull);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('long press bookmarks without a per-work overflow button', (
     tester,
   ) async {
@@ -151,6 +179,7 @@ void main() {
 class _FakeBooruSource implements ContentSource {
   int searchCalls = 0;
   int itemCount = 0;
+  bool failNext = false;
 
   @override
   Future<ContentPage> search(
@@ -159,6 +188,7 @@ class _FakeBooruSource implements ContentSource {
     bool popular = false,
   }) async {
     searchCalls++;
+    if (failNext) throw const ContentException('Unable to connect.');
     return ContentPage([
       for (var id = 1; id <= itemCount; id++)
         ContentItem(

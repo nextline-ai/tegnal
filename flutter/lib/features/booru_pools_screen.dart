@@ -292,9 +292,11 @@ class _BooruPoolFeedScreenState extends State<_BooruPoolFeedScreen> {
         final poolTag = widget.source.kind == SourceKind.danbooru
             ? 'ordpool:${widget.pool.id}'
             : 'pool:${widget.pool.id}';
-        response = await widget.controller
-            .client(widget.source)
-            .search(poolTag, page: _page + 1);
+        response = await widget.controller.searchSource(
+          widget.source,
+          poolTag,
+          page: _page + 1,
+        );
       }
       if (!mounted || generation != _generation) return;
       final ids = _posts.map((post) => post.key).toSet();

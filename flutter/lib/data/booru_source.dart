@@ -7,13 +7,13 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import '../core/content.dart';
-import 'source_http_client.dart';
+import 'booru_credentials.dart';
 
 /// Public Booru APIs, with inert HTML parsing for legacy/public Gelbooru pages.
 /// The default client shares this device’s Android website session.
 class BooruSource implements ContentSource, SortedContentSource {
   BooruSource(this.config, {http.Client? client})
-    : _client = client ?? SourceHttpClient(origin: config.baseUrl),
+    : _client = client ?? BooruAuthenticatedClient(config),
       _ownsClient = client == null {
     SourceConfig.validateUrl(config.baseUrl.toString());
     if (config.mode != AppMode.booru) {
@@ -94,9 +94,10 @@ class BooruSource implements ContentSource, SortedContentSource {
     final prefix = text
         .substring(0, text.length > 4096 ? 4096 : text.length)
         .toLowerCase();
-    if (prefix.contains('cf-chl-') ||
-        prefix.contains('just a moment') ||
-        prefix.contains('checking your browser')) {
+    if (prefix.trimLeft().startsWith('<') &&
+        (prefix.contains('cf-chl-') ||
+            prefix.contains('just a moment') ||
+            prefix.contains('checking your browser'))) {
       throw const ContentException('The server requires browser verification.');
     }
     return text;

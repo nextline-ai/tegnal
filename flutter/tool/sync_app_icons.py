@@ -4,6 +4,8 @@
 Requires macOS's built-in sips tool. This converts and resizes the 1920px
 design-output/JPG/symbol.jpg; it does not redraw the logo. Generated platform
 assets are checked in, so builds do not need this script or an image library.
+The Android adaptive icon wraps the foreground in tegnal_launcher_inset.xml:
+keep that 108dp-to-72dp compensation so launchers preserve the source margins.
 """
 
 from pathlib import Path

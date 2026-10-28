@@ -10,10 +10,14 @@ class InsightPreferences {
     required this.mode,
     Set<String>? excludedTags,
     this.excludedBySource = const {},
+    this.includedBySource = const {},
+    this.excludedRecommendationBySource = const {},
   }) : excludedTags = (excludedTags ?? defaults(mode)).map(normalize).toSet();
   final AppMode mode;
   final Set<String> excludedTags;
   final Map<String, Set<String>> excludedBySource;
+  final Map<String, Set<String>> includedBySource;
+  final Map<String, Set<String>> excludedRecommendationBySource;
   static String normalize(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'[\s_]+'), '_');
   static Set<String> defaults(AppMode mode) => mode == AppMode.booru
@@ -33,7 +37,10 @@ class InsightPreferences {
     }
 
     final normalized = boundary(name);
-    return !(excludedBySource[sourceId] ?? excludedTags).any((value) {
+    return !{
+      ...(excludedBySource[sourceId] ?? excludedTags),
+      ...?excludedRecommendationBySource[sourceId],
+    }.any((value) {
       final exclusion = boundary(value);
       if (exclusion == normalized) return true;
       return mode == AppMode.manga &&
@@ -158,12 +165,14 @@ class TasteTagStat {
     required this.sourceId,
     required this.name,
     required Set<String> workKeys,
+    this.lift,
   }) : workKeys = Set.unmodifiable(workKeys);
   final String sourceId;
   final String name;
   final Set<String> workKeys;
+  final double? lift;
   int get count => workKeys.length;
-  double get weight => math.log(1 + count);
+  double get weight => math.log(1 + count) * (lift?.clamp(0.25, 3.0) ?? 1);
   String get key => '$sourceId\n$name';
 }
 
@@ -189,12 +198,14 @@ class TasteRecap {
     required this.days,
     required this.saves,
     required this.previousSaves,
+    this.opens = 0,
     required this.tags,
     required this.previousTags,
   });
   final int days;
   final int saves;
   final int previousSaves;
+  final int opens;
   final Map<String, int> tags;
   final Map<String, int> previousTags;
   int get change => saves - previousSaves;
@@ -242,13 +253,17 @@ class TasteSnapshot {
   }
 }
 
-/// Counts describe the current saved collection. Recaps count timestamps of
-/// still-saved works; they do not reconstruct removed favorites or reading time.
+/// Counts describe active saved evidence. Calendar recaps use historical save
+/// and open events, retaining activity after removal. Reading time is not tracked.
 class TasteAnalyzer {
   static TasteSnapshot analyze(
     Iterable<SavedItem> input, {
     required AppMode mode,
     InsightPreferences? preferences,
+    Iterable<ContentItem> observed = const [],
+    Iterable<ContentItem> organicSaved = const [],
+    Iterable<SavedItem>? saveHistory,
+    Iterable<SavedItem> openHistory = const [],
     DateTime? now,
   }) {
     final prefs = preferences ?? InsightPreferences(mode: mode);
@@ -267,6 +282,42 @@ class TasteAnalyzer {
       (metadata[entry.item.sourceId] ??= {}).addAll(
         TasteTagPolicy.metadata(entry.item),
       );
+    }
+    final observedUnique = {
+      for (final item in observed.where((item) => item.mode == mode))
+        item.key: item,
+    };
+    final organicUnique = {
+      for (final item in organicSaved.where((item) => item.mode == mode))
+        item.key: item,
+    };
+    for (final item in observedUnique.values) {
+      (metadata[item.sourceId] ??= {}).addAll(TasteTagPolicy.metadata(item));
+    }
+    final openedCounts = <String, int>{};
+    final openedTags = <String, int>{};
+    final organicCounts = <String, int>{};
+    final organicTags = <String, int>{};
+    void countEvidence(
+      ContentItem item,
+      Map<String, int> counts,
+      Map<String, int> tags,
+    ) {
+      counts.update(item.sourceId, (n) => n + 1, ifAbsent: () => 1);
+      for (final tag in TasteTagPolicy.eligible(
+        item,
+        prefs,
+        knownMetadata: metadata[item.sourceId] ?? {},
+      )) {
+        tags.update('${item.sourceId}\n$tag', (n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+
+    for (final item in observedUnique.values) {
+      countEvidence(item, openedCounts, openedTags);
+    }
+    for (final item in organicUnique.values) {
+      countEvidence(item, organicCounts, organicTags);
     }
     final works = <String, Set<String>>{};
     final artists = <String, int>{};
@@ -318,8 +369,17 @@ class TasteAnalyzer {
     final tags =
         works.entries.map((entry) {
           final separator = entry.key.indexOf('\n');
+          final sourceId = entry.key.substring(0, separator);
+          final opened = openedCounts[sourceId] ?? 0;
+          final organic = organicCounts[sourceId] ?? 0;
+          final lift = opened >= 30 && organic >= 10
+              ? ((organicTags[entry.key] ?? 0) + 1) /
+                    (organic + 2) /
+                    (((openedTags[entry.key] ?? 0) + 1) / (opened + 2))
+              : null;
           return TasteTagStat(
-            sourceId: entry.key.substring(0, separator),
+            lift: lift,
+            sourceId: sourceId,
             name: entry.key.substring(separator + 1),
             workKeys: entry.value,
           );
@@ -328,31 +388,60 @@ class TasteAnalyzer {
           return count == 0 ? a.key.compareTo(b.key) : count;
         });
     TasteRecap recap(int days) {
-      final start = clock.subtract(Duration(days: days));
-      final previousStart = start.subtract(Duration(days: days));
-      var current = 0, previous = 0;
+      DateTime midnight(int year, int month, int day) => clock.isUtc
+          ? DateTime.utc(year, month, day)
+          : DateTime(year, month, day);
+      final start = days == 7
+          ? midnight(clock.year, clock.month, clock.day - clock.weekday + 1)
+          : midnight(clock.year, clock.month, 1);
+      final previousStart = days == 7
+          ? midnight(start.year, start.month, start.day - 7)
+          : midnight(start.year, start.month - 1, 1);
+      final end = days == 7
+          ? midnight(start.year, start.month, start.day + 7)
+          : midnight(start.year, start.month + 1, 1);
+      final current = <String, SavedItem>{};
+      final previous = <String, SavedItem>{};
+      final opened = <String>{};
       final currentTags = <String, int>{}, previousTags = <String, int>{};
-      for (final entry in saved) {
-        if (entry.savedAt.isAfter(clock) ||
+      for (final entry in (saveHistory ?? saved).where(
+        (entry) => entry.item.mode == mode,
+      )) {
+        if (!entry.savedAt.isBefore(end) ||
             entry.savedAt.isBefore(previousStart)) {
           continue;
         }
-        final recent = !entry.savedAt.isBefore(start);
-        if (recent) {
-          current++;
-        } else {
-          previous++;
+        final bucket = !entry.savedAt.isBefore(start) ? current : previous;
+        bucket.putIfAbsent(entry.item.key, () => entry);
+      }
+      for (final entry in openHistory.where(
+        (entry) => entry.item.mode == mode,
+      )) {
+        if (!entry.savedAt.isBefore(end) || entry.savedAt.isBefore(start)) {
+          continue;
         }
-        for (final tag in eligibleByItem[entry.item.key] ?? <String>{}) {
-          final target = recent ? currentTags : previousTags;
-          final key = '${entry.item.sourceId}\n$tag';
-          target.update(key, (value) => value + 1, ifAbsent: () => 1);
+        opened.add(entry.item.key);
+      }
+      void countTags(Map<String, SavedItem> bucket, Map<String, int> target) {
+        for (final entry in bucket.values) {
+          for (final tag in TasteTagPolicy.eligible(
+            entry.item,
+            prefs,
+            knownMetadata: metadata[entry.item.sourceId] ?? {},
+          )) {
+            final key = '${entry.item.sourceId}\n$tag';
+            target.update(key, (value) => value + 1, ifAbsent: () => 1);
+          }
         }
       }
+
+      countTags(current, currentTags);
+      countTags(previous, previousTags);
       return TasteRecap(
         days: days,
-        saves: current,
-        previousSaves: previous,
+        saves: current.length,
+        previousSaves: previous.length,
+        opens: opened.length,
         tags: currentTags,
         previousTags: previousTags,
       );
@@ -428,11 +517,13 @@ class TasteRecommendation {
     required this.reason,
     required this.score,
     required this.rankingTags,
+    this.sourceOrder = 0,
   });
   final ContentItem item;
   final TasteTagStat reason;
   final double score;
   final Set<String> rankingTags;
+  final int sourceOrder;
   bool get generatedByAI => false;
 }
 
@@ -472,6 +563,7 @@ class RecommendationService {
     required TasteSnapshot snapshot,
     required List<SourceConfig> sources,
     Map<String, String> blacklists = const {},
+    Map<String, String> sortsBySource = const {},
     Set<String> Function()? currentSavedKeys,
     int limit = 20,
     int requestBudget = 6,
@@ -508,12 +600,20 @@ class RecommendationService {
       while (next < tasks.length) {
         if (cancelled?.call() ?? false) break;
         dispatched++;
-        final (source, seed) = tasks[next++];
+        final taskIndex = next++;
+        final (source, seed) = tasks[taskIndex];
         try {
-          final page = await load(source, seed.name).timeout(timeout);
+          final included =
+              snapshot.preferences.includedBySource[source.id] ??
+              const <String>{};
+          final queryTags = {
+            seed.name,
+            ...included.map(InsightPreferences.normalize),
+          };
+          final page = await load(source, queryTags.join(' ')).timeout(timeout);
           if (cancelled?.call() ?? false) return;
           final savedNow = currentSavedKeys?.call() ?? snapshot.savedKeys;
-          for (final item in page.items.take(40)) {
+          for (final (position, item) in page.items.take(40).indexed) {
             if (item.mode != snapshot.mode ||
                 item.sourceId != source.id ||
                 snapshot.savedKeys.contains(item.key) ||
@@ -526,7 +626,13 @@ class RecommendationService {
               snapshot.preferences,
               knownMetadata: snapshot.knownMetadata[source.id] ?? {},
             );
-            if (!eligible.contains(seed.name)) {
+            final itemTags = item.tags
+                .map(InsightPreferences.normalize)
+                .toSet();
+            if (!eligible.contains(seed.name) ||
+                !itemTags.containsAll(
+                  included.map(InsightPreferences.normalize),
+                )) {
               skipped++;
               continue;
             }
@@ -538,6 +644,7 @@ class RecommendationService {
                   reason: seed,
                   score: score,
                   rankingTags: eligible,
+                  sourceOrder: taskIndex * 40 + position,
                 ),
               );
             }
@@ -569,18 +676,29 @@ class RecommendationService {
     if (wasCancelled) candidates.clear();
     final decks = <List<TasteRecommendation>>[];
     for (final source in matchingSources) {
-      decks.add(
-        _mix(
-          candidates
-              .where(
-                (candidate) =>
-                    candidate.item.sourceId == source.id &&
-                    !saved.contains(candidate.item.key),
-              )
-              .toList(),
-          limit.clamp(0, 40),
-        ),
-      );
+      final input = candidates
+          .where(
+            (candidate) =>
+                candidate.item.sourceId == source.id &&
+                !saved.contains(candidate.item.key),
+          )
+          .toList();
+      final sort = sortsBySource[source.id] ?? 'recommended';
+      if (sort == 'recommended') {
+        decks.add(_mix(input, limit.clamp(0, 40)));
+      } else {
+        // Server ordering belongs to a dispatched query/page position, never
+        // to the order in which concurrent HTTP requests happened to finish.
+        input.sort((a, b) => a.sourceOrder.compareTo(b.sourceOrder));
+        final seen = <String>{};
+        final ordered = input
+            .where((entry) => seen.add(entry.item.key))
+            .toList();
+        if (sort == 'latest') {
+          ordered.sort((a, b) => b.item.id.compareTo(a.item.id));
+        }
+        decks.add(ordered.take(limit.clamp(0, 40)).toList());
+      }
     }
     final result = <TasteRecommendation>[];
     for (var index = 0; result.length < limit.clamp(0, 40); index++) {

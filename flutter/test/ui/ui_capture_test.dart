@@ -8,10 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/app.dart';
 import 'package:tegnal/core/drive_sync_controller.dart';
 import 'package:tegnal/core/content.dart';
+import 'package:tegnal/core/library.dart';
 import 'package:tegnal/data/drive_auth.dart';
 import 'package:tegnal/features/drive_sync_screen.dart';
 import 'package:tegnal/features/reader_screen.dart';
 import 'package:tegnal/features/explore_screen.dart';
+import 'package:tegnal/features/artists_screen.dart';
 import 'package:tegnal/features/library_screen.dart';
 import 'package:tegnal/features/detail_screen.dart';
 import 'package:tegnal/features/onboarding_screen.dart';
@@ -22,6 +24,14 @@ import 'package:tegnal/ui/content_tile.dart';
 
 import 'capture_fixtures.dart';
 
+const _setupRefinement = bool.fromEnvironment(
+  'TEGNAL_CAPTURE_SETUP_REFINEMENT',
+);
+const _nativeParity = bool.fromEnvironment('TEGNAL_CAPTURE_NATIVE_PARITY');
+const _captureStage = String.fromEnvironment(
+  'TEGNAL_CAPTURE_STAGE',
+  defaultValue: 'after',
+);
 const _enabled = bool.fromEnvironment('TEGNAL_CAPTURE_UI');
 const _parityFlowsOnly = bool.fromEnvironment('TEGNAL_CAPTURE_PARITY_FLOWS');
 const _libraryOnly = bool.fromEnvironment('TEGNAL_CAPTURE_LIBRARY_ONLY');
@@ -44,6 +54,7 @@ void main() {
     final temp = Directory.systemTemp.createTempSync('tegnal-ui-capture-');
     final downloads = CaptureDownloads(fixtures.store, temp);
     final driveSync = DriveSyncController(
+      featureEnabled: true,
       library: controller!,
       stateDirectory: Directory('${temp.path}/drive-sync'),
       auth: GoogleDriveAuth(platform: TargetPlatform.android),
@@ -79,7 +90,11 @@ void main() {
     });
 
     final output = Directory(
-      _libraryOnly
+      _setupRefinement
+          ? 'build/ui-captures/setup-refinement'
+          : _nativeParity
+          ? 'build/ui-captures/native-parity/$_captureStage'
+          : _libraryOnly
           ? 'build/ui-captures/library-selector'
           : _polishOnly
           ? 'build/ui-captures/polish'
@@ -134,6 +149,24 @@ void main() {
       expect(loaded, greaterThanOrEqualTo(minimum));
     }
 
+    Future<void> waitForDecodedArtwork(int minimum) async {
+      int loaded() => tester
+          .widgetList<RawImage>(find.byType(RawImage))
+          .where((image) => image.image != null)
+          .length;
+      for (var attempt = 0; attempt < 100 && loaded() < minimum; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        loaded(),
+        greaterThanOrEqualTo(minimum),
+        reason: 'Screenshots must show decoded artwork, never pending placeholders.',
+      );
+    }
+
     int loadedContentTileCount() {
       final tiles = find.byType(ContentTile);
       var loaded = 0;
@@ -152,9 +185,11 @@ void main() {
     }
 
     Future<void> waitForLoadedContentTiles(int minimum) async {
-      for (var attempt = 0;
-          attempt < 25 && loadedContentTileCount() < minimum;
-          attempt++) {
+      for (
+        var attempt = 0;
+        attempt < 25 && loadedContentTileCount() < minimum;
+        attempt++
+      ) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 160)),
         );
@@ -176,10 +211,11 @@ void main() {
       String appearance = 'dark',
     }) async {
       await tester.pumpWidget(const SizedBox());
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = size;
+      final pixelRatio = _nativeParity ? 2.0 : 1.0;
+      tester.view.devicePixelRatio = pixelRatio;
+      tester.view.physicalSize = size * pixelRatio;
       tester.view.padding = size.width < 840
-          ? const FakeViewPadding(top: 59, bottom: 34)
+          ? FakeViewPadding(top: 59 * pixelRatio, bottom: 34 * pixelRatio)
           : const FakeViewPadding();
       tester.platformDispatcher.textScaleFactorTestValue = scale;
       controller.setPreference('appearance', appearance);
@@ -197,10 +233,12 @@ void main() {
     }
 
     Future<void> tab(int index) async {
-      final navigation = tester.view.physicalSize.width >= 840
+      final navigation =
+          tester.view.physicalSize.width / tester.view.devicePixelRatio >= 840
           ? find.byType(TegnalSidebar)
           : find.byType(TegnalTabBar);
-      if (tester.view.physicalSize.width >= 840) {
+      if (tester.view.physicalSize.width / tester.view.devicePixelRatio >=
+          840) {
         await tester.tap(
           find
               .descendant(
@@ -223,7 +261,7 @@ void main() {
         );
       }
       await settle();
-      if (tester.view.physicalSize.width < 840) {
+      if (tester.view.physicalSize.width / tester.view.devicePixelRatio < 840) {
         expect(tester.widget<TegnalTabBar>(navigation).selected, index);
       }
     }
@@ -249,7 +287,217 @@ void main() {
     }
 
     await mount();
+    if (_setupRefinement) {
+      await waitForDecodedArtwork(24);
+      final originalFolderCount = controller.folders(AppMode.booru).length;
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await settle();
+      await tester.enterText(find.byType(TextField).first, '자동 색상 폴더');
+      expect(find.byKey(const ValueKey('folder-creation-color')), findsNothing);
+      await capture('folder-create-name-only');
+      await tester.tap(find.widgetWithText(TextButton, '취소'));
+      await settle();
+      expect(controller.folders(AppMode.booru).length, originalFolderCount);
+      final created = <LibraryFolder>[];
+      for (var index = 1; index <= 3; index++) {
+        await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+        await settle();
+        await tester.enterText(find.byType(TextField).first, '자동 색상 $index');
+        await tester.tap(find.widgetWithText(FilledButton, '저장'));
+        await settle();
+        created.add(
+          controller
+              .folders(AppMode.booru)
+              .firstWhere((folder) => folder.name == '자동 색상 $index'),
+        );
+      }
+      expect(created.map((folder) => folder.color), [
+        0xFF0891B2,
+        0xFFD97706,
+        0xFFDB2777,
+      ]);
+      final libraryScroll = find
+          .descendant(
+            of: find.byType(LibraryScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        find.text('자동 색상 1'),
+        240,
+        scrollable: libraryScroll,
+      );
+      await capture('folder-automatic-assigned-colors');
+      for (final folder in created) {
+        controller.deleteFolder(folder);
+      }
+
+      controller.setPreference('onboarding', false);
+      await mount();
+      final violetShortcut = find.byKey(
+        const ValueKey('onboarding-violet-shortcut'),
+      );
+      await tester.ensureVisible(violetShortcut);
+      await capture('onboarding-violet-shortcut');
+      await tester.tap(violetShortcut);
+      await settle();
+      await capture('onboarding-violet-primary-import');
+      controller.setPreference('onboarding', true);
+      await mount();
+      await tab(3);
+      await capture('settings-violet-prominent-import');
+      final scroll = find
+          .descendant(
+            of: find.byType(SettingsScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        find.text('Google Drive 동기화'),
+        350,
+        scrollable: scroll,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Google Drive 동기화')),
+        alignment: .2,
+      );
+      await settle();
+      expect(
+        find.byKey(const ValueKey('settings-chevron-Google Drive Sync')),
+        findsNothing,
+      );
+      await capture('settings-drive-temporarily-disabled');
+      await tester.runAsync(
+        () => File('${output.path}/validation.txt').writeAsString(
+          errors.isEmpty ? 'No framework errors.\n' : errors.join('\n\n'),
+        ),
+      );
+      expect(errors, isEmpty);
+      expect(offlineImages.unexpectedRequests, isEmpty);
+      return;
+    }
+    if (_nativeParity) {
+      await waitForDecodedArtwork(24);
+      await capture('library');
+      await tab(1);
+      await waitForLoadedContentTiles(12);
+      await capture('explore');
+      await tab(0);
+      await tester.tap(find.text('모든 즐겨찾기'));
+      await settle();
+      await capture('collection');
+      await tester.tap(find.text('선택'));
+      await settle();
+      await tester.tap(find.byType(ContentTile).at(0));
+      await tester.tap(find.byType(ContentTile).at(1));
+      await capture('organize');
+      await tester.tap(find.byIcon(Icons.close));
+      await settle();
+      controller.setReaderPreferences(
+        AppMode.booru,
+        controller.readerPreferences(AppMode.booru).copyWith(bottomMenu: true),
+      );
+      await tester.tap(find.byType(ContentTile).at(3));
+      await settle();
+      await waitForDecodedArtwork(1);
+      await capture('reader');
+      await tester.tapAt(const Offset(201, 437));
+      await settle();
+      await capture('reader-controls');
+      await tester.tap(find.text('나가기'));
+      await settle();
+
+      await mount();
+      await tester.longPress(find.text('풍경'));
+      await settle();
+      await capture('folder-actions');
+      await tester.tap(find.text('색상 변경'));
+      await settle();
+      await capture('folder-color');
+      await tester.tap(find.byTooltip('완료'));
+      await settle();
+      await tester.longPress(find.text('풍경'));
+      await settle();
+      await tester.tap(find.text('폴더 순서 변경'));
+      await settle();
+      await capture('folder-order');
+      await tester.tap(find.text('취소'));
+      await settle();
+
+      await tab(2);
+      final tagsScroll = find
+          .descendant(
+            of: find.byType(ArtistsScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        find.text('검색 기록'),
+        250,
+        scrollable: tagsScroll,
+      );
+      await capture('saved-searches');
+      await tab(1);
+      await tester.tap(find.byKey(const ValueKey('explore.search')));
+      tester.view.viewInsets = FakeViewPadding(
+        bottom: 300 * tester.view.devicePixelRatio,
+      );
+      await settle();
+      await capture('search-history');
+      FocusManager.instance.primaryFocus?.unfocus();
+      tester.view.viewInsets = const FakeViewPadding();
+      await settle();
+      await tab(3);
+      await capture('settings');
+      final settingsScroll = find
+          .descendant(
+            of: find.byType(SettingsScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      controller.setPreference('safeMode.booru', true);
+      await settle();
+      final safeLabel = L10n.tr(
+        tester.element(find.byType(SettingsScreen)),
+        'Safe Mode',
+      );
+      for (
+        var attempt = 0;
+        attempt < 20 && find.text(safeLabel).evaluate().isEmpty;
+        attempt++
+      ) {
+        await tester.drag(settingsScroll, const Offset(0, -220));
+        await settle();
+      }
+      expect(find.text(safeLabel), findsWidgets);
+      await Scrollable.ensureVisible(
+        tester.element(find.text(safeLabel).first),
+        alignment: .1,
+      );
+      await settle();
+      await capture('safe-mode');
+      await tester.scrollUntilVisible(
+        find.text('라이브러리 관리'),
+        220,
+        scrollable: settingsScroll,
+      );
+      await tester.tap(find.text('라이브러리 관리'));
+      await settle();
+      await capture('backup');
+      controller.setPreference('safeMode.booru', false);
+      await mount(size: const Size(320, 740), scale: 1.5);
+      await capture('compact-large-text-library');
+      await tester.runAsync(
+        () => File('${output.path}/validation.txt').writeAsString(
+          errors.isEmpty ? 'No framework errors.\n' : errors.join('\n\n'),
+        ),
+      );
+      expect(errors, isEmpty);
+      expect(offlineImages.unexpectedRequests, isEmpty);
+      return;
+    }
     if (_libraryOnly) {
+      await waitForDecodedArtwork(24);
       await capture('booru-library-source-selector');
       await tester.runAsync(
         () => File('${output.path}/validation.txt').writeAsString(
@@ -263,10 +511,12 @@ void main() {
     if (_refinementsOnly) {
       await tab(1);
       await waitForLoadedContentTiles(3);
-      final exploreScroll = find.descendant(
-        of: find.byType(ExploreScreen),
-        matching: find.byType(CustomScrollView),
-      ).first;
+      final exploreScroll = find
+          .descendant(
+            of: find.byType(ExploreScreen),
+            matching: find.byType(CustomScrollView),
+          )
+          .first;
       await tester.drag(exploreScroll, const Offset(0, 700));
       await settle();
       expect(find.byKey(const ValueKey('explore.search')), findsOneWidget);
@@ -279,9 +529,7 @@ void main() {
             matching: find.byType(Scrollable),
           )
           .first;
-      final themeValue = find.byKey(
-        const ValueKey('settings-value-Theme'),
-      );
+      final themeValue = find.byKey(const ValueKey('settings-value-Theme'));
       await tester.scrollUntilVisible(
         themeValue,
         220,
@@ -304,9 +552,11 @@ void main() {
         'Replay Onboarding',
       );
       final replayOnboarding = find.text(replayTitle);
-      for (var attempt = 0;
-          attempt < 12 && replayOnboarding.evaluate().isEmpty;
-          attempt++) {
+      for (
+        var attempt = 0;
+        attempt < 12 && replayOnboarding.evaluate().isEmpty;
+        attempt++
+      ) {
         await tester.drag(settingsScroll, const Offset(0, -480));
         await settle();
       }
@@ -357,9 +607,7 @@ void main() {
       expect(find.byType(DetailScreen), findsOneWidget);
       expectLoadedImages(1);
       await capture('manga-work-details-initial-metadata');
-      final detailScroll = find.byKey(
-        const ValueKey('content.detail.scroll'),
-      );
+      final detailScroll = find.byKey(const ValueKey('content.detail.scroll'));
       await tester.drag(detailScroll, const Offset(0, -620));
       await settle();
       expect(
@@ -379,10 +627,12 @@ void main() {
       return;
     }
     if (_polishOnly) {
-      final libraryScroll = find.descendant(
-        of: find.byType(LibraryScreen),
-        matching: find.byType(CustomScrollView),
-      ).first;
+      final libraryScroll = find
+          .descendant(
+            of: find.byType(LibraryScreen),
+            matching: find.byType(CustomScrollView),
+          )
+          .first;
       await capture('saved-icons-top');
       await tester.drag(libraryScroll, const Offset(0, -300));
       await settle();
@@ -399,10 +649,12 @@ void main() {
       final searchField = find.byKey(const ValueKey('explore.search'));
       expect(searchField, findsOneWidget);
       await capture('explore-search-visible');
-      final exploreScroll = find.descendant(
-        of: find.byType(ExploreScreen),
-        matching: find.byType(CustomScrollView),
-      ).first;
+      final exploreScroll = find
+          .descendant(
+            of: find.byType(ExploreScreen),
+            matching: find.byType(CustomScrollView),
+          )
+          .first;
       await tester.drag(exploreScroll, const Offset(0, -360));
       await settle();
       await capture('explore-search-scrolled-hidden');
@@ -411,10 +663,7 @@ void main() {
       await mount(size: const Size(320, 740));
       await tester.tap(
         find.text(
-          L10n.tr(
-            tester.element(find.byType(TegnalTabBar)),
-            'All Favorites',
-          ),
+          L10n.tr(tester.element(find.byType(TegnalTabBar)), 'All Favorites'),
         ),
       );
       await settle();
@@ -512,7 +761,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await capture('booru-search-history');
-      await tester.tap(find.text('original scenery').last);
+      await tester.tap(find.text('scenery sky').last);
       await settle();
       expect(find.byType(ExploreScreen), findsOneWidget);
       await capture('booru-explore-from-history');
@@ -677,22 +926,13 @@ void main() {
       250,
       scrollable: settingsScroll,
     );
-    await tester.tap(find.text('Google Drive 동기화'));
-    await settle();
-    expect(find.byType(DriveSyncScreen), findsOneWidget);
-    expect(find.text('Google Drive 설정 필요'), findsOneWidget);
-    expect(find.text('Google Drive 연결'), findsNothing);
+    expect(find.byType(DriveSyncScreen), findsNothing);
+    expect(
+      find.byKey(const ValueKey('settings-chevron-Google Drive Sync')),
+      findsNothing,
+    );
     expect(driveSync.connected, isFalse);
-    await capture('dark-ko-drive-setup');
-    for (final language in ['en', 'ja']) {
-      controller.setPreference('language', language);
-      await settle();
-      await capture('dark-$language-drive-setup');
-    }
-    controller.setPreference('language', 'ko');
-    await settle();
-    await tester.tap(find.byType(BackButton));
-    await settle();
+    await capture('dark-ko-drive-temporarily-disabled');
     await tester.scrollUntilVisible(
       find.text('라이브러리 관리'),
       250,

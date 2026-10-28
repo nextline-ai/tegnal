@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +35,71 @@ void main() {
         .setMockMethodCallHandler(channel, null);
     debugDefaultTargetPlatformOverride = null;
   });
+
+  test(
+    'concurrent same-URL cookie lookups share only the in-flight call',
+    () async {
+      final gate = Completer<void>();
+      var lookups = 0;
+      var cookie = 'session=one';
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'headersFor') {
+              lookups++;
+              await gate.future;
+              return {'Cookie': cookie};
+            }
+            return null;
+          });
+      final firstUrl = Uri.https('session-a.invalid', '/image');
+      final secondUrl = Uri.https('session-a.invalid', '/other');
+      final first = BrowserSession.headersFor(firstUrl);
+      final duplicate = BrowserSession.headersFor(firstUrl);
+      final other = BrowserSession.headersFor(secondUrl);
+      await Future<void>.delayed(Duration.zero);
+      expect(lookups, 2);
+      gate.complete();
+      final a = await first;
+      final b = await duplicate;
+      await other;
+      a['Cookie'] = 'mutated';
+      expect(b['Cookie'], 'session=one');
+      cookie = 'session=two';
+      expect(
+        (await BrowserSession.headersFor(firstUrl))['Cookie'],
+        'session=two',
+      );
+      expect(lookups, 3);
+    },
+  );
+
+  test(
+    'cookie lookups are not shared across a browser-session change',
+    () async {
+      final gates = <Completer<void>>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'headersFor') {
+              final gate = Completer<void>();
+              gates.add(gate);
+              await gate.future;
+              return <String, String>{};
+            }
+            return null;
+          });
+      final url = Uri.https('session-revision.invalid', '/image');
+      final first = BrowserSession.headersFor(url);
+      await Future<void>.delayed(Duration.zero);
+      await BrowserSession.open(url);
+      final second = BrowserSession.headersFor(url);
+      await Future<void>.delayed(Duration.zero);
+      expect(gates.length, 2);
+      for (final gate in gates) {
+        gate.complete();
+      }
+      await Future.wait([first, second]);
+    },
+  );
 
   test('source requests adopt URL-scoped browser cookies and UA without redirecting', () async {
     late http.Request sent;
@@ -134,7 +201,9 @@ void main() {
         ),
       );
       await client.get(Uri.parse('https://source.invalid/login'));
-      final receive = calls.last;
+      final receive = calls.singleWhere(
+        (call) => call.method == 'receiveCookies',
+      );
       expect(receive.method, 'receiveCookies');
       expect((receive.arguments as Map)['url'], 'https://source.invalid/login');
       expect((receive.arguments as Map)['cookies'], [
@@ -143,6 +212,44 @@ void main() {
       ]);
     },
   );
+
+  test('cookie changes invalidate only affected domain and unchanged cookies do not', () async {
+    var cookie = 'session=old';
+    var nextCookie = cookie;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'headersFor') return {'Cookie': cookie};
+          if (call.method == 'receiveCookies') cookie = nextCookie;
+          return null;
+        });
+    final source = Uri.parse('https://source.invalid/login');
+    final child = Uri.parse('https://img.source.invalid/a');
+    final other = Uri.parse('https://elsewhere.invalid/a');
+    final client = SessionClient(
+      origin: source,
+      inner: MockClient(
+        (_) async => http.Response(
+          '',
+          200,
+          headers: {'set-cookie': 'session=new; Domain=source.invalid; Path=/'},
+        ),
+      ),
+    );
+    final sourceBefore = BrowserSession.revisionFor(source);
+    final childBefore = BrowserSession.revisionFor(child);
+    final otherBefore = BrowserSession.revisionFor(other);
+    await client.get(source); // same cookie: no invalidation
+    expect(BrowserSession.revisionFor(source), sourceBefore);
+    expect(BrowserSession.revisionFor(child), childBefore);
+    nextCookie = 'session=new';
+    await client.get(source);
+    expect(BrowserSession.revisionFor(source), isNot(sourceBefore));
+    expect(BrowserSession.revisionFor(child), isNot(childBefore));
+    expect(BrowserSession.revisionFor(other), otherBefore);
+    final changed = BrowserSession.revisionFor(source);
+    await client.get(source);
+    expect(BrowserSession.revisionFor(source), changed);
+  });
 
   test(
     'cross-origin HTTP redirect is returned without fetching destination',

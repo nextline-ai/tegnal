@@ -11,10 +11,14 @@
   <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Discord_button_kr_mobile.svg"><img src="design-output/SVG/button/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
 </p>
 
-<h1 align="center">TEGNAL</h1>
-<p align="center"><b>Hitomi와 Danbooru를 한곳에서 지원하는 최초의 iOS 전용 뷰어</b></p>
 <p align="center">
-  사이드로딩 없이 <b>Apple 공식 TestFlight</b>에서 쉽고 안전하게 다운로드하세요.<br>
+  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk"><img src="https://img.shields.io/badge/Android-Beta%20APK-3DDC84?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 베타 APK 다운로드"></a>
+</p>
+
+<h1 align="center">TEGNAL</h1>
+<p align="center"><b>Hitomi와 Danbooru를 한곳에서 — Apple 앱과 Android 베타</b></p>
+<p align="center">
+  Apple 버전은 <b>TestFlight</b>에서, Android 베타는 위의 <b>APK 다운로드</b> 배지에서 설치하세요.<br>
   온디바이스 AI 추천·번역부터 iCloud 보안 동기화까지, Apple 생태계에 최적화된 감상 환경을 제공합니다.
 </p>
 
@@ -28,21 +32,21 @@
 
 ## ✨ 왜 TEGNAL인가요?
 
-### 1. Hitomi & Danbooru 통합 지원 (최초의 iOS 전용 올인원 뷰어)
+### 1. Hitomi & Danbooru 통합 지원
 - <strong>만화 모드(Hitomi 등)</strong>와 <strong>이미지 모드(Danbooru, Gelbooru, Moebooru 등)</strong>를 하나의 앱에서 지원합니다.
 - 상단 전환바 하나로 만화책 감상과 일러스트(Booru) 탐색을 즉시 오갈 수 있습니다.
 - 여러 Booru 서버를 동시에 탐색하고, 마음에 드는 작품을 길게 눌러 나만의 폴더에 손쉽게 정리하세요.
 
-### 2. 사이드로딩 없이 TestFlight로 안전하고 간편하게
-- TEGNAL은 **공개 TestFlight를 정식 출시 채널로 사용**합니다.
+### 2. Apple 기기는 TestFlight로, Android는 베타 APK로
+- Apple 버전은 **공개 TestFlight를 정식 출시 채널로 사용**하며, Android 베타는 아래 APK로 배포합니다.
 - 복잡하고 위험한 사이드로딩(PC 연결, 7일마다 인증서 갱신 등)이 전혀 필요 없습니다.
 - Apple이 검수한 공식 TestFlight 앱을 통해 **클릭 한 번으로 안전하게 설치**하고 자동 업데이트를 받으세요.
 
-### 3. 완벽한 Apple 기기 연속성 & iCloud 최고 수준 보안
+### 3. Apple 버전의 기기 연속성 & iCloud 최고 수준 보안
 - **크로스플랫폼 연속성 (iPhone · iPhone Duo · iPad · macOS · visionOS):** 공식 지원하는 모든 Apple 기기에서 끊김 없이 이어볼 수 있으며, 각 기기 환경에 맞춰 최적화된 전용 UI와 키보드·마우스·트랙패드 조작을 제공합니다.
 - **안전한 iCloud 동기화:** 최고 수준의 보안을 자랑하는 Apple iCloud를 통해 북마크, 폴더, 작가, 검색 기록이 내 기기 간에만 안전하게 보호되며 자동으로 동기화됩니다.
 
-### 4. 더 즐거운 감상을 돕는 100% 온디바이스 AI
+### 4. Apple 버전의 온디바이스 AI
 모든 AI 기능은 외부 서버 전송 없이 **기기 내부(On-Device)에서 직접 처리**되므로 개인정보 유출 걱정 없이 매우 안전합니다.
 - **스마트 추천 & 월간 리캡:** 내가 저장하고 검색한 취향을 기기 안에서 분석해 매일 새로운 작품을 추천하고, 주간 통계와 월간 리캡 카드를 만들어 드립니다.
 - **비슷한 그림체 찾기:** 저장한 작품을 길게 누르면 Apple Vision AI가 구도·색감·화풍을 분석해 비슷한 스타일의 작품을 찾아줍니다.
@@ -50,7 +54,25 @@
 
 ---
 
-## 📲 다운로드 및 설치 방법
+## 🤖 Android 다운로드 (베타)
+
+**Android 1.0.0-beta.1 · Android 7.0 이상.** 아래 링크는 설치 가능한 **APK 파일을 직접 다운로드**합니다. Google Play 배포판이 아닙니다.
+
+| 다운로드 | 대상 |
+| --- | --- |
+| **[Android 베타 APK — ARM64 권장](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk)** | 대부분의 최신 64비트 ARM 휴대폰 |
+| [Android 베타 APK — 공용판](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android.apk) | 32비트 ARM·ARM64·x86-64, 기기 종류가 불확실할 때 |
+
+APK를 받은 뒤 파일을 열어 설치하세요. Android가 요청하면 다운로드한 브라우저 또는 파일 앱에만 앱 설치를 허용하면 됩니다. 업데이트도 같은 방식으로 새 APK를 설치합니다. 두 APK는 같은 서명을 사용합니다.
+
+- 이번 베타에는 **hitomi.la와 danbooru.donmai.us**가 기본 연결로 한 번 저장됩니다. 사용자 데이터에 저장되므로 이후 버전에서 기본 제공 코드가 없어져도 유지됩니다. 직접 삭제한 연결은 다음 실행 때 다시 추가하지 않습니다.
+- 이미지 모드는 **Booru 사이트별 기본 폴더**로 정리합니다. 만화 모드의 폴더 구성은 유지합니다.
+- **Violet 가져오기**와 기존 TEGNAL JSON 백업을 지원합니다. 이미지 번역은 설치된 Google 번역 앱으로 연결하며, Google Drive 동기화는 현재 비활성화되어 있습니다.
+- 아래 iCloud·Apple Vision·Apple 온디바이스 번역 설명은 **Apple 버전 전용**입니다. Android 베타에는 동일하게 적용되지 않습니다.
+
+[베타 변경 내역 및 파일 해시](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.1)
+
+## 📲 Apple 다운로드 및 설치 방법
 
 1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
 2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
@@ -70,7 +92,7 @@ TestFlight는 Apple이 제공하는 앱 베타 배포 서비스입니다.
 
 </details>
 
-**최신 앱 버전은 TestFlight로 우선 배포됩니다.** 최신 버전을 받으려면 TestFlight를 이용하세요.
+**최신 Apple 앱 버전은 TestFlight로 우선 배포됩니다.** 최신 버전을 받으려면 TestFlight를 이용하세요.
 
 IPA 파일과 AltStore Classic·SideStore용 버전은 일부 버전만 업로드되므로, TestFlight와 버전이 다를 수 있습니다. **소스 코드는 항상 GitHub에 먼저 반영됩니다.**
 

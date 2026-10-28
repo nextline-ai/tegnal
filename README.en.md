@@ -11,10 +11,14 @@
   <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Discord_button_en_mobile.svg"><img src="design-output/SVG/button/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
 </p>
 
-<h1 align="center">TEGNAL</h1>
-<p align="center"><b>The first dedicated iOS viewer supporting both Hitomi and Danbooru in one place</b></p>
 <p align="center">
-  Download easily and safely via <b>Apple’s official TestFlight</b>—no risky sideloading required.<br>
+  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk"><img src="https://img.shields.io/badge/Android-Beta%20APK-3DDC84?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Download Android beta APK"></a>
+</p>
+
+<h1 align="center">TEGNAL</h1>
+<p align="center"><b>Hitomi and Danbooru in one place — Apple apps and Android beta</b></p>
+<p align="center">
+  Install the Apple version via <b>TestFlight</b>, or download the <b>Android beta APK</b> above.<br>
   Enjoy on-device AI recommendations, instant translation, and secure iCloud sync across your Apple devices.
 </p>
 
@@ -28,13 +32,13 @@
 
 ## ✨ Why TEGNAL?
 
-### 1. Hitomi & Danbooru in One Place (First All-in-One iOS Viewer)
-- Supports both **Comics Mode (Hitomi, etc.)** and **Image Mode (Danbooru, Gelbooru, Moebooru, etc.)** in a single native iOS app.
+### 1. Hitomi & Danbooru in One Place
+- Supports both **Comics Mode (Hitomi, etc.)** and **Image Mode (Danbooru, Gelbooru, Moebooru, etc.)** in one app, with native Apple apps and an Android beta.
 - Seamlessly switch between reading comics and browsing illustration boards with the top mode bar.
 - Browse multiple Booru servers simultaneously and long-press any work to organize it into custom color-coded folders.
 
-### 2. Easy & Safe Installation via Official TestFlight (No Sideloading)
-- TEGNAL uses **Public TestFlight as its official release channel**.
+### 2. TestFlight for Apple Devices, Beta APKs for Android
+- The Apple version uses **Public TestFlight as its official release channel**. Android beta APKs are available below.
 - Forget complicated, risky sideloading tools, PC tethering, or 7-day certificate expirations.
 - Install with a single tap through Apple’s official TestFlight app and receive automatic updates safely.
 
@@ -42,7 +46,7 @@
 - **Cross-Platform Continuity (iPhone · iPhone Duo · iPad · macOS · visionOS):** Enjoy seamless continuity across all officially supported Apple platforms, featuring dedicated UI and controls optimized for each environment.
 - **Secure iCloud Sync:** Your bookmarks, folders, saved artists, and search history are protected by Apple’s industry-leading iCloud security and synced automatically across your devices.
 
-### 4. Private, 100% On-Device AI Features
+### 4. On-Device AI Features in the Apple Version
 Every AI feature runs **100% locally on your device** without sending your data to external servers—keeping your preferences completely private.
 - **Smart Recommendations & Monthly Recaps:** Analyzes your saved works and tags on-device to recommend fresh content daily, complete with weekly stats and monthly recap cards.
 - **Find Similar Art Styles:** Long-press a saved work to find visually similar pieces based on composition, color palette, and art style powered by Apple Vision.
@@ -50,7 +54,25 @@ Every AI feature runs **100% locally on your device** without sending your data 
 
 ---
 
-## 📲 How to Install
+## 🤖 Android Download (Beta)
+
+**Android 1.0.0-beta.1 · Requires Android 7.0 or later.** These links download installable **APK files directly**. This is not a Google Play release.
+
+| Download | Devices |
+| --- | --- |
+| **[Android beta APK — ARM64 recommended](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk)** | Most current 64-bit ARM phones |
+| [Android beta APK — Universal](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android.apk) | 32-bit ARM, ARM64 and x86-64; choose this if unsure |
+
+Open the downloaded APK to install it. If Android prompts you, allow app installation for the browser or file manager you used. Install subsequent APKs the same way to update. Both variants use the same signing certificate.
+
+- This beta saves **hitomi.la and danbooru.donmai.us** as default connections once. They remain in your user data even if a future version removes the bundled defaults. Connections you delete are not added again on restart.
+- Image mode organizes saved works into **site-specific Booru folders**. Manga folder organization stays unchanged.
+- **Violet import** and existing TEGNAL JSON backups are supported. Image translation opens the installed Google Translate app; Google Drive sync is currently disabled.
+- The iCloud, Apple Vision and Apple on-device translation features described below apply to the **Apple version**, not the Android beta.
+
+[Beta release notes and checksums](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.1)
+
+## 📲 How to Install on Apple Devices
 
 1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
 2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
@@ -70,7 +92,7 @@ TestFlight is Apple’s service for distributing beta versions of apps.
 
 </details>
 
-**The latest app versions are distributed through TestFlight first.** Use TestFlight to receive the latest version.
+**The latest Apple app versions are distributed through TestFlight first.** Use TestFlight to receive the latest version.
 
 IPA files and builds for AltStore Classic and SideStore are uploaded only for selected versions, so they may lag behind TestFlight. **Source code is always updated on GitHub first.**
 

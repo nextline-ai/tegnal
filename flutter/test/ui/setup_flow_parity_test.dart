@@ -133,7 +133,11 @@ void main() {
       ),
     );
 
-    expect(find.text('Comics source'), findsOneWidget);
+    expect(
+      tester.widget<SettingsScreen>(find.byType(SettingsScreen)).mode,
+      AppMode.manga,
+    );
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Image source'), findsNothing);
     final readerSettings = find.text('Reader Settings');
     await tester.scrollUntilVisible(

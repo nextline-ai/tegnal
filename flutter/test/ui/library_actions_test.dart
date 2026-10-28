@@ -87,6 +87,40 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('images show their site folders and never synthesize Unfiled', (
+    tester,
+  ) async {
+    store.saveSource(
+      SourceConfig(
+        id: 'offline',
+        name: 'Offline Site',
+        baseUrl: Uri.parse('https://offline.invalid'),
+        kind: SourceKind.danbooru,
+      ),
+    );
+    save(1, AppMode.booru, []);
+    await pumpLibrary(tester, AppMode.booru);
+    expect(find.text('Unfiled'), findsNothing);
+    expect(find.text('Offline Site'), findsOneWidget);
+    await selectAll(tester);
+    await tester.tap(find.byIcon(Icons.folder_outlined));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Unfiled'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Offline Site'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'bulk moving images replaces their one folder and preserves notes',
     (tester) async {
@@ -142,7 +176,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final mode in AppMode.values) {
+  for (final mode in [AppMode.manga]) {
     testWidgets('choosing Unfiled explicitly clears ${mode.name} memberships', (
       tester,
     ) async {
@@ -200,7 +234,7 @@ void main() {
     final item = save(1, AppMode.booru, ['custom-unfiled']);
     await pumpLibrary(tester, AppMode.booru);
     expect(find.text('미분류'), findsOneWidget);
-    expect(find.text('Unfiled'), findsOneWidget);
+    expect(find.text('Unfiled'), findsNothing);
     await tester.tap(find.text('미분류'));
     await tester.pumpAndSettle();
     expect(
@@ -211,7 +245,7 @@ void main() {
   });
 
   testWidgets(
-    'imported native Unfiled appears once and includes new unfiled works',
+    'imported native Unfiled moves into its site folder with new saves',
     (tester) async {
       BackupCodec(store).importJson(
         jsonEncode({
@@ -256,9 +290,9 @@ void main() {
       final newItem = save(9, AppMode.booru, []);
       await pumpLibrary(tester, AppMode.booru);
 
-      expect(find.text('Unfiled'), findsOneWidget);
+      expect(find.text('Unfiled'), findsNothing);
       expect(find.text('Uncategorized'), findsNothing);
-      await tester.tap(find.text('Unfiled'));
+      await tester.tap(find.text('Offline'));
       await tester.pumpAndSettle();
       final ids = tester
           .widgetList<ContentTile>(find.byType(ContentTile))

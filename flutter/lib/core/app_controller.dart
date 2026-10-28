@@ -6,6 +6,7 @@ import '../data/manga_source.dart';
 import 'content.dart';
 import 'content_filter.dart';
 import 'library.dart';
+import 'taste_controller.dart';
 
 typedef SourceFactory = ContentSource Function(SourceConfig);
 
@@ -14,6 +15,7 @@ class ExploreState {
   final Set<String> exhaustedSources = {};
   List<ContentItem> items = [];
   String query = '';
+  String contentLanguage = 'all';
   bool popular = false;
   BooruSort booruSort = BooruSort.latest;
   bool loading = false;
@@ -33,8 +35,17 @@ class AppController extends ChangeNotifier {
             .where((v) => v.name == store.setting('mode'))
             .firstOrNull ??
         AppMode.manga;
+    taste = LocalTasteController(store);
+    // Existing libraries need only keys at startup. Avoid decoding every saved
+    // payload for a one-time taste seed that has already completed.
+    if (!taste.initialized) {
+      taste.seed(AppMode.values.expand((value) => store.items(value)));
+    }
+    _knownSavedKeys.addAll(store.savedKeys());
   }
   final LibraryStore store;
+  late final LocalTasteController taste;
+  final Set<String> _knownSavedKeys = {};
   final SourceFactory _sourceFactory;
   final Map<String, ContentSource> _clients = {};
   final Map<AppMode, ExploreState> _explore = {
@@ -45,7 +56,15 @@ class AppController extends ChangeNotifier {
   DeviceAiCapabilities get ai => const DeviceAiCapabilities();
   bool get onboardingComplete => store.setting('onboarding', false) == true;
   String get language => store.setting('language', 'system') as String;
-  String get appearance => store.setting('appearance', 'system') as String;
+  String get appearance => appearanceFor(mode);
+  String appearanceFor(AppMode value) => store.setting(
+    'appearance.${value.name}',
+    store.setting('appearance', 'dark'),
+  ) as String;
+  int columns(String kind, AppMode value) =>
+      (store.setting('$kind.${value.name}', 0) as num).toInt().clamp(0, 5);
+  bool modePreference(String key, AppMode value, [bool fallback = false]) =>
+      store.setting('$key.${value.name}', fallback) == true;
   ExploreState explore([AppMode? value]) => _explore[value ?? mode]!;
   Set<String> get _archivedSources =>
       (store.setting('archivedSources', <String>[]) as List)
@@ -63,7 +82,16 @@ class AppController extends ChangeNotifier {
     String? folderId,
     String query = '',
   }) => store.items(mode ?? this.mode, folderId: folderId, query: query);
-  List<SearchEntry> history([AppMode? value]) => store.history(value ?? mode);
+  List<SearchEntry> history([AppMode? value]) {
+    final target = value ?? mode;
+    final days = (store.setting('historyRetention.${target.name}', 0) as num)
+        .toInt();
+    if (days > 0) {
+      store.pruneHistory(target, DateTime.now().subtract(Duration(days: days)));
+    }
+    return store.history(target);
+  }
+
   List<ArtistEntry> artists([AppMode? value]) => store.artists(value ?? mode);
   bool isSaved(ContentItem item) => store.isSaved(item.key);
   SavedItem? saved(ContentItem item) => store.saved(item.key);
@@ -105,6 +133,9 @@ class AppController extends ChangeNotifier {
   }
 
   void setMode(AppMode value) {
+    if (value == AppMode.manga && modePreference('safeMode', AppMode.booru)) {
+      return;
+    }
     mode = value;
     store.setSetting('mode', value.name);
     changed();
@@ -112,6 +143,13 @@ class AppController extends ChangeNotifier {
 
   void setPreference(String key, dynamic value) {
     store.setSetting(key, value);
+    if (key.startsWith('historyRetention.')) {
+      history(AppMode.values.byName(key.split('.').last));
+    }
+    if (key == 'safeMode.booru' && value == true) {
+      mode = AppMode.booru;
+      store.setSetting('mode', mode.name);
+    }
     changed();
   }
 
@@ -222,6 +260,15 @@ class AppController extends ChangeNotifier {
   }
 
   void libraryRestored() {
+    final current = [for (final value in AppMode.values) ...store.items(value)];
+    for (final entry in current) {
+      if (!_knownSavedKeys.contains(entry.item.key)) {
+        taste.record('imported', entry.item);
+      }
+    }
+    _knownSavedKeys
+      ..clear()
+      ..addAll(current.map((entry) => entry.item.key));
     for (final m in AppMode.values) {
       _resetExplore(m);
     }
@@ -230,6 +277,73 @@ class AppController extends ChangeNotifier {
     }
     _clients.clear();
     changed();
+  }
+
+  /// Native defaults augment requests without rewriting the user's saved query.
+  String effectiveSearchQuery(String query, AppMode value) {
+    final terms = query.trim().split(RegExp(r'\s+')).where((v) => v.isNotEmpty);
+    if (value == AppMode.booru) {
+      final explicit = terms.any(
+        (term) => term
+            .replaceFirst(RegExp(r'^[-~]+'), '')
+            .toLowerCase()
+            .startsWith('rating:'),
+      );
+      if (!modePreference('safeMode', value) || explicit) return query;
+      final rating = store.setting('safeRating.booru', 'g');
+      return [
+        ...terms,
+        'rating:${const {'g', 's', 'q'}.contains(rating) ? rating : 'g'}',
+      ].join(' ');
+    }
+    final includes = (store.setting('defaultTags.manga', '') as String).split(
+      RegExp(r'\s+'),
+    );
+    final excludes = (store.setting('defaultExcludedTags.manga', '') as String)
+        .split(RegExp(r'\s+'));
+    return <String>{
+      ...terms,
+      ...includes.where((v) => v.isNotEmpty),
+      ...excludes
+          .where((v) => v.isNotEmpty)
+          .map((v) => '-${v.replaceFirst(RegExp(r'^-+'), '')}'),
+    }.join(' ');
+  }
+
+  Future<ContentPage> searchSource(
+    SourceConfig source,
+    String query, {
+    int page = 1,
+    bool popular = false,
+    BooruSort? sort,
+    String? mangaSort,
+  }) {
+    final adapter = client(source);
+    if (adapter is MangaSource) {
+      adapter.allowsLanguageExceptions = modePreference(
+        'allowsLanguageExceptions',
+        AppMode.manga,
+      );
+    }
+    final effective = effectiveSearchQuery(query, source.mode);
+    if (adapter is MangaSource && mangaSort != null) {
+      return adapter.search(
+        effective,
+        page: page,
+        popular: !{'recommended', 'latest'}.contains(mangaSort),
+        period: mangaSort == 'popular' ? 'week' : mangaSort,
+      );
+    }
+    if (source.mode == AppMode.booru &&
+        adapter is SortedContentSource &&
+        sort != null) {
+      return (adapter as SortedContentSource).searchSorted(
+        effective,
+        page: page,
+        sort: sort,
+      );
+    }
+    return adapter.search(effective, page: page, popular: popular);
   }
 
   Future<void> search({
@@ -288,11 +402,24 @@ class AppController extends ChangeNotifier {
         targets.map((source) async {
           try {
             final adapter = client(source);
+            if (adapter is MangaSource) {
+              adapter.allowsLanguageExceptions = modePreference(
+                'allowsLanguageExceptions',
+                AppMode.manga,
+              );
+            }
+            var requestQuery = effectiveSearchQuery(state.query, m);
+            if (m == AppMode.manga &&
+                state.contentLanguage != 'all' &&
+                !RegExp(r'(?:^|\s)language:').hasMatch(requestQuery)) {
+              requestQuery = '$requestQuery language:${state.contentLanguage}'
+                  .trim();
+            }
             final nextPage = (state.sourcePages[source.id] ?? 0) + 1;
             final ContentPage result;
             if (m == AppMode.booru && adapter is SortedContentSource) {
               result = await (adapter as SortedContentSource).searchSorted(
-                state.query,
+                requestQuery,
                 page: nextPage,
                 sort: state.booruSort,
               );
@@ -303,7 +430,7 @@ class AppController extends ChangeNotifier {
                 throw UnsupportedBooruSort(state.booruSort);
               }
               result = await adapter.search(
-                state.query,
+                requestQuery,
                 page: nextPage,
                 popular: state.popular,
               );
@@ -406,7 +533,7 @@ class AppController extends ChangeNotifier {
     return s == null ? [] : client(s).suggestions(query);
   }
 
-  Future<ContentItem> detail(ContentItem item) async {
+  Future<ContentItem> detail(ContentItem item, {bool recordOpen = true}) async {
     final source =
         sourceById(item.sourceId) ??
         (item.mode == AppMode.manga ? selectedSource(AppMode.manga) : null);
@@ -415,7 +542,15 @@ class AppController extends ChangeNotifier {
         'Connect this work’s source in Settings first.',
       );
     }
-    return client(source).detail(item.id);
+    final resolved = await client(source).detail(item.id);
+    if (recordOpen) recordTasteOpen(resolved);
+    return resolved;
+  }
+
+  void recordTasteOpen(ContentItem item) {
+    if (_disposed || !taste.enabled) return;
+    taste.record('open', item);
+    changed();
   }
 
   Future<List<ReaderPage>> pages(ContentItem item) async {
@@ -436,30 +571,115 @@ class AppController extends ChangeNotifier {
     return client(source).pages(resolved);
   }
 
+  bool discordInvitationVisible = false;
+  void presentDiscordInvitationIfDue({DateTime? at}) {
+    final now = at ?? DateTime.now();
+    final next = (store.setting(
+      'discord.invitation.nextPresentation',
+      0,
+    ) as num).toDouble();
+    if (discordInvitationVisible || next > now.millisecondsSinceEpoch / 1000) {
+      return;
+    }
+    discordInvitationVisible = true;
+    store.setSetting(
+      'discord.invitation.nextPresentation',
+      now.add(const Duration(days: 3)).millisecondsSinceEpoch / 1000,
+    );
+  }
+
+  void dismissDiscordInvitation({DateTime? at}) {
+    discordInvitationVisible = false;
+    store.setSetting(
+      'discord.invitation.nextPresentation',
+      (at ?? DateTime.now())
+              .add(const Duration(days: 7))
+              .millisecondsSinceEpoch /
+          1000,
+    );
+    changed();
+  }
+
+  bool metadataFillRunning = false;
+  int metadataFillCompleted = 0;
+  int metadataFillTotal = 0;
+  int metadataFillFailed = 0;
+  int _metadataGeneration = 0;
+
+  bool needsMetadata(ContentItem item) =>
+      item.thumbnailUrl == null ||
+      item.title.trim().isEmpty ||
+      item.title == '#${item.id}' ||
+      item.tags.isEmpty;
+
+  Future<void> fillMissingMetadata({
+    Future<void> Function(ContentItem)? cacheCover,
+  }) async {
+    if (metadataFillRunning) return;
+    final generation = ++_metadataGeneration;
+    final pending = savedItems(mode: AppMode.manga)
+        .where((entry) => needsMetadata(entry.item))
+        .toList();
+    metadataFillRunning = true;
+    metadataFillCompleted = 0;
+    metadataFillFailed = 0;
+    metadataFillTotal = pending.length;
+    changed();
+    for (final entry in pending) {
+      if (_disposed || generation != _metadataGeneration) return;
+      try {
+        final updated = await detail(entry.item, recordOpen: false);
+        if (_disposed || generation != _metadataGeneration) return;
+        // A work removed during the request must never be re-created.
+        if (isSaved(entry.item)) {
+          store.saveItem(updated);
+          if (cacheCover != null) await cacheCover(updated);
+        }
+      } catch (_) {
+        metadataFillFailed++;
+      }
+      metadataFillCompleted++;
+      changed();
+    }
+    if (generation == _metadataGeneration) {
+      metadataFillRunning = false;
+      changed();
+    }
+  }
+
+  void pauseMetadataFill() {
+    _metadataGeneration++;
+    metadataFillRunning = false;
+    changed();
+  }
+
   void save(ContentItem item, {List<String>? folderIds, String? note}) {
-    store.saveItem(item, folderIds: folderIds, note: note);
+    final wasSaved = store.isSaved(item.key);
+    store.transaction(() {
+      store.saveItem(item, folderIds: folderIds, note: note);
+      if (!wasSaved) taste.record('save', item);
+      _knownSavedKeys.add(item.key);
+    });
     changed();
   }
 
   void unsave(ContentItem item) {
-    store.removeItem(item.key);
+    if (!store.isSaved(item.key)) return;
+    store.transaction(() {
+      store.removeItem(item.key);
+      taste.record('remove', item);
+      _knownSavedKeys.remove(item.key);
+    });
     changed();
   }
 
-  LibraryFolder createFolder(
-    String name, {
-    AppMode? mode,
-    int color = 0xFF5E5CE6,
-  }) {
-    final m = mode ?? this.mode;
-    final folder = LibraryFolder(
+  LibraryFolder createFolder(String name, {AppMode? mode, int? color}) {
+    final folder = store.createFolder(
+      name,
       id: newId('folder'),
-      mode: m,
-      name: name,
+      mode: mode ?? this.mode,
       color: color,
-      position: folders(m).length,
     );
-    store.saveFolder(folder);
     changed();
     return folder;
   }

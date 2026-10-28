@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/app_controller.dart';
 import 'package:tegnal/core/content.dart';
@@ -10,6 +13,7 @@ import 'package:tegnal/data/download_manager.dart';
 import 'package:tegnal/data/library_store.dart';
 import 'package:tegnal/features/reader_screen.dart';
 import 'package:tegnal/ui/design_system.dart';
+import 'package:tegnal/ui/reader_image_provider.dart';
 
 class _LocalReaderSource implements ContentSource {
   _LocalReaderSource(this.pagesByID);
@@ -70,6 +74,7 @@ void main() {
         ReaderPage(url: imageURLs[page]!, width: 1, height: 1),
     ];
     store = LibraryStore.memory();
+    store.setSetting('reader.helpHidden', true);
     store.setSetting('language', 'en');
     store.setSetting('onboarding', true);
     store.setSetting('reader.booru', const ReaderPreferences().toJson());
@@ -107,6 +112,7 @@ void main() {
     required ContentItem item,
     List<ContentItem> sequence = const [],
     int? initialPageIndex,
+    Duration settleDuration = const Duration(seconds: 1),
   }) async {
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -142,7 +148,7 @@ void main() {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 80)),
     );
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(settleDuration);
   }
 
   Future<void> pumpReader(WidgetTester tester) async {
@@ -160,6 +166,173 @@ void main() {
   }
 
   testWidgets(
+    'Translate checks the installed app and does not silently save an image',
+    (tester) async {
+      const channel = MethodChannel(
+        'work.nextline.tegnal/installed_translation',
+      );
+      final calls = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call.method);
+            return 'manual';
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+      await launch(tester, item: booruItem(1));
+      await openControls(tester);
+      await tester.tap(find.text('Translate'));
+      await pumpReader(tester);
+      expect(find.text('Save Image and Open Google Translate'), findsOneWidget);
+      expect(calls, ['capability']);
+      await tester.tap(find.text('Cancel'));
+      await pumpReader(tester);
+      expect(calls, ['capability']);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+
+  testWidgets(
+    'Translate sends only the visible reader image to an installed handler',
+    (tester) async {
+      const channel = MethodChannel(
+        'work.nextline.tegnal/installed_translation',
+      );
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            return call.method == 'capability' ? 'direct' : null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+      await launch(tester, item: booruItem(1));
+      await openControls(tester);
+      await tester.tap(find.text('Translate'));
+      await pumpReader(tester);
+      await pumpReader(tester);
+      expect(calls.map((call) => call.method), ['capability', 'shareImage']);
+      expect((calls.last.arguments['png'] as List).take(8), [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+      ]);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+
+  testWidgets(
+    'reader guide hides on request and stays hidden on the next work',
+    (tester) async {
+      store.setSetting('reader.helpHidden', false);
+      final item = ContentItem(
+        sourceId: manga.id,
+        id: 10,
+        mode: AppMode.manga,
+        title: 'Guide work',
+        pageCount: 3,
+      );
+      await launch(tester, item: item, initialPageIndex: 0);
+      await pumpReader(tester);
+      expect(find.text('Reader Guide'), findsOneWidget);
+      await tester.tap(find.text("Don't Show Again"));
+      await pumpReader(tester);
+      expect(store.setting('reader.helpHidden'), isTrue);
+      expect(find.text('Reader Guide'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      await launch(tester, item: item, initialPageIndex: 0);
+      expect(find.text('Reader Guide'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'multi-page spreads navigate aligned groups and apply changed layout',
+    (tester) async {
+      pagesByID[10] = [...pagesByID[10]!, ...pagesByID[10]!].take(5).toList();
+      controller.setReaderPreferences(
+        AppMode.manga,
+        const ReaderPreferences(pagesPerSpread: 2, prefetch: 0),
+      );
+      final item = ContentItem(
+        sourceId: manga.id,
+        id: 10,
+        mode: AppMode.manga,
+        title: 'Five pages',
+        pageCount: 5,
+      );
+      await launch(tester, item: item, initialPageIndex: 0);
+      await openControls(tester);
+      await tester.tap(find.byTooltip('Next page'));
+      await pumpReader(tester);
+      expect(controller.readingPosition(item), 2);
+      await tester.tap(find.byTooltip('Next page'));
+      await pumpReader(tester);
+      expect(controller.readingPosition(item), 4);
+      await tester.tap(find.byTooltip('Previous page'));
+      await pumpReader(tester);
+      expect(controller.readingPosition(item), 2);
+      await tester.tap(find.text('More Settings'));
+      await pumpReader(tester);
+      await tester.tap(find.text('Pages per View'));
+      await pumpReader(tester);
+      await tester.tap(find.text('3').last);
+      await pumpReader(tester);
+      await tester.tap(find.text('Done'));
+      await pumpReader(tester);
+      expect(controller.readerPreferences(AppMode.manga).pagesPerSpread, 3);
+      expect(controller.readingPosition(item), 0);
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).controller!.initialPage,
+        0,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('resume asks explicitly and preserves direct page selection', (
+    tester,
+  ) async {
+    final item = ContentItem(
+      sourceId: manga.id,
+      id: 10,
+      mode: AppMode.manga,
+      title: 'Three pages',
+      pageCount: 3,
+    );
+    controller.saveReadingPosition(item, 2);
+    await launch(tester, item: item);
+    expect(find.text('Continue Reading'), findsWidgets);
+    await tester.tap(find.text('Start from Beginning'));
+    await pumpReader(tester);
+    expect(controller.readingPosition(item), 0);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    controller.setReaderPreferences(
+      AppMode.manga,
+      const ReaderPreferences(
+        resumeBehavior: ReaderResumeBehavior.fromBeginning,
+      ),
+    );
+    controller.saveReadingPosition(item, 2);
+    await launch(tester, item: item, initialPageIndex: 1);
+    expect(controller.readingPosition(item), 1);
+    expect(find.text('Continue Reading'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
     'sequence preserves order from the tapped middle post and saves each target',
     (tester) async {
       final first = booruItem(1);
@@ -172,7 +345,7 @@ void main() {
       await tester.tap(find.byTooltip('Next page'));
       await pumpReader(tester);
       expect(find.text('3 / 3'), findsOneWidget);
-      await tester.tap(find.text('Save to library'));
+      await tester.tap(find.text('Add Favorite'));
       await tester.pump();
       expect(controller.isSaved(last), isTrue);
       expect(controller.isSaved(middle), isFalse);
@@ -181,7 +354,7 @@ void main() {
       await tester.tap(find.byTooltip('Previous page'));
       await pumpReader(tester);
       expect(find.text('2 / 3'), findsOneWidget);
-      await tester.tap(find.text('Save to library'));
+      await tester.tap(find.text('Add Favorite'));
       await tester.pump();
       expect(controller.isSaved(middle), isTrue);
       expect(controller.isSaved(first), isFalse);
@@ -189,7 +362,7 @@ void main() {
       await tester.tap(find.byTooltip('Previous page'));
       await pumpReader(tester);
       expect(find.text('1 / 3'), findsOneWidget);
-      await tester.tap(find.text('Save to library'));
+      await tester.tap(find.text('Add Favorite'));
       await tester.pump();
       expect(controller.isSaved(first), isTrue);
       expect(controller.isSaved(middle), isTrue);
@@ -245,6 +418,57 @@ void main() {
     );
   });
 
+  testWidgets(
+    'unknown continuous page dimensions update the measured page height',
+    (tester) async {
+      await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        ui.Canvas(recorder)
+            .drawColor(const Color(0xff2288aa), ui.BlendMode.src);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(4, 4);
+        for (final limit in [1024, 1600, 3000]) {
+          final provider = readerImageProvider(pagesByID[10]!.first, {}, limit);
+          final key = await provider.obtainKey(ImageConfiguration.empty);
+          PaintingBinding.instance.imageCache.putIfAbsent(
+            key,
+            () => OneFrameImageStreamCompleter(
+              SynchronousFuture(ImageInfo(image: image.clone())),
+            ),
+          );
+        }
+        image.dispose();
+        picture.dispose();
+      });
+      pagesByID[10] = [
+        for (final page in pagesByID[10]!) ReaderPage(url: page.url),
+      ];
+      controller.setReaderPreferences(
+        AppMode.manga,
+        const ReaderPreferences(
+          readingMode: ReadingMode.continuous,
+          prefetch: 0,
+        ),
+      );
+      final item = ContentItem(
+        sourceId: manga.id,
+        id: 10,
+        mode: AppMode.manga,
+        title: 'Unknown dimensions',
+        pageCount: 3,
+      );
+      await launch(tester, item: item, initialPageIndex: 0);
+      await pumpReader(tester);
+      await pumpReader(tester);
+      final viewport = tester.getSize(find.byType(ReaderScreen));
+      expect(
+        tester.getSize(find.byType(InteractiveViewer).first).height,
+        viewport.width,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('adjacent post manifests are bounded and reused on navigation', (
     tester,
   ) async {
@@ -271,6 +495,26 @@ void main() {
     expect(find.byType(ReaderScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'post neighbor speculation waits for the native settle interval',
+    (tester) async {
+      final first = booruItem(1);
+      await launch(
+        tester,
+        item: first,
+        sequence: [first, booruItem(2), booruItem(3)],
+        settleDuration: Duration.zero,
+      );
+      expect(source.pageCalls.keys, [1]);
+      await tester.pump(const Duration(milliseconds: 199));
+      expect(source.pageCalls.keys, [1]);
+      await tester.pump(const Duration(milliseconds: 1));
+      await pumpReader(tester);
+      expect(source.pageCalls.keys, containsAll([1, 2, 3]));
+      expect(source.pageCalls.values, everyElement(1));
+    },
+  );
 
   testWidgets('reader long press toggles the current bookmark immediately', (
     tester,
@@ -388,6 +632,10 @@ void main() {
   });
 
   testWidgets('page preview opens the selected manga page', (tester) async {
+    controller.setReaderPreferences(
+      AppMode.manga,
+      const ReaderPreferences(showPageNumber: true),
+    );
     final item = ContentItem(
       sourceId: manga.id,
       id: 10,

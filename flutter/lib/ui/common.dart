@@ -6,7 +6,7 @@ import 'l10n.dart';
 
 /// Height of the floating tab dock; scrollable screens use this to keep their
 /// final row clear of the overlay without shrinking the whole viewport.
-const double tegnalCompactDockHeight = 64;
+const double tegnalCompactDockHeight = 62;
 
 /// Trailing scroll space needed beneath the floating dock on compact layouts.
 /// Wide layouts use a small conventional list tail because their sidebar does
@@ -16,6 +16,16 @@ double navigationScrollInset(BuildContext context, {double gap = 16}) {
   if (media.size.width >= 840 || media.viewInsets.bottom > 0) return gap;
   final safeBottom = media.viewPadding.bottom.clamp(12.0, double.infinity);
   return tegnalCompactDockHeight + safeBottom + gap;
+}
+
+/// Keeps keyboard/safe-area dependencies on the small scroll tail instead of
+/// rebuilding the database-backed library screen on every inset animation tick.
+class NavigationScrollSpacer extends StatelessWidget {
+  const NavigationScrollSpacer({super.key, this.gap = 16});
+  final double gap;
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox(height: navigationScrollInset(context, gap: gap));
 }
 
 /// Material back control with localized semantics and standard route behavior.
@@ -141,7 +151,9 @@ class ChromeSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final color = Theme.of(context).colorScheme.surfaceContainer;
+    final color = enabled && dark
+        ? const Color(0xFF29292B)
+        : Theme.of(context).colorScheme.surfaceContainer;
     final translucent =
         enabled &&
         (!respectReduceMotion || !MediaQuery.disableAnimationsOf(context)) &&

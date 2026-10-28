@@ -18,9 +18,11 @@ class InsightsScreen extends StatefulWidget {
     required this.onSearch,
     this.onOpen,
     this.mode,
+    this.reportDays,
   });
   final AppController controller;
   final AppMode? mode;
+  final int? reportDays;
   final void Function(String) onSearch;
   final ValueChanged<ContentItem>? onOpen;
   @override
@@ -34,27 +36,38 @@ class _InsightsScreenState extends State<InsightsScreen> {
   AppMode? _recommendationMode;
   bool _fetching = false;
   int _requestGeneration = 0;
+  Widget? _lastBody;
 
-  InsightPreferences _preferences(AppMode mode) {
-    final stored = widget.controller.store.setting(
-      'insights.exclusions.${mode.name}',
-    );
-    return InsightPreferences(
-      mode: mode,
-      excludedTags: stored is List ? stored.whereType<String>().toSet() : null,
-    );
-  }
+  InsightPreferences _preferences(AppMode mode) =>
+      widget.controller.taste.preferences(mode);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) {
+      // A retained Smart tab must not replay its event history on every
+      // bookmark/page change while another tab or the reader is visible.
+      // TickerMode's inherited notification rebuilds the latest report when
+      // the tab becomes active again.
+      if (!TickerMode.valuesOf(context).enabled && _lastBody != null) {
+        return _lastBody!;
+      }
       final mode = _mode;
-      final saved = widget.controller.savedItems(mode: mode);
+      final saved = widget.controller.taste.analysisItems(mode);
       final snapshot = TasteAnalyzer.analyze(
         saved,
         mode: mode,
         preferences: _preferences(mode),
+        observed: widget.controller.taste.observedItems(mode),
+        organicSaved: widget.controller.taste.organicSavedItems(mode),
+        saveHistory: widget.controller.taste.historySaves(
+          mode,
+          since: DateTime.now().subtract(const Duration(days: 70)),
+        ),
+        openHistory: widget.controller.taste.historyOpens(
+          mode,
+          since: DateTime.now().subtract(const Duration(days: 70)),
+        ),
       );
       final tags = snapshot.tagCounts;
       final artists = snapshot.artists;
@@ -70,13 +83,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
           return score == 0 ? a.key.compareTo(b.key) : score;
         });
       final totalPages = snapshot.totalPages;
-      return Scaffold(
+      return _lastBody = Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
         body: SafeArea(
           child: TegnalFloatingHeader(
             header: TegnalPageHeader(
               controller: widget.controller,
-              title: 'Smart',
+              title: widget.reportDays == 7
+                  ? 'Weekly statistics'
+                  : widget.reportDays == 30
+                  ? 'Monthly Recap'
+                  : 'Smart',
             ),
             child: saved.isEmpty
                 ? const EmptyState(
@@ -329,7 +346,30 @@ class _InsightsScreenState extends State<InsightsScreen> {
     }
   }
 
+  Future<ContentPage> _loadCandidates(SourceConfig source, String query) {
+    final preferences = widget.controller.store.setting(
+      'recommendation.filters.${source.id}',
+      <String, dynamic>{},
+    ) as Map;
+    final language = preferences['language'] as String? ?? 'all';
+    final sort = preferences['sort'] as String? ?? 'recommended';
+    final effective = source.mode == AppMode.manga && language != 'all'
+        ? '$query language:$language'
+        : query;
+    final booruSort = BooruSort.values
+        .where((value) => value.name == sort)
+        .firstOrNull;
+    return widget.controller.searchSource(
+      source,
+      effective,
+      popular: sort != 'recommended' && sort != 'latest',
+      sort: booruSort,
+      mangaSort: source.mode == AppMode.manga ? sort : null,
+    );
+  }
+
   Future<void> _fetchRecommendations(TasteSnapshot snapshot) async {
+    if (!widget.controller.taste.enabled) return;
     final generation = ++_requestGeneration;
     final mode = snapshot.mode;
     setState(() {
@@ -338,12 +378,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _recommendations = null;
     });
     final sources = widget.controller.selectedSources(mode);
-    final service = RecommendationService(
-      load: (source, query) => widget.controller.client(source).search(query),
-    );
+    final service = RecommendationService(load: _loadCandidates);
     final result = await service.fetch(
       snapshot: snapshot,
       sources: sources,
+      sortsBySource: {
+        for (final source in sources)
+          source.id:
+              (widget.controller.store.setting(
+                    'recommendation.filters.${source.id}',
+                    <String, dynamic>{},
+                  ) as Map)['sort']
+                  as String? ??
+              'recommended',
+      },
       blacklists: {
         for (final source in sources)
           source.id: widget.controller.store.setting(
@@ -389,21 +437,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
     ),
     const SizedBox(height: 12),
-    for (final recap in [snapshot.weekly, snapshot.monthly])
+    for (final recap in [snapshot.weekly, snapshot.monthly].where(
+      (recap) => widget.reportDays == null || recap.days == widget.reportDays,
+    ))
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
         child: Row(
           children: [
             Expanded(
               child: Text(
-                L10n.tr(
-                  context,
-                  recap.days == 7 ? 'Past 7 days' : 'Past 30 days',
-                ),
+                L10n.tr(context, recap.days == 7 ? 'This week' : 'This month'),
               ),
             ),
             Text(
-              '${recap.saves} · ${recap.change >= 0 ? '+' : ''}${recap.change}',
+              '${recap.saves} ${L10n.tr(context, 'Saved')} · ${recap.opens} ${L10n.tr(context, 'Opens')}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
@@ -413,7 +460,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     Text(
       L10n.tr(
         context,
-        'Change compares the previous equal period. Recaps use save dates of works still in your library; removed works and reading time are not tracked.',
+        'Weekly and monthly recaps use local save and open activity. Removing a saved work keeps its historical activity. Reading time is not tracked.',
       ),
       style: TextStyle(
         fontSize: 12,
@@ -526,7 +573,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
         )
       else
         TextButton(
-          onPressed: () => unawaited(_fetchRecommendations(snapshot)),
+          onPressed: widget.controller.taste.enabled
+              ? () => unawaited(_fetchRecommendations(snapshot))
+              : null,
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 12),
           ),

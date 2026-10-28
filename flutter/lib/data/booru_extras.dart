@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/content.dart';
 import 'booru_source.dart';
-import 'source_http_client.dart';
+import 'booru_credentials.dart';
 
 class BooruPool {
   const BooruPool({
@@ -48,7 +48,7 @@ class BooruNote {
 /// reported as unsupported rather than presenting an empty successful result.
 class BooruExtras {
   BooruExtras(this.config, {http.Client? client})
-    : _client = client ?? SourceHttpClient(origin: config.baseUrl),
+    : _client = client ?? BooruAuthenticatedClient(config),
       _ownsClient = client == null;
   final SourceConfig config;
   final http.Client _client;
@@ -106,9 +106,10 @@ class BooruExtras {
       final prefix = body
           .substring(0, body.length.clamp(0, 4096))
           .toLowerCase();
-      if (prefix.contains('cf-chl-') ||
-          prefix.contains('just a moment') ||
-          prefix.contains('<html')) {
+      if (prefix.trimLeft().startsWith('<') &&
+          (prefix.contains('cf-chl-') ||
+              prefix.contains('just a moment') ||
+              prefix.contains('<html'))) {
         throw const ContentException(
           'The server requires browser verification.',
         );

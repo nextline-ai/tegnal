@@ -93,6 +93,18 @@ class _IndexedFixture {
       }
       return http.Response.bytes(_ints(ids), 200);
     }
+    if (path == '/index-korean.nozomi') {
+      return http.Response.bytes(_ints([2000]), 200);
+    }
+    if (path == '/type/gamecg-all.nozomi') {
+      return http.Response.bytes(_ints([1999]), 200);
+    }
+    if (path == '/type/artistcg-all.nozomi') {
+      return http.Response.bytes(_ints([1998]), 200);
+    }
+    if (path == '/type/imageset-all.nozomi') {
+      return http.Response.bytes(_ints([1997]), 200);
+    }
     if (path == '/galleriesindex/version') return http.Response('1', 200);
     if (path == '/galleriesindex/galleries.1.index') {
       final bytes = ByteData(464);
@@ -163,6 +175,7 @@ class _IndexedFixture {
 }
 
 class _DocumentFixture {
+  bool honorCategories = false;
   final requests = <http.Request>[];
   bool expired = false;
   bool unsafe = false;
@@ -206,6 +219,20 @@ class _DocumentFixture {
             request.url.queryParameters['next-views-id'] ??
             '',
       );
+      if (honorCategories) {
+        final visual = request.url.queryParameters['categories'] == '3,4,6';
+        return _json(
+          visual
+              ? [
+                  {...row(2001), 'category': 3},
+                  {...row(1998), 'category': 6},
+                ]
+              : [
+                  {...row(2000), 'category': 2},
+                  {...row(1999), 'category': 2},
+                ],
+        );
+      }
       return _json(
         cursor == null
             ? List.generate(50, (index) => row(2000 - index))
@@ -245,6 +272,76 @@ class _DocumentFixture {
 }
 
 void main() {
+  test('document popularity periods have independent cached feeds', () async {
+    final fixture = _DocumentFixture();
+    final source = MangaSource(_config, client: fixture.client);
+    await source.search('artist:sample_artist', popular: true, period: 'today');
+    await source.search('artist:sample_artist', popular: true, period: 'month');
+    final requests = fixture.requests
+        .where((request) => request.url.path == '/ajax/search')
+        .toList();
+    expect(requests.length, 2);
+    final dates = requests
+        .map(
+          (request) =>
+              DateTime.parse(request.url.queryParameters['start-date']!),
+        )
+        .toList();
+    expect(dates.first.difference(dates.last).inDays, 29);
+    source.close();
+  });
+
+  test(
+    'indexed language exceptions union visual collections before other filters',
+    () async {
+      final fixture = _IndexedFixture();
+      final source = MangaSource(_config, client: fixture.client)
+        ..allowsLanguageExceptions = true;
+      final result = await source.search('language:korean -female:exclude');
+      expect(result.items.map((item) => item.id), [2000, 1998, 1997]);
+      source.allowsLanguageExceptions = false;
+      final strict = await source.search('language:korean -female:exclude');
+      expect(strict.items.map((item) => item.id), [2000]);
+      source.close();
+    },
+  );
+
+  test(
+    'document language exceptions merge sorted disjoint category lanes',
+    () async {
+      final fixture = _DocumentFixture()..honorCategories = true;
+      final source = MangaSource(_config, client: fixture.client)
+        ..allowsLanguageExceptions = true;
+      final result = await source.search(
+        'language:korean artist:sample_artist -tag:spoilers',
+      );
+      expect(result.items.map((item) => item.id), [2001, 2000, 1999, 1998]);
+      final requests = fixture.requests
+          .where((request) => request.url.path == '/ajax/search')
+          .toList();
+      expect(requests.length, 2);
+      expect(
+        requests
+            .singleWhere(
+              (request) => request.url.queryParameters['categories'] == '3,4,6',
+            )
+            .url
+            .queryParameters['search'],
+        'artist:sample_artist -other:spoilers',
+      );
+      expect(
+        requests
+            .singleWhere(
+              (request) => request.url.queryParameters['categories'] != '3,4,6',
+            )
+            .url
+            .queryParameters['search'],
+        contains('language:korean'),
+      );
+      source.close();
+    },
+  );
+
   test(
     'discovers custom common.js once, paginates ranges and preserves metadata',
     () async {

@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -12,13 +16,18 @@ import '../core/content.dart';
 import '../core/library.dart';
 import '../data/download_manager.dart';
 import '../data/booru_extras.dart';
+import '../data/installed_translation.dart';
 import '../data/session_client.dart';
 import '../ui/reader_image_provider.dart';
+import '../ui/artwork_layout.dart';
 import '../ui/l10n.dart';
 import '../ui/design_system.dart';
 import '../ui/common.dart';
 import '../ui/session_image.dart';
 import 'reader_notes.dart';
+import 'settings_screen.dart';
+import 'reader_guide.dart';
+import 'reader_runtime.dart';
 
 class _ReaderManifest {
   const _ReaderManifest({
@@ -85,24 +94,34 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool get _postSequence => _item.mode == AppMode.booru && _sequence.length > 1;
   int get _position => _postSequence ? _postIndex : _index;
   int get _count => _postSequence ? _sequence.length : _pages.length;
+  int get _spread => _item.mode == AppMode.manga && !_continuous
+      ? _prefs.pagesPerSpread.clamp(1, 4)
+      : 1;
+  void _step(int delta) => _go(_position + delta * _spread);
   late ContentItem _resolvedItem;
   List<ReaderPage> _sourcePages = [];
+  List<ReaderPage> _viewingPages = [];
+  ReaderPageOffsets? _pageOffsets;
   List<BooruNote> _notes = [];
   BooruExtras? _notesClient;
   bool _showNotes = false;
   PageController? _pager;
   final ScrollController _scroll = ScrollController();
   final FocusNode _focus = FocusNode();
+  final GlobalKey _translationImageKey = GlobalKey();
   final Map<int, double> _ratios = {};
   final Map<String, _ReaderManifest> _manifestCache = {};
   final Map<String, Future<_ReaderManifest>> _manifestFlights = {};
   Timer? _auto;
+  Timer? _prefetchDebounce;
   int _index = 0;
   int _generation = 0;
   int _prefetchGeneration = 0;
   int _prefetchManifestCount = 0;
   int _prefetchImageCount = 0;
   bool _loading = true;
+  bool _resumeChecked = false;
+  bool _guidePresented = false;
   bool _offline = false;
   bool _chrome = false;
   bool _downloading = false;
@@ -124,49 +143,21 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool get _continuous =>
       _item.mode == AppMode.manga &&
       _prefs.readingMode == ReadingMode.continuous;
-  List<ReaderPage> get _pages {
-    final original = Uri.tryParse(
-      _resolvedItem.metadata['fileURL'] as String? ?? '',
+  List<ReaderPage> get _pages => _viewingPages;
+  void _resolveViewingPages() {
+    _viewingPages = ReaderMediaPolicy.pages(
+      _resolvedItem,
+      _sourcePages,
+      _prefs,
+      offline: _offline,
     );
-    if (!_offline &&
-        _prefs.originalImages &&
-        _sourcePages.length == 1 &&
-        original?.scheme == 'https' &&
-        original!.userInfo.isEmpty &&
-        original.host.isNotEmpty) {
-      final page = _sourcePages.single;
-      return [
-        ReaderPage(
-          url: original,
-          thumbnailUrl: page.thumbnailUrl,
-          width: page.width,
-          height: page.height,
-          headers: page.headers,
-        ),
-      ];
-    }
-    return _sourcePages;
   }
 
   @override
   void initState() {
     super.initState();
-    final seen = <String>{};
-    _sequence = widget.item.mode == AppMode.booru
-        ? [
-            for (final item in [widget.item, ...widget.sequence])
-              if (item.mode == AppMode.booru && seen.add(item.key)) item,
-          ]
-        : [widget.item];
-    if (widget.sequence.isNotEmpty && widget.item.mode == AppMode.booru) {
-      // Preserve the caller's filtered/sorted order, including items before it.
-      _sequence.sort((a, b) {
-        final ai = widget.sequence.indexWhere((entry) => entry.key == a.key);
-        final bi = widget.sequence.indexWhere((entry) => entry.key == b.key);
-        return ai.compareTo(bi);
-      });
-    }
-    _postIndex = _sequence.indexWhere((item) => item.key == widget.item.key);
+    _sequence = ReaderSequence.ordered(widget.item, widget.sequence);
+    _postIndex = _sequence.indexOf(widget.item);
     _resolvedItem = _item;
     _prefs = widget.controller.readerPreferences(_item.mode);
     _showNotes = _prefs.showNotes;
@@ -200,7 +191,10 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _active = state == AppLifecycleState.resumed;
-    if (!_active) _prefetchGeneration++;
+    if (!_active) {
+      _prefetchGeneration++;
+      _prefetchDebounce?.cancel();
+    }
     if (_active && _sourcePages.isNotEmpty) _scheduleAdjacentPrefetch();
     if (_previousAwake != null) unawaited(_applyAwake());
     _configureAuto();
@@ -224,9 +218,44 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
       if (!mounted || generation != _generation) return;
       _resolvedItem = resolved;
+      widget.controller.recordTasteOpen(resolved);
       _sourcePages = pages;
       _offline = offline != null;
-      _index = _index.clamp(0, pages.length - 1);
+      _pageOffsets = null;
+      _resolveViewingPages();
+      if (!_resumeChecked && _item.mode == AppMode.manga) {
+        _resumeChecked = true;
+        if (widget.initialPageIndex == null && _index > 0) {
+          if (_prefs.resumeBehavior == ReaderResumeBehavior.fromBeginning) {
+            _index = 0;
+          } else if (_prefs.resumeBehavior == ReaderResumeBehavior.ask) {
+            _settingsOpen = true;
+            final continued =
+                await showDialog<bool>(
+                  context: context,
+                  builder: (dialog) => AlertDialog(
+                    title: Text(_t('Continue Reading')),
+                    content: Text('${_t('Go to Page')} ${_index + 1}'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog, false),
+                        child: Text(_t('Start from Beginning')),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog, true),
+                        child: Text(_t('Continue Reading')),
+                      ),
+                    ],
+                  ),
+                ) ??
+                true;
+            if (!mounted || generation != _generation) return;
+            _settingsOpen = false;
+            if (!continued) _index = 0;
+          }
+        }
+      }
+      _index = ReaderLayout.start(_index.clamp(0, pages.length - 1), _spread);
       _replacePager();
       setState(() {
         _loading = false;
@@ -235,6 +264,15 @@ class _ReaderScreenState extends State<ReaderScreen>
       _configureAuto();
       _scheduleAdjacentPrefetch();
       unawaited(_loadNotes(generation));
+      if (!_guidePresented &&
+          _item.mode == AppMode.manga &&
+          widget.controller.store.setting('reader.helpHidden', false) != true) {
+        _guidePresented = true;
+        _settingsOpen = true;
+        await showReaderGuide(context, widget.controller, _item.mode);
+        if (!mounted || generation != _generation) return;
+        _settingsOpen = false;
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _continuous) {
           _go(_position, animate: false);
@@ -261,7 +299,10 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     var resolved = requestedItem;
     if (requestedItem.mode == AppMode.booru && requestedItem.mediaUrl == null) {
-      resolved = await widget.controller.detail(requestedItem);
+      resolved = await widget.controller.detail(
+        requestedItem,
+        recordOpen: false,
+      );
     }
     final pages = await widget.controller.pages(resolved);
     return _ReaderManifest(item: resolved, pages: pages, offline: false);
@@ -320,8 +361,29 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _scheduleAdjacentPrefetch() {
+    _prefetchDebounce?.cancel();
     final token = ++_prefetchGeneration;
     if (!_active || _offline || _pages.isEmpty || _video) return;
+    if (_postSequence) {
+      // Match the native reader: rapid swipes should not start three originals.
+      _prefetchDebounce = Timer(
+        const Duration(milliseconds: 200),
+        () => _prefetchNeighbors(token),
+      );
+    } else {
+      _prefetchNeighbors(token);
+    }
+  }
+
+  void _prefetchNeighbors(int token) {
+    if (!mounted ||
+        !_active ||
+        token != _prefetchGeneration ||
+        _offline ||
+        _pages.isEmpty ||
+        _video) {
+      return;
+    }
     final jobs = <Future<void>>[];
     if (_postSequence) {
       for (final index in [_postIndex - 1, _postIndex + 1, _postIndex + 2]) {
@@ -330,17 +392,17 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
       }
     } else {
-      final indices = <int>[
-        if (_index > 0) _index - 1,
-        _index + 1,
-        _index + 2,
-      ].where((index) => index >= 0 && index < _pages.length);
+      final indices = ReaderLoadingPolicy.adjacentPages(
+        _index,
+        _pages.length,
+        _prefs.prefetch,
+      );
       for (final index in indices) {
         jobs.add(_prefetchPage(_pages[index], token));
       }
     }
-    // Only the immediate neighborhood is considered and at most three loads
-    // are started. The shared Flutter ImageCache coalesces visible/prefetch
+    // Only the configured neighborhood is considered; image loading stays
+    // bounded to one previous page and at most five pages ahead. The shared Flutter ImageCache coalesces visible/prefetch
     // requests using the same URL, headers and bounded decode dimensions.
     unawaited(Future.wait(jobs));
   }
@@ -365,7 +427,13 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (!manifest.offline &&
         manifest.pages.isNotEmpty &&
         !_isVideo(manifest.item, manifest.pages)) {
-      await _prefetchPage(manifest.pages.first, token);
+      final pages = ReaderMediaPolicy.pages(
+        manifest.item,
+        manifest.pages,
+        _prefs,
+        offline: manifest.offline,
+      );
+      await _prefetchPage(pages.first, token);
     }
   }
 
@@ -373,7 +441,10 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (!mounted ||
         !_active ||
         token != _prefetchGeneration ||
-        _prefetchImageCount >= 3) {
+        _prefetchImageCount >=
+            (_item.mode == AppMode.manga
+                ? (_prefs.prefetch.clamp(0, 5) + 1)
+                : 3)) {
       return;
     }
     _prefetchImageCount++;
@@ -421,7 +492,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _replacePager() {
     final old = _pager;
-    _pager = PageController(initialPage: _index);
+    _pager = PageController(initialPage: _index ~/ _spread);
     if (old != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
     }
@@ -438,6 +509,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (next == _postIndex) return;
     _auto?.cancel();
     _prefetchGeneration++;
+    _prefetchDebounce?.cancel();
     _notesClient?.close();
     setState(() {
       _postIndex = next;
@@ -446,7 +518,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       _zoomed = false;
       _notes = [];
       _sourcePages = [];
+      _viewingPages = [];
       _ratios.clear();
+      _pageOffsets = null;
     });
     unawaited(_load());
   }
@@ -471,26 +545,15 @@ class _ReaderScreenState extends State<ReaderScreen>
         : _viewport.height.clamp(200, double.infinity);
   }
 
-  double _offset(int index) {
-    double offset = 0;
-    for (var i = 0; i < index; i++) {
-      offset += _extent(i);
-    }
-    return offset;
-  }
+  ReaderPageOffsets get _geometry => _pageOffsets ??= ReaderPageOffsets(
+    Iterable<double>.generate(_sourcePages.length, _extent),
+  );
+
+  double _offset(int index) => _geometry.offset(index);
 
   void _scrolled() {
-    if (!_continuous || !_scroll.hasClients || _sourcePages.isEmpty) {
-      return;
-    }
-    final position = _scroll.offset + _viewport.height * .25;
-    double offset = 0;
-    var index = 0;
-    while (index < _sourcePages.length - 1 &&
-        offset + _extent(index) <= position) {
-      offset += _extent(index++);
-    }
-    _setIndex(index);
+    if (!_continuous || !_scroll.hasClients || _sourcePages.isEmpty) return;
+    _setIndex(_geometry.pageAt(_scroll.offset + _viewport.height * .25));
   }
 
   void _go(int value, {bool animate = true}) {
@@ -499,7 +562,10 @@ class _ReaderScreenState extends State<ReaderScreen>
       return;
     }
     if (_sourcePages.isEmpty) return;
-    final target = value.clamp(0, _sourcePages.length - 1);
+    final target = ReaderLayout.start(
+      value.clamp(0, _sourcePages.length - 1),
+      _spread,
+    );
     _setIndex(target);
     if (_continuous) {
       if (_scroll.hasClients) {
@@ -521,13 +587,13 @@ class _ReaderScreenState extends State<ReaderScreen>
       if (animate) {
         unawaited(
           _pager!.animateToPage(
-            target,
+            target ~/ _spread,
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
           ),
         );
       } else {
-        _pager!.jumpToPage(target);
+        _pager!.jumpToPage(target ~/ _spread);
       }
     }
   }
@@ -548,10 +614,10 @@ class _ReaderScreenState extends State<ReaderScreen>
             _error != null) {
           return;
         }
-        if (_position + 1 >= _count) {
+        if (_position + _spread >= _count) {
           _updatePreferences(_prefs.copyWith(autoAdvance: false));
         } else {
-          _go(_position + 1);
+          _step(1);
         }
       },
     );
@@ -560,9 +626,14 @@ class _ReaderScreenState extends State<ReaderScreen>
   void _updatePreferences(ReaderPreferences value) {
     final changedLayout =
         value.readingMode != _prefs.readingMode ||
-        value.rightToLeft != _prefs.rightToLeft;
+        value.rightToLeft != _prefs.rightToLeft ||
+        value.pagesPerSpread != _prefs.pagesPerSpread;
     setState(() {
+      final mediaChanged =
+          value.originalImages != _prefs.originalImages ||
+          value.reducedData != _prefs.reducedData;
       _prefs = value;
+      if (mediaChanged) _resolveViewingPages();
       _showNotes = value.showNotes;
       if (changedLayout) {
         _zoomed = false;
@@ -572,6 +643,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     widget.controller.setReaderPreferences(_item.mode, value);
     if (_previousAwake != null) unawaited(_applyAwake());
     _configureAuto();
+    _scheduleAdjacentPrefetch();
     if (changedLayout) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _go(_position, animate: false);
@@ -587,13 +659,13 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.arrowLeft) {
       final delta = key == LogicalKeyboardKey.arrowRight ? 1 : -1;
-      _go(_position + (reverse ? -delta : delta));
+      _step(reverse ? -delta : delta);
     } else if (key == LogicalKeyboardKey.arrowDown ||
         key == LogicalKeyboardKey.pageDown) {
-      _go(_position + 1);
+      _step(1);
     } else if (key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.pageUp) {
-      _go(_position - 1);
+      _step(-1);
     } else if (key == LogicalKeyboardKey.home) {
       _go(0);
     } else if (key == LogicalKeyboardKey.end) {
@@ -621,11 +693,11 @@ class _ReaderScreenState extends State<ReaderScreen>
       final reverse =
           _prefs.rightToLeft && _prefs.readingMode == ReadingMode.horizontal;
       if (fraction < .3) {
-        _go(_position + (reverse ? 1 : -1));
+        _step(reverse ? 1 : -1);
         return;
       }
       if (fraction > .7) {
-        _go(_position + (reverse ? -1 : 1));
+        _step(reverse ? -1 : 1);
         return;
       }
     }
@@ -645,6 +717,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     final safeTop = MediaQuery.paddingOf(context).top;
     if (_continuous &&
+        !_prefs.continuousPreviewSwipe &&
         !ReaderExitGesturePolicy.startsInContinuousExitZone(
           event.localPosition.dy,
           safeTop,
@@ -677,9 +750,23 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _pointerUp(PointerEvent event) {
+    if (_video && _activePointers.length == 2) {
+      setState(() => _chrome = !_chrome);
+    }
     if (_exitPointer == event.pointer && _exitStart != null) {
       final delta = event.localPosition - _exitStart!;
       if (_exitGestureEnabled &&
+          delta.dy < -80 &&
+          delta.dy.abs() > delta.dx.abs() * 1.3 &&
+          (!_continuous || _prefs.continuousPreviewSwipe)) {
+        _clearExitPointer();
+        unawaited(_item.mode == AppMode.manga ? _preview() : _info());
+      } else if (_exitGestureEnabled &&
+          (!_continuous ||
+              ReaderExitGesturePolicy.startsInContinuousExitZone(
+                _exitStart!.dy,
+                MediaQuery.paddingOf(context).top,
+              )) &&
           ReaderExitGesturePolicy.shouldExit(delta, _exitVelocityY)) {
         _clearExitPointer();
         Navigator.of(context).maybePop();
@@ -731,187 +818,31 @@ class _ReaderScreenState extends State<ReaderScreen>
       );
   }
 
+  Widget _button(IconData icon, String label, VoidCallback? action) =>
+      Semantics(
+        label: _t(label),
+        button: true,
+        child: IconButton(
+          onPressed: action,
+          tooltip: _t(label),
+          icon: Icon(icon, color: Colors.white, size: 28),
+        ),
+      );
+
   Future<void> _settings() async {
     _settingsOpen = true;
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, refresh) {
-          void update(ReaderPreferences value) {
-            _updatePreferences(value);
-            refresh(() {});
-          }
-
-          Widget toggle(
-            String label,
-            bool value,
-            ValueChanged<bool> onChanged,
-          ) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            child: Row(
-              children: [
-                Expanded(child: Text(_t(label))),
-                TegnalSwitch(
-                  semanticLabel: _t(label),
-                  value: value,
-                  onChanged: onChanged,
-                ),
-              ],
-            ),
-          );
-          return Theme(
-            data: tegnalTheme(Brightness.dark),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: 640,
-                maxHeight: MediaQuery.sizeOf(context).height * .85,
-              ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
-                  child: DefaultTextStyle(
-                    style: Theme.of(context).textTheme.bodyLarge!
-                        .copyWith(color: Colors.white, fontSize: 16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _t('Reader settings'),
-                                style: const TextStyle(
-                                  fontSize: 21,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              child: Text(_t('Done')),
-                            ),
-                          ],
-                        ),
-                        if (!_video && _item.mode == AppMode.manga) ...[
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SegmentedButton<ReadingMode>(
-                              segments: [
-                                ButtonSegment<ReadingMode>(
-                                  value: ReadingMode.horizontal,
-                                  label: Text(_t('Horizontal')),
-                                ),
-                                ButtonSegment<ReadingMode>(
-                                  value: ReadingMode.vertical,
-                                  label: Text(_t('Vertical')),
-                                ),
-                                ButtonSegment<ReadingMode>(
-                                  value: ReadingMode.continuous,
-                                  label: Text(_t('Continuous')),
-                                ),
-                              ],
-                              selected: {_prefs.readingMode},
-                              showSelectedIcon: false,
-                              onSelectionChanged: (selection) {
-                                update(
-                                  _prefs.copyWith(readingMode: selection.first),
-                                );
-                              },
-                            ),
-                          ),
-                          toggle(
-                            'Right to left',
-                            _prefs.rightToLeft,
-                            (value) =>
-                                update(_prefs.copyWith(rightToLeft: value)),
-                          ),
-                          toggle(
-                            'Tap to turn pages',
-                            _prefs.tapNavigation,
-                            (value) =>
-                                update(_prefs.copyWith(tapNavigation: value)),
-                          ),
-                          toggle(
-                            'Show page number',
-                            _prefs.showPageNumber,
-                            (value) =>
-                                update(_prefs.copyWith(showPageNumber: value)),
-                          ),
-                          toggle(
-                            'Auto advance',
-                            _prefs.autoAdvance,
-                            (value) =>
-                                update(_prefs.copyWith(autoAdvance: value)),
-                          ),
-                          if (_prefs.autoAdvance) ...[
-                            Text(
-                              '${_t('Seconds per page')}: ${_prefs.autoSeconds}',
-                            ),
-                            Slider(
-                              value: _prefs.autoSeconds.toDouble(),
-                              min: 2,
-                              max: 120,
-                              divisions: 118,
-                              onChanged: (value) => update(
-                                _prefs.copyWith(autoSeconds: value.round()),
-                              ),
-                            ),
-                          ],
-                        ],
-                        if (_item.mode == AppMode.booru &&
-                            !_offline &&
-                            _resolvedItem.metadata['fileURL'] != null)
-                          toggle(
-                            'Original images',
-                            _prefs.originalImages,
-                            (value) =>
-                                update(_prefs.copyWith(originalImages: value)),
-                          ),
-                        toggle(
-                          'Keep screen awake',
-                          _prefs.keepAwake,
-                          (value) => update(_prefs.copyWith(keepAwake: value)),
-                        ),
-                        Text(_t('Dim screen')),
-                        Slider(
-                          value: _prefs.dimming,
-                          min: 0,
-                          max: .65,
-                          onChanged: (value) =>
-                              update(_prefs.copyWith(dimming: value)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReaderDefaultsScreen(
+          controller: widget.controller,
+          mode: _item.mode,
+        ),
       ),
     );
+    if (!mounted) return;
     _settingsOpen = false;
-    if (mounted) _focus.requestFocus();
+    _updatePreferences(widget.controller.readerPreferences(_item.mode));
   }
-
-  Widget _button(IconData icon, String label, VoidCallback action) => Semantics(
-    label: _t(label),
-    button: true,
-    child: IconButton(
-      onPressed: action,
-      tooltip: _t(label),
-      icon: Icon(icon, color: Colors.white, size: 28),
-    ),
-  );
 
   Future<void> _download() async {
     if (_downloading || _sourcePages.isEmpty) return;
@@ -1193,6 +1124,25 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (action == 'note') await _note();
   }
 
+  int _previewColumns() {
+    final stored = (widget.controller.store.setting(
+      'previewColumns.manga',
+      0,
+    ) as num).toInt();
+    if (stored > 0) return stored.clamp(1, 10);
+    final grid = widget.controller.columns('gridColumns', AppMode.manga);
+    final automatic = ArtworkLayout(
+      widget.controller,
+      AppMode.manga,
+    ).columns(_viewport.width);
+    return (2 * (grid == 0 ? automatic : grid)).clamp(1, 10);
+  }
+
+  int _previewRows() =>
+      (widget.controller.store.setting('previewRows.manga', 5) as num)
+          .toInt()
+          .clamp(1, 10);
+
   Future<void> _preview() async {
     _settingsOpen = true;
     final selected = await showModalBottomSheet<int>(
@@ -1216,9 +1166,12 @@ class _ReaderScreenState extends State<ReaderScreen>
           body: GridView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: _pages.length,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 150,
-              childAspectRatio: .7,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: _previewColumns(),
+              mainAxisExtent:
+                  ((MediaQuery.sizeOf(context).height * .8 - 100) /
+                          _previewRows())
+                      .clamp(48.0, 800.0),
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
             ),
@@ -1299,6 +1252,123 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (selected != null) _go(selected, animate: false);
   }
 
+  Future<void> _translate() async {
+    if (_settingsOpen || _loading || _video) return;
+    _settingsOpen = true;
+    try {
+      final availability = await InstalledTranslation.availability();
+      if (!mounted) return;
+      if (availability == InstalledTranslationAvailability.missing) {
+        await showMessage(
+          context,
+          'Google Translate',
+          'Google Translate is not installed on this device.',
+        );
+        return;
+      }
+      if (availability == InstalledTranslationAvailability.unsupported) {
+        await showMessage(
+          context,
+          'Google Translate',
+          BrowserSession.supported
+              ? 'This device cannot send images to Google Translate. In the Translate app, choose Camera, then All Images, and select a screenshot.'
+              : 'Google Translate image handoff is available in the Android app.',
+        );
+        return;
+      }
+      final manual =
+          availability == InstalledTranslationAvailability.manualImport;
+      if (manual) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialog) => AlertDialog(
+            scrollable: true,
+            title: Text(_t('Google Translate')),
+            content: Text(
+              _t(
+                'This version of Google Translate does not accept shared images. Save the visible image to Pictures/TEGNAL and open Translate, then choose Camera → All Images. Google Translate handles translation and may use its own network connection.',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog, false),
+                child: Text(_t('Cancel')),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialog, true),
+                child: Text(_t('Save Image and Open Google Translate')),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+      }
+      if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final boundary =
+          _translationImageKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null || boundary.size.isEmpty) {
+        throw const InstalledTranslationException(
+          'Unable to prepare the visible image.',
+        );
+      }
+      final image = await boundary.toImage(
+        pixelRatio: math.min(
+          MediaQuery.devicePixelRatioOf(context),
+          2048 / boundary.size.longestSide,
+        ),
+      );
+      try {
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (bytes == null) {
+          throw const InstalledTranslationException(
+            'Unable to prepare the visible image.',
+          );
+        }
+        if (!mounted) return;
+        await InstalledTranslation.sendImage(
+          bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+          manualImport: manual,
+        );
+      } finally {
+        image.dispose();
+      }
+    } catch (error) {
+      if (mounted) {
+        await showMessage(
+          context,
+          'Google Translate',
+          error is InstalledTranslationException
+              ? error.message
+              : 'Unable to prepare the visible image.',
+        );
+      }
+    } finally {
+      _settingsOpen = false;
+    }
+  }
+
+  Future<void> _share() async {
+    final uri = _resolvedItem.pageUrl;
+    if (uri == null) return;
+    _settingsOpen = true;
+    try {
+      await BrowserSession.shareLink(uri, title: _resolvedItem.title);
+    } catch (_) {
+      if (mounted) {
+        await showMessage(
+          context,
+          'Unable to Open',
+          'Unable to open the sharing menu.',
+        );
+      }
+    } finally {
+      _settingsOpen = false;
+    }
+  }
+
   Future<void> _copyLink() async {
     final url = _resolvedItem.pageUrl ?? _pages.firstOrNull?.url;
     if (url == null) return;
@@ -1341,7 +1411,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               ),
               child: _button(
                 Icons.more_horiz,
-                'Reader settings',
+                'More Settings',
                 () => setState(() => _chrome = !_chrome),
               ),
             ),
@@ -1414,7 +1484,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                       _button(
                         Icons.chevron_left,
                         'Previous page',
-                        () => _go(_position - 1),
+                        () => _step(-1),
                       ),
                       Expanded(
                         child: TextButton(
@@ -1431,11 +1501,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                           ),
                         ),
                       ),
-                      _button(
-                        Icons.chevron_right,
-                        'Next page',
-                        () => _go(_position + 1),
-                      ),
+                      _button(Icons.chevron_right, 'Next page', () => _step(1)),
                       _button(
                         Icons.cancel,
                         'Close controls',
@@ -1459,8 +1525,12 @@ class _ReaderScreenState extends State<ReaderScreen>
                               ? Icons.favorite
                               : Icons.favorite_border,
                           widget.controller.isSaved(_item)
-                              ? 'Remove from library'
-                              : 'Save to library',
+                              ? (_item.mode == AppMode.booru
+                                    ? 'Remove Favorite'
+                                    : 'Remove Bookmark')
+                              : (_item.mode == AppMode.booru
+                                    ? 'Add Favorite'
+                                    : 'Bookmark'),
                           () {
                             widget.controller.isSaved(_item)
                                 ? widget.controller.unsave(_item)
@@ -1469,7 +1539,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                         ),
                         _action(
                           Icons.folder_outlined,
-                          'Save to folder',
+                          'Save to Folder',
                           () => unawaited(_folders()),
                         ),
                       ],
@@ -1480,15 +1550,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                       _action(
                         Icons.translate,
                         'Translate',
-                        _video
+                        _video || _loading || _error != null
                             ? null
-                            : () => unawaited(
-                                showMessage(
-                                  context,
-                                  'On-Device AI',
-                                  'No supported preinstalled system translation service is connected.',
-                                ),
-                              ),
+                            : () => unawaited(_translate()),
                       ),
                       _action(
                         Icons.logout,
@@ -1519,16 +1583,22 @@ class _ReaderScreenState extends State<ReaderScreen>
                         _item.mode == AppMode.manga
                             ? Icons.grid_view
                             : Icons.link,
-                        _item.mode == AppMode.manga ? 'Preview' : 'Copy Link',
+                        _item.mode == AppMode.manga
+                            ? 'Preview'
+                            : BrowserSession.supported
+                            ? 'Share'
+                            : 'Copy Link',
                         () => unawaited(
                           _item.mode == AppMode.manga
                               ? _preview()
+                              : BrowserSession.supported
+                              ? _share()
                               : _copyLink(),
                         ),
                       ),
                       _action(
                         Icons.tune,
-                        'Reader settings',
+                        'More Settings',
                         () => unawaited(_settings()),
                       ),
                     ],
@@ -1571,6 +1641,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           if (mounted) {
             setState(() {
               _ratios[index] = ratio;
+              _pageOffsets = null;
             });
           }
         });
@@ -1628,7 +1699,9 @@ class _ReaderScreenState extends State<ReaderScreen>
               itemBuilder: (context, index) => _image(index, continuous: true),
             )
           : PageView.builder(
-              key: ValueKey('${_prefs.readingMode}:${_prefs.rightToLeft}'),
+              key: ValueKey(
+                '${_prefs.readingMode}:${_prefs.rightToLeft}:$_spread',
+              ),
               controller: _pager,
               physics: _zoomed
                   ? const NeverScrollableScrollPhysics()
@@ -1639,9 +1712,21 @@ class _ReaderScreenState extends State<ReaderScreen>
               reverse:
                   _prefs.readingMode == ReadingMode.horizontal &&
                   _prefs.rightToLeft,
-              itemCount: _pages.length,
-              onPageChanged: _setIndex,
-              itemBuilder: (_, index) => _image(index),
+              itemCount: (_pages.length / _spread).ceil(),
+              onPageChanged: (index) => _setIndex(index * _spread),
+              itemBuilder: (_, index) => Row(
+                textDirection: _prefs.rightToLeft
+                    ? TextDirection.rtl
+                    : TextDirection.ltr,
+                children: [
+                  for (
+                    var page = index * _spread;
+                    page < (index + 1) * _spread && page < _pages.length;
+                    page++
+                  )
+                    Expanded(child: _image(page)),
+                ],
+              ),
             ),
     );
   }
@@ -1675,6 +1760,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                     _viewport.width > 0 &&
                     _viewport.width != constraints.maxWidth;
                 final retainedIndex = _index;
+                if (_viewport != constraints.biggest) _pageOffsets = null;
                 _viewport = constraints.biggest;
                 if (resized && _continuous) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1689,7 +1775,13 @@ class _ReaderScreenState extends State<ReaderScreen>
                         onPointerMove: _pointerMove,
                         onPointerUp: _pointerUp,
                         onPointerCancel: _pointerCancel,
-                        child: _body(),
+                        child: RepaintBoundary(
+                          key: _translationImageKey,
+                          child: ColoredBox(
+                            color: Colors.black,
+                            child: _body(),
+                          ),
+                        ),
                       ),
                     ),
                     if (_prefs.dimming > 0)
@@ -1704,7 +1796,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                       Align(alignment: Alignment.topCenter, child: _topBar()),
                     if (_sourcePages.isNotEmpty && !_loading && _chrome)
                       Align(
-                        alignment: Alignment.bottomCenter,
+                        alignment: _prefs.bottomMenu
+                            ? Alignment.bottomCenter
+                            : Alignment.center,
                         child: _controls(),
                       ),
                     if (_sourcePages.isNotEmpty &&
@@ -1751,6 +1845,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   void dispose() {
     ++_generation;
     _auto?.cancel();
+    _prefetchDebounce?.cancel();
     _notesClient?.close();
     WidgetsBinding.instance.removeObserver(this);
     if (_sourcePages.isNotEmpty) _savePosition();
@@ -1795,6 +1890,7 @@ class _ReaderImageState extends State<_ReaderImage> {
   Map<String, String> _mediaHeaders = {};
   int _decodeLimit = 3000;
   ImageProvider<Object>? _resolvedProvider;
+  ImageProvider<Object>? _dimensionProvider;
   ImageStream? _imageStream;
   ImageStreamListener? _imageListener;
   ImageProvider<Object> get _provider =>
@@ -1837,6 +1933,7 @@ class _ReaderImageState extends State<_ReaderImage> {
 
   Future<void> _prepareImage() async {
     final generation = ++_prepareGeneration;
+    _dimensionProvider = null;
     if (mounted) {
       setState(() {
         _headersReady = false;
@@ -1858,19 +1955,39 @@ class _ReaderImageState extends State<_ReaderImage> {
   }
 
   void _resolveDimensions() {
+    if (widget.page.width > 0 && widget.page.height > 0) {
+      _naturalSize = Size(
+        widget.page.width.toDouble(),
+        widget.page.height.toDouble(),
+      );
+      return;
+    }
+    final provider = _provider;
+    if (_dimensionProvider == provider) return;
+    _dimensionProvider = provider;
     if (_imageListener != null) _imageStream?.removeListener(_imageListener!);
-    _imageStream = _provider.resolve(createLocalImageConfiguration(context));
+    _imageStream = provider.resolve(createLocalImageConfiguration(context));
     _imageListener = ImageStreamListener(
       (info, synchronous) {
-        _naturalSize = Size(
+        final size = Size(
           info.image.width.toDouble(),
           info.image.height.toDouble(),
         );
-        widget.onRatio(info.image.width / info.image.height);
+        if (synchronous) {
+          _naturalSize = size;
+        } else if (mounted) {
+          setState(() => _naturalSize = size);
+        }
+        widget.onRatio(size.width / size.height);
         info.dispose();
+        // GIF frames have the same canvas dimensions; do not measure each frame.
+        if (_imageListener != null) {
+          _imageStream?.removeListener(_imageListener!);
+        }
       },
       onError: (Object error, StackTrace? stack) {
-        // The visible Image provides the error and retry control.
+        _dimensionProvider = null;
+        // The visible Image owns retry and error presentation.
       },
     );
     _imageStream!.addListener(_imageListener!);

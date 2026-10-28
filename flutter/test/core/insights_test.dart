@@ -40,6 +40,49 @@ void main() {
     now: now,
   );
 
+  test(
+    'latest recommendation output sorts IDs after candidate retrieval',
+    () async {
+      final service = RecommendationService(
+        load: (_, query) async => ContentPage(
+          query.startsWith('blue')
+              ? [item(12), item(10)]
+              : [item(14), item(13)],
+          hasMore: false,
+        ),
+      );
+      final result = await service.fetch(
+        snapshot: profile(),
+        sources: [source('a')],
+        sortsBySource: {'a': 'latest'},
+      );
+      expect(result.items.map((entry) => entry.item.id), [14, 13, 12, 10]);
+    },
+  );
+
+  test('popular output preserves query/page order across reversed network completion', () async {
+    Future<TasteRecommendations> fetch(bool reverse) =>
+        RecommendationService(
+          load: (_, query) async {
+            final first = query.startsWith('blue');
+            if (first == reverse) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+            return ContentPage(
+              first ? [item(12), item(10)] : [item(14), item(13)],
+              hasMore: false,
+            );
+          },
+        ).fetch(
+          snapshot: profile(),
+          sources: [source('a')],
+          sortsBySource: {'a': 'popular'},
+        );
+    final first = await fetch(false), second = await fetch(true);
+    expect(first.items.map((entry) => entry.item.id), [12, 10, 14, 13]);
+    expect(second.items.map((entry) => entry.item.id), [12, 10, 14, 13]);
+  });
+
   test('profiles deduplicate works and tags, isolate modes and filter technical metadata', () {
     final entries = [
       saved(
@@ -89,19 +132,19 @@ void main() {
     expect(report.generatedByAI, isFalse);
   });
 
-  test('7 and 30 day recaps use exact half-open previous periods and ignore future dates', () {
+  test('recaps use ISO calendar weeks and calendar months', () {
     final entries = [
       for (final day in [1, 7, 8, 30, 31, 61, -1])
         saved(item(day + 100), days: day),
     ];
     final report = profile(entries);
-    expect(report.weekly.saves, 2);
-    expect(report.weekly.previousSaves, 1);
+    expect(report.weekly.saves, 1);
+    expect(report.weekly.previousSaves, 2);
     expect(report.monthly.saves, 4);
-    expect(report.monthly.previousSaves, 1);
+    expect(report.monthly.previousSaves, 2);
     expect(report.findings.first.pattern, InsightPattern.rising);
     expect(report.findings.first.count, 4);
-    expect(report.findings.first.previousCount, 1);
+    expect(report.findings.first.previousCount, 2);
   });
 
   test('manga exclusions repair legacy aliases without changing explicit namespaces', () {
@@ -247,5 +290,78 @@ void main() {
           throw StateError('Cancelled fetch must not query the store'),
     );
     expect(cancelled.requestCount, 0);
+  });
+  test('source included tags constrain query and candidate results', () async {
+    final prefs = InsightPreferences(
+      mode: AppMode.booru,
+      includedBySource: {
+        'a': {'night'},
+      },
+    );
+    final report = TasteAnalyzer.analyze(
+      [saved(item(1))],
+      mode: AppMode.booru,
+      preferences: prefs,
+      now: now,
+    );
+    final queries = <String>[];
+    final service = RecommendationService(
+      load: (_, query) async {
+        queries.add(query);
+        return ContentPage([
+          item(2),
+          item(3, tags: ['blue', 'sky', 'night']),
+        ], hasMore: false);
+      },
+    );
+    final result = await service.fetch(
+      snapshot: report,
+      sources: [source('a')],
+    );
+    expect(queries, everyElement(contains('night')));
+    expect(result.items.map((entry) => entry.item.id), [3]);
+  });
+  test('open evidence adjusts lift only at native sample thresholds', () {
+    final savedWorks = [for (var i = 0; i < 10; i++) item(i)];
+    final observed = [
+      for (var i = 0; i < 30; i++) item(i, tags: i < 10 ? ['blue'] : ['sky']),
+    ];
+    TasteSnapshot report(int openCount) => TasteAnalyzer.analyze(
+      savedWorks.map((work) => saved(work)),
+      mode: AppMode.booru,
+      observed: observed.take(openCount),
+      organicSaved: savedWorks,
+      now: now,
+    );
+    expect(
+      report(29).tags.firstWhere((tag) => tag.name == 'blue').lift,
+      isNull,
+    );
+    expect(
+      report(30).tags.firstWhere((tag) => tag.name == 'blue').lift,
+      closeTo(2.6667, .001),
+    );
+  });
+  test('calendar recap boundaries cover Monday and month transitions', () {
+    final reference = DateTime.utc(2026, 3, 1, 12); // Sunday
+    SavedItem event(int id, DateTime at) =>
+        SavedItem(item: item(id), savedAt: at);
+    final entries = [
+      event(1, DateTime.utc(2026, 2, 22, 23, 59)),
+      event(2, DateTime.utc(2026, 2, 23)),
+      event(3, DateTime.utc(2026, 2, 28, 23, 59)),
+      event(4, DateTime.utc(2026, 3, 1)),
+      event(5, DateTime.utc(2026, 3, 2)),
+    ];
+    final report = TasteAnalyzer.analyze(
+      entries,
+      mode: AppMode.booru,
+      now: reference,
+      saveHistory: entries,
+    );
+    expect(report.weekly.saves, 3);
+    expect(report.weekly.previousSaves, 1);
+    expect(report.monthly.saves, 2);
+    expect(report.monthly.previousSaves, 3);
   });
 }

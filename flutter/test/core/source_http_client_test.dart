@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:ech_http/ech_http.dart' as ech;
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,7 @@ import 'package:tegnal/data/android_manga_client.dart';
 import 'package:tegnal/data/booru_extras.dart';
 import 'package:tegnal/data/booru_source.dart';
 import 'package:tegnal/data/source_http_client.dart';
+import 'package:tegnal/data/session_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -106,7 +108,10 @@ void main() {
         expect(retry.headers['user-agent'], 'Fixture');
         expect(retry.followRedirects, isFalse);
         expect(
-          (browserCalls.single.arguments as Map)['url'],
+          (browserCalls
+                  .singleWhere((call) => call.method == 'headersFor')
+                  .arguments
+              as Map)['url'],
           retry.url.toString(),
         );
       },
@@ -230,7 +235,9 @@ void main() {
 
       expect(browserCalls.map((call) => call.method), [
         'headersFor',
+        'headersFor',
         'receiveCookies',
+        'headersFor',
       ]);
       expect(
         browserCalls.every(
@@ -308,6 +315,276 @@ void main() {
       [1, 1, 1],
     );
     expect(() => client.get(origin), throwsA(isA<http.ClientException>()));
+  });
+  test(
+    'verified browser retries only failed public same-origin posts JSON',
+    () async {
+      final origin = Uri.https('verified-fixture.invalid');
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(browser, (call) async {
+            calls.add(call);
+            if (call.method == 'headersFor') {
+              return {'Cookie': 'session=fixture', 'User-Agent': 'Browser'};
+            }
+            if (call.method == 'verifiedGet') {
+              return {
+                'statusCode': 200,
+                'body': Uint8List.fromList(
+                  utf8.encode(
+                    ((call.arguments as Map)['url'] as String).contains(
+                          '/posts/123.json',
+                        )
+                        ? '{}'
+                        : '[]',
+                  ),
+                ),
+              };
+            }
+            return null;
+          });
+      await BrowserSession.open(origin);
+      var primaryCalls = 0;
+      final client = create(
+        origin,
+        primary: MockClient((_) async {
+          primaryCalls++;
+          throw AndroidMangaNetworkException('reset');
+        }),
+        fallback: MockClient(
+          (_) async => throw AndroidMangaNetworkException('reset'),
+        ),
+      );
+      final url = origin.replace(
+        path: '/posts.json',
+        queryParameters: {'tags': 'cat', 'limit': '40', 'page': '1'},
+      );
+      final result = await client.get(
+        url,
+        headers: {'Accept': 'application/json'},
+      );
+      expect(result.body, '[]');
+      final retry = calls.singleWhere((call) => call.method == 'verifiedGet');
+      expect((retry.arguments as Map)['url'], url.toString());
+      expect((retry.arguments as Map).containsKey('headers'), isFalse);
+      final next = await client.get(
+        url.replace(queryParameters: {'page': '2'}),
+        headers: {'Accept': 'application/json'},
+      );
+      expect(next.body, '[]');
+      final detail = await client.get(
+        origin.replace(path: '/posts/123.json'),
+        headers: {'Accept': 'application/json'},
+      );
+      expect(detail.body, '{}');
+      expect(primaryCalls, 1);
+      expect(calls.where((call) => call.method == 'verifiedGet'), hasLength(3));
+      for (final request in [
+        http.Request('GET', url)..headers['Authorization'] = 'secret',
+        http.Request(
+          'GET',
+          url.replace(queryParameters: {'api_key': 'secret'}),
+        ),
+        http.Request('GET', origin.replace(path: '/image.jpg')),
+        http.Request(
+          'GET',
+          origin.replace(
+            path: '/posts/123.json',
+            queryParameters: {'token': 'secret'},
+          ),
+        ),
+        http.Request('GET', origin.replace(path: '/posts/not-a-number.json')),
+        http.Request('GET', Uri.https('other.invalid', '/posts.json')),
+      ]) {
+        request.headers['Accept'] = 'application/json';
+        await expectLater(
+          client.send(request),
+          throwsA(isA<SourceConnectionException>()),
+        );
+      }
+      expect(calls.where((call) => call.method == 'verifiedGet'), hasLength(3));
+      expect(BrowserSession.prefersVerified(origin), isTrue);
+      await BrowserSession.open(origin);
+      expect(BrowserSession.prefersVerified(origin), isFalse);
+    },
+  );
+
+  test('verification after a failed search tries the browser before another slow network attempt', () async {
+    final origin = Uri.https('verified-retry-first.invalid');
+    var nativeCalls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(browser, (call) async {
+          if (call.method == 'headersFor') return <String, String>{};
+          if (call.method == 'verifiedGet') {
+            return {
+              'statusCode': 200,
+              'body': Uint8List.fromList(utf8.encode('[]')),
+            };
+          }
+          return null;
+        });
+    final client = create(
+      origin,
+      primary: MockClient((_) async {
+        nativeCalls++;
+        throw AndroidMangaNetworkException('reset');
+      }),
+      fallback: MockClient(
+        (_) async => throw AndroidMangaNetworkException('reset'),
+      ),
+    );
+    final url = origin.replace(path: '/posts.json');
+    await expectLater(
+      client.get(url, headers: {'Accept': 'application/json'}),
+      throwsA(isA<SourceConnectionException>()),
+    );
+    expect(nativeCalls, 1);
+    await BrowserSession.open(origin);
+    expect(
+      (await client.get(url, headers: {'Accept': 'application/json'})).body,
+      '[]',
+    );
+    expect(nativeCalls, 1);
+  });
+
+  test(
+    'successful browser route restores after a simulated process restart',
+    () async {
+      final origin = Uri.https('verified-restart.invalid');
+      var nativeCalls = 0;
+      var persisted = false;
+      var cookieChanged = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(browser, (call) async {
+            if (call.method == 'headersFor') return <String, String>{};
+            if (call.method == 'hasVerifiedRoute') return persisted;
+            if (call.method == 'verifiedGet') {
+              persisted = true;
+              return {
+                'statusCode': 200,
+                'body': Uint8List.fromList(utf8.encode('[]')),
+                'cookieChanged': cookieChanged,
+              };
+            }
+            return null;
+          });
+      await BrowserSession.open(origin);
+      final client = create(
+        origin,
+        primary: MockClient((_) async {
+          nativeCalls++;
+          throw AndroidMangaNetworkException('reset');
+        }),
+        fallback: MockClient(
+          (_) async => throw AndroidMangaNetworkException('reset'),
+        ),
+      );
+      final url = origin.replace(path: '/posts.json');
+      await client.get(url, headers: {'Accept': 'application/json'});
+      expect(nativeCalls, 1);
+      BrowserSession.resetLocalRouteStateForTesting();
+      cookieChanged = true;
+      final oldRevision = BrowserSession.revisionFor(url);
+      expect(
+        (await client.get(url, headers: {'Accept': 'application/json'})).body,
+        '[]',
+      );
+      expect(nativeCalls, 1);
+      expect(BrowserSession.revisionFor(url), isNot(oldRevision));
+      expect(BrowserSession.prefersVerified(origin), isTrue);
+    },
+  );
+
+  test(
+    'HTML does not grant a browser route but valid-looking JSON content can',
+    () async {
+      final origin = Uri.https('verified-html.invalid');
+      var body = '<html><body>Sign in</body></html>';
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(browser, (call) async {
+            if (call.method == 'verifiedGet') {
+              return {
+                'statusCode': 200,
+                'body': Uint8List.fromList(utf8.encode(body)),
+              };
+            }
+            return null;
+          });
+      await BrowserSession.open(origin);
+      final url = origin.replace(path: '/posts.json');
+      await BrowserSession.verifiedGet(http.Request('GET', url));
+      expect(BrowserSession.prefersVerified(url), isFalse);
+      body = '[{"description":"just a moment"}]';
+      await BrowserSession.verifiedGet(http.Request('GET', url));
+      expect(BrowserSession.prefersVerified(url), isTrue);
+    },
+  );
+
+  test('browser certificate failure is never downgraded or reused', () async {
+    final origin = Uri.https('verified-cert.invalid');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(browser, (call) async {
+          if (call.method == 'headersFor') return <String, String>{};
+          if (call.method == 'verifiedGet') {
+            throw PlatformException(code: 'certificate_error');
+          }
+          return null;
+        });
+    await BrowserSession.open(origin);
+    final client = create(
+      origin,
+      fallback: MockClient(
+        (_) async => throw AndroidMangaNetworkException('reset'),
+      ),
+    );
+    await expectLater(
+      client.get(
+        origin.replace(path: '/posts.json'),
+        headers: {'Accept': 'application/json'},
+      ),
+      throwsA(isA<AndroidMangaCertificateException>()),
+    );
+    expect(BrowserSession.prefersVerified(origin), isFalse);
+  });
+
+  test('closing source cancels active verified browser retry', () async {
+    final origin = Uri.https('verified-cancel.invalid');
+    final pending = Completer<Object?>();
+    final started = Completer<void>();
+    final cancelled = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(browser, (call) async {
+          if (call.method == 'headersFor') return <String, String>{};
+          if (call.method == 'verifiedGet') {
+            started.complete();
+            return pending.future;
+          }
+          if (call.method == 'cancelVerifiedGet') {
+            cancelled.complete();
+            return null;
+          }
+          return null;
+        });
+    await BrowserSession.open(origin);
+    final client = create(
+      origin,
+      fallback: MockClient(
+        (_) async => throw AndroidMangaNetworkException('reset'),
+      ),
+    );
+    final future = client.get(
+      origin.replace(path: '/posts.json'),
+      headers: {'Accept': 'application/json'},
+    );
+    await started.future;
+    final assertion = expectLater(
+      future,
+      throwsA(isA<http.RequestAbortedException>()),
+    );
+    client.close();
+    await cancelled.future;
+    await assertion;
+    pending.completeError(PlatformException(code: 'aborted'));
   });
 }
 

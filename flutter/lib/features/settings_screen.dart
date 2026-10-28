@@ -3,8 +3,13 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+
+import '../core/insights.dart';
+import '../ui/session_image_provider.dart';
 
 import '../core/app_controller.dart';
+import '../core/app_features.dart';
 import '../core/drive_sync_controller.dart';
 import '../core/content.dart';
 import '../core/library.dart';
@@ -14,16 +19,20 @@ import '../data/backup_files.dart';
 import '../data/download_manager.dart';
 import '../data/legacy_import.dart';
 import '../data/booru_source_detector.dart';
+import '../data/booru_credentials.dart';
+import '../data/session_client.dart';
 import '../ui/common.dart';
 import '../ui/l10n.dart';
 import '../ui/design_system.dart';
 import 'downloads_screen.dart';
+import 'drive_sync_screen.dart';
 import 'browser_screen.dart';
 import 'challenges_screen.dart';
 import 'booru_pools_screen.dart';
-import 'drive_sync_screen.dart';
 import 'detail_screen.dart';
 import 'onboarding_screen.dart';
+import 'insights_screen.dart';
+import 'reader_guide.dart';
 
 /// Opens the existing, validated legacy importer from setup and Settings.
 Future<void> showImportLegacy(
@@ -49,13 +58,54 @@ Future<void> showImportLegacy(
     final importer = LegacyImport(controller.store);
     final summary = await importer.inspectFile(file.path);
     if (!context.mounted) return;
+    var fullCatalog = false;
+    if (summary.isCatalog) {
+      final choice = await showModalBottomSheet<bool>(
+        context: context,
+        useRootNavigator: true,
+        useSafeArea: true,
+        builder: (sheet) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                L10n.tr(context, '⚡️ Fill Only My Library (Recommended)'),
+              ),
+              onTap: () => Navigator.pop(sheet, false),
+            ),
+            ListTile(
+              title: Text(
+                L10n.tr(context, '📦 Save Entire Catalog (Background Import)'),
+              ),
+              onTap: () => Navigator.pop(sheet, true),
+            ),
+            ListTile(
+              title: Text(L10n.tr(context, 'Cancel')),
+              onTap: () => Navigator.pop(sheet),
+            ),
+          ],
+        ),
+      );
+      if (choice == null || !context.mounted) return;
+      fullCatalog = choice;
+    }
     if (await confirmAction(
       context,
       'Import Library',
       '${summary.workCount} ${L10n.tr(context, 'Works')} · ${summary.folderCount} ${L10n.tr(context, 'Folders')}\n${L10n.tr(context, 'Existing items will be merged. Other saved items will remain.')}',
       action: 'Import',
     )) {
-      final imported = await importer.importFile(file.path);
+      if (!context.mounted) return;
+      final imported = await showDialog<LegacyImportSummary>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _LegacyImportProgress(
+          importer: importer,
+          path: file.path,
+          fullCatalog: fullCatalog,
+        ),
+      );
+      if (imported == null) return;
       controller.libraryRestored();
       if (context.mounted) {
         await showMessage(
@@ -74,6 +124,83 @@ Future<void> showImportLegacy(
       );
     }
   }
+}
+
+class _LegacyImportProgress extends StatefulWidget {
+  const _LegacyImportProgress({
+    required this.importer,
+    required this.path,
+    required this.fullCatalog,
+  });
+  final LegacyImport importer;
+  final String path;
+  final bool fullCatalog;
+  @override
+  State<_LegacyImportProgress> createState() => _LegacyImportProgressState();
+}
+
+class _LegacyImportProgressState extends State<_LegacyImportProgress> {
+  bool _cancelled = false;
+  int _count = 0;
+  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_run());
+  }
+
+  Future<void> _run() async {
+    try {
+      final result = await widget.importer.importFile(
+        widget.path,
+        fullCatalog: widget.fullCatalog,
+        isCancelled: () => _cancelled,
+        onProgress: (count) {
+          if (mounted) setState(() => _count = count);
+        },
+      );
+      if (mounted) Navigator.pop(context, result);
+    } on LegacyImportCancelled {
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error is FormatException
+              ? error.message
+              : L10n.tr(
+                  context,
+                  'The selected file could not be imported. Your current library has been kept.',
+                ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: _error != null,
+    child: AlertDialog(
+      title: Text(L10n.tr(context, 'Import Library')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_error == null) const CircularProgressIndicator(),
+          const SizedBox(height: 12),
+          Text(_error ?? '${L10n.tr(context, 'Processing…')} $_count'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _error != null
+              ? () => Navigator.pop(context)
+              : _cancelled
+              ? null
+              : () => setState(() => _cancelled = true),
+          child: Text(L10n.tr(context, _error != null ? 'Close' : 'Cancel')),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Restores a native-compatible JSON backup after inspecting it first.
@@ -572,6 +699,12 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _working = false;
   late final AppMode _mode = widget.mode ?? widget.controller.mode;
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.presentDiscordInvitationIfDue();
+  }
+
   Future<void> _importLegacy() async {
     if (_working) {
       return;
@@ -671,7 +804,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-    if (result != null) widget.controller.setPreference(key, result);
+    if (result != null) {
+      widget.controller.setPreference(
+        key,
+        (key.startsWith('preview') || key.startsWith('historyRetention'))
+            ? int.parse(result)
+            : result,
+      );
+    }
   }
 
   Future<void> _source(SourceConfig source, AppMode mode) async {
@@ -710,6 +850,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Text(L10n.tr(context, 'Use This Server')),
               ),
               TextButton(
+                onPressed: () => Navigator.pop(context, 'rename'),
+                child: Text(L10n.tr(context, 'Rename')),
+              ),
+              if (source.mode == AppMode.booru &&
+                  source.kind != SourceKind.oldGelbooru)
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'credentials'),
+                  child: Text(L10n.tr(context, 'Additional Options')),
+                ),
+              if (BrowserSession.supported)
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'cookies'),
+                  child: Text(L10n.tr(context, 'Cookies')),
+                ),
+              TextButton(
                 onPressed: () => Navigator.pop(context, 'blacklist'),
                 child: Text(L10n.tr(context, 'Blocked Tags')),
               ),
@@ -743,8 +898,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
+    if (action == 'rename') {
+      final name = await _nameSource(source);
+      if (name != null && name.trim().isNotEmpty) {
+        widget.controller.store.saveSource(
+          SourceConfig(
+            id: source.id,
+            name: name.trim(),
+            baseUrl: source.baseUrl,
+            kind: source.kind,
+          ),
+        );
+        widget.controller.changed();
+      }
+    }
+    if (action == 'credentials') await _credentials(source);
+    if (action == 'cookies') await _cookies(source);
     if (action == 'select') widget.controller.selectSource(source);
-    if (action == 'remove' &&
+    if (mounted &&
+        action == 'remove' &&
         await confirmAction(
           context,
           'Remove Server',
@@ -765,6 +937,165 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (value != null) {
         widget.controller.setPreference('blacklist.${source.id}', value);
+      }
+    }
+  }
+
+  Future<String?> _nameSource(SourceConfig source) async {
+    final input = TextEditingController(text: source.name);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(L10n.tr(context, 'Rename')),
+        content: TextField(controller: input, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: Text(L10n.tr(context, 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, input.text),
+            child: Text(L10n.tr(context, 'Save')),
+          ),
+        ],
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    input.dispose();
+    return value;
+  }
+
+  Future<void> _credentials(SourceConfig source) async {
+    BooruCredentials credentials;
+    try {
+      credentials = await BooruCredentialsStore.read(source);
+    } catch (_) {
+      if (mounted) {
+        await showMessage(
+          context,
+          'Unable to Complete',
+          'Secure storage is unavailable.',
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final account = TextEditingController(text: credentials.account);
+    final secret = TextEditingController(text: credentials.secret);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(source.name),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: account,
+              autocorrect: false,
+              decoration: InputDecoration(
+                labelText: L10n.tr(
+                  context,
+                  source.kind == SourceKind.gelbooru ? 'User ID' : 'Username',
+                ),
+              ),
+            ),
+            TextField(
+              controller: secret,
+              obscureText: true,
+              autocorrect: false,
+              decoration: InputDecoration(
+                labelText: L10n.tr(
+                  context,
+                  source.kind == SourceKind.moebooru
+                      ? 'Password Hash'
+                      : 'API Key',
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: Text(L10n.tr(context, 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text(L10n.tr(context, 'Save')),
+          ),
+        ],
+      ),
+    );
+    if (result == true) {
+      try {
+        await BooruCredentialsStore.save(
+          source,
+          BooruCredentials(
+            account: account.text.trim(),
+            secret: secret.text.trim(),
+          ),
+        );
+      } catch (error) {
+        if (mounted) {
+          await showMessage(
+            context,
+            'Unable to Complete',
+            error is FormatException
+                ? error.message
+                : 'Secure storage is unavailable.',
+          );
+        }
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    account.dispose();
+    secret.dispose();
+  }
+
+  Future<void> _cookies(SourceConfig source) async {
+    try {
+      final cookies = await BrowserSession.cookiesFor(source.baseUrl);
+      if (!mounted) return;
+      final reset = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          scrollable: true,
+          title: Text(L10n.tr(context, 'Cookies')),
+          content: SelectableText(
+            cookies.isEmpty
+                ? L10n.tr(context, 'No Cookies')
+                : cookies.join('\n'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: Text(L10n.tr(context, 'Close')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(L10n.tr(context, 'Reset Cookies')),
+            ),
+          ],
+        ),
+      );
+      if (reset == true &&
+          mounted &&
+          await confirmAction(
+            context,
+            'Reset Cookies?',
+            'Reset cookies visible at this website address and its local website storage. Other paths may retain sign-ins. Your favorites and API key are kept.',
+            action: 'Reset Cookies',
+          )) {
+        await BrowserSession.resetCookies(source.baseUrl);
+      }
+    } catch (_) {
+      if (mounted) {
+        await showMessage(
+          context,
+          'Unable to Complete',
+          'Unable to read the website session.',
+        );
       }
     }
   }
@@ -851,263 +1182,785 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
   );
 
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.controller;
-    final mode = _mode;
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surface,
-      child: TegnalFloatingHeader(
-        header: TegnalPageHeader(
-          controller: c,
-          title: mode == AppMode.manga ? 'Settings' : 'More',
+  Widget _togglePreference(String title, String key, {bool fallback = false}) =>
+      _SettingsRow(
+        title: title,
+        trailing: TegnalSwitch(
+          semanticLabel: L10n.tr(context, title),
+          value: widget.controller.store.setting(key, fallback) == true,
+          onChanged: (value) => widget.controller.setPreference(key, value),
         ),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            tegnalHeaderExtent + 8,
-            16,
-            navigationScrollInset(context, gap: 28),
+      );
+
+  Future<void> _editText(
+    String title,
+    String key, {
+    String fallback = '',
+  }) async {
+    final input = TextEditingController(
+      text: widget.controller.store.setting(key, fallback) as String,
+    );
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(L10n.tr(context, title)),
+        content: TextField(
+          controller: input,
+          minLines: 3,
+          maxLines: 7,
+          autocorrect: false,
+          decoration: InputDecoration(hintText: L10n.tr(context, title)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: Text(L10n.tr(context, 'Cancel')),
           ),
-          children: [
-            _SettingsGroup(
-              title: 'Browsing',
-              children: [
-                for (final source in c.sources(mode))
-                  _SettingsRow(
-                    title: source.name,
-                    subtitle: source.baseUrl.host,
-                    icon: Icons.language,
-                    trailing: c.selectedSource(mode)?.id == source.id
-                        ? const Icon(
-                            Icons.check,
-                            size: 26,
-                            color: Color(0xFF007AFF),
-                          )
-                        : null,
-                    onTap: () => _source(source, mode),
-                  ),
-                _SettingsRow(
-                  title: 'Website Connection',
-                  icon: Icons.language,
-                  onTap: () => showAddSource(context, c, mode: mode),
-                ),
-              ],
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, input.text.trim()),
+            child: Text(L10n.tr(context, 'Save')),
+          ),
+        ],
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    input.dispose();
+    if (value != null) widget.controller.setPreference(key, value);
+  }
+
+  Widget _segments<T>(String key, T current, Map<T, String> options) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    child: SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<T>(
+        segments: [
+          for (final option in options.entries)
+            ButtonSegment<T>(
+              value: option.key,
+              label: Text(L10n.tr(context, option.value), maxLines: 1),
             ),
-            _SettingsGroup(
-              children: [
-                _SettingsRow(
-                  title: 'Downloads',
-                  icon: Icons.download,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => DownloadsScreen(
-                        controller: c,
-                        downloads: widget.downloads,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (mode == AppMode.booru)
+        ],
+        style: SegmentedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          selectedForegroundColor: Theme.of(context).colorScheme.onSurface,
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF303034)
+              : const Color(0xFFE5E5EA),
+          selectedBackgroundColor:
+              Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF636366)
+              : Colors.white,
+          side: BorderSide.none,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+          minimumSize: const Size(0, 34),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle: const TextStyle(
+            fontFamily: 'Pretendard',
+            fontFamilyFallback: ['Pretendard JP'],
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+          ),
+          visualDensity: VisualDensity.compact,
+        ),
+        selected: {current},
+        showSelectedIcon: false,
+        onSelectionChanged: (value) =>
+            widget.controller.setPreference(key, value.first),
+      ),
+    ),
+  );
+
+  Widget _columnPicker(String title, String kind) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        child: Text(
+          L10n.tr(context, title),
+          style: const TextStyle(fontSize: 16),
+        ),
+      ),
+      _segments<int>(
+        '$kind.${_mode.name}',
+        widget.controller.columns(kind, _mode),
+        {0: 'Automatic', for (var i = 1; i <= 5; i++) i: '$i'},
+      ),
+    ],
+  );
+
+  Future<void> _servers() async => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        appBar: AppBar(
+          leading: const TegnalBackButton(),
+          title: Text(L10n.tr(context, 'Servers')),
+        ),
+        body: ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) => ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
               _SettingsGroup(
                 children: [
+                  for (final source in widget.controller.sources(_mode))
+                    _SettingsRow(
+                      title: source.name,
+                      subtitle: source.baseUrl.host,
+                      icon: Icons.dns_outlined,
+                      trailing: _mode == AppMode.booru
+                          ? Checkbox(
+                              value: widget.controller
+                                  .selectedSources(_mode)
+                                  .any((selected) => selected.id == source.id),
+                              onChanged: (enabled) {
+                                final selected = widget.controller
+                                    .selectedSources(_mode)
+                                    .where(
+                                      (selected) => selected.id != source.id,
+                                    )
+                                    .toList();
+                                if (enabled == true) selected.add(source);
+                                widget.controller.selectSources(selected);
+                              },
+                            )
+                          : null,
+                      onTap: () => _source(source, _mode),
+                    ),
                   _SettingsRow(
-                    title: 'Pools',
-                    icon: Icons.layers_outlined,
-                    onTap: () => _openPools(mode),
+                    title: 'Connect a Website',
+                    icon: Icons.add,
+                    onTap: () =>
+                        showAddSource(context, widget.controller, mode: _mode),
                   ),
                 ],
               ),
-            _SettingsGroup(
-              title: 'Appearance',
-              footer: 'Reader preferences are saved separately for each mode.',
-              children: [
-                _SettingsRow(
-                  title: 'Theme',
-                  icon: Icons.contrast,
-                  value: L10n.tr(
-                    context,
-                    {
-                      'system': 'System',
-                      'light': 'Light',
-                      'dark': 'Dark',
-                    }[c.appearance]!,
-                  ),
-                  onTap: () => _select('appearance', c.appearance, {
-                    'system': 'System',
-                    'light': 'Light',
-                    'dark': 'Dark',
-                  }),
-                ),
-                _SettingsRow(
-                  title: 'Language',
-                  icon: Icons.translate,
-                  value:
-                      {
-                        'system': L10n.tr(context, 'System'),
-                        'en': 'English',
-                        'ko': '한국어',
-                        'ja': '日本語',
-                      }[c.language] ??
-                      c.language,
-                  onTap: () => _select('language', c.language, {
-                    'system': 'System',
-                    'en': 'English',
-                    'ko': '한국어',
-                    'ja': '日本語',
-                  }),
-                ),
-              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Future<void> _openLink(String address) async {
+    final uri = Uri.parse(address);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      await showMessage(context, 'Unable to Open', 'No browser is available.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (context, _) {
+      final c = widget.controller;
+      final mode = _mode;
+      final booru = mode == AppMode.booru;
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child: TegnalFloatingHeader(
+          header: TegnalPageHeader(
+            controller: c,
+            title: booru ? 'More' : 'Settings',
+            trailing: booru
+                ? IconButton(
+                    onPressed: _servers,
+                    tooltip: L10n.tr(context, 'Servers'),
+                    icon: const Icon(Icons.dns_outlined),
+                  )
+                : null,
+          ),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              tegnalHeaderExtent + 30,
+              16,
+              navigationScrollInset(context, gap: 28),
             ),
-            _SettingsGroup(
-              title: 'Viewer',
-              children: [
-                _SettingsRow(
-                  title: 'Reader Settings',
-                  icon: Icons.tune,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          _ReaderDefaultsScreen(controller: c, mode: mode),
+            children: [
+              if (c.store.setting('discord.invitation.dismissed', false) !=
+                  true)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 36),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF5865F2),
+                      borderRadius: BorderRadius.circular(32),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                            ),
+                            onPressed: () =>
+                                _openLink('https://discord.gg/DFT9Hm66Gz'),
+                            icon: const Icon(Icons.forum, color: Colors.white),
+                            label: Text(
+                              L10n.tr(context, 'Join us on Discord'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => c.setPreference(
+                            'discord.invitation.dismissed',
+                            true,
+                          ),
+                          tooltip: L10n.tr(context, 'Close'),
+                          icon: const Icon(Icons.close, color: Colors.white),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
-            _SettingsGroup(
-              title: 'Privacy',
-              children: [
-                _SettingsRow(
-                  title: 'Remember Search History',
-                  trailing: TegnalSwitch(
-                    semanticLabel: L10n.tr(context, 'Remember Search History'),
-                    value:
-                        c.store.setting('rememberHistory.${mode.name}', true) ==
-                        true,
-                    onChanged: (v) =>
-                        c.setPreference('rememberHistory.${mode.name}', v),
-                  ),
-                ),
-                _SettingsRow(
-                  title: 'Clear Search History',
-                  icon: Icons.history,
-                  onTap: () async {
-                    if (await confirmAction(
-                      context,
-                      'Clear Search History',
-                      'This clears search history for the current mode.',
-                      action: 'Clear',
-                    )) {
-                      c.clearHistory(mode);
-                    }
-                  },
-                ),
-              ],
-            ),
-            _SettingsGroup(
-              title: 'Data & Storage',
-              footer:
-                  'Import, back up, and move your saved works between devices.',
-              children: [
-                _SettingsRow(
-                  title: 'Library Management',
-                  icon: Icons.inventory_2_outlined,
-                  onTap: _openLibraryManagement,
-                ),
-                _SettingsRow(
-                  title: 'Import from Other Apps',
-                  icon: Icons.move_to_inbox_outlined,
-                  onTap: _importLegacy,
-                ),
-                if (mode == AppMode.booru)
+              _SettingsGroup(
+                children: [
                   _SettingsRow(
-                    title: 'Challenge Roulette',
-                    icon: Icons.timer_outlined,
+                    title: 'Import from Violet',
+                    subtitle: L10n.tr(
+                      context,
+                      'Choose Violet user.db or a catalog database.',
+                    ),
+                    icon: Icons.move_to_inbox_outlined,
                     color: const Color(0xFFAF52DE),
+                    onTap: _importLegacy,
+                  ),
+                ],
+              ),
+              if (booru)
+                _SettingsGroup(
+                  footer: c
+                      .selectedSources(mode)
+                      .map((source) => source.name)
+                      .join(' · '),
+                  children: [
+                    _SettingsRow(
+                      title: 'Challenge Roulette',
+                      icon: Icons.casino_outlined,
+                      color: const Color(0xFFD32EF1),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => ChallengesScreen(controller: c),
+                        ),
+                      ),
+                    ),
+                    _SettingsRow(
+                      title: 'Servers',
+                      icon: Icons.dns_outlined,
+                      onTap: _servers,
+                    ),
+                    _SettingsRow(
+                      title: 'Pools',
+                      icon: Icons.layers_outlined,
+                      onTap: () => _openPools(mode),
+                    ),
+                    _SettingsRow(
+                      title: 'Downloads',
+                      icon: Icons.download_for_offline_outlined,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => DownloadsScreen(
+                            controller: c,
+                            downloads: widget.downloads,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              if (!booru)
+                _SettingsGroup(
+                  title: 'Browsing',
+                  footer: 'Use the website if the native viewer stops working. Turn off to return to the native viewer.',
+                  children: [
+                    _SettingsRow(
+                      title: 'Website Connection',
+                      icon: Icons.language,
+                      onTap: _servers,
+                    ),
+                    _togglePreference(
+                      'Use Embedded Browser',
+                      'useEmbeddedBrowser.${mode.name}',
+                    ),
+                    _togglePreference(
+                      'Show Work Information Before Reading',
+                      'showInformationBeforeReading.manga',
+                    ),
+                  ],
+                ),
+              if (!booru)
+                _SettingsGroup(
+                  children: [
+                    _SettingsRow(
+                      title: 'Downloads',
+                      icon: Icons.download_for_offline_outlined,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => DownloadsScreen(
+                            controller: c,
+                            downloads: widget.downloads,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              _SettingsGroup(
+                title: 'Appearance',
+                footer: 'Spacing and text scale with thumbnail size. Show Without Spacing removes grid margins, gaps and card padding.',
+                children: [
+                  _segments<String>(
+                    'appearance.${mode.name}',
+                    c.appearanceFor(mode),
+                    {
+                      'dark': 'Dark Mode',
+                      'light': 'Light Mode',
+                      'system': 'System Default',
+                    },
+                  ),
+                  _columnPicker('Folder Columns', 'folderColumns'),
+                  _columnPicker('Grid Columns', 'gridColumns'),
+                  _togglePreference(
+                    'Show Without Spacing',
+                    'removesGridPadding.${mode.name}',
+                  ),
+                  if (!booru) ...[
+                    _SettingsRow(
+                      title: 'Preview Columns',
+                      value: '${c.store.setting('previewColumns.manga', 0)}',
+                      onTap: () => _select(
+                        'previewColumns.manga',
+                        '${c.store.setting('previewColumns.manga', 0)}',
+                        {
+                          '0': 'Automatic (2× Grid)',
+                          for (var i = 1; i <= 10; i++) '$i': '$i',
+                        },
+                      ),
+                    ),
+                    _SettingsRow(
+                      title: 'Preview Rows per Page',
+                      value: '${c.store.setting('previewRows.manga', 5)}',
+                      onTap: () => _select(
+                        'previewRows.manga',
+                        '${c.store.setting('previewRows.manga', 5)}',
+                        {for (var i = 1; i <= 10; i++) '$i': '$i'},
+                      ),
+                    ),
+                    _togglePreference(
+                      'Show Work Titles',
+                      'showsMangaTitles.manga',
+                      fallback: true,
+                    ),
+                    _togglePreference(
+                      'Show Work Artists',
+                      'showsMangaArtists.manga',
+                      fallback: true,
+                    ),
+                  ],
+                ],
+              ),
+              _SettingsGroup(
+                title: 'Language',
+                children: [
+                  _SettingsRow(
+                    title: 'Language',
+                    icon: Icons.translate,
+                    value: {
+                      'system': L10n.tr(context, 'System'),
+                      'en': 'English',
+                      'ko': '한국어',
+                      'ja': '日本語',
+                    }[c.language],
+                    onTap: () => _select('language', c.language, {
+                      'system': 'System',
+                      'en': 'English',
+                      'ko': '한국어',
+                      'ja': '日本語',
+                    }),
+                  ),
+                ],
+              ),
+              if (!booru)
+                _SettingsGroup(
+                  title: 'Search',
+                  footer: 'Applied to every native manga search, including artist pages. Separate tags with spaces; use underscores within a tag. Excluded tags are automatically prefixed with a minus sign.',
+                  children: [
+                    _togglePreference(
+                      'Allow Language Filter Exceptions',
+                      'allowsLanguageExceptions.manga',
+                    ),
+                    _SettingsRow(
+                      title: 'Default Search Tags',
+                      icon: Icons.filter_list,
+                      onTap: () =>
+                          _editText('Default Tags', 'defaultTags.manga'),
+                    ),
+                    _SettingsRow(
+                      title: 'Default Excluded Tags',
+                      icon: Icons.filter_list_off,
+                      onTap: () => _editText(
+                        'Default Excluded Tags',
+                        'defaultExcludedTags.manga',
+                      ),
+                    ),
+                  ],
+                ),
+              if (booru)
+                _SettingsGroup(
+                  title: 'Browsing',
+                  footer: 'Use the website if the native viewer stops working. Turn off to return to the native viewer.',
+                  children: [
+                    _SettingsRow(
+                      title: 'Reduce Image Data Further',
+                      trailing: TegnalSwitch(
+                        semanticLabel: L10n.tr(
+                          context,
+                          'Reduce Image Data Further',
+                        ),
+                        value: c.readerPreferences(mode).reducedData,
+                        onChanged: (value) => c.setReaderPreferences(
+                          mode,
+                          c
+                              .readerPreferences(mode)
+                              .copyWith(reducedData: value),
+                        ),
+                      ),
+                    ),
+                    _togglePreference(
+                      'Use Embedded Browser',
+                      'useEmbeddedBrowser.${mode.name}',
+                    ),
+                    _togglePreference(
+                      'Fit Entire Thumbnails',
+                      'fitThumbnails.booru',
+                    ),
+                  ],
+                ),
+              _SettingsGroup(
+                title: 'Viewer',
+                footer: 'Appearance and reader preferences are saved separately for each mode.',
+                children: [
+                  _SettingsRow(
+                    title: 'Reader Settings',
+                    icon: Icons.tune,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute<void>(
-                        builder: (_) => ChallengesScreen(controller: c),
+                        builder: (_) =>
+                            ReaderDefaultsScreen(controller: c, mode: mode),
                       ),
                     ),
                   ),
-              ],
-            ),
-            _SettingsGroup(
-              title: 'On-Device AI',
-              footer: 'AI features are available only with supported, already installed system services. TEGNAL never downloads AI models.',
-              children: [
-                _SettingsRow(
-                  title: 'System AI',
-                  icon: Icons.auto_awesome,
-                  value: L10n.tr(
-                    context,
-                    c.ai.available ? 'Available' : 'Unavailable',
+                ],
+              ),
+              _SettingsGroup(
+                title: 'Privacy',
+                children: [
+                  _togglePreference(
+                    'Remember Search History',
+                    'rememberHistory.${mode.name}',
+                    fallback: true,
                   ),
-                ),
-                _SettingsRow(
-                  title: 'Local Statistics',
-                  icon: Icons.bar_chart,
-                  value: L10n.tr(context, 'Available'),
-                ),
-              ],
-            ),
-            _SettingsGroup(
-              title: 'Sync',
-              footer: 'Sync your library through Google Drive, or transfer an iPhone JSON backup.',
-              children: [
-                _SettingsRow(
-                  title: 'Google Drive Sync',
-                  icon: Icons.cloud_sync_outlined,
-                  onTap: widget.driveSync == null
-                      ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) =>
-                                DriveSyncScreen(sync: widget.driveSync!),
+                  _SettingsRow(
+                    title: 'Keep History',
+                    value: L10n.tr(
+                      context,
+                      {0: 'Always', 3: '3 Days', 7: '7 Days', 30: '30 Days'}[c
+                              .store
+                              .setting('historyRetention.${mode.name}', 0)] ??
+                          'Always',
+                    ),
+                    onTap: () => _select(
+                      'historyRetention.${mode.name}',
+                      '${c.store.setting('historyRetention.${mode.name}', 0)}',
+                      {
+                        '0': 'Always',
+                        '3': '3 Days',
+                        '7': '7 Days',
+                        '30': '30 Days',
+                      },
+                    ),
+                  ),
+                  _SettingsRow(
+                    title: 'Clear Search History',
+                    icon: Icons.history,
+                    onTap: () async {
+                      if (await confirmAction(
+                        context,
+                        'Clear Search History',
+                        'This clears search history for the current mode.',
+                        action: 'Clear',
+                      )) {
+                        c.clearHistory(mode);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              _SettingsGroup(
+                title: 'On-Device AI',
+                footer: 'AI features are available only with supported, already installed system services. TEGNAL never downloads AI models.',
+                children: [
+                  _SettingsRow(
+                    title: 'System AI',
+                    icon: Icons.auto_awesome,
+                    value: L10n.tr(
+                      context,
+                      c.ai.available ? 'Available' : 'Unavailable',
+                    ),
+                  ),
+                  _SettingsRow(
+                    title: 'Local Statistics',
+                    icon: Icons.bar_chart,
+                    value: L10n.tr(context, 'Available'),
+                  ),
+                  _SettingsRow(
+                    title: 'Taste Analysis',
+                    icon: Icons.auto_awesome,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            _TasteSettingsScreen(controller: c, mode: mode),
+                      ),
+                    ),
+                  ),
+                  _SettingsRow(
+                    title: 'Analysis excluded tags',
+                    icon: Icons.filter_list,
+                    onTap: () => _editExclusions(),
+                  ),
+                ],
+              ),
+              _SettingsGroup(
+                title: 'Sync',
+                footer: AppFeatures.googleDriveSyncEnabled
+                    ? 'Sync your library through Google Drive, or transfer an iPhone JSON backup.'
+                    : 'Google Drive sync is temporarily disabled. You can still import and export JSON backups.',
+                children: [
+                  _SettingsRow(
+                    title: 'Google Drive Sync',
+                    icon: Icons.cloud_sync_outlined,
+                    subtitle: AppFeatures.googleDriveSyncEnabled
+                        ? null
+                        : L10n.tr(context, 'Temporarily unavailable'),
+                    onTap:
+                        !AppFeatures.googleDriveSyncEnabled ||
+                            widget.driveSync == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  DriveSyncScreen(sync: widget.driveSync!),
+                            ),
                           ),
+                  ),
+                  _SettingsRow(
+                    title: 'Transfer Library',
+                    icon: Icons.sync,
+                    onTap: _openLibraryManagement,
+                  ),
+                ],
+              ),
+              if (booru)
+                _SettingsGroup(
+                  title: 'Safe Mode',
+                  footer: 'Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches.',
+                  children: [
+                    _togglePreference('Safe Mode', 'safeMode.booru'),
+                    if (c.modePreference('safeMode', mode))
+                      _SettingsRow(
+                        title: 'Age Guide',
+                        value: L10n.tr(
+                          context,
+                          const {'g': 'All Ages', 's': '12+', 'q': '15+'}[c
+                                  .store
+                                  .setting('safeRating.booru', 'g')] ??
+                              'All Ages',
                         ),
-                ),
-                _SettingsRow(
-                  title: 'Transfer Library',
-                  icon: Icons.sync,
-                  onTap: _openLibraryManagement,
-                ),
-              ],
-            ),
-            _SettingsGroup(
-              title: 'Help & Privacy',
-              children: [
-                _SettingsRow(
-                  title: 'Replay Onboarding',
-                  icon: Icons.school_outlined,
-                  onTap: () =>
-                      Navigator.of(context, rootNavigator: true).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) =>
-                              OnboardingScreen(controller: c, mode: mode),
+                        onTap: () => _select(
+                          'safeRating.booru',
+                          c.store.setting('safeRating.booru', 'g') as String,
+                          {'g': 'All Ages', 's': '12+', 'q': '15+'},
                         ),
                       ),
+                    if (c.modePreference('safeMode', mode))
+                      _SettingsRow(
+                        title: 'Default Search Tag',
+                        value:
+                            'rating:${c.store.setting('safeRating.booru', 'g')}',
+                      ),
+                  ],
                 ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'TEGNAL · NextLine',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+              _SettingsGroup(
+                title: 'Data & Storage',
+                children: [
+                  _SettingsRow(
+                    title: 'Library Management',
+                    icon: Icons.inventory_2_outlined,
+                    onTap: _openLibraryManagement,
+                  ),
+                  _SettingsRow(
+                    title: 'Import from Other Apps',
+                    icon: Icons.move_to_inbox_outlined,
+                    onTap: _importLegacy,
+                  ),
+                  _SettingsRow(
+                    title: 'Clear Image Cache',
+                    icon: Icons.cleaning_services_outlined,
+                    onTap: () async {
+                      if (await confirmAction(
+                        context,
+                        'Clear Image Cache?',
+                        'Saved favorites are kept. Images will be downloaded again when needed.',
+                        action: 'Clear',
+                      )) {
+                        await SessionImageLoader.clearCache();
+                        if (context.mounted) {
+                          await showMessage(
+                            context,
+                            'Image Cache Cleared',
+                            'Saved favorites are kept.',
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
               ),
-            ),
-          ],
+              _SettingsGroup(
+                title: 'Help & Privacy',
+                children: [
+                  _SettingsRow(
+                    title: 'Keyboard & Mouse',
+                    icon: Icons.keyboard_outlined,
+                    onTap: () => _guide(),
+                  ),
+                  _SettingsRow(
+                    title: 'Replay Onboarding',
+                    icon: Icons.school_outlined,
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                OnboardingScreen(controller: c, mode: mode),
+                          ),
+                        ),
+                  ),
+                  _SettingsRow(
+                    title: 'Privacy Policy',
+                    icon: Icons.privacy_tip_outlined,
+                    onTap: () => _openLink(
+                      'https://github.com/nextline-ai/tegnal/blob/main/docs/privacy-policy.md',
+                    ),
+                  ),
+                  _SettingsRow(
+                    title: 'Open Source Licenses',
+                    icon: Icons.description_outlined,
+                    onTap: () => showLicensePage(
+                      context: context,
+                      applicationName: 'TEGNAL',
+                      applicationVersion: '1.0.0-beta.1',
+                    ),
+                  ),
+                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.1'),
+                ],
+              ),
+              _SettingsGroup(
+                title: 'Developer',
+                children: [
+                  const _SettingsRow(title: 'Developer', value: 'NextLine'),
+                  _SettingsRow(
+                    title: 'Website',
+                    icon: Icons.language,
+                    value: 'nextline.work',
+                    onTap: () => _openLink('https://nextline.work'),
+                  ),
+                  _SettingsRow(
+                    title: 'Email',
+                    icon: Icons.email_outlined,
+                    value: 'contact@nextline.work',
+                    onTap: () => _openLink('mailto:contact@nextline.work'),
+                  ),
+                  _SettingsRow(
+                    title: 'Community & Bug Reports',
+                    icon: Icons.forum_outlined,
+                    onTap: () => _openLink('https://discord.gg/DFT9Hm66Gz'),
+                  ),
+                  _SettingsRow(
+                    title: 'View on GitHub',
+                    icon: Icons.code,
+                    onTap: () =>
+                        _openLink('https://github.com/nextline-ai/tegnal'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
+      );
+    },
+  );
+
+  Future<void> _editExclusions() async {
+    final key = 'insights.exclusions.${_mode.name}';
+    final stored = widget.controller.store.setting(key);
+    final initial = stored is List
+        ? stored.whereType<String>()
+        : InsightPreferences.defaults(_mode);
+    final input = TextEditingController(text: initial.join('\n'));
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(L10n.tr(context, 'Analysis excluded tags')),
+        content: TextField(controller: input, minLines: 4, maxLines: 8),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: Text(L10n.tr(context, 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, input.text),
+            child: Text(L10n.tr(context, 'Save')),
+          ),
+        ],
       ),
     );
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    input.dispose();
+    if (value != null) {
+      widget.controller.setPreference(
+        key,
+        value
+            .split(RegExp(r'[\n\r]+'))
+            .map((v) => v.trim())
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList(),
+      );
+    }
   }
+
+  Future<void> _guide() => showMessage(
+    context,
+    'Keyboard & Mouse',
+    'Arrow keys: turn pages\nPage Up / Page Down: previous / next\nHome / End: first / last page\nSpace: quick menu\nEscape: close menu or reader\nDouble tap or pinch: zoom\nHold: bookmark',
+  );
 }
 
 /// Modern inset groups use the same generous corners and separators as the
@@ -1181,7 +2034,7 @@ class _SettingsRow extends StatelessWidget {
     this.value,
     this.trailing,
     this.onTap,
-    this.color = const Color(0xFF007AFF),
+    this.color,
     this.action = false,
   });
   final String title;
@@ -1190,10 +2043,11 @@ class _SettingsRow extends StatelessWidget {
   final String? value;
   final Widget? trailing;
   final VoidCallback? onTap;
-  final Color color;
+  final Color? color;
   final bool action;
   @override
   Widget build(BuildContext context) {
+    final tint = color ?? Theme.of(context).colorScheme.primary;
     final label = Theme.of(context).colorScheme.onSurface;
     final showChevron = trailing == null && onTap != null && !action;
     final hasTrailingArea = value != null || trailing != null || showChevron;
@@ -1201,14 +2055,14 @@ class _SettingsRow extends StatelessWidget {
         .clamp(96.0, 200.0)
         .toDouble();
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 26),
         child: Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 30, color: color),
-              const SizedBox(width: 16),
+              Icon(icon, size: 26, color: tint),
+              const SizedBox(width: 12),
             ],
             Expanded(
               child: Column(
@@ -1218,7 +2072,8 @@ class _SettingsRow extends StatelessWidget {
                     L10n.tr(context, title),
                     style: TextStyle(
                       fontSize: 17,
-                      color: action ? color : label,
+                      fontWeight: FontWeight.w400,
+                      color: action ? tint : label,
                     ),
                   ),
                   if (subtitle != null)
@@ -1250,9 +2105,7 @@ class _SettingsRow extends StatelessWidget {
                         textAlign: TextAlign.end,
                         style: TextStyle(
                           fontSize: 15,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurfaceVariant,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1322,6 +2175,82 @@ class _LibraryManagementScreenState extends State<_LibraryManagementScreen> {
               padding: EdgeInsets.all(16),
               child: CircularProgressIndicator(),
             ),
+          if (widget.controller.mode == AppMode.manga)
+            ListenableBuilder(
+              listenable: widget.controller,
+              builder: (context, _) {
+                final c = widget.controller;
+                final works = c.savedItems(mode: AppMode.manga);
+                return Column(
+                  children: [
+                    _SettingsGroup(
+                      title: 'Library Status',
+                      children: [
+                        _SettingsRow(
+                          title: 'Saved Works',
+                          value: '${works.length}',
+                        ),
+                        _SettingsRow(
+                          title: 'Missing Titles',
+                          value:
+                              '${works.where((entry) => entry.item.title.trim().isEmpty || entry.item.title == '#${entry.item.id}').length}',
+                        ),
+                        _SettingsRow(
+                          title: 'Catalog Matches',
+                          value:
+                              '${works.where((entry) => entry.item.metadata['catalog_matched'] == true || entry.item.metadata['metadata_source'] == 'catalog').length}',
+                        ),
+                      ],
+                    ),
+                    _SettingsGroup(
+                      title: 'Automatic Fetching',
+                      footer: 'Fetch missing covers and metadata in the background.',
+                      children: [
+                        _SettingsRow(
+                          title: c.metadataFillRunning
+                              ? 'Pause'
+                              : 'Fill Covers, Titles, and Tags',
+                          icon: c.metadataFillRunning
+                              ? Icons.pause_circle_outline
+                              : Icons.play_circle_outline,
+                          value: c.metadataFillTotal > 0
+                              ? '${c.metadataFillCompleted}/${c.metadataFillTotal} · ${c.metadataFillFailed}'
+                              : null,
+                          onTap: c.metadataFillRunning
+                              ? c.pauseMetadataFill
+                              : () => c.fillMissingMetadata(
+                                  cacheCover: (item) async {
+                                    final url = item.thumbnailUrl;
+                                    if (url != null && url.scheme == 'https') {
+                                      await SessionImageLoader(
+                                        maximumBytes: 16 * 1024 * 1024,
+                                      ).load(
+                                        url,
+                                        headers: {
+                                          if (item.pageUrl != null)
+                                            'Referer': item.pageUrl.toString(),
+                                        },
+                                      );
+                                    }
+                                  },
+                                ),
+                        ),
+                        if (c.metadataFillRunning)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: LinearProgressIndicator(
+                              value: c.metadataFillTotal == 0
+                                  ? 0
+                                  : c.metadataFillCompleted /
+                                        c.metadataFillTotal,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
           _SettingsGroup(
             title: 'Backup & Restore',
             footer: 'One JSON file backs up both libraries, including folders, saved works, artists, tags, searches and servers. Media, caches and sign-in details are not included.',
@@ -1356,7 +2285,8 @@ class _LibraryManagementScreenState extends State<_LibraryManagementScreen> {
                   ),
                 ),
               _SettingsRow(
-                title: 'Import Violet / Anime Boxes',
+                title: 'Import from Violet',
+                subtitle: 'Violet / Anime Boxes',
                 icon: Icons.move_to_inbox_outlined,
                 onTap: _busy ? null : () => _run(widget.onImport),
               ),
@@ -1373,15 +2303,19 @@ class _LibraryManagementScreenState extends State<_LibraryManagementScreen> {
   );
 }
 
-class _ReaderDefaultsScreen extends StatefulWidget {
-  const _ReaderDefaultsScreen({required this.controller, required this.mode});
+class ReaderDefaultsScreen extends StatefulWidget {
+  const ReaderDefaultsScreen({
+    super.key,
+    required this.controller,
+    required this.mode,
+  });
   final AppController controller;
   final AppMode mode;
   @override
-  State<_ReaderDefaultsScreen> createState() => _ReaderDefaultsScreenState();
+  State<ReaderDefaultsScreen> createState() => ReaderDefaultsScreenState();
 }
 
-class _ReaderDefaultsScreenState extends State<_ReaderDefaultsScreen> {
+class ReaderDefaultsScreenState extends State<ReaderDefaultsScreen> {
   late ReaderPreferences _prefs = widget.controller.readerPreferences(
     widget.mode,
   );
@@ -1399,6 +2333,40 @@ class _ReaderDefaultsScreenState extends State<_ReaderDefaultsScreen> {
           onChanged: change,
         ),
       );
+  Future<void> _choose<T>(
+    String title,
+    T current,
+    Map<T, String> options,
+    ValueChanged<T> changed,
+  ) async {
+    final value = await showModalBottomSheet<T>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: RadioGroup<T>(
+            groupValue: current,
+            onChanged: (value) => Navigator.pop(sheet, value),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final option in options.entries)
+                  RadioListTile<T>(
+                    value: option.key,
+                    title: Text(L10n.tr(context, option.value)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (value != null) changed(value);
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -1406,6 +2374,61 @@ class _ReaderDefaultsScreenState extends State<_ReaderDefaultsScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.mode == AppMode.manga)
+            _SettingsGroup(
+              title: 'Reading Progress',
+              children: [
+                _SettingsRow(
+                  title: 'When Reopening a Work',
+                  value: L10n.tr(
+                    context,
+                    {
+                      ReaderResumeBehavior.ask: 'Ask Before Continuing',
+                      ReaderResumeBehavior.continueReading: 'Continue Reading',
+                      ReaderResumeBehavior.fromBeginning:
+                          'Start from Beginning',
+                    }[_prefs.resumeBehavior]!,
+                  ),
+                  onTap: () => _choose<ReaderResumeBehavior>(
+                    'When Reopening a Work',
+                    _prefs.resumeBehavior,
+                    {
+                      ReaderResumeBehavior.ask: 'Ask Before Continuing',
+                      ReaderResumeBehavior.continueReading: 'Continue Reading',
+                      ReaderResumeBehavior.fromBeginning:
+                          'Start from Beginning',
+                    },
+                    (value) => _update(_prefs.copyWith(resumeBehavior: value)),
+                  ),
+                ),
+              ],
+            ),
+          if (widget.mode == AppMode.manga)
+            _SettingsGroup(
+              title: 'Multiple Pages at Once',
+              children: [
+                _SettingsRow(
+                  title: 'Pages per View',
+                  value: '${_prefs.pagesPerSpread}',
+                  onTap: () => _choose<int>(
+                    'Pages per View',
+                    _prefs.pagesPerSpread,
+                    {for (var i = 1; i <= 4; i++) i: '$i'},
+                    (value) => _update(_prefs.copyWith(pagesPerSpread: value)),
+                  ),
+                ),
+                _SettingsRow(
+                  title: 'Prefetch Pages',
+                  value: '${_prefs.prefetch}',
+                  onTap: () => _choose<int>('Prefetch Pages', _prefs.prefetch, {
+                    0: 'Off',
+                    2: '2 Pages',
+                    3: '3 Pages',
+                    5: '5 Pages',
+                  }, (value) => _update(_prefs.copyWith(prefetch: value))),
+                ),
+              ],
+            ),
           if (widget.mode == AppMode.manga)
             _SettingsGroup(
               title: 'Reading Mode',
@@ -1500,6 +2523,57 @@ class _ReaderDefaultsScreenState extends State<_ReaderDefaultsScreen> {
                   (v) => _update(_prefs.copyWith(showNotes: v)),
                 ),
               _toggle(
+                'Show Quick Menu at Bottom',
+                _prefs.bottomMenu,
+                (value) => _update(_prefs.copyWith(bottomMenu: value)),
+              ),
+              if (widget.mode == AppMode.booru) ...[
+                _toggle(
+                  'Right to left',
+                  _prefs.rightToLeft,
+                  (value) => _update(_prefs.copyWith(rightToLeft: value)),
+                ),
+                _toggle(
+                  'Tap to turn pages',
+                  _prefs.tapNavigation,
+                  (value) => _update(_prefs.copyWith(tapNavigation: value)),
+                ),
+                _toggle(
+                  'Show page number',
+                  _prefs.showPageNumber,
+                  (value) => _update(_prefs.copyWith(showPageNumber: value)),
+                ),
+                _toggle(
+                  'Auto advance',
+                  _prefs.autoAdvance,
+                  (value) => _update(_prefs.copyWith(autoAdvance: value)),
+                ),
+                if (_prefs.autoAdvance)
+                  _SettingsRow(
+                    title: 'Seconds per page',
+                    value: '${_prefs.autoSeconds}',
+                    onTap: () => _choose<int>(
+                      'Seconds per page',
+                      _prefs.autoSeconds,
+                      {for (var i = 2; i <= 120; i++) i: '$i'},
+                      (value) => _update(_prefs.copyWith(autoSeconds: value)),
+                    ),
+                  ),
+                _toggle(
+                  'Reduce Image Data Further',
+                  _prefs.reducedData,
+                  (value) => _update(_prefs.copyWith(reducedData: value)),
+                ),
+              ],
+              if (widget.mode == AppMode.manga &&
+                  _prefs.readingMode == ReadingMode.continuous)
+                _toggle(
+                  'Swipe Up for Previews',
+                  _prefs.continuousPreviewSwipe,
+                  (value) =>
+                      _update(_prefs.copyWith(continuousPreviewSwipe: value)),
+                ),
+              _toggle(
                 'Keep screen awake',
                 _prefs.keepAwake,
                 (v) => _update(_prefs.copyWith(keepAwake: v)),
@@ -1521,12 +2595,321 @@ class _ReaderDefaultsScreenState extends State<_ReaderDefaultsScreen> {
               ),
             ],
           ),
+          _SettingsGroup(
+            title: 'Gesture Guide',
+            children: [
+              _SettingsRow(
+                title: 'Reader Guide',
+                icon: Icons.touch_app_outlined,
+                onTap: () =>
+                    showReaderGuide(context, widget.controller, widget.mode),
+              ),
+            ],
+          ),
         ],
       ),
     ),
     appBar: AppBar(
       leading: const TegnalBackButton(),
       title: Text(L10n.tr(context, 'Reader Settings')),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(L10n.tr(context, 'Done')),
+        ),
+      ],
+    ),
+  );
+}
+
+class _TasteSettingsScreen extends StatelessWidget {
+  const _TasteSettingsScreen({required this.controller, required this.mode});
+  final AppController controller;
+  final AppMode mode;
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      leading: const TegnalBackButton(),
+      title: Text(L10n.tr(context, 'Taste Analysis Settings')),
+    ),
+    body: ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _SettingsGroup(
+            children: [
+              for (final title in ['Weekly statistics', 'Monthly Recap'])
+                _SettingsRow(
+                  title: title,
+                  icon: Icons.bar_chart_outlined,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => InsightsScreen(
+                        controller: controller,
+                        mode: mode,
+                        reportDays: title == 'Weekly statistics' ? 7 : 30,
+                        onSearch: (query) =>
+                            controller.search(query: query, forMode: mode),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          _SettingsGroup(
+            title: 'Taste Analysis',
+            footer: 'New taste evidence, recommendations and reports pause on this device. Existing analysis and saved works are kept.',
+            children: [
+              _SettingsRow(
+                title: 'Taste Analysis',
+                trailing: TegnalSwitch(
+                  semanticLabel: L10n.tr(context, 'Taste Analysis'),
+                  value: controller.taste.enabled,
+                  onChanged: (value) async {
+                    if (value ||
+                        await confirmAction(
+                          context,
+                          'Turn off taste analysis?',
+                          'New taste evidence, recommendations and reports pause on this device. Existing analysis and saved works are kept.',
+                          action: 'Turn Off',
+                        )) {
+                      controller.taste.setEnabled(value);
+                      controller.changed();
+                    }
+                  },
+                ),
+              ),
+              for (final source in controller.sources(mode))
+                _SettingsRow(
+                  title: source.name,
+                  subtitle: L10n.tr(context, 'Recommendation filters'),
+                  icon: Icons.filter_list,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => _RecommendationSettingsScreen(
+                        controller: controller,
+                        source: source,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          _SettingsGroup(
+            footer: 'Deletes activity, preference evidence, and reports. Your saved works remain. Existing works will not be automatically analyzed again.',
+            children: [
+              _SettingsRow(
+                title: 'Delete all analysis data',
+                icon: Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+                action: true,
+                onTap: () async {
+                  if (await confirmAction(
+                    context,
+                    'Delete all analysis data?',
+                    'Deletes activity, preference evidence, and reports. Your saved works remain. Existing works will not be automatically analyzed again.',
+                    action: 'Delete',
+                  )) {
+                    controller.taste.reset();
+                    controller.changed();
+                  }
+                },
+              ),
+              _SettingsRow(
+                title: 'Analysis time zone',
+                value: DateTime.now().timeZoneName,
+              ),
+              const _SettingsRow(
+                title: 'Retention',
+                value: 'Until you delete it',
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _RecommendationSettingsScreen extends StatelessWidget {
+  const _RecommendationSettingsScreen({
+    required this.controller,
+    required this.source,
+  });
+  final AppController controller;
+  final SourceConfig source;
+  Future<void> _tags(
+    BuildContext context,
+    String title,
+    String key,
+    List<String> defaults,
+  ) async {
+    final stored = Map<String, dynamic>.from(
+      controller.store.setting(key, <String, dynamic>{}) as Map,
+    );
+    final current = stored[source.id] as List? ?? defaults;
+    final input = TextEditingController(text: current.join('\n'));
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        scrollable: true,
+        title: Text(L10n.tr(context, title)),
+        content: TextField(
+          controller: input,
+          minLines: 4,
+          maxLines: 8,
+          autocorrect: false,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: Text(L10n.tr(context, 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, input.text),
+            child: Text(L10n.tr(context, 'Save')),
+          ),
+        ],
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    input.dispose();
+    if (value != null) {
+      stored[source.id] = value
+          .split(RegExp(r'[\n\r]+'))
+          .map(InsightPreferences.normalize)
+          .where((value) => value.isNotEmpty && !value.startsWith('-'))
+          .toSet()
+          .toList();
+      controller.setPreference(key, stored);
+    }
+  }
+
+  Future<void> _choose(
+    BuildContext context,
+    String title,
+    String field,
+    Map<String, String> options,
+  ) async {
+    final key = 'recommendation.filters.${source.id}';
+    final filters = Map<String, dynamic>.from(
+      controller.store.setting(key, <String, dynamic>{}) as Map,
+    );
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      builder: (sheet) => RadioGroup<String>(
+        groupValue: filters[field] as String? ?? options.keys.first,
+        onChanged: (value) => Navigator.pop(sheet, value),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final option in options.entries)
+                RadioListTile<String>(
+                  value: option.key,
+                  title: Text(L10n.tr(context, option.value)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null) {
+      filters[field] = selected;
+      controller.setPreference(key, filters);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(leading: const TegnalBackButton(), title: Text(source.name)),
+    body: ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final preferences = controller.taste.preferences(source.mode);
+        final filters = controller.store.setting(
+          'recommendation.filters.${source.id}',
+          <String, dynamic>{},
+        ) as Map;
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _SettingsGroup(
+              title: 'Smart Recommendations',
+              footer: 'Only this server uses these filters. All included tags must match. No language is required unless you choose one. Changes apply when you refresh recommendations.',
+              children: [
+                if (source.mode == AppMode.manga)
+                  _SettingsRow(
+                    title: 'Language',
+                    value: '${filters['language'] ?? 'all'}',
+                    onTap: () => _choose(context, 'Language', 'language', {
+                      'all': 'All',
+                      'korean': 'Korean',
+                      'japanese': 'Japanese',
+                      'english': 'English',
+                    }),
+                  ),
+                _SettingsRow(
+                  title: 'Sort',
+                  value: '${filters['sort'] ?? 'recommended'}',
+                  onTap: () => _choose(context, 'Sort', 'sort', {
+                    'recommended': 'Recommended',
+                    'latest': 'Latest',
+                    if (source.mode == AppMode.manga) ...{
+                      'today': 'Popular Today',
+                      'week': 'Popular This Week',
+                      'month': 'Popular This Month',
+                      'year': 'Popular This Year',
+                    },
+                    if (source.mode == AppMode.booru)
+                      for (final sort in BooruSort.supportedBy([
+                        source,
+                      ]).where((sort) => sort != BooruSort.latest))
+                        sort.name: sort.title,
+                  }),
+                ),
+                _SettingsRow(
+                  title: 'Default included tags',
+                  value:
+                      '${preferences.includedBySource[source.id]?.length ?? 0}',
+                  onTap: () => _tags(
+                    context,
+                    'Default included tags',
+                    'recommendation.includedTags',
+                    const [],
+                  ),
+                ),
+                _SettingsRow(
+                  title: 'Excluded taste tags',
+                  value:
+                      '${preferences.excludedRecommendationBySource[source.id]?.length ?? 0}',
+                  onTap: () => _tags(
+                    context,
+                    'Excluded taste tags',
+                    'recommendation.excludedTags',
+                    const [],
+                  ),
+                ),
+                _SettingsRow(
+                  title: 'Analysis excluded tags',
+                  value:
+                      '${(preferences.excludedBySource[source.id] ?? preferences.excludedTags).length}',
+                  onTap: () => _tags(
+                    context,
+                    'Analysis excluded tags',
+                    'insights.exclusionsBySource.${source.mode.name}',
+                    preferences.excludedTags.toList(),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     ),
   );
 }

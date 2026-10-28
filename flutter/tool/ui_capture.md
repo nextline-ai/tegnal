@@ -58,3 +58,36 @@ buttons, and manga metadata before/after deliberate scrolling to previews.
 Fixtures implement the same HTTP client interface as the shared authenticated
 image transport; decoded-image assertions prevent error placeholders from being
 mistaken for successful artwork rendering.
+
+For the native screenshot comparison at 402×874 logical pixels:
+
+```sh
+flutter test --no-pub --dart-define=TEGNAL_CAPTURE_UI=true --dart-define=TEGNAL_CAPTURE_NATIVE_PARITY=true test/ui/ui_capture_test.dart
+```
+
+The 15 frames under `build/ui-captures/native-parity/after/` cover Saved,
+Explore, selection, the olive artwork viewer and bottom quick menu, folder
+context/color/reorder sheets, saved searches, focused history, settings, Safe
+Mode, backup, and a 320px window at 150% text. The harness requires decoded
+artwork before saving the main browsing frames. Each thumbnail uses its own
+bounded 640px rendition; full viewer media retains the original local artwork.
+The fixture reads native marketing folder order, saved searches and history.
+It opts into the bottom viewer menu only for the corresponding reference shot.
+The focused history frame simulates keyboard insets without drawing an OS
+keyboard. Use `TEGNAL_CAPTURE_STAGE=before` to keep a separate baseline directory.
+
+For Violet onboarding/prominent settings import, automatic creation colors and the
+paused Google Drive entry:
+
+```sh
+flutter test --no-pub --dart-define=TEGNAL_CAPTURE_UI=true --dart-define=TEGNAL_CAPTURE_SETUP_REFINEMENT=true test/ui/ui_capture_test.dart
+```
+
+Six frames in `build/ui-captures/setup-refinement/` show name-only creation,
+automatically assigned native palette colors, the first-screen Violet shortcut,
+the primary Violet import card, the settings shortcut and disabled Drive status.
+The creation capture cancels first, verifies no folder was created, then saves
+three folders and verifies their automatic colors. Existing-folder Change Color
+remains available separately.
+`violet_setup_test.dart` separately picks a temporary real Violet `user.db` through
+the file-selector channel and verifies import through both visible entry points.

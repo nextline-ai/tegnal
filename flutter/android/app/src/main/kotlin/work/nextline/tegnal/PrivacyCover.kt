@@ -3,8 +3,8 @@ package work.nextline.tegnal
 import android.app.Activity
 import android.app.ActivityManager
 import android.view.WindowManager
-import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -207,6 +207,11 @@ class PrivacyCover(private val activity: Activity) {
 
     private fun updateVisibleArtwork() {
         runOnMain {
+            // Flutter supplies the saved theme, including an explicit light
+            // choice. Keep uncovered window/IME transition pixels consistent.
+            activity.window.setBackgroundDrawable(
+                ColorDrawable(if (isDarkAppearance()) Color.BLACK else Color.WHITE),
+            )
             updateTaskAppearance()
             val cover = artwork ?: return@runOnMain
             if (cover.parent == null) return@runOnMain
@@ -219,10 +224,7 @@ class PrivacyCover(private val activity: Activity) {
         }
     }
 
-    private fun isDarkAppearance(): Boolean = appAppearanceDark ?: run {
-        val mask = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        mask == Configuration.UI_MODE_NIGHT_YES
-    }
+    private fun isDarkAppearance(): Boolean = appAppearanceDark ?: true
 
     private fun animationsDisabled(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

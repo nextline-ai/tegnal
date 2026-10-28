@@ -7,6 +7,7 @@ import '../ui/common.dart';
 import '../ui/content_tile.dart';
 import '../ui/l10n.dart';
 import '../ui/page_header.dart';
+import '../ui/source_picker.dart';
 
 class ArtistsScreen extends StatefulWidget {
   const ArtistsScreen({
@@ -70,12 +71,17 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
             mode: mode,
             title: mode == AppMode.booru ? 'Tags' : 'Artists',
             trailing: IconButton(
-              onPressed: () => _edit(context),
+              onPressed: () => mode == AppMode.booru
+                  ? showBooruSourcePicker(context, widget.controller)
+                  : _edit(context),
               style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
               icon: Icon(
-                Icons.add,
+                mode == AppMode.booru ? Icons.dns_rounded : Icons.add,
                 size: 30,
-                semanticLabel: L10n.tr(context, 'Add Artist'),
+                semanticLabel: L10n.tr(
+                  context,
+                  mode == AppMode.booru ? 'Servers' : 'Add Artist',
+                ),
               ),
             ),
           ),
@@ -89,7 +95,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
               decoration: InputDecoration(
                 hintText: L10n.tr(
                   context,
-                  mode == AppMode.booru ? 'Search Tags' : 'Search artists',
+                  mode == AppMode.booru ? 'Search tags' : 'Search artists',
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -249,7 +255,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
             artist.kind == 0 ? Icons.star : Icons.tag,
             size: artist.kind == 0 ? 22 : 28,
             color: artist.kind == 0
-                ? Theme.of(context).colorScheme.tertiary
+                ? const Color(0xFFFFCC00)
                 : Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(width: 16),
@@ -267,7 +273,9 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
-                if (artist.note.isNotEmpty || _count(artist, saved) > 0) ...[
+                if (artist.note.isNotEmpty ||
+                    artist.mode == AppMode.manga &&
+                        _count(artist, saved) > 0) ...[
                   const SizedBox(height: 3),
                   Text(
                     artist.note.isNotEmpty
@@ -284,15 +292,10 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
               ],
             ),
           ),
-          IconButton(
-            onPressed: () => _actions(context, artist),
-            style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
-            icon: Icon(
-              Icons.more_horiz,
-              size: 28,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              semanticLabel: L10n.tr(context, 'Edit Artist'),
-            ),
+          Icon(
+            Icons.chevron_right,
+            size: 24,
+            color: Theme.of(context).colorScheme.outline,
           ),
         ],
       ),
@@ -321,6 +324,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                   entry.query.replaceAll('_', ' '),
                   style: TextStyle(
                     fontSize: 17,
+                    fontWeight: FontWeight.w400,
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
@@ -357,7 +361,10 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                 Expanded(
                   child: Text(
                     entry.query.replaceAll('_', ' '),
-                    style: const TextStyle(fontSize: 17),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
               ],
@@ -370,7 +377,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
           icon: Icon(
             _isSavedSearch(entry) ? Icons.star : Icons.star_border,
             size: 28,
-            color: Theme.of(context).colorScheme.tertiary,
+            color: const Color(0xFFFFCC00),
             semanticLabel: L10n.tr(context, 'Saved Searches'),
           ),
         ),

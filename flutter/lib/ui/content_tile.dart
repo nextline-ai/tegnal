@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/content.dart';
 import 'l10n.dart';
+import 'artwork_layout.dart';
 import 'session_image.dart';
 
 /// Image browsing stays edge to edge; comics retain their identifying text.
@@ -14,8 +15,10 @@ class ContentTile extends StatelessWidget {
     this.onSecondaryTap,
     this.onMore,
     this.saved = false,
+    this.showSavedBadge = true,
     this.selecting = false,
     this.selected = false,
+    this.layout,
   });
   final ContentItem item;
   final VoidCallback onTap;
@@ -23,8 +26,10 @@ class ContentTile extends StatelessWidget {
   final VoidCallback? onSecondaryTap;
   final VoidCallback? onMore;
   final bool saved;
+  final bool showSavedBadge;
   final bool selecting;
   final bool selected;
+  final ArtworkLayout? layout;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -41,7 +46,7 @@ class ContentTile extends StatelessWidget {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(layout?.radius ?? 12),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -59,7 +64,9 @@ class ContentTile extends StatelessWidget {
                           )
                         : SessionImage(
                             url: item.thumbnailUrl!,
-                            fit: BoxFit.cover,
+                            fit: layout?.fitsThumbnails == true
+                                ? BoxFit.contain
+                                : BoxFit.cover,
                             referer: item.pageUrl,
                             errorBuilder: (_, _, _) => const Center(
                               child: Icon(
@@ -70,7 +77,7 @@ class ContentTile extends StatelessWidget {
                             ),
                           ),
                   ),
-                  if (saved && !selecting)
+                  if (saved && showSavedBadge && !selecting)
                     Positioned(
                       top: 7,
                       left: 7,
@@ -97,7 +104,7 @@ class ContentTile extends StatelessWidget {
                         height: 27,
                         decoration: BoxDecoration(
                           color: selected
-                              ? Color(0xFF1677FF)
+                              ? Color(0xFF009DFF)
                               : const Color(0x18000000),
                           shape: BoxShape.circle,
                           border: selected
@@ -158,7 +165,7 @@ class ContentTile extends StatelessWidget {
               ),
             ),
           ),
-          if (item.mode == AppMode.manga) ...[
+          if (item.mode == AppMode.manga && (layout?.showsTitles ?? true)) ...[
             const SizedBox(height: 8),
             Text(
               item.title,
@@ -170,6 +177,8 @@ class ContentTile extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ],
+          if (item.mode == AppMode.manga && (layout?.showsArtists ?? true)) ...[
             const SizedBox(height: 3),
             Text(
               item.artists.isEmpty ? '#${item.id}' : item.artists.join(', '),

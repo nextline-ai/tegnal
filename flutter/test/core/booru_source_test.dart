@@ -285,6 +285,18 @@ void main() {
           ),
         ),
       );
+      final validJson = BooruSource(
+        config(SourceKind.danbooru),
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode([
+              {...row(123), 'tag_string': 'just a moment'},
+            ]),
+            200,
+          ),
+        ),
+      );
+      expect((await validJson.search('a')).items.single.id, 123);
       final offline = BooruSource(
         config(SourceKind.danbooru),
         client: MockClient((_) async => throw http.ClientException('offline')),

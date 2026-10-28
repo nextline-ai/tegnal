@@ -43,6 +43,7 @@ class MangaSource implements ContentSource {
   }
 
   final SourceConfig config;
+  bool allowsLanguageExceptions = false;
   late final http.Client _client;
   late final MangaFallbackClient? _fallbackClient;
   final bool _ownsClient;
@@ -93,27 +94,41 @@ class MangaSource implements ContentSource {
     String query, {
     int page = 1,
     bool popular = false,
+    String period = 'week',
   }) async {
-    if (page < 1 || page > 250000) _invalidQuery();
+    if (page < 1 ||
+        page > 250000 ||
+        !const {
+          'today',
+          'week',
+          'month',
+          'year',
+          'latest',
+          'recommended',
+        }.contains(period)) {
+      _invalidQuery();
+    }
     final tokens = query
         .trim()
         .toLowerCase()
         .split(RegExp(r'\s+'))
         .where((value) => value.isNotEmpty)
         .toList();
-    if (tokens.length > 8 ||
+    if (tokens.length > 64 ||
         tokens.any(
           (value) => value.length > 120 || value.contains('"') || value == '-',
         )) {
       _invalidQuery();
     }
     await _discover();
-    if (_document) return _documentSearch(tokens, page, popular);
+    if (_document) {
+      return _documentSearch(tokens, page, popular, period: period);
+    }
     final offset = (page - 1) * _pageSize;
     final List<int> ids;
     final bool hasMore;
     if (tokens.isEmpty) {
-      final path = popular ? 'popular/week-all.nozomi' : 'index-all.nozomi';
+      final path = popular ? 'popular/$period-all.nozomi' : 'index-all.nozomi';
       final response = await _data(
         path,
         limit: _pageSize * 4,
@@ -127,13 +142,14 @@ class MangaSource implements ContentSource {
       ids = _ids(response.bodyBytes);
       hasMore = offset * 4 + response.bodyBytes.length < total;
     } else {
-      final key = '${popular ? 'popular' : 'latest'}:${tokens.join(' ')}';
+      final key =
+          '${popular ? 'popular' : 'latest'}:$period:$allowsLanguageExceptions:${tokens.join(' ')}';
       var matches = _lists[key];
       if (matches == null) {
         matches = await _searchIds(tokens);
         if (popular) {
           final selected = matches.toSet();
-          matches = (await _fullList('popular/week-all.nozomi'))
+          matches = (await _fullList('popular/$period-all.nozomi'))
               .where(selected.contains)
               .toList();
         }
@@ -413,8 +429,16 @@ class MangaSource implements ContentSource {
   Future<ContentPage> _documentSearch(
     List<String> tokens,
     int page,
-    bool popular,
-  ) async {
+    bool popular, {
+    bool bypass = true,
+    Set<int>? restrictCategories,
+    String period = 'week',
+  }) async {
+    if (bypass &&
+        allowsLanguageExceptions &&
+        tokens.any((token) => token.startsWith('language:'))) {
+      return _documentLanguageBypass(tokens, page, popular, period);
+    }
     var categories = tokens.any((token) => token.startsWith('type:'))
         ? <int>{}
         : _categories.keys.toSet();
@@ -433,8 +457,12 @@ class MangaSource implements ContentSource {
         categories.add(category);
       }
     }
+    if (restrictCategories != null) {
+      categories = categories.intersection(restrictCategories);
+    }
     if (categories.isEmpty) return const ContentPage([], hasMore: false);
-    final key = '$popular:${tokens.join(' ')}';
+    final key =
+        '$popular:$period:${tokens.join(' ')}:${(categories.toList()..sort()).join(',')}';
     var feed = _feeds[key];
     if (feed == null ||
         DateTime.now().difference(feed.created).inMinutes >= 5) {
@@ -464,7 +492,16 @@ class MangaSource implements ContentSource {
         if (popular)
           'start-date': DateTime.now()
               .toUtc()
-              .subtract(const Duration(days: 7))
+              .subtract(
+                Duration(
+                  days: switch (period) {
+                    'today' => 1,
+                    'month' => 30,
+                    'year' => 365,
+                    _ => 7,
+                  },
+                ),
+              )
               .toIso8601String()
               .substring(0, 10),
         if (feed.nextId != null)
@@ -484,7 +521,10 @@ class MangaSource implements ContentSource {
       for (final value in rows) {
         final row = _map(value);
         if (_number(row['id']) <= 0) _badResponse();
-        if (_number(row['blocked']) != 0) continue;
+        if (_number(row['blocked']) != 0 ||
+            !categories.contains(_number(row['category']))) {
+          continue;
+        }
         if (seen.add(_number(row['id']))) feed.items.add(_documentItem(row));
       }
       if (rows.isNotEmpty) {
@@ -496,6 +536,78 @@ class MangaSource implements ContentSource {
     }
     return ContentPage(
       feed.items.skip(offset).take(_pageSize).toList(),
+      hasMore: feed.more || feed.items.length > target,
+    );
+  }
+
+  Future<ContentPage> _documentLanguageBypass(
+    List<String> tokens,
+    int page,
+    bool popular,
+    String period,
+  ) async {
+    final key = 'mixed:$popular:$period:${tokens.join(' ')}';
+    var feed = _feeds[key];
+    if (feed == null ||
+        DateTime.now().difference(feed.created).inMinutes >= 5) {
+      feed = _Feed()..lanes = [_DocumentLane(), _DocumentLane()];
+      _remember(_feeds, key, feed, 16);
+    }
+    final target = page * _pageSize;
+    var requests = 0;
+    final seen = feed.items.map((item) => item.id).toSet();
+    while (feed.items.length < target) {
+      for (var index = 0; index < feed.lanes.length; index++) {
+        final lane = feed.lanes[index];
+        if (lane.pending.isNotEmpty || !lane.more) continue;
+        if (++requests > 20) {
+          throw const ContentException(
+            'Load earlier pages before jumping this far.',
+          );
+        }
+        final result = await _documentSearch(
+          index == 0
+              ? tokens
+              : tokens
+                    .where((token) => !token.startsWith('language:'))
+                    .toList(),
+          ++lane.page,
+          popular,
+          bypass: false,
+          period: period,
+          restrictCategories: index == 0
+              ? _categories.keys
+                    .where((key) => !const {3, 4, 6}.contains(key))
+                    .toSet()
+              : {3, 4, 6},
+        );
+        lane.pending.addAll(result.items);
+        lane.more = result.hasMore;
+      }
+      if (feed.lanes.any((lane) => lane.pending.isEmpty && lane.more)) continue;
+      final heads = feed.lanes
+          .where((lane) => lane.pending.isNotEmpty)
+          .toList();
+      if (heads.isEmpty) break;
+      heads.sort((a, b) {
+        final first = a.pending.first, second = b.pending.first;
+        if (popular) {
+          final firstViews = _number(_map(first.metadata['gallery'])['views']);
+          final secondViews = _number(
+            _map(second.metadata['gallery'])['views'],
+          );
+          if (firstViews != secondViews) {
+            return secondViews.compareTo(firstViews);
+          }
+        }
+        return second.id.compareTo(first.id);
+      });
+      final next = heads.first.pending.removeAt(0);
+      if (seen.add(next.id)) feed.items.add(next);
+    }
+    feed.more = feed.lanes.any((lane) => lane.more || lane.pending.isNotEmpty);
+    return ContentPage(
+      feed.items.skip((page - 1) * _pageSize).take(_pageSize).toList(),
       hasMore: feed.more || feed.items.length > target,
     );
   }
@@ -565,7 +677,7 @@ class MangaSource implements ContentSource {
       final negative = token.startsWith('-');
       final term = (negative ? token.substring(1) : token).replaceAll('_', ' ');
       final colon = term.indexOf(':');
-      final List<int> ids;
+      List<int> ids;
       if (colon >= 0) {
         final field = term.substring(0, colon),
             value = term.substring(colon + 1);
@@ -576,6 +688,17 @@ class MangaSource implements ContentSource {
             ? 'tag/${Uri.encodeComponent(term)}-all.nozomi'
             : '$field/${Uri.encodeComponent(value)}-all.nozomi';
         ids = await _fullList(path);
+        if (field == 'language' && !negative && allowsLanguageExceptions) {
+          final exceptions = await Future.wait(
+            [
+              'gamecg',
+              'artistcg',
+              'imageset',
+            ].map((type) => _fullList('type/$type-all.nozomi')),
+          );
+          ids = {...ids, ...exceptions.expand((values) => values)}.toList()
+            ..sort((a, b) => b.compareTo(a));
+        }
       } else {
         version ??= (await _data(
           'galleriesindex/version',
@@ -1096,7 +1219,14 @@ class MangaSource implements ContentSource {
       throw const ContentException('The manga server format is not supported.');
 }
 
+class _DocumentLane {
+  final pending = <ContentItem>[];
+  int page = 0;
+  bool more = true;
+}
+
 class _Feed {
+  List<_DocumentLane> lanes = [];
   final created = DateTime.now();
   final items = <ContentItem>[];
   int? nextId;
