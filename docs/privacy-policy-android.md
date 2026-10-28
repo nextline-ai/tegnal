@@ -1,7 +1,9 @@
 # TEGNAL Android 개인정보처리방침 / Privacy Policy
 
-시행일 / Effective date: 2026-10-29  
-운영자 / Developer: **NextLine**  
+시행일 / Effective date: 2026-10-29
+
+운영자 / Developer: **NextLine**
+
 문의 / Contact: **contact@nextline.work** · https://nextline.work
 
 이 방침은 TEGNAL Android 앱에 적용됩니다. Apple 앱의 방침은 [별도 문서](privacy-policy.md)를 참고하세요. English follows the Korean policy below.

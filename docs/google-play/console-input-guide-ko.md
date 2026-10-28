@@ -61,8 +61,10 @@ IARC 설문은 다음 사실을 기준으로 작성합니다.
 
 ## 4. 번들 업로드와 서명
 
-업로드 파일: `flutter/build/releases/TEGNAL-1.0.0-beta.4.aab`  
-내부 출시명: `1.0.0-beta.4 (6)`  
+업로드 파일: `flutter/build/releases/TEGNAL-1.0.0-beta.4.aab`
+
+내부 출시명: `1.0.0-beta.4 (6)`
+
 릴리스 노트: 언어별 [store-listing](store-listing/)의 `release-notes.txt`.
 
 APK 파일은 GitHub 직접 배포용입니다. 새 Play 앱에는 준비된 **AAB**를 사용합니다. 먼저 내부 테스트 트랙에 올려 처리 결과와 사전 출시 보고서를 확인합니다. 승인된 조직 계정에는 신규 개인 계정 대상의 12명·14일 조건을 적용하지 않지만, 앱 검증이 생략되는 것은 아닙니다.
