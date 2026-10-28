@@ -31,10 +31,12 @@ Do not hide sites or features from reviewers, detect review accounts, change rem
 
 - [x] A **pre-removal candidate** AAB was created and validated locally; see [artifact evidence](../../flutter/docs/android-play-bundle-1.0.0-beta.1.md) (105,241,649 bytes, bundletool 1.18.3 validation and signing-certificate comparison reported). This records artifact validation, **not policy or Console approval**.
 - [x] Rebuilt the candidate with bootstrap removed and generic import UI: [beta.2 validation](../../flutter/docs/android-play-bundle-1.0.0-beta.2.md), version code 4. Any subsequent privacy/product changes require another build. This is technical validation only. Configure Play App Signing/upload-key ownership and backup separately; never commit private signing material. The universal APK is a direct-distribution artifact, not the new-app Play upload artifact. See [Android App Bundles](https://developer.android.com/guide/app-bundle).
+- [x] Prepared the updated [beta.3 candidate](../../flutter/docs/android-play-bundle-1.0.0-beta.3.md), version code 5, with the new SQLite import and bounded image prefetch. APKs are direct-distribution files; the AAB is the Play upload candidate. [Automated validation](../../flutter/docs/android-beta3-validation.md) passed 359 tests with two skipped.
 - [x] Verified candidate package, versionName/versionCode, signing identity, ABIs and base manifest. Full transitive SDK/data-flow declarations still require completion. Source currently uses `work.nextline.tegnal` and targetSdk 37; use final artifact values, not a stale draft version number.
 - [ ] The current official phone/tablet submission minimum is target API 36 from 2026-08-31. Recheck at upload. Targeting above that minimum does not establish overall compliance. See [target API requirements](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en).
 - [ ] Run Play internal testing/pre-launch report and test current Android/WebView versions, network failure, browser sign-in, source removal, imports, downloads, accessibility and Google Translate unavailable/manual/direct states. Record results and remaining issues.
-- [ ] Check large native libraries/16 KB page-size support on the final bundle and the warnings shown by Console; this document does not certify binary compatibility.
+- [x] Beta.3 APKs pass 16 KB ZIP alignment; all 21 universal APK native libraries have ELF LOAD alignment of at least 16 KiB. See the artifact report.
+- [ ] Verify Play-generated APKs on devices and inspect Console compatibility warnings; static binary checks do not replace that validation.
 
 ## Listing and graphics inventory
 

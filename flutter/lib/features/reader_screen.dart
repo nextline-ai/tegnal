@@ -117,6 +117,8 @@ class _ReaderScreenState extends State<ReaderScreen>
   int _index = 0;
   int _generation = 0;
   int _prefetchGeneration = 0;
+  final ReaderPrefetchQueue _postPrefetch = ReaderPrefetchQueue();
+  final ReaderPreparedImages _preparedImages = ReaderPreparedImages();
   int _prefetchManifestCount = 0;
   int _prefetchImageCount = 0;
   bool _loading = true;
@@ -194,6 +196,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (!_active) {
       _prefetchGeneration++;
       _prefetchDebounce?.cancel();
+      _postPrefetch.clear();
     }
     if (_active && _sourcePages.isNotEmpty) _scheduleAdjacentPrefetch();
     if (_previousAwake != null) unawaited(_applyAwake());
@@ -208,7 +211,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       _error = null;
     });
     try {
-      final manifest = await _loadManifest(requestedItem);
+      final manifest =
+          _manifestCache[requestedItem.key] ??
+          await _loadManifest(requestedItem);
       _rememberManifest(requestedItem.key, manifest);
       final offline = manifest.offline ? manifest.pages : null;
       final resolved = manifest.item;
@@ -344,7 +349,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   void _rememberManifest(String key, _ReaderManifest manifest) {
     _manifestCache.remove(key);
     _manifestCache[key] = manifest;
-    while (_manifestCache.length > 4) {
+    while (_manifestCache.length > 5) {
       _manifestCache.remove(_manifestCache.keys.first);
     }
   }
@@ -362,6 +367,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _scheduleAdjacentPrefetch() {
     _prefetchDebounce?.cancel();
+    _postPrefetch.clear();
     final token = ++_prefetchGeneration;
     if (!_active || _offline || _pages.isEmpty || _video) return;
     if (_postSequence) {
@@ -386,11 +392,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     final jobs = <Future<void>>[];
     if (_postSequence) {
-      for (final index in [_postIndex - 1, _postIndex + 1, _postIndex + 2]) {
-        if (index >= 0 && index < _sequence.length) {
-          jobs.add(_prefetchManifest(_sequence[index], token));
-        }
-      }
+      final indices = ReaderPostNeighbors.indices(_postIndex, _sequence.length);
+      _postPrefetch.replace([
+        for (final index in indices)
+          () => _prefetchManifest(_sequence[index], token),
+      ]);
     } else {
       final indices = ReaderLoadingPolicy.adjacentPages(
         _index,
@@ -401,9 +407,8 @@ class _ReaderScreenState extends State<ReaderScreen>
         jobs.add(_prefetchPage(_pages[index], token));
       }
     }
-    // Only the configured neighborhood is considered; image loading stays
-    // bounded to one previous page and at most five pages ahead. The shared Flutter ImageCache coalesces visible/prefetch
-    // requests using the same URL, headers and bounded decode dimensions.
+    // The shared Flutter ImageCache coalesces visible and prefetched images
+    // using the same URL, headers and bounded decode dimensions.
     unawaited(Future.wait(jobs));
   }
 
@@ -456,6 +461,13 @@ class _ReaderScreenState extends State<ReaderScreen>
         ...ephemeral,
       }, _readerDecodeLimit(context));
       await precacheImage(provider, context, onError: (_, _) {});
+      if (!mounted || !_active || token != _prefetchGeneration) return;
+      await _preparedImages.remember(
+        page,
+        _readerDecodeLimit(context),
+        provider,
+        createLocalImageConfiguration(context),
+      );
     } catch (_) {
       // The visible page owns error presentation; speculation is best-effort.
     } finally {
@@ -510,6 +522,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     _auto?.cancel();
     _prefetchGeneration++;
     _prefetchDebounce?.cancel();
+    _postPrefetch.clear();
     _notesClient?.close();
     setState(() {
       _postIndex = next;
@@ -1626,6 +1639,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   Widget _image(int index, {bool continuous = false}) => _ReaderImage(
     key: ValueKey('${_pages[index].url}:$index:$continuous'),
     page: _pages[index],
+    preparedImages: _preparedImages,
     continuous: continuous,
     notes: _showNotes ? _notes : const [],
     onZoom: (zoomed) {
@@ -1846,6 +1860,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     ++_generation;
     _auto?.cancel();
     _prefetchDebounce?.cancel();
+    _postPrefetch.close();
     _notesClient?.close();
     WidgetsBinding.instance.removeObserver(this);
     if (_sourcePages.isNotEmpty) _savePosition();
@@ -1865,6 +1880,7 @@ class _ReaderImage extends StatefulWidget {
   const _ReaderImage({
     super.key,
     required this.page,
+    required this.preparedImages,
     required this.continuous,
     required this.onZoom,
     required this.onRatio,
@@ -1872,6 +1888,7 @@ class _ReaderImage extends StatefulWidget {
   });
   final List<BooruNote> notes;
   final ReaderPage page;
+  final ReaderPreparedImages preparedImages;
   final bool continuous;
   final ValueChanged<bool> onZoom;
   final ValueChanged<double> onRatio;
@@ -1911,7 +1928,6 @@ class _ReaderImageState extends State<_ReaderImage> {
   void initState() {
     super.initState();
     _transform.addListener(_zoomChanged);
-    unawaited(_prepareImage());
   }
 
   @override
@@ -1920,13 +1936,19 @@ class _ReaderImageState extends State<_ReaderImage> {
     final nextLimit = _readerDecodeLimit(context);
     if (nextLimit != _decodeLimit) {
       _decodeLimit = nextLimit;
-      if (_headersReady) {
-        _resolvedProvider = readerImageProvider(
-          widget.page,
-          _mediaHeaders,
-          _decodeLimit,
-        );
+      if (_prepareGeneration != 0) {
+        _headersReady = false;
+        _resolvedProvider = null;
+        unawaited(_prepareImage());
       }
+    }
+    if (_prepareGeneration == 0) {
+      final prepared = widget.preparedImages.find(widget.page, _decodeLimit);
+      if (prepared != null) {
+        _resolvedProvider = prepared;
+        _headersReady = true;
+      }
+      unawaited(_prepareImage());
     }
     if (_headersReady) _resolveDimensions();
   }
@@ -1934,22 +1956,22 @@ class _ReaderImageState extends State<_ReaderImage> {
   Future<void> _prepareImage() async {
     final generation = ++_prepareGeneration;
     _dimensionProvider = null;
-    if (mounted) {
+    final revision = BrowserSession.revisionFor(widget.page.url);
+    final ephemeral = await BrowserSession.headersFor(widget.page.url);
+    if (!mounted || generation != _prepareGeneration) return;
+    if (revision != BrowserSession.revisionFor(widget.page.url)) {
       setState(() {
         _headersReady = false;
       });
+      return _prepareImage();
     }
-    final ephemeral = await BrowserSession.headersFor(widget.page.url);
-    if (!mounted || generation != _prepareGeneration) return;
+    final headers = {...widget.page.headers, ...ephemeral};
+    final provider = readerImageProvider(widget.page, headers, _decodeLimit);
     setState(() {
-      _mediaHeaders = {...widget.page.headers, ...ephemeral};
-      _resolvedProvider = readerImageProvider(
-        widget.page,
-        _mediaHeaders,
-        _decodeLimit,
-      );
+      _mediaHeaders = headers;
+      if (_resolvedProvider != provider) _retry++;
+      _resolvedProvider = provider;
       _headersReady = true;
-      _retry++;
     });
     _resolveDimensions();
   }
@@ -2007,9 +2029,22 @@ class _ReaderImageState extends State<_ReaderImage> {
       width: double.infinity,
       height: double.infinity,
       filterQuality: FilterQuality.medium,
-      frameBuilder: (context, child, frame, sync) => frame == null
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : child,
+      frameBuilder: (context, child, frame, sync) {
+        if (frame == null) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          );
+        }
+        unawaited(
+          widget.preparedImages.remember(
+            widget.page,
+            _decodeLimit,
+            _provider,
+            createLocalImageConfiguration(context),
+          ),
+        );
+        return child;
+      },
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
         final expected = progress.expectedTotalBytes;
@@ -2043,6 +2078,10 @@ class _ReaderImageState extends State<_ReaderImage> {
               onPressed: () async {
                 await _provider.evict();
                 if (mounted) {
+                  setState(() {
+                    _headersReady = false;
+                    _resolvedProvider = null;
+                  });
                   await _prepareImage();
                 }
               },

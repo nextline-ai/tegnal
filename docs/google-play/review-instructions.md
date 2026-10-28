@@ -1,6 +1,6 @@
 # App access / review instructions draft
 
-Internal status, 2026-10-28: organization developer verification and app-name registration complete. Pre-removal candidate AAB creation/validation evidence is recorded in [bundle report](../../flutter/docs/android-play-bundle-1.0.0-beta.1.md). **Default-connection bootstrap code has been removed and fresh-install/preserved-DB tests pass. Do not submit until the remaining reachable-content policy assessment, lawful test content, privacy disclosures and rebuilt AAB verification are complete.** No review-only behavior is permitted.
+Internal status, 2026-10-28: organization developer verification and app-name registration complete. The current candidate and validation evidence are recorded in [bundle report](../../flutter/docs/android-play-bundle-1.0.0-beta.3.md). **Default-connection bootstrap code has been removed and fresh-install/preserved-DB tests pass. Do not submit until the remaining reachable-content policy assessment, lawful test content, privacy disclosures and rebuilt AAB verification are complete.** No review-only behavior is permitted.
 
 ## Proposed Console text — owner must complete brackets
 
@@ -9,7 +9,7 @@ TEGNAL is a reader and personal library organizer for compatible external websit
 1. Open the app and complete the language/appearance introduction. Use the normal connection setup to enter the approved compatible website supplied in the private App access instructions: **[approved URL, engine/type and authorized content IDs needed]**.
 2. Select the appropriate image or comics mode. Open Explore, search **[lawful test query]**, open **[authorized test work]**, and read or zoom. The first comics work shows a three-step reader guide; it can be reopened from reader settings.
 3. Save a work, open the library and create a colored folder. Move the saved work using Save to Folder. Notes, search history and local taste controls are available through their ordinary screens.
-4. To test import/export, use **[authorized sample backup, delivery/access instructions and expected contents needed]**. Do not include personal user data or secret credentials in public repository files.
+4. To test import/export, use **[authorized synthetic sample backup, delivery/access instructions and expected contents needed]**. Onboarding and Settings offer Import Data from Other Manga Viewers for supported bookmark SQLite files with a count preview and explicit merge confirmation. Older formats are available only in Settings under Other Backup Formats; TEGNAL JSON restore/export stays separate. Read-log/crop records are retained locally but not applied as reader positions/crops or included in JSON export. Do not include personal user data or secret credentials in public repository files. See [format mapping](../../flutter/docs/android-bookmark-import.md).
 5. For optional translation, install/open Google Translate through the reviewer's normal device setup if available. The app checks its image-sharing support. If unsupported, the user may explicitly save an image and open that app, then import the image there. Translation is optional; no built-in AI model download or guaranteed offline translation is provided.
 6. Google Drive sync is temporarily disabled in this release. JSON backup import/export remains available.
 

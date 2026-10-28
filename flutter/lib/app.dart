@@ -277,9 +277,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                   Expanded(
                     child: ListTile(
                       leading: const Icon(Icons.file_download_outlined),
-                      title: Text(L10n.tr(context, 'Import from Other Apps')),
+                      title: Text(
+                        L10n.tr(context, 'Import Android Bookmark Backup'),
+                      ),
                       subtitle: Text(
-                        L10n.tr(context, 'SQLite and image-library backups'),
+                        L10n.tr(context, 'Android bookmark SQLite backup'),
                       ),
                       onTap: () {
                         c.setPreference(

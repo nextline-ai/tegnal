@@ -11,6 +11,7 @@ import 'package:tegnal/core/content.dart';
 import 'package:tegnal/core/library.dart';
 import 'package:tegnal/data/download_manager.dart';
 import 'package:tegnal/data/library_store.dart';
+import 'package:tegnal/data/session_client.dart';
 import 'package:tegnal/features/reader_screen.dart';
 import 'package:tegnal/ui/design_system.dart';
 import 'package:tegnal/ui/reader_image_provider.dart';
@@ -58,7 +59,7 @@ void main() {
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('tegnal-reader-flow-');
     final png = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=',
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
     );
     final imageURLs = <int, Uri>{};
     for (var id = 1; id <= 3; id++) {
@@ -466,6 +467,59 @@ void main() {
         viewport.width,
       );
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'prefetched image and returned image show without loading spinner',
+    (tester) async {
+      final first = booruItem(1);
+      final second = booruItem(2);
+      await launch(tester, item: first, sequence: [first, second]);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+      );
+      await tester.pump();
+      for (var i = 0; i < 4; i++) {
+        await pumpReader(tester);
+      }
+      await openControls(tester);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Next page'));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.tap(find.byTooltip('Previous page'));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(source.pageCalls[1], 1);
+      expect(source.pageCalls[2], 1);
+
+      final context = tester.element(find.byType(ReaderScreen));
+      final page = pagesByID[1]!.single;
+      final provider = readerImageProvider(page, const {}, 3000);
+      final prepared = ReaderPreparedImages();
+      await prepared.remember(
+        page,
+        3000,
+        provider,
+        createLocalImageConfiguration(context),
+      );
+      expect(prepared.find(page, 3000), isNotNull);
+      const channel = MethodChannel('work.nextline.tegnal/browser');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      messenger.setMockMethodCallHandler(channel, (_) async => null);
+      try {
+        await BrowserSession.resetCookies(Uri.https('reader.example'));
+        expect(prepared.find(page, 3000), isNull);
+      } finally {
+        messenger.setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = null;
+      }
     },
   );
 

@@ -85,3 +85,50 @@ class ReaderPageOffsets {
     return low;
   }
 }
+
+/// Replaces obsolete speculative work while limiting concurrent image loads.
+class ReaderPrefetchQueue {
+  ReaderPrefetchQueue({this.maxConcurrent = 2}) : assert(maxConcurrent > 0);
+
+  final int maxConcurrent;
+  final List<Future<void> Function()> _pending = [];
+  int _running = 0;
+  bool _closed = false;
+
+  void replace(Iterable<Future<void> Function()> jobs) {
+    if (_closed) return;
+    _pending
+      ..clear()
+      ..addAll(jobs);
+    _start();
+  }
+
+  void clear() => _pending.clear();
+
+  void close() {
+    _closed = true;
+    clear();
+  }
+
+  void _start() {
+    while (!_closed && _running < maxConcurrent && _pending.isNotEmpty) {
+      final job = _pending.removeAt(0);
+      _running++;
+      Future<void>.sync(job).catchError((Object _) {}).whenComplete(() {
+        _running--;
+        _start();
+      });
+    }
+  }
+}
+
+class ReaderPostNeighbors {
+  static List<int> indices(int current, int length) {
+    return [
+      current + 1,
+      current - 1,
+      current + 2,
+      current - 2,
+    ].where((index) => index >= 0 && index < length).toList(growable: false);
+  }
+}

@@ -180,7 +180,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         key: const ValueKey('onboarding-violet-shortcut'),
         onPressed: _working ? null : () => setState(() => _step = 1),
         icon: const Icon(Icons.move_to_inbox_outlined),
-        label: Text(_t('Import SQLite Backup')),
+        label: Text(_t('Import Android Bookmark Backup')),
       ),
       const SizedBox(height: 20),
       _websiteModeGuide(),
@@ -286,17 +286,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       const SizedBox(height: 20),
       _importCard(
         key: const ValueKey('onboarding-violet-card'),
-        title: 'Import SQLite Backup',
-        subtitle: 'Import saved works, folders and artists from a SQLite database. A catalog database can fill missing work information.',
+        title: 'Import Android Bookmark Backup',
+        subtitle: 'Choose an Android bookmark SQLite backup (.sqlite or .db). Preview its contents before merging it into your library.',
         icon: Icons.move_to_inbox_outlined,
         action: FilledButton.icon(
           key: const ValueKey('onboarding-violet-import'),
           onPressed: _working
               ? null
-              : () =>
-                    _import(() => showImportLegacy(context, widget.controller)),
+              : () => _import(
+                  () => showImportAndroidBookmarks(context, widget.controller),
+                ),
           icon: const Icon(Icons.input),
-          label: Text(_t('Import SQLite Backup')),
+          label: Text(_t('Import Android Bookmark Backup')),
         ),
       ),
       const SizedBox(height: 12),
@@ -312,20 +313,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
           icon: const Icon(Icons.file_download_outlined),
           label: Text(_t('Restore JSON Backup')),
-        ),
-      ),
-      const SizedBox(height: 12),
-      _importCard(
-        title: 'Image Library Backup',
-        subtitle: 'Import an .abbj backup (version 1.0).',
-        icon: Icons.menu_book_outlined,
-        action: OutlinedButton.icon(
-          onPressed: _working
-              ? null
-              : () =>
-                    _import(() => showImportLegacy(context, widget.controller)),
-          icon: const Icon(Icons.input),
-          label: Text(_t('Import Image Backup')),
         ),
       ),
     ],

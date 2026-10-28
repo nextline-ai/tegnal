@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Android_button_kr_mobile.svg"><img src="design-output/SVG/button/Android_button_kr.svg" alt="Android 베타 APK 다운로드"></picture></a>
+  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.3/TEGNAL-1.0.0-beta.3-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Android_button_kr_mobile.svg"><img src="design-output/SVG/button/Android_button_kr.svg" alt="Android 베타 APK 다운로드"></picture></a>
 </p>
 
 <h1 align="center">TEGNAL</h1>
@@ -56,21 +56,21 @@
 
 ## 🤖 Android 다운로드 (베타)
 
-**Android 1.0.0-beta.1 · Android 7.0 이상.** 아래 링크는 설치 가능한 **APK 파일을 직접 다운로드**합니다. Google Play 배포판이 아닙니다.
+**Android 1.0.0-beta.3 · Android 7.0 이상.** 아래 링크는 설치 가능한 **APK 파일을 직접 다운로드**합니다. Google Play 배포판이 아닙니다.
 
 | 다운로드 | 대상 |
 | --- | --- |
-| **[Android 베타 APK — ARM64 권장](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android-arm64.apk)** | 대부분의 최신 64비트 ARM 휴대폰 |
-| [Android 베타 APK — 공용판](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.1/TEGNAL-1.0.0-beta.1-android.apk) | 32비트 ARM·ARM64·x86-64, 기기 종류가 불확실할 때 |
+| **[Android 베타 APK — ARM64 권장](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.3/TEGNAL-1.0.0-beta.3-android-arm64.apk)** | 대부분의 최신 64비트 ARM 휴대폰 |
+| [Android 베타 APK — 공용판](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.3/TEGNAL-1.0.0-beta.3-android.apk) | 32비트 ARM·ARM64·x86-64, 기기 종류가 불확실할 때 |
 
 APK를 받은 뒤 파일을 열어 설치하세요. Android가 요청하면 다운로드한 브라우저 또는 파일 앱에만 앱 설치를 허용하면 됩니다. 업데이트도 같은 방식으로 새 APK를 설치합니다. 두 APK는 같은 서명을 사용합니다.
 
-- 이번 베타에는 **hitomi.la와 danbooru.donmai.us**가 기본 연결로 한 번 저장됩니다. 사용자 데이터에 저장되므로 이후 버전에서 기본 제공 코드가 없어져도 유지됩니다. 직접 삭제한 연결은 다음 실행 때 다시 추가하지 않습니다.
+- 신규 설치에는 기본 사이트 연결이 없습니다. 업데이트 시 이미 저장된 사용자 연결은 유지됩니다.
 - 이미지 모드는 **Booru 사이트별 기본 폴더**로 정리합니다. 만화 모드의 폴더 구성은 유지합니다.
-- **Violet 가져오기**와 기존 TEGNAL JSON 백업을 지원합니다. 이미지 번역은 설치된 Google 번역 앱으로 연결하며, Google Drive 동기화는 현재 비활성화되어 있습니다.
+- 온보딩과 설정에서 **다른 만화 뷰어의 북마크 SQLite 백업**을 가져올 수 있습니다. 이전 가져오기 형식은 설정의 별도 옵션으로 남아 있으며, TEGNAL JSON 백업도 지원합니다. 이미지 번역은 설치된 Google 번역 앱으로 연결하며, Google Drive 동기화는 현재 비활성화되어 있습니다.
 - 아래 iCloud·Apple Vision·Apple 온디바이스 번역 설명은 **Apple 버전 전용**입니다. Android 베타에는 동일하게 적용되지 않습니다.
 
-[베타 변경 내역 및 파일 해시](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.1)
+[베타 변경 내역 및 파일 해시](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.3)
 
 ## 📲 Apple 다운로드 및 설치 방법
 

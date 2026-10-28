@@ -308,6 +308,11 @@ void main() {
         400,
         scrollable: scroll,
       );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Replay Onboarding')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Replay Onboarding'));
       await tester.pumpAndSettle();
       expect(find.byType(OnboardingScreen), findsOneWidget);

@@ -1,6 +1,6 @@
 # TEGNAL Flutter
 
-> **Android:** [Public beta APK](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.1). Current source is the `1.0.0-beta.2+4` Play preparation candidate: no bundled connections, generic import labels, existing user connections preserved. It has not been submitted or approved. See [submission preparation](../docs/google-play/submission-checklist.md).
+> **Android:** [Public beta APK](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.3). Current source is the `1.0.0-beta.3+5` candidate: Android bookmark SQLite import in onboarding and Settings, older formats in Settings, no bundled connections, existing user connections preserved. It has not been submitted or approved. See [submission preparation](../docs/google-play/submission-checklist.md).
 
 
 Android-first port of TEGNAL, with Windows and Linux runners. This is an implementation in progress, not a claim of complete native parity. The native Apple application remains the behavioral reference. See the [delivery roadmap](../docs/flutter-roadmap.md) for current implementation, validation gates and remaining work, and [the parity contract](../docs/flutter-parity.md) for the full native behavior matrix.
@@ -99,7 +99,7 @@ Output: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`. An explicit loc
 flutter run -d <existing-device-id>
 ```
 
-The Android release configuration still needs production signing and distribution review. A debug APK or a successful compile is not evidence of a working save/read/download/login workflow.
+Android release builds use production signing configured outside the repository. Play distribution review is still pending. A debug APK or a successful compile is not evidence of a working save/read/download/login workflow.
 
 ### Windows
 

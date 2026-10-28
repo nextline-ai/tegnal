@@ -18,6 +18,7 @@ import '../data/backup_codec.dart';
 import '../data/backup_files.dart';
 import '../data/download_manager.dart';
 import '../data/legacy_import.dart';
+import '../data/android_bookmarks_import.dart';
 import '../data/booru_source_detector.dart';
 import '../data/booru_credentials.dart';
 import '../data/session_client.dart';
@@ -34,7 +35,128 @@ import 'onboarding_screen.dart';
 import 'insights_screen.dart';
 import 'reader_guide.dart';
 
-/// Opens the existing, validated legacy importer from setup and Settings.
+/// The primary importer accepts only the Android bookmark database schema.
+Future<void> showImportAndroidBookmarks(
+  BuildContext context,
+  AppController controller,
+) async {
+  try {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: L10n.tr(context, 'Android bookmark SQLite backup'),
+          extensions: const ['sqlite', 'sqlite3', 'db'],
+          mimeTypes: const [
+            'application/octet-stream',
+            'application/x-sqlite3',
+            'application/vnd.sqlite3',
+          ],
+          uniformTypeIdentifiers: const ['public.data'],
+        ),
+      ],
+    );
+    if (file == null || !context.mounted) return;
+    final importer = AndroidBookmarksImport(controller.store);
+    final summary = await importer.inspectFile(file.path);
+    if (!context.mounted) return;
+    final confirmed = await _showAndroidBookmarksSummary(
+      context,
+      summary,
+      confirm: true,
+    );
+    if (!confirmed || !context.mounted) return;
+    final imported = await showDialog<LegacyImportSummary>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _LibraryImportProgress(
+        onImport: (isCancelled, onProgress) => importer.importFile(
+          file.path,
+          isCancelled: isCancelled,
+          onProgress: onProgress,
+        ),
+      ),
+    );
+    if (imported == null) return;
+    controller.libraryRestored();
+    if (context.mounted && imported is AndroidBookmarksSummary) {
+      await _showAndroidBookmarksSummary(context, imported);
+    }
+  } catch (error) {
+    if (context.mounted) {
+      await showMessage(
+        context,
+        'Unable to Import',
+        error is FormatException
+            ? '${L10n.tr(context, error.message)}\n\n${L10n.tr(context, 'No library data was changed. For other formats, use Other Backup Formats in Settings.')}'
+            : 'The selected file could not be imported. Your current library has been kept.',
+      );
+    }
+  }
+}
+
+Future<bool> _showAndroidBookmarksSummary(
+  BuildContext context,
+  AndroidBookmarksSummary summary, {
+  bool confirm = false,
+}) async {
+  final counts = <String>[
+    '${summary.workCount} ${L10n.tr(context, 'Works')}',
+    '${summary.folderCount} ${L10n.tr(context, 'Folders')}',
+    '${summary.artistCount} ${L10n.tr(context, 'Artists')}',
+    '${summary.searchCount} ${L10n.tr(context, 'Search history records')}',
+    '${summary.readLogCount} ${L10n.tr(context, 'Read-log records (preserved)')}',
+    '${summary.cropCount} ${L10n.tr(context, 'Crop records (preserved)')}',
+    '${summary.preservedRecordCount} ${L10n.tr(context, 'Original records kept locally')}',
+    if (summary.duplicates > 0)
+      '${summary.duplicates} ${L10n.tr(context, 'Duplicate records')}',
+    if (summary.skipped > 0)
+      '${summary.skipped} ${L10n.tr(context, 'Skipped records')}',
+    if (summary.unsupportedDownloadCount > 0)
+      '${summary.unsupportedDownloadCount} ${L10n.tr(context, 'Download records not imported')}',
+  ].join('\n');
+  final details = <String>[
+    counts,
+    if (summary.preservedRecordCount > 0)
+      L10n.tr(
+        context,
+        'Original source records are kept only on this device and are not included in TEGNAL JSON backups.',
+      ),
+    if (summary.readLogCount > 0 || summary.cropCount > 0)
+      L10n.tr(
+        context,
+        'Read logs and crop records are preserved as original data. Reader positions and image crops are not applied.',
+      ),
+    if (confirm)
+      L10n.tr(
+        context,
+        'Existing items will be merged. Other saved items will remain.',
+      ),
+  ].join('\n\n');
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          scrollable: true,
+          title: Text(
+            L10n.tr(context, confirm ? 'Import Library' : 'Import Complete'),
+          ),
+          content: Text(details),
+          actions: [
+            if (confirm)
+              TextButton(
+                onPressed: () => Navigator.pop(dialog, false),
+                child: Text(L10n.tr(context, 'Cancel')),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(L10n.tr(context, confirm ? 'Import' : 'OK')),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}
+
+/// Other formats remain available explicitly from Settings.
 Future<void> showImportLegacy(
   BuildContext context,
   AppController controller,
@@ -99,10 +221,13 @@ Future<void> showImportLegacy(
       final imported = await showDialog<LegacyImportSummary>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => _LegacyImportProgress(
-          importer: importer,
-          path: file.path,
-          fullCatalog: fullCatalog,
+        builder: (_) => _LibraryImportProgress(
+          onImport: (isCancelled, onProgress) => importer.importFile(
+            file.path,
+            fullCatalog: fullCatalog,
+            isCancelled: isCancelled,
+            onProgress: onProgress,
+          ),
         ),
       );
       if (imported == null) return;
@@ -126,20 +251,18 @@ Future<void> showImportLegacy(
   }
 }
 
-class _LegacyImportProgress extends StatefulWidget {
-  const _LegacyImportProgress({
-    required this.importer,
-    required this.path,
-    required this.fullCatalog,
-  });
-  final LegacyImport importer;
-  final String path;
-  final bool fullCatalog;
+class _LibraryImportProgress extends StatefulWidget {
+  const _LibraryImportProgress({required this.onImport});
+  final Future<LegacyImportSummary> Function(
+    bool Function() isCancelled,
+    ValueChanged<int> onProgress,
+  )
+  onImport;
   @override
-  State<_LegacyImportProgress> createState() => _LegacyImportProgressState();
+  State<_LibraryImportProgress> createState() => _LibraryImportProgressState();
 }
 
-class _LegacyImportProgressState extends State<_LegacyImportProgress> {
+class _LibraryImportProgressState extends State<_LibraryImportProgress> {
   bool _cancelled = false;
   int _count = 0;
   String? _error;
@@ -151,14 +274,9 @@ class _LegacyImportProgressState extends State<_LegacyImportProgress> {
 
   Future<void> _run() async {
     try {
-      final result = await widget.importer.importFile(
-        widget.path,
-        fullCatalog: widget.fullCatalog,
-        isCancelled: () => _cancelled,
-        onProgress: (count) {
-          if (mounted) setState(() => _count = count);
-        },
-      );
+      final result = await widget.onImport(() => _cancelled, (count) {
+        if (mounted) setState(() => _count = count);
+      });
       if (mounted) Navigator.pop(context, result);
     } on LegacyImportCancelled {
       if (mounted) Navigator.pop(context);
@@ -166,7 +284,7 @@ class _LegacyImportProgressState extends State<_LegacyImportProgress> {
       if (mounted) {
         setState(
           () => _error = error is FormatException
-              ? error.message
+              ? L10n.tr(context, error.message)
               : L10n.tr(
                   context,
                   'The selected file could not be imported. Your current library has been kept.',
@@ -714,6 +832,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _importAndroidBookmarks() async {
+    if (_working) return;
+    setState(() => _working = true);
+    try {
+      await showImportAndroidBookmarks(context, widget.controller);
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _backup(bool exporting) async {
     if (_working) return;
     setState(() => _working = true);
@@ -1172,7 +1300,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         controller: widget.controller,
         onExport: () => _backup(true),
         onRestore: () => _backup(false),
-        onImport: _importLegacy,
+        onImport: _importAndroidBookmarks,
+        onImportOther: _importLegacy,
       ),
     ),
   );
@@ -1422,14 +1551,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _SettingsGroup(
                 children: [
                   _SettingsRow(
-                    title: 'Import from Other Apps',
+                    title: 'Import Android Bookmark Backup',
                     subtitle: L10n.tr(
                       context,
-                      'Choose a SQLite database or an .abbj image-library backup.',
+                      'Android bookmark SQLite backup',
                     ),
                     icon: Icons.move_to_inbox_outlined,
                     color: const Color(0xFFAF52DE),
-                    onTap: _importLegacy,
+                    onTap: _importAndroidBookmarks,
                   ),
                 ],
               ),
@@ -1811,8 +1940,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: _openLibraryManagement,
                   ),
                   _SettingsRow(
-                    title: 'Import from Other Apps',
+                    title: 'Import Android Bookmark Backup',
                     icon: Icons.move_to_inbox_outlined,
+                    onTap: _importAndroidBookmarks,
+                  ),
+                  _SettingsRow(
+                    title: 'Other Backup Formats',
+                    icon: Icons.inventory_2_outlined,
                     onTap: _importLegacy,
                   ),
                   _SettingsRow(
@@ -1870,10 +2004,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => showLicensePage(
                       context: context,
                       applicationName: 'TEGNAL',
-                      applicationVersion: '1.0.0-beta.2',
+                      applicationVersion: '1.0.0-beta.3',
                     ),
                   ),
-                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.2'),
+                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.3'),
                 ],
               ),
               _SettingsGroup(
@@ -2138,9 +2272,10 @@ class _LibraryManagementScreen extends StatefulWidget {
     required this.onExport,
     required this.onRestore,
     required this.onImport,
+    required this.onImportOther,
   });
   final AppController controller;
-  final Future<void> Function() onExport, onRestore, onImport;
+  final Future<void> Function() onExport, onRestore, onImport, onImportOther;
   @override
   State<_LibraryManagementScreen> createState() =>
       _LibraryManagementScreenState();
@@ -2280,10 +2415,19 @@ class _LibraryManagementScreenState extends State<_LibraryManagementScreen> {
                   ),
                 ),
               _SettingsRow(
-                title: 'Import from Other Apps',
-                subtitle: L10n.tr(context, 'SQLite and image-library backups'),
+                title: 'Import Android Bookmark Backup',
+                subtitle: L10n.tr(context, 'Android bookmark SQLite backup'),
                 icon: Icons.move_to_inbox_outlined,
                 onTap: _busy ? null : () => _run(widget.onImport),
+              ),
+              _SettingsRow(
+                title: 'Other Backup Formats',
+                subtitle: L10n.tr(
+                  context,
+                  'Older user databases, catalog databases and .abbj backups',
+                ),
+                icon: Icons.inventory_2_outlined,
+                onTap: _busy ? null : () => _run(widget.onImportOther),
               ),
             ],
           ),

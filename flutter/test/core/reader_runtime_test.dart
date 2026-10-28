@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content.dart';
 import 'package:tegnal/core/library.dart';
@@ -5,6 +7,51 @@ import 'package:tegnal/features/reader_runtime.dart';
 import 'package:tegnal/ui/reader_image_provider.dart';
 
 void main() {
+  test('post neighbors cover both directions and stay within bounds', () {
+    expect(ReaderPostNeighbors.indices(4, 9), [5, 3, 6, 2]);
+    expect(ReaderPostNeighbors.indices(0, 3), [1, 2]);
+    expect(ReaderPostNeighbors.indices(2, 3), [1, 0]);
+  });
+
+  test(
+    'replacement starts newest jobs after bounded old work completes',
+    () async {
+      final queue = ReaderPrefetchQueue();
+      addTearDown(queue.close);
+      final first = Completer<void>();
+      final second = Completer<void>();
+      final started = <String>[];
+      queue.replace([
+        () {
+          started.add('old1');
+          return first.future;
+        },
+        () {
+          started.add('old2');
+          return second.future;
+        },
+        () async {
+          started.add('obsolete');
+        },
+      ]);
+      expect(started, ['old1', 'old2']);
+      queue.replace([
+        () async {
+          started.add('new1');
+        },
+        () async {
+          started.add('new2');
+        },
+      ]);
+      first.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(started, ['old1', 'old2', 'new1', 'new2']);
+      second.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(started, isNot(contains('obsolete')));
+    },
+  );
+
   ContentItem item(
     int id, {
     String? title,
