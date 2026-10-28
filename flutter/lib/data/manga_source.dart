@@ -43,7 +43,6 @@ class MangaSource implements ContentSource {
   }
 
   final SourceConfig config;
-  bool allowsLanguageExceptions = false;
   late final http.Client _client;
   late final MangaFallbackClient? _fallbackClient;
   final bool _ownsClient;
@@ -62,6 +61,7 @@ class MangaSource implements ContentSource {
   final _detailFlights = <int, Future<ContentItem>>{};
   final _lists = <String, List<int>>{};
   final _feeds = <String, _Feed>{};
+  final _categoryLabels = <int, String>{};
   final _abortRequests = <Completer<void>>{};
   static const _pageSize = 20;
   static const _namespaces = {
@@ -74,19 +74,6 @@ class MangaSource implements ContentSource {
     'female',
     'male',
     'language',
-  };
-  static const _categories = {
-    1: 'doujinshi',
-    2: 'manga',
-    3: 'artistcg',
-    4: 'gamecg',
-    5: 'western',
-    6: 'imageset',
-    7: 'non-h',
-    8: 'cosplay',
-    9: 'photo',
-    10: 'misc',
-    11: 'private',
   };
 
   @override
@@ -143,7 +130,7 @@ class MangaSource implements ContentSource {
       hasMore = offset * 4 + response.bodyBytes.length < total;
     } else {
       final key =
-          '${popular ? 'popular' : 'latest'}:$period:$allowsLanguageExceptions:${tokens.join(' ')}';
+          '${popular ? 'popular' : 'latest'}:$period:${tokens.join(' ')}';
       var matches = _lists[key];
       if (matches == null) {
         matches = await _searchIds(tokens);
@@ -430,39 +417,46 @@ class MangaSource implements ContentSource {
     List<String> tokens,
     int page,
     bool popular, {
-    bool bypass = true,
-    Set<int>? restrictCategories,
     String period = 'week',
   }) async {
-    if (bypass &&
-        allowsLanguageExceptions &&
-        tokens.any((token) => token.startsWith('language:'))) {
-      return _documentLanguageBypass(tokens, page, popular, period);
-    }
-    var categories = tokens.any((token) => token.startsWith('type:'))
+    // Category IDs belong to the server. No built-in range or names are
+    // inferred, including for negative filters and language conditions.
+    Set<int>? categories = tokens.any((token) => token.startsWith('type:'))
         ? <int>{}
-        : _categories.keys.toSet();
+        : null;
+    final excluded = <int>{};
     for (final token in tokens.where(
       (token) => token.startsWith('type:') || token.startsWith('-type:'),
     )) {
-      final name = token.split(':').last;
-      final category = _categories.entries
-          .where((entry) => entry.value == name)
-          .firstOrNull
-          ?.key;
-      if (category == null) _invalidQuery();
-      if (token.startsWith('-')) {
-        categories.remove(category);
+      final negative = token.startsWith('-');
+      final name = token.substring(negative ? 6 : 5);
+      final numeric = _categoryNumber(name);
+      final ids = numeric != null
+          ? {numeric}
+          : _categoryLabels.entries
+                .where(
+                  (entry) =>
+                      _categoryToken(entry.value) == _categoryToken(name),
+                )
+                .map((entry) => entry.key)
+                .toSet();
+      if (ids.isEmpty) {
+        throw const ContentException(
+          'This website does not provide a matching category label. Use a numeric category ID.',
+        );
+      }
+      if (negative) {
+        excluded.addAll(ids);
       } else {
-        categories.add(category);
+        categories!.addAll(ids);
       }
     }
-    if (restrictCategories != null) {
-      categories = categories.intersection(restrictCategories);
+    categories?.removeAll(excluded);
+    if (categories?.isEmpty == true) {
+      return const ContentPage([], hasMore: false);
     }
-    if (categories.isEmpty) return const ContentPage([], hasMore: false);
     final key =
-        '$popular:$period:${tokens.join(' ')}:${(categories.toList()..sort()).join(',')}';
+        '$popular:$period:${tokens.join(' ')}:${categories == null ? 'server-default' : (categories.toList()..sort()).join(',')}:${(excluded.toList()..sort()).join(',')}';
     var feed = _feeds[key];
     if (feed == null ||
         DateTime.now().difference(feed.created).inMinutes >= 5) {
@@ -487,7 +481,7 @@ class MangaSource implements ContentSource {
             .map(_remoteTerm)
             .join(' '),
         'sort': popular ? 'popular' : 'id_desc',
-        if (categories.length != 11)
+        if (categories != null)
           'categories': (categories.toList()..sort()).join(','),
         if (popular)
           'start-date': DateTime.now()
@@ -521,8 +515,15 @@ class MangaSource implements ContentSource {
       for (final value in rows) {
         final row = _map(value);
         if (_number(row['id']) <= 0) _badResponse();
+        final category = _documentCategoryId(row);
+        if ((categories != null || excluded.isNotEmpty) && category == null) {
+          throw const ContentException(
+            'This website does not provide category IDs for type filters.',
+          );
+        }
         if (_number(row['blocked']) != 0 ||
-            !categories.contains(_number(row['category']))) {
+            (categories != null && !categories.contains(category)) ||
+            excluded.contains(category)) {
           continue;
         }
         if (seen.add(_number(row['id']))) feed.items.add(_documentItem(row));
@@ -540,76 +541,54 @@ class MangaSource implements ContentSource {
     );
   }
 
-  Future<ContentPage> _documentLanguageBypass(
-    List<String> tokens,
-    int page,
-    bool popular,
-    String period,
-  ) async {
-    final key = 'mixed:$popular:$period:${tokens.join(' ')}';
-    var feed = _feeds[key];
-    if (feed == null ||
-        DateTime.now().difference(feed.created).inMinutes >= 5) {
-      feed = _Feed()..lanes = [_DocumentLane(), _DocumentLane()];
-      _remember(_feeds, key, feed, 16);
-    }
-    final target = page * _pageSize;
-    var requests = 0;
-    final seen = feed.items.map((item) => item.id).toSet();
-    while (feed.items.length < target) {
-      for (var index = 0; index < feed.lanes.length; index++) {
-        final lane = feed.lanes[index];
-        if (lane.pending.isNotEmpty || !lane.more) continue;
-        if (++requests > 20) {
-          throw const ContentException(
-            'Load earlier pages before jumping this far.',
-          );
-        }
-        final result = await _documentSearch(
-          index == 0
-              ? tokens
-              : tokens
-                    .where((token) => !token.startsWith('language:'))
-                    .toList(),
-          ++lane.page,
-          popular,
-          bypass: false,
-          period: period,
-          restrictCategories: index == 0
-              ? _categories.keys
-                    .where((key) => !const {3, 4, 6}.contains(key))
-                    .toSet()
-              : {3, 4, 6},
-        );
-        lane.pending.addAll(result.items);
-        lane.more = result.hasMore;
+  static int? _categoryNumber(dynamic value) {
+    final parsed = value is int
+        ? value
+        : value is String
+        ? int.tryParse(value)
+        : null;
+    return parsed != null && parsed >= 0 && parsed <= 0x7fffffff
+        ? parsed
+        : null;
+  }
+
+  static int? _documentCategoryId(Map<String, dynamic> object) {
+    final category = object['category'];
+    return _categoryNumber(category is Map ? category['id'] : category) ??
+        _categoryNumber(object['category_id']);
+  }
+
+  static String _categoryToken(String label) =>
+      label.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+
+  String? _documentCategoryLabel(Map<String, dynamic> object) {
+    final category = object['category'];
+    final candidates = [
+      if (category is Map) category['label'],
+      if (category is Map) category['name'],
+      object['category_label'],
+      object['category_name'],
+      object['type'],
+      if (category is String && _categoryNumber(category) == null) category,
+      for (final row in _maps(object['tags']))
+        if (row['tag'] is List &&
+            (row['tag'] as List).length == 2 &&
+            (row['tag'] as List).first == 'type')
+          (row['tag'] as List).last,
+    ];
+    for (final value in candidates) {
+      if (value is! String ||
+          value.trim().isEmpty ||
+          value.length > 120 ||
+          RegExp(r'[\r\n]').hasMatch(value)) {
+        continue;
       }
-      if (feed.lanes.any((lane) => lane.pending.isEmpty && lane.more)) continue;
-      final heads = feed.lanes
-          .where((lane) => lane.pending.isNotEmpty)
-          .toList();
-      if (heads.isEmpty) break;
-      heads.sort((a, b) {
-        final first = a.pending.first, second = b.pending.first;
-        if (popular) {
-          final firstViews = _number(_map(first.metadata['gallery'])['views']);
-          final secondViews = _number(
-            _map(second.metadata['gallery'])['views'],
-          );
-          if (firstViews != secondViews) {
-            return secondViews.compareTo(firstViews);
-          }
-        }
-        return second.id.compareTo(first.id);
-      });
-      final next = heads.first.pending.removeAt(0);
-      if (seen.add(next.id)) feed.items.add(next);
+      final label = value.trim();
+      final id = _documentCategoryId(object);
+      if (id != null) _remember(_categoryLabels, id, label, 128);
+      return label;
     }
-    feed.more = feed.lanes.any((lane) => lane.more || lane.pending.isNotEmpty);
-    return ContentPage(
-      feed.items.skip((page - 1) * _pageSize).take(_pageSize).toList(),
-      hasMore: feed.more || feed.items.length > target,
-    );
+    return null;
   }
 
   ContentItem _documentItem(
@@ -637,7 +616,11 @@ class MangaSource implements ContentSource {
             '${_previewBase!.path.replaceFirst(RegExp(r'/+$'), '')}/${id ~/ 1000000}/${id % 1000000 ~/ 1000}/${id % 1000}.$ext',
       );
     }
-    final type = _categories[_number(object['category'])];
+    final categoryId = _documentCategoryId(object);
+    final categoryLabel = _documentCategoryLabel(object);
+    final type = categoryLabel == null
+        ? categoryId?.toString()
+        : _categoryToken(categoryLabel);
     final image = files == null
         ? <String, dynamic>{}
         : _map(files.first['image']);
@@ -662,6 +645,8 @@ class MangaSource implements ContentSource {
       ],
       metadata: {
         'backend': 'document',
+        'category_id': ?categoryId,
+        'category_label': ?categoryLabel,
         'sourceSite': _home.toString(),
         'gallery': object,
         'files': ?files,
@@ -688,17 +673,6 @@ class MangaSource implements ContentSource {
             ? 'tag/${Uri.encodeComponent(term)}-all.nozomi'
             : '$field/${Uri.encodeComponent(value)}-all.nozomi';
         ids = await _fullList(path);
-        if (field == 'language' && !negative && allowsLanguageExceptions) {
-          final exceptions = await Future.wait(
-            [
-              'gamecg',
-              'artistcg',
-              'imageset',
-            ].map((type) => _fullList('type/$type-all.nozomi')),
-          );
-          ids = {...ids, ...exceptions.expand((values) => values)}.toList()
-            ..sort((a, b) => b.compareTo(a));
-        }
       } else {
         version ??= (await _data(
           'galleriesindex/version',
@@ -1219,14 +1193,7 @@ class MangaSource implements ContentSource {
       throw const ContentException('The manga server format is not supported.');
 }
 
-class _DocumentLane {
-  final pending = <ContentItem>[];
-  int page = 0;
-  bool more = true;
-}
-
 class _Feed {
-  List<_DocumentLane> lanes = [];
   final created = DateTime.now();
   final items = <ContentItem>[];
   int? nextId;

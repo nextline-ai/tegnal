@@ -61,7 +61,7 @@ class LegacyImport {
         await file.length() <= _maxAnimeBytes,
         'Image-library backup exceeds 64 MiB.',
       );
-      return inspectAnimeBoxes(await file.readAsString());
+      return inspectImageLibrary(await file.readAsString());
     }
     final source = sqlite3.open(path, mode: OpenMode.readOnly);
     try {
@@ -106,7 +106,7 @@ class LegacyImport {
       );
       final text = await file.readAsString();
       _checkCancel(isCancelled);
-      return importAnimeBoxes(text);
+      return importImageLibrary(text);
     }
     final source = sqlite3.open(path, mode: OpenMode.readOnly);
     try {
@@ -152,9 +152,9 @@ class LegacyImport {
     }
   }
 
-  LegacyImportSummary inspectAnimeBoxes(String text) =>
+  LegacyImportSummary inspectImageLibrary(String text) =>
       _animePlan(text).summary;
-  LegacyImportSummary importAnimeBoxes(String text) {
+  LegacyImportSummary importImageLibrary(String text) {
     final plan = _animePlan(text);
     _codec.importJson(jsonEncode(plan.envelope));
     return plan.summary;

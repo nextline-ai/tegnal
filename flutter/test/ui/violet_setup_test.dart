@@ -148,11 +148,11 @@ void main() {
     'onboarding imports Android SQLite bookmarks after preview and confirmation',
     (tester) async {
       await mount(tester, OnboardingScreen(controller: controller));
-      final shortcut = find.byKey(const ValueKey('onboarding-violet-shortcut'));
+      final shortcut = find.byKey(const ValueKey('onboarding-import-shortcut'));
       await tester.ensureVisible(shortcut);
       await tester.tap(shortcut);
       await tester.pumpAndSettle();
-      final violet = find.byKey(const ValueKey('onboarding-violet-import'));
+      final violet = find.byKey(const ValueKey('onboarding-import-action'));
       expect(tester.widget(violet), isA<FilledButton>());
       expect(find.text('Import Data from Other Manga Viewers'), findsWidgets);
       expect(find.text('Import from Violet'), findsNothing);

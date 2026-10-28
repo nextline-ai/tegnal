@@ -1,6 +1,6 @@
-# Play Console 입력 워크시트 — Android beta4
+# Play Console 입력 워크시트 — Android beta5
 
-검토일: 2026-10-29. 대상: `work.nextline.tegnal`, `1.0.0-beta.4`, versionCode `6`, minSdk `24`, targetSdk `37`. 코드·release 병합 Manifest·잠긴 의존성을 확인한 **입력 후보**이며, Console에 저장하거나 제출한 답변이 아닙니다. 최종 책임자가 아래 운영 확인을 마친 뒤 확정합니다. 상세 데이터 흐름 목록은 [기존 조사표](data-safety-draft.md)를 참조하고, 실제 답변 선택에는 이 문서를 우선 사용합니다.
+검토일: 2026-10-29. 대상: `work.nextline.tegnal`, `1.0.0-beta.5`, versionCode `7`, minSdk `24`, targetSdk `37`. 기존 beta4 병합 Manifest·의존성 감사와 beta5의 코드/문구 변경을 대조한 **입력 후보**이며, Console에 저장하거나 제출한 답변이 아닙니다. 최종 책임자가 아래 운영 확인을 마친 뒤 확정합니다. 상세 데이터 흐름 목록은 [기존 조사표](data-safety-draft.md)를 참조하고, 실제 답변 선택에는 이 문서를 우선 사용합니다.
 
 표기: **코드 확인**은 이 빌드에서 확인한 사실, **운영 확인**은 사이트/SDK의 처리 또는 최종 사업자 판단이 필요한 부분입니다. 분류와 예외 적용은 단순히 권한 개수로 결정하지 않습니다. 개인 DB, 사용자 기록, 서명키는 읽지 않았습니다.
 

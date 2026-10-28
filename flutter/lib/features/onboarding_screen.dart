@@ -186,7 +186,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
       TextButton.icon(
-        key: const ValueKey('onboarding-violet-shortcut'),
+        key: const ValueKey('onboarding-import-shortcut'),
         onPressed: _working ? null : () => setState(() => _step = 1),
         icon: const Icon(Icons.move_to_inbox_outlined),
         label: Text(_t('Import Android Bookmark Backup')),
@@ -294,12 +294,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 20),
       _importCard(
-        key: const ValueKey('onboarding-violet-card'),
+        key: const ValueKey('onboarding-import-card'),
         title: 'Import Android Bookmark Backup',
         subtitle: 'Choose an Android bookmark SQLite backup (.sqlite or .db). Preview its contents before merging it into your library.',
         icon: Icons.move_to_inbox_outlined,
         action: FilledButton.icon(
-          key: const ValueKey('onboarding-violet-import'),
+          key: const ValueKey('onboarding-import-action'),
           onPressed: _working
               ? null
               : () => _import(

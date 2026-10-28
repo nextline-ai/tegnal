@@ -6,6 +6,8 @@ Run from any directory:
   python3 flutter/tool/sync_localizations.py --check
 
 Native files are read-only. Edit l10n_overrides/{en,ko,ja}.json for Flutter copy.
+Retired UI strings are tracked with reasons in l10n_exclusions.json. They are
+removed after merging the shared catalogs and may not be referenced by Flutter.
 Supplemental keys must match across languages and preserve formatting tokens.
 The source audit recognizes literal L10n.tr/_t calls and common dialog/empty-state
 wrappers. Computed keys, user metadata and API errors still need manual review.
@@ -31,6 +33,10 @@ TOKENS = re.compile(
     r'%(?:\d+\$)?[-+0 #]*(?:\d+|\*)?(?:\.(?:\d+|\*))?'
     r'(?:hh|h|ll|l|z|t|j)?[@diuoxXfFeEgGaAcsp]'
     r'|\{[A-Za-z_][A-Za-z_0-9]*\}'
+)
+RETIRED_IMPORT_BRANDS = re.compile(
+    r"violet|anime[\s_-]*boxes|바이올렛|ヴァイオレット|バイオレット|アニメ\s*ボックス",
+    re.IGNORECASE,
 )
 
 
@@ -118,6 +124,26 @@ def controlled_runtime_keys() -> set[str]:
                 keys.add(value)
     return keys
 
+
+def referenced_retired_keys(retired: set[str]) -> set[str]:
+    """Catch direct and dynamically translated uses, without inspecting DB data.
+
+    Keep the shared dynamic catalog intact except for explicit retired UI keys.
+    Protocol enums, portable IDs and imported user content are outside this
+    translation policy and must not be renamed or deleted.
+    """
+    token = re.compile(r"//[^\n]*|/\*[\s\S]*?\*/|'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
+    referenced: set[str] = set()
+    for path in (FLUTTER / "lib").rglob("*.dart"):
+        for match in token.finditer(path.read_text(encoding="utf-8")):
+            value = match.group(0)
+            if value[0] not in "\"'":
+                continue
+            value = value[1:-1].replace(r"\'", "'").replace(r'\"', '"').replace(r"\n", "\n")
+            if value in retired:
+                referenced.add(value)
+    return referenced
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Validate generated catalogs without writing")
@@ -125,6 +151,7 @@ def main() -> int:
     catalogs: dict[str, dict[str, str]] = {}
     supplements: dict[str, dict[str, str]] = {}
     native: dict[str, dict[str, str]] = {}
+    retired = set(read_json(FLUTTER / "tool" / "l10n_exclusions.json"))
     for language in LANGUAGES:
         native[language] = native_catalog(language)
         supplements[language] = read_json(FLUTTER / "tool" / "l10n_overrides" / f"{language}.json")
@@ -141,6 +168,15 @@ def main() -> int:
                           if key in native[language] and value != native[language][key]]
         if changed_native:
             raise ValueError(f"Supplement would replace native {language} values: {changed_native}")
+    referenced = referenced_retired_keys(retired)
+    if referenced:
+        raise ValueError("Retired UI copy is still referenced by Flutter: " + ", ".join(sorted(referenced)))
+    for language in LANGUAGES:
+        catalogs[language] = {key: value for key, value in catalogs[language].items() if key not in retired}
+        branded = [key for key, value in catalogs[language].items()
+                   if RETIRED_IMPORT_BRANDS.search(key + " " + value)]
+        if branded:
+            raise ValueError(f"Retired import brands remain in {language}; replace active copy or explicitly retire unused keys: {branded}")
     missing = sorted((used_literal_keys() | controlled_runtime_keys()) - catalogs["en"].keys())
     if missing:
         raise ValueError("Missing Flutter literal keys: " + ", ".join(repr(key) for key in missing))
@@ -154,7 +190,7 @@ def main() -> int:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(output, encoding="utf-8")
     print(f"{'Validated' if args.check else 'Generated'} {len(catalogs['en'])} matching keys in en/ko/ja "
-          f"({len(native['en'])} unchanged native keys, {len(supplements['en'])} supplemental keys).")
+          f"({len(native['en'])} shared native keys, {len(supplements['en'])} supplemental keys, {len(retired)} retired UI keys excluded).")
     print("Literal UI keys, controlled Drive runtime messages, and formatting tokens validated. Other computed/runtime keys require manual review.")
     return 0
 

@@ -1,0 +1,20 @@
+{
+  "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.": "Retired bypass advice. Current copy explains default-rating behavior and unavailable source types without recommending removal of protection.",
+  "Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches.": "Retired bypass advice. Current copy explains default-rating behavior and unavailable source types without recommending removal of protection.",
+  "Allow Language Filter Exceptions": "Not supported by current adapters. The stored preference remains compatible, but the inactive control is removed.",
+  "Anime Boxes": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Choose Violet user.db or a catalog database.": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Choose an Anime Boxes .abbj backup (version 1.0).": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again.": "Retired UI example. General tags, IDs and artists replace it; parser compatibility remains unchanged.",
+  "Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing.": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Import Violet / Anime Boxes": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Import an Anime Boxes .abbj backup.": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Import from Anime Boxes": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Import from Violet": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Import saved works, folders and artists from Violet user.db. A catalog database can fill missing work information.": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Move your servers, favorites and search history from Anime Boxes.": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "One rule per line. Use tags, rating:explicit, id:123, or artist:name. Remove a rule to unblock content.": "Retired UI example. General tags, IDs and artists replace it; parser compatibility remains unchanged.",
+  "Restore a TEGNAL JSON backup, or import a library from Violet, Anime Boxes, or another manga viewer. Existing items are merged.": "Retired branded import copy. Current controls describe supported formats using generic function names.",
+  "Turn off Safe Mode in More to use Comics Mode.": "Retired bypass advice. Current copy explains default-rating behavior and unavailable source types without recommending removal of protection.",
+  "Violet, Anime Boxes, or another manga viewer.": "Retired branded import copy. Current controls describe supported formats using generic function names."
+}

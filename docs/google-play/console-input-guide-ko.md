@@ -1,6 +1,6 @@
 # Play Console 입력 가이드 — TEGNAL
 
-작성일: **2026-10-29** · 대상: **Android 1.0.0-beta.4 / versionCode 6**. 조직 계정·개발자 인증 완료 및 앱 이름 등록 완료는 사용자 확인 사항입니다. 이 문서는 입력할 내용과 선택 근거를 준비한 것으로 Console 제출 기록은 아닙니다.
+작성일: **2026-10-29** · 대상: **Android 1.0.0-beta.5 / versionCode 7**. 조직 계정·개발자 인증 완료 및 앱 이름 등록 완료는 사용자 확인 사항입니다. 이 문서는 입력할 내용과 선택 근거를 준비한 것으로 Console 제출 기록은 아닙니다.
 
 ## 1. 기본 등록정보
 
@@ -61,9 +61,9 @@ IARC 설문은 다음 사실을 기준으로 작성합니다.
 
 ## 4. 번들 업로드와 서명
 
-업로드 파일: `flutter/build/releases/TEGNAL-1.0.0-beta.4.aab`
+업로드 파일: `flutter/build/releases/TEGNAL-1.0.0-beta.5.aab`
 
-내부 출시명: `1.0.0-beta.4 (6)`
+내부 출시명: `1.0.0-beta.5 (7)`
 
 릴리스 노트: 언어별 [store-listing](store-listing/)의 `release-notes.txt`.
 

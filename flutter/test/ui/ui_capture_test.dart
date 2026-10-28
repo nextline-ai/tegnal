@@ -394,17 +394,17 @@ void main() {
       controller.setPreference('onboarding', false);
       await mount();
       final violetShortcut = find.byKey(
-        const ValueKey('onboarding-violet-shortcut'),
+        const ValueKey('onboarding-import-shortcut'),
       );
       await tester.ensureVisible(violetShortcut);
-      await capture('onboarding-violet-shortcut');
+      await capture('onboarding-import-shortcut');
       await tester.tap(violetShortcut);
       await settle();
-      await capture('onboarding-violet-primary-import');
+      await capture('onboarding-primary-import');
       controller.setPreference('onboarding', true);
       await mount();
       await tab(3);
-      await capture('settings-violet-prominent-import');
+      await capture('settings-prominent-import');
       final scroll = find
           .descendant(
             of: find.byType(SettingsScreen),
@@ -518,7 +518,7 @@ void main() {
       await settle();
       final safeLabel = L10n.tr(
         tester.element(find.byType(SettingsScreen)),
-        'Safe Mode',
+        'Image Rating Filter',
       );
       for (
         var attempt = 0;

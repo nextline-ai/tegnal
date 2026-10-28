@@ -1,6 +1,6 @@
 # TEGNAL Flutter
 
-> **Android:** [Public beta APK](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.4). Current source is the `1.0.0-beta.4+6` candidate: automatic metadata enrichment after import, native community shortcuts and invitation cadence, animated reader dismissal, no bundled connections, existing user connections preserved. It has not been submitted or approved. See [submission preparation](../docs/google-play/submission-checklist.md).
+> **Android:** [Public beta APK](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5). Current source is the `1.0.0-beta.5+7` candidate: automatic metadata enrichment after import, native community shortcuts and invitation cadence, animated reader dismissal, no bundled connections, existing user connections preserved. It has not been submitted or approved. See [submission preparation](../docs/google-play/submission-checklist.md).
 
 
 Android-first port of TEGNAL, with Windows and Linux runners. This is an implementation in progress, not a claim of complete native parity. The native Apple application remains the behavioral reference. See the [delivery roadmap](../docs/flutter-roadmap.md) for current implementation, validation gates and remaining work, and [the parity contract](../docs/flutter-parity.md) for the full native behavior matrix.

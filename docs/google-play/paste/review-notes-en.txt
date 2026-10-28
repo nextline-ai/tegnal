@@ -1,4 +1,4 @@
-TEGNAL — Android 1.0.0-beta.4 (version code 6)
+TEGNAL — Android 1.0.0-beta.5 (version code 7)
 Package: work.nextline.tegnal
 
 TEGNAL is a reader and personal library for user-configured compatible websites. A fresh installation contains no configured sources or bundled media. Existing user connections are preserved during an update. No TEGNAL account, app subscription or app purchase is required. No reviewer-specific feature switch is used.

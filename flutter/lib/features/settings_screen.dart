@@ -764,7 +764,7 @@ class _BlockedTagsDialogState extends State<_BlockedTagsDialog> {
           Text(
             L10n.tr(
               context,
-              'One rule per line. Space-separated tags must all match. Use -tag for exceptions and * for wildcards. Rating rules are supported.',
+              'One rule per line. Use tags such as landscape, id:123 or artist:name. Space-separated tags must all match. Use -tag for exceptions and * for wildcards.',
             ),
           ),
           const SizedBox(height: 10),
@@ -1731,12 +1731,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (!booru)
                 _SettingsGroup(
                   title: 'Search',
-                  footer: 'Applied to every native manga search, including artist pages. Separate tags with spaces; use underscores within a tag. Excluded tags are automatically prefixed with a minus sign.',
+                  footer:
+                      '${L10n.tr(context, 'Language filters follow the connected website. Category-based language exceptions are not supported.')}\n\n${L10n.tr(context, 'Applied to every native manga search, including artist pages. Separate tags with spaces; use underscores within a tag. Excluded tags are automatically prefixed with a minus sign.')}',
                   children: [
-                    _togglePreference(
-                      'Allow Language Filter Exceptions',
-                      'allowsLanguageExceptions.manga',
-                    ),
                     _SettingsRow(
                       title: 'Default Search Tags',
                       icon: Icons.filter_list,
@@ -1913,10 +1910,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               if (booru)
                 _SettingsGroup(
-                  title: 'Safe Mode',
-                  footer: 'Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches.',
+                  title: 'Image Rating Filter',
+                  footer: 'Applies the selected default rating to image searches that do not specify a rating. Existing rating terms are preserved. Source types that do not support this filter are unavailable while it is enabled.',
                   children: [
-                    _togglePreference('Safe Mode', 'safeMode.booru'),
+                    _togglePreference('Image Rating Filter', 'safeMode.booru'),
                     if (c.modePreference('safeMode', mode))
                       _SettingsRow(
                         title: 'Age Guide',
@@ -2014,10 +2011,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => showLicensePage(
                       context: context,
                       applicationName: 'TEGNAL',
-                      applicationVersion: '1.0.0-beta.4',
+                      applicationVersion: '1.0.0-beta.5',
                     ),
                   ),
-                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.4'),
+                  const _SettingsRow(title: 'Version', value: '1.0.0-beta.5'),
                 ],
               ),
               _SettingsGroup(

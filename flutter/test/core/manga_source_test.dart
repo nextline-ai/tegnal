@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:tegnal/core/content.dart';
+import 'package:tegnal/core/app_controller.dart';
+import 'package:tegnal/data/library_store.dart';
 import 'package:tegnal/data/manga_source.dart';
 
 const _routing = """
@@ -96,15 +98,6 @@ class _IndexedFixture {
     if (path == '/index-korean.nozomi') {
       return http.Response.bytes(_ints([2000]), 200);
     }
-    if (path == '/type/gamecg-all.nozomi') {
-      return http.Response.bytes(_ints([1999]), 200);
-    }
-    if (path == '/type/artistcg-all.nozomi') {
-      return http.Response.bytes(_ints([1998]), 200);
-    }
-    if (path == '/type/imageset-all.nozomi') {
-      return http.Response.bytes(_ints([1997]), 200);
-    }
     if (path == '/galleriesindex/version') return http.Response('1', 200);
     if (path == '/galleriesindex/galleries.1.index') {
       final bytes = ByteData(464);
@@ -175,7 +168,10 @@ class _IndexedFixture {
 }
 
 class _DocumentFixture {
-  bool honorCategories = false;
+  Object? category = 2;
+  String? categoryLabel;
+  String? serverType;
+  List<Map<String, dynamic>> Function(Uri)? searchRows;
   final requests = <http.Request>[];
   bool expired = false;
   bool unsafe = false;
@@ -184,7 +180,9 @@ class _DocumentFixture {
     'id': id,
     'title': 'Book {name}',
     'title_jpn': null,
-    'category': 2,
+    'category': category,
+    if (categoryLabel != null) 'category_label': categoryLabel,
+    if (serverType != null) 'type': serverType,
     'views': id * 10,
     'blocked': 0,
     'thumb_extension': 'jpg',
@@ -219,20 +217,7 @@ class _DocumentFixture {
             request.url.queryParameters['next-views-id'] ??
             '',
       );
-      if (honorCategories) {
-        final visual = request.url.queryParameters['categories'] == '3,4,6';
-        return _json(
-          visual
-              ? [
-                  {...row(2001), 'category': 3},
-                  {...row(1998), 'category': 6},
-                ]
-              : [
-                  {...row(2000), 'category': 2},
-                  {...row(1999), 'category': 2},
-                ],
-        );
-      }
+      if (searchRows != null) return _json(searchRows!(request.url));
       return _json(
         cursor == null
             ? List.generate(50, (index) => row(2000 - index))
@@ -272,6 +257,161 @@ class _DocumentFixture {
 }
 
 void main() {
+  test('document default range accepts unfamiliar server categories without inventing labels', () async {
+    final fixture = _DocumentFixture()..category = 73;
+    final source = MangaSource(_config, client: fixture.client);
+    final result = await source.search('');
+    expect(result.items.first.metadata['category_id'], 73);
+    expect(result.items.first.metadata['category_label'], isNull);
+    expect(result.items.first.tags, contains('type:73'));
+    expect(
+      fixture.requests.last.url.queryParameters.containsKey('categories'),
+      false,
+    );
+    source.close();
+  });
+
+  test('document type names resolve only after the server supplies an ID and label', () async {
+    final fixture = _DocumentFixture()
+      ..category = {'id': 73, 'label': 'Illustrated Works'};
+    final source = MangaSource(_config, client: fixture.client);
+    final detail = await source.detail(2000);
+    expect(detail.metadata['category_id'], 73);
+    expect(detail.metadata['category_label'], 'Illustrated Works');
+    expect(detail.tags, contains('type:illustrated_works'));
+    final result = await source.search('type:illustrated_works');
+    expect(result.items, isNotEmpty);
+    expect(fixture.requests.last.url.queryParameters['categories'], '73');
+    source.close();
+  });
+
+  test('document server type field is preserved as supplied rather than a built-in name', () async {
+    final fixture = _DocumentFixture()
+      ..category = 84
+      ..serverType = 'Reference';
+    final source = MangaSource(_config, client: fixture.client);
+    final detail = await source.detail(2000);
+    expect(detail.metadata['category_label'], 'Reference');
+    expect(detail.tags, contains('type:reference'));
+    await source.search('type:reference');
+    expect(fixture.requests.last.url.queryParameters['categories'], '84');
+    source.close();
+  });
+
+  test(
+    'unknown named document type fails explicitly without broadening a search',
+    () async {
+      final fixture = _DocumentFixture();
+      final source = MangaSource(_config, client: fixture.client);
+      await source.search(
+        '',
+      ); // Seeing ID 2 alone does not identify its meaning.
+      final previous = fixture.requests.length;
+      await expectLater(
+        source.search('type:manga'),
+        throwsA(
+          isA<ContentException>().having(
+            (error) => error.message,
+            'message',
+            'This website does not provide a matching category label. Use a numeric category ID.',
+          ),
+        ),
+      );
+      expect(fixture.requests.length, previous);
+      source.close();
+    },
+  );
+
+  test('document negative category filters retain cursor order and page boundaries', () async {
+    final fixture = _DocumentFixture();
+    fixture.searchRows = (url) => url.queryParameters['next-id'] == null
+        ? List.generate(
+            50,
+            (index) => {
+              ...fixture.row(2000 - index),
+              'category': index.isEven ? 73 : 88,
+            },
+          )
+        : [
+            {...fixture.row(1950), 'category': 73},
+            {...fixture.row(1949), 'category': 73},
+          ];
+    final source = MangaSource(_config, client: fixture.client);
+    final first = await source.search('-type:88');
+    final second = await source.search('-type:88', page: 2);
+    expect(first.items, hasLength(20));
+    expect(first.hasMore, true);
+    expect(second.items, hasLength(7));
+    expect(second.hasMore, false);
+    final ids = [
+      ...first.items,
+      ...second.items,
+    ].map((item) => item.id).toList();
+    expect(ids.toSet(), hasLength(27));
+    expect(ids, [...ids]..sort((a, b) => b.compareTo(a)));
+    final requests = fixture.requests
+        .where((request) => request.url.path == '/ajax/search')
+        .toList();
+    expect(requests, hasLength(2));
+    expect(requests.last.url.queryParameters['next-id'], '1951');
+    expect(
+      requests.every(
+        (request) => !request.url.queryParameters.containsKey('categories'),
+      ),
+      true,
+    );
+    source.close();
+  });
+
+  test('fully excluded server pages advance their cursor until actual results or end', () async {
+    final fixture = _DocumentFixture();
+    fixture.searchRows = (url) => url.queryParameters['next-id'] == null
+        ? List.generate(
+            50,
+            (index) => {...fixture.row(2000 - index), 'category': 88},
+          )
+        : [
+            {...fixture.row(1950), 'category': 73},
+          ];
+    final source = MangaSource(_config, client: fixture.client);
+    final result = await source.search('-type:88');
+    expect(result.items.map((item) => item.id), [1950]);
+    expect(result.hasMore, false);
+    expect(fixture.requests.last.url.queryParameters['next-id'], '1951');
+    fixture.searchRows = (_) => [
+      {...fixture.row(1900), 'category': 88},
+    ];
+    final empty = await source.search('-type:88 artist:other');
+    expect(empty.items, isEmpty);
+    expect(empty.hasMore, false);
+    source.close();
+  });
+
+  test(
+    'document type filtering requires server category IDs instead of guessing',
+    () async {
+      final fixture = _DocumentFixture()..category = null;
+      final source = MangaSource(_config, client: fixture.client);
+      final unfiltered = await source.search('');
+      expect(unfiltered.items, isNotEmpty);
+      expect(
+        unfiltered.items.first.tags.where((tag) => tag.startsWith('type:')),
+        isEmpty,
+      );
+      await expectLater(
+        source.search('type:73'),
+        throwsA(
+          isA<ContentException>().having(
+            (error) => error.message,
+            'message',
+            'This website does not provide category IDs for type filters.',
+          ),
+        ),
+      );
+      source.close();
+    },
+  );
+
   test('document popularity periods have independent cached feeds', () async {
     final fixture = _DocumentFixture();
     final source = MangaSource(_config, client: fixture.client);
@@ -292,55 +432,54 @@ void main() {
   });
 
   test(
-    'indexed language exceptions union visual collections before other filters',
+    'legacy language-exception preferences preserve strict indexed filtering',
     () async {
       final fixture = _IndexedFixture();
-      final source = MangaSource(_config, client: fixture.client)
-        ..allowsLanguageExceptions = true;
-      final result = await source.search('language:korean -female:exclude');
-      expect(result.items.map((item) => item.id), [2000, 1998, 1997]);
-      source.allowsLanguageExceptions = false;
-      final strict = await source.search('language:korean -female:exclude');
-      expect(strict.items.map((item) => item.id), [2000]);
-      source.close();
+      final store = LibraryStore.memory();
+      store.saveSource(_config);
+      store.setSetting('allowsLanguageExceptions.manga', true);
+      final controller = AppController(
+        store,
+        sourceFactory: (config) => MangaSource(config, client: fixture.client),
+      );
+      try {
+        final result = await controller.searchSource(
+          _config,
+          'language:korean -female:exclude',
+        );
+        expect(result.items.map((item) => item.id), [2000]);
+        expect(
+          fixture.requests.where(
+            (request) => request.url.path.startsWith('/type/'),
+          ),
+          isEmpty,
+        );
+        expect(store.setting('allowsLanguageExceptions.manga'), true);
+      } finally {
+        controller.dispose();
+        store.close();
+      }
     },
   );
 
-  test(
-    'document language exceptions merge sorted disjoint category lanes',
-    () async {
-      final fixture = _DocumentFixture()..honorCategories = true;
-      final source = MangaSource(_config, client: fixture.client)
-        ..allowsLanguageExceptions = true;
-      final result = await source.search(
-        'language:korean artist:sample_artist -tag:spoilers',
-      );
-      expect(result.items.map((item) => item.id), [2001, 2000, 1999, 1998]);
-      final requests = fixture.requests
-          .where((request) => request.url.path == '/ajax/search')
-          .toList();
-      expect(requests.length, 2);
-      expect(
-        requests
-            .singleWhere(
-              (request) => request.url.queryParameters['categories'] == '3,4,6',
-            )
-            .url
-            .queryParameters['search'],
-        'artist:sample_artist -other:spoilers',
-      );
-      expect(
-        requests
-            .singleWhere(
-              (request) => request.url.queryParameters['categories'] != '3,4,6',
-            )
-            .url
-            .queryParameters['search'],
-        contains('language:korean'),
-      );
-      source.close();
-    },
-  );
+  test('document language filters are sent unchanged without category exception lanes', () async {
+    final fixture = _DocumentFixture();
+    final source = MangaSource(_config, client: fixture.client);
+    await source.search('language:korean artist:sample_artist -tag:spoilers');
+    final requests = fixture.requests
+        .where((request) => request.url.path == '/ajax/search')
+        .toList();
+    expect(requests, hasLength(1));
+    expect(
+      requests.single.url.queryParameters['search'],
+      contains('language:korean'),
+    );
+    expect(
+      requests.single.url.queryParameters.containsKey('categories'),
+      false,
+    );
+    source.close();
+  });
 
   test(
     'discovers custom common.js once, paginates ranges and preserves metadata',
@@ -473,7 +612,7 @@ void main() {
     () async {
       final fixture = _DocumentFixture();
       final source = MangaSource(_config, client: fixture.client);
-      final first = await source.search('series:sample_series type:manga');
+      final first = await source.search('series:sample_series type:2');
       expect(first.items.length, 20);
       expect(
         first.items.first.thumbnailUrl.toString(),
@@ -490,10 +629,7 @@ void main() {
       final initial = fixture.requests.last.url;
       expect(initial.queryParameters['search'], 'parody:sample_series');
       expect(initial.queryParameters['categories'], '2');
-      final third = await source.search(
-        'series:sample_series type:manga',
-        page: 3,
-      );
+      final third = await source.search('series:sample_series type:2', page: 3);
       expect(
         third.items.map((item) => item.id),
         List.generate(12, (index) => 1960 - index),

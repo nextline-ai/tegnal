@@ -1,6 +1,6 @@
 # Google Play 제출 체크리스트
 
-기준: **2026-10-29 / 1.0.0-beta.4 (6)**. 문서 입력은 [Console 가이드](console-input-guide-ko.md)를 따릅니다. 이전 beta.1~3의 준비 기록은 각 Flutter 빌드 문서에 남아 있으며 현재 후보는 beta.4입니다.
+기준: **2026-10-29 / 1.0.0-beta.5 (7)**. 문서 입력은 [Console 가이드](console-input-guide-ko.md)를 따릅니다. 이전 beta.1~3의 준비 기록은 각 Flutter 빌드 문서에 남아 있으며 현재 후보는 beta.5입니다.
 
 ## 완료
 
@@ -11,7 +11,7 @@
 - [x] Android 공개 개인정보처리방침 작성 및 기존 앱 링크의 플랫폼 구분.
 - [x] 코드·병합 manifest 기반 데이터 보안 입력표 및 확인해야 할 외부 처리 항목 정리.
 - [x] 기본 사이트 없는 새 설치 및 기존 사용자 연결 보존 구현. 심사 전용 분기 없음.
-- [x] 서명된 beta.4 AAB 준비 및 기존 APK 인증서 대조, bundletool·16 KiB 정렬 검사 기록.
+- [x] 서명된 beta.5 AAB 준비 및 기존 APK 인증서 대조, bundletool·16 KiB 정렬 검사 기록.
 - [x] 앱 회귀 테스트 381개와 정적 분석 통과 기록. 이 문서 작업에서 앱 코드는 변경하지 않음.
 - [x] 현재 이미지의 규격·Android 기능 표현을 실제 확인하고 부적합 항목 식별.
 
@@ -26,3 +26,7 @@
 - [ ] **최종 제출**: 스토어 미리보기·App content 선언·리뷰 액세스 검토 후 변경사항 심사 제출. 이 단계는 아직 실행하지 않음.
 
 기존 Apple/TestFlight 승인 사실이나 조직 인증은 Android 콘텐츠·개인정보 심사 승인을 대체하지 않습니다. 제출 자료는 일반 사용자에게 제공할 앱과 일치해야 합니다. [심사 준비](https://support.google.com/googleplay/android-developer/answer/9859455?hl=en).
+
+## beta.5 변경
+
+[코드·리소스 감사](../../flutter/docs/android-beta5-validation.md)와 [새 빌드 검증](../../flutter/docs/android-play-bundle-1.0.0-beta.5.md)을 확인하세요. 내장 카테고리 매핑·폐기 번역·해제 권고를 제거했지만 외부 소스 기능은 남아 있어 위 콘텐츠/데이터 보안 확인 항목은 그대로 적용됩니다.

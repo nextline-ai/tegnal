@@ -347,12 +347,12 @@ void main() {
       'selectedServerIDs': ['existing'],
     });
     final text = jsonEncode(animeFixture());
-    final preview = importer.inspectAnimeBoxes(text);
+    final preview = importer.inspectImageLibrary(text);
     expect(preview.workCount, 2);
     expect(preview.duplicates, 1);
     expect(preview.skipped, 4);
     expect(store.sources(), hasLength(1));
-    final result = importer.importAnimeBoxes(text);
+    final result = importer.importImageLibrary(text);
     expect(result.serverCount, 1);
     expect(result.workCount, 2);
     expect(store.sources(), hasLength(2));
@@ -377,20 +377,20 @@ void main() {
     expect(output['blacklist']['existing'], 'keep\nspoilers\ngore');
     expect(output['savedTags'], hasLength(2));
     expect(jsonEncode(output), isNot(contains('secret')));
-    importer.importAnimeBoxes(text);
+    importer.importImageLibrary(text);
     expect(store.items(AppMode.booru), hasLength(3));
     expect(store.saved('booru:existing:77')!.folderIds, ['my-folder']);
   });
 
   test('unsupported legacy file, format, and absent source do not mutate or create source files', () async {
     expect(
-      () => importer.importAnimeBoxes(
+      () => importer.importImageLibrary(
         jsonEncode({'backupVersion': '2.0', 'servers': [], 'favorites': []}),
       ),
       throwsFormatException,
     );
     expect(
-      () => importer.importAnimeBoxes(
+      () => importer.importImageLibrary(
         jsonEncode({'backupVersion': '1.0', 'servers': [], 'favorites': []}),
       ),
       throwsFormatException,

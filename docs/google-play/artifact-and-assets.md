@@ -4,9 +4,9 @@ Snapshot: 2026-10-29. This is preparation material, not a Play submission or a s
 
 ## Existing bundle and APKs
 
-- The locally built Play candidate is `flutter/build/releases/TEGNAL-1.0.0-beta.4.aab` (105,594,905 bytes). Its SHA-256, rechecked against the file, is `56c33ed31b12405bde8a77fc1a46092cac0bf0460562262477ff4f8999776506`. Its package is `work.nextline.tegnal`, version name `1.0.0-beta.4`, version code **6**. These build outputs are local and may need to be rebuilt if unavailable or if production code changes.
-- The AAB signature certificate SHA-256 in the [build report](../../flutter/docs/android-play-bundle-1.0.0-beta.4.md) is `9B:52:9A:92:DE:32:8F:BB:FA:2D:A9:80:64:6A:0E:93:38:63:F8:01:2D:35:3F:3D:5F:4B:F3:32:9E:AD:8C:59`, matching the direct beta APKs. The report records bundletool validation, signature verification, version, ABI and limitations. This is the certificate that signed this AAB, **not proof of the eventual Play-distributed app-signing certificate**.
-- The ARM64 and universal APKs are direct-distribution artifacts; the AAB is the bundle candidate for Play, which generates device-specific APKs. Do not upload the checksum file or direct APK as a substitute for the AAB. Current APK checksums are in `flutter/build/releases/TEGNAL-1.0.0-beta.4-SHA256SUMS.txt`.
+- The locally built Play candidate is `flutter/build/releases/TEGNAL-1.0.0-beta.5.aab` (105,593,649 bytes). Its SHA-256, rechecked against the file, is `93f98f609fec3dd2cca854ba0d9dc5a6661444182369829e09a03081d47d94d5`. Its package is `work.nextline.tegnal`, version name `1.0.0-beta.5`, version code **7**. These build outputs are local and may need to be rebuilt if unavailable or if production code changes.
+- The AAB signature certificate SHA-256 in the [build report](../../flutter/docs/android-play-bundle-1.0.0-beta.5.md) is `9B:52:9A:92:DE:32:8F:BB:FA:2D:A9:80:64:6A:0E:93:38:63:F8:01:2D:35:3F:3D:5F:4B:F3:32:9E:AD:8C:59`, matching the direct beta APKs. The report records bundletool validation, signature verification, version, ABI and limitations. This is the certificate that signed this AAB, **not proof of the eventual Play-distributed app-signing certificate**.
+- The ARM64 and universal APKs are direct-distribution artifacts; the AAB is the bundle candidate for Play, which generates device-specific APKs. Do not upload the checksum file or direct APK as a substitute for the AAB. Current APK checksums are in `flutter/build/releases/TEGNAL-1.0.0-beta.5-SHA256SUMS.txt`.
 
 ## Signing decision before first Play release
 

@@ -340,12 +340,6 @@ class AppController extends ChangeNotifier {
     String? mangaSort,
   }) {
     final adapter = client(source);
-    if (adapter is MangaSource) {
-      adapter.allowsLanguageExceptions = modePreference(
-        'allowsLanguageExceptions',
-        AppMode.manga,
-      );
-    }
     final effective = effectiveSearchQuery(query, source.mode);
     if (adapter is MangaSource && mangaSort != null) {
       return adapter.search(
@@ -423,12 +417,7 @@ class AppController extends ChangeNotifier {
         targets.map((source) async {
           try {
             final adapter = client(source);
-            if (adapter is MangaSource) {
-              adapter.allowsLanguageExceptions = modePreference(
-                'allowsLanguageExceptions',
-                AppMode.manga,
-              );
-            }
+            if (adapter is MangaSource) {}
             var requestQuery = effectiveSearchQuery(state.query, m);
             if (m == AppMode.manga &&
                 state.contentLanguage != 'all' &&
