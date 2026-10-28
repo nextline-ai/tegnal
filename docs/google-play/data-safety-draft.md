@@ -1,6 +1,6 @@
-# Android Data safety draft — investigation, not Console answers
+# Android data-flow evidence inventory
 
-Reviewed 2026-10-28. **Owner approval and final-artifact verification required.** Organization account verification and app-name registration are complete; Data safety submission is not recorded. The product decision is to remove bundled default connections and use generic feature names in listing copy. That does not remove the app's actual third-party content/data flows.
+Updated 2026-10-29. Use the completed [Console worksheet](console-data-safety.md) for field-by-field entry; this file retains the supporting implementation inventory. **Owner approval and final-artifact verification required.** Organization account verification and app-name registration are complete; Data safety submission is not recorded. The product decision is to remove bundled default connections and use generic feature names in listing copy. That does not remove the app's actual third-party content/data flows.
 
 Google's definition includes off-device transmission to third parties, not just a developer server. Local-only data is different; open-web WebView use and user-initiated transfers have specific exceptions that must be assessed per flow. Ephemeral handling is not a blanket exemption. Use the [official Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en) when completing Console. Do not paste “No collection / No sharing” from this draft.
 
@@ -26,6 +26,6 @@ Google's definition includes off-device transmission to third parties, not just 
 - [ ] Confirm the global encryption-in-transit answer from all flows, including external app/provider behavior; app-owned website requests require HTTPS but that is not an end-to-end or universal third-party guarantee.
 - [ ] Verify cookie/credential deletion scope and OS backup behavior. Source removal **archives the connection and keeps saved works**, and does not itself prove all credentials or website data were erased.
 - [ ] Confirm no TEGNAL account creation in the submitted build. Third-party website accounts are separate; do not describe a nonexistent TEGNAL account-deletion mechanism. Provide actual local/support deletion instructions.
-- [ ] Approve and publicly host the Android privacy policy; align in-app link, listing identity, Data safety and actual production behavior.
+- [x] Prepare the [Android policy](../privacy-policy-android.md) with confirmed developer contact details and add its link to the policy page used by the app. Verify its public availability after publication.
 
 These are investigation categories, not a preselected Console form. Keep reviewed answers with the final version, network evidence and owner sign-off.

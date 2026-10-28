@@ -1,5 +1,9 @@
 # TEGNAL Privacy Policy
 
+**Android:** [Android 개인정보처리방침 / Android Privacy Policy](privacy-policy-android.md) · effective 2026-10-29.
+
+**Apple (iPhone, iPad, Mac):** The policy below applies to the native Apple app. It does not describe Android sync, translation or connection removal.
+
 TEGNAL Privacy Policy
 Updated: October 10, 2026
 

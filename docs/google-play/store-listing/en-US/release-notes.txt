@@ -1,0 +1,7 @@
+1.0.0-beta.4
+• Preview and import supported SQLite data from other manga viewers.
+• Automatically fill missing comic covers, titles and tags from your connected site, with a progress notice and pause control.
+• Added developer community and source-code shortcuts, plus an invitation banner.
+• Refined viewer dismissal animations and browsing/return behavior.
+
+Filling work information requires a compatible site connection and internet access.

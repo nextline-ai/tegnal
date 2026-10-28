@@ -1,0 +1,25 @@
+TEGNAL — Android 1.0.0-beta.4 (version code 6)
+Package: work.nextline.tegnal
+
+TEGNAL is a reader and personal library for user-configured compatible websites. A fresh installation contains no configured sources or bundled media. Existing user connections are preserved during an update. No TEGNAL account, app subscription or app purchase is required. No reviewer-specific feature switch is used.
+
+PASSWORD-FREE IMAGE REVIEW EXAMPLE
+1. Complete language/appearance setup. Choose the website-address action in onboarding, or add a website from Settings/Servers after onboarding.
+2. Enter https://safebooru.org and leave detection on Automatic. Leave username and API key empty. This example requires no password.
+3. Switch to Image Mode using the image icon at the top, open Explore and search scenery. Use the general/safe rating filter where offered.
+4. Long-press a result to save it. In Saved, use its site folder and create a named folder to organize saved works. Tap a work to open the reader, zoom or move to adjacent works. A downward dismissal gesture closes the reader when controls are hidden and the image is not zoomed.
+5. In Settings/More, try theme/language controls, the privacy link and library JSON export/restore. Export the small library just created, then restore it to exercise the normal backup flow without using personal data.
+
+OTHER FEATURES AND ACCESS SCOPE
+The example above demonstrates image browsing; it does not demonstrate every comics provider or prove that all accessible content is general-audience. Users may connect other supported websites, with their own authentication, content ratings and availability. The app's embedded browser and optional API credentials are ordinary user features. The app is not locked to the example website or its rating policy.
+
+The separate comics mode requires a compatible comics connection. Importing a supported bookmark database creates library records; it does not create that connection. Missing covers, titles and tags are fetched automatically once a compatible connection exists. The progress notice can pause/retry this work. Original opaque read/crop records are retained locally, not applied to the reader or included in JSON export. Older formats remain in Settings under Other Backup Formats. A generic image source must not be described as unlocking the separate comics provider.
+
+Translation uses an installed external translation app when image sharing is supported. Otherwise the user can explicitly save an image for external translation. This is optional and not a built-in model download. Cloud library sync is disabled in this Android release. Library export/restore remains available.
+
+DATA AND SUPPORT
+Library storage and taste statistics are local. Content requests, search terms, work-ID enrichment and image requests go to configured websites/media servers. Some Android recovery requests use DNS-over-HTTPS. The privacy policy explains third-party services and OS backups. Settings provides community/project links. Credentials and media files are not included in JSON library exports.
+
+Contact: contact@nextline.work
+Website: https://nextline.work
+Privacy: https://github.com/nextline-ai/tegnal/blob/main/docs/privacy-policy-android.md

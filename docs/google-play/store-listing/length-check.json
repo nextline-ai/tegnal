@@ -1,0 +1,71 @@
+{
+  "candidate": "1.0.0-beta.4+6",
+  "locales": {
+    "ko-KR": {
+      "title": {
+        "characters": 6,
+        "characters_including_final_newline": 7,
+        "limit": 30
+      },
+      "short-description": {
+        "characters": 40,
+        "characters_including_final_newline": 41,
+        "limit": 80
+      },
+      "full-description": {
+        "characters": 1584,
+        "characters_including_final_newline": 1585,
+        "limit": 4000
+      },
+      "release-notes": {
+        "characters": 228,
+        "characters_including_final_newline": 229,
+        "limit": 500
+      }
+    },
+    "en-US": {
+      "title": {
+        "characters": 6,
+        "characters_including_final_newline": 7,
+        "limit": 30
+      },
+      "short-description": {
+        "characters": 72,
+        "characters_including_final_newline": 73,
+        "limit": 80
+      },
+      "full-description": {
+        "characters": 2955,
+        "characters_including_final_newline": 2956,
+        "limit": 4000
+      },
+      "release-notes": {
+        "characters": 443,
+        "characters_including_final_newline": 444,
+        "limit": 500
+      }
+    },
+    "ja-JP": {
+      "title": {
+        "characters": 6,
+        "characters_including_final_newline": 7,
+        "limit": 30
+      },
+      "short-description": {
+        "characters": 38,
+        "characters_including_final_newline": 39,
+        "limit": 80
+      },
+      "full-description": {
+        "characters": 1389,
+        "characters_including_final_newline": 1390,
+        "limit": 4000
+      },
+      "release-notes": {
+        "characters": 206,
+        "characters_including_final_newline": 207,
+        "limit": 500
+      }
+    }
+  }
+}

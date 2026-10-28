@@ -1,59 +1,28 @@
-# Google Play submission checklist
+# Google Play 제출 체크리스트
 
-Draft reviewed against source and Google documentation on 2026-10-28. **Not ready to submit.** This folder prepares decisions and materials; it does not record a Console submission, approval, or publication.
+기준: **2026-10-29 / 1.0.0-beta.4 (6)**. 문서 입력은 [Console 가이드](console-input-guide-ko.md)를 따릅니다. 이전 beta.1~3의 준비 기록은 각 Flutter 빌드 문서에 남아 있으며 현재 후보는 beta.4입니다.
 
-## Blocking product decision
+## 완료
 
-Historical audit finding: the earlier bootstrap registered `hitomi.la` and `danbooru.donmai.us`; that default adult-content connection configuration was a Google Play Sexual Content policy blocker. The owner directed removal, and the bootstrap call/module have now been removed. Two targeted tests confirm empty connections on a fresh install and preservation of existing user DB records. Do not describe the current build as blocked solely by a default connection that no longer exists.
+- [x] 조직 계정 및 개발자 인증 완료, 앱 이름 등록 완료 — 사용자 확인.
+- [x] 공개 연락처 NextLine / contact@nextline.work / https://nextline.work — 사용자 확인.
+- [x] 한국어·영어·일본어 제목·짧은 설명·상세 설명·출시 노트 및 문자 수 검사.
+- [x] 비밀번호 없는 심사 예시와 영어 입력 문안. 공개 API 응답 확인, 실제 Android 실행 확인과는 구분.
+- [x] Android 공개 개인정보처리방침 작성 및 기존 앱 링크의 플랫폼 구분.
+- [x] 코드·병합 manifest 기반 데이터 보안 입력표 및 확인해야 할 외부 처리 항목 정리.
+- [x] 기본 사이트 없는 새 설치 및 기존 사용자 연결 보존 구현. 심사 전용 분기 없음.
+- [x] 서명된 beta.4 AAB 준비 및 기존 APK 인증서 대조, bundletool·16 KiB 정렬 검사 기록.
+- [x] 앱 회귀 테스트 381개와 정적 분석 통과 기록. 이 문서 작업에서 앱 코드는 변경하지 않음.
+- [x] 현재 이미지의 규격·Android 기능 표현을 실제 확인하고 부적합 항목 식별.
 
-The remaining submission gate is assessment of **all actual reachable content paths**, arbitrary compatible-site connections, existing user connections, supported imports/downloads, and the final product scope. Removing host names or using generic marketing terms does not by itself establish compliance. An age rating, user-controlled Safe Mode or non-explicit screenshots is also insufficient evidence. The limited catalog exception is not presumed to apply. Confirm the public product offering for all users against the [Sexual Content policy](https://support.google.com/googleplay/android-developer/answer/9878810?hl=en) before declaring it ready.
+## 제출 전에 남은 사항
 
-Do not hide sites or features from reviewers, detect review accounts, change remote content after approval, or use a review-only build. Metadata and review access must describe the same product users receive. See [Deceptive Behavior](https://support.google.com/googleplay/android-developer/answer/17006354?hl=en).
+- [ ] **실제 제품의 콘텐츠 범위** 확인: 사용자 지정 연결, 기존 연결, 만화 제공자, 필터와 내장 브라우저까지 포함해 Play 콘텐츠 정책을 충족하는지 판단. 일반 콘텐츠 예시·브랜드 생략·18세 이상 선택만으로 충족된다고 보지 않음. [콘텐츠 정책](https://support.google.com/googleplay/android-developer/answer/9878810?hl=en).
+- [ ] **데이터 보안 최종 응답** 확인: [입력표](console-data-safety.md)의 전송 암호화·외부 처리/공유 예외·삭제 답변과 운영 관행을 대조. 확인되지 않은 제3자 보관·삭제를 보장하지 않음.
+- [ ] **그래픽 준비**: 정확한 Android 화면 최소 2장, 512×512 아이콘, 1024×500 피처 그래픽. Apple 전용 기능 홍보물은 사용하지 않음. [자산 점검](artifact-and-assets.md).
+- [ ] **서명 선택**: 기존 APK 사용자의 업데이트 호환 여부를 결정한 뒤 Play App Signing 키 설정. 업로드 인증서만 비교해서 호환된다고 판단하지 않음.
+- [ ] **사업자 Console 선택**: 인증 프로필의 법적 이름·주소·전화, 배포 국가, 무료 여부, 타깃 고객 확인. IARC는 전체 실제 콘텐츠로 응답하고 결과 등급 확인.
+- [ ] **Console/기기 검증**: 내부 테스트 AAB 처리, 생성 APK 설치, 사전 출시 보고서, 네트워크·가져오기·읽기·다운로드·외부 번역 테스트. 공개 개인정보 URL이 로그인 없이 표시되는지 확인.
+- [ ] **최종 제출**: 스토어 미리보기·App content 선언·리뷰 액세스 검토 후 변경사항 심사 제출. 이 단계는 아직 실행하지 않음.
 
-## Owner decisions and Console information
-
-- [x] Remove bundled default connections from bootstrap code; fresh-install/preserved-DB tests reported passing.
-- [ ] Resolve the remaining content-policy assessment above and record the approved public product scope.
-- [x] Owner confirms an **organization account**, developer verification complete, and app name registered.
-- [ ] Confirm the exact Console legal/display identity, contact address/email/phone, countries, pricing and distribution eligibility; these details are not filled from repository names.
-- [ ] Complete target-audience and IARC questionnaires from the entire reachable product. Do not guess a rating or select children as an audience to improve discoverability.
-- [ ] Confirm content licenses, site/API terms, artwork rights and rights to screenshots/branding; retain written evidence. Public accessibility does not establish permission. See [Intellectual Property](https://support.google.com/googleplay/android-developer/answer/9888072?hl=en).
-- [ ] Decide app category/tags, ads declaration and any relevant app-content declarations in Console. No ad SDK was found in the reviewed direct Flutter dependencies; inspect the final dependency/SDK inventory before answering.
-- [x] The new-personal-account 12-tester/14-day production-access requirement is **not applicable to the confirmed organization account**. Internal release testing and other Console requirements remain necessary. See [testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en).
-
-## Privacy and reviewer access
-
-- [ ] Approve [Android privacy draft](privacy-policy-android-draft.md), publish an active public non-geofenced HTML policy URL, and link the Android policy in the app and Console. The current app links to `docs/privacy-policy.md`, which contains Apple/iCloud/Vision claims and must not stand in for this Android review. Existing public policy was not overwritten. See [User Data](https://support.google.com/googleplay/android-developer/answer/10144311?hl=en).
-- [ ] Complete [Data safety investigation](data-safety-draft.md), including content sites, WebView/API handoff, Cloudflare DNS, Google Translate, OS backup, merged permissions and transitive SDKs. Do not automatically answer “No data collected/shared.”
-- [ ] Complete [review instructions](review-instructions.md) with approved, lawful working content and any required third-party test credentials. No credentials are supplied in these files.
-
-## Release artifact
-
-- [x] A **pre-removal candidate** AAB was created and validated locally; see [artifact evidence](../../flutter/docs/android-play-bundle-1.0.0-beta.1.md) (105,241,649 bytes, bundletool 1.18.3 validation and signing-certificate comparison reported). This records artifact validation, **not policy or Console approval**.
-- [x] Rebuilt the candidate with bootstrap removed and generic import UI: [beta.2 validation](../../flutter/docs/android-play-bundle-1.0.0-beta.2.md), version code 4. Any subsequent privacy/product changes require another build. This is technical validation only. Configure Play App Signing/upload-key ownership and backup separately; never commit private signing material. The universal APK is a direct-distribution artifact, not the new-app Play upload artifact. See [Android App Bundles](https://developer.android.com/guide/app-bundle).
-- [x] Prepared the updated [beta.3 candidate](../../flutter/docs/android-play-bundle-1.0.0-beta.3.md), version code 5, with the new SQLite import and bounded image prefetch. APKs are direct-distribution files; the AAB is the Play upload candidate. [Automated validation](../../flutter/docs/android-beta3-validation.md) passed 359 tests with two skipped.
-- [x] Updated to [beta.4, version code 6](../../flutter/docs/android-play-bundle-1.0.0-beta.4.md): automatic post-import metadata requests, community shortcuts and animated reader dismissal. [Validation](../../flutter/docs/android-beta4-validation.md) passed 381 tests with two opt-in capture tests skipped. Data safety/privacy/reviewer drafts describe the new automatic requests.
-- [x] Verified candidate package, versionName/versionCode, signing identity, ABIs and base manifest. Full transitive SDK/data-flow declarations still require completion. Source currently uses `work.nextline.tegnal` and targetSdk 37; use final artifact values, not a stale draft version number.
-- [ ] The current official phone/tablet submission minimum is target API 36 from 2026-08-31. Recheck at upload. Targeting above that minimum does not establish overall compliance. See [target API requirements](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en).
-- [ ] Run Play internal testing/pre-launch report and test current Android/WebView versions, network failure, browser sign-in, source removal, imports, downloads, accessibility and Google Translate unavailable/manual/direct states. Record results and remaining issues.
-- [x] Beta.3 APKs pass 16 KB ZIP alignment; all 21 universal APK native libraries have ELF LOAD alignment of at least 16 KiB. See the artifact report.
-- [ ] Verify Play-generated APKs on devices and inspect Console compatibility warnings; static binary checks do not replace that validation.
-
-## Listing and graphics inventory
-
-Use [Korean](listing-ko-draft.md) and [English](listing-en-draft.md) text only after the product scope is settled. Name/short/full limits are 30/80/4,000 characters. See [store listing setup](https://support.google.com/googleplay/android-developer/answer/9859152?hl=en).
-
-| Asset | Required preparation |
-| --- | --- |
-| Store icon | 512 × 512, 32-bit PNG, maximum 1,024 KB. Review full-square treatment against the current icon specification. |
-| Feature graphic | 1,024 × 500, JPEG or 24-bit PNG without alpha. Needed for the listing; not created here. |
-| Phone screenshots | At least two; up to eight per device type. JPEG or 24-bit PNG without alpha; dimensions 320–3,840, longest dimension at most twice the shortest. For screenshot-based promotion eligibility, prepare at least four at 1,080 × 1,920 portrait or 1,920 × 1,080 landscape. |
-| Large-screen assets | If distributing to tablets/Chromebooks, prepare actual large-screen captures following the dedicated section of the current specification; do not reuse phone captures as evidence of tablet layouts. |
-
-Specifications: [Google Play preview assets](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en), [icon design](https://developer.android.com/distribute/google-play/resources/icon-design-specifications). Recheck Console validation before upload.
-
-Existing references: `flutter/assets/branding/app-icon.png` is 1,024 × 1,024; `flutter/web/icons/Icon-512.png` is 512 × 512 but visual inspection confirmed it is the Flutter placeholder logo and must not be submitted; `docs/assets/app-icon.png` is only 152 × 152. No icon was converted or approved here. Existing internal native-parity captures are QA evidence, not cleared store assets. Record final screenshot dimensions, language, app version, artwork provenance and owner approval before use. Suggested scenes: lawful library/folders, reader controls, search, settings. No feature graphic or cleared screenshot set is ready in this folder.
-
-## Submit gate
-
-All blocking items require owner sign-off and evidence. Console upload, review submission and rollout remain separate actions. This preparation did not access Console, upload artifacts, publish a policy, or contact third parties.
+기존 Apple/TestFlight 승인 사실이나 조직 인증은 Android 콘텐츠·개인정보 심사 승인을 대체하지 않습니다. 제출 자료는 일반 사용자에게 제공할 앱과 일치해야 합니다. [심사 준비](https://support.google.com/googleplay/android-developer/answer/9859455?hl=en).

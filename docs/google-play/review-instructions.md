@@ -1,26 +1,13 @@
-# App access / review instructions draft
+# 심사 액세스 안내
 
-Internal status, 2026-10-28: organization developer verification and app-name registration complete. The current candidate and validation evidence are recorded in [bundle report](../../flutter/docs/android-play-bundle-1.0.0-beta.4.md). **Default-connection bootstrap code has been removed and fresh-install/preserved-DB tests pass. Do not submit until the remaining reachable-content policy assessment, lawful test content, privacy disclosures and rebuilt AAB verification are complete.** No review-only behavior is permitted.
+최종 문안: [500자 이내 입력용 영어 안내](paste/app-access-en.txt) · [상세 영어 심사 메모](paste/review-notes-en.txt)
 
-## Proposed Console text — owner must complete brackets
+2026-10-29 사용자가 **https://safebooru.org / 비밀번호 없음**을 심사 예시로 지정했습니다. 공식 [API 문서](https://safebooru.org/index.php?page=help&topic=dapi)와 [이용약관](https://safebooru.org/index.php?page=tos)을 확인했습니다. `scenery rating:safe` 검색의 공개 JSON API를 1건만 요청해 HTTP 200과 리스트 응답을 확인했습니다. 이미지 다운로드나 실제 Android 기기 검증은 수행하지 않았습니다.
 
-TEGNAL is a reader and personal library organizer for compatible external websites. It does not create a TEGNAL account. Website authentication requirements vary. Use the same release and functionality available to ordinary users.
+주소는 일반 사용자가 쓰는 연결 화면에 직접 입력합니다. 앱에 기본 탑재하거나 심사자만 다르게 처리하지 않습니다. API 이용은 과도한 요청을 하지 않는 조건이며, 사이트는 성인 이용과 광고·유료 장벽 제한을 명시합니다. API 접근 가능성이 게시물 전체의 저작권 허락을 의미하지는 않습니다.
 
-1. Open the app and complete the language/appearance introduction. Use the normal connection setup to enter the approved compatible website supplied in the private App access instructions: **[approved URL, engine/type and authorized content IDs needed]**.
-2. Select the appropriate image or comics mode. Open Explore, search **[lawful test query]**, open **[authorized test work]**, and read or zoom. The first comics work shows a three-step reader guide; it can be reopened from reader settings.
-3. Save a work, open the library and create a colored folder. Move the saved work using Save to Folder. Notes, search history and local taste controls are available through their ordinary screens.
-4. To test import/export, use **[authorized synthetic sample backup, delivery/access instructions and expected contents needed]**. Onboarding and Settings offer Import Data from Other Manga Viewers for supported bookmark SQLite files with a count preview and explicit merge confirmation. Successful imports start missing-cover/title/tag enrichment against the configured compatible source, with a top progress notice and pause/resume controls. Without a source the notice prompts for a connection. Older formats are available only in Settings under Other Backup Formats; TEGNAL JSON restore/export stays separate. Read-log/crop records are retained locally but not applied as reader positions/crops or included in JSON export. Do not include personal user data or secret credentials in public repository files. See [format mapping](../../flutter/docs/android-bookmark-import.md).
-5. For optional translation, install/open Google Translate through the reviewer's normal device setup if available. The app checks its image-sharing support. If unsupported, the user may explicitly save an image and open that app, then import the image there. Translation is optional; no built-in AI model download or guaranteed offline translation is provided.
-6. Google Drive sync is temporarily disabled in this release. JSON backup import/export remains available.
+이 예시는 **이미지 탐색**을 재현하는 경로입니다. 별도 만화 제공자, 모든 사용자 지정 사이트 및 모든 콘텐츠 등급의 검증을 대신하지 않습니다. 상세 메모에 이 범위와 자동 정보 채우기·외부 번역·비활성 동기화를 명시했습니다. 원본 개인 북마크 데이터베이스나 인증 정보를 심사 자료에 포함하지 않습니다.
 
-**Access details:** [Confirm whether the approved source has any authentication, location, membership, API tier, challenge, age verification or 2FA restriction. Supply durable authorized reviewer access through Console, with steps covering every restricted feature. Do not put passwords here.] If no restrictions remain, the owner can confirm that explicitly after testing; it is not assumed.
+TEGNAL 자체 계정은 없지만 외부 사이트마다 로그인·API·지역 제한이 있을 수 있어 Console에서는 추가 액세스 안내를 작성합니다. 심사자가 특정 추가 기능의 접근 자료를 요청하면 그 기능에 실제로 쓸 수 있는 권한과 데이터를 제공해야 합니다. 현재 별도 만화 소스용 일반 콘텐츠 테스트 자료는 제공받지 않았습니다.
 
-## Evidence and submission conditions
-
-- The chosen test source and content must be legal, licensed/authorized, available to reviewers and representative of the public product. Do not substitute harmless review content while hiding prohibited public functionality.
-- A decision to omit website/importer brand names from marketing does not exempt actual connectivity, content access or data transfers from disclosure. Explain actual restrictions and data flows accurately.
-- Bundled default-connection code is removed. Fresh installations start without a connection; existing user database records remain. These existing connections and every supported user connection remain part of the product/content assessment. Verify both states again in the final rebuilt artifact.
-- Reviewer credentials/rights evidence, source availability, target audience and IARC responses remain owner-supplied unknowns.
-- Rehearse these steps against the final Play-delivered build, not a fixture/debug capture. Record device/Android/WebView version, artifact version, test date and any dependencies.
-
-Google requires enough information to access restricted functionality: [Prepare your app for review](https://support.google.com/googleplay/android-developer/answer/9859455?hl=en). No Console access, credential provisioning or external submission was performed for this draft.
+참고: [Google 심사 준비 안내](https://support.google.com/googleplay/android-developer/answer/9859455?hl=en).
