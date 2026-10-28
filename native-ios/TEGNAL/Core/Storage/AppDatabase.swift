@@ -972,10 +972,40 @@ public final class AppDatabase: Sendable {
         }
     }
 
-    public func removeFavoriteArtist(name: String) throws {
+    public func removeFavoriteArtist(name: String, kind: Int? = nil) throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try dbWriter.write { db in
-            try db.execute(sql: "DELETE FROM artists WHERE name = ?", arguments: [trimmed])
+            if let kind { try db.execute(sql: "DELETE FROM artists WHERE name = ? AND kind = ?", arguments: [trimmed, kind]) }
+            else { try db.execute(sql: "DELETE FROM artists WHERE name = ?", arguments: [trimmed]) }
         }
+    }
+}
+
+extension AppDatabase {
+    func saveCollectionTag(_ raw: String, kind: SavedCollectionKind) throws {
+        let name = kind.normalized(raw)
+        guard !name.isEmpty, kind != .history else { return }
+        if kind == .search {
+            if try !savedSearches().contains(name) { try toggleSavedSearch(name) }
+        } else if let code = kind.mangaKind {
+            let exists = try listArtists().contains { $0.kind == code && SavedCollectionKind.identity($0.name) == SavedCollectionKind.identity(name) }
+            if !exists { _ = try addFavoriteArtist(name: name, kind: code) }
+        }
+    }
+}
+
+extension AppDatabase {
+    @discardableResult func toggleCollectionTag(_ raw: String, kind: SavedCollectionKind) throws -> Bool {
+        let name = kind.normalized(raw)
+        guard !name.isEmpty else { return false }
+        if kind == .search || kind == .history {
+            let saved = try savedSearches().contains(name)
+            try toggleSavedSearch(name); return !saved
+        }
+        guard let code = kind.mangaKind else { return false }
+        let matching = try listArtists().filter { $0.kind == code && SavedCollectionKind.identity($0.name) == SavedCollectionKind.identity(name) }
+        if matching.isEmpty { try saveCollectionTag(name, kind: kind); return true }
+        for value in matching { try removeFavoriteArtist(name: value.name, kind: code) }
+        return false
     }
 }

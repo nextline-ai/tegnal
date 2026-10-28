@@ -229,7 +229,7 @@
 "Tap either side to turn pages. Tap the center for the quick menu, or hold anywhere to bookmark." = "左右をタップしてページを送り、中央をタップしてクイックメニューを開きます。画面のどこでも長押しするとブックマークできます。";
 "Tap the Sides to Turn Pages" = "左右をタップしてページを送る";
 "Tap the center: quick menu\nHold anywhere: bookmark\nDouble tap or pinch: zoom · Drag while zoomed: move image\nPage number in the quick menu: go to a page" = "中央をタップ：クイックメニュー\n画面のどこでも長押し：ブックマーク\nダブルタップ・ピンチ：拡大 · 拡大中にドラッグ：画像を移動\nクイックメニューのページ番号：指定ページへ移動";
-"Tap the star (★) beside an artist on the work details screen to add them." = "作品情報の作家名の横にある星（★）をタップして登録できます。";
+"Tap the star (★) beside an artist on the work details screen to add them." = "作品情報の作家タグを長押しして、お気に入りの登録・解除ができます。";
 "Taps" = "タップ";
 "Task Status" = "処理状況";
 "The address is invalid.\nContent and shortcuts will remain disabled if you continue.\nYou can enter the address later in Settings." = "入力されたアドレスは無効です。\nこのまま続けるとコンテンツとショートカットは無効になります。\n後から設定で再入力できます。";
@@ -1196,3 +1196,101 @@
 "Original Text" = "原文";
 
 "Translation requires iOS 17.4 or later." = "翻訳はiOS 17.4以降で利用できます。";
+
+/* Viewer and settings information */
+"Viewer Detail Settings" = "ビューアの詳細設定";
+"About %@" = "%@について";
+"All Works" = "すべての作品";
+"Unable to Save" = "保存できませんでした";
+"Favorite Artist" = "お気に入りの作家";
+"Not a Favorite Artist" = "お気に入り未登録の作家";
+"Add to Artists" = "作家をお気に入りに追加";
+"Remove from Artists" = "作家のお気に入りを解除";
+"Hold an artist tag in Work Information to add it to your favorite artists." = "作品情報の作家タグを長押しすると、お気に入りに追加できます。";
+"Swipe Up for Work Information" = "上にスワイプして作品情報を表示";
+"Viewer Gestures" = "ビューアの操作方法";
+"Add a supported image website, then select the servers you want to search. Each server keeps its own favorites and filters." = "対応する画像サイトを追加し、検索するサーバーを選びます。お気に入りとフィルターはサーバーごとに保存されます。";
+"Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode." = "サイトのホームページのアドレスを入力します。自動で種類を判別し、マンガまたは画像モードで開きます。";
+"Optional account details can improve access on some websites. Copy them from that website’s account settings; they are stored securely in Keychain." = "サイトによってはアカウント情報でアクセス範囲が広がります。サイトのアカウント設定から取得した情報を入力してください。キーチェーンに安全に保存されます。";
+"Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again." = "非表示にする条件を1行に1つ入力します。タグ、rating:explicit、id:123、artist:nameなどが使えます。条件を削除すると再表示されます。";
+"Opens the website instead of the app’s native screens. Try this if a website does not load correctly." = "アプリ専用画面の代わりにサイトを直接開きます。サイトを正しく読み込めないときにお試しください。";
+"Opens the website’s connection check. Complete it here if the server blocks searches or image loading." = "サイトの接続確認画面を開きます。検索や画像の読み込みがブロックされた場合、ここで確認を完了してください。";
+"Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed." = "端末に一時保存したサムネイルとビューア画像を削除します。保存した作品は残り、必要な画像は再ダウンロードされます。";
+"Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet." = "ページ下部から上にスワイプすると作品情報が開きます。連続スクロールでは誤って開かないよう、初期設定はオフです。";
+"Loads the full-size file from the website. This can use more data and take longer to load." = "サイトの元のサイズのファイルを読み込みます。データ使用量と読み込み時間が増えることがあります。";
+"Uses smaller compressed images when available. Load Original Images takes priority over this setting." = "サイトに用意されている小さな圧縮画像を使います。「元の画像を読み込む」がオンの場合は原本が優先されます。";
+"Keeps the viewer’s quick actions visible along the bottom of the screen." = "ビューアの画面下部にクイックメニューを常に表示します。";
+"Turns pages at your chosen interval. Pauses while a menu, settings, translation or zoom is open, and stops at the last page." = "設定した間隔で次のページへ進みます。メニュー、設定、翻訳、拡大中は一時停止し、最後のページで止まります。";
+"Loads upcoming pages in advance so they open faster. Uses extra data and keeps the images in memory only." = "次のページを先に読み込み、待ち時間を減らします。追加のデータを使用し、画像はメモリ内だけに保持します。";
+"Keeps both libraries, folders and general settings in sync across your devices. Layout, viewer preferences, downloaded media and sign-in details stay on each device." = "両モードのライブラリ、フォルダ、一般設定を端末間で同期します。レイアウト、ビューア設定、ダウンロードしたファイル、ログイン情報は各端末に残ります。";
+"Uses your device’s language unless you choose another language below. Comics and Image modes remember separate choices." = "選択しない場合は端末の言語に翻訳します。マンガと画像モードでそれぞれ別の言語を記憶します。";
+"Exports both libraries, folders, saved searches and other library data into one JSON file. Media and sign-in details are not included. Importing merges the file with your library." = "両モードのライブラリ、フォルダ、保存した検索などを1つのJSONファイルに書き出します。画像、動画、ログイン情報は含まれません。読み込むと既存のライブラリに統合されます。";
+"Includes Game CG, Artist CG and Image Set even when their language differs from your filter. Turn off to apply the language filter to all works." = "ゲームCG、作家CG、画像セットは選択した言語と違っても表示します。オフにするとすべての作品に言語フィルターを適用します。";
+"Adds these tags to every comics search. Separate tags with spaces and use underscores inside a tag." = "すべてのマンガ検索にこれらのタグを適用します。タグ同士はスペース、タグ内の空白はアンダースコアで区切ります。";
+"Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you." = "すべてのマンガ検索で一致する作品を除外します。タグだけを入力すると、除外記号のマイナスは自動で追加されます。";
+"Removes the gaps and outer margins around artwork and folder thumbnails." = "作品やフォルダのサムネイル間の隙間と、画面端の余白をなくします。";
+"Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges." = "サムネイルに画像全体を表示します。オフの場合はカードを埋めるため、端が切れることがあります。";
+"Automatic shows twice as many columns as the artwork grid. Choose a number to keep the preview layout fixed." = "自動では作品一覧の2倍の列数でプレビューを表示します。数字を選ぶと列数を固定します。";
+"Automatic fits the columns to the screen width. Choose a number to keep the layout fixed." = "自動では画面幅に合わせて列数を調整します。数字を選ぶと列数を固定します。";
+"Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "画像検索に選択したレーティングタグを1つ追加します。検索欄で変更や削除もできます。レーティング検索に対応しないマンガサイトがあるため、オンの間はマンガモードを使用できません。";
+"Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer." = "作品をタップすると、タイトル、タグ、プレビューのある作品情報を先に表示します。オフの場合は直接ビューアで開きます。";
+"Finds missing covers, titles and tags for works in your library. You can pause and resume the background task." = "保存した作品の不足している表紙、タイトル、タグを取得します。バックグラウンド処理は一時停止して再開できます。";
+"Uses the works you view and save to find recommendations and build your statistics. Turn off to pause new analysis without deleting your library." = "閲覧や保存した作品をもとに、おすすめと統計を作成します。オフにすると新しい分析だけを停止し、ライブラリは残ります。";
+"Shares your taste analysis with your other devices through iCloud. iCloud Sync must also be on; other devices update when they next sync." = "好みの分析をiCloudで他の端末と共有します。iCloud同期もオンにする必要があり、他の端末には次の同期時に反映されます。";
+"Applies these tags to recommendations from this website only. All tags must match. Refresh recommendations after changing the filters." = "このサイトのおすすめだけに適用します。すべてのタグが一致する作品を表示します。変更後はおすすめを更新してください。";
+"Deletes viewing activity, taste evidence and reports. Saved works stay in your library. Existing works will not be analyzed again automatically." = "閲覧履歴、好みの分析、統計レポートを削除します。保存した作品は残り、既存の作品を自動で再分析することはありません。";
+"Tap the center for the quick menu, hold to save, and tap the sides or swipe to change images. Double tap or pinch to zoom. Swipe up from the bottom for details, or swipe down at original zoom to close. For videos, tap with two fingers to open the quick menu." = "中央をタップ：クイックメニュー\n長押し：保存\n左右をタップ、またはスワイプ：画像の切り替え\nダブルタップ、またはピンチ：拡大\n下部から上にスワイプ：詳細情報\n拡大していない状態で下にスワイプ：閉じる\n動画を2本指でタップ：クイックメニュー";
+"Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close." = "中央をタップ：クイックメニュー\n長押し：保存\nダブルタップ、またはピンチ：拡大\n作品情報：クイックメニューから選択、または下部から上にスワイプ\n連続スクロール：上の設定でスワイプを有効にします。上端のハンドルを下に引くと閉じます。";
+
+/* Saved tag collections */
+"Show More" = "もっと見る";
+"Reorder" = "並べ替え";
+"Move Up" = "上へ移動";
+"Move Down" = "下へ移動";
+"Number" = "番号";
+"Copied" = "コピーしました";
+"Hold to copy" = "長押ししてコピー";
+"Saved to Tags" = "タグに保存しました";
+
+/* Library maintenance and viewer feedback */
+"Removed from Tags" = "タグの保存を解除しました";
+"Remove Saved Tag" = "タグの保存を解除";
+"Play Animation When Returning" = "アプリ復帰時にアニメーションを再生";
+"Reset Settings to Defaults" = "設定を初期値に戻す";
+"Reset Settings to Defaults?" = "設定を初期値に戻しますか？";
+"Resets this mode’s viewer options. Saved works and reading progress are kept." = "このモードのビューア設定を初期化します。保存した作品と読書位置は残ります。";
+"Resets this mode’s appearance, browsing and viewer options. Libraries, website connections, sign-in details and iCloud settings are kept." = "このモードの表示・検索・ビューア設定を初期化します。ライブラリ、サイト接続、ログイン情報、iCloud設定は残ります。";
+"Swipe Left or Right to Change Works" = "左右のスワイプで前後の作品を表示";
+"Switches between works already loaded in the current list. Turn off to keep horizontal swipes from changing works." = "現在の一覧に読み込まれた作品の間を移動します。スワイプで作品を切り替えない場合はオフにしてください。";
+"No More Works in This List" = "この一覧に移動先の作品がありません";
+"Organize Saved Works" = "保存作品の整理";
+"Classify into Folders" = "フォルダへ自動分類";
+"Classify By" = "分類基準";
+"Only Unsorted Works" = "未分類の作品のみ";
+"Apply Classification" = "分類を適用";
+"Apply Classification?" = "分類を適用しますか？";
+"Classification Complete" = "分類が完了しました";
+"Review Duplicate Works" = "重複候補の確認・整理";
+"Possible Duplicates" = "重複の可能性がある作品";
+"No Duplicate Candidates" = "重複候補はありません";
+"No Matching Metadata" = "分類できるメタデータがありません";
+"Keep This Copy?" = "この作品を残しますか？";
+"Keep This Copy and Remove Others" = "この作品を残して他を削除";
+"Duplicate Copies Removed" = "重複候補を整理しました";
+"Review the number and source before confirming. Comics merge folder memberships and notes into the kept copy. Images keep the selected copy’s folder." = "番号と出所を確認してください。マンガは他のコピーのフォルダとメモを残す作品に統合します。画像は選択した作品のフォルダを維持します。";
+"Identical work numbers and server post IDs are already merged. This lists possible duplicates with matching metadata or original file addresses. Review each copy before removing it." = "同じ作品番号や同一サーバーの投稿はすでに1件にまとめて保存されます。情報や元ファイルのアドレスが一致する作品を候補として表示します。削除前に各コピーを確認してください。";
+"Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped." = "保存済みの作家や言語などの情報からフォルダを作ります。マンガの既存フォルダは維持します。画像は1つのフォルダに属するため、最初の作家など1つの値で分類します。情報のない作品はスキップします。";
+"Unsorted" = "未分類";
+"Open Menu" = "メニューを開く";
+
+"Keep This Copy" = "このコピーを残す";
+
+"Swipe Right to Go Back" = "右スワイプで一覧へ戻る";
+
+"In Continuous Scroll, swipe right from the left edge of the safe area to return to the list. Off by default. Swiping elsewhere can still change works if that option is on." = "連続スクロールでセーフエリアの左端から右へスワイプすると一覧に戻ります。初期設定はオフです。作品切り替えがオンの場合、端以外のスワイプでは前後の作品へ移動します。";
+
+/* Image viewer removal notices and loading support. */
+"Deleted Post" = "削除された作品";
+"This post was deleted or removed from the website." = "ウェブサイトで削除されたか、公開が停止された作品です。";
+"If you can view this post on the website, contact the developer so we can fix it. Include the post link." = "ウェブサイトで作品を表示できる場合は、修正できるよう作品のリンクを添えて開発者にお知らせください。";
+"Official Discord" = "公式Discord";

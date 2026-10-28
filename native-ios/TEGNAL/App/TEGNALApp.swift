@@ -95,6 +95,10 @@ struct SplashTiming: Equatable {
         guard cleanup == nil else { return }
         guard !covers.isEmpty else { completion(); return }
         generation += 1; let current = generation
+        if timing.hold == 0 && timing.slide == 0 {
+            for cover in covers.values { cover.removeFromSuperview() }
+            covers.removeAll(); completion(); return
+        }
         cleanup = Task { [weak self] in
             do {
                 try await Task.sleep(for: .seconds(timing.hold))
@@ -224,6 +228,7 @@ struct TEGNALApp: App {
     }
 
     @State private var isSplashScreenVisible = true
+    @SwiftUI.AppStorage("app.resumeAnimation", store: ContentPreferences.defaults) private var resumeAnimation = true
     @State private var isResumeSplashVisible = false
     @State private var backgroundSync = BackgroundLibrarySync()
     @State private var launchThermalAllowed = ProcessInfo.processInfo.thermalState != .serious && ProcessInfo.processInfo.thermalState != .critical
@@ -322,7 +327,7 @@ struct TEGNALApp: App {
                 PrivacyCoverManager.shared.show()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                let timing: SplashTiming = splashEnabled && !isSplashScreenVisible ? .resume : .init(hold: 0, slide: 0)
+                let timing: SplashTiming = splashEnabled && resumeAnimation && !isSplashScreenVisible ? .resume : .init(hold: 0, slide: 0)
                 PrivacyCoverManager.shared.hide(timing: timing) { isResumeSplashVisible = false }
             }
             .appFullScreenCover(isPresented: Binding(

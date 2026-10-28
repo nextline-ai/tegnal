@@ -12,7 +12,7 @@ enum ReaderShortcut: String, CaseIterable {
         case .next: return "Next"
         case .menu: return "Quick Menu"
         case .favorite: return "Toggle Saved"
-        case .details: return "Details"
+        case .details: return "Work Details"
         }
     }
     var displayKey: String {

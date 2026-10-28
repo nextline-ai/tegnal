@@ -320,12 +320,12 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["Saved"].tap()
         selectMode(app, "manga")
         XCTAssertTrue(element(app, "manga.createFolder").waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["Artists"].exists)
-        XCTAssertFalse(app.tabBars.buttons["Tags"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Tags"].exists)
+        XCTAssertFalse(app.tabBars.buttons["More"].exists)
         selectMode(app, "booru")
         XCTAssertTrue(element(app, "booru.allFavorites").waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["Tags"].exists)
-        XCTAssertFalse(app.tabBars.buttons["Artists"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Settings"].exists)
         app.tabBars.buttons["Explore"].tap()
         dragMode(app, to: "manga"); assertMode(app, "manga")
         XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
@@ -546,7 +546,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertEqual(search.value as? String, "scenery mountain")
         XCTAssertEqual(paginatedPost.frame.minY, previousY, accuracy: 8, "Returning to the app must retain search, loaded pages and scroll position")
         app.tabBars.buttons["Tags"].tap(); selectMode(app, "manga")
-        XCTAssertTrue(app.tabBars.buttons["Artists"].isSelected)
+        XCTAssertTrue(app.tabBars.buttons["Tags"].isSelected)
         selectMode(app, "booru")
         XCTAssertTrue(app.tabBars.buttons["Tags"].isSelected)
         capture(app, "Mode switch preserves corresponding tab")
@@ -1376,8 +1376,8 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Import user.db (Bookmarks, Folders, Artists)"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Backup & Restore"].exists)
         capture(app, "MangaViewer import from disconnected comics")
-        app.tabBars.buttons["Artists"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Artists"].isSelected)
+        app.tabBars.buttons["Tags"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Tags"].isSelected)
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(element(app, "settings.connection").waitForExistence(timeout: 5))
     }
@@ -1713,14 +1713,14 @@ final class BooruUITests: XCTestCase {
             control.tap(withNumberOfTaps: 4, numberOfTouches: 1)
             let mode = control.value as? String ?? ""
             if modeTitles("manga").contains(mode) {
-                XCTAssertTrue(app.tabBars.buttons["Artists"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.tabBars.buttons["Tags"].waitForExistence(timeout: 5))
                 XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
-                XCTAssertFalse(app.tabBars.buttons["Tags"].exists)
+                XCTAssertFalse(app.tabBars.buttons["More"].exists)
             } else {
                 XCTAssertTrue(modeTitles("booru").contains(mode))
                 XCTAssertTrue(app.tabBars.buttons["Tags"].waitForExistence(timeout: 5))
                 XCTAssertTrue(app.tabBars.buttons["More"].exists)
-                XCTAssertFalse(app.tabBars.buttons["Artists"].exists)
+                XCTAssertFalse(app.tabBars.buttons["Settings"].exists)
             }
         }
         selectMode(app, "manga")

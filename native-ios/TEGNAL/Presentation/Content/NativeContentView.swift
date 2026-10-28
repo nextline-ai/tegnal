@@ -7,6 +7,8 @@ struct ContentEntryView: View {
     @Environment(\.dismiss) private var dismiss
     var initialUrl: String = MangaUrls.home
     var embedded = false
+    var siblingIDs: [Int64] = []
+    var willCloseManga: (Int64) -> Void = { _ in }
     var body: some View {
         if !env.isSiteVerified {
             NavigationStack {
@@ -28,14 +30,14 @@ struct ContentEntryView: View {
             #if DEBUG
             if ContentUITestSupport.enabled {
                 NativeContentView(initialUrl: initialUrl, source: ContentUITestSupport.source, savesProgress: false, embedded: embedded,
-                                  images: env.launchFeeds.images, startup: ProcessInfo.processInfo.arguments.contains("--launch-warmup-test") ? env.launchFeeds : nil)
+                                  images: env.launchFeeds.images, readerIDs: siblingIDs, willCloseManga: willCloseManga, startup: ProcessInfo.processInfo.arguments.contains("--launch-warmup-test") ? env.launchFeeds : nil)
             } else {
                 NativeContentView(initialUrl: initialUrl, source: env.launchFeeds.manga, embedded: embedded,
-                                  images: env.launchFeeds.images, startup: env.launchFeeds)
+                                  images: env.launchFeeds.images, readerIDs: siblingIDs, willCloseManga: willCloseManga, startup: env.launchFeeds)
             }
             #else
             NativeContentView(initialUrl: initialUrl, source: env.launchFeeds.manga, embedded: embedded,
-                              images: env.launchFeeds.images, startup: env.launchFeeds)
+                              images: env.launchFeeds.images, readerIDs: siblingIDs, willCloseManga: willCloseManga, startup: env.launchFeeds)
             #endif
         }
     }
@@ -51,6 +53,8 @@ public struct NativeContentView: View {
     private let source: any ContentProviding
     private let savesProgress: Bool
     private let startup: LaunchFeedWarmup?
+    private let willCloseManga: (Int64) -> Void
+    @State private var readerSequence: MangaReaderSequence
     @State private var images: PageImageStore
     @State private var path: [ContentRoute] = []
     @State private var presentedGallery: GalleryDestination?
@@ -83,12 +87,14 @@ public struct NativeContentView: View {
         self.init(initialUrl: initialUrl, source: MangaContentSource.shared, embedded: embedded)
     }
 
-    init(initialUrl: String = MangaUrls.home, source: any ContentProviding, savesProgress: Bool = true, embedded: Bool = false, initialQuery: String? = nil, images: PageImageStore? = nil, startup: LaunchFeedWarmup? = nil) {
+    init(initialUrl: String = MangaUrls.home, source: any ContentProviding, savesProgress: Bool = true, embedded: Bool = false, initialQuery: String? = nil, images: PageImageStore? = nil, readerIDs: [Int64] = [], sequence: MangaReaderSequence? = nil, willCloseManga: @escaping (Int64) -> Void = { _ in }, startup: LaunchFeedWarmup? = nil) {
         self.embedded = embedded
+        _readerSequence = State(initialValue: sequence ?? MangaReaderSequence(readerIDs))
         initialRoute = initialQuery.map(ContentRoute.query) ?? ContentRoute.initial(initialUrl)
         self.source = source
         self.savesProgress = savesProgress
         self.startup = startup
+        self.willCloseManga = willCloseManga
         _images = State(initialValue: images ?? PageImageStore(source: source))
     }
 
@@ -107,19 +113,21 @@ public struct NativeContentView: View {
         }
         .appSheet(item: $presentedGallery) { gallery in
             NativeContentView(initialUrl: MangaUrls.galleryUrl(for: gallery.id), source: source,
-                              savesProgress: savesProgress, images: images)
+                              savesProgress: savesProgress, images: images, readerIDs: readerSequence.ids, sequence: readerSequence, willCloseManga: willCloseManga)
                 .environment(\.discoveryContext, gallery.context)
                 .presentationDetents([.large]).presentationDragIndicator(.visible)
         }
         .appFullScreenCover(item: $presentedReader, onDismiss: {
             if let readerSearch { self.readerSearch = nil; path.append(.query(readerSearch)) }
         }) { reader in
-            NativeReaderView(galleryID: reader.id, initialPage: reader.page, source: source, images: images,
+            MangaReaderSession(galleryID: reader.id, initialPage: reader.page, source: source, images: images,
                              savesProgress: savesProgress, resumesProgress: reader.resumesProgress, search: { text in readerSearch = text; presentedReader = nil },
-                             exit: { presentedReader = nil })
+                             exit: { presentedReader = nil }, willClose: willCloseManga)
                 .environment(\.discoveryContext, reader.context)
+                .environment(\.mangaReaderSequence, readerSequence)
         }
         .presentationDragIndicator(.visible)
+        .environment(\.mangaReaderSequence, readerSequence)
     }
 
     @ViewBuilder private var root: some View {
@@ -137,14 +145,14 @@ public struct NativeContentView: View {
         case .discoveredGallery(let id, let context):
             RemoteGalleryView(galleryID: id, source: source, images: images, read: openReader).environment(\.discoveryContext, context)
         case .discoveredReader(let id, let page, let context):
-            NativeReaderView(galleryID: id, initialPage: page, source: source, images: images, savesProgress: savesProgress, search: { text in
+            MangaReaderSession(galleryID: id, initialPage: page, source: source, images: images, savesProgress: savesProgress, search: { text in
                 if !path.isEmpty { path.removeLast() }; path.append(.query(text))
-            }, exit: { if path.isEmpty { dismiss() } else { path.removeLast() } }).environment(\.discoveryContext, context)
+            }, exit: { if path.isEmpty { dismiss() } else { path.removeLast() } }, willClose: willCloseManga).environment(\.discoveryContext, context)
         case .reader(let id, let page):
-            NativeReaderView(galleryID: id, initialPage: page, source: source, images: images, savesProgress: savesProgress, search: { text in
+            MangaReaderSession(galleryID: id, initialPage: page, source: source, images: images, savesProgress: savesProgress, search: { text in
                 if !path.isEmpty { path.removeLast() }
                 path.append(.query(text))
-            }, exit: { if path.isEmpty { dismiss() } else { path.removeLast() } })
+            }, exit: { if path.isEmpty { dismiss() } else { path.removeLast() } }, willClose: willCloseManga)
         case .gallery(let id):
             RemoteGalleryView(galleryID: id, source: source, images: images, read: openReader)
         case .artist(let name):
@@ -175,6 +183,7 @@ private struct ContentBookmark: Identifiable {
 }
 
 private struct GalleryFeedView: View {
+    @Environment(\.mangaReaderSequence) private var readerSequence
     @Environment(\.scenePhase) private var scenePhase
     @State private var isVisible = false
     @Environment(\.discoveryContext) private var inheritedContext
@@ -228,6 +237,7 @@ private struct GalleryFeedView: View {
 
     var body: some View {
         let visibleEntries = loader.ids.enumerated().filter { !env.hiddenMangaGalleryIDs.contains($0.element) }
+        ScrollViewReader { scrollProxy in
         ZStack(alignment: .top) {
         ScrollView {
             LazyVStack(spacing: 8) {
@@ -252,9 +262,10 @@ private struct GalleryFeedView: View {
                     let lookahead = prefetchColumns * 6
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
                     ForEach(visibleEntries, id: \.element) { index, id in
-                        GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
+                        GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
                             saveFeedback = .perform { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
                         }
+                        .id(id)
                         .onAppear {
                             if index.isMultiple(of: prefetchColumns) {
                                 loader.prioritizeCovers(startingAt: index, count: lookahead, columns: prefetchColumns)
@@ -400,6 +411,16 @@ private struct GalleryFeedView: View {
             if query.text != text { query.text = text }
             else { await loader.load(effectiveQuery, reset: true).value }
         }
+        .onAppear {
+            let loader = loader, environment = env
+            readerSequence?.prepareReturn = { [weak loader, weak environment] opened, viewed in
+                guard let loader else { return }
+                MangaViewerReturn.restore(openedID: opened, viewedID: viewed,
+                    availableIDs: loader.ids.lazy.filter { !(environment?.hiddenMangaGalleryIDs.contains($0) ?? false) }, using: scrollProxy)
+            }
+        }
+        }
+
     }
 
     private func resumeFeed() {
@@ -514,35 +535,14 @@ private struct RemoteGalleryView: View {
     @State private var coverFinished = false
     @State private var error: String?
     @State private var retry = 0
-    @State private var bookmark: ContentBookmark?
     var read: (Int64, Int, DiscoveryContext, Bool) -> Void
-    @State private var previewsEnabled = false
 
     var body: some View {
         Group {
             if let gallery {
-                GeometryReader { viewport in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 22) {
-                            GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
-                                               read: { read(galleryID, 1, discovery, true) },
-                                               bookmark: { bookmark = ContentBookmark(id: galleryID) })
-                                .onGeometryChange(for: Bool.self) { geometry in
-                                    GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
-                                                                     viewportHeight: viewport.size.height)
-                                } action: { shouldLoad in
-                                    if shouldLoad { previewsEnabled = true }
-                                }
-                            GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled) { index in
-                                read(galleryID, index + 1, discovery, false)
-                            }
-                            .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
-                            MangaContentControls(gallery: gallery)
-                        }.padding(20)
-                    }
-                    .coordinateSpace(name: "gallery.detailViewport")
-                    .accessibilityIdentifier("content.detail.scroll")
-                }
+                GalleryWorkInformation(gallery: gallery, images: images, cover: cover, coverFinished: coverFinished,
+                    read: { read(galleryID, 1, discovery, true) },
+                    selectPage: { read(galleryID, $0 + 1, discovery, false) })
             } else if let error { ContentFailureView(message: error) { retry += 1 } }
             else { ProgressView(L10n.text("Loading work details")) }
         }
@@ -551,7 +551,6 @@ private struct RemoteGalleryView: View {
         .toolbar(.visible, for: .navigationBar)
         .navigationTitle(L10n.text("Work Details"))
         .navigationBarTitleDisplayMode(.inline)
-        .appSheet(item: $bookmark) { target in AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery) }
         .task(id: retry) {
             error = nil
             do {
@@ -570,52 +569,246 @@ private struct RemoteGalleryView: View {
     }
 }
 
-private struct GalleryInformation: View {
+/// Explore, saved works and the viewer use the same work information sections.
+/// The viewer omits only the cover and the action that would open another reader.
+struct GalleryWorkInformation: View {
+    @Environment(\.discoveryContext) private var discovery
     let gallery: NativeGallery
-    let cover: UIImage?
-    let coverFinished: Bool
-    let read: () -> Void
-    let bookmark: () -> Void
+    let images: PageImageStore
+    var cover: UIImage? = nil
+    var coverFinished = true
+    var showsCover = true
+    var previewsFirst = false
+    var read: (() -> Void)? = nil
+    let selectPage: (Int) -> Void
+    var search: ((String) -> Void)? = nil
+    @State private var previewsEnabled = false
+    @State private var bookmark: ContentBookmark?
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            WorkDetailCover(image: cover, loading: !coverFinished)
-            GalleryDetailHeading(title: gallery.title, metadata: L10n.text("%@ · %@ · %@ pages", gallery.language, gallery.type, String(gallery.pages.count)))
-            GalleryDetailActions(read: read, bookmark: bookmark)
-            GalleryDetailMetadata(gallery: gallery)
+        GeometryReader { viewport in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if previewsFirst {
+                        GalleryDetailPreviews(gallery: gallery, images: images, enabled: true, select: selectPage)
+                    }
+                    GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
+                        showsCover: showsCover, read: read,
+                        bookmark: { bookmark = ContentBookmark(id: gallery.id) }, search: search)
+                        .onGeometryChange(for: Bool.self) { geometry in
+                            !previewsFirst && GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
+                                                             viewportHeight: viewport.size.height)
+                        } action: { if $0 { previewsEnabled = true } }
+                    if !previewsFirst {
+                        GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled, select: selectPage)
+                            .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
+                    }
+                    MangaContentControls(gallery: gallery)
+                }.padding(20)
+            }
+            .coordinateSpace(name: "gallery.detailViewport")
+            .accessibilityIdentifier("content.detail.scroll")
+        }
+        .appSheet(item: $bookmark) { target in
+            AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery)
         }
     }
 }
 
-private struct GalleryDetailMetadata: View {
+struct ReaderWorkInformationView: View {
+    @Environment(\.dismiss) private var dismiss
     let gallery: NativeGallery
+    let images: PageImageStore
+    @Binding var current: Int
+    let search: (String) -> Void
+    var body: some View {
+        NavigationStack {
+            GalleryWorkInformation(gallery: gallery, images: images, showsCover: false, previewsFirst: true,
+                selectPage: { current = $0; dismiss() }, search: search)
+                .navigationTitle(L10n.text("Work Details")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
+        }
+        .presentationDetents([.large]).presentationDragIndicator(.visible)
+    }
+}
+
+private struct GalleryInformation: View {
+    let gallery: NativeGallery
+    let cover: UIImage?
+    let coverFinished: Bool
+    let showsCover: Bool
+    let read: (() -> Void)?
+    let bookmark: () -> Void
+    let search: ((String) -> Void)?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            if showsCover { WorkDetailCover(image: cover, loading: !coverFinished) }
+            GalleryDetailHeading(title: gallery.title, metadata: L10n.text("%@ · %@ · %@ pages", gallery.language, gallery.type, String(gallery.pages.count)))
+            GalleryDetailActions(read: read, bookmark: bookmark)
+            GalleryDetailMetadata(gallery: gallery, search: search)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct GalleryDetailMetadata: View {
+    @Environment(AppEnvironment.self) private var env
+    let gallery: NativeGallery
+    let search: ((String) -> Void)?
+    @State private var favoriteArtists = Set<String>()
+    @State private var favoriteError: String?
+    @State private var savedTagQueries = Set<String>()
+    private var groups: [ArtworkTagGroup] {
+        let tags = ArtworkTagGroup.make(tags: gallery.tags).filter { $0.category != .artist && $0.category != .language }
+        // Keep Other Tags last, including a one-character placeholder when empty.
+        return tags.filter { $0.category != .general } + [tags.first { $0.category == .general } ?? .init(category: .general, tags: [])]
+    }
+    private var artists: [String] {
+        var seen = Set<String>()
+        let tagged = ArtworkTagGroup.make(tags: gallery.tags).first { $0.category == .artist }?.tags.map { String($0.query.dropFirst("artist:".count)) } ?? []
+        return (gallery.artists + tagged).filter { !MangaArtistFavorite.key($0).isEmpty && seen.insert(MangaArtistFavorite.key($0)).inserted }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !gallery.artists.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.text("Artists")).font(.headline).padding(.leading, 16)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Artists")).font(.headline)
+                if artists.isEmpty { MetadataPlaceholder() }
+                else {
                     FlowLayout(spacing: 6) {
-                        ForEach(gallery.artists, id: \.self) { name in
-                            NavigationLink(name, value: ContentRoute.artist(name)).font(.body).buttonStyle(.bordered)
+                        ForEach(artists, id: \.self) { name in
+                            MangaArtistTag(name: name, favorite: isFavorite(name), search: search) { saveTag(name, kind: .artist) }
                         }
                     }
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Language")).font(.headline).padding(.leading, 16)
-                NavigationLink(gallery.language, value: ContentRoute.query("language:" + gallery.language))
-                    .font(.body).buttonStyle(.bordered).accessibilityIdentifier("content.detail.language")
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Tags")).font(.headline).padding(.leading, 16)
-                if gallery.tags.isEmpty {
-                    Text(" ").modifier(ArtworkTagPill(color: .clear)).hidden().accessibilityHidden(true)
+                Text(L10n.text("Language")).font(.headline)
+                if gallery.language.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { MetadataPlaceholder() }
+                else if let search {
+                    Button { search("language:" + gallery.language.replacingOccurrences(of: " ", with: "_")) } label: { languageTag }
+                        .buttonStyle(.plain).accessibilityIdentifier("content.detail.language")
+                        .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(gallery.language, kind: .language) })
                 } else {
-                    ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags), headingStyle: .detail, destination: { tag in
-                        .query(tag.query.replacingOccurrences(of: " ", with: "_"))
-                    })
+                    NavigationLink(value: ContentRoute.query("language:" + gallery.language)) { languageTag }
+                        .buttonStyle(.plain).accessibilityIdentifier("content.detail.language")
+                        .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(gallery.language, kind: .language) })
                 }
             }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Tags")).font(.headline)
+                if groups.allSatisfy({ $0.tags.isEmpty }) { MetadataPlaceholder() }
+                ArtworkTagCloud(groups: groups, headingStyle: .detail,
+                    destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
+                    action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
+                    savedQueries: savedTagQueries,
+                    save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) })
+            }
+            GalleryWorkNumber(number: gallery.id)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+        .task { reloadSavedTags() }
+        .alert(L10n.text("Unable to Save"), isPresented: Binding(get: { favoriteError != nil }, set: { if !$0 { favoriteError = nil } })) {
+            Button(L10n.text("Done"), role: .cancel) { favoriteError = nil }
+        } message: { Text(favoriteError ?? "") }
+    }
+    private var languageTag: some View {
+        HStack(spacing: 4) {
+            if savedTagQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true)) { Image(systemName: "star.fill").foregroundStyle(.yellow) }
+            Text(gallery.language)
+        }.foregroundStyle(ArtworkTagCategory.language.color).modifier(ArtworkTagPill(color: ArtworkTagCategory.language.color))
+    }
+    private func isFavorite(_ name: String) -> Bool {
+        favoriteArtists.contains { MangaArtistFavorite.key($0) == MangaArtistFavorite.key(name) }
+    }
+    private func reloadSavedTags() {
+        let values = (try? env.database.listArtists()) ?? []
+        favoriteArtists = Set(values.filter { $0.kind == 0 }.map(\.name))
+        savedTagQueries = Set(values.compactMap { value in
+            SavedCollectionKind.allCases.first { $0.mangaKind == value.kind }?.query(value.name, manga: true)
+        })
+    }
+    private func saveTag(_ name: String, kind: SavedCollectionKind) {
+        do {
+            let saved = try env.database.toggleCollectionTag(name, kind: kind)
+            reloadSavedTags(); SavedTagFeedback.notify(saved: saved)
         }
+        catch { favoriteError = error.localizedDescription }
+    }
+
+}
+
+enum MangaArtistFavorite {
+    static func toggle(_ name: String, in database: AppDatabase) throws -> Set<String> {
+        let artists = Set(try database.listArtists().filter { $0.kind == 0 }.map(\.name))
+        let matching = artists.filter { key($0) == key(name) }
+        if matching.isEmpty { _ = try database.addFavoriteArtist(name: name) }
+        else { for artist in matching { try database.removeFavoriteArtist(name: artist, kind: 0) } }
+        return Set(try database.listArtists().filter { $0.kind == 0 }.map(\.name))
+    }
+    static func key(_ name: String) -> String {
+        SavedCollectionKind.identity(name)
+    }
+}
+
+struct MetadataPlaceholder: View {
+    @ScaledMetric(relativeTo: .body) private var lineHeight = 22
+    var body: some View {
+        Color.clear.frame(width: lineHeight, height: lineHeight).accessibilityHidden(true)
+    }
+}
+
+struct GalleryWorkNumber: View {
+    let number: Int64
+    @State private var copied = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.text("Number")).font(.headline)
+            HStack {
+                Button(action: copy) {
+                    Text(String(number)).foregroundStyle(ArtworkTagCategory.general.color)
+                        .modifier(ArtworkTagPill(color: ArtworkTagCategory.general.color))
+                }.buttonStyle(.plain)
+                    .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in copy() })
+                    .accessibilityIdentifier("content.detail.workNumber")
+                    .accessibilityHint(L10n.text("Hold to copy"))
+                    .accessibilityAction(named: L10n.text("Copy"), copy)
+                if copied { Label(L10n.text("Copied"), systemImage: "checkmark").font(.caption).foregroundStyle(.secondary) }
+            }
+
+        }
+        .task(id: copied) {
+            guard copied else { return }
+            do { try await Task.sleep(for: .seconds(2)); copied = false } catch {}
+        }
+    }
+    private func copy() {
+        UIPasteboard.general.string = String(number); copied = true
+        WorkSaveFeedback.haptic(.added(.comics))
+    }
+}
+
+private struct MangaArtistTag: View {
+    let name: String
+    let favorite: Bool
+    let search: ((String) -> Void)?
+    let saveFavorite: () -> Void
+    var body: some View {
+        link
+            .buttonStyle(.plain)
+            .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveFavorite() })
+            .accessibilityValue(L10n.text(favorite ? "Favorite Artist" : "Not a Favorite Artist"))
+            .accessibilityAction(named: L10n.text(favorite ? "Remove from Artists" : "Add to Artists"), saveFavorite)
+            .accessibilityIdentifier("content.detail.artist." + name)
+    }
+    @ViewBuilder private var link: some View {
+        if let search {
+            Button { search("artist:" + name.replacingOccurrences(of: " ", with: "_")) } label: { tag }
+        } else { NavigationLink(value: ContentRoute.artist(name)) { tag } }
+    }
+    private var tag: some View {
+        HStack(spacing: 4) {
+            if favorite { Image(systemName: "star.fill").foregroundStyle(.yellow) }
+            Text(name.replacingOccurrences(of: "_", with: " "))
+        }.foregroundStyle(ArtworkTagCategory.artist.color)
+            .modifier(ArtworkTagPill(color: ArtworkTagCategory.artist.color))
     }
 }
 
@@ -658,17 +851,17 @@ private struct GalleryFullTitle: View {
 }
 
 private struct GalleryDetailActions: View {
-    let read: () -> Void
+    let read: (() -> Void)?
     let bookmark: () -> Void
     @ScaledMetric(relativeTo: .headline) private var fontSize = 19.5
     var body: some View {
         VStack(spacing: 11) {
-            GalleryActionHeight {
+            if let read { GalleryActionHeight {
                 Button(action: read) {
                     Label(L10n.text("Read"), systemImage: AppMode.manga.icon).font(.system(size: fontSize, weight: .bold)).imageScale(.medium)
                         .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.vertical, 8)
                 }.buttonStyle(.borderedProminent).accessibilityIdentifier("content.read")
-            }
+            } }
             GalleryActionHeight {
                 Button(action: bookmark) {
                     Label(L10n.text("Save to Library"), systemImage: "bookmark").font(.system(size: fontSize, weight: .bold)).imageScale(.medium)

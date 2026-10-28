@@ -2,6 +2,32 @@ import XCTest
 @testable import TEGNAL
 
 final class BooruTests: XCTestCase {
+    func testDanbooruRemovalFlagsAndPost451DoNotMisclassifyGenericFailures() async throws {
+        let flags = try BooruDecoder.post(["id": 12_466_874, "is_deleted": true, "is_banned": true], server: dan)
+        XCTAssertTrue(flags.isRemoved)
+        XCTAssertTrue(try JSONDecoder().decode(BooruPost.self, from: JSONEncoder().encode(flags)).isRemoved)
+        let legacy = try BooruDecoder.post(["id": 101], server: dan)
+        XCTAssertFalse(legacy.isRemoved)
+        XCTAssertEqual(BooruPostAccessError.detect(["id": 12_466_874, "is_deleted": true], server: dan), .removed)
+        XCTAssertEqual(BooruPostAccessError.detect(Data("<meta name='post-is-banned' content='true'>".utf8), server: dan), .removed)
+        XCTAssertNil(BooruPostAccessError.detect(["file_url": NSNull(), "is_deleted": false, "is_banned": false], server: dan))
+        let removed = mocked { request in
+            XCTAssertTrue(request.url!.path.hasSuffix("posts/12466874.json"))
+            return (200, #"{"id":12466874,"is_deleted":true}"#)
+        }
+        let saved = try BooruDecoder.post(["id": 12_466_874, "file_url": "https://cdn.example.com/old.jpg"], server: dan)
+        do { _ = try await removed.details(server: dan, post: saved); XCTFail("Refresh stale saved media metadata") }
+        catch { XCTAssertEqual(error as? BooruPostAccessError, .removed) }
+        let takedown = mocked { _ in (451, "This page has been removed because of a takedown request") }
+        do { _ = try await takedown.details(server: dan, post: legacy); XCTFail("Expected removal") }
+        catch { XCTAssertEqual(error as? BooruPostAccessError, .removed) }
+        do { _ = try await takedown.posts(server: dan, query: "", page: 0); XCTFail("Expected feed error") }
+        catch { XCTAssertNil(error as? BooruPostAccessError, "A feed-wide HTTP error must not silently remove a post") }
+        let forbidden = mocked { _ in (403, "Forbidden") }
+        do { _ = try await forbidden.details(server: dan, post: legacy); XCTFail("Expected verification error") }
+        catch { XCTAssertNil(error as? BooruPostAccessError) }
+    }
+
     func testViewerReturnUsesTheLastLoadedPostWithoutJumpingOnAnUnchangedOrRemovedPost() {
         let initial = ["first:101", "first:102", "second:101"]
         XCTAssertNil(BooruViewerReturn.targetID(openedID: "first:101", viewedID: "first:101", availableIDs: initial))
@@ -677,7 +703,7 @@ final class BooruTests: XCTestCase {
         let client = mocked { request in
             let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
             let fields = Set((items.first { $0.name == "only" }?.value ?? "").split(separator: ",").map(String.init))
-            XCTAssertEqual(fields, Set(["id", "file_url", "large_file_url", "preview_file_url", "image_width", "image_height", "tag_string", "tag_string_artist", "tag_string_meta", "rating", "score", "file_ext", "pool_ids", "fav_count", "up_score", "comment_count", "is_banned", "media_asset[variants]", "tag_string_copyright", "tag_string_character"]))
+            XCTAssertEqual(fields, Set(["id", "file_url", "large_file_url", "preview_file_url", "image_width", "image_height", "tag_string", "tag_string_artist", "tag_string_meta", "rating", "score", "file_ext", "pool_ids", "fav_count", "up_score", "comment_count", "is_banned", "is_deleted", "media_asset[variants]", "tag_string_copyright", "tag_string_character"]))
             return (200, #"[{"id":101,"file_url":"https://cdn.example.com/a.jpg","preview_file_url":"https://cdn.example.com/p.jpg","tag_string":"scenery","tag_string_artist":"artist","rating":"g","file_ext":"jpg"}]"#)
         }
         let result = try await client.posts(server: dan, query: "scenery", page: 0)
@@ -697,9 +723,9 @@ final class BooruTests: XCTestCase {
             "<section class='image-container'><p>This page has been removed because of a takedown request or rule violation.</p></section>",
             "<section class='image-container'><p>This image is unavailable in safe mode.</p></section>",
             #"{"success":false,"message":"Gold members can search more tags."}"#,
-            #"{"id":12403879,"is_banned":true,"is_visible":false,"tag_string":"restricted_tag"}"#,
             "Forbidden", "<html>Just a moment...</html>"
         ] { XCTAssertNil(BooruPostAccessError.detect(Data(text.utf8), server: dan), text) }
+        XCTAssertEqual(BooruPostAccessError.detect(Data(#"{"id":12403879,"is_banned":true,"is_visible":false}"#.utf8), server: dan), .removed)
         var other = dan; other.engine = .gelbooru
         XCTAssertNil(BooruPostAccessError.detect(Data(gate.utf8), server: other))
     }
@@ -711,6 +737,7 @@ final class BooruTests: XCTestCase {
         var documentCalls = 0
         let client = mocked { request in
             if request.url!.path.hasSuffix("posts.json") { return (200, json) }
+            if request.url!.path.hasSuffix("posts/12403879.json") { return (200, #"{"id":12403879,"is_banned":false}"#) }
             documentCalls += 1
             XCTAssertTrue(request.url!.path.hasSuffix("posts/12403879"))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/html", "The access gate exists in HTML, not Danbooru's projected JSON")
@@ -750,7 +777,8 @@ final class BooruTests: XCTestCase {
     @MainActor func testGoldAccessCacheRetriesAfterBrowserValidationChanges() async throws {
         var server = dan; server.id = UUID().uuidString
         var restricted = true, calls = 0
-        let client = mocked { _ in
+        let client = mocked { request in
+            if request.url!.path.hasSuffix("posts/101.json") { return (200, #"{"id":101}"#) }
             calls += 1
             return (200, restricted
                 ? "<section class='image-container'>You need a gold account to see this image.</section>"

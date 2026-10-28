@@ -3,51 +3,11 @@ import SwiftUI
 struct BooruSavedView: View {
     let server: BooruServer
     let source: any BooruProviding
+    @Environment(AppEnvironment.self) private var env
     @Environment(BooruStore.self) private var store
-    @State private var tagName = ""
-    @State private var kind = "tag"
-    @State private var historyQuery: String?
     var body: some View {
-        List {
-            Section(L10n.text("Save a Tag or Artist")) {
-                Picker(L10n.text("Type"), selection: $kind) {
-                    Text(L10n.text("Tags")).tag("tag")
-                    Text(L10n.text("Artists")).tag("artist")
-                }.pickerStyle(.segmented)
-                HStack {
-                    TextField(L10n.text("Tag name"), text: $tagName).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .accessibilityIdentifier("booru.savedName")
-                    Button(L10n.text("Add")) {
-                        let name = tagName.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: " ", with: "_")
-                        if !store.savedTags(serverID: server.id, kind: kind).contains(name) {
-                            store.perform { try store.toggleTag(name, serverID: server.id, kind: kind) }
-                        }
-                        tagName = ""
-                    }.disabled(tagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("booru.saveTag")
-                }
-            }
-            savedSection("Tags", kind: "tag")
-            savedSection("Artists", kind: "artist")
-            savedSection("Saved Searches", kind: "search")
-            SearchHistorySection(history: store.history(serverID: server.id), saved: store.savedTags(serverID: server.id, kind: "search"), open: { historyQuery = $0 }, star: { query in
-                store.perform { try store.toggleTag(query, serverID: server.id, kind: "search") }
-            }, remove: { query in store.perform { try store.deleteSearch(query, serverID: server.id) } }, clear: {
-                store.perform { try store.clearHistory(serverID: server.id) }
-            }, identifierPrefix: "booru.savedHistory.")
-        }.navigationDestination(item: $historyQuery) { BooruFeedView(server: server, source: source, initialQuery: $0) }.navigationTitle(L10n.text("Tags & Artists")).navigationBarTitleDisplayMode(.inline)
-    }
-    private func savedSection(_ title: String, kind: String) -> some View {
-        Section(L10n.text(title)) {
-            let tags = store.savedTags(serverID: server.id, kind: kind)
-            if tags.isEmpty { Text(L10n.text("Nothing Saved Yet")).foregroundStyle(.secondary) }
-            ForEach(tags, id: \.self) { name in
-                NavigationLink { BooruFeedView(server: server, source: source, initialQuery: name) } label: {
-                    Label(name.replacingOccurrences(of: "_", with: " "), systemImage: kind == "artist" ? "person" : "number")
-                }.swipeActions {
-                    Button(L10n.text("Remove"), role: .destructive) { store.perform { try store.toggleTag(name, serverID: server.id, kind: kind) } }
-                }
-            }
-        }
+        SavedCollectionsBrowser(database: env.database, booru: store, server: server, source: source)
+            .navigationTitle(L10n.text("Tags")).navigationBarTitleDisplayMode(.inline)
     }
 }
 

@@ -39,8 +39,11 @@ struct TranslationLanguageSettings: View {
     var body: some View {
         List {
             Section {
-                option("system", title: L10n.text("System Language"))
-            } footer: { Text(L10n.text("By default, images are translated into your device’s language. This preference is saved separately for each mode.")) }
+                HStack {
+                    option("system", title: L10n.text("System Language"))
+                    SettingsInfoButton(title: "Translation Language", message: "Uses your device’s language unless you choose another language below. Comics and Image modes remember separate choices.")
+                }
+            }
             if #available(iOS 18.0, *) {
                 Section(L10n.text("Choose a Language")) {
                     ForEach(languages, id: \.self) { option($0, title: ReaderTranslationLanguage.name($0)) }

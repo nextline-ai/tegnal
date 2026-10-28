@@ -390,8 +390,8 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     let explore: Explore
     let collections: Collections
     let settings: Settings
-    private var collectionsTitle: String { L10n.text(mode == .booru ? "Tags" : "Artists") }
-    private var collectionsIcon: String { mode == .booru ? "tag" : "person.2" }
+    private var collectionsTitle: String { L10n.text("Tags") }
+    private var collectionsIcon: String { "tag" }
     private var settingsTitle: String { L10n.text(mode == .booru ? "More" : "Settings") }
     private var settingsIcon: String { mode == .booru ? "ellipsis" : "gearshape" }
     private var insights: some View {

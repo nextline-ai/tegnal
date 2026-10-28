@@ -331,6 +331,7 @@ struct BooruMediaView: UIViewRepresentable {
     let onStatus: (String) -> Void
     let onGesture: (BooruMediaGesture) -> Void
     var onGoldRequired: () -> Void = {}
+    var onRemoved: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> WKWebView {
@@ -363,6 +364,7 @@ struct BooruMediaView: UIViewRepresentable {
         coordinator.showNotes = showNotes
         coordinator.onGesture = onGesture
         coordinator.onGoldRequired = onGoldRequired
+        coordinator.onRemoved = onRemoved
         let url = post.viewerURL(original: original, reducedData: reducedData)
         let key = post.id + ":" + (url?.absoluteString ?? "")
         if coordinator.key != key {
@@ -381,6 +383,9 @@ struct BooruMediaView: UIViewRepresentable {
             let expectedDocument = coordinator.documentID
             coordinator.resources.onGoldRequired = { [weak coordinator] in
                 coordinator?.rejectGoldRestrictedDocument(expectedDocument)
+            }
+            coordinator.resources.onRemoved = { [weak coordinator] in
+                coordinator?.rejectRemovedDocument(expectedDocument)
             }
             // A snapshot can finish after activity changes. Every new document
             // starts suspended; didFinish applies the current native policy.
@@ -459,7 +464,7 @@ struct BooruMediaView: UIViewRepresentable {
         <meta name="referrer" content="origin"><style>
         html,body{margin:0;width:100%;height:100%;background:#000;color:white;-webkit-touch-callout:none;-webkit-user-select:none}body{display:flex;align-items:center;justify-content:center}
         #canvas{position:relative;flex:none}#media{display:block;width:100%;height:100%;object-fit:contain;visibility:hidden}
-        #notes{position:absolute;inset:0;pointer-events:none}.note{position:absolute;box-sizing:border-box;border:0;outline:0;border-radius:0;appearance:none;background:rgba(0,0,0,0.2);color:white;pointer-events:auto;padding:0;min-width:18px;min-height:18px;display:flex;align-items:center;justify-content:center;text-align:center}
+        #notes{position:absolute;inset:0;pointer-events:none}.note{position:absolute;box-sizing:border-box;border:0;outline:0;border-radius:6px;appearance:none;background:rgba(0,0,0,0.2);color:white;pointer-events:auto;padding:0;min-width:18px;min-height:18px;display:flex;align-items:center;justify-content:center;text-align:center}
         .note span{background:transparent;color:white;padding:0;font:12px -apple-system;text-shadow:none}
         </style></head><body><div id="canvas">\(media)<div id="notes"></div></div>
         <script nonce="\(nonce)">
@@ -701,6 +706,14 @@ struct BooruMediaView: UIViewRepresentable {
         var onStatus: ((String) -> Void)?
         var onGesture: ((BooruMediaGesture) -> Void)?
         var onGoldRequired: (() -> Void)?
+        var onRemoved: (() -> Void)?
+        func rejectRemovedDocument(_ id: String) {
+            guard documentID == id, restrictedDocumentID != id else { return }
+            restrictedDocumentID = id
+            transition.failed(id: id)
+            pause()
+            onRemoved?()
+        }
         func rejectGoldRestrictedDocument(_ id: String) {
             guard documentID == id, restrictedDocumentID != id else { return }
             restrictedDocumentID = id
@@ -786,6 +799,7 @@ final class BooruImageResourceHandler: NSObject, WKURLSchemeHandler {
     var source: URL?
     var server: BooruServer?
     var onGoldRequired: (() -> Void)?
+    var onRemoved: (() -> Void)?
     private var pending: [ObjectIdentifier: Task<Void, Never>] = [:]
     func cancel() {
         for task in pending.values { task.cancel() }
@@ -797,6 +811,7 @@ final class BooruImageResourceHandler: NSObject, WKURLSchemeHandler {
             urlSchemeTask.didFailWithError(BooruError.invalidResponse); return
         }
         let goldRequired = onGoldRequired
+        let removed = onRemoved
         pending[id] = Task {
             defer { pending[id] = nil }
             do {
@@ -811,6 +826,7 @@ final class BooruImageResourceHandler: NSObject, WKURLSchemeHandler {
             } catch {
                 if !Task.isCancelled {
                     if error as? BooruPostAccessError == .goldRequired { goldRequired?() }
+                    if error as? BooruPostAccessError == .removed { removed?() }
                     urlSchemeTask.didFailWithError(error)
                 }
             }
@@ -910,6 +926,7 @@ actor BooruViewerImageCache {
                 guard let http = response as? HTTPURLResponse,
                       (try file.resourceValues(forKeys: [.fileSizeKey])).fileSize ?? 0 <= 128 * 1024 * 1024 else { throw BooruError.invalidResponse }
                 let downloaded = try Data(contentsOf: file, options: .mappedIfSafe)
+                if server.engine == .danbooru, http.statusCode == 451 { throw BooruPostAccessError.removed }
                 guard (200..<300).contains(http.statusCode),
                       let image = CGImageSourceCreateWithData(downloaded as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
                       CGImageSourceGetCount(image) > 0 else {
@@ -920,7 +937,7 @@ actor BooruViewerImageCache {
                 return downloaded
             } catch {
                 try Task.checkCancellation()
-                if error as? BooruPostAccessError == .goldRequired { throw error }
+                if error is BooruPostAccessError { throw error }
                 guard await BooruWebTransport.hasSession(for: server) else { throw error }
                 data = try await BooruWebTransport.imageData(url: url, server: server)
             }

@@ -1,25 +1,5 @@
 import SwiftUI
 
-struct ReaderPreviewView: View {
-    @Environment(\.dismiss) private var dismiss
-    let gallery: NativeGallery
-    let images: PageImageStore
-    @Binding var current: Int
-    var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    GalleryPagePreviewGrid(gallery: gallery, images: images, current: current, identifier: "reader.preview") { index in
-                        current = index; dismiss()
-                    }
-                }.onAppear { proxy.scrollTo(current, anchor: .center) }
-            }
-            .navigationTitle(L10n.text("Total pages: %@", String(describing: gallery.pages.count))).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
-        }
-    }
-}
-
 /// Loading is latched by the detail screen only after meaningful downward
 /// travel AND reaching the end of its metadata. A visible footer alone is not intent.
 enum GalleryPreviewLoading {
@@ -187,40 +167,6 @@ struct ReaderThumbnail: View {
     }
 }
 
-struct ReaderDetailsView: View {
-    let search: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    let gallery: NativeGallery
-    var body: some View {
-        NavigationStack {
-            List {
-                Section { Text(gallery.title).font(.headline).textSelection(.enabled) }
-                NavigationLink { ContentReportView(page: URL(string: MangaUrls.galleryUrl(for: gallery.id))!) } label: {
-                    Label(L10n.text("Report Content"), systemImage: "flag")
-                }.accessibilityIdentifier("reader.report")
-                LabeledContent(L10n.text("Work Number"), value: String(gallery.id))
-
-                Section(L10n.text("Language")) { chip(gallery.language, query: "language:" + gallery.language) }
-                LabeledContent(L10n.text("Type"), value: gallery.type)
-                LabeledContent(L10n.text("Page"), value: String(gallery.pages.count))
-                Section(L10n.text("Tags")) {
-                    ArtworkTagCloud(groups: ArtworkTagGroup.make(tags: gallery.tags, artists: gallery.artists.map { "artist:" + $0 }), action: { tag in
-                        dismiss(); search(tag.query.replacingOccurrences(of: " ", with: "_"))
-                    })
-                }
-            }
-            .navigationTitle(L10n.text("Details")).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
-        }
-    }
-    private func chip(_ title: String, query: String) -> some View {
-        Button { dismiss(); search(query.replacingOccurrences(of: " ", with: "_")) } label: {
-            Text(title).foregroundStyle(ArtworkTagCategory.language.color).modifier(ArtworkTagPill(color: ArtworkTagCategory.language.color))
-        }.buttonStyle(.plain).accessibilityIdentifier("reader.details.language")
-    }
-
-}
-
 /// Categories come from tag namespaces or the server’s category metadata.
 enum ArtworkTagCategory: String, CaseIterable, Identifiable {
     case artist, series, character, female, male, group, language, type, metadata, general
@@ -319,6 +265,8 @@ struct ArtworkTagCloud: View {
     var headingStyle: ArtworkTagHeadingStyle = .compact
     var destination: ((ArtworkTag) -> ContentRoute)? = nil
     var action: ((ArtworkTag) -> Void)? = nil
+    var savedQueries = Set<String>()
+    var save: ((ArtworkTag) -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: headingStyle == .detail ? 12 : 16) {
             ForEach(groups) { group in
@@ -327,15 +275,11 @@ struct ArtworkTagCloud: View {
                         ArtworkTagHeading(category: group.category, showsIcon: headingStyle != .detail)
                             .font(headingStyle == .detail ? .headline : .caption.weight(.semibold))
                     }
+                    if group.tags.isEmpty { MetadataPlaceholder() }
                     FlowLayout(spacing: 6) {
                         ForEach(group.tags) { tag in
-                            Group {
-                                if let destination {
-                                    NavigationLink(value: destination(tag)) { tagLabel(tag) }
-                                } else {
-                                    Button { action?(tag) } label: { tagLabel(tag) }
-                                }
-                            }.buttonStyle(.plain)
+                            ArtworkTagCloudItem(tag: tag, saved: savedQueries.contains(tag.query.replacingOccurrences(of: " ", with: "_")),
+                                destination: destination, action: action, save: save)
                                 .accessibilityLabel(L10n.text(group.category.title) + ": " + tag.name)
                                 .accessibilityIdentifier("tags." + group.category.rawValue + "." + tag.query)
                         }
@@ -344,11 +288,32 @@ struct ArtworkTagCloud: View {
             }
         }
     }
-    private func tagLabel(_ tag: ArtworkTag) -> some View {
-        Text(tag.name).foregroundStyle(tag.category.color).modifier(ArtworkTagPill(color: tag.category.color))
-    }
-
 }
+
+private struct ArtworkTagCloudItem: View {
+    let tag: ArtworkTag
+    let saved: Bool
+    let destination: ((ArtworkTag) -> ContentRoute)?
+    let action: ((ArtworkTag) -> Void)?
+    let save: ((ArtworkTag) -> Void)?
+    var body: some View {
+        if let save {
+            link.highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in save(tag) })
+                .accessibilityAction(named: L10n.text(saved ? "Remove Saved Tag" : "Save Tag")) { save(tag) }
+        } else { link }
+    }
+    @ViewBuilder private var link: some View {
+        if let destination { NavigationLink(value: destination(tag)) { label }.buttonStyle(.plain) }
+        else { Button { action?(tag) } label: { label }.buttonStyle(.plain) }
+    }
+    private var label: some View {
+        HStack(spacing: 4) {
+            if saved { Image(systemName: "star.fill").font(.caption).foregroundStyle(.yellow) }
+            Text(tag.name)
+        }.foregroundStyle(tag.category.color).modifier(ArtworkTagPill(color: tag.category.color))
+    }
+}
+
 
 struct ArtworkTagPill: ViewModifier {
     let color: Color

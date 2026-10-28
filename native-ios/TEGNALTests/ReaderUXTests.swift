@@ -4,21 +4,130 @@ import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
-    func testContinuousPreviewSwipeDefaultsOffAndPagedModesRemainEnabled() throws {
+    func testMangaReturnFindsOnlyTheLastViewedVisibleWorkWithoutReloadingTheList() {
+        var examined = 0
+        let loaded = (1...200).lazy.map { examined += 1; return Int64($0) }
+        XCTAssertNil(MangaViewerReturn.targetID(openedID: 10, viewedID: 10, availableIDs: loaded))
+        XCTAssertNil(MangaViewerReturn.targetID(openedID: nil, viewedID: 10, availableIDs: loaded))
+        XCTAssertEqual(examined, 0, "An unchanged work must preserve the exact scroll offset without scanning the list")
+        XCTAssertEqual(MangaViewerReturn.targetID(openedID: 10, viewedID: 175, availableIDs: loaded), 175)
+        XCTAssertEqual(examined, 175, "Stop scanning as soon as the last viewed work is found")
+        XCTAssertNil(MangaViewerReturn.targetID(openedID: 10, viewedID: 201, availableIDs: loaded))
+        XCTAssertNil(MangaViewerReturn.targetID(openedID: 10, viewedID: 175, availableIDs: loaded.filter { $0 != 175 }),
+                     "A removed or hidden work must not jump to an unrelated row")
+    }
+
+    @MainActor func testInterruptedExitCancellationCannotResetTheNextDrag() async throws {
+        let view = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 640)), motion = ReaderExitMotion()
+        defer { motion.restore() }
+        motion.begin(view, snapshot: false); motion.update(distance: 180); motion.cancel()
+        motion.begin(view, snapshot: false); motion.update(distance: 64)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(motion.surface === view)
+        XCTAssertEqual(view.transform.ty, 64, "The previous spring-back completion must not move the new drag")
+        motion.restore()
+        XCTAssertEqual(view.transform, .identity)
+        XCTAssertFalse(view.clipsToBounds)
+    }
+
+    func testExitReversalCancelsEvenWhileStillBeyondTheDismissalThreshold() {
+        var intent = ReaderExitIntent()
+        intent.update(distance: 180)
+        XCTAssertTrue(intent.shouldFinish(delta: .init(x: 0, y: 180), velocity: .zero))
+        intent.update(distance: 172)
+        XCTAssertTrue(intent.reversed)
+        XCTAssertFalse(intent.shouldFinish(delta: .init(x: 0, y: 172), velocity: .init(x: 0, y: 100)))
+        intent.update(distance: 200)
+        XCTAssertFalse(intent.shouldFinish(delta: .init(x: 0, y: 200), velocity: .init(x: 0, y: 800)))
+        var steady = ReaderExitIntent(); steady.update(distance: 180); steady.update(distance: 177)
+        XCTAssertTrue(steady.shouldFinish(delta: .init(x: 0, y: 177), velocity: .zero), "Small touch noise should not cancel a deliberate pull")
+        XCTAssertFalse(steady.shouldFinish(delta: .init(x: 0, y: 177), velocity: .init(x: 0, y: -1)), "Releasing upward must never dismiss")
+    }
+    func testBackSwipeUsesTheLeadingSafeAreaAndIsOffByDefault() throws {
+        let bounds = CGRect(x: 0, y: 0, width: 800, height: 400), insets = UIEdgeInsets(top: 20, left: 50, bottom: 20, right: 50)
+        XCTAssertTrue(ReaderHorizontalSwipe.isLeadingStart(.init(x: 65, y: 100), bounds: bounds, safeArea: insets))
+        XCTAssertFalse(ReaderHorizontalSwipe.isLeadingStart(.init(x: 20, y: 100), bounds: bounds, safeArea: insets))
+        XCTAssertFalse(ReaderHorizontalSwipe.isLeadingStart(.init(x: 65, y: 10), bounds: bounds, safeArea: insets))
+        XCTAssertFalse(ReaderHorizontalSwipe.isLeadingStart(.init(x: 160, y: 100), bounds: bounds, safeArea: insets))
+        XCTAssertEqual(ReaderHorizontalSwipe.direction(delta: .init(x: 120, y: 10), backOnly: true), -1)
+        XCTAssertNil(ReaderHorizontalSwipe.direction(delta: .init(x: -120, y: 10), backOnly: true))
+        XCTAssertNil(ReaderHorizontalSwipe.direction(delta: .init(x: 120, y: 100), backOnly: true))
+        let suite = "reader-back-swipe-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(defaults.bool(forKey: "reader.continuousBackSwipe"))
+        defaults.set(true, forKey: "reader.continuousBackSwipe")
+        ReaderPreferenceReset.reset(booru: false, defaults: defaults)
+        XCTAssertFalse(defaults.bool(forKey: "reader.continuousBackSwipe"))
+    }
+    @MainActor func testImageExitChoosesTheWholeNavigationContainer() {
+        let child = UIViewController(), parent = UIViewController()
+        parent.addChild(child); parent.view.addSubview(child.view); child.didMove(toParent: parent)
+        XCTAssertTrue(ReaderExitSurface.view(for: child, movesContainer: false) === child.view)
+        XCTAssertTrue(ReaderExitSurface.view(for: child, movesContainer: true) === parent.view)
+    }
+
+    @MainActor func testExitGestureOwnsScrollingAndWorkSwipesStayWithinTheCurrentList() {
+        let view = ExitGestureView(), scroll = UIScrollView()
+        XCTAssertFalse(view.gestureRecognizer(view.pan, shouldRecognizeSimultaneouslyWith: scroll.panGestureRecognizer))
+        XCTAssertTrue(view.gestureRecognizer(view.pan, shouldBeRequiredToFailBy: scroll.panGestureRecognizer))
+        let work = WorkSwipeView()
+        XCTAssertTrue(work.gestureRecognizer(work.pan, shouldBeRequiredToFailBy: scroll.panGestureRecognizer))
+        XCTAssertEqual(MangaReaderSequence.neighbor(20, delta: 1, ids: [10, 20, 30]), 30)
+        XCTAssertEqual(MangaReaderSequence.neighbor(20, delta: -1, ids: [10, 20, 30]), 10)
+        XCTAssertNil(MangaReaderSequence.neighbor(30, delta: 1, ids: [10, 20, 30]))
+        XCTAssertNil(MangaReaderSequence.neighbor(99, delta: -1, ids: [10, 20, 30]))
+    }
+    func testViewerResetPreservesProgressConnectionsAndOtherModeOptions() throws {
+        let suite = "reader-reset-" + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { preferences.removePersistentDomain(forName: suite) }
+        preferences.set("continuous", forKey: "reader.mode"); preferences.set(true, forKey: "reader.continuousWorkSwipe")
+        preferences.set(42, forKey: "reader_page_101"); preferences.set("https://example.com", forKey: "manga_site_address")
+        preferences.set(false, forKey: "booru.showNotes")
+        ReaderPreferenceReset.reset(booru: false, defaults: preferences)
+        XCTAssertNil(preferences.object(forKey: "reader.mode")); XCTAssertNil(preferences.object(forKey: "reader.continuousWorkSwipe"))
+        XCTAssertEqual(preferences.integer(forKey: "reader_page_101"), 42)
+        XCTAssertEqual(preferences.string(forKey: "manga_site_address"), "https://example.com")
+        XCTAssertEqual(preferences.object(forKey: "booru.showNotes") as? Bool, false)
+        ReaderPreferenceReset.reset(booru: true, defaults: preferences)
+        XCTAssertNil(preferences.object(forKey: "booru.showNotes"))
+    }
+
+    @MainActor func testEmptyMetadataReservesAFullLineAndScalesWithTextSize() {
+        let normal = UIHostingController(rootView: MetadataPlaceholder().environment(\.dynamicTypeSize, .large))
+        let large = UIHostingController(rootView: MetadataPlaceholder().environment(\.dynamicTypeSize, .accessibility3))
+        let available = CGSize(width: 300, height: 300)
+        XCTAssertGreaterThanOrEqual(normal.sizeThatFits(in: available).height, 22)
+        XCTAssertGreaterThan(large.sizeThatFits(in: available).height, normal.sizeThatFits(in: available).height)
+    }
+
+    func testFavoriteArtistTagsPersistAndRecognizeSpacesAndUnderscores() throws {
+        let database = try AppDatabase.inMemory()
+        var favorites = try MangaArtistFavorite.toggle("sample_artist", in: database)
+        XCTAssertTrue(favorites.contains("sample_artist"))
+        XCTAssertEqual(try database.listArtists().map(\.name), ["sample_artist"])
+        favorites = try MangaArtistFavorite.toggle("Sample Artist", in: database)
+        XCTAssertTrue(favorites.isEmpty, "Holding an already-favorited artist removes it even if the website formats its name differently")
+        _ = try database.addFavoriteArtist(name: "another_artist")
+        _ = try MangaArtistFavorite.toggle("sample_artist", in: database)
+        favorites = try MangaArtistFavorite.toggle("sample_artist", in: database)
+        XCTAssertEqual(favorites, ["another_artist"], "Other favorite artists remain unchanged")
+    }
+
+    func testContinuousInformationSwipeDefaultsOffAndPagedModesRemainEnabled() throws {
         let suite = "reader-preview-swipe-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertFalse(ReaderPreviewReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
+        XCTAssertFalse(ReaderInformationReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
                                                     continuousOptIn: defaults.bool(forKey: "reader.continuousPreviewSwipe")))
         for mode in [ReaderMode.horizontal, .vertical] {
-            for optIn in [false, true] { XCTAssertTrue(ReaderPreviewReveal.isEnabled(mode: mode.rawValue, continuousOptIn: optIn)) }
+            for optIn in [false, true] { XCTAssertTrue(ReaderInformationReveal.isEnabled(mode: mode.rawValue, continuousOptIn: optIn)) }
         }
         defaults.set(true, forKey: "reader.continuousPreviewSwipe")
         let restored = try XCTUnwrap(UserDefaults(suiteName: suite))
-        XCTAssertTrue(ReaderPreviewReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
+        XCTAssertTrue(ReaderInformationReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
                                                    continuousOptIn: restored.bool(forKey: "reader.continuousPreviewSwipe")))
         defaults.set(false, forKey: "reader.continuousPreviewSwipe")
-        XCTAssertFalse(ReaderPreviewReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
+        XCTAssertFalse(ReaderInformationReveal.isEnabled(mode: ReaderMode.continuous.rawValue,
                                                     continuousOptIn: restored.bool(forKey: "reader.continuousPreviewSwipe")))
     }
 
@@ -211,16 +320,16 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertNotEqual(WorkSaveFeedback(saved).id, WorkSaveFeedback(saved).id)
     }
 
-    func testPreviewRevealRequiresAnUpwardBottomSwipe() {
+    func testInformationRevealRequiresAnUpwardBottomSwipe() {
         let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
-        XCTAssertTrue(ReaderPreviewReveal.isInZone(CGPoint(x: 195, y: 740), bounds: bounds))
-        XCTAssertFalse(ReaderPreviewReveal.isInZone(CGPoint(x: 195, y: 420), bounds: bounds))
-        XCTAssertFalse(ReaderPreviewReveal.isInZone(CGPoint(x: 500, y: 740), bounds: bounds))
-        XCTAssertTrue(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: -120), velocity: .zero))
-        XCTAssertTrue(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: -30), velocity: .init(x: 0, y: -700)))
-        XCTAssertFalse(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: -12), velocity: .init(x: 0, y: -700)))
-        XCTAssertFalse(ReaderPreviewReveal.shouldReveal(delta: .init(x: 5, y: 120), velocity: .zero))
-        XCTAssertFalse(ReaderPreviewReveal.shouldReveal(delta: .init(x: 120, y: -80), velocity: .zero))
+        XCTAssertTrue(ReaderInformationReveal.isInZone(CGPoint(x: 195, y: 740), bounds: bounds))
+        XCTAssertFalse(ReaderInformationReveal.isInZone(CGPoint(x: 195, y: 420), bounds: bounds))
+        XCTAssertFalse(ReaderInformationReveal.isInZone(CGPoint(x: 500, y: 740), bounds: bounds))
+        XCTAssertTrue(ReaderInformationReveal.shouldReveal(delta: .init(x: 5, y: -120), velocity: .zero))
+        XCTAssertTrue(ReaderInformationReveal.shouldReveal(delta: .init(x: 5, y: -30), velocity: .init(x: 0, y: -700)))
+        XCTAssertFalse(ReaderInformationReveal.shouldReveal(delta: .init(x: 5, y: -12), velocity: .init(x: 0, y: -700)))
+        XCTAssertFalse(ReaderInformationReveal.shouldReveal(delta: .init(x: 5, y: 120), velocity: .zero))
+        XCTAssertFalse(ReaderInformationReveal.shouldReveal(delta: .init(x: 120, y: -80), velocity: .zero))
     }
 
     func testExitRecognizesShortFlickAndRejectsAccidentalDrags() {

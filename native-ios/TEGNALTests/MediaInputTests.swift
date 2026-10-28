@@ -3,6 +3,46 @@ import WebKit
 @testable import TEGNAL
 
 @MainActor final class MediaInputTests: XCTestCase {
+    func testDeletedPostsShowOnDirectOpenAndSkipDuringNavigationInBothDirections() {
+        let ids = ["first", "removed", "last"]
+        var navigation = BooruViewerAccessNavigation()
+        XCTAssertFalse(navigation.removed("removed"), "A direct selection stays open with a deletion notice")
+        XCTAssertNil(navigation.pendingID)
+        navigation.moved(1)
+        XCTAssertTrue(navigation.removed("removed"))
+        XCTAssertEqual(navigation.destination(in: ids, current: 1, canLoadMore: false, excluding: []), .post(2))
+        navigation.moved(-1)
+        XCTAssertTrue(navigation.removed("removed"))
+        XCTAssertEqual(navigation.destination(in: ids, current: 1, canLoadMore: false, excluding: []), .post(0))
+        XCTAssertEqual(navigation.candidate(in: ids, startingAt: 1, direction: 1, excluding: []), 2)
+        XCTAssertEqual(navigation.candidate(in: ids, startingAt: 1, direction: -1, excluding: []), 0)
+        let server = BooruServer.presets[0]
+        var deleted = BooruFixtureSource.post(123, server: server); deleted.isDeleted = true
+        navigation.recordRemovals([deleted])
+        XCTAssertNil(navigation.candidate(in: [deleted.id], startingAt: 0, direction: 1, excluding: []))
+        var end = BooruViewerAccessNavigation(); end.moved(1); _ = end.removed("removed")
+        XCTAssertEqual(end.destination(in: ["removed"], current: 0, canLoadMore: true, excluding: []), .loadMore)
+        XCTAssertEqual(end.destination(in: ["removed"], current: 0, canLoadMore: true, excluding: []), .close)
+        XCTAssertEqual(BooruFailureNavigation.swipe(.init(width: -100, height: 10)), 1)
+        XCTAssertEqual(BooruFailureNavigation.swipe(.init(width: 100, height: 10)), -1)
+        XCTAssertNil(BooruFailureNavigation.swipe(.init(width: 10, height: 100)), "Scrolling error text must not change posts")
+    }
+
+    func testRemovalCallbackIgnoresStaleDocumentsAndDoesNotShowAGenericError() {
+        let coordinator = BooruMediaView.Coordinator(), web = WKWebView(frame: .zero)
+        var removed = 0, statuses: [String] = []
+        coordinator.documentID = "current"
+        coordinator.onRemoved = { removed += 1 }; coordinator.onStatus = { statuses.append($0) }
+        coordinator.rejectRemovedDocument("previous")
+        XCTAssertEqual(removed, 0)
+        coordinator.rejectRemovedDocument("current"); coordinator.rejectRemovedDocument("current")
+        coordinator.webView(web, didFail: nil, withError: BooruError.invalidResponse)
+        XCTAssertEqual(removed, 1); XCTAssertTrue(statuses.isEmpty)
+        coordinator.documentID = "next"; coordinator.restrictedDocumentID = nil
+        coordinator.webView(web, didFail: nil, withError: BooruError.invalidResponse)
+        XCTAssertEqual(statuses, ["error"])
+    }
+
     func testNotesRenderTranslucentBlackBoxesAndWhiteNumbersAndForwardTheTappedBody() async throws {
         let coordinator = BooruMediaView.Coordinator()
         coordinator.active = false
@@ -31,9 +71,9 @@ import WebKit
         XCTAssertTrue(coordinator.ready)
         let style = try await web.evaluateJavaScript("""
         (()=>{const b=document.querySelector('.note'),n=b.querySelector('span'),s=getComputedStyle(b),t=getComputedStyle(n);
-        return [s.borderWidth,s.outlineWidth,s.backgroundColor,t.color,t.backgroundColor,t.padding,t.borderWidth,t.textShadow,s.display,s.alignItems,s.justifyContent,n.textContent]})()
+        return [s.borderWidth,s.outlineWidth,s.borderRadius,s.backgroundColor,t.color,t.backgroundColor,t.padding,t.borderWidth,t.textShadow,s.display,s.alignItems,s.justifyContent,n.textContent]})()
         """) as? [String]
-        XCTAssertEqual(style, ["0px", "0px", "rgba(0, 0, 0, 0.2)", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)", "0px", "0px", "none", "flex", "center", "center", "1"])
+        XCTAssertEqual(style, ["0px", "0px", "6px", "rgba(0, 0, 0, 0.2)", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)", "0px", "0px", "none", "flex", "center", "center", "1"])
         _ = try await web.evaluateJavaScript("document.querySelector('.note').click()")
         for _ in 0..<100 {
             if tapped != nil { break }

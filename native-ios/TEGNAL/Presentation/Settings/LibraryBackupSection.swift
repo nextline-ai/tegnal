@@ -36,8 +36,8 @@ struct LibraryBackupSection: View {
                     }
                 }
             if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-        } header: { Text(L10n.text("Backup & Restore")) } footer: {
-            Text(L10n.text("One JSON file backs up both Comics and Image libraries, including folders, saved works, artists, tags, searches, servers, blacklists and challenge definitions. Media, caches and sign-in details are not included. Older separate backups can also be imported."))
+        } header: {
+            SettingsHelpLabel("Backup & Restore", help: "Exports both libraries, folders, saved searches and other library data into one JSON file. Media and sign-in details are not included. Importing merges the file with your library.")
         }
         .disabled(busy)
     }

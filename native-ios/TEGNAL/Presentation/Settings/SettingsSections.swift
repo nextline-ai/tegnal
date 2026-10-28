@@ -7,19 +7,18 @@ struct ReaderSettingsSection: View {
         Section {
             Button { isPresented = true } label: {
                 HStack {
-                    Label { Text(L10n.text("Reader Settings")).foregroundStyle(.primary) } icon: { Image(systemName: "slider.horizontal.3") }
+                    Label { Text(L10n.text("Viewer Detail Settings")).foregroundStyle(.primary) } icon: { Image(systemName: "slider.horizontal.3") }
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                 }
             }.accessibilityIdentifier(booru ? "booru.readerSettings" : "settings.reader")
-        } header: { Text(L10n.text("Viewer")) } footer: {
-            Text(L10n.text("Appearance and reader preferences are saved separately for each mode."))
-        }
+        } header: { Text(L10n.text("Viewer")) }
     }
 }
 
 struct SettingsSupportSection: View {
     @Binding var showOnboarding: Bool
+    var booru = false
     var body: some View {
         Section(L10n.text("Help & Privacy")) {
             NavigationLink { KeyboardShortcutsView() } label: {
@@ -34,6 +33,7 @@ struct SettingsSupportSection: View {
                 Label(L10n.text("Open Source Licenses"), systemImage: "doc.text")
             }
             LabeledContent(L10n.text("Version"), value: version)
+            SettingsResetButton(booru: booru)
         }
     }
     private var version: String {
@@ -100,7 +100,9 @@ struct BooruSafeModeSettings: View {
     var body: some View {
         @Bindable var env = env
         Section {
-            Toggle(L10n.text("Safe Mode"), isOn: $env.booruSafeMode)
+            Toggle(isOn: $env.booruSafeMode) {
+                SettingsHelpLabel("Safe Mode", help: "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.")
+            }
                 .accessibilityIdentifier("booru.safeMode")
             if env.booruSafeMode {
                 Picker(L10n.text("Age Guide"), selection: $env.booruSafeRating) {
@@ -110,8 +112,67 @@ struct BooruSafeModeSettings: View {
                 }.accessibilityIdentifier("booru.safeRating")
                 LabeledContent(L10n.text("Default Search Tag"), value: env.booruSafeRating.tag)
             }
-        } header: { Text(L10n.text("Safe Mode")) } footer: {
-            Text(L10n.text("Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches."))
+        } header: { Text(L10n.text("Safe Mode")) }
+    }
+}
+
+/// Optional help stays beside its setting instead of adding a paragraph to every row.
+struct SettingsHelpLabel: View {
+    let title: String
+    let help: String
+    var symbol: String? = nil
+    init(_ title: String, help: String, symbol: String? = nil) {
+        self.title = title; self.help = help; self.symbol = symbol
+    }
+    var body: some View {
+        HStack(spacing: 4) {
+            if let symbol { Label(L10n.text(title), systemImage: symbol) }
+            else { Text(L10n.text(title)) }
+            SettingsInfoButton(title: title, message: help)
         }
+    }
+}
+
+struct SettingsInfoButton: View {
+    let title: String
+    let message: String
+    @State private var presented = false
+    var body: some View {
+        Button { presented = true } label: {
+            Image(systemName: "info.circle").font(.body).foregroundStyle(.secondary)
+                .frame(width: 32, height: 32).contentShape(Rectangle())
+        }.buttonStyle(.borderless)
+            .accessibilityLabel(L10n.text("About %@", L10n.text(title)))
+            .accessibilityIdentifier("settings.help." + title)
+            .alert(L10n.text(title), isPresented: $presented) {
+                Button(L10n.text("Done"), role: .cancel) {}
+            } message: { Text(L10n.text(message)) }
+    }
+}
+
+struct SettingsResetButton: View {
+    var booru = false
+    var viewerOnly = false
+    @Environment(AppEnvironment.self) private var env
+    @State private var confirming = false
+    var body: some View {
+        Button(L10n.text("Reset Settings to Defaults"), role: .destructive) { confirming = true }
+            .accessibilityIdentifier(viewerOnly ? "reader.settings.reset" : "settings.reset")
+            .confirmationDialog(L10n.text("Reset Settings to Defaults?"), isPresented: $confirming, titleVisibility: .visible) {
+                Button(L10n.text("Reset"), role: .destructive) {
+                    if viewerOnly { ReaderPreferenceReset.reset(booru: booru) }
+                    else { env.resetModeSettings(booru: booru) }
+                }
+            } message: {
+                Text(L10n.text(viewerOnly ? "Resets this mode’s viewer options. Saved works and reading progress are kept." : "Resets this mode’s appearance, browsing and viewer options. Libraries, website connections, sign-in details and iCloud settings are kept."))
+            }
+    }
+}
+
+enum ReaderPreferenceReset {
+    static let keys = ["reader.resumeBehavior", "reader.pagesPerSpread", "reader.autoAdvance", "reader.autoSeconds", "reader.mode", "reader.rtl", "reader.bottomMenu", "reader.pageNumber", "reader.keepAwake", "reader.prefetch", "reader.dimming", "reader.tapNavigation", "reader.continuousPreviewSwipe", "reader.continuousWorkSwipe", "reader.continuousBackSwipe", "reader.helpHidden", "reader.translationLanguage"]
+    static func reset(booru: Bool, defaults: UserDefaults? = nil) {
+        let store = defaults ?? (booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults)
+        for key in keys + (booru ? ["booru.original", "booru.reducedData", "booru.showNotes"] : []) { store.removeObject(forKey: key) }
     }
 }

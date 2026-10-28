@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum ReaderSheet: String, Identifiable {
-    case settings, preview, details, help, downloads
+    case settings, information, help, downloads
     var id: String { rawValue }
 }
 
@@ -17,6 +17,9 @@ struct NativeReaderView: View {
     let offline: Bool
     let search: (String) -> Void
     let exit: () -> Void
+    let changeWork: ((Int) -> Bool)?
+    @SwiftUI.AppStorage("reader.continuousBackSwipe", store: ReaderPreferences.defaults) private var continuousBackSwipe = false
+    @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var translationRequest: ReaderTranslationRequest?
     @State private var zoomed = false
@@ -51,10 +54,11 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.prefetch", store: ReaderPreferences.defaults) private var prefetch = 3
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.defaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
-    @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousPreviewSwipe = false
+    @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false
 
     init(galleryID: Int64, initialPage: Int, source: any ContentProviding, images: PageImageStore,
-         savesProgress: Bool, offline: Bool = false, resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void) {
+         savesProgress: Bool, offline: Bool = false, resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void, changeWork: ((Int) -> Bool)? = nil) {
+        self.changeWork = changeWork
         self.galleryID = galleryID; self.initialPage = initialPage
         self.source = source; self.images = images; self.savesProgress = savesProgress; self.offline = offline
         self.resumesProgress = resumesProgress
@@ -102,8 +106,8 @@ struct NativeReaderView: View {
         .background(ReaderExitGesture(enabled: readerActive && sheet == nil && !showJump && !zoomed,
                                       requiresTopSafeZone: mode == ReaderMode.continuous.rawValue,
                                       progress: { _ in }, exit: closeReader))
-        .background(ReaderPreviewGesture(enabled: ReaderPreviewReveal.isEnabled(mode: mode, continuousOptIn: continuousPreviewSwipe) && readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
-                                         reveal: { sheet = .preview }))
+        .background(ReaderInformationGesture(enabled: ReaderInformationReveal.isEnabled(mode: mode, continuousOptIn: continuousInformationSwipe) && readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
+                                         reveal: { sheet = .information }))
         .overlay(alignment: .topTrailing) {
             if let request = translationRequest, let gallery, gallery.pages.indices.contains(request.index) {
                 ReaderTranslationView(page: gallery.pages[request.index], galleryID: galleryID, images: images, rect: request.rect, finished: {
@@ -120,6 +124,10 @@ struct NativeReaderView: View {
             if bottomMenu && !menuVisible && gallery != nil { menuActions(compact: true).padding(.horizontal, 12).padding(.vertical, 8)
                     .modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
         }
+        .background(ReaderWorkSwipeGesture(enabled: continuousWorkSwipe && mode == ReaderMode.continuous.rawValue && readerActive && sheet == nil && !zoomed && !menuVisible && !showJump, excludesLeadingEdge: continuousBackSwipe) { delta in
+            if changeWork?(delta) != true { toast = L10n.text("No More Works in This List") }
+        })
+        .background(ReaderBackSwipeGesture(enabled: continuousBackSwipe && mode == ReaderMode.continuous.rawValue && readerActive && sheet == nil && !zoomed && !menuVisible && !showJump, back: closeReader))
         .background(ReaderKeyboardCommands(enabled: readerActive && sheet == nil && !showJump, action: shortcut))
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
@@ -137,10 +145,11 @@ struct NativeReaderView: View {
             switch item {
             case .downloads: DownloadsSheet(mode: .manga)
             case .settings: ReaderSettingsView()
-            case .preview:
-                if let gallery { ReaderPreviewView(gallery: gallery, images: images, current: $currentPage) }
-            case .details:
-                if let gallery { ReaderDetailsView(search: { pendingSearch = $0; sheet = nil }, gallery: gallery) }
+            case .information:
+                if let gallery {
+                    ReaderWorkInformationView(gallery: gallery, images: images, current: $currentPage,
+                        search: { pendingSearch = $0; sheet = nil })
+                }
             case .help: ReaderHelpView()
             }
         }
@@ -248,8 +257,7 @@ struct NativeReaderView: View {
             menuButton(L10n.text("Bookmark"), icon: "bookmark", id: "bookmark", compact: compact, action: bookmark)
             menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "exit", compact: compact, action: closeReader)
             menuButton(L10n.text("Translate"), icon: "translate", id: "translate", compact: compact) { translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1)); menuVisible = false }
-            menuButton(L10n.text("Details"), icon: "info.circle", id: "details", compact: compact) { sheet = .details }
-            menuButton(L10n.text("Preview"), icon: "square.grid.3x3", id: "preview", compact: compact) { sheet = .preview }
+            menuButton(L10n.text("Work Details"), icon: "info.circle", id: "information", compact: compact) { sheet = .information }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "settings", compact: compact) { sheet = .settings }
         }
     }
@@ -290,7 +298,7 @@ struct NativeReaderView: View {
         case .next: move(rtl ? -1 : 1)
         case .menu: menuVisible.toggle()
         case .favorite: bookmark()
-        case .details: sheet = .details
+        case .details: sheet = .information
         case .exit: break
         }
     }
@@ -363,5 +371,65 @@ struct ReaderMenuGlass: ViewModifier {
             content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
                 .environment(\.colorScheme, .dark)
         }
+    }
+}
+
+@MainActor @Observable final class MangaReaderSequence {
+    var ids: [Int64]
+    @ObservationIgnored var prepareReturn: ((Int64, Int64) -> Void)?
+    init(_ ids: [Int64] = []) { self.ids = ids }
+    static func neighbor(_ id: Int64, delta: Int, ids: [Int64]) -> Int64? {
+        guard let index = ids.firstIndex(of: id), ids.indices.contains(index + delta) else { return nil }
+        return ids[index + delta]
+    }
+}
+private struct MangaReaderSequenceKey: EnvironmentKey { static let defaultValue: MangaReaderSequence? = nil }
+extension EnvironmentValues {
+    var mangaReaderSequence: MangaReaderSequence? {
+        get { self[MangaReaderSequenceKey.self] }
+        set { self[MangaReaderSequenceKey.self] = newValue }
+    }
+}
+struct MangaReaderSession: View {
+    @Environment(\.mangaReaderSequence) private var sequence
+    let initialPage: Int
+    let source: any ContentProviding
+    let images: PageImageStore
+    let savesProgress: Bool
+    let resumesProgress: Bool
+    let search: (String) -> Void
+    let exit: () -> Void
+    let willClose: (Int64) -> Void
+    private let openedID: Int64
+    @State private var selected: Int64
+    init(galleryID: Int64, initialPage: Int, source: any ContentProviding, images: PageImageStore, savesProgress: Bool,
+         resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void, willClose: @escaping (Int64) -> Void = { _ in }) {
+        self.openedID = galleryID; self.willClose = willClose
+        _selected = State(initialValue: galleryID); self.initialPage = initialPage; self.source = source; self.images = images
+        self.savesProgress = savesProgress; self.resumesProgress = resumesProgress; self.search = search; self.exit = exit
+    }
+    @State private var switched = false
+    var body: some View {
+        NativeReaderView(galleryID: selected, initialPage: switched ? 1 : initialPage, source: source, images: images,
+                         savesProgress: savesProgress, resumesProgress: resumesProgress, search: { text in prepareClose(); search(text) }, exit: { prepareClose(); exit() }, changeWork: { delta in
+            guard let id = MangaReaderSequence.neighbor(selected, delta: delta, ids: sequence?.ids ?? []) else { return false }
+            selected = id; switched = true; return true
+        }).id(selected)
+    }
+    private func prepareClose() {
+        sequence?.prepareReturn?(openedID, selected)
+        willClose(selected)
+    }
+}
+
+enum MangaViewerReturn {
+    static func targetID<IDs: Sequence>(openedID: Int64?, viewedID: Int64, availableIDs: IDs) -> Int64? where IDs.Element == Int64 {
+        guard let openedID, openedID != viewedID, availableIDs.contains(viewedID) else { return nil }
+        return viewedID
+    }
+    @MainActor static func restore<IDs: Sequence>(openedID: Int64?, viewedID: Int64, availableIDs: IDs, using proxy: ScrollViewProxy) where IDs.Element == Int64 {
+        guard let target = targetID(openedID: openedID, viewedID: viewedID, availableIDs: availableIDs) else { return }
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) { proxy.scrollTo(target, anchor: .center) }
     }
 }

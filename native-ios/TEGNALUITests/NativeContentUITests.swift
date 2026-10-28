@@ -10,6 +10,15 @@ final class NativeContentUITests: XCTestCase {
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
+    private func workInformationPreview(_ app: XCUIApplication, page: Int) -> XCUIElement {
+        let query = app.descendants(matching: .any).matching(identifier: "content.detail.preview.\(page)")
+        for _ in 0..<8 {
+            if let visible = query.allElementsBoundByIndex.first(where: \.isHittable) { return visible }
+            let scrolls = app.scrollViews.matching(identifier: "content.detail.scroll")
+            (scrolls.allElementsBoundByIndex.first(where: \.isHittable) ?? scrolls.firstMatch).swipeUp()
+        }
+        return query.firstMatch
+    }
     private func wait(_ item: XCUIElement, _ predicate: String, _ value: String) {
         expectation(for: NSPredicate(format: predicate, value), evaluatedWith: item)
         waitForExpectations(timeout: 10)
@@ -183,7 +192,7 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(card.isHittable)
     }
 
-    func testBottomSwipeRevealsComicPreviewsWithoutAdvancingThePage() {
+    func testBottomSwipeRevealsWorkInformationWithoutAdvancingThePage() {
         let app = launchReader()
         for mode in [nil, "수직으로 넘기기", "스크롤로 보기"] as [String?] {
             if let mode {
@@ -191,21 +200,23 @@ final class NativeContentUITests: XCTestCase {
                 element(app, "reader.settings.mode").tap()
                 app.buttons[mode].tap()
                 if mode == "스크롤로 보기" {
-                    element(app, "reader.settings.continuousPreviewSwipe").switches.firstMatch.tap()
+                    element(app, "reader.settings.continuousInformationSwipe").switches.firstMatch.tap()
                 }
                 element(app, "reader.settings.done").tap()
                 element(app, "reader.menu.close").tap()
             }
             let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
             bottom.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
-            let first = element(app, "reader.preview.1")
-            XCTAssertTrue(first.waitForExistence(timeout: 5))
-            capture(app, "Bottom swipe reveals previews " + (mode ?? "horizontal"))
+            let number = element(app, "content.detail.workNumber")
+            XCTAssertTrue(number.waitForExistence(timeout: 5))
+            XCTAssertFalse(element(app, "content.read").isHittable)
+            XCTAssertFalse(element(app, "content.detail.cover").isHittable)
+            capture(app, "Bottom swipe reveals work information " + (mode ?? "horizontal"))
             let hierarchy = XCTAttachment(string: app.debugDescription)
-            hierarchy.name = "Swipe preview hierarchy " + (mode ?? "horizontal"); hierarchy.lifetime = .keepAlways; add(hierarchy)
+            hierarchy.name = "Work information hierarchy " + (mode ?? "horizontal"); hierarchy.lifetime = .keepAlways; add(hierarchy)
             app.buttons["완료"].tap()
             menu(app)
-            XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3", "Opening previews must not also scroll or turn the page")
+            XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3", "Opening work information must not also scroll or turn the page")
         }
     }
 
@@ -264,8 +275,8 @@ final class NativeContentUITests: XCTestCase {
         third.tap()
         XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
         menu(app)
-        element(app, "reader.preview").tap()
-        let readerFirst = element(app, "reader.preview.1"), readerSecond = element(app, "reader.preview.2")
+        element(app, "reader.information").tap()
+        let readerFirst = workInformationPreview(app, page: 1), readerSecond = workInformationPreview(app, page: 2)
         XCTAssertTrue(readerSecond.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(readerSecond.frame.minX - readerFirst.frame.maxX, 0)
         XCTAssertLessThan(readerSecond.frame.minX - readerFirst.frame.maxX, 14)
@@ -356,8 +367,8 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3")
         XCTAssertFalse(element(app, "reader.previous").isEnabled)
         capture(app, "Reader quick menu Liquid Glass white controls")
-        element(app, "reader.preview").tap()
-        let last = element(app, "reader.preview.3")
+        element(app, "reader.information").tap()
+        let last = workInformationPreview(app, page: 3)
         XCTAssertTrue(last.waitForExistence(timeout: 10))
         last.tap()
         XCTAssertEqual(element(app, "reader.position").label, "페이지 3 / 3")
@@ -416,8 +427,8 @@ final class NativeContentUITests: XCTestCase {
         element(app, "reader.settings.mode").tap()
         app.buttons["스크롤로 보기"].tap()
         element(app, "reader.settings.done").tap()
-        element(app, "reader.preview").tap()
-        element(app, "reader.preview.1").tap()
+        element(app, "reader.information").tap()
+        workInformationPreview(app, page: 1).tap()
         element(app, "reader.menu.close").tap()
         app.swipeUp()
         menu(app)
@@ -432,8 +443,8 @@ final class NativeContentUITests: XCTestCase {
         element(app, "reader.settings.mode").tap()
         app.buttons["스크롤로 보기"].tap()
         element(app, "reader.settings.done").tap()
-        element(app, "reader.preview").tap()
-        element(app, "reader.preview.2").tap()
+        element(app, "reader.information").tap()
+        workInformationPreview(app, page: 2).tap()
         element(app, "reader.menu.close").tap()
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
         let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
@@ -466,8 +477,8 @@ final class NativeContentUITests: XCTestCase {
     func testReaderTagSizesMatchLanguageAndKeepCategoryColors() throws {
         let app = launchReader()
         menu(app)
-        element(app, "reader.details").tap()
-        let language = element(app, "reader.details.language")
+        element(app, "reader.information").tap()
+        let language = element(app, "content.detail.language")
         let tag = element(app, "tags.female.female:sample")
         XCTAssertTrue(language.waitForExistence(timeout: 5))
         XCTAssertTrue(tag.waitForExistence(timeout: 5))
@@ -637,8 +648,8 @@ final class NativeContentUITests: XCTestCase {
         card.tap()
         element(app, "content.read").tap()
         menu(app)
-        element(app, "reader.details").tap()
-        app.collectionViews.buttons["female:sample"].tap()
+        element(app, "reader.information").tap()
+        element(app, "tags.female.female:sample").tap()
         XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
         XCTAssertEqual(element(app, "content.search").value as? String, "female:sample")
         capture(app, "Explore tab tag search")

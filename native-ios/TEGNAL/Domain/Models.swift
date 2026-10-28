@@ -314,7 +314,7 @@ public struct ArtistMemo: Identifiable, Codable, Equatable, Hashable, Sendable, 
 
     public var id: Int64?
     public var name: String
-    public var kind: Int // 0: artist, 1: group
+    public var kind: Int // SavedCollectionKind.mangaKind; legacy artist = 0, group = 1
     public var note: String?
     public var folderId: Int64?
     public var bookmarkedAt: String
@@ -371,4 +371,78 @@ public struct IdentifiableInt64: Identifiable, Hashable, Sendable {
 public struct IdentifiableString: Identifiable, Hashable, Sendable {
     public let id: String
     public init(id: String) { self.id = id }
+}
+
+/// Persisted kinds retain the original artist/group values used by imports and sync.
+enum SavedCollectionKind: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case tag, artist, series, character, group, language, type, female, male, metadata, search, history
+    var id: String { rawValue }
+    static func identity(_ name: String) -> String {
+        name.replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+    var mangaKind: Int? {
+        switch self {
+        case .artist: 0
+        case .group: 1
+        case .tag: 2
+        case .series: 3
+        case .character: 4
+        case .language: 5
+        case .type: 6
+        case .female: 7
+        case .male: 8
+        case .metadata: 9
+        case .search, .history: nil
+        }
+    }
+    var title: String {
+        switch self {
+        case .tag: "Tags"
+        case .artist: "Artists"
+        case .series: "Series"
+        case .character: "Characters"
+        case .group: "Groups"
+        case .language: "Language"
+        case .type: "Type"
+        case .female: "Female Tags"
+        case .male: "Male Tags"
+        case .metadata: "Metadata Tags"
+        case .search: "Saved Searches"
+        case .history: "Search History"
+        }
+    }
+    var namespace: String? {
+        switch self {
+        case .tag, .search, .history: nil
+        case .metadata: "meta"
+        default: rawValue
+        }
+    }
+    func normalized(_ name: String) -> String {
+        var value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self == .search || self == .history { return value }
+        if let namespace, value.hasPrefix(namespace + ":") { value = String(value.dropFirst(namespace.count + 1)) }
+        return value.replacingOccurrences(of: " ", with: "_")
+    }
+    func query(_ name: String, manga: Bool) -> String {
+        guard manga, let namespace, !name.contains(":") else { return name }
+        return namespace + ":" + name.replacingOccurrences(of: " ", with: "_")
+    }
+}
+
+/// The first five entries are a preview of the same persistent order used in More.
+enum SavedCollectionOrdering {
+    static func resolve(_ names: [String], preferred: [String]) -> [String] {
+        let available = Set(names)
+        var seen = Set<String>()
+        return (preferred + names).filter { available.contains($0) && seen.insert($0).inserted }
+    }
+    static func moved(_ names: [String], source: String, target: String) -> [String] {
+        guard source != target, let from = names.firstIndex(of: source), let to = names.firstIndex(of: target) else { return names }
+        var result = names
+        result.remove(at: from); result.insert(source, at: to)
+        return result
+    }
+    static func preview(_ names: [String]) -> [String] { Array(names.prefix(5)) }
+    static func showsMore(_ count: Int) -> Bool { count >= 5 }
 }

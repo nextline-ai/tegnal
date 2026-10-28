@@ -20,8 +20,9 @@ struct TasteSettingsView: View {
                 NavigationLink { RecommendationSettingsView(mode: mode, initialSource: resolvedSource) } label: { Label(L10n.text("Recommendation filters"), systemImage: "line.3.horizontal.decrease") }
             }
             Section(L10n.text("Taste Analysis")) {
-                Toggle(L10n.text("Taste Analysis"), isOn: Binding(get: { env.taste.control.enabled }, set: { enabled in if enabled { env.taste.change { $0.enabled = true } } else { pendingDisable = .analysis } }))
-                    .accessibilityIdentifier("taste.enabled")
+                Toggle(isOn: Binding(get: { env.taste.control.enabled }, set: { enabled in if enabled { env.taste.change { $0.enabled = true } } else { pendingDisable = .analysis } })) {
+                    SettingsHelpLabel("Taste Analysis", help: "Uses the works you view and save to find recommendations and build your statistics. Turn off to pause new analysis without deleting your library.")
+                }.accessibilityIdentifier("taste.enabled")
                 NavigationLink { TasteAnalysisExclusionsView(mode: mode, source: resolvedSource) } label: {
                     HStack { Text(L10n.text("Analysis excluded tags")); Spacer(); Text(String(env.taste.control.analysisExcluded(mode, source: resolvedSource).count)).foregroundStyle(.secondary) }
                 }.accessibilityIdentifier("taste.settings.exclusions")
@@ -40,20 +41,24 @@ struct TasteSettingsView: View {
                 }.disabled(env.taste.control.excluded.isEmpty)
             }
             Section {
-                Toggle(L10n.text("Sync analysis with iCloud"), isOn: Binding(get: { env.taste.control.cloudEnabled }, set: { enabled in env.taste.change { $0.cloudEnabled = enabled } }))
-                    .accessibilityIdentifier("taste.cloud")
+                Toggle(isOn: Binding(get: { env.taste.control.cloudEnabled }, set: { enabled in env.taste.change { $0.cloudEnabled = enabled } })) {
+                    SettingsHelpLabel("Sync analysis with iCloud", help: "Shares your taste analysis with your other devices through iCloud. iCloud Sync must also be on; other devices update when they next sync.")
+                }.accessibilityIdentifier("taste.cloud")
                 Text(env.taste.cloud.status).font(.footnote).foregroundStyle(.secondary)
                 if !env.sync.enabled { Text(L10n.text("iCloud sync is off. Changes cannot reach your other devices until it is enabled.")) }
                 DisclosureGroup(L10n.text("Storage details")) {
                     LabeledContent(L10n.text("Analysis time zone"), value: env.taste.control.timeZone)
                     LabeledContent(L10n.text("Retention"), value: L10n.text("Until you delete it"))
                 }
-            } footer: { Text(L10n.text("Analysis uses your existing iCloud Drive protection. It is separate from search history retention. Other devices apply changes when they next sync.")) }
+            }
             Section {
-                Button(L10n.text("Delete all analysis data"), role: .destructive) { confirmReset = true }
-                    .accessibilityIdentifier("taste.reset")
+                HStack(spacing: 4) {
+                    Button(L10n.text("Delete all analysis data"), role: .destructive) { confirmReset = true }
+                        .accessibilityIdentifier("taste.reset")
+                    SettingsInfoButton(title: "Delete all analysis data", message: "Deletes viewing activity, taste evidence and reports. Saved works stay in your library. Existing works will not be analyzed again automatically.")
+                }
                 if let error = env.taste.error { Text(error).foregroundStyle(.red) }
-            } footer: { Text(L10n.text("Deletes activity, preference evidence, and reports. Your saved works remain. Existing works will not be automatically analyzed again.")) }
+            }
         }.navigationTitle(L10n.text("Taste Analysis Settings"))
         .alert(L10n.text("Turn off taste analysis?"), isPresented: Binding(get: { pendingDisable != nil }, set: { if !$0 { pendingDisable = nil } }), presenting: pendingDisable) { target in
             Button(L10n.text("Keep Enabled"), role: .cancel) { pendingDisable = nil }
@@ -152,8 +157,7 @@ struct RecommendationSettingsView: View {
                         var value = preferences; value.includedTags.remove(atOffsets: indices)
                         env.taste.change { $0.setPreferences(value, source: source) }
                     }
-            } header: { Text(L10n.text("Default included tags")) }
-            footer: { Text(L10n.text("Only this server uses these filters. All included tags must match. No language is required unless you choose one. Changes apply when you refresh recommendations.")) }
+            } header: { SettingsHelpLabel("Default included tags", help: "Applies these tags to recommendations from this website only. All tags must match. Refresh recommendations after changing the filters.") }
         }.disabled(source.isEmpty).navigationTitle(L10n.text("Recommendation filters"))
     }
     private func add() {

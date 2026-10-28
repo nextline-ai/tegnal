@@ -406,10 +406,10 @@ final class BooruStore: @unchecked Sendable {
         return id
     }
 
-    func history(serverID: String) -> [String] {
+    func history(serverID: String, limit: Int? = 500) -> [String] {
         _ = revision
         return (try? database.read { db in
-            try String.fetchAll(db, sql: "SELECT query FROM history WHERE server_id = ? AND used_at >= ? ORDER BY used_at DESC LIMIT 500", arguments: [serverID, SearchRetention.cutoff(booru: true)])
+            try String.fetchAll(db, sql: "SELECT query FROM history WHERE server_id = ? AND used_at >= ? ORDER BY used_at DESC LIMIT ?", arguments: [serverID, SearchRetention.cutoff(booru: true), limit ?? -1])
         }) ?? []
     }
 

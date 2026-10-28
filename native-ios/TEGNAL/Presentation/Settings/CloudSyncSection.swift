@@ -5,10 +5,12 @@ struct CloudSyncSection: View {
     @State private var confirmDisable = false
     var body: some View {
         Section {
-            Toggle(L10n.text("iCloud Sync"), isOn: Binding(get: { env.sync.enabled }, set: { value in
+            Toggle(isOn: Binding(get: { env.sync.enabled }, set: { value in
                 if value { env.sync.enabled = true; Task { await env.sync.synchronize(env: env) } }
                 else { confirmDisable = true }
-            })).accessibilityIdentifier("settings.icloud")
+            })) {
+                SettingsHelpLabel("iCloud Sync", help: "Keeps both libraries, folders and general settings in sync across your devices. Layout, viewer preferences, downloaded media and sign-in details stay on each device.")
+            }.accessibilityIdentifier("settings.icloud")
             Text(env.sync.status).font(.footnote).foregroundStyle(.secondary)
             if let bytes = env.sync.documentBytes {
                 LabeledContent(L10n.text("This Device’s Sync Data"), value: ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))
@@ -22,9 +24,7 @@ struct CloudSyncSection: View {
                 Button(L10n.text("Sync Now"), systemImage: "arrow.triangle.2.circlepath") { Task { await env.sync.synchronize(env: env) } }
                     .disabled(env.sync.syncing)
             }
-        } header: { Text("iCloud") } footer: {
-            Text(L10n.text("Sync both Comics and Image libraries and general settings together. Layout, playback, media, credentials and cookies stay on each device."))
-        }
+        } header: { Text("iCloud") }
         .alert(L10n.text("Turn Off iCloud Sync?"), isPresented: $confirmDisable) {
             Button(L10n.text("Turn Off"), role: .destructive) { env.sync.enabled = false }
             Button(L10n.text("Cancel"), role: .cancel) {}

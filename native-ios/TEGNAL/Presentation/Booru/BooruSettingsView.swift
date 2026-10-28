@@ -30,7 +30,7 @@ struct BooruServersView: View {
                     }
                 }
                 Button(L10n.text("Add a Server"), systemImage: "plus") { editing = .init() }.accessibilityIdentifier("booru.addServer")
-            } header: { Text(L10n.text("Servers")) } footer: { Text(L10n.text("Danbooru, Gelbooru, Old Gelbooru (v0.1.11) and Moebooru compatible servers are supported.")) }
+            } header: { SettingsHelpLabel("Servers", help: "Add a supported image website, then select the servers you want to search. Each server keeps its own favorites and filters.") }
         }.navigationTitle(L10n.text("Servers")).navigationBarTitleDisplayMode(.inline)
             .appSheet(item: $editing) { item in WebsiteConnectionEditor(server: item.server) }
             .confirmationDialog(L10n.text("Delete Server?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
@@ -155,9 +155,7 @@ struct WebsiteConnectionEditor: View {
                 TextField("https://example.com", text: $address).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                     .disabled(server != nil).accessibilityIdentifier("booru.serverURL")
                     .accessibilityLabel(L10n.text("Website Address"))
-            } header: { Text(L10n.text("Website Address")) } footer: {
-                Text(L10n.text(server == nil ? "Enter a comics or image website. We’ll detect its type and switch to the right mode." : "Enter the website’s home address."))
-            }
+            } header: { SettingsHelpLabel("Website Address", help: "Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode.") }
             Section {
                 Picker(L10n.text("Mode"), selection: $serverTypeChoice) {
                     Text(L10n.text("Automatic")).tag(nil as ServerType?)
@@ -174,7 +172,6 @@ struct WebsiteConnectionEditor: View {
                     Label(effectiveServerType == .comics ? L10n.text("Comics Mode") : L10n.text("Image Mode"), systemImage: effectiveServerType.icon)
                         .foregroundStyle(.tint).accessibilityIdentifier("website.detectedMode")
                     if case .booru(let engine) = effectiveServerType { Text(engine.title).font(.footnote).foregroundStyle(.secondary) }
-                    Text(L10n.text("Saving this address will open the matching mode.")).font(.footnote).foregroundStyle(.secondary)
                 } else if !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(L10n.text("Couldn’t identify this website. Check the connection or select its mode manually."))
                         .font(.footnote).foregroundStyle(.secondary)
@@ -189,7 +186,6 @@ struct WebsiteConnectionEditor: View {
                         .accessibilityIdentifier("website.retryDetection")
                 }
             }
-            if server == nil { Section { WebsiteModeGuide() } }
             if case .booru(let engine) = effectiveServerType {
                 Section {
                     DisclosureGroup(isExpanded: $showOptions) {
@@ -197,11 +193,10 @@ struct WebsiteConnectionEditor: View {
                         if engine != .oldGelbooru {
                             TextField(L10n.text(engine == .gelbooru ? "User ID" : "Username"), text: $account).textInputAutocapitalization(.never).autocorrectionDisabled()
                             SecureField(L10n.text(engine == .moebooru ? "Password Hash" : "API Key"), text: $apiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
-                            Text(L10n.text("Use credentials from your server account settings. They are stored securely in Keychain."))
-                                .font(.footnote).foregroundStyle(.secondary)
                         }
                     } label: {
-                        Text(L10n.text("Additional Options")).accessibilityIdentifier("booru.serverOptions")
+                        SettingsHelpLabel("Additional Options", help: "Optional account details can improve access on some websites. Copy them from that website’s account settings; they are stored securely in Keychain.")
+                            .accessibilityIdentifier("booru.serverOptions")
                     }
                 }
             }
@@ -285,9 +280,7 @@ struct BooruBlacklistView: View {
             Section {
                 TextEditor(text: $text).frame(minHeight: 240).font(.body.monospaced())
                     .textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("booru.blacklistText")
-            } header: { Text(L10n.text("Tag Blacklist")) } footer: {
-                Text(L10n.text("One rule per line. Use tags, rating:explicit, id:123, or artist:name. Remove a rule to unblock content."))
-            }
+            } header: { SettingsHelpLabel("Tag Blacklist", help: "Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again.") }
             Section(L10n.text("Example")) { Text("spoilers\ngore -scenery\nrating:explicit\nartist_*").font(.footnote.monospaced()).foregroundStyle(.secondary) }
         }.navigationTitle(server.displayName).navigationBarTitleDisplayMode(.inline)
             .onAppear { text = store.blacklist(serverID: server.id) }
@@ -309,17 +302,15 @@ struct BooruMoreView: View {
     @State private var validating: BooruServer?
     @State private var cacheCleared = false
     @State private var confirmClearCache = false
-    @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
-    @SwiftUI.AppStorage("booru.fitThumbnails", store: ReaderPreferences.booruDefaults) private var fitThumbnails = false
     @SwiftUI.AppStorage("booru.useEmbeddedBrowser", store: ReaderPreferences.booruDefaults) private var useEmbeddedBrowser = false
     var body: some View {
         Form {
             if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
-            Section {
-                NavigationLink { ChallengeLibraryView(source: source) } label: { Label { Text(L10n.text("Challenge Roulette")) } icon: { Image(systemName: "dice").foregroundStyle(.purple) } }
-                    .accessibilityIdentifier("booru.challengesLink")
+            Section(L10n.text("Browsing")) {
                 NavigationLink { BooruServersView() } label: { Label(L10n.text("Servers"), systemImage: "server.rack") }
                     .accessibilityIdentifier("booru.serversLink")
+                NavigationLink { ChallengeLibraryView(source: source) } label: { Label { Text(L10n.text("Challenge Roulette")) } icon: { Image(systemName: "dice").foregroundStyle(.purple) } }
+                    .accessibilityIdentifier("booru.challengesLink")
                 if !store.servers.isEmpty {
                     NavigationLink {
                         if store.selectedServers.count == 1, let server = store.selectedServer { BooruPoolsView(server: server, source: source) }
@@ -329,27 +320,26 @@ struct BooruMoreView: View {
                 }
                 NavigationLink { DownloadsView(mode: .booru) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
                     .accessibilityIdentifier("booru.downloadsLink")
-            } footer: {
-                Text(store.selectedServers.map(\.displayName).joined(separator: " · "))
             }
 
+            ReaderSettingsSection(booru: true, isPresented: $showReader)
             ModeAppearanceSettings()
             LanguageSettingsSection(booru: true)
             Section {
-                Toggle(L10n.text("Reduce Image Data Further"), isOn: $reducedData).accessibilityIdentifier("booru.reducedData")
-                Toggle(L10n.text("Use Embedded Browser"), isOn: $useEmbeddedBrowser).accessibilityIdentifier("booru.browserToggle")
-                Toggle(L10n.text("Fit Entire Thumbnails"), isOn: $fitThumbnails)
-            } header: { Text(L10n.text("Browsing")) } footer: {
-                Text(L10n.text("Use the website if the native viewer stops working. Turn off to return to the native viewer."))
-            }
+                Toggle(isOn: $useEmbeddedBrowser) {
+                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.")
+                }.accessibilityIdentifier("booru.browserToggle")
+            } header: { Text(L10n.text("Website Connection")) }
             ForEach(store.selectedServers) { server in
                 Section(L10n.text("Connection & Filters") + " · " + server.displayName) {
                     NavigationLink { BooruBlacklistView(server: server) } label: { Label(L10n.text("Tag Blacklist"), systemImage: "eye.slash") }.accessibilityIdentifier("booru.blacklist")
-                    Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = server }.accessibilityIdentifier("booru.validate")
+                    HStack(spacing: 4) {
+                        Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = server }.accessibilityIdentifier("booru.validate")
+                        SettingsInfoButton(title: "Validate Client", message: "Opens the website’s connection check. Complete it here if the server blocks searches or image loading.")
+                    }
                     NavigationLink { BooruCookiesView(server: server) } label: { Label(L10n.text("Cookies"), systemImage: "network.badge.shield.half.filled") }.accessibilityIdentifier("booru.cookies")
                 }
             }
-            ReaderSettingsSection(booru: true, isPresented: $showReader)
             SearchHistorySettings(booru: true)
             TasteSettingsSection(mode: .booru)
             CloudSyncSection()
@@ -357,16 +347,14 @@ struct BooruMoreView: View {
             Section {
                 NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }
                     .accessibilityIdentifier("booru.libraryManagement")
-                Button(L10n.text(cacheCleared ? "Image Cache Cleared" : "Clear Image Cache")) {
-                    confirmClearCache = true
-                }.accessibilityIdentifier("settings.clearCache")
-            } header: { Text(L10n.text("Data & Storage")) } footer: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.text("Booru favorites, tags, artists and history are stored separately from manga mode, and separately for each server."))
-                    Text(L10n.text("Previews use up to 256 MB and viewer images use up to 512 MB of on-device cache. Two images before and after the current work are preloaded. These caches stay out of iCloud and can be cleared here."))
+                HStack(spacing: 4) {
+                    Button(L10n.text(cacheCleared ? "Image Cache Cleared" : "Clear Image Cache")) {
+                        confirmClearCache = true
+                    }.accessibilityIdentifier("settings.clearCache")
+                    SettingsInfoButton(title: "Clear Image Cache", message: "Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed.")
                 }
-            }
-            SettingsSupportSection(showOnboarding: $showOnboarding)
+            } header: { Text(L10n.text("Data & Storage")) }
+            SettingsSupportSection(showOnboarding: $showOnboarding, booru: true)
             DeveloperInfoSection()
         }
         .onAppear { env.presentDiscordInvitationIfDue() }

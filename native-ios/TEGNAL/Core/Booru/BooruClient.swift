@@ -77,7 +77,7 @@ actor BooruClient: BooruProviding {
     static let shared = BooruClient()
     static let pageSize = 40
     // Request only the fields consumed by BooruDecoder, including blocking and media metadata.
-    static let postFields = "id,file_url,large_file_url,preview_file_url,media_asset[variants],tag_string_copyright,tag_string_character,image_width,image_height,tag_string,tag_string_artist,tag_string_meta,rating,score,file_ext,pool_ids,fav_count,up_score,comment_count,is_banned"
+    static let postFields = "id,file_url,large_file_url,preview_file_url,media_asset[variants],tag_string_copyright,tag_string_character,image_width,image_height,tag_string,tag_string_artist,tag_string_meta,rating,score,file_ext,pool_ids,fav_count,up_score,comment_count,is_banned,is_deleted"
     private struct PostPage { let data: Data; let date: Date }
     private var postPages: [String: PostPage] = [:]
     private var pendingPostPages: [String: Task<Data, Error>] = [:]
@@ -166,6 +166,7 @@ actor BooruClient: BooruProviding {
         await BooruBrowserSession.receive(response, server: server)
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw BooruError.invalidResponse }
+        if server.engine == .danbooru, path.hasPrefix("posts/"), http.statusCode == 451 { throw BooruPostAccessError.removed }
         if let error = BooruPostAccessError.detect(data, server: server) { throw error }
         if isDocument && Self.needsBrowser(data, response: response), let url = request.url {
             await BooruBrowserSession.recordChallenge(url, server: server)
@@ -231,7 +232,7 @@ actor BooruClient: BooruProviding {
             // Missing URLs alone never prove a Gold restriction. The public
             // document distinguishes Gold from removals, safe mode and failures.
             if server.engine == .danbooru, post.viewerURL(original: false) == nil,
-               !(row["is_banned"] as? Bool ?? false) { candidates.append(post) }
+               !post.isRemoved { candidates.append(post) }
         }
         let checked = try await withThrowingTaskGroup(of: Int64?.self) { group in
             var iterator = candidates.makeIterator(), found: [Int64] = []
@@ -431,18 +432,16 @@ actor BooruClient: BooruProviding {
     }
 
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost {
-        // Previously saved ZIP posts may predate conversion metadata support.
-        if server.engine == .danbooru, post.isUgoira, post.animationPlaybackURL == nil {
+        if post.isRemoved { throw BooruPostAccessError.removed }
+        // Refresh metadata when resolving missing media or checking a failed URL.
+        // Saved posts may predate removal flags or animation conversion metadata.
+        if server.engine == .danbooru {
             let raw = try await data(server, "posts/\(post.postID).json", [("only", Self.postFields)])
             guard let row = try JSONSerialization.jsonObject(with: raw) as? [String: Any] else { throw BooruError.invalidResponse }
             let resolved = try BooruDecoder.post(row, server: server)
             guard resolved.postID == post.postID else { throw BooruError.invalidResponse }
             if resolved.viewerURL(original: false) == nil { try await checkDanbooruAccess(server: server, postID: post.postID) }
             return resolved
-        }
-        if server.engine == .danbooru, post.viewerURL(original: false) == nil {
-            try await checkDanbooruAccess(server: server, postID: post.postID)
-            return post
         }
         guard server.engine.usesGelbooruPages else { return post }
         let raw = try await postPage(server: server, id: post.postID, reuse: false)
@@ -626,7 +625,8 @@ enum BooruDecoder {
                      metadataTags: (row["tag_string_meta"] as? String).map { $0.split(whereSeparator: \.isWhitespace).map(String.init) },
                      favoriteCount: row["fav_count"].map(integer), upvoteCount: row["up_score"].map(integer), commentCount: row["comment_count"].map(integer), reducedDataURL: reduced,
                      tagCategories: categories.isEmpty ? nil : categories,
-                     animated: variants.contains { $0["type"] as? String == "full" } ? false : nil, animationVideoURL: animationVideo)
+                     animated: variants.contains { $0["type"] as? String == "full" } ? false : nil, animationVideoURL: animationVideo,
+                     isDeleted: row["is_deleted"] as? Bool, isBanned: row["is_banned"] as? Bool)
     }
     static func suggestions(_ data: Data, server: BooruServer) throws -> [BooruTag] {
         if let names = try? JSONSerialization.jsonObject(with: data) as? [String] {

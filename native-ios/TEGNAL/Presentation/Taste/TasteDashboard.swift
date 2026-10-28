@@ -116,6 +116,11 @@ struct TasteDashboard: View {
             guard BooruViewerReturn.targetID(openedID: opened?.post?.id, viewedID: viewed.id, availableIDs: items.lazy.compactMap { $0.post?.id }) != nil,
                   let target = items.first(where: { $0.post?.id == viewed.id }) else { return }
             BooruViewerReturn.scroll(to: target.id, using: scrollProxy)
+        }, willCloseManga: { viewed in
+            guard opened?.item.source == MangaUrls.source, opened?.item.id != viewed,
+                  !env.hiddenMangaGalleryIDs.contains(viewed),
+                  let target = feed.visibleItems(in: env.booru).first(where: { $0.item.source == MangaUrls.source && $0.item.id == viewed }) else { return }
+            BooruViewerReturn.scroll(to: target.id, using: scrollProxy)
         }) { .recommended($0.reason.name, session: feed.discoverySession) }
         .navigationDestination(item: $detail) { TasteTagDetail(tag: $0, mode: mode) }
         }

@@ -99,16 +99,21 @@ public struct WorksGridView: View {
             get: { selectedDetailGalleryId.map { IdentifiableInt64(id: $0) } },
             set: { selectedDetailGalleryId = $0?.id }
         ), onDismiss: { loadWorks() }) { item in
-            NavigationStack {
-                WorkDetailView(galleryId: item.id)
-            }
+            ContentEntryView(initialUrl: MangaUrls.galleryUrl(for: item.id), siblingIDs: works.map(\.galleryId), willCloseManga: { viewed in
+                MangaViewerReturn.restore(openedID: item.id, viewedID: viewed, availableIDs: works.lazy.map(\.galleryId), using: proxy)
+            })
+                .presentationDetents([.large]).presentationDragIndicator(.visible)
         }
         .appSheet(item: browserSelection(information: true)) { item in
-            ContentEntryView(initialUrl: item.id)
+            ContentEntryView(initialUrl: item.id, siblingIDs: works.map(\.galleryId), willCloseManga: { viewed in
+                MangaViewerReturn.restore(openedID: GalleryIDParser.parse(item.id).first, viewedID: viewed, availableIDs: works.lazy.map(\.galleryId), using: proxy)
+            })
                 .presentationDetents([.large]).presentationDragIndicator(.visible)
         }
         .appFullScreenCover(item: browserSelection(information: false)) { item in
-            ContentEntryView(initialUrl: item.id)
+            ContentEntryView(initialUrl: item.id, siblingIDs: works.map(\.galleryId), willCloseManga: { viewed in
+                MangaViewerReturn.restore(openedID: GalleryIDParser.parse(item.id).first, viewedID: viewed, availableIDs: works.lazy.map(\.galleryId), using: proxy)
+            })
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -361,7 +366,7 @@ public struct WorksGridView: View {
         Button {
             selectedDetailGalleryId = work.galleryId
         } label: {
-            Label(L10n.text("More Settings"), systemImage: "info.circle")
+            Label(L10n.text("Work Details"), systemImage: "info.circle")
         }
 
         Button {

@@ -1,8 +1,67 @@
 import XCTest
 import SwiftUI
+import CoreImage
 @testable import TEGNAL
 
 final class AppPresentationTests: XCTestCase {
+    @MainActor func testImageViewerDragExposesThePresentingScreenInsteadOfABlackBackdrop() async throws {
+        let env = AppEnvironment.preview(), state = PresentationProbeState(), server = BooruServer.presets[0]
+        env.mode = .booru; try env.booru.saveServer(server)
+        var post = BooruFixtureSource.post(101, server: server)
+        let png = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).pngData { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+        }
+        let dataURL = URL(string: "data:image/png;base64," + png.base64EncodedString())!
+        post.fileURL = dataURL; post.sampleURL = dataURL; post.previewURL = dataURL
+        let previous = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first(where: \.isKeyWindow)
+        let window = try show(Color.green.ignoresSafeArea()
+            .appFullScreenCover(isPresented: Binding(get: { state.cover }, set: { state.cover = $0 })) {
+                BooruPostView(post: post, posts: [post], server: server, source: BooruFixtureSource())
+            }.environment(env).environment(env.booru))
+        defer { window.rootViewController?.dismiss(animated: false); window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        state.cover = true
+        try await wait { window.rootViewController?.presentedViewController?.view.window != nil }
+        let controller = try XCTUnwrap(window.rootViewController?.presentedViewController)
+        let surface = ReaderExitSurface.view(for: controller, movesContainer: true)
+        let frame = surface.frame, safeArea = surface.safeAreaInsets
+        let motion = ReaderExitMotion()
+        motion.begin(surface, snapshot: true)
+        defer { motion.restore() }
+        XCTAssertFalse(motion.surface === surface, "Move the compositor replica without changing the hosting layout")
+        XCTAssertTrue(surface.isHidden)
+        for distance: CGFloat in [40, 180, 120, 180] {
+            motion.update(distance: distance)
+            surface.layoutIfNeeded()
+            XCTAssertEqual(surface.frame, frame, "Dragging must not resize the navigation/WebKit container")
+            XCTAssertEqual(surface.safeAreaInsets, safeArea)
+            XCTAssertEqual(motion.surface?.transform.ty, distance)
+        }
+        let screenshot = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+        let image = try XCTUnwrap(screenshot.cgImage)
+        let scale = CGFloat(image.width) / window.bounds.width
+        let sample = CGRect(x: CGFloat(image.width) / 2, y: CGFloat(image.height) - 100 * scale, width: 1, height: 1)
+        var pixel = [UInt8](repeating: 0, count: 4)
+        pixel.withUnsafeMutableBytes { bytes in
+            CIContext().render(CIImage(cgImage: image), toBitmap: bytes.baseAddress!, rowBytes: 4, bounds: sample, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+        }
+        XCTAssertGreaterThan(Int(pixel[1]), Int(pixel[0]) + 30, "The exposed area must show the green presenting screen, not a black cover")
+        XCTAssertGreaterThan(Int(pixel[1]), Int(pixel[2]) + 30)
+        motion.restore()
+        XCTAssertFalse(surface.isHidden)
+        XCTAssertNil(motion.surface)
+    }
+
+    @MainActor func testDisabledResumeAnimationRemovesPrivacyCoverImmediately() {
+        let manager = PrivacyCoverManager(), window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+        window.rootViewController = UIViewController()
+        manager.show(in: [window])
+        XCTAssertTrue(window.subviews.contains { $0.accessibilityIdentifier == "privacy.cover" })
+        var finished = false
+        manager.hide(timing: .init(hold: 0, slide: 0)) { finished = true }
+        XCTAssertTrue(finished)
+        XCTAssertFalse(window.subviews.contains { $0.accessibilityIdentifier == "privacy.cover" })
+    }
+
     @MainActor func testDetachedModalRootSuppliesModelsBeforeRenderingRealScreens() async throws {
         let env = AppEnvironment.preview()
         for screen in [AnyView(OnboardingView()), AnyView(WebsiteConnectionEditor(server: nil)), AnyView(DownloadsSheet(mode: .booru))] {

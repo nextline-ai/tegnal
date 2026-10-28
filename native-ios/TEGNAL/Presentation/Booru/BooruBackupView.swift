@@ -5,6 +5,7 @@ struct BooruBackupView: View {
 
     var body: some View {
         Form {
+            LibraryMaintenanceLinks(booru: true)
             LibraryBackupSection(busy: $busy)
             Section {
                 NavigationLink { ChallengeBackupView() } label: { Label { Text(L10n.text("Challenge Backup and Import")) } icon: { Image(systemName: "dice").foregroundStyle(.purple) } }

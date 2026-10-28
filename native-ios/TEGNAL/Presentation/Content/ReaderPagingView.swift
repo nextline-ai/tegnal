@@ -427,22 +427,27 @@ struct ReaderContinuousView: View {
 struct ReaderExitGesture: UIViewRepresentable {
     var enabled: Bool
     var requiresTopSafeZone = false
+    var movesContainer = false
     let progress: (CGFloat) -> Void
     let exit: () -> Void
     func makeUIView(context: Context) -> ExitGestureView { ExitGestureView() }
-    func updateUIView(_ view: ExitGestureView, context: Context) { view.exit = exit; view.progress = progress; view.pan.isEnabled = enabled; view.requiresTopSafeZone = requiresTopSafeZone }
-    static func dismantleUIView(_ view: ExitGestureView, coordinator: ()) { view.pan.view?.removeGestureRecognizer(view.pan) }
+    func updateUIView(_ view: ExitGestureView, context: Context) { view.exit = exit; view.progress = progress; view.pan.isEnabled = enabled; view.requiresTopSafeZone = requiresTopSafeZone; view.movesContainer = movesContainer }
+    static func dismantleUIView(_ view: ExitGestureView, coordinator: ()) { view.restore(); view.pan.view?.removeGestureRecognizer(view.pan) }
 }
 final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
     var exit: () -> Void = {}
     var progress: (CGFloat) -> Void = { _ in }
     var requiresTopSafeZone = false
+    var movesContainer = false
+    private var intent = ReaderExitIntent()
+    private let motion = ReaderExitMotion()
+    private var crossedThreshold = false
     lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
     override func didMoveToWindow() {
         super.didMoveToWindow()
         pan.view?.removeGestureRecognizer(pan)
         pan.delegate = self
-        pan.cancelsTouchesInView = false
+        pan.cancelsTouchesInView = true
         pan.maximumNumberOfTouches = 1
         window?.addGestureRecognizer(pan)
     }
@@ -451,11 +456,17 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
         return velocity.y > 0 && velocity.y > abs(velocity.x) * 1.25
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        !(other is UIScreenEdgePanGestureRecognizer)
+        !(other is UIPanGestureRecognizer) && !(other is UIScreenEdgePanGestureRecognizer)
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        other is UIPanGestureRecognizer && !(other is UIScreenEdgePanGestureRecognizer)
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard let window, window.bounds.inset(by: window.safeAreaInsets).contains(touch.location(in: window)) else { return false }
-        if requiresTopSafeZone && !ReaderDismissal.isInExitZone(touch.location(in: window), bounds: window.bounds, safeTop: window.safeAreaInsets.top) { return false }
+        guard let window, window.bounds.contains(touch.location(in: window)) else { return false }
+        if requiresTopSafeZone {
+            guard window.bounds.inset(by: window.safeAreaInsets).contains(touch.location(in: window)),
+                  ReaderDismissal.isInExitZone(touch.location(in: window), bounds: window.bounds, safeTop: window.safeAreaInsets.top) else { return false }
+        }
         var view = touch.view
         while let current = view {
             if current is UIControl { return false }
@@ -464,36 +475,111 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
         }
         return true
     }
+    private func hostView() -> UIView? {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let controller = current as? UIViewController { return ReaderExitSurface.view(for: controller, movesContainer: movesContainer) }
+            responder = current.next
+        }
+        return nil
+    }
+    func restore() { motion.restore() }
     @objc private func dragged(_ gesture: UIPanGestureRecognizer) {
         guard let window else { return }
         let delta = gesture.translation(in: window)
         switch gesture.state {
-        case .began, .changed: progress(max(0, delta.y))
+        case .began:
+            if let surface = hostView() { motion.begin(surface, snapshot: movesContainer) }
+            crossedThreshold = false; intent = ReaderExitIntent()
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            fallthrough
+        case .changed:
+            let distance = max(0, delta.y)
+            intent.update(distance: distance)
+            motion.update(distance: distance)
+            if distance >= 96 && !crossedThreshold { crossedThreshold = true; UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            progress(distance)
         case .ended:
-            if ReaderDismissal.shouldExit(delta: delta, velocity: gesture.velocity(in: window)) { exit() }
-            else { progress(0) }
-        case .cancelled, .failed: progress(0)
+            intent.update(distance: max(0, delta.y))
+            if intent.shouldFinish(delta: delta, velocity: gesture.velocity(in: window)) {
+                motion.finish(distance: window.bounds.height) { [weak self] in self?.exit() }
+            } else {
+                motion.cancel(); progress(0)
+            }
+        case .cancelled, .failed:
+            motion.cancel(); progress(0)
         default: break
         }
     }
 }
 
+/// The image viewer's hosting/navigation layout stays stationary during dragging.
+/// Move a compositor snapshot above it so safe-area and WebKit resizing cannot
+/// feed the drag translation back into another layout pass.
+@MainActor final class ReaderExitMotion {
+    private(set) var surface: UIView?
+    private weak var original: UIView?
+    private var replica: UIView?
+    private var wasHidden = false
+    private var wasClipped = false
+    private var cornerRadius: CGFloat = 0
+    private var generation = 0
+    func begin(_ view: UIView, snapshot: Bool) {
+        restore()
+        original = view; wasHidden = view.isHidden; wasClipped = view.clipsToBounds; cornerRadius = view.layer.cornerRadius
+        if snapshot, let parent = view.superview, let copy = view.snapshotView(afterScreenUpdates: false) {
+            copy.frame = view.frame; copy.isUserInteractionEnabled = false; copy.accessibilityElementsHidden = true
+            parent.insertSubview(copy, aboveSubview: view)
+            replica = copy; surface = copy; view.isHidden = true
+        } else { surface = view }
+        surface?.clipsToBounds = true
+    }
+    func update(distance: CGFloat) {
+        surface?.transform = CGAffineTransform(translationX: 0, y: max(0, distance))
+        surface?.layer.cornerRadius = min(24, max(0, distance) / 4)
+    }
+    func cancel() {
+        let token = generation
+        UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut, .beginFromCurrentState], animations: {
+            self.surface?.transform = .identity; self.surface?.layer.cornerRadius = self.cornerRadius
+        }) { _ in if self.generation == token { self.restore() } }
+    }
+    func finish(distance: CGFloat, completion: @escaping () -> Void) {
+        let token = generation
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState], animations: {
+            self.surface?.transform = CGAffineTransform(translationX: 0, y: distance)
+        }) { finished in
+            guard self.generation == token else { return }
+            if finished { completion() } else { self.restore() }
+        }
+    }
+    func restore() {
+        generation += 1
+        surface?.layer.removeAllAnimations()
+        if replica == nil {
+            original?.transform = .identity; original?.clipsToBounds = wasClipped; original?.layer.cornerRadius = cornerRadius
+        }
+        original?.isHidden = wasHidden
+        replica?.removeFromSuperview(); replica = nil; surface = nil; original = nil
+    }
+}
+
 /// A bottom-origin upward swipe owns its pan before the pager/continuous
-/// scroller, so revealing previews does not also advance the current page.
-struct ReaderPreviewGesture: UIViewRepresentable {
+/// scroller, so opening work information does not also advance the current page.
+struct ReaderInformationGesture: UIViewRepresentable {
     let enabled: Bool
     let reveal: () -> Void
-    func makeUIView(context: Context) -> PreviewGestureView { PreviewGestureView() }
-    func updateUIView(_ view: PreviewGestureView, context: Context) {
+    func makeUIView(context: Context) -> InformationGestureView { InformationGestureView() }
+    func updateUIView(_ view: InformationGestureView, context: Context) {
         view.reveal = reveal
         view.pan.isEnabled = enabled
     }
-    static func dismantleUIView(_ view: PreviewGestureView, coordinator: ()) {
+    static func dismantleUIView(_ view: InformationGestureView, coordinator: ()) {
         view.pan.view?.removeGestureRecognizer(view.pan)
     }
 }
 
-final class PreviewGestureView: UIView, UIGestureRecognizerDelegate {
+final class InformationGestureView: UIView, UIGestureRecognizerDelegate {
     var reveal: () -> Void = {}
     lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
     override func didMoveToWindow() {
@@ -506,7 +592,7 @@ final class PreviewGestureView: UIView, UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard let window,
               window.bounds.inset(by: window.safeAreaInsets).contains(touch.location(in: window)),
-              ReaderPreviewReveal.isInZone(touch.location(in: window), bounds: window.bounds) else { return false }
+              ReaderInformationReveal.isInZone(touch.location(in: window), bounds: window.bounds) else { return false }
         var view = touch.view
         while let current = view {
             if current is UIControl { return false }
@@ -524,12 +610,12 @@ final class PreviewGestureView: UIView, UIGestureRecognizerDelegate {
     }
     @objc private func dragged(_ gesture: UIPanGestureRecognizer) {
         guard gesture.state == .ended, let window,
-              ReaderPreviewReveal.shouldReveal(delta: gesture.translation(in: window), velocity: gesture.velocity(in: window)) else { return }
+              ReaderInformationReveal.shouldReveal(delta: gesture.translation(in: window), velocity: gesture.velocity(in: window)) else { return }
         reveal()
     }
 }
 
-enum ReaderPreviewReveal {
+enum ReaderInformationReveal {
     static func isEnabled(mode: String, continuousOptIn: Bool) -> Bool {
         mode != ReaderMode.continuous.rawValue || continuousOptIn
     }
@@ -541,11 +627,98 @@ enum ReaderPreviewReveal {
     }
 }
 
+struct ReaderExitIntent {
+    private(set) var peak: CGFloat = 0
+    private(set) var reversed = false
+    mutating func update(distance: CGFloat) {
+        peak = max(peak, distance)
+        if peak - distance >= 8 { reversed = true }
+    }
+    func shouldFinish(delta: CGPoint, velocity: CGPoint) -> Bool {
+        !reversed && velocity.y >= 0 && ReaderDismissal.shouldExit(delta: delta, velocity: velocity)
+    }
+}
+
+@MainActor enum ReaderExitSurface {
+    static func view(for controller: UIViewController, movesContainer: Bool) -> UIView {
+        var owner = controller
+        if movesContainer { while let parent = owner.parent { owner = parent } }
+        return owner.view
+    }
+}
+
 enum ReaderDismissal {
     static func isInExitZone(_ point: CGPoint, bounds: CGRect, safeTop: CGFloat) -> Bool {
-        point.y >= bounds.minY + safeTop && point.y <= bounds.minY + safeTop + 64
+        bounds.contains(point) && point.y >= bounds.minY + safeTop && point.y <= bounds.minY + safeTop + 64
     }
     static func shouldExit(delta: CGPoint, velocity: CGPoint) -> Bool {
         delta.y > abs(delta.x) * 1.25 && (delta.y >= 96 || (delta.y >= 24 && velocity.y >= 550))
+    }
+}
+
+struct ReaderWorkSwipeGesture: UIViewRepresentable {
+    let enabled: Bool
+    var excludesLeadingEdge = false
+    let change: (Int) -> Void
+    func makeUIView(context: Context) -> WorkSwipeView { WorkSwipeView() }
+    func updateUIView(_ view: WorkSwipeView, context: Context) { view.pan.isEnabled = enabled; view.change = change; view.excludesLeadingEdge = excludesLeadingEdge }
+    static func dismantleUIView(_ view: WorkSwipeView, coordinator: ()) { view.pan.view?.removeGestureRecognizer(view.pan) }
+}
+final class WorkSwipeView: UIView, UIGestureRecognizerDelegate {
+    var backOnly = false
+    var excludesLeadingEdge = false
+    var change: (Int) -> Void = { _ in }
+    lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(dragged))
+    override func didMoveToWindow() {
+        super.didMoveToWindow(); pan.view?.removeGestureRecognizer(pan)
+        pan.delegate = self; pan.maximumNumberOfTouches = 1; window?.addGestureRecognizer(pan)
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let window else { return false }
+        let point = touch.location(in: window), safe = window.bounds.inset(by: window.safeAreaInsets)
+        guard safe.contains(point) else { return false }
+        let leading = ReaderHorizontalSwipe.isLeadingStart(point, bounds: window.bounds, safeArea: window.safeAreaInsets)
+        if backOnly && !leading || excludesLeadingEdge && leading { return false }
+        var current = touch.view
+        while let view = current {
+            if view is UIControl { return false }
+            if let page = view as? PageScrollView, page.zoomScale > 1.01 { return false }
+            current = view.superview
+        }
+        return true
+    }
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        let velocity = pan.velocity(in: window); return (!backOnly || velocity.x > 0) && abs(velocity.x) > abs(velocity.y) * 1.5
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        other is UIPanGestureRecognizer && !(other is UIScreenEdgePanGestureRecognizer)
+    }
+    @objc private func dragged() {
+        guard pan.state == .ended else { return }
+        let delta = pan.translation(in: window)
+        guard let direction = ReaderHorizontalSwipe.direction(delta: delta, backOnly: backOnly) else { return }
+        change(direction)
+    }
+}
+
+struct ReaderBackSwipeGesture: UIViewRepresentable {
+    let enabled: Bool
+    let back: () -> Void
+    func makeUIView(context: Context) -> WorkSwipeView { WorkSwipeView() }
+    func updateUIView(_ view: WorkSwipeView, context: Context) {
+        view.backOnly = true; view.pan.isEnabled = enabled
+        view.change = { _ in UIImpactFeedbackGenerator(style: .soft).impactOccurred(); back() }
+    }
+    static func dismantleUIView(_ view: WorkSwipeView, coordinator: ()) { view.pan.view?.removeGestureRecognizer(view.pan) }
+}
+
+enum ReaderHorizontalSwipe {
+    static func isLeadingStart(_ point: CGPoint, bounds: CGRect, safeArea: UIEdgeInsets) -> Bool {
+        let safe = bounds.inset(by: safeArea)
+        return safe.contains(point) && point.x <= safe.minX + 44
+    }
+    static func direction(delta: CGPoint, backOnly: Bool) -> Int? {
+        guard (!backOnly || delta.x > 0), abs(delta.x) > 80, abs(delta.x) > abs(delta.y) * 1.5 else { return nil }
+        return delta.x < 0 ? 1 : -1
     }
 }

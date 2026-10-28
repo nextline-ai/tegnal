@@ -174,6 +174,7 @@ struct TasteOpenedWork: View {
     @Binding var viewerPosition: BooruPost?
     var context = DiscoveryContext(origin: .recommendation)
     var willClose: (BooruPost) -> Void = { _ in }
+    var willCloseManga: (Int64) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     var body: some View {
@@ -188,7 +189,7 @@ struct TasteOpenedWork: View {
                 })
                 .environment(env.booru).environment(\.discoveryContext, context)
         } else if item.item.source == MangaUrls.source {
-            ContentEntryView(initialUrl: MangaThumbnailOpening.stored().url(for: item.item.id))
+            ContentEntryView(initialUrl: MangaThumbnailOpening.stored().url(for: item.item.id), siblingIDs: feed?.results.items.filter { $0.item.source == MangaUrls.source }.map { $0.item.id } ?? [item.item.id], willCloseManga: willCloseManga)
                 .environment(\.discoveryContext, context)
         } else {
             NavigationStack {
@@ -206,6 +207,7 @@ private struct TasteWorkPresentation: ViewModifier {
     var feed: TasteFeedState?
     var context: (TasteRecommendation) -> DiscoveryContext
     var willClose: (BooruPost) -> Void
+    var willCloseManga: (Int64) -> Void
     @SwiftUI.AppStorage(MangaThumbnailOpening.preferenceKey, store: ReaderPreferences.defaults) private var showsInformationBeforeReading = false
     private func usesInformationSheet(_ value: TasteRecommendation) -> Bool {
         value.item.source == MangaUrls.source && showsInformationBeforeReading
@@ -222,17 +224,17 @@ private struct TasteWorkPresentation: ViewModifier {
         content
             .onChange(of: item?.id) { _, _ in viewerPosition = nil }
             .appSheet(item: selection(information: true)) { item in
-                TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item), willClose: willClose)
+                TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item), willClose: willClose, willCloseManga: willCloseManga)
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
             .appFullScreenCover(item: selection(information: false)) { item in
-                TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item), willClose: willClose)
+                TasteOpenedWork(item: item, feed: feed, viewerPosition: $viewerPosition, context: context(item), willClose: willClose, willCloseManga: willCloseManga)
             }
     }
 }
 extension View {
-    func tasteWorkPresentation(_ item: Binding<TasteRecommendation?>, feed: TasteFeedState? = nil, willClose: @escaping (BooruPost) -> Void = { _ in },
+    func tasteWorkPresentation(_ item: Binding<TasteRecommendation?>, feed: TasteFeedState? = nil, willClose: @escaping (BooruPost) -> Void = { _ in }, willCloseManga: @escaping (Int64) -> Void = { _ in },
                                context: @escaping (TasteRecommendation) -> DiscoveryContext = { _ in .init(origin: .recommendation) }) -> some View {
-        modifier(TasteWorkPresentation(item: item, feed: feed, context: context, willClose: willClose))
+        modifier(TasteWorkPresentation(item: item, feed: feed, context: context, willClose: willClose, willCloseManga: willCloseManga))
     }
 }

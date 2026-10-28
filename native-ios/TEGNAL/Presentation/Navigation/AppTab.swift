@@ -13,7 +13,7 @@ public enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable {
         switch self {
         case .folders: return L10n.text("Folders")
         case .works: return L10n.text("Explore")
-        case .artists: return L10n.text("Artists")
+        case .artists: return L10n.text("Tags")
         case .settings: return L10n.text("Settings")
         case .insights: return L10n.text("Smart")
         }
@@ -27,7 +27,7 @@ public enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable {
         switch self {
         case .folders: return "folder.fill"
         case .works: return "globe"
-        case .artists: return "person.2.fill"
+        case .artists: return "tag.fill"
         case .settings: return "gearshape.fill"
         case .insights: return "apple.intelligence"
         }
@@ -37,7 +37,7 @@ public enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable {
         switch self {
         case .folders: return "folder"
         case .works: return "globe"
-        case .artists: return "person.2"
+        case .artists: return "tag"
         case .settings: return "gearshape"
         case .insights: return "apple.intelligence"
         }

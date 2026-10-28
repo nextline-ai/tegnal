@@ -45,7 +45,7 @@ struct BooruBackup: Codable, Sendable {
               Set(favorites.map { $0.post.id }).count == favorites.count,
               favorites.allSatisfy({ serverIDs.contains($0.post.serverID) && folderIDs.contains($0.folderID) && $0.post.postID > 0 && $0.savedAt.isFinite }),
               history.allSatisfy({ serverIDs.contains($0.serverID) && !$0.query.isEmpty && $0.usedAt.isFinite }),
-              savedTags.allSatisfy({ serverIDs.contains($0.serverID) && !$0.name.isEmpty && ["tag", "artist", "search"].contains($0.kind) }),
+              savedTags.allSatisfy({ serverIDs.contains($0.serverID) && !$0.name.isEmpty && (SavedCollectionKind(rawValue: $0.kind).map { $0 != .history } ?? false) }),
               Set(blacklist.keys).isSubset(of: serverIDs), Set(selectedServerIDs).isSubset(of: serverIDs)
         else { throw BooruError.invalidResponse }
         for server in servers { _ = try BooruServer.validatedURL(server.baseURL.absoluteString) }

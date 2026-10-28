@@ -170,7 +170,7 @@ struct MangaBackup: Codable, Sendable {
               folders.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (0...0xFFFFFFFF).contains($0.color ?? 0xFF2563EB) }),
               Set(works.map(\.gallery_id)).count == works.count,
               works.allSatisfy({ $0.gallery_id > 0 && ($0.thumb_page ?? 1) > 0 && Set($0.folders ?? []).isSubset(of: names) }),
-              artists.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && [0, 1].contains($0.kind ?? 0) }),
+              artists.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && SavedCollectionKind.allCases.compactMap(\.mangaKind).contains($0.kind ?? 0) }),
               Set(artists.map { $0.name + "\u{0}" + String($0.kind ?? 0) }).count == artists.count,
               (history ?? []).allSatisfy({ !$0.query.isEmpty && $0.used_at.isFinite }),
               (saved_searches ?? []).allSatisfy({ !$0.isEmpty }) else { throw LibraryBackupError.invalid }

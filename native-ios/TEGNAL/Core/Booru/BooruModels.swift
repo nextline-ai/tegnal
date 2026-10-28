@@ -202,6 +202,9 @@ struct BooruPost: Codable, Identifiable, Hashable, Sendable {
     var tagCategories: [String: Int]? = nil
     var animated: Bool? = nil
     var animationVideoURL: URL? = nil
+    var isDeleted: Bool? = nil
+    var isBanned: Bool? = nil
+    var isRemoved: Bool { isDeleted == true || isBanned == true }
     var id: String { "\(serverID):\(postID)" }
     static let videoExtensions = ["mp4", "webm", "mov", "m4v"]
     var isUgoira: Bool { fileExtension.lowercased() == "zip" }
@@ -255,10 +258,9 @@ struct BooruBatch: Sendable {
     var sourcePostCount: Int { posts.count + goldRestrictedIDs.count }
 }
 
-/// Only an explicit server access notice may silently remove a post. Missing
-/// media, a generic 403, removed posts and safe-mode restrictions are ambiguous.
+/// Missing media or a generic 403 never prove an account restriction or removal.
 enum BooruPostAccessError: Error, Equatable, Sendable {
-    case goldRequired
+    case goldRequired, removed
 
     static func detect(_ data: Data, server: BooruServer) -> Self? {
         guard server.engine == .danbooru, data.count <= 12_000_000 else { return nil }
@@ -268,6 +270,10 @@ enum BooruPostAccessError: Error, Equatable, Sendable {
             return detect(object, server: server)
         }
         guard let text = String(data: data, encoding: .utf8) else { return nil }
+        for match in BooruHTML.matches("<meta\\b([^>]*)>", text) {
+            let attributes = BooruHTML.attributes(match[1])
+            if ["post-is-deleted", "post-is-banned"].contains(attributes["name"] ?? ""), attributes["content"] == "true" { return .removed }
+        }
         // Danbooru renders the gate in its image container. A comment, tag,
         // navigation link or upgrade advertisement must not hide a usable post.
         for match in BooruHTML.matches("<(section|div)\\b([^>]*\\bclass\\s*=\\s*[\"'][^\"']*\\bimage-container\\b[^\"']*[\"'][^>]*)>(.*?)</\\1\\s*>", text) {
@@ -283,6 +289,7 @@ enum BooruPostAccessError: Error, Equatable, Sendable {
 
     static func detect(_ row: [String: Any], server: BooruServer) -> Self? {
         guard server.engine == .danbooru else { return nil }
+        if row["is_deleted"] as? Bool == true || row["is_banned"] as? Bool == true { return .removed }
         for key in ["message", "error", "reason"] {
             if let message = row[key] as? String, isGoldNotice(message) { return .goldRequired }
         }
@@ -380,7 +387,7 @@ struct BooruFolder: Identifiable, Hashable, Sendable {
 
 extension BooruPost {
     func onServer(_ id: String) -> Self {
-        Self(serverID: id, postID: postID, previewURL: previewURL, sampleURL: sampleURL, fileURL: fileURL, width: width, height: height, tags: tags, artists: artists, rating: rating, score: score, fileExtension: fileExtension, poolIDs: poolIDs, metadataTags: metadataTags, favoriteCount: favoriteCount, upvoteCount: upvoteCount, commentCount: commentCount)
+        Self(serverID: id, postID: postID, previewURL: previewURL, sampleURL: sampleURL, fileURL: fileURL, width: width, height: height, tags: tags, artists: artists, rating: rating, score: score, fileExtension: fileExtension, poolIDs: poolIDs, metadataTags: metadataTags, favoriteCount: favoriteCount, upvoteCount: upvoteCount, commentCount: commentCount, isDeleted: isDeleted, isBanned: isBanned)
     }
 }
 

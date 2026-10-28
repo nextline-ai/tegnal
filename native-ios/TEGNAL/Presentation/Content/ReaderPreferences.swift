@@ -114,7 +114,9 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("reader.prefetch", store: ReaderPreferences.defaults) private var prefetch = 3
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.defaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
-    @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousPreviewSwipe = false
+    @SwiftUI.AppStorage("reader.continuousBackSwipe", store: ReaderPreferences.defaults) private var continuousBackSwipe = false
+    @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
+    @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false
 
     init(booru: Bool = false) {
         self.booru = booru
@@ -135,49 +137,51 @@ struct ReaderSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                if !booru { Section(L10n.text("Reading Progress")) {
-                    Picker(L10n.text("When Reopening a Work"), selection: $resumeBehavior) {
-                        ForEach(ReaderResumeBehavior.allCases) { Text($0.title).tag($0.rawValue) }
-                    }.accessibilityIdentifier("reader.settings.resumeBehavior")
-                } }
-                if booru { Section(L10n.text("Media")) {
-                    Toggle(L10n.text("Load Original Images"), isOn: $original)
-                    Toggle(L10n.text("Reduce Image Data Further"), isOn: $reducedData).disabled(original)
-                        .accessibilityIdentifier("reader.settings.reducedData")
-                    Text(L10n.text("Use viewing-size compressed images by default. Enable this option to reduce data further. Original Images takes priority."))
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Toggle(L10n.text("Show Notes on Images"), isOn: $showNotes)
-                } }
+                if !booru {
+                    Section(L10n.text("Reading Progress")) {
+                        Picker(L10n.text("When Reopening a Work"), selection: $resumeBehavior) {
+                            ForEach(ReaderResumeBehavior.allCases) { Text($0.title).tag($0.rawValue) }
+                        }.accessibilityIdentifier("reader.settings.resumeBehavior")
+                    }
+                }
                 Section(L10n.text("Page Navigation")) {
-                    if !booru { Picker(L10n.text("Reading Mode"), selection: $mode) {
-                        ForEach(ReaderMode.allCases) { Text($0.title).tag($0.rawValue) }
-                    }.accessibilityIdentifier("reader.settings.mode")
+                    if !booru {
+                        Picker(L10n.text("Reading Mode"), selection: $mode) {
+                            ForEach(ReaderMode.allCases) { Text($0.title).tag($0.rawValue) }
+                        }.accessibilityIdentifier("reader.settings.mode")
                         if mode == ReaderMode.continuous.rawValue {
-                            Toggle(L10n.text("Swipe Up for Previews"), isOn: $continuousPreviewSwipe)
-                                .accessibilityIdentifier("reader.settings.continuousPreviewSwipe")
-                            Text(L10n.text("Off by default in Continuous Scroll. Previews remain available in the quick menu."))
-                                .font(.footnote).foregroundStyle(.secondary)
-                            Text(L10n.text("In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls."))
-                                .font(.footnote).foregroundStyle(.secondary)
+                            Toggle(isOn: $continuousBackSwipe) {
+                                SettingsHelpLabel("Swipe Right to Go Back", help: "In Continuous Scroll, swipe right from the left edge of the safe area to return to the list. Off by default. Swiping elsewhere can still change works if that option is on.")
+                            }.accessibilityIdentifier("reader.settings.backSwipe")
+                            Toggle(isOn: $continuousWorkSwipe) {
+                                SettingsHelpLabel("Swipe Left or Right to Change Works", help: "Switches between works already loaded in the current list. Turn off to keep horizontal swipes from changing works.")
+                            }.accessibilityIdentifier("reader.settings.workSwipe")
+                            Toggle(isOn: $continuousInformationSwipe) {
+                                SettingsHelpLabel("Swipe Up for Work Information", help: "Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet.")
+                            }.accessibilityIdentifier("reader.settings.continuousInformationSwipe")
                         }
+                        Picker(L10n.text("Pages per View"), selection: $pagesPerSpread) {
+                            ForEach(1...4, id: \.self) { Text(L10n.text("Pages: %@", String(describing: $0))).tag($0) }
+                        }.accessibilityIdentifier("reader.settings.spread")
                     }
                     Toggle(L10n.text("Read Right to Left"), isOn: $rtl).accessibilityIdentifier("reader.settings.rtl")
                     Toggle(L10n.text("Tap the Sides to Turn Pages"), isOn: $tapNavigation)
                 }
-                if !booru { Section(L10n.text("Multiple Pages at Once")) {
-                    Picker(L10n.text("Pages per View"), selection: $pagesPerSpread) {
-                        ForEach(1...4, id: \.self) { Text(L10n.text("Pages: %@", String(describing: $0))).tag($0) }
-                    }.accessibilityIdentifier("reader.settings.spread")
-                } }
-                Section {
-                    Toggle(L10n.text("Auto Advance"), isOn: $autoAdvance).accessibilityIdentifier("reader.settings.auto")
-                    Stepper(L10n.text("Advance every %@ seconds", String(describing: Int(autoSeconds))), value: $autoSeconds, in: 2...120, step: 1)
-                        .accessibilityIdentifier("reader.settings.seconds").disabled(!autoAdvance)
-                } header: { Text(L10n.text("Auto Advance")) } footer: {
-                    Text(L10n.text("Pauses while menus, settings, translation, or zoom are active. Stops at the last page."))
+                if booru {
+                    Section(L10n.text("Media")) {
+                        Toggle(L10n.text("Show Notes on Images"), isOn: $showNotes)
+                        Toggle(isOn: $original) {
+                            SettingsHelpLabel("Load Original Images", help: "Loads the full-size file from the website. This can use more data and take longer to load.")
+                        }
+                        Toggle(isOn: $reducedData) {
+                            SettingsHelpLabel("Reduce Image Data Further", help: "Uses smaller compressed images when available. Load Original Images takes priority over this setting.")
+                        }.disabled(original).accessibilityIdentifier("reader.settings.reducedData")
+                    }
                 }
                 Section(L10n.text("Display")) {
-                    Toggle(L10n.text("Show Quick Menu at Bottom"), isOn: $bottomMenu).accessibilityIdentifier("reader.settings.bottomMenu")
+                    Toggle(isOn: $bottomMenu) {
+                        SettingsHelpLabel("Show Quick Menu at Bottom", help: "Keeps the viewer’s quick actions visible along the bottom of the screen.")
+                    }.accessibilityIdentifier("reader.settings.bottomMenu")
                     Toggle(L10n.text("Show Page Number"), isOn: $pageNumber)
                     Toggle(L10n.text("Keep Screen Awake While Reading"), isOn: $keepAwake)
                     VStack(alignment: .leading) {
@@ -185,30 +189,42 @@ struct ReaderSettingsView: View {
                         Slider(value: $dimming, in: 0...0.65).accessibilityLabel(L10n.text("Dim Screen"))
                     }
                 }
-                if !booru { Section {
-                    Picker(L10n.text("Prefetch Pages"), selection: $prefetch) {
-                        Text(L10n.text("Off")).tag(0)
-                        Text(L10n.text("2 Pages")).tag(2)
-                        Text(L10n.text("3 Pages")).tag(3)
-                        Text(L10n.text("5 Pages")).tag(5)
-                    }
-                } header: { Text(L10n.text("Loading Options")) } footer: {
-                    Text(L10n.text("Prefetching reduces the wait for the next page and uses data. Images are kept only in app memory."))
-                } }
-                Section(L10n.text("Gesture Guide")) {
-                    Text(L10n.text(booru ? "From the bottom of the image, swipe up for details." : mode == ReaderMode.continuous.rawValue && !continuousPreviewSwipe ? "Open previews from the quick menu." : "From the bottom of the page, swipe up for previews."))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    if booru { Text(L10n.text("For videos, tap with two fingers to open the quick menu. Playback controls remain available.")).font(.subheadline).foregroundStyle(.secondary) }
-                    if !booru { Button(L10n.text("Reader Guide")) { showHelp = true }.accessibilityIdentifier("reader.settings.help") }
-                    Text(L10n.text(booru ? "Tap the center: quick menu\nHold anywhere: favorite\nTap the sides or swipe: change image\nDouble tap or pinch: zoom\nTranslate: Apple image translation for the visible area\nSwipe down at original zoom: close" : "Tap the center: quick menu\nHold anywhere: bookmark\nDouble tap or pinch: zoom · Drag while zoomed: move image\nPage number in the quick menu: go to a page"))
-                        .font(.subheadline).foregroundStyle(.secondary)
+                Section(L10n.text("Auto Advance")) {
+                    Toggle(isOn: $autoAdvance) {
+                        SettingsHelpLabel("Auto Advance", help: "Turns pages at your chosen interval. Pauses while a menu, settings, translation or zoom is open, and stops at the last page.")
+                    }.accessibilityIdentifier("reader.settings.auto")
+                    Stepper(L10n.text("Advance every %@ seconds", String(describing: Int(autoSeconds))), value: $autoSeconds, in: 2...120, step: 1)
+                        .accessibilityIdentifier("reader.settings.seconds").disabled(!autoAdvance)
                 }
+                if !booru {
+                    Section(L10n.text("Loading Options")) {
+                        HStack {
+                            SettingsHelpLabel("Prefetch Pages", help: "Loads upcoming pages in advance so they open faster. Uses extra data and keeps the images in memory only.")
+                            Spacer()
+                            Picker(L10n.text("Prefetch Pages"), selection: $prefetch) {
+                            Text(L10n.text("Off")).tag(0)
+                            Text(L10n.text("2 Pages")).tag(2)
+                            Text(L10n.text("3 Pages")).tag(3)
+                            Text(L10n.text("5 Pages")).tag(5)
+                            }.labelsHidden()
+                        }
+                    }
+                }
+                Section(L10n.text("Gesture Guide")) {
+                    SettingsHelpLabel("Viewer Gestures", help: booru
+                        ? "Tap the center for the quick menu, hold to save, and tap the sides or swipe to change images. Double tap or pinch to zoom. Swipe up from the bottom for details, or swipe down at original zoom to close. For videos, tap with two fingers to open the quick menu."
+                        : "Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close.")
+                    if !booru {
+                        Button(L10n.text("Reader Guide")) { showHelp = true }.accessibilityIdentifier("reader.settings.help")
+                    }
+                }
+                Section { SettingsResetButton(booru: booru, viewerOnly: true) }
             }
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground))
             .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .navigationTitle(L10n.text("Reader Settings")).navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(L10n.text("Viewer Detail Settings")).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() }.accessibilityIdentifier("reader.settings.done") } }
         }
         .presentationBackground(Color(uiColor: .systemGroupedBackground))
@@ -406,12 +422,15 @@ struct WorkSaveFeedback: Identifiable {
     let result: WorkSaveResult
     @MainActor init(_ result: WorkSaveResult) {
         self.result = result
+        Self.haptic(result)
+        if UIAccessibility.isVoiceOverRunning { UIAccessibility.post(notification: .announcement, argument: result.message) }
+    }
+    @MainActor static func haptic(_ result: WorkSaveResult) {
         switch result {
         case .added: UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .removed, .unchanged: UISelectionFeedbackGenerator().selectionChanged()
         case .failed: UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
-        if UIAccessibility.isVoiceOverRunning { UIAccessibility.post(notification: .announcement, argument: result.message) }
     }
     @MainActor static func perform(_ action: () throws -> WorkSaveResult) -> Self {
         do { return Self(try action()) } catch { return Self(.failed) }

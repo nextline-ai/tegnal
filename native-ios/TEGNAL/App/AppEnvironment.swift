@@ -455,6 +455,23 @@ public final class AppEnvironment: @unchecked Sendable {
     }
     @ObservationIgnored private var launchFeedsStorage: LaunchFeedWarmup?
 
+    @MainActor func resetModeSettings(booru: Bool) {
+        if booru {
+            booruTheme = .dark; booruColumns = 0; booruFolderColumns = 0; booruRemovesGridPadding = false
+            booruSafeMode = false; booruSafeRating = .general
+        } else {
+            mangaTheme = .dark; mangaColumns = 0; mangaFolderColumns = 0; mangaRemovesGridPadding = false
+            mangaPreviewColumns = 0; mangaPreviewRows = 5; showsMangaTitles = true; showsMangaArtists = true
+            allowsMangaLanguageExceptions = false; defaultTags = ""; defaultExcludedTags = ""; useEmbeddedBrowser = false
+        }
+        browserPreferences.set(AppTheme.dark.rawValue, forKey: booru ? "booru.app_theme" : "app_theme")
+        for key in booru ? ["booru.grid_columns", "booru.folder_columns", "booru.grid.noPadding"] : ["grid_columns", "folder_columns", "manga.grid.noPadding", MangaThumbnailOpening.preferenceKey] { browserPreferences.removeObject(forKey: key) }
+        let preferences = booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults
+        for key in ["search.retentionDays", booru ? "booru.rememberHistory" : "search.rememberHistory", "booru.fitThumbnails", "booru.useEmbeddedBrowser"] { preferences.removeObject(forKey: key) }
+        browserPreferences.removeObject(forKey: "app.resumeAnimation")
+        ReaderPreferenceReset.reset(booru: booru)
+    }
+
     var launchMangaQuery: GalleryQuery {
         var query = GalleryQuery(language: L10n.contentLanguage).applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
         query.allowsLanguageExceptions = allowsMangaLanguageExceptions

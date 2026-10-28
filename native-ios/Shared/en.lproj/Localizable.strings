@@ -229,7 +229,7 @@
 "Tap either side to turn pages. Tap the center for the quick menu, or hold anywhere to bookmark." = "Tap either side to turn pages. Tap the center for the quick menu, or hold anywhere to bookmark.";
 "Tap the Sides to Turn Pages" = "Tap the Sides to Turn Pages";
 "Tap the center: quick menu\nHold anywhere: bookmark\nDouble tap or pinch: zoom · Drag while zoomed: move image\nPage number in the quick menu: go to a page" = "Tap the center: quick menu\nHold anywhere: bookmark\nDouble tap or pinch: zoom · Drag while zoomed: move image\nPage number in the quick menu: go to a page";
-"Tap the star (★) beside an artist on the work details screen to add them." = "Tap the star (★) beside an artist on the work details screen to add them.";
+"Tap the star (★) beside an artist on the work details screen to add them." = "Hold an artist tag in Work Information to add or remove it from favorites.";
 "Taps" = "Taps";
 "Task Status" = "Task Status";
 "The address is invalid.\nContent and shortcuts will remain disabled if you continue.\nYou can enter the address later in Settings." = "The address is invalid.\nContent and shortcuts will remain disabled if you continue.\nYou can enter the address later in Settings.";
@@ -1196,3 +1196,101 @@
 "Original Text" = "Original Text";
 
 "Translation requires iOS 17.4 or later." = "Translation requires iOS 17.4 or later.";
+
+/* Viewer and settings information */
+"Viewer Detail Settings" = "Viewer Detail Settings";
+"About %@" = "About %@";
+"All Works" = "All Works";
+"Unable to Save" = "Unable to Save";
+"Favorite Artist" = "Favorite Artist";
+"Not a Favorite Artist" = "Not a Favorite Artist";
+"Add to Artists" = "Add to Artists";
+"Remove from Artists" = "Remove from Artists";
+"Hold an artist tag in Work Information to add it to your favorite artists." = "Hold an artist tag in Work Information to add it to your favorite artists.";
+"Swipe Up for Work Information" = "Swipe Up for Work Information";
+"Viewer Gestures" = "Viewer Gestures";
+"Add a supported image website, then select the servers you want to search. Each server keeps its own favorites and filters." = "Add a supported image website, then select the servers you want to search. Each server keeps its own favorites and filters.";
+"Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode." = "Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode.";
+"Optional account details can improve access on some websites. Copy them from that website’s account settings; they are stored securely in Keychain." = "Optional account details can improve access on some websites. Copy them from that website’s account settings; they are stored securely in Keychain.";
+"Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again." = "Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again.";
+"Opens the website instead of the app’s native screens. Try this if a website does not load correctly." = "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.";
+"Opens the website’s connection check. Complete it here if the server blocks searches or image loading." = "Opens the website’s connection check. Complete it here if the server blocks searches or image loading.";
+"Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed." = "Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed.";
+"Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet." = "Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet.";
+"Loads the full-size file from the website. This can use more data and take longer to load." = "Loads the full-size file from the website. This can use more data and take longer to load.";
+"Uses smaller compressed images when available. Load Original Images takes priority over this setting." = "Uses smaller compressed images when available. Load Original Images takes priority over this setting.";
+"Keeps the viewer’s quick actions visible along the bottom of the screen." = "Keeps the viewer’s quick actions visible along the bottom of the screen.";
+"Turns pages at your chosen interval. Pauses while a menu, settings, translation or zoom is open, and stops at the last page." = "Turns pages at your chosen interval. Pauses while a menu, settings, translation or zoom is open, and stops at the last page.";
+"Loads upcoming pages in advance so they open faster. Uses extra data and keeps the images in memory only." = "Loads upcoming pages in advance so they open faster. Uses extra data and keeps the images in memory only.";
+"Keeps both libraries, folders and general settings in sync across your devices. Layout, viewer preferences, downloaded media and sign-in details stay on each device." = "Keeps both libraries, folders and general settings in sync across your devices. Layout, viewer preferences, downloaded media and sign-in details stay on each device.";
+"Uses your device’s language unless you choose another language below. Comics and Image modes remember separate choices." = "Uses your device’s language unless you choose another language below. Comics and Image modes remember separate choices.";
+"Exports both libraries, folders, saved searches and other library data into one JSON file. Media and sign-in details are not included. Importing merges the file with your library." = "Exports both libraries, folders, saved searches and other library data into one JSON file. Media and sign-in details are not included. Importing merges the file with your library.";
+"Includes Game CG, Artist CG and Image Set even when their language differs from your filter. Turn off to apply the language filter to all works." = "Includes Game CG, Artist CG and Image Set even when their language differs from your filter. Turn off to apply the language filter to all works.";
+"Adds these tags to every comics search. Separate tags with spaces and use underscores inside a tag." = "Adds these tags to every comics search. Separate tags with spaces and use underscores inside a tag.";
+"Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you." = "Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you.";
+"Removes the gaps and outer margins around artwork and folder thumbnails." = "Removes the gaps and outer margins around artwork and folder thumbnails.";
+"Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges." = "Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges.";
+"Automatic shows twice as many columns as the artwork grid. Choose a number to keep the preview layout fixed." = "Automatic shows twice as many columns as the artwork grid. Choose a number to keep the preview layout fixed.";
+"Automatic fits the columns to the screen width. Choose a number to keep the layout fixed." = "Automatic fits the columns to the screen width. Choose a number to keep the layout fixed.";
+"Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.";
+"Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer." = "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.";
+"Finds missing covers, titles and tags for works in your library. You can pause and resume the background task." = "Finds missing covers, titles and tags for works in your library. You can pause and resume the background task.";
+"Uses the works you view and save to find recommendations and build your statistics. Turn off to pause new analysis without deleting your library." = "Uses the works you view and save to find recommendations and build your statistics. Turn off to pause new analysis without deleting your library.";
+"Shares your taste analysis with your other devices through iCloud. iCloud Sync must also be on; other devices update when they next sync." = "Shares your taste analysis with your other devices through iCloud. iCloud Sync must also be on; other devices update when they next sync.";
+"Applies these tags to recommendations from this website only. All tags must match. Refresh recommendations after changing the filters." = "Applies these tags to recommendations from this website only. All tags must match. Refresh recommendations after changing the filters.";
+"Deletes viewing activity, taste evidence and reports. Saved works stay in your library. Existing works will not be analyzed again automatically." = "Deletes viewing activity, taste evidence and reports. Saved works stay in your library. Existing works will not be analyzed again automatically.";
+"Tap the center for the quick menu, hold to save, and tap the sides or swipe to change images. Double tap or pinch to zoom. Swipe up from the bottom for details, or swipe down at original zoom to close. For videos, tap with two fingers to open the quick menu." = "Tap the center for the quick menu, hold to save, and tap the sides or swipe to change images. Double tap or pinch to zoom. Swipe up from the bottom for details, or swipe down at original zoom to close. For videos, tap with two fingers to open the quick menu.";
+"Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close." = "Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close.";
+
+/* Saved tag collections */
+"Show More" = "Show More";
+"Reorder" = "Reorder";
+"Move Up" = "Move Up";
+"Move Down" = "Move Down";
+"Number" = "Number";
+"Copied" = "Copied";
+"Hold to copy" = "Hold to copy";
+"Saved to Tags" = "Saved to Tags";
+
+/* Library maintenance and viewer feedback */
+"Removed from Tags" = "Removed from Tags";
+"Remove Saved Tag" = "Remove Saved Tag";
+"Play Animation When Returning" = "Play Animation When Returning";
+"Reset Settings to Defaults" = "Reset Settings to Defaults";
+"Reset Settings to Defaults?" = "Reset Settings to Defaults?";
+"Resets this mode’s viewer options. Saved works and reading progress are kept." = "Resets this mode’s viewer options. Saved works and reading progress are kept.";
+"Resets this mode’s appearance, browsing and viewer options. Libraries, website connections, sign-in details and iCloud settings are kept." = "Resets this mode’s appearance, browsing and viewer options. Libraries, website connections, sign-in details and iCloud settings are kept.";
+"Swipe Left or Right to Change Works" = "Swipe Left or Right to Change Works";
+"Switches between works already loaded in the current list. Turn off to keep horizontal swipes from changing works." = "Switches between works already loaded in the current list. Turn off to keep horizontal swipes from changing works.";
+"No More Works in This List" = "No More Works in This List";
+"Organize Saved Works" = "Organize Saved Works";
+"Classify into Folders" = "Classify into Folders";
+"Classify By" = "Classify By";
+"Only Unsorted Works" = "Only Unsorted Works";
+"Apply Classification" = "Apply Classification";
+"Apply Classification?" = "Apply Classification?";
+"Classification Complete" = "Classification Complete";
+"Review Duplicate Works" = "Review Duplicate Works";
+"Possible Duplicates" = "Possible Duplicates";
+"No Duplicate Candidates" = "No Duplicate Candidates";
+"No Matching Metadata" = "No Matching Metadata";
+"Keep This Copy?" = "Keep This Copy?";
+"Keep This Copy and Remove Others" = "Keep This Copy and Remove Others";
+"Duplicate Copies Removed" = "Duplicate Copies Removed";
+"Review the number and source before confirming. Comics merge folder memberships and notes into the kept copy. Images keep the selected copy’s folder." = "Review the number and source before confirming. Comics merge folder memberships and notes into the kept copy. Images keep the selected copy’s folder.";
+"Identical work numbers and server post IDs are already merged. This lists possible duplicates with matching metadata or original file addresses. Review each copy before removing it." = "Identical work numbers and server post IDs are already merged. This lists possible duplicates with matching metadata or original file addresses. Review each copy before removing it.";
+"Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped." = "Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped.";
+"Unsorted" = "Unsorted";
+"Open Menu" = "Open Menu";
+
+"Keep This Copy" = "Keep This Copy";
+
+"Swipe Right to Go Back" = "Swipe Right to Go Back";
+
+"In Continuous Scroll, swipe right from the left edge of the safe area to return to the list. Off by default. Swiping elsewhere can still change works if that option is on." = "In Continuous Scroll, swipe right from the left edge of the safe area to return to the list. Off by default. Swiping elsewhere can still change works if that option is on.";
+
+/* Image viewer removal notices and loading support. */
+"Deleted Post" = "Deleted Post";
+"This post was deleted or removed from the website." = "This post was deleted or removed from the website.";
+"If you can view this post on the website, contact the developer so we can fix it. Include the post link." = "If you can view this post on the website, contact the developer so we can fix it. Include the post link.";
+"Official Discord" = "Official Discord";
