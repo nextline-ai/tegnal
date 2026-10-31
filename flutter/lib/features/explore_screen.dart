@@ -14,6 +14,7 @@ import '../ui/page_header.dart';
 import '../ui/source_picker.dart';
 import '../ui/native_symbols.dart';
 import '../ui/common.dart';
+import '../ui/thumbnail_image_provider.dart';
 import 'browser_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -730,6 +731,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       onRefresh: () => controller.search(forMode: widget.mode),
                       child: CustomScrollView(
                         controller: _scroll,
+                        scrollCacheExtent: thumbnailScrollCacheExtent,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
                           const SliverToBoxAdapter(

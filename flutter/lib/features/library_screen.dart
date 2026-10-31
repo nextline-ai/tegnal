@@ -13,6 +13,7 @@ import '../ui/page_header.dart';
 import '../ui/native_symbols.dart';
 import '../ui/session_image.dart';
 import '../ui/source_picker.dart';
+import '../ui/thumbnail_image_provider.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
@@ -730,6 +731,7 @@ class _SavedCollectionState extends State<_SavedCollection> {
         body: SafeArea(
           child: CustomScrollView(
             controller: _scroll,
+            scrollCacheExtent: thumbnailScrollCacheExtent,
             slivers: [
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 3, 16, 18),

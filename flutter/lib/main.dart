@@ -16,9 +16,11 @@ import 'ui/design_system.dart';
 import 'data/download_manager.dart';
 import 'data/library_store.dart';
 import 'ui/l10n.dart';
+import 'ui/session_image_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PaintingBinding.instance.imageCache.maximumSizeBytes = decodedImageCacheBytes;
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks([
       'Pretendard',

@@ -29,6 +29,10 @@ class LibraryFolderOverview {
 class LibraryStore {
   LibraryStore(this.database) {
     database.execute('PRAGMA foreign_keys = ON');
+    // Writes run on the UI thread, so a page turn must not wait for an fsync.
+    // WAL with NORMAL stays consistent across a crash or power loss.
+    database.select('PRAGMA journal_mode = WAL');
+    database.execute('PRAGMA synchronous = NORMAL');
     final version = database.userVersion;
     if (version > 1) {
       throw StateError('This library requires a newer version of TEGNAL.');

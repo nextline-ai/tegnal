@@ -38,6 +38,9 @@ class BrowserSession {
     return '$_browserRevision:${domainVersions.map((e) => '${e.key}=${e.value}').join(',')}';
   }
 
+  /// Nothing has changed browser authentication since this process started.
+  static bool isInitialRevision(String revision) => revision == '0:';
+
   static bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
@@ -26,6 +28,7 @@ class BooruSource implements ContentSource, SortedContentSource {
   final bool _ownsClient;
   final Map<String, Map<int, Uri>> _publicPages = {};
   static const _pageSize = 40;
+  static const _inlineParseLength = 16 * 1024;
   static const _maxBytes = 12000000;
   static const _timeout = Duration(seconds: 30);
   bool _closed = false;
@@ -83,14 +86,14 @@ class BooruSource implements ContentSource, SortedContentSource {
         _ => 'Server error ($status). Please try again.',
       }, statusCode: status);
     }
-    final bytes = <int>[];
+    final bytes = BytesBuilder(copy: false);
     await for (final chunk in response.stream) {
       if (bytes.length + chunk.length >= _maxBytes) {
         throw const ContentException('The server response is too large.');
       }
-      bytes.addAll(chunk);
+      bytes.add(chunk);
     }
-    final text = utf8.decode(bytes, allowMalformed: true);
+    final text = utf8.decode(bytes.takeBytes(), allowMalformed: true);
     final prefix = text
         .substring(0, text.length > 4096 ? 4096 : text.length)
         .toLowerCase();
@@ -162,7 +165,7 @@ class BooruSource implements ContentSource, SortedContentSource {
       }
       rethrow;
     }
-    final rows = _rows(body, 'post');
+    final rows = await _rows(body, 'post');
     return ContentPage(
       rows.map(_post).toList(),
       hasMore: rows.length >= _pageSize,
@@ -265,7 +268,7 @@ class BooruSource implements ContentSource, SortedContentSource {
       }
       rethrow;
     }
-    final rows = _rows(
+    final rows = await _rows(
       body,
       'post',
       single: config.kind == SourceKind.danbooru,
@@ -343,7 +346,7 @@ class BooruSource implements ContentSource, SortedContentSource {
       }
       rethrow;
     }
-    return _rows(body, 'tag')
+    return (await _rows(body, 'tag'))
         .map((row) => row['name'])
         .whereType<String>()
         .where((s) => s.isNotEmpty)
@@ -352,58 +355,14 @@ class BooruSource implements ContentSource, SortedContentSource {
         .toList();
   }
 
-  List<Map<String, dynamic>> _rows(
+  /// A full catalog page exceeds a 120 Hz frame budget on the UI thread.
+  Future<List<Map<String, dynamic>>> _rows(
     String body,
     String key, {
     bool single = false,
-  }) {
-    try {
-      final trimmed = body.trimLeft();
-      if (trimmed.startsWith('<')) {
-        final document = XmlDocument.parse(body);
-        final root = document.rootElement;
-        if (root.localName != '${key}s') throw const FormatException();
-        return root
-            .findElements(key)
-            .map(
-              (element) => <String, dynamic>{
-                for (final attribute in element.attributes)
-                  attribute.localName: attribute.value,
-                for (final child in element.childElements)
-                  child.localName.replaceAll('-', '_'): child.innerText,
-              },
-            )
-            .toList();
-      }
-      final decoded = jsonDecode(body);
-      dynamic values = decoded;
-      if (decoded is Map) {
-        if (decoded['success'] == false || decoded['error'] != null) {
-          throw const FormatException();
-        }
-        if (single && decoded['id'] != null) {
-          return [Map<String, dynamic>.from(decoded)];
-        }
-        values = decoded[key];
-        if (values == null &&
-            decoded['@attributes'] is Map &&
-            _integer(decoded['@attributes']['count']) == 0) {
-          return [];
-        }
-        if (values is Map) values = [values];
-      }
-      if (values is! List || values.any((value) => value is! Map)) {
-        throw const FormatException();
-      }
-      return values
-          .map((value) => Map<String, dynamic>.from(value as Map))
-          .toList();
-    } on Exception {
-      throw const ContentException(
-        'The server returned an unsupported response. Check its address and engine.',
-      );
-    }
-  }
+  }) async => body.length < _inlineParseLength
+      ? _decodeRows((body, key, single))
+      : await compute(_decodeRows, (body, key, single));
 
   ContentItem _post(Map<String, dynamic> row) {
     final id = _integer(row['id']);
@@ -539,6 +498,58 @@ class BooruSource implements ContentSource, SortedContentSource {
           : null;
     } on FormatException {
       return null;
+    }
+  }
+
+  static List<Map<String, dynamic>> _decodeRows(
+    (String, String, bool) request,
+  ) {
+    final (body, key, single) = request;
+    try {
+      final trimmed = body.trimLeft();
+      if (trimmed.startsWith('<')) {
+        final document = XmlDocument.parse(body);
+        final root = document.rootElement;
+        if (root.localName != '${key}s') throw const FormatException();
+        return root
+            .findElements(key)
+            .map(
+              (element) => <String, dynamic>{
+                for (final attribute in element.attributes)
+                  attribute.localName: attribute.value,
+                for (final child in element.childElements)
+                  child.localName.replaceAll('-', '_'): child.innerText,
+              },
+            )
+            .toList();
+      }
+      final decoded = jsonDecode(body);
+      dynamic values = decoded;
+      if (decoded is Map) {
+        if (decoded['success'] == false || decoded['error'] != null) {
+          throw const FormatException();
+        }
+        if (single && decoded['id'] != null) {
+          return [Map<String, dynamic>.from(decoded)];
+        }
+        values = decoded[key];
+        if (values == null &&
+            decoded['@attributes'] is Map &&
+            _integer(decoded['@attributes']['count']) == 0) {
+          return [];
+        }
+        if (values is Map) values = [values];
+      }
+      if (values is! List || values.any((value) => value is! Map)) {
+        throw const FormatException();
+      }
+      return values
+          .map((value) => Map<String, dynamic>.from(value as Map))
+          .toList();
+    } on Exception {
+      throw const ContentException(
+        'The server returned an unsupported response. Check its address and engine.',
+      );
     }
   }
 

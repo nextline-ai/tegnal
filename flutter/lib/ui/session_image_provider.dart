@@ -15,6 +15,13 @@ import 'package:path_provider/path_provider.dart';
 import '../data/source_http_client.dart';
 import '../data/session_client.dart';
 
+/// Thumbnails use this budget; anything larger is a reader page or original.
+const thumbnailMaximumBytes = 2 * 1024 * 1024;
+
+/// Flutter's 100 MiB default holds only about four full reader pages, so
+/// prefetched neighbors were evicted before use. Matches the native reader.
+const decodedImageCacheBytes = 192 * 1024 * 1024;
+
 ImageProvider<Object> sessionImageProvider(
   Uri url,
   Map<String, String> headers, {
@@ -124,6 +131,7 @@ class SessionImageLoader {
   }) {
     // Injected transports are isolated unless a cache is explicitly supplied.
     final selected = cache ?? (clientFactory == null ? _sharedCache : null);
+    final foreground = maximumBytes > thumbnailMaximumBytes;
     if (identical(selected, _sharedCache) && !_memoryObserverRegistered) {
       WidgetsBinding.instance.addObserver(_sharedCache);
       _memoryObserverRegistered = true;
@@ -137,6 +145,7 @@ class SessionImageLoader {
     if (selected == null) {
       return _requests.run(
         () => _load(url, headers: headers, onChunk: onChunk),
+        foreground: foreground,
       );
     }
     final generation = selected._generation;
@@ -151,6 +160,7 @@ class SessionImageLoader {
           key: key,
           cacheGeneration: generation,
         ),
+        foreground: foreground,
       ),
     );
   }
@@ -313,43 +323,58 @@ class SessionImageLoader {
   }
 }
 
-/// Keep the CPU/network window small like the native image queues. Idle
-/// transports retain connection/ECH reuse, with at most eight origin clients.
-/// Only two jobs run, so eviction can never close an in-flight origin client.
+/// Matches the native six-connection window. Thumbnails stop one slot short,
+/// so a reader page never waits behind a full grid of covers. Idle transports
+/// retain connection/ECH reuse, with at most eight origin clients; eviction
+/// skips any origin still in use.
 class _ImageRequests {
+  static const _maximumActive = 6;
+  static const _maximumThumbnails = 5;
   int _active = 0;
   final _waiting = <Completer<void>>[];
+  final _waitingForeground = <Completer<void>>[];
   final _clients = <String, http.Client>{};
   final _inUse = <String, int>{};
 
-  Future<T> run<T>(Future<T> Function() operation) async {
-    if (_active >= 2) {
-      final turn = Completer<void>();
-      // A fast fling must not retain an entire library of queued closures and
-      // credentials. New visible work supersedes the oldest waiting image.
-      // Failed ImageProvider keys are evicted, so returning cells can retry.
-      if (_waiting.length >= 64) {
-        _waiting
-            .removeAt(0)
-            .completeError(
-              const HttpException(
-                'A newer image replaced this queued request.',
-              ),
-            );
-      }
-      _waiting.add(turn);
-      await turn.future;
-    } else {
-      _active++;
+  Future<T> run<T>(
+    Future<T> Function() operation, {
+    bool foreground = false,
+  }) async {
+    final queue = foreground ? _waitingForeground : _waiting;
+    final turn = Completer<void>();
+    // A fast fling must not retain an entire library of queued closures and
+    // credentials. New visible work supersedes the oldest waiting image.
+    // Failed ImageProvider keys are evicted, so returning cells can retry.
+    if (queue.length >= 64) {
+      queue
+          .removeAt(0)
+          .completeError(
+            const HttpException('A newer image replaced this queued request.'),
+          );
     }
+    queue.add(turn);
+    _startNext();
+    await turn.future;
     try {
       return await operation();
     } finally {
-      if (_waiting.isEmpty) {
-        _active--;
+      _active--;
+      _startNext();
+    }
+  }
+
+  void _startNext() {
+    while (true) {
+      final Completer<void> next;
+      if (_waitingForeground.isNotEmpty && _active < _maximumActive) {
+        next = _waitingForeground.removeLast();
+      } else if (_waiting.isNotEmpty && _active < _maximumThumbnails) {
+        next = _waiting.removeLast();
       } else {
-        _waiting.removeLast().complete();
+        return;
       }
+      _active++;
+      next.complete();
     }
   }
 
@@ -423,7 +448,7 @@ class _ByteEntry {
 class SessionImageByteCache with WidgetsBindingObserver {
   SessionImageByteCache({
     this.maximumBytes = 32 * 1024 * 1024,
-    this.maximumDiskBytes = 256 * 1024 * 1024,
+    this.maximumDiskBytes = 512 * 1024 * 1024,
     this.useDisk = false,
     this.diskDirectory,
     this.beforeDiskWrite,
@@ -446,8 +471,9 @@ class SessionImageByteCache with WidgetsBindingObserver {
   int _pendingDiskJobs = 0;
   final _pendingDiskKeys = <_ImageByteKey, int>{};
   static const _maximumPendingDiskBytes = 32 * 1024 * 1024;
-  static const _maximumPendingDiskJobs = 4;
-  // Session randomness avoids reusing authenticated files after process restart.
+  static const _maximumPendingDiskJobs = 16;
+  // Only credentialed files are tied to this process. Anonymous media survives
+  // a restart, as the native disk caches do.
   final String _session = List.generate(
     4,
     (_) => Random.secure().nextInt(1 << 32).toRadixString(16),
@@ -467,6 +493,13 @@ class SessionImageByteCache with WidgetsBindingObserver {
     final parent = diskDirectory ?? await getTemporaryDirectory();
     final directory = Directory('${parent.path}/tegnal-image-cache');
     await directory.create(recursive: true);
+    return _directory = directory;
+  }
+
+  /// Size accounting is only needed to write, so a launch that merely reads
+  /// cached images never pays for scanning the directory.
+  Future<void> _indexDisk(Directory directory) async {
+    if (_diskIndex != null) return;
     final files = await directory
         .list()
         .where((e) => e is File && e.path.endsWith('.data'))
@@ -487,9 +520,14 @@ class SessionImageByteCache with WidgetsBindingObserver {
             stats[i].size,
     };
     _diskSize = stats.fold<int>(0, (sum, stat) => sum + stat.size);
-    _directory = directory;
-    return directory;
   }
+
+  bool _persistent(_ImageByteKey key) =>
+      BrowserSession.isInitialRevision(key.revision) &&
+      !key.headers.keys.any(
+        (name) =>
+            const {'authorization', 'cookie'}.contains(name.toLowerCase()),
+      );
 
   String _name(_ImageByteKey key) {
     final names = key.headers.keys.toList()..sort();
@@ -497,7 +535,7 @@ class SessionImageByteCache with WidgetsBindingObserver {
         .convert(
           utf8.encode(
             jsonEncode([
-              _session,
+              if (!_persistent(key)) _session,
               key.url.toString(),
               key.maximumBytes,
               key.revision,
@@ -556,15 +594,17 @@ class SessionImageByteCache with WidgetsBindingObserver {
     if (existing != null) return existing;
     final generation = _generation;
     final future = () async {
-      // Filenames include a random process-session key. Before the first
-      // write, or when the initialized index has no entry, a lookup is a
-      // certain miss. Only wait behind queued writes for this same key.
-      final pending = _pendingDiskKeys.containsKey(key);
-      final mayBeOnDisk =
-          pending || (_diskIndex?.containsKey(_name(key)) ?? false);
-      if (useDisk && mayBeOnDisk) {
-        final disk = await _serial(() => _readDisk(key, generation));
-        if (disk != null) return disk;
+      // An indexed miss is certain, and before indexing only anonymous files
+      // can predate this process. Only queued writes for this key need order.
+      if (useDisk) {
+        final index = _diskIndex;
+        if (_pendingDiskKeys.containsKey(key)) {
+          final disk = await _serial(() => _readDisk(key, generation));
+          if (disk != null) return disk;
+        } else if (index?.containsKey(_name(key)) ?? _persistent(key)) {
+          final disk = await _readDisk(key, generation);
+          if (disk != null) return disk;
+        }
       }
       return load();
     }();
@@ -605,8 +645,12 @@ class SessionImageByteCache with WidgetsBindingObserver {
       }
       final size = _diskIndex?.remove(name);
       if (size != null) _diskIndex![name] = size;
-      // Session keys cannot be reused after restart, so the in-memory LRU is
-      // sufficient and no filesystem timestamp write is needed on a hit.
+      // The modified time carries recency across restarts into _indexDisk.
+      unawaited(
+        data
+            .setLastModified(DateTime.now())
+            .then<void>((_) {}, onError: (Object _, StackTrace stack) {}),
+      );
       _remember(key, bytes, expires);
       return bytes;
     } on FileSystemException {
@@ -649,6 +693,7 @@ class SessionImageByteCache with WidgetsBindingObserver {
           await beforeDiskWrite?.call();
           if (generation != _generation) return;
           final dir = await _dir();
+          await _indexDisk(dir);
           if (generation != _generation) return;
           final name = _name(key);
           final data = File('${dir.path}/$name.data');
