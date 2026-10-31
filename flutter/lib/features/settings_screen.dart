@@ -1215,6 +1215,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             action: 'Reset Cookies',
           )) {
         await BrowserSession.resetCookies(source.baseUrl);
+        // Cached media may have been fetched with the removed session.
+        await SessionImageLoader.clearCache();
       }
     } catch (_) {
       if (mounted) {

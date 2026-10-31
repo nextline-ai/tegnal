@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -41,6 +42,7 @@ class MangaHttpTransport private constructor(
         .callTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .followRedirects(false)
         .followSslRedirects(false)
+        .dispatcher(Dispatcher().apply { maxRequestsPerHost = MAX_REQUESTS_PER_HOST })
         .build()
     private val disposed = AtomicBoolean(false)
 
@@ -194,7 +196,9 @@ class MangaHttpTransport private constructor(
     private fun finishSuccess(request: PendingRequest, value: Any) {
         if (!request.completed.compareAndSet(false, true)) return
         pending.remove(request.requestId, request)
-        mainHandler.post { request.result.success(value) }
+        // Encoding copies the whole body. Flutter runs Dart on the Android main
+        // thread, so encode on this network thread rather than delaying frames.
+        request.result.success(value)
     }
 
     private fun finishError(request: PendingRequest, code: String, message: String) {
@@ -246,6 +250,7 @@ class MangaHttpTransport private constructor(
         const val CHANNEL_NAME = "work.nextline.tegnal/manga-http"
         const val ECH_API = 37
         const val TIMEOUT_SECONDS = 20L
+        const val MAX_REQUESTS_PER_HOST = 6
         const val MAX_REQUEST_ID_LENGTH = 80
         const val MAX_RESPONSE_BYTES = 32L * 1024 * 1024
 

@@ -136,34 +136,44 @@ void main() {
     );
   });
 
-  test('image jobs share a two-request concurrency window', () async {
+  test('thumbnails leave a slot for a reader page', () async {
     final gates = <Completer<void>>[];
     var active = 0;
     var peak = 0;
-    final loader = SessionImageLoader(
-      clientFactory: (_) => MockClient((_) async {
-        active++;
-        if (active > peak) peak = active;
-        final gate = Completer<void>();
-        gates.add(gate);
-        await gate.future;
-        active--;
-        return http.Response.bytes([1], 200);
-      }),
+    MockClient client() => MockClient((_) async {
+      active++;
+      if (active > peak) peak = active;
+      final gate = Completer<void>();
+      gates.add(gate);
+      await gate.future;
+      active--;
+      return http.Response.bytes([1], 200);
+    });
+    final thumbnails = SessionImageLoader(
+      maximumBytes: thumbnailMaximumBytes,
+      clientFactory: (_) => client(),
     );
-    final first = loader.load(Uri.https('media.example', '/1'));
-    final second = loader.load(Uri.https('media.example', '/2'));
-    final third = loader.load(Uri.https('media.example', '/3'));
+    final queued = [
+      for (var i = 0; i < 7; i++)
+        thumbnails.load(Uri.https('media.example', '/$i')),
+    ];
     await Future<void>.delayed(Duration.zero);
-    expect(gates.length, 2);
+    expect(gates.length, 5);
+    final page = SessionImageLoader(clientFactory: (_) => client())
+        .load(Uri.https('media.example', '/page'));
+    await Future<void>.delayed(Duration.zero);
+    expect(gates.length, 6);
     gates.first.complete();
-    await first;
+    await queued.first;
     await Future<void>.delayed(Duration.zero);
-    expect(gates.length, 3);
-    gates[1].complete();
-    gates[2].complete();
-    await Future.wait([second, third]);
-    expect(peak, 2);
+    expect(gates.length, 6);
+    for (var finished = 1; finished < 8; finished++) {
+      gates[finished].complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+    }
+    await Future.wait([...queued, page]);
+    expect(peak, 6);
   });
 
   test(
@@ -174,6 +184,7 @@ void main() {
       var stopped = 0;
       final loader = SessionImageLoader(
         requestTimeout: const Duration(milliseconds: 10),
+        maximumBytes: thumbnailMaximumBytes,
         clientFactory: (_) => _AbortTrackingClient(
           () {
             active++;
@@ -186,15 +197,15 @@ void main() {
         ),
       );
       await Future.wait([
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < 7; i++)
           expectLater(
             loader.load(Uri.https('media.example', '/$i')),
             throwsA(isA<http.RequestAbortedException>()),
           ),
       ]);
-      expect(peak, 2);
+      expect(peak, 5);
       expect(active, 0);
-      expect(stopped, 3);
+      expect(stopped, 7);
     },
   );
 
@@ -202,6 +213,7 @@ void main() {
     final started = <String>[];
     final gates = <String, Completer<void>>{};
     final loader = SessionImageLoader(
+      maximumBytes: thumbnailMaximumBytes,
       clientFactory: (_) => MockClient((request) async {
         final path = request.url.path;
         started.add(path);
@@ -211,20 +223,21 @@ void main() {
       }),
     );
     final jobs = [
-      for (var i = 1; i <= 4; i++)
+      for (var i = 1; i <= 7; i++)
         loader.load(Uri.https('media.example', '/$i')),
     ];
     await Future<void>.delayed(Duration.zero);
     gates['/1']!.complete();
     await jobs.first;
     await Future<void>.delayed(Duration.zero);
-    expect(started, ['/1', '/2', '/4']);
+    expect(started, ['/1', '/2', '/3', '/4', '/5', '/7']);
     gates['/2']!.complete();
     await jobs[1];
     await Future<void>.delayed(Duration.zero);
-    expect(started, ['/1', '/2', '/4', '/3']);
-    gates['/3']!.complete();
-    gates['/4']!.complete();
+    expect(started, ['/1', '/2', '/3', '/4', '/5', '/7', '/6']);
+    for (final path in ['/3', '/4', '/5', '/6', '/7']) {
+      gates[path]!.complete();
+    }
     await Future.wait(jobs);
   });
 
@@ -343,6 +356,38 @@ void main() {
     await loader.load(first);
     expect(calls, 5);
     await cache.clear();
+  });
+
+  test('anonymous disk entries survive a process restart', () async {
+    final dir = await Directory.systemTemp.createTemp('tegnal-cache-test');
+    addTearDown(() => dir.delete(recursive: true));
+    var calls = 0;
+    SessionImageLoader launch() => SessionImageLoader(
+      cache: SessionImageByteCache(
+        maximumBytes: 0,
+        useDisk: true,
+        diskDirectory: dir,
+      ),
+      clientFactory: (_) => MockClient((_) async {
+        calls++;
+        return http.Response.bytes([1, 2], 200);
+      }),
+    );
+    final url = Uri.https('disk.example', '/image');
+    final first = launch();
+    await first.load(url);
+    await first.load(url, headers: {'Cookie': 'a=b'});
+    await first.load(url, headers: {'Authorization': 'c'});
+    await first.cache!.waitForDiskWrites();
+    expect(calls, 3);
+
+    final second = launch();
+    expect(await second.load(url), [1, 2]);
+    expect(calls, 3);
+    await second.load(url, headers: {'Cookie': 'a=b'});
+    await second.load(url, headers: {'Authorization': 'c'});
+    expect(calls, 5);
+    await second.cache!.waitForDiskWrites();
   });
 
   test('disk tier honors no-store and isolates auth', () async {
