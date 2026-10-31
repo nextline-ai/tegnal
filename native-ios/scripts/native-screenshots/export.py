@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import argparse,hashlib,json,re,shutil,subprocess,zipfile
 
 tool_root=Path(__file__).resolve().parent
-repo=tool_root.parents[1]
+repo=tool_root.parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('result',type=Path)
 parser.add_argument('--assets-root',type=Path,default=repo/'user_data'/'marketing'/'generated')

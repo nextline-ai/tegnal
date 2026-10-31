@@ -2,7 +2,7 @@
 set -euo pipefail
 capture_scripts="$(cd -- "$(dirname -- "$0")" && pwd)"
 capture_tools="$capture_scripts/native-screenshots"
-capture_root="${TEGNAL_CAPTURE_ASSETS:-$capture_scripts/../user_data/marketing/generated}"
+capture_root="${TEGNAL_CAPTURE_ASSETS:-$capture_scripts/../../user_data/marketing/generated}"
 capture_python="${MARKETING_PYTHON:-python3}"
 if ! "$capture_python" -c 'import PIL' >/dev/null 2>&1; then
   capture_python="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3"

@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import zipfile
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 SOURCE_URL = 'https://nextline-ai.github.io/tegnal/source.json'
 ASSETS_URL = 'https://nextline-ai.github.io/tegnal/assets'
 BUNDLE_ID = 'work.nextline.tegnal'

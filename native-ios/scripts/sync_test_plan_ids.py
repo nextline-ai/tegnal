@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 
-IOS = Path(__file__).resolve().parent.parent / "native-ios"
+IOS = Path(__file__).resolve().parent.parent
 
 
 def sync(project=IOS / "TEGNAL.xcodeproj", plans=IOS / "TestPlans"):

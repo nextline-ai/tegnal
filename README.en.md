@@ -2,17 +2,17 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="design-output/screenshot/info.webp" alt="Download TEGNAL on TestFlight" width="100%">
+    <img src="docs/assets/readme/info.webp" alt="Download TEGNAL on TestFlight" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Down_button_en_mobile.svg"><img src="design-output/SVG/button/Down_button_en.svg" alt="Download TEGNAL on TestFlight"></picture></a>
-  <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Discord_button_en_mobile.svg"><img src="design-output/SVG/button/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
+  <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Down_button_en_mobile.svg"><img src="docs/assets/readme/Down_button_en.svg" alt="Download TEGNAL on TestFlight"></picture></a>
+  <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_en_mobile.svg"><img src="docs/assets/readme/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="design-output/SVG/button/Android_button_en_mobile.svg"><img src="design-output/SVG/button/Android_button_en.svg" alt="Download Android beta APK"></picture></a>
+  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Android_button_en_mobile.svg"><img src="docs/assets/readme/Android_button_en.svg" alt="Download Android beta APK"></picture></a>
 </p>
 
 <h1 align="center">TEGNAL</h1>

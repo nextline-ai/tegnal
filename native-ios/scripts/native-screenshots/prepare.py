@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil,json,datetime,subprocess,argparse,hashlib
 from zoneinfo import ZoneInfo
 tool_root=Path(__file__).resolve().parent
-repo=tool_root.parents[1]
+repo=tool_root.parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--assets-root',type=Path,default=repo/'user_data'/'marketing'/'generated',help='Private originals and generated outputs; never committed')
 parser.add_argument('--run',type=Path,help='Capture archive directory; a new timestamped run is the default')
@@ -62,7 +62,7 @@ patch(p,'        var source = url?.absoluteString ?? ""','        var source = u
 patch(Path('TEGNAL/Presentation/Booru/BooruPostView.swift'),'if BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled {','if MarketingCapture.enabled { Color.clear.frame(width: 1, height: 1).accessibilityElement().accessibilityLabel(mediaStatus).accessibilityIdentifier("marketing.mediaStatus") } else if BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled {')
 patch(p,'    private func download(url: URL, server: BooruServer) async throws -> Data {','    private func download(url: URL, server: BooruServer) async throws -> Data {\n        if MarketingCapture.enabled, let data = MarketingCapture.data(url) { return data }')
 project=stage/'project.yml'
-text=project.read_text().replace('  postGenCommand: python3 ../script/sync_test_plan_ids.py\n','')
+text=project.read_text().replace('  postGenCommand: python3 scripts/sync_test_plan_ids.py\n','')
 text=text.replace('PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.share','PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.capture.share')
 text=text.replace('PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal\n','PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.capture\n')
 text=text.replace('PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.tests','PRODUCT_BUNDLE_IDENTIFIER: work.nextline.tegnal.capture.tests')

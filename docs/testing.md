@@ -4,20 +4,20 @@
 
 ```sh
 # 목록/도움말은 빌드나 시뮬레이터 부팅을 하지 않는다.
-python3 script/test.py
-python3 script/test.py --list
+python3 native-ios/scripts/test.py
+python3 native-ios/scripts/test.py --list
 
 # 실행 범위를 먼저 확인한다.
-python3 script/test.py --scope grid --dry-run
+python3 native-ios/scripts/test.py --scope grid --dry-run
 
 # 관련 메서드 하나 (괄호 생략 가능)
-python3 script/test.py --only GridLayoutTests/testPreviewColumnsFollowTwiceTheResolvedArtworkColumnsOrAnExplicitChoice
+python3 native-ios/scripts/test.py --only GridLayoutTests/testPreviewColumnsFollowTwiceTheResolvedArtworkColumnsOrAnExplicitChoice
 
 # 필요한 경우 관련 클래스 하나
-python3 script/test.py --scope catalog
+python3 native-ios/scripts/test.py --scope catalog
 
 # UI는 해당 동작의 메서드를 명시한다. 전체 클래스 선택은 거부한다.
-python3 script/test.py --only TEGNALUITests/NativeContentUITests/testPreviewColumnSettingCreatesProportionalGridWithoutPageNumbers
+python3 native-ios/scripts/test.py --only TEGNALUITests/NativeContentUITests/testPreviewColumnSettingCreatesProportionalGridWithoutPageNumbers
 ```
 
 `--only`는 반복할 수 있다. 기본 기기는 기존 iPhone 18 Pro이며 `--device UDID`로 다른 기존 기기를 지정한다. 기기가 없으면 오류로 종료하고 자동으로 만들지 않는다. 병렬 테스트/커버리지는 끄며, 성공 후 전체 테스트를 추가 실행하지 않는다. 스크립트는 변경 파일을 추측해 테스트 범위를 넓히지 않는다.

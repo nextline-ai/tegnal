@@ -52,6 +52,7 @@ migrate_working_dir/
 
 # Local tool configuration and generated Python caches
 /.codex/
+/.github/
 __pycache__/
 
 # Local research and working records; GitHub Pages publishes all of docs/
@@ -66,14 +67,5 @@ __pycache__/
 /flutter/docs/android-release-1.0.0-beta.*.md
 /flutter/docs/flutter-*-validation.md
 
-# Only repository-referenced brand assets are published
-/design-output/*
-!/design-output/JPG/
-/design-output/JPG/*
-!/design-output/JPG/symbol.jpg
-!/design-output/SVG/
-/design-output/SVG/*
-!/design-output/SVG/button/
-!/design-output/screenshot/
-/design-output/screenshot/*
-!/design-output/screenshot/info.webp
+# Brand originals; published assets live in docs/assets/
+/design-output/

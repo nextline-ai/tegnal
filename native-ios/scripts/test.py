@@ -10,7 +10,7 @@ import shlex
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 IOS = ROOT / "native-ios"
 SCOPES = {
     "parser": ["GalleryIDParserTests"],

@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 case "$MODE" in run|--debug|--logs|--telemetry|--verify) ;; *) echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2; exit 2 ;; esac
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT="$ROOT_DIR/native-ios/TEGNAL.xcodeproj"
 
 # This is the iOS app running on Apple silicon, not a Mac Catalyst target.

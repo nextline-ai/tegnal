@@ -2,11 +2,11 @@
 
 ```sh
 # 소스 복제와 빌드는 한 번만 하고, 기존 세 기기에서 촬영합니다.
-scripts/capture-native-screenshots.sh all
+native-ios/scripts/capture-native-screenshots.sh all
 
 # 기기 하나만 촬영하거나, 기존 시뮬레이터 ID를 지정합니다.
-scripts/capture-native-screenshots.sh iphone
-scripts/capture-native-screenshots.sh ipad-13 EXISTING-SIMULATOR-UDID
+native-ios/scripts/capture-native-screenshots.sh iphone
+native-ios/scripts/capture-native-screenshots.sh ipad-13 EXISTING-SIMULATOR-UDID
 ```
 
 Xcode, XcodeGen, Python 3와 Pillow가 필요합니다. 기본 Python에 Pillow가 없으면 설치된 Codex 번들 Python을 사용합니다. `MARKETING_PYTHON`으로 Python을 지정할 수 있습니다. 촬영은 사용자의 요청이 있을 때 실행하며, 회귀 테스트를 함께 실행하지 않습니다.

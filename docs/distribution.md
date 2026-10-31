@@ -22,7 +22,7 @@
 4. IPA 이름과 Release 태그를 정한 뒤 아래 명령으로 소스를 갱신합니다. 같은 앱 버전의 핫픽스는 빌드 번호를 올리고 `v1.0.0-8`처럼 태그에 빌드 번호를 포함합니다. macOS의 `codesign`과 Python 3가 필요합니다.
 
 ```sh
-python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-26.ipa \
+python3 native-ios/scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-26.ipa \
   --download-url https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0-26.ipa \
   --date 2026-10-28 \
   --notes 'What changed in this release.'
@@ -41,7 +41,7 @@ python3 scripts/update-alt-source.py /path/to/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.0.0
 [네이티브 촬영 도구](native-screenshots.md)를 사용하면 앱 복제·빌드 한 번으로 기존 세 기기의 전체 촬영 세트를 갱신할 수 있습니다.
 
 ```sh
-scripts/capture-native-screenshots.sh all
+native-ios/scripts/capture-native-screenshots.sh all
 ```
 
 개인 원본 이미지는 Git에서 제외된 경로에 보관합니다. 촬영 결과와 파일별 체크섬을 검수한 뒤 버전 릴리스에 전체 스크린샷 ZIP을 첨부합니다.

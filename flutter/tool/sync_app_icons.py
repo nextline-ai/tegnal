@@ -2,7 +2,7 @@
 """Package the supplied high-resolution TEGNAL symbol for app icons.
 
 Requires macOS's built-in sips tool. This converts and resizes the 1920px
-design-output/JPG/symbol.jpg; it does not redraw the logo. Generated platform
+tool/symbol.jpg; it does not redraw the logo. Generated platform
 assets are checked in, so builds do not need this script or an image library.
 The Android adaptive icon wraps the foreground in tegnal_launcher_inset.xml:
 keep that 108dp-to-72dp compensation so launchers preserve the source margins.
@@ -16,7 +16,7 @@ import tempfile
 
 
 FLUTTER = Path(__file__).resolve().parents[1]
-SOURCE = FLUTTER.parent / "design-output" / "JPG" / "symbol.jpg"
+SOURCE = FLUTTER / "tool" / "symbol.jpg"
 BRANDING_ICON = FLUTTER / "assets" / "branding" / "app-icon.png"
 
 

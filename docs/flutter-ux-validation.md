@@ -173,7 +173,7 @@ and stale-result protection. Onboarding detects either content mode and adopts
 the returned source mode only after the user presses Add. Existing source records
 and storage schemas are unchanged.
 
-The supplied 1920px `design-output/JPG/symbol.jpg` now produces the 1024px branding
+The supplied 1920px `flutter/tool/symbol.jpg` now produces the 1024px branding
 and Android adaptive foreground, standard Android density icons, Linux PNG and a
 seven-size Windows ICO. No logo was redrawn. Shared icon themes, navigation,
 headers, settings, lists and reader controls were enlarged; explicit small glyph

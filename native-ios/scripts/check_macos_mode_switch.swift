@@ -1,5 +1,5 @@
-// Run after ./script/build_and_run.sh --verify:
-// swift script/check_macos_mode_switch.swift <TEGNAL PID>
+// Run after ./native-ios/scripts/build_and_run.sh --verify:
+// swift native-ios/scripts/check_macos_mode_switch.swift <TEGNAL PID>
 // Exercises real macOS wheel events; simulated iOS swipes do not cover this crash.
 import AppKit
 import ApplicationServices

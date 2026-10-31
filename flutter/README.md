@@ -127,13 +127,9 @@ flutter build linux --release
 
 The media dependency follows the installed [`media_kit` Linux setup](https://github.com/media-kit/media-kit#gnulinux). Run/distribute the complete `build/linux/x64/release/bundle/`. libmpv and its codec dependencies remain system dependencies. The bundle includes a desktop entry and icon under `data/`; registering a launcher requires installing that metadata and making `tegnal` resolvable from the launcher's `Exec` path. No AppImage, Flatpak or distribution package has been validated.
 
-### Manual CI
-
-[Flutter platform build](../.github/workflows/flutter-platform-builds.yml) is manually dispatched and builds **one selected target**: Android debug APK, Windows release ZIP or Linux release tarball. It has no push/PR/scheduled trigger, test matrix, deployment or signing secrets. It has not been remotely dispatched as part of this change. An uploaded bundle, if a maintainer later runs it successfully, is build evidence only.
-
 ## Assets and localization
 
-All platform icons use the supplied 1920×1920 [`symbol.jpg`](../design-output/JPG/symbol.jpg), which matches the stacked wordmark in the native app icon; the wide `logotype.jpg` is not used as a square icon. `python3 tool/sync_app_icons.py` creates the 1024px Flutter branding PNG, Android density and adaptive-icon assets, a multi-size Windows ICO, and the Linux PNG with macOS's built-in `sips`. The conversion resizes the existing artwork without redrawing it; generated assets are checked in, so platform builds need no image-generation service or image library.
+All platform icons use the supplied 1920×1920 [`symbol.jpg`](tool/symbol.jpg), which matches the stacked wordmark in the native app icon; the wide `logotype.jpg` is not used as a square icon. `python3 tool/sync_app_icons.py` creates the 1024px Flutter branding PNG, Android density and adaptive-icon assets, a multi-size Windows ICO, and the Linux PNG with macOS's built-in `sips`. The conversion resizes the existing artwork without redrawing it; generated assets are checked in, so platform builds need no image-generation service or image library.
 
 ```sh
 python3 tool/sync_localizations.py

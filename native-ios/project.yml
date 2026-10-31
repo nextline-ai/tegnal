@@ -5,7 +5,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
-  postGenCommand: python3 ../script/sync_test_plan_ids.py
+  postGenCommand: python3 scripts/sync_test_plan_ids.py
 
 settings:
   base:
