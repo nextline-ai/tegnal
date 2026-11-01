@@ -15,167 +15,116 @@
   <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Android_button_kr_mobile.svg"><img src="docs/assets/readme/Android_button_kr.svg" alt="Android 베타 APK 다운로드"></picture></a>
 </p>
 
-<h1 align="center">TEGNAL</h1>
-<p align="center"><b>Hitomi와 Danbooru를 한곳에서 — Apple 앱과 Android 베타</b></p>
-<p align="center">
-  Apple 버전은 <b>TestFlight</b>에서, Android 베타는 위의 <b>APK 다운로드</b> 배지에서 설치하세요.<br>
-  온디바이스 AI 추천·번역부터 iCloud 보안 동기화까지, Apple 생태계에 최적화된 감상 환경을 제공합니다.
-</p>
+# TEGNAL
 
-<p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W"><b>📲 TestFlight에서 무료 다운로드</b></a> ·
-  <a href="https://github.com/nextline-ai/tegnal/releases">업데이트 내역</a> ·
-  <a href="https://discord.gg/vUTGZNMaMB">Discord 커뮤니티</a>
-</p>
+만화와 일러스트를 앱 하나로 봅니다.
 
----
+화면 위쪽의 전환 버튼을 누르면 Hitomi 같은 만화 사이트와 Danbooru, Gelbooru, Moebooru 같은 이미지 사이트를 바로 오갈 수 있습니다. 앱에 사이트가 들어 있는 것은 아닙니다. 쓰는 사이트의 주소를 연결하면 그 사이트의 작품을 앱 화면으로 보여 줍니다.
 
-## ✨ 왜 TEGNAL인가요?
+Apple 기기용은 TestFlight로, Android용은 베타 APK로 배포합니다. 모두 무료입니다.
 
-### 1. Hitomi & Danbooru 통합 지원
-- <strong>만화 모드(Hitomi 등)</strong>와 <strong>이미지 모드(Danbooru, Gelbooru, Moebooru 등)</strong>를 하나의 앱에서 지원합니다.
-- 상단 전환바 하나로 만화책 감상과 일러스트(Booru) 탐색을 즉시 오갈 수 있습니다.
-- 여러 Booru 서버를 동시에 탐색하고, 마음에 드는 작품을 길게 눌러 나만의 폴더에 손쉽게 정리하세요.
+## 보기
 
-### 2. Apple 기기는 TestFlight로, Android는 베타 APK로
-- Apple 버전은 **공개 TestFlight를 정식 출시 채널로 사용**하며, Android 베타는 아래 APK로 배포합니다.
-- 복잡하고 위험한 사이드로딩(PC 연결, 7일마다 인증서 갱신 등)이 전혀 필요 없습니다.
-- Apple이 검수한 공식 TestFlight 앱을 통해 **클릭 한 번으로 안전하게 설치**하고 자동 업데이트를 받으세요.
+만화는 좌우로 넘기거나 세로로 이어서 읽습니다. 작품을 고르면 바로 열리고, 읽기 전에 작품 정보를 먼저 보도록 바꿀 수도 있습니다. 이미지 모드에서는 여러 Booru 서버를 함께 둘러보고, 고해상도 이미지와 GIF, 동영상, 풀, 노트까지 앱 안에서 봅니다.
 
-### 3. Apple 버전의 기기 연속성 & iCloud 최고 수준 보안
-- **크로스플랫폼 연속성 (iPhone · iPhone Duo · iPad · macOS · visionOS):** 공식 지원하는 모든 Apple 기기에서 끊김 없이 이어볼 수 있으며, 각 기기 환경에 맞춰 최적화된 전용 UI와 키보드·마우스·트랙패드 조작을 제공합니다.
-- **안전한 iCloud 동기화:** 최고 수준의 보안을 자랑하는 Apple iCloud를 통해 북마크, 폴더, 작가, 검색 기록이 내 기기 간에만 안전하게 보호되며 자동으로 동기화됩니다.
+뷰어에서 번역 버튼을 누르면 이미지 속 글자를 기기 안에서 읽어 번역합니다. 작가를 누르면 모든 언어의 작품이 나오고, 원하는 언어를 고르면 다음 작가부터 그 언어로 열립니다.
 
-### 4. Apple 버전의 온디바이스 AI
-모든 AI 기능은 외부 서버 전송 없이 **기기 내부(On-Device)에서 직접 처리**되므로 개인정보 유출 걱정 없이 매우 안전합니다.
-- **스마트 추천 — 내가 조율하는 큐레이터:** 최근 저장, 오래 본 작품, 끝까지 본 작품을 기기 안에서 학습해 오늘의 한 점과 이유가 붙은 선반을 만듭니다. 작품마다 추천 이유를 확인하고, 관심 없음·비슷한 작품 더 보기·태그 더/덜 보기로 직접 가르칠 수 있으며, 익숙하게부터 모험적으로까지 탐험 범위도 고를 수 있습니다.
-- **리캡 — 나만의 아트 매거진:** 매달 내가 모은 작품으로 만드는 한 권의 매거진이 호마다 다른 일러스트 표지로 도착합니다. 탑 차트, 이번 호의 작가, 표지에서 측정한 색, 처음 만난 취향, 활동 리듬, 감상 시간, 취향 페르소나를 스토리로 넘겨 보고, 잊고 있던 저장작을 다시 만나고, 지난 호를 서가에 모을 수 있습니다. 공유 카드에는 저장한 작품이 들어가지 않습니다.
-- **비슷한 그림체 찾기:** 저장한 작품을 길게 누르면 Apple Vision AI가 구도·색감·화풍을 분석해 비슷한 스타일의 작품을 찾아줍니다.
-- **원클릭 이미지 번역:** 뷰어에서 번역 버튼만 누르면 Apple 온디바이스 인식·번역 엔진이 이미지 속 텍스트를 바로 번역해 줍니다.
+이미지 모드의 챌린지 룰렛은 조금 다른 기능입니다. 크로키 연습이나 직접 만든 미션을 룰렛으로 뽑고, 참고 이미지를 보며 타이머에 맞춰 그릴 수 있습니다.
 
----
+## 저장하고 정리하기
 
-## 🤖 Android 다운로드 (베타)
+작품을 길게 누르면 저장됩니다. 저장할 폴더는 설정에서 미리 정할 수 있고, 저장 직후 뜨는 안내에서 바꿀 수도 있습니다. 실수로 해제해도 앱을 끄기 전에 다시 저장하면 원래 폴더로 돌아갑니다.
 
-**Android 1.0.0-beta.5 · Android 7.0 이상.** 아래 링크는 설치 가능한 **APK 파일을 직접 다운로드**합니다. Google Play 배포판이 아닙니다.
+한 작품을 여러 폴더에 넣을 수 있습니다. 저장 탭에서 `language:korean` 같은 태그로 찾은 결과를 그대로 폴더로 만들 수 있고, 자동 분류 규칙을 걸어 두면 앞으로 저장하는 작품도 알아서 들어갑니다. 원하지 않는 태그는 규칙마다 제외할 수 있습니다.
 
-| 다운로드 | 대상 |
-| --- | --- |
-| **[Android 베타 APK — ARM64 권장](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk)** | 대부분의 최신 64비트 ARM 휴대폰 |
-| [Android 베타 APK — 공용판](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android.apk) | 32비트 ARM·ARM64·x86-64, 기기 종류가 불확실할 때 |
+저장한 작품을 길게 누르면 구도와 색감, 화풍이 비슷한 작품도 찾아 줍니다.
 
-APK를 받은 뒤 파일을 열어 설치하세요. Android가 요청하면 다운로드한 브라우저 또는 파일 앱에만 앱 설치를 허용하면 됩니다. 업데이트도 같은 방식으로 새 APK를 설치합니다. 두 APK는 같은 서명을 사용합니다.
+## 스마트 추천과 리캡
 
-- 신규 설치에는 기본 사이트 연결이 없습니다. 업데이트 시 이미 저장된 사용자 연결은 유지됩니다.
-- 이미지 모드는 **Booru 사이트별 기본 폴더**로 정리합니다. 만화 모드의 폴더 구성은 유지합니다.
-- 온보딩과 설정에서 **다른 만화 뷰어의 북마크 SQLite 백업**을 가져올 수 있습니다. 이전 가져오기 형식은 설정의 별도 옵션으로 남아 있으며, TEGNAL JSON 백업도 지원합니다. 이미지 번역은 설치된 Google 번역 앱으로 연결하며, Google Drive 동기화는 현재 비활성화되어 있습니다.
-- 가져오기 후 빠진 커버·제목·태그를 연결된 사이트에서 자동으로 채우며, 상단 안내에서 진행 확인과 일시정지를 할 수 있습니다. 설정에 Discord·GitHub 바로가기를 제공하고, 뷰어의 아래로 밀어 닫기에 애니메이션을 적용했습니다.
-- 아래 iCloud·Apple Vision·Apple 온디바이스 번역 설명은 **Apple 버전 전용**입니다. Android 베타에는 동일하게 적용되지 않습니다.
+스마트 추천은 무엇을 저장했고, 무엇을 오래 봤고, 무엇을 끝까지 읽었는지를 보고 다음 작품을 고릅니다. 작품마다 추천된 이유가 붙어 있고, 관심 없는 작품은 숨기고, 비슷한 작품을 더 달라고 하고, 태그별로 더 보거나 덜 보도록 직접 조정할 수 있습니다. 익숙한 작품 위주로 볼지, 낯선 작품까지 넓힐지도 고를 수 있습니다.
 
-[베타 변경 내역 및 파일 해시](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5)
+리캡은 매달 한 권씩 나오는 나만의 잡지입니다. 호마다 표지 그림이 다르고, 안에는 그달의 탑 차트와 많이 본 작가, 새로 빠진 취향, 감상 시간이 담깁니다. 잊고 있던 저장작을 다시 만나기도 하고, 지난 호는 서가에 쌓입니다. 공유 카드에는 저장한 작품이 들어가지 않으니 안심하고 올려도 됩니다.
 
-## 📲 Apple 다운로드 및 설치 방법
+추천과 리캡, 번역, 비슷한 그림 찾기는 모두 기기 안에서 처리합니다. 감상 기록을 분석하려고 외부 서버로 보내지 않습니다.
 
-1. App Store에서 **[Apple TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)** 앱을 먼저 설치합니다.
-2. 아래 링크(또는 상단 배너)를 눌러 **TEGNAL TestFlight** 페이지로 이동한 뒤 **설치**를 누릅니다.
-   - 👉 **[TEGNAL TestFlight 바로가기](https://testflight.apple.com/join/gnkqu44W)**
-3. **공식 지원 기기:** iPhone, iPhone Duo, iPad, macOS, visionOS (각 환경에 최적화된 UI 제공 · 한국어/영어/일본어 지원)
+## 설치
+
+### Apple 기기
+
+iPhone, iPhone Duo, iPad, Mac, Apple Vision Pro에서 쓸 수 있고 한국어, 영어, 일본어를 지원합니다.
+
+1. App Store에서 [TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)를 받습니다.
+2. [TEGNAL TestFlight 페이지](https://testflight.apple.com/join/gnkqu44W)를 열고 설치를 누릅니다.
+
+TestFlight는 Apple이 운영하는 앱 배포 서비스입니다. PC를 연결하거나 인증서를 갱신할 필요가 없고, 업데이트도 TestFlight에서 받습니다. 새 버전은 여기에 가장 먼저 올라옵니다.
+
+iCloud 동기화를 켜면 북마크, 폴더, 작가, 검색 기록이 내 Apple 기기끼리 이어집니다.
 
 <details>
-<summary><b>TestFlight가 뭔가요?</b></summary>
+<summary>AltStore, SideStore, IPA로 설치하기</summary>
 
-TestFlight는 Apple이 제공하는 앱 베타 배포 서비스입니다.
+IPA는 일부 버전만 올리기 때문에 TestFlight보다 버전이 낮을 수 있습니다.
 
-**안전하고 신뢰할 수 있는 권장 설치 방법은 Apple 공식 TestFlight입니다.**
-
-- **Apple이 관리하는 공식 배포 경로:** 개발자가 제공한 빌드를 TestFlight에서 직접 설치하며, 외부 테스터를 위한 공개에는 Apple의 베타 심사 절차가 적용됩니다. [Apple 공식 안내](https://developer.apple.com/testflight/)
-- **별도의 인증서 관리 불필요:** IPA 파일을 직접 구해 재서명하거나, 별도 인증서와 기기 관리 프로파일을 수동으로 설치할 필요가 없습니다.
-- **일관된 설치·업데이트 경로:** TestFlight에서 자동 업데이트를 켜면 새로운 빌드도 같은 공식 경로로 받아 설치할 수 있습니다. [TestFlight 설치·업데이트 안내](https://testflight.apple.com/)
-
-</details>
-
-**최신 Apple 앱 버전은 TestFlight로 우선 배포됩니다.** 최신 버전을 받으려면 TestFlight를 이용하세요.
-
-IPA 파일과 AltStore Classic·SideStore용 버전은 일부 버전만 업로드되므로, TestFlight와 버전이 다를 수 있습니다. **소스 코드는 항상 GitHub에 먼저 반영됩니다.**
-
-<details>
-<summary><b>다른 설치 방법 (선택)</b></summary>
-
-AltStore Classic 또는 SideStore가 이미 설치되어 있다면 아래 링크에서 TEGNAL 소스를 등록할 수 있습니다.
-
-| 방법 | 다운로드 및 설치 |
+| 방법 | 링크 |
 | --- | --- |
 | AltStore Classic | [소스 등록](https://nextline-ai.github.io/tegnal/#altstore) |
 | SideStore | [소스 등록](https://nextline-ai.github.io/tegnal/#sidestore) |
-| IPA 수동 설치 | [자동 업데이트 제한 확인 후 다운로드](https://nextline-ai.github.io/tegnal/manual-install.html) |
+| IPA 수동 설치 | [안내 보기](https://nextline-ai.github.io/tegnal/manual-install.html) |
 
-수동 등록은 AltStore Classic·SideStore의 <b>Sources → +</b>에서 아래 주소를 추가하세요.
+직접 등록하려면 Sources에서 + 를 누르고 아래 주소를 넣습니다.
 
 ```text
 https://nextline-ai.github.io/tegnal/source.json
 ```
 
-IPA는 설치 도구에서 사용자 Apple 계정으로 다시 서명해야 합니다. 서명 갱신과 사용 가능한 iCloud 기능은 계정 및 설치 도구에 따라 달라집니다.
+IPA는 설치 도구에서 자신의 Apple 계정으로 다시 서명해야 합니다. 서명 갱신 주기와 쓸 수 있는 iCloud 기능은 계정과 도구에 따라 다릅니다.
 
 </details>
 
----
+### Android
 
-## 🚀 1분 만에 시작하기
+Android 7.0 이상에서 설치할 수 있는 베타 1.0.0-beta.5입니다. Google Play에는 없고 APK 파일을 직접 받습니다.
 
-1. **사이트 연결하기:** 앱 실행 후 **주소 입력**을 눌러 이용할 사이트 주소(예: Hitomi, Danbooru, Gelbooru 등)를 입력하세요. 자동완성 목록에서 간편하게 선택할 수 있습니다. 입력한 도메인에서 데이터·이미지 서버 주소를 찾아 저장하고, 이후에는 저장된 주소를 재사용합니다. 사이트 주소를 바꾸거나 서버 연결에 실패했을 때만 다시 탐색합니다.
-2. **모드 전환하기:** 화면 상단의 **책 / 이미지 전환바**를 눌러 만화 모드와 이미지 모드를 자유롭게 전환하세요.
-3. **작품 저장하기:** 탐색 화면이나 뷰어에서 마음에 드는 작품을 **길게 누르면 즉시 저장**됩니다. 폴더별로 색상과 순서를 지정해 깔끔하게 관리해 보세요.
-4. **기존 백업 가져오기:** 기존에 사용하던 **Violet**(`user.db` / `data.db`)이나 **Anime Boxes**(`.abbj`) 백업 파일이 있다면 설정에서 그대로 가져올 수 있습니다.
+- [ARM64 APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk): 최신 휴대폰은 대부분 이 파일입니다.
+- [공용 APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android.apk): 기기 종류를 모르겠다면 이 파일을 받습니다. 32비트 ARM, ARM64, x86-64를 모두 지원합니다.
 
-| 구분 | 📖 만화 모드 | 🖼️ 이미지 모드 (Booru) |
-| --- | --- | --- |
-| **주요 기능** | 작품 검색, 인기순, 작가별 모아보기 | 여러 서버 동시 탐색, 최신/인기순, 태그 검색 |
-| **뷰어** | 양방향 넘김, 연속 스크롤, 이미지 번역 | 고해상도 이미지, GIF·동영상, 풀(Pool)·노트, 번역 |
-| **백업 호환** | 다른 만화 뷰어 가져오기 및 통합 JSON 백업 | Anime Boxes 가져오기 및 통합 JSON 백업 |
+받은 파일을 열어 설치합니다. Android가 물어보면 파일을 받은 브라우저나 파일 앱에만 설치를 허용하면 됩니다. 업데이트할 때도 새 APK를 같은 방법으로 설치합니다. 변경 내역과 파일 해시는 [릴리스 페이지](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5)에 있습니다.
 
-**통합 JSON 백업:** 어느 모드에서든 **설정 / 더보기 → 보관함 관리 → JSON 백업 내보내기**를 누르면 만화·이미지 보관함과 챌린지 정의를 하나의 `tegnal-backup.json` 파일로 저장합니다. 같은 화면에서 두 모드를 함께 복원하며, 이전의 모드별 백업도 가져올 수 있습니다. 미디어·캐시·로그인 정보는 포함하지 않습니다. iCloud를 켜면 복원한 보관함도 기기 간에 동기화됩니다.
+베타라서 아직 Apple 버전과 같지 않습니다. iCloud 동기화, 비슷한 그림 찾기, 기본 저장 폴더와 자동 분류는 없고, 스마트 추천은 이전 버전입니다. 이미지 번역은 설치된 Google 번역 앱으로 넘깁니다. Google Drive 동기화는 지금 꺼져 있습니다.
 
-> 💡 **색다른 즐길 거리 — 챌린지 룰렛**
-> 이미지 모드의 **더보기 → 챌린지 룰렛**에서 크로키 연습이나 나만의 랜덤 미션 룰렛을 만들고, 참고 이미지를 보며 타이머와 함께 챌린지를 즐겨보세요!
+## 처음 시작할 때
 
----
+앱을 열고 주소 입력을 누른 뒤 쓰는 사이트 주소를 넣습니다. 자동완성 목록에서 골라도 됩니다. 앱이 그 주소에서 데이터와 이미지 서버를 찾아 저장하고, 주소를 바꾸거나 연결에 실패했을 때만 다시 찾습니다.
 
-## 🛠️ 사이트 연결이 안 될 때
+다른 앱을 쓰고 있었다면 설정에서 백업을 가져옵니다. Violet의 `user.db`, `data.db`와 Anime Boxes의 `.abbj` 파일을 읽을 수 있습니다. 빠진 표지와 제목, 태그는 연결된 사이트에서 자동으로 채웁니다.
 
-- **클라이언트 확인 (Cloudflare 등):** 연결 오류 화면이나 서버 설정에서 **클라이언트 확인**을 눌러 로봇 확인 절차를 완료하면 정상 연결됩니다.
-- **내장 브라우저 모드:** 사이트 사정으로 기본 연결이 원활하지 않을 때는 설정에서 **내장 브라우저 사용**을 켜서 끊김 없이 감상할 수 있습니다.
-- **Danbooru 태그 검색 팁:** Danbooru 무료 계정은 사이트 정책상 한 번에 2개의 태그까지만 검색할 수 있습니다. (Gelbooru 등은 태그 개수 제한 없이 검색 가능합니다.)
+TEGNAL 자체 백업은 설정이나 더보기의 보관함 관리에서 JSON 백업 내보내기를 누르면 됩니다. 만화와 이미지 보관함, 챌린지를 `tegnal-backup.json` 하나에 담고, 같은 화면에서 두 모드를 함께 복원합니다. 이미지와 캐시, 로그인 정보는 들어가지 않습니다.
 
----
+## 연결이 안 될 때
 
-## 🛠️ 개발
+- Cloudflare 같은 확인 화면에 막히면 오류 화면이나 서버 설정에서 클라이언트 확인을 눌러 절차를 마칩니다.
+- 그래도 안 되면 설정에서 내장 브라우저 사용을 켭니다. 앱 화면 대신 사이트를 그대로 엽니다.
+- Danbooru 무료 계정은 사이트 정책상 태그를 두 개까지만 검색할 수 있습니다. Gelbooru 등에는 이 제한이 없습니다.
 
-네이티브 iOS 소스는 `native-ios/TEGNAL`에 있습니다. `native-ios/TEGNAL.xcodeproj`를 열고 **TEGNAL** 스킴을 선택하세요. 최소 지원 버전은 iOS 17입니다.
+## 개발
 
-- **앱 번들 ID:** `work.nextline.tegnal`
-- **공유 확장 ID:** `work.nextline.tegnal.share`
-- **iCloud 컨테이너:** `iCloud.work.nextline.tegnal`
+iOS 앱은 `native-ios/TEGNAL`에 있습니다. `native-ios/TEGNAL.xcodeproj`를 열고 TEGNAL 스킴을 고르면 됩니다. 최소 버전은 iOS 17입니다.
 
-실기기 서명과 배포에는 위 식별자를 사용하는 Apple Developer 설정과 프로비저닝 프로파일이 필요합니다. 새 식별자는 기존 설치와 별도 앱으로 취급되며, 이전 버전의 이미지·챌린지 JSON 백업은 가져올 수 있습니다.
+- 앱 번들 ID: `work.nextline.tegnal`
+- 공유 확장 ID: `work.nextline.tegnal.share`
+- iCloud 컨테이너: `iCloud.work.nextline.tegnal`
 
----
+실기기 서명과 배포에는 이 식별자를 쓰는 Apple Developer 설정과 프로비저닝 프로파일이 필요합니다. 식별자가 다르면 기존 설치와 별개의 앱으로 설치됩니다. 소스 코드는 항상 GitHub에 먼저 올라옵니다.
 
-## 💬 개발자 및 커뮤니티
+## 문의
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nextline-logo-dark.svg">
   <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
 </picture>
 
-앱 사용 중 궁금한 점이나 버그 제보, 기능 제안은 언제든 **Discord 커뮤니티**에 남겨 주세요!
+버그 제보와 기능 제안은 [Discord](https://discord.gg/vUTGZNMaMB)에 남겨 주세요.
 
-- **개발자:** NextLine
-- **커뮤니티 / 오류 제보:** [Discord 바로가기](https://discord.gg/vUTGZNMaMB)
-- **웹사이트:** [nextline.work](https://nextline.work)
-- **이메일:** [contact@nextline.work](mailto:contact@nextline.work)
+NextLine · [nextline.work](https://nextline.work) · [contact@nextline.work](mailto:contact@nextline.work)
 
----
-
-<sub>TEGNAL은 Apple 및 연결 가능한 외부 사이트와 무관한 독립 클라이언트 애플리케이션입니다.<br>
-<a href="docs/privacy-policy.md">개인정보처리방침</a></sub>
+<sub>TEGNAL은 Apple 및 연결하는 외부 사이트와 관계없는 독립 클라이언트입니다. · <a href="docs/privacy-policy.md">개인정보처리방침</a></sub>

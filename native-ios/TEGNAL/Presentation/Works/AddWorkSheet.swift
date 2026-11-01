@@ -147,7 +147,7 @@ public struct AddWorkSheet: View {
         if let list = try? env.database.listFolders() {
             folders = list
             if selectedFolderId == nil {
-                selectedFolderId = list.first?.id
+                selectedFolderId = list.first { $0.id == LibrarySavePreferences.defaultFolderID }?.id ?? list.first?.id
             }
         }
     }

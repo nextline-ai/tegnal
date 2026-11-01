@@ -1297,7 +1297,6 @@
 
 /* Reader coach marks and information hints. */
 "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "作品情報でタグや作家名を長押しすると、ここに保存できます。もう一度長押しすると保存を解除できます。";
-"Scroll to Work Information" = "下の作品情報を見る";
 "Turn Pages" = "ページ移動";
 "Step %@ of %@" = "%@ / %@ ステップ";
 "Start Reading" = "読み始める";
@@ -1349,7 +1348,6 @@
 "Finished" = "読了";
 "Folder created" = "フォルダを作成しました";
 "From your own shelves" = "自分の本棚から";
-"Hide artwork in Recap" = "リキャップで作品画像を隠す";
 "Images keep one folder each, so these %@ images will move into the new folder." = "画像は1つのフォルダにのみ入るため、この%@枚は新しいフォルダへ移動します。";
 "Images viewed" = "鑑賞した画像";
 "Longest streak: %@ days" = "最長連続活動 %@日";
@@ -1487,9 +1485,31 @@
 "Rising lately" = "最近上昇中";
 "For you" = "あなたへのおすすめ";
 "Share cards never include your saved works." = "共有カードに保存した作品は含まれません。";
-"Inside pages show colors instead of your works." = "中のページの作品を色で表示します。";
 "Every save teaches your feed." = "保存するほどおすすめが正確になります。";
 "Hidden" = "非表示にしました";
 "Today's picks" = "今日のおすすめ";
 "One each from your usual taste, recent interests and something new." = "いつもの好み、最近の関心、新しい発見から一つずつ選びました。";
 "Chosen from what you've been saving and viewing." = "保存や鑑賞した作品をもとに選びました。";
+"Hold an artist or tag to add it to your favorites. Hold it again to remove it." = "作家やタグを長押しするとお気に入りに追加されます。もう一度長押しすると解除されます。";
+"No Works in This Language" = "この言語の作品はありません";
+"Show All Languages" = "すべての言語を表示";
+"Artist Works Language" = "作家の作品の言語";
+"Change Folder" = "フォルダを変更";
+"Search saved works" = "保存した作品を検索";
+"Fill from a Tag…" = "タグで追加…";
+"Tag" = "タグ";
+"Excluded Tags" = "除外タグ";
+"Folder" = "フォルダ";
+"Separate tags with spaces. Use _ for a space inside a tag." = "タグはスペースで区切ります。タグ内のスペースは _ で入力してください。";
+"%@ saved works match." = "保存した作品のうち%@件が該当します。";
+"Also Add New Saves" = "今後保存する作品も含める";
+"Apply to Saved Works" = "保存済みの作品にも適用";
+"Classification Rule" = "分類ルール";
+"Classify New Saves" = "新しく保存した作品を分類";
+"A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders." = "ルールのタグを持つ作品を保存すると、そのルールのフォルダにも追加されます。1つの作品を複数のフォルダに入れられます。";
+"Except %@" = "%@ を除く";
+"No rules yet." = "ルールはまだありません。";
+"Automatic Classification" = "自動分類";
+"Add Rule" = "ルールを追加";
+"Default Save Folder" = "デフォルトの保存先フォルダ";
+"Create Folder from Results" = "この結果からフォルダを作成";

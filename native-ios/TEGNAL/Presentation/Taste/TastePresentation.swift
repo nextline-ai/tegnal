@@ -137,13 +137,13 @@ struct TasteRecommendationCard: View {
             VStack(alignment: .leading, spacing: style.inset(6)) {
                 if let post = item.post, let server = env.booru.servers.first(where: { $0.id == post.serverID }) {
                     BooruPostThumbnailCard(post: post, server: server, showsFavoriteIndicator: true, isFavorite: env.booru.favoriteIDs.contains(post.id))
-                        .overlay(alignment: .bottomLeading) { reasonTag }
+                        .overlay(alignment: .bottom) { imageTags(language: nil) }
                 } else if item.post != nil {
                     Color.secondary.opacity(0.12).aspectRatio(0.78, contentMode: .fit)
                         .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }.clipShape(RoundedRectangle(cornerRadius: style.radius(16)))
                 } else if let gallery = item.gallery {
-                    GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language) {
-                        TasteArtwork(gallery: gallery).overlay(alignment: .bottomLeading) { reasonTag }
+                    GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language, showsLanguage: false) {
+                        TasteArtwork(gallery: gallery).overlay(alignment: .bottom) { imageTags(language: gallery.language) }
                     }.overlay(alignment: .topLeading) {
                         if isBookmarked {
                             Image(systemName: "bookmark.fill").font(.system(size: style.fontSize(14), weight: .semibold)).foregroundStyle(.yellow)
@@ -161,13 +161,22 @@ struct TasteRecommendationCard: View {
             .overlay(alignment: .topTrailing) { if let feedback { RecommendationMenu(item: item, feedback: feedback, compact: true) } }
     }
     /// The one reason a card has room for. An exclusion removes it at once.
-    @ViewBuilder private var reasonTag: some View {
-        if feedback != nil, let why = item.why, env.taste.control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru) {
-            // The tag that found this work varies more than the artist behind many saves.
-            Text(item.reason.name.isEmpty ? why.label : RecapText.tag(item.reason.name)).font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                .padding(.horizontal, 7).padding(.vertical, 3).background(.black.opacity(0.58), in: Capsule())
-                .padding(6).allowsHitTesting(false)
-        }
+    private var reason: String? {
+        guard feedback != nil, let why = item.why, env.taste.control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru) else { return nil }
+        // The tag that found this work varies more than the artist behind many saves.
+        return item.reason.name.isEmpty ? why.label : RecapText.tag(item.reason.name)
+    }
+    /// The reason gives way first when both tags cannot fit on a narrow card.
+    private func imageTags(language: String?) -> some View {
+        HStack(spacing: 4) {
+            if let reason { imageTag(reason) }
+            Spacer(minLength: 0)
+            if let language, !language.isEmpty { imageTag(language).layoutPriority(1) }
+        }.padding(6).allowsHitTesting(false)
+    }
+    private func imageTag(_ text: String) -> some View {
+        Text(text).font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+            .padding(.horizontal, 7).padding(.vertical, 3).background(.black.opacity(0.58), in: Capsule())
     }
     private var saved: Bool {
         if let post = item.post { return env.booru.favoriteIDs.contains(post.id) }

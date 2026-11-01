@@ -1297,7 +1297,6 @@
 
 /* Reader coach marks and information hints. */
 "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.";
-"Scroll to Work Information" = "Scroll to Work Information";
 "Turn Pages" = "Turn Pages";
 "Step %@ of %@" = "Step %@ of %@";
 "Start Reading" = "Start Reading";
@@ -1349,7 +1348,6 @@
 "Finished" = "Finished";
 "Folder created" = "Folder created";
 "From your own shelves" = "From your own shelves";
-"Hide artwork in Recap" = "Hide artwork in Recap";
 "Images keep one folder each, so these %@ images will move into the new folder." = "Images keep one folder each, so these %@ images will move into the new folder.";
 "Images viewed" = "Images viewed";
 "Longest streak: %@ days" = "Longest streak: %@ days";
@@ -1487,9 +1485,31 @@
 "Rising lately" = "Rising lately";
 "For you" = "For you";
 "Share cards never include your saved works." = "Share cards never include your saved works.";
-"Inside pages show colors instead of your works." = "Inside pages show colors instead of your works.";
 "Every save teaches your feed." = "Every save teaches your feed.";
 "Hidden" = "Hidden";
 "Today's picks" = "Today's picks";
 "One each from your usual taste, recent interests and something new." = "One each from your usual taste, recent interests and something new.";
 "Chosen from what you've been saving and viewing." = "Chosen from what you've been saving and viewing.";
+"Hold an artist or tag to add it to your favorites. Hold it again to remove it." = "Hold an artist or tag to add it to your favorites. Hold it again to remove it.";
+"No Works in This Language" = "No Works in This Language";
+"Show All Languages" = "Show All Languages";
+"Artist Works Language" = "Artist Works Language";
+"Change Folder" = "Change Folder";
+"Search saved works" = "Search saved works";
+"Fill from a Tag…" = "Fill from a Tag…";
+"Tag" = "Tag";
+"Excluded Tags" = "Excluded Tags";
+"Folder" = "Folder";
+"Separate tags with spaces. Use _ for a space inside a tag." = "Separate tags with spaces. Use _ for a space inside a tag.";
+"%@ saved works match." = "%@ saved works match.";
+"Also Add New Saves" = "Also Add New Saves";
+"Apply to Saved Works" = "Apply to Saved Works";
+"Classification Rule" = "Classification Rule";
+"Classify New Saves" = "Classify New Saves";
+"A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders." = "A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders.";
+"Except %@" = "Except %@";
+"No rules yet." = "No rules yet.";
+"Automatic Classification" = "Automatic Classification";
+"Add Rule" = "Add Rule";
+"Default Save Folder" = "Default Save Folder";
+"Create Folder from Results" = "Create Folder from Results";

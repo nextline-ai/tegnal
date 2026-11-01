@@ -1297,7 +1297,6 @@
 
 /* Reader coach marks and information hints. */
 "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "작품 정보에서 태그나 작가 이름을 길게 누르면 이곳에 저장할 수 있습니다. 다시 길게 누르면 저장이 해제됩니다.";
-"Scroll to Work Information" = "아래 작품 정보 보기";
 "Turn Pages" = "페이지 넘기기";
 "Step %@ of %@" = "%@ / %@ 단계";
 "Start Reading" = "읽기 시작";
@@ -1349,7 +1348,6 @@
 "Finished" = "완독";
 "Folder created" = "폴더를 만들었어요";
 "From your own shelves" = "내 서재에서";
-"Hide artwork in Recap" = "리캡에서 작품 이미지 숨기기";
 "Images keep one folder each, so these %@ images will move into the new folder." = "이미지는 폴더를 하나만 가질 수 있어서, 이 이미지 %@장이 새 폴더로 이동합니다.";
 "Images viewed" = "감상한 이미지";
 "Longest streak: %@ days" = "최장 연속 활동 %@일";
@@ -1487,9 +1485,31 @@
 "Rising lately" = "최근 상승 중";
 "For you" = "나를 위한 작품";
 "Share cards never include your saved works." = "공유 카드에는 저장한 작품이 포함되지 않습니다.";
-"Inside pages show colors instead of your works." = "속 페이지의 작품을 색으로 대신 표시합니다.";
 "Every save teaches your feed." = "저장할수록 추천이 정확해집니다.";
 "Hidden" = "숨겼어요";
 "Today's picks" = "오늘의 추천";
 "One each from your usual taste, recent interests and something new." = "평소 취향, 최근 관심사, 새로운 발견에서 하나씩 골랐어요.";
 "Chosen from what you've been saving and viewing." = "저장하고 감상한 작품을 바탕으로 골랐어요.";
+"Hold an artist or tag to add it to your favorites. Hold it again to remove it." = "작가나 태그를 길게 누르면 즐겨찾기에 추가됩니다. 다시 길게 누르면 해제됩니다.";
+"No Works in This Language" = "이 언어로 된 작품이 없습니다";
+"Show All Languages" = "모든 언어 보기";
+"Artist Works Language" = "작가 작품 언어";
+"Change Folder" = "폴더 변경";
+"Search saved works" = "저장된 작품 검색";
+"Fill from a Tag…" = "태그로 채우기…";
+"Tag" = "태그";
+"Excluded Tags" = "제외 태그";
+"Folder" = "폴더";
+"Separate tags with spaces. Use _ for a space inside a tag." = "태그는 띄어쓰기로 구분합니다. 태그 안의 공백은 _로 입력하세요.";
+"%@ saved works match." = "저장된 작품 중 %@개가 해당됩니다.";
+"Also Add New Saves" = "앞으로 저장하는 작품도 포함";
+"Apply to Saved Works" = "이미 저장한 작품에도 적용";
+"Classification Rule" = "분류 규칙";
+"Classify New Saves" = "새로 저장한 작품 분류";
+"A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders." = "규칙의 태그가 있는 작품을 저장하면 그 규칙의 폴더에도 들어갑니다. 한 작품이 여러 폴더에 있을 수 있습니다.";
+"Except %@" = "%@ 제외";
+"No rules yet." = "아직 규칙이 없습니다.";
+"Automatic Classification" = "자동 분류";
+"Add Rule" = "규칙 추가";
+"Default Save Folder" = "기본 저장 폴더";
+"Create Folder from Results" = "이 결과로 폴더 만들기";

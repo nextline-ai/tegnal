@@ -15,167 +15,116 @@
   <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Android_button_en_mobile.svg"><img src="docs/assets/readme/Android_button_en.svg" alt="Download Android beta APK"></picture></a>
 </p>
 
-<h1 align="center">TEGNAL</h1>
-<p align="center"><b>Hitomi and Danbooru in one place — Apple apps and Android beta</b></p>
-<p align="center">
-  Install the Apple version via <b>TestFlight</b>, or download the <b>Android beta APK</b> above.<br>
-  Enjoy on-device AI recommendations, instant translation, and secure iCloud sync across your Apple devices.
-</p>
+# TEGNAL
 
-<p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W"><b>📲 Download Free on TestFlight</b></a> ·
-  <a href="https://github.com/nextline-ai/tegnal/releases">Release Notes</a> ·
-  <a href="https://discord.gg/vUTGZNMaMB">Discord Community</a>
-</p>
+Comics and illustrations, in one app.
 
----
+A switch at the top of the screen moves you between comic sites like Hitomi and image boards like Danbooru, Gelbooru and Moebooru. No site comes built in. You connect the addresses you already use, and TEGNAL shows their works in its own screens.
 
-## ✨ Why TEGNAL?
+The Apple version is on TestFlight and the Android beta is an APK. Both are free.
 
-### 1. Hitomi & Danbooru in One Place
-- Supports both **Comics Mode (Hitomi, etc.)** and **Image Mode (Danbooru, Gelbooru, Moebooru, etc.)** in one app, with native Apple apps and an Android beta.
-- Seamlessly switch between reading comics and browsing illustration boards with the top mode bar.
-- Browse multiple Booru servers simultaneously and long-press any work to organize it into custom color-coded folders.
+## Viewing
 
-### 2. TestFlight for Apple Devices, Beta APKs for Android
-- The Apple version uses **Public TestFlight as its official release channel**. Android beta APKs are available below.
-- Forget complicated, risky sideloading tools, PC tethering, or 7-day certificate expirations.
-- Install with a single tap through Apple’s official TestFlight app and receive automatic updates safely.
+Read comics page by page or as one long scroll. A work opens straight away, or you can have its details show first. In image mode you can browse several Booru servers together and view full-size images, GIFs, videos, pools and notes without leaving the app.
 
-### 3. Seamless Apple Continuity & Top-Tier iCloud Security
-- **Cross-Platform Continuity (iPhone · iPhone Duo · iPad · macOS · visionOS):** Enjoy seamless continuity across all officially supported Apple platforms, featuring dedicated UI and controls optimized for each environment.
-- **Secure iCloud Sync:** Your bookmarks, folders, saved artists, and search history are protected by Apple’s industry-leading iCloud security and synced automatically across your devices.
+The translate button in the viewer reads the text inside an image and translates it on your device. Tapping an artist shows their work in every language. Pick one and the next artist opens in that language too.
 
-### 4. On-Device AI Features in the Apple Version
-Every AI feature runs **100% locally on your device** without sending your data to external servers—keeping your preferences completely private.
-- **Smart Recommendations, a curator you tune:** Learns on-device from recent saves, long views and finished works to build a daily pick and shelves that explain themselves. See why any work was chosen, teach it with Not interested, More like this and per-tag controls, and choose how far it reaches, from Familiar to Adventurous.
-- **Recap, your personal art magazine:** Every month, an issue built from the works you kept, under its own illustrated cover. Flip through your top chart, artist of the issue, the colors measured from your covers, new discoveries, your rhythm, viewing time and taste persona; rediscover forgotten saves; and collect back issues on a shelf. Share cards never include your saved works.
-- **Find Similar Art Styles:** Long-press a saved work to find visually similar pieces based on composition, color palette, and art style powered by Apple Vision.
-- **One-Tap Image Translation:** Instantly recognize and translate text inside comics and illustrations using Apple’s on-device translation engine.
+Image mode also has Challenge Roulette, which is a different sort of thing: spin for a gesture drawing exercise or a mission you wrote yourself, then draw against a timer with a reference image beside you.
 
----
+## Saving and sorting
 
-## 🤖 Android Download (Beta)
+Hold a work to save it. You choose the default folder in Settings, and the notice that appears after saving lets you change it on the spot. Remove a bookmark by accident and saving it again before you quit the app puts it back where it was.
 
-**Android 1.0.0-beta.5 · Requires Android 7.0 or later.** These links download installable **APK files directly**. This is not a Google Play release.
+A work can sit in several folders. Search your saved works for a tag like `language:korean` and turn the results into a folder, or add an automatic classification rule so new saves file themselves. Each rule can exclude the tags you don't want.
 
-| Download | Devices |
-| --- | --- |
-| **[Android beta APK — ARM64 recommended](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk)** | Most current 64-bit ARM phones |
-| [Android beta APK — Universal](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android.apk) | 32-bit ARM, ARM64 and x86-64; choose this if unsure |
+Hold a saved work to find others with a similar composition, palette and style.
 
-Open the downloaded APK to install it. If Android prompts you, allow app installation for the browser or file manager you used. Install subsequent APKs the same way to update. Both variants use the same signing certificate.
+## Smart and Recap
 
-- Fresh installations have no bundled website connections. Updates preserve connections already saved in user data.
-- Image mode organizes saved works into **site-specific Booru folders**. Manga folder organization stays unchanged.
-- Onboarding and Settings support **bookmark SQLite backups from other manga viewers**. Older import formats remain a separate Settings option; TEGNAL JSON backups are also supported. Image translation opens the installed Google Translate app; Google Drive sync is currently disabled.
-- After import, missing covers, titles and tags are filled from the configured source, with a top progress notice and pause control. Settings includes Discord/GitHub shortcuts, and the reader animates downward dismissal.
-- The iCloud, Apple Vision and Apple on-device translation features described below apply to the **Apple version**, not the Android beta.
+Smart picks what to show next from what you saved, what you lingered on and what you finished. Every pick says why it's there. You can hide what you don't care for, ask for more like something, and turn individual tags up or down. You also decide how far it strays from your usual taste.
 
-[Beta release notes and checksums](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5)
+Recap is a magazine made from your month, one issue at a time. Each issue has its own cover illustration, and inside are your top charts, the artists you kept returning to, the tastes you picked up and the time you spent. It digs up saves you'd forgotten, and past issues stay on your shelf. Share cards never include your saved works, so they're safe to post.
 
-## 📲 How to Install on Apple Devices
+Recommendations, Recap, translation and similar-work search all run on your device. Your viewing history isn't sent to a server to be analyzed.
 
-1. Install **[Apple TestFlight](https://apps.apple.com/app/testflight/id899247664)** from the App Store.
-2. Tap the link below (or the banner at the top) to open the **TEGNAL TestFlight** page and tap **Install**.
-   - 👉 **[Join TEGNAL on TestFlight](https://testflight.apple.com/join/gnkqu44W)**
-3. **Supported Platforms:** iPhone, iPhone Duo, iPad, macOS, visionOS (UI optimized for each environment · Supports English, Korean, and Japanese)
+## Installing
+
+### Apple devices
+
+Runs on iPhone, iPhone Duo, iPad, Mac and Apple Vision Pro, in English, Korean and Japanese.
+
+1. Get [TestFlight](https://apps.apple.com/app/testflight/id899247664) from the App Store.
+2. Open the [TEGNAL TestFlight page](https://testflight.apple.com/join/gnkqu44W) and tap Install.
+
+TestFlight is Apple's own app distribution service. There's no computer to connect and no certificate to renew, and updates arrive there too. New versions land on TestFlight first.
+
+Turn on iCloud sync to keep your bookmarks, folders, artists and search history in step across your Apple devices.
 
 <details>
-<summary><b>What is TestFlight?</b></summary>
+<summary>Installing with AltStore, SideStore or an IPA</summary>
 
-TestFlight is Apple’s service for distributing beta versions of apps.
+Only some versions are published as IPAs, so these can lag behind TestFlight.
 
-**Apple’s official TestFlight is the recommended installation method for a safe, trustworthy distribution experience.**
-
-- **Distribution managed by Apple:** Install developer-provided builds directly through TestFlight. Public distribution to external testers is subject to Apple’s beta review process. [Apple’s official guide](https://developer.apple.com/testflight/)
-- **No manual certificate management:** There is no need to obtain and re-sign an IPA file or manually install separate certificates and device management profiles.
-- **A consistent installation and update channel:** Enable automatic updates in TestFlight to receive new builds through the same official channel. [TestFlight installation and updates](https://testflight.apple.com/)
-
-</details>
-
-**The latest Apple app versions are distributed through TestFlight first.** Use TestFlight to receive the latest version.
-
-IPA files and builds for AltStore Classic and SideStore are uploaded only for selected versions, so they may lag behind TestFlight. **Source code is always updated on GitHub first.**
-
-<details>
-<summary><b>Other installation methods (optional)</b></summary>
-
-If you already have AltStore Classic or SideStore installed, use the links below to add the TEGNAL source.
-
-| Method | Download and install |
+| Method | Link |
 | --- | --- |
-| AltStore Classic | [Add source](https://nextline-ai.github.io/tegnal/?lang=en#altstore) |
-| SideStore | [Add source](https://nextline-ai.github.io/tegnal/?lang=en#sidestore) |
-| Manual IPA installation | [Read the update limitations before downloading](https://nextline-ai.github.io/tegnal/manual-install.html?lang=en) |
+| AltStore Classic | [Add source](https://nextline-ai.github.io/tegnal/#altstore) |
+| SideStore | [Add source](https://nextline-ai.github.io/tegnal/#sidestore) |
+| Manual IPA | [Read the guide](https://nextline-ai.github.io/tegnal/manual-install.html) |
 
-To add the source manually, paste this address into **Sources → +** in AltStore Classic or SideStore:
+To add the source by hand, tap + under Sources and enter:
 
 ```text
 https://nextline-ai.github.io/tegnal/source.json
 ```
 
-The IPA must be re-signed with your Apple account using your installation tool. Signing renewal and available iCloud capabilities depend on your account and installer.
+An IPA has to be re-signed with your own Apple account in the install tool. How often it needs renewing, and which iCloud features work, depends on your account and tool.
 
 </details>
 
----
+### Android
 
-## 🚀 Quick Start Guide
+This is beta 1.0.0-beta.5, for Android 7.0 and later. It isn't on Google Play, so you download the APK yourself.
 
-1. **Connect Your Sites:** Tap **Enter Website Address** and type the URL of the site you want to use (e.g., Hitomi, Danbooru, Gelbooru). Pick from the autocomplete suggestions to connect right away. The app discovers and saves data and image server addresses from your chosen domain, then reuses them across launches. It discovers them again only when you change the website address or a server connection fails.
-2. **Switch Modes:** Use the **Book / Image switch** at the top of the screen to move between Comics Mode and Image Mode anytime.
-3. **Save Favorites:** **Long-press** any work in Explore or the viewer to save it immediately, and organize your collection into custom folders.
-4. **Import Existing Backups:** Easily bring your existing collection from **Violet** (`user.db` / `data.db`) or **Anime Boxes** (`.abbj`) in Settings.
+- [ARM64 APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk): the right one for most recent phones.
+- [Universal APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android.apk): covers 32-bit ARM, ARM64 and x86-64, if you're not sure what your device uses.
 
-| Feature | 📖 Comics Mode | 🖼️ Image Mode (Booru) |
-| --- | --- | --- |
-| **Browse** | Gallery search, popular feeds, artist collections | Multi-server search, latest/popular feeds, tag autocomplete |
-| **Viewer** | Configurable reading direction, continuous scroll, translation | High-res images, GIFs/videos, pools, notes, translation |
-| **Backup & Import** | Other manga viewer import & unified JSON backup | Anime Boxes import & unified JSON backup |
+Open the file to install it. If Android asks, allow installs from the browser or file app you downloaded it with, and nothing else. To update, install the new APK the same way. Changes and file hashes are on the [release page](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5).
 
-**Unified JSON backup:** In either mode, open **Settings / More → Library Management → Export JSON Backup** to save both libraries and challenge definitions in one `tegnal-backup.json` file. Restore both modes from the same screen; older separate backups remain supported. Media, caches, and sign-in details are excluded. Restored library data also syncs across devices when iCloud is enabled.
+It's a beta, and it doesn't match the Apple version yet. There's no iCloud sync, similar-work search, default save folder or automatic classification, and Smart is still the older version. Image translation hands off to the Google Translate app. Google Drive sync is currently off.
 
-> 💡 **Bonus Feature — Challenge Roulette**
-> Head to **More → Challenge Roulette** in Image Mode to practice timed croquis sketching or create your own custom roulette missions with reference images!
+## Getting started
 
----
+Open the app, tap Enter Website Address and type the address of a site you use, or pick one from the suggestions. TEGNAL finds that site's data and image servers and remembers them, and only looks again if you change the address or a connection fails.
 
-## 🛠️ Troubleshooting Connection Issues
+Coming from another app? Import your backup in Settings. TEGNAL reads Violet's `user.db` and `data.db` and Anime Boxes' `.abbj` files, then fills in missing covers, titles and tags from the connected site.
 
-- **Validate Client (Cloudflare, etc.):** If a site blocks automated requests, tap **Validate Client** on the error screen or in Server Settings to complete verification.
-- **Built-in Browser Mode:** If a site’s API is temporarily unavailable, turn on **Use Embedded Browser** in Settings for uninterrupted browsing.
-- **Danbooru Tag Limit:** Free Danbooru accounts are limited by the site to 2 tags per search. (Gelbooru and other servers do not have this limit.)
+To back up TEGNAL itself, go to Library Management under Settings or More and choose the JSON backup export. Your comics library, image library and challenges all go into one `tegnal-backup.json`, and the same screen restores both modes. Media, caches and sign-in details are left out.
 
----
+## If a site won't connect
 
-## 🛠️ Development
+- If a Cloudflare-style check blocks you, tap Validate Client on the error screen or in the server settings and complete it.
+- If that doesn't help, turn on Use Embedded Browser in Settings. It opens the site itself instead of the app's screens.
+- Danbooru's free accounts can only search two tags at a time, by site policy. Gelbooru and others don't have this limit.
 
-Native iOS sources live in `native-ios/TEGNAL`. Open `native-ios/TEGNAL.xcodeproj` and select the **TEGNAL** scheme. The minimum deployment target is iOS 17.
+## Development
 
-- **App bundle ID:** `work.nextline.tegnal`
-- **Share extension ID:** `work.nextline.tegnal.share`
-- **iCloud container:** `iCloud.work.nextline.tegnal`
+The iOS app lives in `native-ios/TEGNAL`. Open `native-ios/TEGNAL.xcodeproj` and choose the TEGNAL scheme. It needs iOS 17 or later.
 
-Device signing and distribution require matching Apple Developer configuration and provisioning profiles. These identifiers create a separate app from existing installations. Image-library and challenge JSON backups from earlier versions can still be imported.
+- App bundle ID: `work.nextline.tegnal`
+- Share extension ID: `work.nextline.tegnal.share`
+- iCloud container: `iCloud.work.nextline.tegnal`
 
----
+Signing and distributing to devices takes an Apple Developer setup and provisioning profiles for these identifiers. Different identifiers install as a separate app. Source code always reaches GitHub first.
 
-## 💬 Developer & Community
+## Contact
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nextline-logo-dark.svg">
   <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
 </picture>
 
-Have questions, feedback, or bug reports? Join our **Discord community** anytime!
+Bug reports and ideas are welcome on [Discord](https://discord.gg/vUTGZNMaMB).
 
-- **Developer:** NextLine
-- **Community / Bug Reports:** [Join Discord](https://discord.gg/vUTGZNMaMB)
-- **Website:** [nextline.work](https://nextline.work)
-- **Email:** [contact@nextline.work](mailto:contact@nextline.work)
+NextLine · [nextline.work](https://nextline.work) · [contact@nextline.work](mailto:contact@nextline.work)
 
----
-
-<sub>TEGNAL is an independent client application and is not affiliated with Apple or any user-connected websites.<br>
-<a href="docs/privacy-policy.md">Privacy Policy</a></sub>
+<sub>TEGNAL is an independent client, not affiliated with Apple or any site you connect to. · <a href="docs/privacy-policy.md">Privacy Policy</a></sub>

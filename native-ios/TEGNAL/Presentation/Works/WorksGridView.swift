@@ -8,6 +8,7 @@ public struct WorksGridView: View {
 
     public let folder: Folder?
     public let artist: String?
+    private let opensSearch: Bool
 
     @State private var works: [Work] = []
     @State private var reloadGeneration = 0
@@ -30,15 +31,24 @@ public struct WorksGridView: View {
     @State private var searchScroll = ScrollSearchVisibility()
     @State private var showJumpSheet = false
     @State private var pendingJump: Int64?
+    @State private var composingFolder = false
     @FocusState private var isSearchFocused: Bool
 
     public init(folder: Folder? = nil, artist: String? = nil) {
         self.folder = folder
         self.artist = artist
+        opensSearch = false
+    }
+
+    init(search: String) {
+        folder = nil
+        artist = nil
+        opensSearch = true
+        _searchText = State(initialValue: search)
     }
 
     private var isPushed: Bool {
-        folder != nil || artist != nil
+        folder != nil || artist != nil || opensSearch
     }
 
     public var body: some View {
@@ -72,6 +82,8 @@ public struct WorksGridView: View {
                                     }
                                     .contextMenu {
                                         workContextMenu(for: work)
+                                    } preview: {
+                                        WorkContextPreview(work: work)
                                     }
 
                             }
@@ -124,7 +136,7 @@ public struct WorksGridView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.backward")
                                 .font(.system(size: 14, weight: .bold))
-                            Text(artist ?? folder?.displayName ?? L10n.text("All"))
+                            Text(artist ?? folder?.displayName ?? L10n.text(opensSearch ? "Search Results" : "All"))
                                 .font(.system(size: 15, weight: .bold))
                         }
                         .foregroundColor(.primary)
@@ -156,6 +168,10 @@ public struct WorksGridView: View {
                         } label: { Image(systemName: "folder") }.frame(height: 32).accessibilityLabel(L10n.text("Move to Another Folder"))
                         Button(role: .destructive) { confirmingDelete = true } label: { Image(systemName: "trash") }.frame(height: 32).disabled(selection.isEmpty)
                     } else {
+                    if opensSearch {
+                        Button { composingFolder = true } label: { Image(systemName: "folder.badge.plus") }
+                            .frame(height: 32).disabled(works.isEmpty).accessibilityLabel(L10n.text("Create Folder from Results")).accessibilityIdentifier("works.createFolder")
+                    }
                     Menu {
                         Button(L10n.text("Jump to Top"), systemImage: "arrow.up.to.line") { isSearchFocused = false; proxy.scrollTo("works.top", anchor: .top) }
                         Button(L10n.text("Jump to Bottom"), systemImage: "arrow.down.to.line") {
@@ -194,6 +210,7 @@ public struct WorksGridView: View {
         .appSheet(isPresented: $showAddSheet, onDismiss: { loadWorks() }) {
             AddWorkSheet()
         }
+        .appSheet(isPresented: $composingFolder) { FolderRuleEditor(tag: searchText) }
         .alert(L10n.text("Delete Work"), isPresented: Binding(
             get: { workPendingDelete != nil },
             set: { if !$0 { workPendingDelete = nil } }

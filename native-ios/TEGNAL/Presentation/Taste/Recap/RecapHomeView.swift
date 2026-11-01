@@ -14,8 +14,6 @@ struct RecapHomeView: View {
     @State private var artwork: RecapArtwork?
     @State private var reading: RecapPresentation?
     @State private var openedArrival = false
-    @SwiftUI.AppStorage("recap.private") private var privateMode = false
-    private var hidesArtwork: Bool { privateMode || env.booruSafeMode }
     private var requestKey: String { "\(mode.rawValue):\(env.taste.control.analysisKey(mode)):\(env.booru.revision)" }
     init(mode: TasteMode, opening: Date? = nil) { _mode = State(initialValue: mode); self.opening = opening }
     var body: some View {
@@ -41,12 +39,8 @@ struct RecapHomeView: View {
                     AppModeSwitch(previewMode: Binding(get: { mode == .booru ? .booru : .manga }, set: { mode = $0 == .booru ? .booru : .comics }))
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { privateMode.toggle() } label: { Image(systemName: hidesArtwork ? "eye.slash" : "eye") }.disabled(env.booruSafeMode)
-                    .accessibilityLabel(L10n.text("Hide artwork in Recap")).accessibilityValue(L10n.text(hidesArtwork ? "On" : "Off")).accessibilityIdentifier("recap.private")
-            }
         }
-        .environment(\.recapPrivate, hidesArtwork)
+        .environment(\.recapPrivate, env.booruSafeMode)
         .task { if artwork == nil { artwork = RecapArtwork(env: env) } }
         .task(id: requestKey) {
             await shelf.load(mode: mode, env: env, key: requestKey)
@@ -55,7 +49,7 @@ struct RecapHomeView: View {
             if let artwork { for recap in ([shelf.latest, shelf.year, shelf.week, shelf.sample].compactMap { $0 } + shelf.pastIssues.prefix(8)) { await shelf.measure(recap, artwork: artwork, env: env) } }
         }
         .appFullScreenCover(item: $reading) { item in
-            RecapStoryView(recap: item.recap, palette: shelf.palette(item.recap)).environment(artwork ?? RecapArtwork(env: env)).environment(\.recapPrivate, hidesArtwork)
+            RecapStoryView(recap: item.recap, palette: shelf.palette(item.recap)).environment(artwork ?? RecapArtwork(env: env)).environment(\.recapPrivate, env.booruSafeMode)
         }
     }
     private func open(_ recap: TasteRecap) { reading = .init(recap: shelf.opened(recap), palette: shelf.palette(recap)) }
@@ -195,12 +189,6 @@ struct RecapHomeView: View {
     }
     private var privacy: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: $privateMode) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.text("Hide artwork in Recap")).font(.subheadline.weight(.medium))
-                    Text(L10n.text("Inside pages show colors instead of your works.")).font(.caption).foregroundStyle(.secondary)
-                }
-            }.disabled(env.booruSafeMode)
             Label(L10n.text("Made on this device from your own activity. Nothing is uploaded to build it."), systemImage: "lock").font(.footnote).foregroundStyle(.secondary)
             NavigationLink { TasteReportsView(mode: mode, period: .week) } label: { Label(L10n.text("Weekly statistics"), systemImage: "chart.bar.xaxis").font(.footnote.weight(.medium)) }
         }

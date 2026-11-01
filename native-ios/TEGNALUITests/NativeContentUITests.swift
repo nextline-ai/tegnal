@@ -590,7 +590,7 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
     }
 
-    func testWorkInformationHintAppearsBeforeAnyScrollingOnFirstOpen() {
+    func testWorkInformationLeadsWithTitleAndDetails() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "NO",
                                "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
@@ -602,22 +602,11 @@ final class NativeContentUITests: XCTestCase {
         menu(app)
         element(app, "reader.information").tap()
 
-        // Do not scroll or select a preview before checking the initial layout.
-        let hint = element(app, "content.detail.moreInformation")
-        XCTAssertTrue(hint.waitForExistence(timeout: 3))
-        XCTAssertTrue(hint.isHittable)
-        capture(app, "Work Information hint on first open without scrolling")
-        hint.tap()
+        // Do not scroll before checking the initial layout.
         let title = element(app, "content.detail.title")
-        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: title)
-        waitForExpectations(timeout: 5)
-        XCTAssertFalse(hint.exists)
-        app.buttons["완료"].tap()
-        XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3", "The hint must scroll without selecting a page")
-
-        element(app, "reader.information").tap()
-        XCTAssertTrue(hint.waitForExistence(timeout: 3), "Reopening must also show the hint without a scroll")
-        XCTAssertTrue(hint.isHittable)
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertTrue(title.isHittable)
+        XCTAssertFalse(element(app, "content.detail.moreInformation").exists)
     }
 
     func testHelpCanBeDismissedAndReopened() {

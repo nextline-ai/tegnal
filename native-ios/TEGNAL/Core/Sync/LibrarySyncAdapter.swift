@@ -60,7 +60,7 @@ struct LibrarySyncAdapter {
     let booru: BooruStore
     let mangaDefaults: UserDefaults
     let booruDefaults: UserDefaults
-    static let commonPreferences = ["site_verified", "app.language", "app_theme", "booru.app_theme", "manga.defaultTags", "manga.defaultExcludedTags", "search.retentionDays", "search.rememberHistory", "reader.translationLanguage"]
+    static let commonPreferences = ["site_verified", "app.language", "app_theme", "booru.app_theme", "manga.defaultTags", "manga.defaultExcludedTags", "manga.artistLanguage", "search.retentionDays", "search.rememberHistory", "reader.translationLanguage"]
     static let booruPreferences = ["search.retentionDays", "reader.translationLanguage", "booru.rememberHistory", "booru.showNotes"]
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],

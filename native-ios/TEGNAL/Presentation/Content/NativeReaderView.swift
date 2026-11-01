@@ -358,7 +358,7 @@ struct NativeReaderView: View {
         exit()
     }
     private func bookmark() {
-        saveFeedback = .perform { try ContentBookmarkAction.toggle(id: galleryID, gallery: gallery, env: env, images: images, context: discovery) }
+        saveFeedback = .perform(galleryID: galleryID) { try ContentBookmarkAction.toggle(id: galleryID, gallery: gallery, env: env, images: images, context: discovery) }
     }
     private func resolveOpening(continuing: Bool) {
         let resolved = opening.resolved(continuing: continuing)

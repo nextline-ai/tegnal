@@ -67,6 +67,7 @@ final class BooruUITests: XCTestCase {
         return firstTasteCard(app)
     }
     private func openEvidence(_ app: XCUIApplication) {
+        element(app, "taste.settings").tap()
         element(app, "taste.tuner").tap()
         reveal(app, "taste.evidence").tap()
     }
@@ -199,7 +200,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "taste.tag.detail").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Your evidence"].exists)
         capture(app, "AI taste evidence")
-        for _ in 0..<3 { app.navigationBars.buttons.element(boundBy: 0).tap() }
+        for _ in 0..<4 { app.navigationBars.buttons.element(boundBy: 0).tap() }
         app.navigationBars.buttons["Settings"].tap()
         element(app, "taste.settings.weekly").tap()
         XCTAssertTrue(app.staticTexts["Newly saved works"].waitForExistence(timeout: 5))
@@ -242,7 +243,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Why this work?"].exists)
         openEvidence(app)
         XCTAssertTrue(app.navigationBars["Recommendation evidence"].waitForExistence(timeout: 5))
-        for _ in 0..<2 { app.navigationBars.buttons.element(boundBy: 0).tap() }
+        for _ in 0..<3 { app.navigationBars.buttons.element(boundBy: 0).tap() }
         let next = reveal(app, "taste.work.221")
         XCTAssertTrue(next.waitForExistence(timeout: 10))
         capture(app, "AI infinite feed second page")
@@ -271,14 +272,14 @@ final class BooruUITests: XCTestCase {
         element(app, "taste.undo").tap()
         XCTAssertTrue(element(app, "taste.work.\(id)").waitForExistence(timeout: 5))
 
-        let thread = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "taste.thread.")).firstMatch
-        XCTAssertTrue(thread.waitForExistence(timeout: 5))
-        thread.tap()
+        options.tap()
+        app.buttons["More like this"].tap()
         XCTAssertTrue(element(app, "taste.focus.clear").waitForExistence(timeout: 10))
         capture(app, "Focused feed")
         element(app, "taste.focus.clear").tap()
-        XCTAssertTrue(element(app, "taste.tuner").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "taste.focus.clear").waitForNonExistence(timeout: 10))
 
+        element(app, "taste.settings").tap()
         element(app, "taste.tuner").tap()
         XCTAssertTrue(element(app, "taste.tuner.view").waitForExistence(timeout: 5))
         capture(app, "Taste tuner")
@@ -366,7 +367,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["female:sample"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["female:sole female"].exists)
         XCTAssertFalse(app.staticTexts["male:sole male"].exists)
-        for _ in 0..<2 { app.navigationBars.buttons.element(boundBy: 0).tap() }
+        for _ in 0..<3 { app.navigationBars.buttons.element(boundBy: 0).tap() }
         element(app, id).tap()
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
         let bar = app.navigationBars.firstMatch
@@ -406,6 +407,27 @@ final class BooruUITests: XCTestCase {
 
     /// Interleaves taps, double taps, drags and tab changes. A control that stops
     /// answering fails here with the iteration and a capture of that moment.
+    func testSavedTagOpensInASheetThatClosesWhenPulledDown() {
+        let app = launch()
+        selectMode(app, "manga")
+        app.tabBars.buttons["Tags"].tap()
+        let name = element(app, "manga.savedName")
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("sample")
+        element(app, "manga.saveTag").tap()
+        app.swipeDown(velocity: .fast)
+        app.swipeDown(velocity: .fast)
+        let saved = app.staticTexts["sample"].firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 5))
+        saved.tap()
+        let close = element(app, "content.close")
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        capture(app, "saved tag sheet")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)))
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5), "Pulling down must close the sheet")
+    }
+
     func testModeSwitchKeepsAnsweringUnderRepeatedInput() {
         let app = launch(extra: ["--taste-ui-rich"])
         let iterations = Int(ProcessInfo.processInfo.environment["TEGNAL_MODE_STRESS"] ?? "") ?? 40

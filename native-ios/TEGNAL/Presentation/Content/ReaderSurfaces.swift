@@ -308,12 +308,37 @@ private struct ArtworkTagCloudItem: View {
     }
     private var label: some View {
         HStack(spacing: 4) {
-            if saved { Image(systemName: "star.fill").font(.caption).foregroundStyle(.yellow) }
+            if saved { SavedTagStar(font: .caption) }
             Text(tag.name)
         }.foregroundStyle(tag.category.color).modifier(ArtworkTagPill(color: tag.category.color))
+            .modifier(SavedTagResponse(saved: saved))
     }
 }
 
+
+struct SavedTagStar: View {
+    let font: Font
+    var body: some View {
+        Image(systemName: "star.fill").font(font).foregroundStyle(.yellow)
+            .transition(.scale(scale: 0.2).combined(with: .opacity))
+    }
+}
+
+/// Confirms a hold on a tag: the pill gives one soft bounce as its star arrives or leaves.
+struct SavedTagResponse: ViewModifier {
+    let saved: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content
+            .animation(reduceMotion ? nil : .spring(duration: 0.32, bounce: 0.45), value: saved)
+            .keyframeAnimator(initialValue: CGFloat(1), trigger: saved) { view, scale in
+                view.scaleEffect(reduceMotion ? 1 : scale)
+            } keyframes: { _ in
+                CubicKeyframe(saved ? 1.16 : 0.92, duration: 0.11)
+                SpringKeyframe(1, duration: 0.34, spring: .bouncy)
+            }
+    }
+}
 
 struct ArtworkTagPill: ViewModifier {
     let color: Color

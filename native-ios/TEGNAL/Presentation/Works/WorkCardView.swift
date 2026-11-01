@@ -88,13 +88,14 @@ struct GalleryCardLayout<Cover: View>: View {
     let title: String
     let artists: String
     let language: String
+    var showsLanguage = true
     var recommendationTag: String? = nil
     @ViewBuilder let cover: () -> Cover
     var body: some View {
         VStack(alignment: .leading, spacing: style.inset(6)) {
             ZStack(alignment: .bottomTrailing) {
                 Color.clear.aspectRatio(0.72, contentMode: .fit).overlay { cover() }.clipped()
-                if !language.isEmpty {
+                if showsLanguage, !language.isEmpty {
                     Text(language).font(.system(size: style.fontSize(badgeSize), weight: .bold)).padding(.horizontal, style.inset(6)).padding(.vertical, style.inset(2))
                         .background(.ultraThinMaterial, in: Capsule()).padding(style.inset(6))
                 }
@@ -133,6 +134,34 @@ public struct WorkCardView: View {
                 }
             }
         }
+    }
+}
+
+/// Shown while a card is held, so reading a work's details takes no second tap.
+struct WorkContextPreview: View {
+    let work: Work
+    private var details: String {
+        [work.language, work.type].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+    private var tags: [ArtworkTag] {
+        let names = (work.tags ?? "").components(separatedBy: ", ")
+        return ArtworkTagGroup.make(tags: names).flatMap(\.tags).filter { $0.category != .language && $0.category != .artist }
+    }
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            LocalThumbnailView(path: work.thumbStatus == "ready" ? work.thumbPath : nil, revision: String(work.thumbPage ?? 1)) { image in
+                if let image { Image(uiImage: image).resizable().scaledToFill() }
+                else { Rectangle().fill(Color.secondary.opacity(0.12)) }
+            }.frame(width: 104, height: 148).clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(work.hasTitle ? work.title ?? "" : String(work.galleryId)).font(.headline).lineLimit(3)
+                if let artists = work.artists, !artists.isEmpty { Text(artists).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
+                if !details.isEmpty { Text(details).font(.footnote).foregroundStyle(.secondary).lineLimit(1) }
+                if !tags.isEmpty {
+                    Text(tags.prefix(6).map(\.name).joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(14).frame(width: 340, alignment: .topLeading)
     }
 }
 

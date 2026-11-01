@@ -310,8 +310,10 @@ private struct SavedCollectionResults: ViewModifier {
             .navigationDestination(item: Binding(get: { model.isManga ? nil : opened }, set: { opened = $0 })) { entry in
                 if let server = model.server { BooruFeedView(server: server, source: source, initialQuery: model.query(entry)) }
             }
-            .appFullScreenCover(item: Binding(get: { model.isManga ? opened : nil }, set: { opened = $0 })) { entry in
+            .appSheet(item: Binding(get: { model.isManga ? opened : nil }, set: { opened = $0 })) { entry in
                 ContentEntryView(initialUrl: mangaURL(model.query(entry)))
+                    .environment(\.feedClosesOnPull, true)
+                    .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
     }
     private func mangaURL(_ query: String) -> String {

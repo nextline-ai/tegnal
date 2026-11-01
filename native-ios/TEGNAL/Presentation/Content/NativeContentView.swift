@@ -182,8 +182,22 @@ private struct ContentBookmark: Identifiable {
     let id: Int64
 }
 
+/// A pull at the top of a feed either refreshes it or, in a sheet, closes the sheet.
+extension EnvironmentValues {
+    @Entry var feedClosesOnPull = false
+}
+
+private struct FeedRefresh: ViewModifier {
+    let enabled: Bool
+    let action: () async -> Void
+    func body(content: Content) -> some View {
+        if enabled { content.refreshable { await action() } } else { content }
+    }
+}
+
 private struct GalleryFeedView: View {
     @Environment(\.mangaReaderSequence) private var readerSequence
+    @Environment(\.feedClosesOnPull) private var closesOnPull
     @Environment(\.scenePhase) private var scenePhase
     @State private var isVisible = false
     @Environment(\.discoveryContext) private var inheritedContext
@@ -196,6 +210,7 @@ private struct GalleryFeedView: View {
     @State private var toast: String?
     @State private var saveFeedback: WorkSaveFeedback?
     let artist: String?
+    private let browsesArtist: Bool
     let source: any ContentProviding
     let images: PageImageStore
     let navigate: (ContentRoute) -> Void
@@ -223,7 +238,9 @@ private struct GalleryFeedView: View {
         self.images = images
         _loader = State(initialValue: GalleryFeedLoader(source: source, images: images, startup: startup))
         self.navigate = navigate
-        _query = State(initialValue: GalleryQuery(language: artist == nil && initialQuery.isEmpty ? L10n.contentLanguage : "all", artist: artist, text: initialQuery))
+        let browsesArtist = artist != nil || ArtistBrowsing.matches(initialQuery)
+        self.browsesArtist = browsesArtist
+        _query = State(initialValue: GalleryQuery(language: browsesArtist ? ArtistBrowsing.language : initialQuery.isEmpty ? L10n.contentLanguage : "all", artist: artist, text: initialQuery))
         _searchText = State(initialValue: initialQuery)
     }
 
@@ -263,7 +280,7 @@ private struct GalleryFeedView: View {
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
                     ForEach(visibleEntries, id: \.element) { index, id in
                         GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
-                            saveFeedback = .perform { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
+                            saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
                         }
                         .id(id)
                         .onAppear {
@@ -281,6 +298,13 @@ private struct GalleryFeedView: View {
                 VStack {
                     if loader.loading { ProgressView(L10n.text("Loading")).accessibilityIdentifier("content.loading") }
                     else if let error = loader.error { ContentFailureView(message: error) { loader.retry(effectiveQuery) } }
+                    else if loader.ids.isEmpty, browsesArtist, query.language != "all" {
+                        ContentUnavailableView {
+                            Label(L10n.text("No Works in This Language"), systemImage: "globe")
+                        } actions: {
+                            Button(L10n.text("Show All Languages")) { query.language = "all" }.accessibilityIdentifier("content.allLanguages")
+                        }
+                    }
                     else if loader.ids.isEmpty { ContentUnavailableView.search(text: query.text) }
                     else if loader.hasMore {
                         Button(L10n.text("Load More")) { loader.load(effectiveQuery, reset: false) }
@@ -346,6 +370,7 @@ private struct GalleryFeedView: View {
         }
         .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
         .onChange(of: isSearchFocused) { _, focused in if focused { isSearchBarVisible = true; reloadSearches() } }
+        .onChange(of: query.language) { _, language in if browsesArtist { ArtistBrowsing.language = language } }
         .task(id: "\(isSearchFocused):\(searchText)") {
             suggestions = []; suggesting = false
             guard isSearchFocused, let context = TagCompletionContext(searchText) else { return }
@@ -406,11 +431,11 @@ private struct GalleryFeedView: View {
             guard isVisible else { return }
             if active { resumeFeed() } else { loader.suspend() }
         }
-        .refreshable {
+        .modifier(FeedRefresh(enabled: !closesOnPull) {
             let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             if query.text != text { query.text = text }
             else { await loader.load(effectiveQuery, reset: true).value }
-        }
+        })
         .onAppear {
             let loader = loader, environment = env
             readerSequence?.prepareReturn = { [weak loader, weak environment] opened, viewed in
@@ -578,7 +603,6 @@ struct GalleryWorkInformation: View {
     var cover: UIImage? = nil
     var coverFinished = true
     var showsCover = true
-    var previewsFirst = false
     var read: (() -> Void)? = nil
     let selectPage: (Int) -> Void
     var search: ((String) -> Void)? = nil
@@ -587,77 +611,26 @@ struct GalleryWorkInformation: View {
 
     var body: some View {
         GeometryReader { viewport in
-            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    if previewsFirst {
-                        GalleryDetailPreviews(gallery: gallery, images: images, enabled: true, select: selectPage)
-                    }
-                    VStack(spacing: 0) {
-                        Color.clear.frame(height: 1).id("gallery.metadata")
-                        GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
+                    GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
                         showsCover: showsCover, read: read,
                         bookmark: { bookmark = ContentBookmark(id: gallery.id) }, search: search)
-                    }
-                        .anchorPreference(key: GalleryMetadataBounds.self, value: .bounds) { $0 }
                         .onGeometryChange(for: Bool.self) { geometry in
-                            !previewsFirst && GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
+                            GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
                                                              viewportHeight: viewport.size.height)
                         } action: { if $0 { previewsEnabled = true } }
-                    if !previewsFirst {
-                        GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled, select: selectPage)
-                            .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
-                    }
+                    GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled, select: selectPage)
+                        .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
                     MangaContentControls(gallery: gallery)
                 }.padding(20)
             }
             .coordinateSpace(name: "gallery.detailViewport")
             .accessibilityIdentifier("content.detail.scroll")
-            .overlayPreferenceValue(GalleryMetadataBounds.self) { anchor in
-                GeometryReader { visibleViewport in
-                    if previewsFirst, let anchor,
-                       visibleViewport[anchor].minY > visibleViewport.size.height - 64 {
-                        VStack {
-                            Spacer(minLength: 0)
-                            GalleryInformationScrollHint {
-                                withAnimation(.easeInOut(duration: 0.28)) { scrollProxy.scrollTo("gallery.metadata", anchor: .top) }
-                            }
-                        }
-                    }
-                }
-            }
-            }
         }
         .appSheet(item: $bookmark) { target in
             AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery)
         }
-    }
-}
-
-private struct GalleryMetadataBounds: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>? { nil }
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
-}
-
-private struct GalleryInformationScrollHint: View {
-    let scroll: () -> Void
-    var body: some View {
-        Button(action: scroll) {
-            Image(systemName: "chevron.down")
-                .font(.title3.weight(.bold)).foregroundStyle(.white.opacity(0.9))
-                .frame(maxWidth: .infinity, minHeight: 64)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background {
-            LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
-                                   .init(color: .black.opacity(0.82), location: 0.65),
-                                   .init(color: .black.opacity(0.95), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .bottom).allowsHitTesting(false)
-        }
-        .accessibilityLabel(L10n.text("Scroll to Work Information"))
-        .accessibilityIdentifier("content.detail.moreInformation")
     }
 }
 
@@ -669,7 +642,7 @@ struct ReaderWorkInformationView: View {
     let search: (String) -> Void
     var body: some View {
         NavigationStack {
-            GalleryWorkInformation(gallery: gallery, images: images, showsCover: false, previewsFirst: true,
+            GalleryWorkInformation(gallery: gallery, images: images, showsCover: false,
                 selectPage: { current = $0; dismiss() }, search: search)
                 .navigationTitle(L10n.text("Work Details")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
@@ -740,7 +713,7 @@ private struct GalleryDetailMetadata: View {
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Tags")).font(.headline)
+                SettingsHelpLabel("Tags", help: "Hold an artist or tag to add it to your favorites. Hold it again to remove it.").font(.headline)
                 if groups.allSatisfy({ $0.tags.isEmpty }) { MetadataPlaceholder() }
                 ArtworkTagCloud(groups: groups, headingStyle: .detail,
                     destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
@@ -755,11 +728,13 @@ private struct GalleryDetailMetadata: View {
             Button(L10n.text("Done"), role: .cancel) { favoriteError = nil }
         } message: { Text(favoriteError ?? "") }
     }
+    private var languageSaved: Bool { savedTagQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true)) }
     private var languageTag: some View {
         HStack(spacing: 4) {
-            if savedTagQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true)) { Image(systemName: "star.fill").foregroundStyle(.yellow) }
+            if languageSaved { SavedTagStar(font: .body) }
             Text(gallery.language)
         }.foregroundStyle(ArtworkTagCategory.language.color).modifier(ArtworkTagPill(color: ArtworkTagCategory.language.color))
+            .modifier(SavedTagResponse(saved: languageSaved))
     }
     private func isFavorite(_ name: String) -> Bool {
         favoriteArtists.contains { MangaArtistFavorite.key($0) == MangaArtistFavorite.key(name) }
@@ -851,10 +826,11 @@ private struct MangaArtistTag: View {
     }
     private var tag: some View {
         HStack(spacing: 4) {
-            if favorite { Image(systemName: "star.fill").foregroundStyle(.yellow) }
+            if favorite { SavedTagStar(font: .body) }
             Text(name.replacingOccurrences(of: "_", with: " "))
         }.foregroundStyle(ArtworkTagCategory.artist.color)
             .modifier(ArtworkTagPill(color: ArtworkTagCategory.artist.color))
+            .modifier(SavedTagResponse(saved: favorite))
     }
 }
 

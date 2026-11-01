@@ -463,21 +463,11 @@ public final class AppDatabase: Sendable {
             arguments.append("%\(artist)%")
         }
 
-        if let query, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let idQuery = Int64(trimmed) {
-                conditions.append("(w.gallery_id = ? OR w.title LIKE ? OR w.artists LIKE ? OR w.tags LIKE ? OR w.note LIKE ?)")
-                arguments.append(idQuery)
-                arguments.append("%\(trimmed)%")
-                arguments.append("%\(trimmed)%")
-                arguments.append("%\(trimmed)%")
-                arguments.append("%\(trimmed)%")
-            } else {
-                conditions.append("(w.title LIKE ? OR w.artists LIKE ? OR w.tags LIKE ? OR w.note LIKE ?)")
-                arguments.append("%\(trimmed)%")
-                arguments.append("%\(trimmed)%")
-                arguments.append("%\(trimmed)%")
-                arguments.append("%\(trimmed)%")
+        if let query {
+            let search = WorkQuery(query).conditions
+            if !search.sql.isEmpty {
+                conditions.append(search.sql)
+                arguments += search.arguments
             }
         }
 
@@ -564,6 +554,7 @@ public final class AppDatabase: Sendable {
             let now = ISO8601DateFormatter().string(from: Date())
             var work = try Work.filter(Work.Columns.galleryId == galleryId).fetchOne(db)
             let wasNew = work == nil
+            let lackedTags = (work?.tags ?? "").isEmpty
 
             if var existing = work {
                 if overwriteMetadata || existing.metadataSource != "manual" {
@@ -626,6 +617,9 @@ public final class AppDatabase: Sendable {
                 }
             }
 
+            if lackedTags, wasNew || !(work?.tags ?? "").isEmpty, let workId = work?.id {
+                try Self.applyFolderRules(toWork: workId, now: now, db: db)
+            }
             if wasNew, let discoveryContext { try TasteStore.record(.save, item: .comic(galleryId, tags: work?.tags), context: discoveryContext, db: db) }
             else if wasNew { try TasteStore.record(.imported, item: .comic(galleryId, tags: work?.tags), db: db) }
             else if !wasNew { try TasteStore.record(.metadata, item: .comic(galleryId, tags: work?.tags), db: db) }

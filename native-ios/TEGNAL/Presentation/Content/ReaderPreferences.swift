@@ -396,11 +396,19 @@ enum ReaderLayout {
     }
 }
 
+/// Lets a removal made by accident come back to where it was, for as long as the app runs.
+struct RemovedBookmark {
+    let folders: [Int64]
+    let note: String?
+}
+
 @MainActor
 enum ContentBookmarkAction {
     static func toggle(id: Int64, gallery: NativeGallery?, env: AppEnvironment, images: PageImageStore? = nil, context: DiscoveryContext = .unknown) throws -> WorkSaveResult {
-        if try env.database.getWork(galleryId: id) != nil {
+        if let work = try env.database.getWork(galleryId: id) {
+            let folders = try env.database.folderIDs(galleryId: id)
             try env.database.deleteWork(galleryId: id)
+            env.removedBookmarks[id] = RemovedBookmark(folders: folders, note: work.note)
             return .removed(.comics)
         }
         return try save(id: id, gallery: gallery, env: env, images: images, context: context)
@@ -408,11 +416,14 @@ enum ContentBookmarkAction {
 
     static func save(id: Int64, gallery: NativeGallery?, env: AppEnvironment, images: PageImageStore? = nil, context: DiscoveryContext = .unknown) throws -> WorkSaveResult {
         if try env.database.getWork(galleryId: id) != nil { return .unchanged(.comics) }
-        let folders = try env.database.listFolders()
-        let folder = try folders.first(where: { $0.name == "미분류" }) ?? folders.first ?? env.database.ensureDefaultFolder()
-        _ = try env.database.upsertWork(galleryId: id, folderId: folder.id,
+        let removed = env.removedBookmarks.removeValue(forKey: id)
+        let existing = Set(try env.database.listFolders().compactMap(\.id))
+        let restored = (removed?.folders ?? []).filter(existing.contains)
+        _ = try env.database.upsertWork(galleryId: id, folderId: try restored.first ?? env.database.defaultSaveFolder().id,
             title: gallery?.title, artists: gallery?.artists.joined(separator: ", "),
             language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", discoveryContext: context)
+        for folder in restored.dropFirst() { try env.database.setWork(galleryId: id, folderID: folder, included: true) }
+        if let note = removed?.note { try env.database.setNote(galleryId: id, note: note) }
         if let gallery, let page = gallery.pages.first, let images {
             Task {
                 do {
@@ -474,8 +485,11 @@ enum WorkSaveResult: Equatable {
 struct WorkSaveFeedback: Identifiable {
     let id = UUID()
     let result: WorkSaveResult
-    @MainActor init(_ result: WorkSaveResult) {
+    /// The saved comic, while its folder can still be changed from this notice.
+    var galleryID: Int64?
+    @MainActor init(_ result: WorkSaveResult, galleryID: Int64? = nil) {
         self.result = result
+        if result == .added(.comics) { self.galleryID = galleryID }
         Self.haptic(result)
         if UIAccessibility.isVoiceOverRunning { UIAccessibility.post(notification: .announcement, argument: result.message) }
     }
@@ -486,8 +500,8 @@ struct WorkSaveFeedback: Identifiable {
         case .failed: UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
-    @MainActor static func perform(_ action: () throws -> WorkSaveResult) -> Self {
-        do { return Self(try action()) } catch { return Self(.failed) }
+    @MainActor static func perform(galleryID: Int64? = nil, _ action: () throws -> WorkSaveResult) -> Self {
+        do { return Self(try action(), galleryID: galleryID) } catch { return Self(.failed) }
     }
 }
 @MainActor enum BooruFavoriteAction {
@@ -500,26 +514,35 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
     @Binding var feedback: WorkSaveFeedback?
     let identifier: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var filing: WorkFolderTarget?
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
             if let feedback {
-                Label { Text(feedback.result.message).font(.subheadline.weight(.semibold)) } icon: {
-                    Image(systemName: feedback.result.icon).foregroundStyle(feedback.result.color)
+                HStack(spacing: 12) {
+                    Label { Text(feedback.result.message).font(.subheadline.weight(.semibold)) } icon: {
+                        Image(systemName: feedback.result.icon).foregroundStyle(feedback.result.color)
+                    }
+                    .accessibilityElement(children: .ignore).accessibilityLabel(feedback.result.message)
+                    .accessibilityIdentifier(identifier)
+                    if let id = feedback.galleryID {
+                        Button(L10n.text("Change Folder")) { filing = WorkFolderTarget(id: id); self.feedback = nil }
+                            .font(.subheadline.weight(.semibold)).accessibilityIdentifier(identifier + ".folder")
+                    }
                 }
                 .padding(.horizontal, 18).padding(.vertical, 12)
                 .background(.regularMaterial, in: Capsule())
                 .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-                .padding(16).allowsHitTesting(false)
-                .accessibilityElement(children: .ignore).accessibilityLabel(feedback.result.message)
-                .accessibilityIdentifier(identifier)
+                .padding(16).allowsHitTesting(feedback.galleryID != nil)
+                .accessibilityElement(children: .contain)
                 .transition(.opacity.combined(with: reduceMotion ? .identity : .scale(scale: 0.96)))
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: feedback?.id)
         .task(id: feedback?.id) {
-            guard feedback != nil else { return }
-            do { try await Task.sleep(for: .seconds(3)); feedback = nil } catch { }
+            guard let current = feedback else { return }
+            do { try await Task.sleep(for: .seconds(current.galleryID == nil ? 3 : 5)); feedback = nil } catch { }
         }
+        .appSheet(item: $filing) { WorkFolderSheet(galleryID: $0.id) }
     }
 }
 extension View {

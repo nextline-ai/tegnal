@@ -10,6 +10,7 @@
 		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
 		097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E58A1895DEFCCC8FD809D45F /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift */; };
 		09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */; };
+		A43254566954AE0472A2ECB5 /* TEGNALTests/FolderRuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EB7F719B8EB17FEC39FC684 /* TEGNALTests/FolderRuleTests.swift */; };
 		4007874F595BF8034395DA15 /* TEGNALTests/TasteLearningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3291A41034E600887DB1CAF /* TEGNALTests/TasteLearningTests.swift */; };
 		29D634933AAA5D8400EAFF61 /* TEGNALTests/TasteRecapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */; };
 		09F96FACC7155FD7B5D16E12 /* TEGNALApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36718E50F5349D3C2AF44634 /* TEGNALApp.swift */; };
@@ -52,6 +53,9 @@
 		56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80B56E655528C707020F8BD7 /* PageImageStore.swift */; };
 		57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */; };
 		4288EA3863FB4AFDEE4F0C41 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */; };
+		6728A9A724BC2A84FE73ECC5 /* TEGNAL/Core/Storage/WorkQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 181970C87C4678D09A8C818A /* TEGNAL/Core/Storage/WorkQuery.swift */; };
+		A376BA968A3E8BE4679CAC67 /* TEGNAL/Core/Storage/FolderRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBE32C7A6933F9927C0A06C /* TEGNAL/Core/Storage/FolderRules.swift */; };
+		9F2D714558ACA560A9EA4291 /* TEGNAL/Presentation/Folders/FolderRuleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A3ABEC416D3CA66693D332 /* TEGNAL/Presentation/Folders/FolderRuleViews.swift */; };
 		2EDCF110A2840C969D671258 /* TEGNAL/Core/Taste/TasteLearning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43528A30366E16F7CA3BF12E /* TEGNAL/Core/Taste/TasteLearning.swift */; };
 		545411A0C8D7E98E33A2FD7C /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */; };
 		CAC5EC89EBAE2736353A8B53 /* TEGNAL/Core/Taste/TasteRecap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */; };
@@ -258,6 +262,7 @@
 		5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSurfaces.swift; sourceTree = "<group>"; };
 		53837377DFD8F9DCA3416A89 /* nextline-logo.svg */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "nextline-logo.svg"; sourceTree = "<group>"; };
 		5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/TasteTests.swift; sourceTree = SOURCE_ROOT; };
+		6EB7F719B8EB17FEC39FC684 /* TEGNALTests/FolderRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/FolderRuleTests.swift; sourceTree = SOURCE_ROOT; };
 		B3291A41034E600887DB1CAF /* TEGNALTests/TasteLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/TasteLearningTests.swift; sourceTree = SOURCE_ROOT; };
 		9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/TasteRecapTests.swift; sourceTree = SOURCE_ROOT; };
 		54D631F53A129A6A3F5ADDDD /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -360,6 +365,9 @@
 		F6728E31C6CB18E178E6ECE0 /* TEGNAL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TEGNAL.entitlements; sourceTree = "<group>"; };
 		F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteAnalyzer.swift; sourceTree = SOURCE_ROOT; };
 		78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift; sourceTree = SOURCE_ROOT; };
+		181970C87C4678D09A8C818A /* TEGNAL/Core/Storage/WorkQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Storage/WorkQuery.swift; sourceTree = SOURCE_ROOT; };
+		7BBE32C7A6933F9927C0A06C /* TEGNAL/Core/Storage/FolderRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Storage/FolderRules.swift; sourceTree = SOURCE_ROOT; };
+		85A3ABEC416D3CA66693D332 /* TEGNAL/Presentation/Folders/FolderRuleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Folders/FolderRuleViews.swift; sourceTree = SOURCE_ROOT; };
 		43528A30366E16F7CA3BF12E /* TEGNAL/Core/Taste/TasteLearning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteLearning.swift; sourceTree = SOURCE_ROOT; };
 		359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/Smart/SmartViews.swift; sourceTree = SOURCE_ROOT; };
 		000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteRecap.swift; sourceTree = SOURCE_ROOT; };
@@ -498,6 +506,7 @@
 			children = (
 				40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */,
 				5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */,
+				6EB7F719B8EB17FEC39FC684 /* TEGNALTests/FolderRuleTests.swift */,
 				B3291A41034E600887DB1CAF /* TEGNALTests/TasteLearningTests.swift */,
 				9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */,
 				9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */,
@@ -616,6 +625,9 @@
 				40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */,
 				F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */,
 				78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */,
+				181970C87C4678D09A8C818A /* TEGNAL/Core/Storage/WorkQuery.swift */,
+				7BBE32C7A6933F9927C0A06C /* TEGNAL/Core/Storage/FolderRules.swift */,
+				85A3ABEC416D3CA66693D332 /* TEGNAL/Presentation/Folders/FolderRuleViews.swift */,
 				43528A30366E16F7CA3BF12E /* TEGNAL/Core/Taste/TasteLearning.swift */,
 				359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */,
 				000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */,
@@ -999,6 +1011,9 @@
 				A8DEA1F1E17A02BB561A1CD2 /* TEGNAL/Core/Taste/TasteStore.swift in Sources */,
 				57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */,
 				4288EA3863FB4AFDEE4F0C41 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift in Sources */,
+				6728A9A724BC2A84FE73ECC5 /* TEGNAL/Core/Storage/WorkQuery.swift in Sources */,
+				A376BA968A3E8BE4679CAC67 /* TEGNAL/Core/Storage/FolderRules.swift in Sources */,
+				9F2D714558ACA560A9EA4291 /* TEGNAL/Presentation/Folders/FolderRuleViews.swift in Sources */,
 				2EDCF110A2840C969D671258 /* TEGNAL/Core/Taste/TasteLearning.swift in Sources */,
 				545411A0C8D7E98E33A2FD7C /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift in Sources */,
 				CAC5EC89EBAE2736353A8B53 /* TEGNAL/Core/Taste/TasteRecap.swift in Sources */,
@@ -1122,6 +1137,7 @@
 				69BEADC98520A8FFD8B0D31C /* GalleryIDParserTests.swift in Sources */,
 				BA64A4EEBAEB6973149849AB /* GridLayoutTests.swift in Sources */,
 				09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */,
+				A43254566954AE0472A2ECB5 /* TEGNALTests/FolderRuleTests.swift in Sources */,
 				4007874F595BF8034395DA15 /* TEGNALTests/TasteLearningTests.swift in Sources */,
 				29D634933AAA5D8400EAFF61 /* TEGNALTests/TasteRecapTests.swift in Sources */,
 				DFF9E986805DDE834086C1C5 /* TEGNALTests/TasteFeedTests.swift in Sources */,

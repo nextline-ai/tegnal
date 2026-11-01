@@ -25,16 +25,17 @@ struct RecommendationMenu: View {
 }
 
 /// How far the feed reaches, then today's threads with the tuner at their head.
+/// Sections breathe more than the works inside them, which stay close together.
+enum SmartSpacing {
+    static let section: CGFloat = 40
+    static let heading: CGFloat = 16
+}
+
 struct SmartSteering: View {
-    let mode: TasteMode
     let feed: TasteFeedState
-    let source: String
     let refresh: () -> Void
     let focus: (TasteFocus?) -> Void
     @Environment(AppEnvironment.self) private var env
-    private var threads: [TasteLearnedTag] {
-        Array((feed.learning?.recentTags ?? []).filter { env.taste.control.allows($0.name, source: $0.source, mode: mode) }.prefix(8))
-    }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Picker(L10n.text("How far to reach"), selection: Binding(get: { env.taste.control.discoveryLevel ?? 1 }, set: { value in
@@ -42,26 +43,12 @@ struct SmartSteering: View {
             })) {
                 Text(L10n.text("Familiar")).tag(0); Text(L10n.text("Balanced")).tag(1); Text(L10n.text("Adventurous")).tag(2)
             }.pickerStyle(.segmented).accessibilityIdentifier("taste.discovery")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    NavigationLink { TasteTunerView(mode: mode, feed: feed, source: source, refresh: refresh) } label: {
-                        Image(systemName: "dial.low").font(.subheadline.weight(.semibold)).foregroundStyle(.primary).frame(width: 40, height: 34).background(.quaternary.opacity(0.5), in: Capsule())
-                    }.accessibilityLabel(L10n.text("Tune your taste")).accessibilityIdentifier("taste.tuner")
-                    if let active = feed.focus {
-                        Button { focus(nil) } label: {
-                            Label(active.why.label, systemImage: "xmark").font(.subheadline.weight(.semibold)).lineLimit(1)
-                                .padding(.horizontal, 12).frame(height: 34).foregroundStyle(.white).background(TastePresentation.accent, in: Capsule())
-                        }.buttonStyle(.plain).accessibilityIdentifier("taste.focus.clear")
-                    } else {
-                        ForEach(threads) { tag in
-                            Button { focus(.init(seed: .init(source: tag.source, name: tag.name, general: tag.saves), why: .recent(tag.name))) } label: {
-                                Text(RecapText.tag(tag.name)).font(.subheadline).lineLimit(1)
-                                    .padding(.horizontal, 12).frame(height: 34).background(.quaternary.opacity(0.5), in: Capsule())
-                            }.buttonStyle(.plain).accessibilityHint(L10n.text("Shows only this for now")).accessibilityIdentifier("taste.thread.\(tag.name)")
-                        }
-                    }
-                }.padding(.horizontal, 20)
-            }.padding(.horizontal, -20)
+            if let active = feed.focus {
+                Button { focus(nil) } label: {
+                    Label(active.why.label, systemImage: "xmark").font(.subheadline.weight(.semibold)).lineLimit(1)
+                        .padding(.horizontal, 12).frame(height: 34).foregroundStyle(.white).background(TastePresentation.accent, in: Capsule())
+                }.buttonStyle(.plain).accessibilityIdentifier("taste.focus.clear")
+            }
         }
     }
 }
@@ -107,8 +94,8 @@ struct SmartPicksView: View {
     @Environment(AppEnvironment.self) private var env
     private func saved(_ item: TasteRecommendation) -> Bool { item.post.map { env.booru.favoriteIDs.contains($0.id) } ?? bookmarks.contains(item.item.id) }
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SmartSpacing.heading) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.text("Today's picks")).font(.title3.bold()).lineLimit(1).accessibilityAddTraits(.isHeader)
                 Text(L10n.text("One each from your usual taste, recent interests and something new.")).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -141,8 +128,8 @@ struct SmartShelfView: View {
     let bookmarks: Set<Int64>
     let feedback: RecommendationFeedback
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SmartSpacing.heading) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(shelf.plan.title).font(.title3.bold()).lineLimit(1).accessibilityAddTraits(.isHeader)
                 Text(shelf.plan.why.sentence).font(.footnote).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }

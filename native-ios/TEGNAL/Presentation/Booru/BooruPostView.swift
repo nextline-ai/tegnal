@@ -669,7 +669,8 @@ struct BooruPostView: View {
                     }
                 }
             } label: {
-                Image(systemName: store.savedTags(serverID: server.id, kind: SavedCollectionKind(category: category).rawValue).contains(tag) ? "star.fill" : "ellipsis.circle")
+                let saved = store.savedTags(serverID: server.id, kind: SavedCollectionKind(category: category).rawValue).contains(tag)
+                Image(systemName: saved ? "star.fill" : "ellipsis.circle").symbolEffect(.bounce, value: saved)
             }.buttonStyle(.borderless)
         }
     }

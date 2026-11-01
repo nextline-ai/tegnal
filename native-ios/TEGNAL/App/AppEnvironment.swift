@@ -270,6 +270,7 @@ public final class AppEnvironment: @unchecked Sendable {
     public let mangaViewerImporter: MangaViewerImportService
     let booru: BooruStore
     let modeSwitchMotion = AppModeSwitchMotion()
+    @ObservationIgnored var removedBookmarks: [Int64: RemovedBookmark] = [:]
 
     private var selectedMode: AppMode
     var mode: AppMode {

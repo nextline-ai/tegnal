@@ -1,6 +1,11 @@
 import SwiftUI
 import GRDB
 
+private struct SavedWorksSearch: Identifiable, Hashable {
+    let query: String
+    var id: String { query }
+}
+
 public struct FoldersView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
@@ -20,6 +25,9 @@ public struct FoldersView: View {
     @State private var editError: String?
     @State private var reordering = false
     @State private var folderMessage: String?
+    @State private var composing = false
+    @State private var searchText = ""
+    @State private var searchResults: SavedWorksSearch?
 
 
     public init() {}
@@ -67,6 +75,13 @@ public struct FoldersView: View {
             }
         }
         .transientMessage($folderMessage)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L10n.text("Search saved works"))
+        .autocorrectionDisabled().textInputAutocapitalization(.never)
+        .onSubmit(of: .search) {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !query.isEmpty { searchResults = SavedWorksSearch(query: query) }
+        }
+        .navigationDestination(item: $searchResults) { WorksGridView(search: $0.query) }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -100,11 +115,12 @@ public struct FoldersView: View {
             }
         }
         .background {
-            FolderNameAlert(isPresented: $showCreateAlert, name: $newFolderName) { name in
+            FolderNameAlert(isPresented: $showCreateAlert, name: $newFolderName, alternateTitle: "Fill from a Tag…", onAlternate: { composing = true }) { name in
                 newFolderName = name
                 createFolder()
             }.frame(width: 0, height: 0)
         }
+        .appSheet(isPresented: $composing, onDismiss: loadFolders) { FolderRuleEditor() }
         .alert(
             L10n.text("Delete the folder '%@'?", String(describing: folderPendingDelete?.name ?? "")),
             isPresented: Binding(
@@ -254,6 +270,8 @@ struct FolderNameAlert: UIViewControllerRepresentable {
     var identifier = "folder.name"
     var title = "New Folder"
     var actionTitle = "Create"
+    var alternateTitle: String? = nil
+    var onAlternate: () -> Void = {}
     let onCreate: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -288,7 +306,12 @@ struct FolderNameAlert: UIViewControllerRepresentable {
                 return
             }
             guard prompt == nil, host.view.window != nil, host.presentedViewController == nil else { return }
-            let content = FolderNamePrompt(name: parent.$name, identifier: parent.identifier, title: parent.title, actionTitle: parent.actionTitle) { [weak self] name in
+            let content = FolderNamePrompt(name: parent.$name, identifier: parent.identifier, title: parent.title, actionTitle: parent.actionTitle, alternateTitle: parent.alternateTitle, alternate: { [weak self] in
+                guard let self else { return }
+                self.parent.isPresented = false
+                self.parent.name = ""
+                self.parent.onAlternate()
+            }) { [weak self] name in
                 guard let self else { return }
                 self.parent.isPresented = false
                 self.parent.name = ""
@@ -310,6 +333,8 @@ private struct FolderNamePrompt: View {
     let identifier: String
     let title: String
     let actionTitle: String
+    let alternateTitle: String?
+    let alternate: () -> Void
     let finish: (String?) -> Void
     @FocusState private var focused: Bool
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -334,6 +359,9 @@ private struct FolderNamePrompt: View {
                     Button { finish(trimmedName) } label: {
                         Text(L10n.text(actionTitle)).frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).disabled(trimmedName.isEmpty)
+                }
+                if let alternateTitle {
+                    Button(L10n.text(alternateTitle), action: alternate).font(.subheadline).accessibilityIdentifier("folder.fromTag")
                 }
             }
             .padding(24).frame(maxWidth: 340)

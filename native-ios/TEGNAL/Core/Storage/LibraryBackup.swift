@@ -139,6 +139,7 @@ struct MangaBackup: Codable, Sendable {
     }
     struct ArtistRecord: Codable, Sendable { var name: String; var kind: Int?; var note: String? }
     struct SearchRecord: Codable, Sendable { var query: String; var used_at: Double }
+    struct RuleRecord: Codable, Sendable { var folder: String; var query: String; var excluded: String? }
     var version = 2
     var exported_at: String?
     var folders: [FolderRecord]
@@ -146,6 +147,7 @@ struct MangaBackup: Codable, Sendable {
     var artists: [ArtistRecord]
     var history: [SearchRecord]?
     var saved_searches: [String]?
+    var folder_rules: [RuleRecord]?
 
     static func capture(_ database: AppDatabase) throws -> Self {
         try database.dbWriter.read { db in
@@ -160,7 +162,11 @@ struct MangaBackup: Codable, Sendable {
                       published_at: $0.publishedAt, thumb_page: $0.thumbPage, folders: $0.folders.map(\.name))
             }, artists: artists.map { .init(name: $0.name, kind: $0.kind, note: $0.note) },
                         history: try Row.fetchAll(db, sql: "SELECT * FROM search_history ORDER BY used_at DESC").map { .init(query: $0["query"], used_at: $0["used_at"]) },
-                        saved_searches: try String.fetchAll(db, sql: "SELECT query FROM saved_searches ORDER BY query"))
+                        saved_searches: try String.fetchAll(db, sql: "SELECT query FROM saved_searches ORDER BY query"),
+                        folder_rules: try AppDatabase.fetchFolderRules(db).compactMap { rule in
+                            guard let id = try AppDatabase.folderID(ofRule: rule, db: db), let folder = folders.first(where: { $0.id == id }) else { return nil }
+                            return .init(folder: folder.name, query: rule.query, excluded: rule.excluded)
+                        })
         }
     }
 
@@ -173,7 +179,8 @@ struct MangaBackup: Codable, Sendable {
               artists.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && SavedCollectionKind.allCases.compactMap(\.mangaKind).contains($0.kind ?? 0) }),
               Set(artists.map { $0.name + "\u{0}" + String($0.kind ?? 0) }).count == artists.count,
               (history ?? []).allSatisfy({ !$0.query.isEmpty && $0.used_at.isFinite }),
-              (saved_searches ?? []).allSatisfy({ !$0.isEmpty }) else { throw LibraryBackupError.invalid }
+              (saved_searches ?? []).allSatisfy({ !$0.isEmpty }),
+              (folder_rules ?? []).allSatisfy({ names.contains($0.folder) && !$0.query.isEmpty }) else { throw LibraryBackupError.invalid }
     }
 
     func restore(in db: Database) throws {
@@ -226,6 +233,13 @@ struct MangaBackup: Codable, Sendable {
             try db.execute(sql: "INSERT INTO search_history VALUES (?, ?) ON CONFLICT(query) DO UPDATE SET used_at = MAX(used_at, excluded.used_at)", arguments: [search.query, search.used_at])
         }
         for query in saved_searches ?? [] { try db.execute(sql: "INSERT OR IGNORE INTO saved_searches VALUES (?)", arguments: [query]) }
+        var rules = try AppDatabase.fetchFolderRules(db)
+        for record in folder_rules ?? [] {
+            guard let id = mapping[record.folder] else { continue }
+            let rule = FolderRule(folder: try AppDatabase.folderIdentity(id, db: db), query: record.query, excluded: record.excluded ?? "")
+            if !rules.contains(where: { $0.folder == rule.folder && $0.query == rule.query && $0.excluded == rule.excluded }) { rules.append(rule) }
+        }
+        if !(folder_rules ?? []).isEmpty { try AppDatabase.storeFolderRules(rules, db: db) }
     }
 }
 

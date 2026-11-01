@@ -33,24 +33,22 @@ struct TasteDashboard: View {
         ScrollViewReader { scrollProxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                if !sources.isEmpty, env.taste.control.enabled {
-                    SmartSteering(mode: mode, feed: feed, source: source, refresh: refresh, focus: setFocus).padding(.bottom, 24)
-                    if !picks.isEmpty {
-                        SmartPicksView(items: picks, open: { opened = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback, inset: layout.margin - 20).padding(.bottom, 24)
-                    }
+                if !sources.isEmpty, env.taste.control.enabled, !picks.isEmpty {
+                    SmartPicksView(items: picks, open: { opened = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback, inset: layout.margin - 20).padding(.bottom, SmartSpacing.section)
                 }
-                if env.taste.control.enabled, feed.focus == nil { RecapEntryCard(mode: mode).padding(.horizontal, layout.margin - 20).padding(.bottom, 32) }
+                if env.taste.control.enabled, feed.focus == nil { RecapEntryCard(mode: mode).padding(.horizontal, layout.margin - 20).padding(.bottom, SmartSpacing.section) }
                 if !sources.isEmpty, env.taste.control.enabled {
+                    SmartSteering(feed: feed, refresh: refresh, focus: setFocus).padding(.bottom, SmartSpacing.section)
                     ForEach(feed.visibleShelves(in: env.booru)) { shelf in
                         if !shelf.items.isEmpty {
-                            SmartShelfView(shelf: shelf, open: { openedShelf = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback).padding(.bottom, 32)
+                            SmartShelfView(shelf: shelf, open: { openedShelf = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback).padding(.bottom, SmartSpacing.section)
                         }
                     }
                 }
                 if sources.isEmpty { BooruNoSelectionView() }
                 else if !env.taste.control.enabled { paused }
                 else {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SmartSpacing.heading) {
                         if let failure = feed.error { message(failure, icon: "wifi.exclamationmark", action: "Try Again", perform: refresh) }
                         if let snapshot = feed.snapshot, snapshot.tags.isEmpty { gettingStarted }
                         if !gridItems.isEmpty || sources.count > 1 { feedHeader }
@@ -62,7 +60,7 @@ struct TasteDashboard: View {
                     }
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 32)
+            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, SmartSpacing.section)
             .frame(maxWidth: env.removesGridPadding(for: mode == .booru ? .booru : .manga) ? .infinity : 960)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewportWidth = $0 }
             .frame(maxWidth: .infinity)
@@ -75,7 +73,8 @@ struct TasteDashboard: View {
             ToolbarItem(placement: .topBarTrailing) {
                 AppToolbarActions {
                     if mode == .booru { BooruServerMenu(compact: true) }
-                    NavigationLink { TasteSettingsView(mode: mode, source: source) } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel(L10n.text("Settings"))
+                    NavigationLink { TasteSettingsView(mode: mode, source: source, tuner: .init(feed: feed, refresh: refresh)) } label: { Image(systemName: "slider.horizontal.3") }
+                        .accessibilityLabel(L10n.text("Settings")).accessibilityIdentifier("taste.settings")
                 }
             }
             if isRoot {
@@ -153,7 +152,7 @@ struct TasteDashboard: View {
     }
     /// One title with the feed's controls beside it. Several servers keep a row each.
     private var feedHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
                 Text(L10n.text(feed.starter ? "Popular now" : "For you")).font(.title3.bold()).lineLimit(1).minimumScaleFactor(0.8).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
@@ -279,7 +278,7 @@ struct TasteDashboard: View {
     }
 
     private func toggle(_ item: TasteRecommendation) {
-        saveFeedback = .perform { try TasteRecommendationAction.toggle(item, env: env, session: feed.discoverySession) }
+        saveFeedback = .perform(galleryID: item.item.id) { try TasteRecommendationAction.toggle(item, env: env, session: feed.discoverySession) }
     }
     private func refresh() { feed.refresh(mode: mode, env: env, language: comicLanguage) }
 }

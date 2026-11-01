@@ -31,6 +31,7 @@ public struct SettingsView: View {
                 NavigationLink { DownloadsView(mode: .manga) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
                     .accessibilityIdentifier("settings.downloads")
             }
+            SavedWorksSettingsSection()
             ModeAppearanceSettings()
             LanguageSettingsSection()
             MangaDefaultTagsSettings()

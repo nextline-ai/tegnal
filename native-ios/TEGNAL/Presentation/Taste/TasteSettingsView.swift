@@ -1,8 +1,15 @@
 import SwiftUI
 
+/// What the taste tuner needs from the Smart tab it was opened from.
+struct TasteTunerContext {
+    let feed: TasteFeedState
+    let refresh: () -> Void
+}
+
 struct TasteSettingsView: View {
     let mode: TasteMode
     var source: String = ""
+    var tuner: TasteTunerContext? = nil
     @Environment(AppEnvironment.self) private var env
     @State private var confirmReset = false
     private enum DisableTarget { case analysis }
@@ -10,6 +17,11 @@ struct TasteSettingsView: View {
     private var resolvedSource: String { source.isEmpty ? (mode == .comics ? MangaUrls.source : (env.booru.selectedServer ?? env.booru.servers.first)?.canonicalAddress ?? "") : source }
     var body: some View {
         Form {
+            if let tuner {
+                NavigationLink { TasteTunerView(mode: mode, feed: tuner.feed, source: resolvedSource, refresh: tuner.refresh) } label: {
+                    Label(L10n.text("Tune your taste"), systemImage: "dial.low")
+                }.accessibilityIdentifier("taste.tuner")
+            }
             Section {
                 NavigationLink { TasteReportsView(mode: mode, period: .week) } label: { Label(L10n.text("Weekly statistics"), systemImage: "chart.bar.xaxis") }
                     .accessibilityIdentifier("taste.settings.weekly")
@@ -88,12 +100,18 @@ struct TasteSettingsSection: View {
 struct BrowseFilterMenu<Content: View>: View {
     let title: String
     let icon: String
+    var iconOnly = false
     @ViewBuilder var content: () -> Content
     var body: some View {
         Menu(content: content) {
-            Label(title, systemImage: icon).font(.subheadline.weight(.medium))
-                .padding(.horizontal, 12).frame(minHeight: 40)
-                .background(.quaternary.opacity(0.5), in: Capsule())
+            if iconOnly {
+                Image(systemName: icon).font(.subheadline.weight(.medium)).frame(width: 40, height: 40)
+                    .background(.quaternary.opacity(0.5), in: Circle()).accessibilityLabel(title)
+            } else {
+                Label(title, systemImage: icon).font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 12).frame(minHeight: 40)
+                    .background(.quaternary.opacity(0.5), in: Capsule())
+            }
         }
     }
 }
@@ -108,7 +126,7 @@ struct RecommendationFilters: View {
     var body: some View {
         HStack {
             if mode == .comics {
-                BrowseFilterMenu(title: L10n.text(preferences.language.capitalized), icon: "globe") {
+                BrowseFilterMenu(title: L10n.text(preferences.language.capitalized), icon: "globe", iconOnly: compact) {
                     Picker(L10n.text("Language"), selection: Binding(get: { preferences.language }, set: { language in update { $0.language = language } })) {
                         ForEach(["all", "korean", "japanese", "english"], id: \.self) { Text(L10n.text($0.capitalized)).tag($0) }
                     }
@@ -117,7 +135,7 @@ struct RecommendationFilters: View {
                 Label(L10n.text("Recommendation filters"), systemImage: "line.3.horizontal.decrease").font(.subheadline).foregroundStyle(.secondary)
             }
             if !compact { Spacer() }
-            BrowseFilterMenu(title: preferences.sort.title(mode), icon: "arrow.up.arrow.down") {
+            BrowseFilterMenu(title: preferences.sort.title(mode), icon: "arrow.up.arrow.down", iconOnly: compact) {
                 Picker(L10n.text("Sort"), selection: Binding(get: { preferences.sort }, set: { sort in update { $0.sort = sort } })) {
                     ForEach(RecommendationSort.options(mode, engine: env.booru.servers.first { $0.canonicalAddress == source }?.engine)) { Text($0.title(mode)).tag($0) }
                 }

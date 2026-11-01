@@ -4,6 +4,7 @@ import Translation
 struct LanguageSettingsSection: View {
     var booru = false
     @Environment(AppEnvironment.self) private var env
+    @SwiftUI.AppStorage(ArtistBrowsing.preferenceKey, store: ReaderPreferences.defaults) private var artistLanguage = "all"
     var body: some View {
         @Bindable var env = env
         Section(L10n.text("Language")) {
@@ -13,6 +14,14 @@ struct LanguageSettingsSection: View {
                 Text("한국어").tag("ko")
                 Text("日本語").tag("ja")
             }.accessibilityIdentifier("settings.appLanguage")
+            if !booru {
+                Picker(L10n.text("Artist Works Language"), selection: $artistLanguage) {
+                    Text(L10n.text("All")).tag("all")
+                    Text(L10n.text("Korean")).tag("korean")
+                    Text(L10n.text("Japanese")).tag("japanese")
+                    Text(L10n.text("English")).tag("english")
+                }.accessibilityIdentifier("settings.artistLanguage")
+            }
             NavigationLink { TranslationLanguageSettings(booru: booru) } label: {
                 Label(L10n.text("Translation Language"), systemImage: "character.bubble")
             }.accessibilityIdentifier("settings.translationLanguage")

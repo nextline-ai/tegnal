@@ -166,6 +166,19 @@ enum GallerySort: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Artists open in every language until a person picks one, and that choice stays.
+enum ArtistBrowsing {
+    static let preferenceKey = "manga.artistLanguage"
+    static var language: String {
+        get { ReaderPreferences.defaults.string(forKey: preferenceKey) ?? "all" }
+        set { ReaderPreferences.defaults.set(newValue, forKey: preferenceKey) }
+    }
+    static func matches(_ query: String) -> Bool {
+        let terms = query.split(whereSeparator: \.isWhitespace)
+        return terms.count == 1 && terms[0].lowercased().hasPrefix("artist:")
+    }
+}
+
 struct GalleryBatch: Sendable {
     let ids: [Int64]
     let hasMore: Bool
