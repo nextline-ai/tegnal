@@ -95,7 +95,7 @@ struct SmartPicksView: View {
     private func saved(_ item: TasteRecommendation) -> Bool { item.post.map { env.booru.favoriteIDs.contains($0.id) } ?? bookmarks.contains(item.item.id) }
     var body: some View {
         VStack(alignment: .leading, spacing: SmartSpacing.heading) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(L10n.text("Today's picks")).font(.title3.bold()).lineLimit(1).accessibilityAddTraits(.isHeader)
                 Text(L10n.text("One each from your usual taste, recent interests and something new.")).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -129,7 +129,7 @@ struct SmartShelfView: View {
     let feedback: RecommendationFeedback
     var body: some View {
         VStack(alignment: .leading, spacing: SmartSpacing.heading) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(shelf.plan.title).font(.title3.bold()).lineLimit(1).accessibilityAddTraits(.isHeader)
                 Text(shelf.plan.why.sentence).font(.footnote).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }

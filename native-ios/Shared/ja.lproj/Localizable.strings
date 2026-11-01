@@ -1513,3 +1513,4 @@
 "Add Rule" = "ルールを追加";
 "Default Save Folder" = "デフォルトの保存先フォルダ";
 "Create Folder from Results" = "この結果からフォルダを作成";
+"Saved to folder '%@'" = "%@フォルダに保存しました";

@@ -271,6 +271,8 @@ public final class AppEnvironment: @unchecked Sendable {
     let booru: BooruStore
     let modeSwitchMotion = AppModeSwitchMotion()
     @ObservationIgnored var removedBookmarks: [Int64: RemovedBookmark] = [:]
+    /// The folder each work saved this session went to, which Change Folder moves it out of.
+    @ObservationIgnored var savedFolders: [Int64: Int64] = [:]
 
     private var selectedMode: AppMode
     var mode: AppMode {

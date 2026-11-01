@@ -296,10 +296,12 @@ private struct ArtworkTagCloudItem: View {
     let destination: ((ArtworkTag) -> ContentRoute)?
     let action: ((ArtworkTag) -> Void)?
     let save: ((ArtworkTag) -> Void)?
+    @ScaledMetric(relativeTo: .caption) private var starRoom: CGFloat = 18
     var body: some View {
         if let save {
             link.highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in save(tag) })
                 .accessibilityAction(named: L10n.text(saved ? "Remove Saved Tag" : "Save Tag")) { save(tag) }
+                .layoutValue(key: FlowReservedWidth.self, value: saved ? 0 : starRoom)
         } else { link }
     }
     @ViewBuilder private var link: some View {

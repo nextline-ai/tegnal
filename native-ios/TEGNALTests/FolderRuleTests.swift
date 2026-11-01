@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 import GRDB
 @testable import TEGNAL
 
@@ -60,7 +61,7 @@ import GRDB
     func testFolderFilledFromATagKeepsOtherFoldersAndLeavesUnfiled() throws {
         let favorites = try database.createFolder(name: "Favorites")
         try save(1)
-        try database.setWork(galleryId: 1, folderID: favorites.id!, included: true)
+        try database.addWork(galleryId: 1, folderID: favorites.id!)
         try save(2)
         try save(3, language: "japanese")
         let korean = try database.createFolder(name: "Korean")
@@ -99,8 +100,7 @@ import GRDB
         XCTAssertEqual(try folderNames(1), ["Korean"])
 
         let other = try database.createFolder(name: "Other")
-        try database.setWork(galleryId: 1, folderID: other.id!, included: true)
-        try database.setWork(galleryId: 1, folderID: korean.id!, included: false)
+        try database.moveWorkToFolder(galleryId: 1, targetFolderId: other.id!, currentFolderId: korean.id!)
         _ = try database.upsertWork(galleryId: 1, language: "korean", tags: "tag:full color, tag:more")
         XCTAssertEqual(try folderNames(1), ["Other"])
     }
@@ -119,13 +119,6 @@ import GRDB
         XCTAssertTrue(try database.folderRules().isEmpty)
     }
 
-    func testAWorkAlwaysKeepsOneFolder() throws {
-        try save(1)
-        let only = try database.folderIDs(galleryId: 1)[0]
-        try database.setWork(galleryId: 1, folderID: only, included: false)
-        XCTAssertEqual(try database.folderIDs(galleryId: 1), [only])
-    }
-
     func testDefaultSaveFolderFallsBackAfterDeletion() throws {
         let favorites = try database.createFolder(name: "Favorites")
         ReaderPreferences.defaults.set(Int(favorites.id!), forKey: LibrarySavePreferences.defaultFolderKey)
@@ -138,7 +131,7 @@ import GRDB
         let first = try database.createFolder(name: "First"), second = try database.createFolder(name: "Second")
         ReaderPreferences.defaults.set(Int(first.id!), forKey: LibrarySavePreferences.defaultFolderKey)
         XCTAssertEqual(try ContentBookmarkAction.toggle(id: 1, gallery: gallery(1), env: env), .added(.comics))
-        try database.setWork(galleryId: 1, folderID: second.id!, included: true)
+        try database.addWork(galleryId: 1, folderID: second.id!)
         try database.setNote(galleryId: 1, note: "Keep")
         ReaderPreferences.defaults.removeObject(forKey: LibrarySavePreferences.defaultFolderKey)
 
@@ -177,9 +170,40 @@ import GRDB
         XCTAssertFalse(ArtistBrowsing.matches("language:korean"))
     }
 
+    func testChangingFolderLeavesFoldersARuleAdded() throws {
+        let korean = try database.createFolder(name: "Korean"), other = try database.createFolder(name: "Other")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
+        let favorites = try database.createFolder(name: "Favorites")
+        ReaderPreferences.defaults.set(Int(favorites.id!), forKey: LibrarySavePreferences.defaultFolderKey)
+        _ = try ContentBookmarkAction.toggle(id: 1, gallery: gallery(1), env: env)
+        try database.moveWorkToFolder(galleryId: 1, targetFolderId: other.id!, currentFolderId: env.savedFolders[1])
+        XCTAssertEqual(try folderNames(1), ["Other", "Korean"])
+    }
+
+    func testFlowLayoutBreaksLinesAsIfReservedWidthWereUsed() {
+        func height(reserved: CGFloat) -> CGFloat {
+            let view = FlowLayout(spacing: 0) {
+                FlowProbe(width: 60, reserved: reserved)
+                FlowProbe(width: 30, reserved: 0)
+            }
+            return UIHostingController(rootView: view).sizeThatFits(in: CGSize(width: 100, height: 500)).height
+        }
+        XCTAssertEqual(height(reserved: 0), 20)
+        XCTAssertEqual(height(reserved: 20), 40)
+    }
+
     func testAddingToAFolderDoesNotChangeNotifications() {
         XCTAssertNil(WorkSaveFeedback(.removed(.comics), galleryID: 1).galleryID)
         XCTAssertEqual(WorkSaveFeedback(.added(.comics), galleryID: 1).galleryID, 1)
+        XCTAssertEqual(WorkSaveFeedback(.added(.comics), galleryID: 1, folder: "A").message, L10n.text("Saved to folder '%@'", "A"))
         XCTAssertNil(WorkSaveFeedback(.added(.booru), galleryID: 1).galleryID)
+    }
+}
+
+private struct FlowProbe: View {
+    let width: CGFloat
+    let reserved: CGFloat
+    var body: some View {
+        Color.clear.frame(width: width, height: 20).layoutValue(key: FlowReservedWidth.self, value: reserved)
     }
 }

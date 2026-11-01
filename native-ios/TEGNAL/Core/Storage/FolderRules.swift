@@ -116,17 +116,13 @@ extension AppDatabase {
         return try folders.first { $0.id == LibrarySavePreferences.defaultFolderID } ?? folders.first { $0.name == "미분류" } ?? folders.first ?? ensureDefaultFolder()
     }
 
-    /// Adding a work to a real folder takes it out of Unfiled. The last folder stays.
-    func setWork(galleryId: Int64, folderID: Int64, included: Bool) throws {
+    /// Adding a work to a real folder takes it out of Unfiled.
+    func addWork(galleryId: Int64, folderID: Int64) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
             guard let workID = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [galleryId]) else { return }
-            if included {
-                try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
-                try Self.leaveUnfiled(whenIn: folderID, db: db)
-            } else if try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder_works WHERE work_id = ?", arguments: [workID]) ?? 0 > 1 {
-                try db.execute(sql: "DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?", arguments: [folderID, workID])
-            }
+            try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
+            try Self.leaveUnfiled(whenIn: folderID, db: db)
         }
     }
 }

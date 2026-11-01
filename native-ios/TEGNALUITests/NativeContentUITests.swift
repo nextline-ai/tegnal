@@ -590,6 +590,45 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
     }
 
+    func testFavoritingATagKeepsItOnItsLine() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.information").tap()
+        let artist = element(app, "content.detail.artist.TEGNAL")
+        XCTAssertTrue(artist.waitForExistence(timeout: 5))
+        let line = artist.frame.minY
+        artist.press(forDuration: 0.8)
+        XCTAssertEqual(artist.frame.minY, line, accuracy: 3)
+    }
+
+    func testChoosingAFolderSavesAtOnceAndOffersAnotherChange() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.bookmark").tap()
+        let change = element(app, "reader.toast.folder")
+        XCTAssertTrue(change.waitForExistence(timeout: 3))
+        change.tap()
+        let folder = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "workFolder.")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 5))
+        folder.tap()
+        XCTAssertTrue(folder.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(change.waitForExistence(timeout: 5), "The notice must offer another change")
+        XCTAssertTrue(element(app, "reader.toast").label.contains("Saved to folder"))
+        XCTAssertTrue(element(app, "reader.toast").label.contains("Unfiled"))
+    }
+
     func testWorkInformationLeadsWithTitleAndDetails() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "NO",

@@ -811,9 +811,11 @@ private struct MangaArtistTag: View {
     let favorite: Bool
     let search: ((String) -> Void)?
     let saveFavorite: () -> Void
+    @ScaledMetric(relativeTo: .body) private var starRoom: CGFloat = 26
     var body: some View {
         link
             .buttonStyle(.plain)
+            .layoutValue(key: FlowReservedWidth.self, value: favorite ? 0 : starRoom)
             .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveFavorite() })
             .accessibilityValue(L10n.text(favorite ? "Favorite Artist" : "Not a Favorite Artist"))
             .accessibilityAction(named: L10n.text(favorite ? "Remove from Artists" : "Add to Artists"), saveFavorite)

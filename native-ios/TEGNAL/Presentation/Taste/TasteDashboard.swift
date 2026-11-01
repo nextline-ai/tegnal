@@ -152,13 +152,15 @@ struct TasteDashboard: View {
     }
     /// One title with the feed's controls beside it. Several servers keep a row each.
     private var feedHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 8) {
-                Text(L10n.text(feed.starter ? "Popular now" : "For you")).font(.title3.bold()).lineLimit(1).minimumScaleFactor(0.8).accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(L10n.text(feed.starter ? "Popular now" : "For you")).font(.title3.bold()).lineLimit(1).minimumScaleFactor(0.8).accessibilityAddTraits(.isHeader)
+                    Text(feedDescription).font(.footnote).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer(minLength: 8)
                 if sources.count == 1 { RecommendationFilters(mode: mode, source: source, onChange: refresh, compact: true) }
             }
-            Text(feedDescription).font(.footnote).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             if sources.count > 1, mode == .booru {
                 ForEach(env.booru.selectedServers) { server in
                     HStack {

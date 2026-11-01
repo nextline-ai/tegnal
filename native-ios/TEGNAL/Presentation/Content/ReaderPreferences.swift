@@ -419,10 +419,12 @@ enum ContentBookmarkAction {
         let removed = env.removedBookmarks.removeValue(forKey: id)
         let existing = Set(try env.database.listFolders().compactMap(\.id))
         let restored = (removed?.folders ?? []).filter(existing.contains)
-        _ = try env.database.upsertWork(galleryId: id, folderId: try restored.first ?? env.database.defaultSaveFolder().id,
+        let folder = try restored.first ?? env.database.defaultSaveFolder().id
+        env.savedFolders[id] = folder
+        _ = try env.database.upsertWork(galleryId: id, folderId: folder,
             title: gallery?.title, artists: gallery?.artists.joined(separator: ", "),
             language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", discoveryContext: context)
-        for folder in restored.dropFirst() { try env.database.setWork(galleryId: id, folderID: folder, included: true) }
+        for folder in restored.dropFirst() { try env.database.addWork(galleryId: id, folderID: folder) }
         if let note = removed?.note { try env.database.setNote(galleryId: id, note: note) }
         if let gallery, let page = gallery.pages.first, let images {
             Task {
@@ -487,11 +489,15 @@ struct WorkSaveFeedback: Identifiable {
     let result: WorkSaveResult
     /// The saved comic, while its folder can still be changed from this notice.
     var galleryID: Int64?
-    @MainActor init(_ result: WorkSaveResult, galleryID: Int64? = nil) {
+    /// Names the folder a person just chose for the work.
+    var folder: String?
+    var message: String { folder.map { L10n.text("Saved to folder '%@'", $0) } ?? result.message }
+    @MainActor init(_ result: WorkSaveResult, galleryID: Int64? = nil, folder: String? = nil) {
         self.result = result
+        self.folder = folder
         if result == .added(.comics) { self.galleryID = galleryID }
         Self.haptic(result)
-        if UIAccessibility.isVoiceOverRunning { UIAccessibility.post(notification: .announcement, argument: result.message) }
+        if UIAccessibility.isVoiceOverRunning { UIAccessibility.post(notification: .announcement, argument: message) }
     }
     @MainActor static func haptic(_ result: WorkSaveResult) {
         switch result {
@@ -515,18 +521,19 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
     let identifier: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var filing: WorkFolderTarget?
+    @State private var filed: (id: Int64, folder: String)?
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
             if let feedback {
                 HStack(spacing: 12) {
-                    Label { Text(feedback.result.message).font(.subheadline.weight(.semibold)) } icon: {
+                    Label { Text(feedback.message).font(.subheadline.weight(.semibold)).lineLimit(1) } icon: {
                         Image(systemName: feedback.result.icon).foregroundStyle(feedback.result.color)
                     }
-                    .accessibilityElement(children: .ignore).accessibilityLabel(feedback.result.message)
+                    .accessibilityElement(children: .ignore).accessibilityLabel(feedback.message)
                     .accessibilityIdentifier(identifier)
                     if let id = feedback.galleryID {
                         Button(L10n.text("Change Folder")) { filing = WorkFolderTarget(id: id); self.feedback = nil }
-                            .font(.subheadline.weight(.semibold)).accessibilityIdentifier(identifier + ".folder")
+                            .font(.subheadline.weight(.semibold)).fixedSize().accessibilityIdentifier(identifier + ".folder")
                     }
                 }
                 .padding(.horizontal, 18).padding(.vertical, 12)
@@ -542,7 +549,13 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
             guard let current = feedback else { return }
             do { try await Task.sleep(for: .seconds(current.galleryID == nil ? 3 : 5)); feedback = nil } catch { }
         }
-        .appSheet(item: $filing) { WorkFolderSheet(galleryID: $0.id) }
+        .appSheet(item: $filing, onDismiss: {
+            guard let filed else { return }
+            feedback = WorkSaveFeedback(.added(.comics), galleryID: filed.id, folder: filed.folder)
+            self.filed = nil
+        }) { target in
+            WorkFolderSheet(galleryID: target.id) { filed = (target.id, $0) }
+        }
     }
 }
 extension View {

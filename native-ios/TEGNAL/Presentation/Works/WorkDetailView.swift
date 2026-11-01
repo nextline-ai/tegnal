@@ -1,6 +1,12 @@
 import SwiftUI
 
 /// Helper for wrapping flow layout tags
+/// Width a subview may grow by later. Lines break as if every subview had already
+/// grown, so a star appearing on a tag never pushes it or a neighbor to the next line.
+public struct FlowReservedWidth: LayoutValueKey {
+    public static let defaultValue: CGFloat = 0
+}
+
 public struct FlowLayout: Layout {
     public var spacing: CGFloat
 
@@ -16,12 +22,13 @@ public struct FlowLayout: Layout {
 
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > width && currentX > 0 {
+            let needed = size.width + subview[FlowReservedWidth.self]
+            if currentX + needed > width && currentX > 0 {
                 currentX = 0
                 currentY += lineHeight + spacing
                 lineHeight = 0
             }
-            currentX += size.width + spacing
+            currentX += needed + spacing
             lineHeight = max(lineHeight, size.height)
         }
 
@@ -30,18 +37,22 @@ public struct FlowLayout: Layout {
 
     public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var currentX = bounds.minX
+        var reservedX = bounds.minX
         var currentY = bounds.minY
         var lineHeight: CGFloat = 0
 
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > bounds.maxX && currentX > bounds.minX {
+            let needed = size.width + subview[FlowReservedWidth.self]
+            if reservedX + needed > bounds.maxX && reservedX > bounds.minX {
                 currentX = bounds.minX
+                reservedX = bounds.minX
                 currentY += lineHeight + spacing
                 lineHeight = 0
             }
             subview.place(at: CGPoint(x: currentX, y: currentY), proposal: ProposedViewSize(size))
             currentX += size.width + spacing
+            reservedX += needed + spacing
             lineHeight = max(lineHeight, size.height)
         }
     }

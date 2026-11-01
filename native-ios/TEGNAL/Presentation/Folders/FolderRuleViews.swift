@@ -177,15 +177,15 @@ struct SavedWorksSettingsSection: View {
     }
 }
 
-/// Picks the folders of a work that was just saved.
+/// Moves a work that was just saved. Tapping a folder is the whole action.
 struct WorkFolderTarget: Identifiable { let id: Int64 }
 
 struct WorkFolderSheet: View {
     let galleryID: Int64
+    let filed: (String) -> Void
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var folders: [Folder] = []
-    @State private var membership = Set<Int64>()
     @State private var creating = false
     @State private var newName = ""
 
@@ -194,37 +194,36 @@ struct WorkFolderSheet: View {
             List {
                 Button { creating = true } label: { Label(L10n.text("Create New Folder…"), systemImage: "folder.badge.plus") }
                 ForEach(folders) { folder in
-                    Button { toggle(folder) } label: {
+                    Button { file(in: folder) } label: {
                         HStack(spacing: 12) {
                             Circle().fill(Color(argb: folder.color)).frame(width: 12, height: 12)
                             Text(folder.displayName).foregroundStyle(.primary)
                             Spacer()
-                            if let id = folder.id, membership.contains(id) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).font(.subheadline.bold()) }
+                            if folder.id == env.savedFolders[galleryID] { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).font(.subheadline.bold()) }
                         }.contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityIdentifier("workFolder." + folder.name)
                 }
             }
             .navigationTitle(L10n.text("Save to Folder")).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } } }
             .background {
                 FolderNameAlert(isPresented: $creating, name: $newName) { name in
-                    if let id = (try? env.database.createFolder(name: name))?.id { try? env.database.setWork(galleryId: galleryID, folderID: id, included: true) }
-                    reload()
+                    if let folder = try? env.database.createFolder(name: name) { file(in: folder) }
                 }.frame(width: 0, height: 0)
             }
         }
         .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
-        .task { reload() }
+        .task { folders = (try? env.database.listFolders()) ?? [] }
     }
 
-    private func toggle(_ folder: Folder) {
+    private func file(in folder: Folder) {
         guard let id = folder.id else { return }
-        try? env.database.setWork(galleryId: galleryID, folderID: id, included: !membership.contains(id))
-        reload()
-    }
-
-    private func reload() {
-        folders = (try? env.database.listFolders()) ?? []
-        membership = Set((try? env.database.folderIDs(galleryId: galleryID)) ?? [])
+        do {
+            let current = env.savedFolders[galleryID]
+            if id != current { try env.database.moveWorkToFolder(galleryId: galleryID, targetFolderId: id, currentFolderId: current) }
+            env.savedFolders[galleryID] = id
+            filed(folder.displayName)
+        } catch {}
+        dismiss()
     }
 }

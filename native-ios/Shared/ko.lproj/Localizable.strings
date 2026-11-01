@@ -1513,3 +1513,4 @@
 "Add Rule" = "규칙 추가";
 "Default Save Folder" = "기본 저장 폴더";
 "Create Folder from Results" = "이 결과로 폴더 만들기";
+"Saved to folder '%@'" = "%@ 폴더에 저장되었습니다";
