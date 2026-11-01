@@ -107,7 +107,7 @@ struct RecapPageView: View {
         ZStack(alignment: .bottom) {
             RecapCoverLayout(recap: recap, palette: palette, timeZone: timeZone, note: recap.hasActivity ? recap.editorNote?.text : nil,
                              insets: EdgeInsets(top: safeArea.top + 44, leading: 0, bottom: max(safeArea.bottom, 12) + 30, trailing: 0)) {
-                RecapArtTile(work: recap.cover, palette: palette, large: true, generated: recap.isSample, seed: recap.issue)
+                RecapCoverArt(palette: palette, seed: recap.coverSeed)
                     .scaleEffect(revealed ? 1 : 1.08).animation(.easeOut(duration: 2.4), value: revealed)
             }
             if !recap.hasActivity {
@@ -462,7 +462,7 @@ struct RecapPageView: View {
                 }
                 Spacer(minLength: 8)
                 RecapCoverLayout(recap: recap, palette: palette, timeZone: timeZone) {
-                    RecapArtTile(work: recap.cover, palette: palette, generated: recap.isSample, seed: recap.issue)
+                    RecapCoverArt(palette: palette, seed: recap.coverSeed)
                 }.frame(width: 136 * unit, height: 184 * unit).clipShape(RoundedRectangle(cornerRadius: 7)).frame(maxWidth: .infinity)
                     .shadow(color: .black.opacity(0.4), radius: 14, y: 8).accessibilityHidden(true).rise(5)
                 Spacer(minLength: 8)

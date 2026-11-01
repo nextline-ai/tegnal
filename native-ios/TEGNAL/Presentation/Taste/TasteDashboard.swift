@@ -12,7 +12,6 @@ struct TasteDashboard: View {
     @State private var bookmarks = Set<Int64>()
     @State private var saveFeedback: WorkSaveFeedback?
     @State private var opened: TasteRecommendation?
-    @State private var detail: TasteTag?
     @State private var explaining: TasteRecommendation?
     @State private var openedShelf: TasteRecommendation?
     @State private var comicPrefetchTask: Task<Void, Never>?
@@ -33,52 +32,37 @@ struct TasteDashboard: View {
             removesPadding: env.removesGridPadding(for: mode == .booru ? .booru : .manga))
         ScrollViewReader { scrollProxy in
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                TasteDashboardHeading(mode: mode, learning: feed.learning, source: source, feed: feed, refresh: refresh)
-                    .padding(.bottom, 4)
-                if env.taste.control.enabled { RecapEntryCard(mode: mode).padding(.horizontal, layout.margin - 20) }
+            LazyVStack(alignment: .leading, spacing: 0) {
                 if !sources.isEmpty, env.taste.control.enabled {
-                    SmartSteering(mode: mode, feed: feed, source: source, refresh: refresh, focus: setFocus)
-                    if let hero = heroItem {
-                        SmartHeroCard(item: hero, open: { opened = hero }, toggle: { toggle(hero) }, isBookmarked: bookmarks.contains(hero.item.id), feedback: feedback)
-                            .padding(.horizontal, layout.margin - 20)
+                    SmartSteering(mode: mode, feed: feed, source: source, refresh: refresh, focus: setFocus).padding(.bottom, 24)
+                    if !picks.isEmpty {
+                        SmartPicksView(items: picks, open: { opened = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback, inset: layout.margin - 20).padding(.bottom, 24)
                     }
+                }
+                if env.taste.control.enabled, feed.focus == nil { RecapEntryCard(mode: mode).padding(.horizontal, layout.margin - 20).padding(.bottom, 32) }
+                if !sources.isEmpty, env.taste.control.enabled {
                     ForEach(feed.visibleShelves(in: env.booru)) { shelf in
                         if !shelf.items.isEmpty {
-                            SmartShelfView(shelf: shelf, open: { openedShelf = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback)
-                        }
-                    }
-                    if feed.focus == nil, let snapshot = feed.snapshot, let report = feed.report,
-                       let insight = report.insights.first, let tag = snapshot.tags.first(where: { $0.id == insight.tagKey }) {
-                        highlight(insight, tag: tag, report: report, snapshot: snapshot)
-                            .padding(.horizontal, layout.margin - 20)
-                    }
-                    if feed.starter { Label(L10n.text("We start with what is popular here. Every save teaches your feed."), systemImage: "chart.line.uptrend.xyaxis").font(.subheadline).foregroundStyle(.secondary) }
-                    else if !gridItems.isEmpty { TasteSectionHeading(title: "For you") }
-                }
-                if sources.count <= 1 && !sources.isEmpty { RecommendationFilters(mode: mode, source: source, onChange: refresh) }
-                else if mode == .booru {
-                    ForEach(env.booru.selectedServers) { server in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(server.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            RecommendationFilters(mode: mode, source: server.canonicalAddress, onChange: refresh)
+                            SmartShelfView(shelf: shelf, open: { openedShelf = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback).padding(.bottom, 32)
                         }
                     }
                 }
                 if sources.isEmpty { BooruNoSelectionView() }
                 else if !env.taste.control.enabled { paused }
                 else {
-                    if let failure = feed.error { message(failure, icon: "wifi.exclamationmark", action: "Try Again", perform: refresh) }
-                    if let snapshot = feed.snapshot {
-                        if snapshot.tags.isEmpty { gettingStarted }
-                        if !snapshot.tags.isEmpty || !feed.results.items.isEmpty { works }
-                    } else if feed.loading {
-                        TasteSurface { HStack(spacing: 12) { ProgressView(); Text(L10n.text("Preparing your insights…")).font(.subheadline).foregroundStyle(.secondary) }.padding(.vertical, 24) }
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let failure = feed.error { message(failure, icon: "wifi.exclamationmark", action: "Try Again", perform: refresh) }
+                        if let snapshot = feed.snapshot, snapshot.tags.isEmpty { gettingStarted }
+                        if !gridItems.isEmpty || sources.count > 1 { feedHeader }
+                        if let snapshot = feed.snapshot {
+                            if !snapshot.tags.isEmpty || !feed.results.items.isEmpty { works }
+                        } else if feed.loading {
+                            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
+                        }
                     }
-                    about
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 32)
+            .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 32)
             .frame(maxWidth: env.removesGridPadding(for: mode == .booru ? .booru : .manga) ? .infinity : 960)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewportWidth = $0 }
             .frame(maxWidth: .infinity)
@@ -147,16 +131,15 @@ struct TasteDashboard: View {
                   let target = feed.visibleItems(in: env.booru).first(where: { $0.item.source == MangaUrls.source && $0.item.id == viewed }) else { return }
             BooruViewerReturn.scroll(to: target.id, using: scrollProxy)
         }) { .recommended($0.reason.name, session: feed.discoverySession) }
-        .navigationDestination(item: $detail) { TasteTagDetail(tag: $0, mode: mode) }
         }
     }
 
     private var gridItems: [TasteRecommendation] { feed.visibleItems(in: env.booru) }
-    /// Only a personal ranking has a top pick. A chosen sort keeps its own order.
-    private var heroItem: TasteRecommendation? {
+    /// Only a personal ranking can pick. A chosen sort keeps its own order.
+    private var picks: [TasteRecommendation] {
         let items = gridItems
-        guard items.count >= 5, !feed.starter, feed.focus == nil, sources.allSatisfy({ env.taste.control.preferences(source: $0).sort == .recommended }) else { return nil }
-        return items.first
+        guard items.count >= 6, !feed.starter, feed.focus == nil, sources.allSatisfy({ env.taste.control.preferences(source: $0).sort == .recommended }) else { return [] }
+        return TasteRecommendation.picks(from: items)
     }
     private var feedback: RecommendationFeedback {
         .init(why: { explaining = $0 }, more: moreLikeThis, dismiss: { item in feed.dismiss(item, mode: mode, env: env) })
@@ -168,20 +151,40 @@ struct TasteDashboard: View {
         guard let first = chosen.first else { return }
         setFocus(.init(seed: .init(source: item.item.source, name: chosen.joined(separator: " "), general: 1), why: .similar(first)))
     }
+    /// One title with the feed's controls beside it. Several servers keep a row each.
+    private var feedHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(L10n.text(feed.starter ? "Popular now" : "For you")).font(.title3.bold()).lineLimit(1).minimumScaleFactor(0.8).accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                if sources.count == 1 { RecommendationFilters(mode: mode, source: source, onChange: refresh, compact: true) }
+            }
+            Text(feedDescription).font(.footnote).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            if sources.count > 1, mode == .booru {
+                ForEach(env.booru.selectedServers) { server in
+                    HStack {
+                        Text(server.displayName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                        Spacer(minLength: 8)
+                        RecommendationFilters(mode: mode, source: server.canonicalAddress, onChange: refresh, compact: true)
+                    }
+                }
+            }
+        }
+    }
+    private var feedDescription: String {
+        if let focus = feed.focus { return focus.why.sentence }
+        return feed.starter ? RecommendationWhy.popular.sentence : L10n.text("Chosen from what you've been saving and viewing.")
+    }
     private var gettingStarted: some View {
         TasteSurface {
-            VStack(alignment: .leading, spacing: 20) {
-                Image(systemName: "heart.text.clipboard").font(.system(size: 40)).foregroundStyle(TastePresentation.accent).padding(.top, 8).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.text("Start with something you love")).font(.title2.bold())
-                    Text(L10n.text("Save a few works as you explore. Your recommendations and taste discoveries will grow from there.")).foregroundStyle(.secondary)
-                }
-                Label(L10n.text("Browse, save, discover"), systemImage: "sparkles").font(.subheadline.weight(.medium))
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.text("Start with something you love")).font(.title3.bold())
+                Text(L10n.text("Every save teaches your feed.")).font(.subheadline).foregroundStyle(.secondary)
                 if let explore {
                     Button(action: explore) { Text(L10n.text("Explore works")).frame(maxWidth: .infinity).padding(.vertical, 6) }
                         .buttonStyle(.borderedProminent).tint(TastePresentation.accent).accessibilityIdentifier("taste.startExploring")
                 }
-            }.padding(4)
+            }
         }.accessibilityElement(children: .contain).accessibilityIdentifier("taste.empty")
     }
     private var paused: some View {
@@ -195,29 +198,13 @@ struct TasteDashboard: View {
             }
         }
     }
-    private func highlight(_ insight: TasteInsight, tag: TasteTag, report: TasteReport, snapshot: TasteSnapshot) -> some View {
-        Button { detail = tag } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label(L10n.text(tag.discovery ? "A new side of your taste" : "A thread in your favorites"), systemImage: "sparkles").font(.subheadline.weight(.semibold))
-                    Spacer(minLength: 8)
-                    Image(systemName: "arrow.up.right").font(.subheadline)
-                }.foregroundStyle(TastePresentation.accent)
-                Text(TastePresentation.name(tag.name)).font(.title2.bold()).foregroundStyle(.primary)
-                Text(TastePresentation.explanation(insight, tag: tag, snapshot: snapshot)).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(LinearGradient(colors: [TastePresentation.accent.opacity(0.12), Color(uiColor: .secondarySystemGroupedBackground)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 22))
-                .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(TastePresentation.accent.opacity(0.13), lineWidth: 1))
-                .contentShape(RoundedRectangle(cornerRadius: 22))
-        }.buttonStyle(.plain).accessibilityIdentifier("taste.highlight")
-    }
     private var works: some View {
-        let items = feed.visibleItems(in: env.booru)
+        let items = feed.visibleItems(in: env.booru), picked = Set(picks.map(\.id))
         return Group {
             if !items.isEmpty {
                 let prefetchThresholdIndex = max(0, items.count - lookahead)
                 ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20, topMarginScale: 0.5) { _ in
-                    ForEach(Array(items.enumerated()).filter { $0.element.id != heroItem?.id }, id: \.element.id) { index, item in
+                    ForEach(Array(items.enumerated()).filter { !picked.contains($0.element.id) }, id: \.element.id) { index, item in
                         TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id), feedback: feedback)
                             .id(item.id)
                             .onAppear {
@@ -230,7 +217,7 @@ struct TasteDashboard: View {
                     }
                 }
             } else if feed.loading {
-                TasteSurface { HStack(spacing: 12) { ProgressView(); Text(L10n.text("Finding works for you…")).font(.subheadline).foregroundStyle(.secondary) } }
+                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
             } else if feed.results.failures.isEmpty && !feed.results.cursor.hasMore {
                 message(L10n.text("You're all caught up. Explore more works or refresh for new recommendations."), icon: "checkmark.circle", action: explore == nil ? "Try Again" : "Explore works") { if let explore { explore() } else { refresh() } }
             }
@@ -253,17 +240,6 @@ struct TasteDashboard: View {
             }
         }
     }
-    private var about: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            DisclosureGroup(L10n.text("About your recommendations")) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(L10n.text("Recommendations are calculated on your device from your choices. Analysis records sync through iCloud when enabled and remain until you delete them."))
-                    Text(L10n.text("Recommendation searches send the selected tags to your connected websites. Your taste profile is not sent."))
-                }.padding(.top, 8)
-            }.font(.footnote).foregroundStyle(.secondary).tint(.secondary)
-        }.padding(.horizontal, 4)
-    }
-
     private func prefetchRecommendations(around index: Int) {
         guard isActiveMode, scenePhase == .active, CoverQueuePolicy.allowsBackfill else { return }
         if let anchor = prefetchAnchor, abs(index - anchor) < 4 { return }
@@ -306,42 +282,4 @@ struct TasteDashboard: View {
         saveFeedback = .perform { try TasteRecommendationAction.toggle(item, env: env, session: feed.discoverySession) }
     }
     private func refresh() { feed.refresh(mode: mode, env: env, language: comicLanguage) }
-}
-
-/// Follows the feed, so evidence opened during a load fills in when it finishes.
-private struct TasteLiveEvidence: View {
-    let feed: TasteFeedState
-    let mode: TasteMode
-    var body: some View { TasteTagList(tags: feed.snapshot?.tags ?? [], mode: mode) }
-}
-
-private struct TasteDashboardHeading: View {
-    let mode: TasteMode
-    var learning: TasteLearning? = nil
-    var source = ""
-    let feed: TasteFeedState
-    let refresh: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(Date(), format: .dateTime.month(.wide).day().weekday(.wide)).font(RecapType.folio(12)).textCase(.uppercase).foregroundStyle(TastePresentation.accent)
-            Text(L10n.text("Smart Recommendations")).font(.largeTitle.bold())
-            Text(summary).font(.subheadline).foregroundStyle(.secondary)
-            HStack(spacing: 18) {
-                NavigationLink { TasteTunerView(mode: mode, feed: feed, source: source, refresh: refresh) } label: {
-                    Label(L10n.text("Tune your taste"), systemImage: "dial.medium").font(.subheadline.weight(.medium))
-                }.accessibilityIdentifier("taste.tuner")
-                NavigationLink { TasteLiveEvidence(feed: feed, mode: mode) } label: {
-                    Label(L10n.text("Recommendation evidence"), systemImage: "arrow.up.right")
-                        .font(.subheadline.weight(.medium))
-                }.accessibilityIdentifier("taste.evidence")
-            }
-        }.padding(.vertical, 4)
-    }
-    /// Says what today's page is built on rather than repeating a slogan.
-    private var summary: String {
-        guard let top = learning?.recentTags.first(where: { $0.source == source }) ?? learning?.ranked(source).first else {
-            return L10n.text("Inspired by what you love. Made for your next discovery.")
-        }
-        return L10n.text("Tuned to what you've saved lately, led by %@.", RecapText.tag(top.name))
-    }
 }

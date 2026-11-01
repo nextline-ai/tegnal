@@ -51,6 +51,7 @@
 		558B9BC856132F232BB2AE8E /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8346FCB8EB53E1B5E6D5B20 /* AppTab.swift */; };
 		56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80B56E655528C707020F8BD7 /* PageImageStore.swift */; };
 		57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */; };
+		4288EA3863FB4AFDEE4F0C41 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */; };
 		2EDCF110A2840C969D671258 /* TEGNAL/Core/Taste/TasteLearning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43528A30366E16F7CA3BF12E /* TEGNAL/Core/Taste/TasteLearning.swift */; };
 		545411A0C8D7E98E33A2FD7C /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */; };
 		CAC5EC89EBAE2736353A8B53 /* TEGNAL/Core/Taste/TasteRecap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */; };
@@ -358,6 +359,7 @@
 		F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupTests.swift; sourceTree = "<group>"; };
 		F6728E31C6CB18E178E6ECE0 /* TEGNAL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TEGNAL.entitlements; sourceTree = "<group>"; };
 		F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteAnalyzer.swift; sourceTree = SOURCE_ROOT; };
+		78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift; sourceTree = SOURCE_ROOT; };
 		43528A30366E16F7CA3BF12E /* TEGNAL/Core/Taste/TasteLearning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteLearning.swift; sourceTree = SOURCE_ROOT; };
 		359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/Smart/SmartViews.swift; sourceTree = SOURCE_ROOT; };
 		000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteRecap.swift; sourceTree = SOURCE_ROOT; };
@@ -613,6 +615,7 @@
 				950F4BA3B7F26293633599D9 /* TEGNAL/Core/Taste/RecommendationService.swift */,
 				40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */,
 				F6EACD056993026672F5B647 /* TEGNAL/Core/Taste/TasteAnalyzer.swift */,
+				78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */,
 				43528A30366E16F7CA3BF12E /* TEGNAL/Core/Taste/TasteLearning.swift */,
 				359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */,
 				000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */,
@@ -995,6 +998,7 @@
 				A98D1BE5CD53F4CFE2AF73A7 /* AppDatabase.swift in Sources */,
 				A8DEA1F1E17A02BB561A1CD2 /* TEGNAL/Core/Taste/TasteStore.swift in Sources */,
 				57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */,
+				4288EA3863FB4AFDEE4F0C41 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift in Sources */,
 				2EDCF110A2840C969D671258 /* TEGNAL/Core/Taste/TasteLearning.swift in Sources */,
 				545411A0C8D7E98E33A2FD7C /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift in Sources */,
 				CAC5EC89EBAE2736353A8B53 /* TEGNAL/Core/Taste/TasteRecap.swift in Sources */,

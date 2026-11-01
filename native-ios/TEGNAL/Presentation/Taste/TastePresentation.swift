@@ -132,18 +132,18 @@ struct TasteRecommendationCard: View {
     var isBookmarked = false
     var feedback: RecommendationFeedback? = nil
     @Environment(AppEnvironment.self) private var env
-    private var reasonText: String { item.why?.label ?? TastePresentation.name(item.reason.name) }
     var body: some View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: style.inset(6)) {
                 if let post = item.post, let server = env.booru.servers.first(where: { $0.id == post.serverID }) {
                     BooruPostThumbnailCard(post: post, server: server, showsFavoriteIndicator: true, isFavorite: env.booru.favoriteIDs.contains(post.id))
+                        .overlay(alignment: .bottomLeading) { reasonTag }
                 } else if item.post != nil {
                     Color.secondary.opacity(0.12).aspectRatio(0.78, contentMode: .fit)
                         .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }.clipShape(RoundedRectangle(cornerRadius: style.radius(16)))
                 } else if let gallery = item.gallery {
-                    GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language, recommendationTag: reasonAllowed ? reasonText : nil) {
-                        TasteArtwork(gallery: gallery)
+                    GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language) {
+                        TasteArtwork(gallery: gallery).overlay(alignment: .bottomLeading) { reasonTag }
                     }.overlay(alignment: .topLeading) {
                         if isBookmarked {
                             Image(systemName: "bookmark.fill").font(.system(size: style.fontSize(14), weight: .semibold)).foregroundStyle(.yellow)
@@ -151,8 +151,6 @@ struct TasteRecommendationCard: View {
                         }
                     }
                 }
-                if item.gallery == nil && reasonAllowed { Label(reasonText, systemImage: item.why?.icon ?? "number")
-                    .font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(style.width < 110 ? 1 : 2).padding(.horizontal, style.inset(2)) }
             }.contentShape(Rectangle())
         }.buttonStyle(.plain).hoverEffect(.highlight)
             .accessibilityIdentifier("taste.work.\(item.item.id)")
@@ -162,8 +160,14 @@ struct TasteRecommendationCard: View {
             .accessibilityAction(named: WorkSaveResult.actionTitle(saved: saved, mode: item.post == nil ? .comics : .booru), toggle)
             .overlay(alignment: .topTrailing) { if let feedback { RecommendationMenu(item: item, feedback: feedback, compact: true) } }
     }
-    private var reasonAllowed: Bool {
-        env.taste.control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru)
+    /// The one reason a card has room for. An exclusion removes it at once.
+    @ViewBuilder private var reasonTag: some View {
+        if feedback != nil, let why = item.why, env.taste.control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru) {
+            // The tag that found this work varies more than the artist behind many saves.
+            Text(item.reason.name.isEmpty ? why.label : RecapText.tag(item.reason.name)).font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                .padding(.horizontal, 7).padding(.vertical, 3).background(.black.opacity(0.58), in: Capsule())
+                .padding(6).allowsHitTesting(false)
+        }
     }
     private var saved: Bool {
         if let post = item.post { return env.booru.favoriteIDs.contains(post.id) }

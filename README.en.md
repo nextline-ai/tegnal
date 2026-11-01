@@ -49,7 +49,7 @@
 ### 4. On-Device AI Features in the Apple Version
 Every AI feature runs **100% locally on your device** without sending your data to external servers—keeping your preferences completely private.
 - **Smart Recommendations, a curator you tune:** Learns on-device from recent saves, long views and finished works to build a daily pick and shelves that explain themselves. See why any work was chosen, teach it with Not interested, More like this and per-tag controls, and choose how far it reaches, from Familiar to Adventurous.
-- **Recap, your personal art magazine:** Every month, an issue built from the works you kept, starting with its cover. Flip through your top chart, artist of the issue, the colors measured from your covers, new discoveries, your rhythm, viewing time and taste persona; rediscover forgotten saves; and collect back issues on a shelf. Share cards carry only colors and numbers by default.
+- **Recap, your personal art magazine:** Every month, an issue built from the works you kept, under its own illustrated cover. Flip through your top chart, artist of the issue, the colors measured from your covers, new discoveries, your rhythm, viewing time and taste persona; rediscover forgotten saves; and collect back issues on a shelf. Share cards never include your saved works.
 - **Find Similar Art Styles:** Long-press a saved work to find visually similar pieces based on composition, color palette, and art style powered by Apple Vision.
 - **One-Tap Image Translation:** Instantly recognize and translate text inside comics and illustrations using Apple’s on-device translation engine.
 

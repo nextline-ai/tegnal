@@ -44,6 +44,35 @@ enum RecommendationWhy: Hashable, Sendable {
     }
 }
 
+extension TasteRecommendation {
+    var reachesOut: Bool {
+        if novel || reason.discovery { return true }
+        if case .comeback = why { return true }
+        return false
+    }
+    /// Three works that can fail independently: something current, something
+    /// from long-standing taste and something new, never on one shared reason.
+    static func picks(from items: [TasteRecommendation], count: Int = 3) -> [TasteRecommendation] {
+        var chosen: [TasteRecommendation] = [], reasons = Set<String>()
+        func take(_ matches: (TasteRecommendation) -> Bool) {
+            guard chosen.count < count, let item = items.first(where: { candidate in matches(candidate) && !reasons.contains(candidate.reason.name) && !chosen.contains { $0.id == candidate.id } }) else { return }
+            chosen.append(item); reasons.insert(item.reason.name)
+        }
+        take { item in
+            switch item.why { case .recent, .person: true; default: false }
+        }
+        take { !$0.reachesOut }
+        take(\.reachesOut)
+        while chosen.count < count {
+            let before = chosen.count
+            take { _ in true }
+            if chosen.count == before { reasons.removeAll(); take { _ in true } }
+            if chosen.count == before { break }
+        }
+        return chosen
+    }
+}
+
 /// One line of the explanation sheet. `strength` is relative within a work.
 struct RecommendationFactor: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable { case tag, person, boosted, reduced, fresh }
@@ -88,10 +117,10 @@ struct TasteShelfPlan: Identifiable, Hashable, Sendable {
     var id: String { kind.rawValue + seed.id }
     var title: String {
         switch why {
-        case .recent(let tag): L10n.text("Lately: %@", RecapText.tag(tag))
-        case .person(let name, _, _): L10n.text("More from %@", RecapText.tag(name).capitalized)
+        case .recent(let tag): RecapText.tag(tag)
+        case .person(let name, _, _): RecapText.tag(name).capitalized
         case .pair(let first, let second): RecapText.tag(first) + " × " + RecapText.tag(second)
-        case .hidden(let tag): L10n.text("Your quiet favorite: %@", RecapText.tag(tag))
+        case .hidden(let tag): RecapText.tag(tag)
         case .comeback(let tag): L10n.text("Back to %@", RecapText.tag(tag))
         default: why.label
         }

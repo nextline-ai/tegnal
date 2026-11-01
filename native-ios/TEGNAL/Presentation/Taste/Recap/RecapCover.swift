@@ -91,7 +91,7 @@ struct RecapCover: View {
     @Environment(AppEnvironment.self) private var env
     var body: some View {
         RecapCoverLayout(recap: recap, palette: palette, timeZone: RecapFormat.zone(env)) {
-            RecapArtTile(work: recap.cover, palette: palette, large: true, generated: recap.isSample, seed: recap.issue)
+            RecapCoverArt(palette: palette, seed: recap.coverSeed)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.text("Recap issue %@, %@", String(recap.issue), RecapFormat.title(recap, timeZone: RecapFormat.zone(env))))

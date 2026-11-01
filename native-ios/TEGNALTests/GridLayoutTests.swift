@@ -237,6 +237,19 @@ final class GridLayoutTests: XCTestCase {
         restored.mangaPreviewRows = -1; XCTAssertEqual(restored.mangaPreviewRows, 1)
     }
 
+    /// Observation notifies before the value is stored. A view updated inside that
+    /// notification reads the old mode, and nothing used to tell it about the new one.
+    /// The root then kept showing one library while the switch refused all input.
+    @MainActor func testModeReachesAnObserverThatRereadsDuringTheChangeNotification() {
+        let env = AppEnvironment.preview()
+        env.mode = .booru
+        let reader = ModeReader(env)
+        env.mode = .manga
+        XCTAssertEqual(reader.seen, .manga)
+        env.mode = .booru
+        XCTAssertEqual(reader.seen, .booru)
+    }
+
     @MainActor func testModeSwitchCoalescesOverlappingUserInteractions() {
         let motion = AppModeSwitchMotion()
         let now = ContinuousClock().now
@@ -634,5 +647,20 @@ private struct DensityGridProbe: View {
                 }
             }
         }.coordinateSpace(name: "density")
+    }
+}
+
+/// Rereads the mode inside each change notification, as a synchronous view update does.
+@MainActor private final class ModeReader {
+    private let env: AppEnvironment
+    private(set) var seen: AppMode?
+    init(_ env: AppEnvironment) {
+        self.env = env
+        read()
+    }
+    private func read() {
+        withObservationTracking { seen = env.mode } onChange: { [self] in
+            MainActor.assumeIsolated { read() }
+        }
     }
 }

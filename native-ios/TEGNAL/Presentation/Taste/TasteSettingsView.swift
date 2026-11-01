@@ -101,6 +101,8 @@ struct RecommendationFilters: View {
     let mode: TasteMode
     let source: String
     var onChange: () -> Void = {}
+    /// Sits beside a section title, which already says what these controls are.
+    var compact = false
     @Environment(AppEnvironment.self) private var env
     private var preferences: RecommendationPreferences { env.taste.control.preferences(source: source) }
     var body: some View {
@@ -111,10 +113,10 @@ struct RecommendationFilters: View {
                         ForEach(["all", "korean", "japanese", "english"], id: \.self) { Text(L10n.text($0.capitalized)).tag($0) }
                     }
                 }
-            } else {
+            } else if !compact {
                 Label(L10n.text("Recommendation filters"), systemImage: "line.3.horizontal.decrease").font(.subheadline).foregroundStyle(.secondary)
             }
-            Spacer()
+            if !compact { Spacer() }
             BrowseFilterMenu(title: preferences.sort.title(mode), icon: "arrow.up.arrow.down") {
                 Picker(L10n.text("Sort"), selection: Binding(get: { preferences.sort }, set: { sort in update { $0.sort = sort } })) {
                     ForEach(RecommendationSort.options(mode, engine: env.booru.servers.first { $0.canonicalAddress == source }?.engine)) { Text($0.title(mode)).tag($0) }

@@ -49,6 +49,27 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(value.isHittable, "Missing control: " + id)
         return value
     }
+    /// A card's menu sits in its corner, so the press names a point on the artwork.
+    private func pressArtwork(_ card: XCUIElement) {
+        card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.65)).press(forDuration: 0.7)
+    }
+    private func assertSaveStatus(_ app: XCUIApplication, _ text: String) {
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", text), object: element(app, "taste.saveStatus"))
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+    }
+    /// A retained tab keeps its cards while the other mode's feed is still loading.
+    private func firstTasteCard(_ app: XCUIApplication, containing text: String) -> XCUIElement {
+        for _ in 0..<40 {
+            let card = firstTasteCard(app)
+            if text.isEmpty || card.identifier.contains(text) { return card }
+            usleep(250_000)
+        }
+        return firstTasteCard(app)
+    }
+    private func openEvidence(_ app: XCUIApplication) {
+        element(app, "taste.tuner").tap()
+        reveal(app, "taste.evidence").tap()
+    }
     private func capture(_ app: XCUIApplication, _ name: String) {
         // UIKit's glass morph can outlive accessibility idleness after tab changes.
         Thread.sleep(forTimeInterval: 1)
@@ -134,7 +155,6 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "taste.dashboard").waitForExistence(timeout: 10))
         XCTAssertEqual(app.sheets.count, 0)
         XCTAssertFalse(app.alerts["Discover your taste"].exists)
-        XCTAssertTrue(element(app, "taste.highlight").waitForExistence(timeout: 10))
         XCTAssertFalse(element(app, "taste.refresh").exists)
         let modeSwitch = element(app, "app.mode")
         XCTAssertLessThan(abs(modeSwitch.frame.midX - app.frame.midX), 20)
@@ -174,11 +194,12 @@ final class BooruUITests: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         XCTAssertTrue(firstTasteCard(app).waitForExistence(timeout: 20))
         capture(app, "AI recommendations with works")
-        reveal(app, "taste.highlight").tap()
+        openEvidence(app)
+        app.cells.firstMatch.tap()
         XCTAssertTrue(element(app, "taste.tag.detail").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Your evidence"].exists)
         capture(app, "AI taste evidence")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        for _ in 0..<3 { app.navigationBars.buttons.element(boundBy: 0).tap() }
         app.navigationBars.buttons["Settings"].tap()
         element(app, "taste.settings.weekly").tap()
         XCTAssertTrue(app.staticTexts["Newly saved works"].waitForExistence(timeout: 5))
@@ -219,9 +240,9 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         XCTAssertEqual(first.frame.minY, y, accuracy: 10)
         XCTAssertFalse(app.buttons["Why this work?"].exists)
-        element(app, "taste.evidence").tap()
+        openEvidence(app)
         XCTAssertTrue(app.navigationBars["Recommendation evidence"].waitForExistence(timeout: 5))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        for _ in 0..<2 { app.navigationBars.buttons.element(boundBy: 0).tap() }
         let next = reveal(app, "taste.work.221")
         XCTAssertTrue(next.waitForExistence(timeout: 10))
         capture(app, "AI infinite feed second page")
@@ -264,7 +285,7 @@ final class BooruUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["What your feed has learned"].waitForExistence(timeout: 5))
         element(app, "taste.tuner.apply").tap()
-        XCTAssertTrue(element(app, "taste.discovery").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "taste.tuner").waitForExistence(timeout: 10))
     }
 
     func testTasteMonthlyRecapBannerAndAnalysisExclusions() {
@@ -327,7 +348,6 @@ final class BooruUITests: XCTestCase {
         capture(app, "Recap closing page")
         element(app, "recap.next.share").tap()
         XCTAssertTrue(element(app, "recap.share.preview").waitForExistence(timeout: 10))
-        XCTAssertEqual(element(app, "recap.share.artwork").value as? String, "0")
         XCTAssertEqual(element(app, "recap.share.tags").value as? String, "0")
         capture(app, "Recap share card without artwork")
         element(app, "recap.share.close").tap()
@@ -341,12 +361,12 @@ final class BooruUITests: XCTestCase {
         let app = launch(extra: ["--taste-ui-rich", "--taste-sole-exclusion-test", "-manga.showInformationBeforeReading", "YES"])
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         selectMode(app, "manga")
-        let card = firstTasteCard(app), id = card.identifier
-        element(app, "taste.evidence").tap()
+        let card = firstTasteCard(app, containing: "900000"), id = card.identifier
+        openEvidence(app)
         XCTAssertTrue(app.staticTexts["female:sample"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["female:sole female"].exists)
         XCTAssertFalse(app.staticTexts["male:sole male"].exists)
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        for _ in 0..<2 { app.navigationBars.buttons.element(boundBy: 0).tap() }
         element(app, id).tap()
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
         let bar = app.navigationBars.firstMatch
@@ -363,10 +383,12 @@ final class BooruUITests: XCTestCase {
     func testExclusionUpdatesRetainedRecommendationEvidenceImmediately() {
         let app = launch(extra: ["--taste-ui-rich"])
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
-        let card = firstTasteCard(app), id = card.identifier
-        let reason = card.staticTexts.matching(NSPredicate(format: "label IN %@", ["scenery", "mountain", "cloud", "river"])).firstMatch
-        XCTAssertTrue(reason.exists)
+        XCTAssertTrue(firstTasteCard(app).exists)
+        let reason = app.staticTexts.matching(NSPredicate(format: "label IN %@", ["scenery", "mountain", "cloud", "river"])).firstMatch
+        for _ in 0..<4 where !reason.exists { app.swipeUp() }
+        XCTAssertTrue(reason.waitForExistence(timeout: 5))
         let tag = reason.label
+        let id = firstTasteCard(app).identifier
         app.navigationBars.buttons["Settings"].tap()
         element(app, "taste.settings.exclusions").tap()
         let field = element(app, "taste.exclusions.input")
@@ -377,9 +399,67 @@ final class BooruUITests: XCTestCase {
         let retained = element(app, id)
         XCTAssertTrue(retained.waitForExistence(timeout: 5))
         XCTAssertFalse(retained.staticTexts[tag].exists)
-        element(app, "taste.evidence").tap()
+        openEvidence(app)
         XCTAssertFalse(app.staticTexts[tag].exists)
         capture(app, "Excluded evidence removed without refreshing works")
+    }
+
+    /// Interleaves taps, double taps, drags and tab changes. A control that stops
+    /// answering fails here with the iteration and a capture of that moment.
+    func testModeSwitchKeepsAnsweringUnderRepeatedInput() {
+        let app = launch(extra: ["--taste-ui-rich"])
+        let iterations = Int(ProcessInfo.processInfo.environment["TEGNAL_MODE_STRESS"] ?? "") ?? 40
+        let tabs = ["Saved", "Explore", "Smart", "Explore"]
+        func body(_ mode: String, _ tab: String) -> XCUIElement? {
+            switch tab {
+            case "Saved": return element(app, mode == "manga" ? "manga.createFolder" : "booru.allFavorites")
+            case "Explore": return element(app, mode == "manga" ? "content.search" : "booru.search")
+            default: return nil
+            }
+        }
+        var mode = "booru", tab = "Explore"
+        for index in 0..<iterations {
+            if index % 3 == 0 {
+                let next = tabs[index / 3 % tabs.count]
+                let item = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", next)).firstMatch
+                if item.exists && item.isHittable { item.tap(); tab = next }
+            }
+            let target = mode == "manga" ? "booru" : "manga"
+            let control = element(app, "app.mode")
+            let started = Date()
+            switch index % 7 {
+            case 1: dragMode(app, to: target)
+            case 3:
+                // A second tap lands mid-transition; the guard must absorb it, not wedge.
+                control.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
+            case 5:
+                control.tap()
+                XCUIDevice.shared.press(.home); app.activate()
+            default: control.tap()
+            }
+            let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value IN %@", modeTitles(target) + modeTitles(mode)), object: control)
+            _ = XCTWaiter.wait(for: [settled], timeout: 2)
+            var current = modeTitles(target).contains(control.value as? String ?? "") ? target : mode
+            if index % 7 != 3, current != target {
+                let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value IN %@", modeTitles(target)), object: control)
+                if XCTWaiter.wait(for: [changed], timeout: 3) == .completed { current = target } else {
+                    capture(app, "Mode switch ignored input at \(index)")
+                    let attachment = XCTAttachment(string: app.debugDescription); attachment.lifetime = .keepAlways; add(attachment)
+                    control.tap()
+                    let retry = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value IN %@", modeTitles(target)), object: control)
+                    let recovered = XCTWaiter.wait(for: [retry], timeout: 5) == .completed
+                    XCTFail("Iteration \(index) on \(tab): no response to input, recovered on retry: \(recovered)")
+                    return
+                }
+            }
+            mode = current
+            if let expected = body(mode, tab), !expected.waitForExistence(timeout: 4) {
+                capture(app, "Mode switch lost its screen at \(index)")
+                let attachment = XCTAttachment(string: app.debugDescription); attachment.lifetime = .keepAlways; add(attachment)
+                XCTFail("Iteration \(index) on \(tab) in \(mode): screen did not appear after \(Date().timeIntervalSince(started))s")
+                return
+            }
+        }
     }
 
     func testRepeatedModeSwitchingKeepsSelectionAndFeed() {
@@ -400,15 +480,15 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 5))
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         let imageID = firstTasteCard(app).identifier
-        let evidence = element(app, "taste.evidence"), highlight = element(app, "taste.highlight"), sort = element(app, "taste.sort")
-        let introduction = app.staticTexts["Inspired by what you love. Made for your next discovery."]
-        XCTAssertLessThanOrEqual(introduction.frame.maxY, evidence.frame.minY)
-        XCTAssertLessThan(evidence.frame.maxY, highlight.frame.minY)
-        XCTAssertLessThan(highlight.frame.maxY, sort.frame.minY)
+        let sort = element(app, "taste.sort")
         let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "taste.work."))
-        XCTAssertLessThan(sort.frame.maxY, cards.element(boundBy: 0).frame.minY)
-        XCTAssertEqual(highlight.frame.minX, cards.element(boundBy: 0).frame.minX, accuracy: 1)
-        XCTAssertEqual(highlight.frame.maxX, cards.element(boundBy: 1).frame.maxX, accuracy: 1)
+        let pick = cards.element(boundBy: 0)
+        XCTAssertTrue(reveal(app, "taste.sort").exists)
+        XCTAssertLessThan(pick.frame.minY, sort.frame.minY)
+        XCTAssertLessThan(sort.frame.maxY, cards.element(boundBy: 3).frame.minY)
+        XCTAssertEqual(pick.frame.minX, cards.element(boundBy: 3).frame.minX, accuracy: 1)
+        XCTAssertEqual(cards.element(boundBy: 2).frame.maxX, cards.element(boundBy: 4).frame.maxX, accuracy: 1)
+        app.swipeDown(); app.swipeDown()
         var comicID: String?
         // Include the seam, padding, edges, and the already selected icon.
         let points: [CGVector] = [.init(dx: 0.5, dy: 0.5), .init(dx: 0.05, dy: 0.5),
@@ -419,7 +499,7 @@ final class BooruUITests: XCTestCase {
             control.coordinate(withNormalizedOffset: point).tap()
             let target = index.isMultiple(of: 2) ? "manga" : "booru"
             assertMode(app, target)
-            let card = firstTasteCard(app).identifier
+            let card = firstTasteCard(app, containing: target == "manga" ? "900000" : "").identifier
             if target == "manga" {
                 XCTAssertTrue(card.contains("900000"))
                 if let comicID { XCTAssertEqual(card, comicID) } else { comicID = card }
@@ -436,23 +516,23 @@ final class BooruUITests: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
         let image = firstTasteCard(app)
         let imageID = image.identifier
-        image.press(forDuration: 0.7)
+        pressArtwork(image)
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Saved"), object: image)], timeout: 5), .completed)
-        XCTAssertEqual(element(app, "taste.saveStatus").label, "Saved to Favorites")
-        image.press(forDuration: 0.7)
-        XCTAssertEqual(element(app, "taste.saveStatus").label, "Favorite removed")
+        assertSaveStatus(app, "Saved to Favorites")
+        pressArtwork(image)
+        assertSaveStatus(app, "Favorite removed")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Not favorited"), object: image)], timeout: 5), .completed)
         app.swipeUp()
         let imageAnchor = firstTasteCard(app)
         let imageAnchorID = imageAnchor.identifier, imageY = imageAnchor.frame.minY
         dragMode(app, to: "manga")
-        let comic = firstTasteCard(app)
+        let comic = firstTasteCard(app, containing: "900000")
         XCTAssertTrue(comic.identifier.contains("900000"))
-        comic.press(forDuration: 0.7)
+        pressArtwork(comic)
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Bookmarked"), object: comic)], timeout: 5), .completed)
-        XCTAssertEqual(element(app, "taste.saveStatus").label, "Saved to bookmarks")
-        comic.press(forDuration: 0.7)
-        XCTAssertEqual(element(app, "taste.saveStatus").label, "Bookmark removed")
+        assertSaveStatus(app, "Saved to bookmarks")
+        pressArtwork(comic)
+        assertSaveStatus(app, "Bookmark removed")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Not bookmarked"), object: comic)], timeout: 5), .completed)
         capture(app, "AI compact comic cards")
         comic.tap()
@@ -491,7 +571,7 @@ final class BooruUITests: XCTestCase {
         app.launchArguments = ["--booru-ui-test", "--taste-ui-rich", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "스마트 추천")).firstMatch.tap()
-        XCTAssertTrue(element(app, "taste.highlight").waitForExistence(timeout: 10))
+        XCTAssertTrue(firstTasteCard(app).waitForExistence(timeout: 20))
         capture(app, "AI Korean large text")
         let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "taste.work."))
         for _ in 0..<10 {

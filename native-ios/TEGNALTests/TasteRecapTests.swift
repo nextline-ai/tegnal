@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 import GRDB
 @testable import TEGNAL
 
@@ -344,6 +345,33 @@ final class TasteRecapTests: XCTestCase {
         var next = try store.control(); next.epoch = UUID().uuidString
         try store.setControl(next)
         XCTAssertNil(try store.metadata(RecapPalette.self, key: "recap.palette.booru:month:1"))
+    }
+
+    // MARK: Covers
+
+    @MainActor private func cover(_ seed: Int, hue: String = "sky") throws -> UIImage {
+        let renderer = ImageRenderer(content: RecapCoverArt(palette: .seeded(hue), seed: seed).frame(width: 148, height: 200))
+        renderer.scale = 2
+        return try XCTUnwrap(renderer.uiImage)
+    }
+    @MainActor func testEveryCoverSceneDrawsSomethingDifferent() throws {
+        let images = try (0..<RecapCoverArt.styles).map { try cover($0) }
+        let hashes = images.map { RecapPalette.pixels(of: $0, side: 32).map(\.hex).joined() }
+        XCTAssertEqual(Set(hashes).count, RecapCoverArt.styles)
+        for image in images { XCTAssertGreaterThan(Set(RecapPalette.pixels(of: image, side: 32).map(\.hex)).count, 6, "a scene must not be a flat fill") }
+        XCTAssertEqual(RecapPalette.pixels(of: try cover(3), side: 16), RecapPalette.pixels(of: try cover(3), side: 16), "an issue keeps its cover")
+        if let folder = ProcessInfo.processInfo.environment["TEGNAL_COVER_OUTPUT"] {
+            for (index, hue) in ["sky", "rain", "ember", "forest"].enumerated() {
+                for style in 0..<RecapCoverArt.styles {
+                    let sheet = try cover(style + index * 96 + style * 11 * 8, hue: hue)
+                    try sheet.pngData()?.write(to: URL(fileURLWithPath: folder).appendingPathComponent("cover-\(index)-\(style).png"))
+                }
+            }
+        }
+    }
+    func testConsecutiveIssuesNeverShareACoverScene() throws {
+        let issues = index((1...9).map { event(.save, Int64($0), tags: ["a"], at: date($0, 2)) }).issues(now: now)
+        for (first, second) in zip(issues, issues.dropFirst()) { XCTAssertNotEqual(first.coverSeed % RecapCoverArt.styles, second.coverSeed % RecapCoverArt.styles) }
     }
 
     // MARK: Scale

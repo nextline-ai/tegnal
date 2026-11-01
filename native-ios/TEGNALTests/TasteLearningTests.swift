@@ -161,6 +161,25 @@ final class TasteLearningTests: XCTestCase {
         XCTAssertTrue(learning([]).shelves(sources: [source], tags: [], offset: 0).isEmpty)
     }
 
+    // MARK: Picks
+
+    func testPicksSpreadAcrossReasonsSoOneMissCannotSinkThePage() {
+        func item(_ id: Int64, _ tag: String, _ why: RecommendationWhy, novel: Bool = false) -> TasteRecommendation {
+            var value = candidate(id, tags: [tag]); value.why = why; value.novel = novel; return value
+        }
+        let deck = [item(1, "a", .taste("a")), item(2, "a", .taste("a")), item(3, "a", .taste("a")), item(4, "b", .recent("b")), item(5, "c", .novel("c"), novel: true), item(6, "d", .taste("d"))]
+        let picks = TasteRecommendation.picks(from: deck)
+        XCTAssertEqual(picks.count, 3)
+        XCTAssertEqual(Set(picks.map(\.reason.name)).count, 3, "no two picks fail for the same reason")
+        XCTAssertEqual(Set(picks.map(\.id)), [4, 1, 5].map { source + "#\($0)" }.reduce(into: Set<String>()) { $0.insert($1) })
+    }
+    func testPicksStillFillWhenEveryWorkSharesOneReason() {
+        let deck = (1...5).map { candidate(Int64($0), tags: ["a"]) }
+        XCTAssertEqual(Set(TasteRecommendation.picks(from: deck).map(\.id)).count, 3)
+        XCTAssertEqual(TasteRecommendation.picks(from: Array(deck.prefix(2))).count, 2)
+        XCTAssertTrue(TasteRecommendation.picks(from: []).isEmpty)
+    }
+
     // MARK: Shelves
 
     func testShelvesComeFromDifferentReasonsAndRotate() {

@@ -17,15 +17,14 @@ struct RecommendationMenu: View {
             Button { feedback.more(item) } label: { Label(L10n.text("More like this"), systemImage: "square.on.square") }
             Button(role: .destructive) { feedback.dismiss(item) } label: { Label(L10n.text("Not interested"), systemImage: "hand.thumbsdown") }
         } label: {
-            Image(systemName: "ellipsis").font(.system(size: compact ? 11 : 13, weight: .bold)).foregroundStyle(.white.opacity(compact ? 0.9 : 1))
-                .frame(width: compact ? 22 : 28, height: compact ? 22 : 28).background(.black.opacity(compact ? 0.32 : 0.55), in: Circle())
-                .frame(width: 44, height: 44, alignment: compact ? .topTrailing : .center).padding(compact ? 5 : 0).contentShape(Rectangle())
+            Image(systemName: "ellipsis").font(.system(size: compact ? 14 : 16, weight: .bold)).foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.75), radius: 3).frame(width: 44, height: 44).contentShape(Rectangle())
         }
         .accessibilityLabel(L10n.text("Recommendation options")).accessibilityIdentifier("taste.more.\(item.item.id)")
     }
 }
 
-/// How far the feed reaches, plus a temporary lens from today's strongest threads.
+/// How far the feed reaches, then today's threads with the tuner at their head.
 struct SmartSteering: View {
     let mode: TasteMode
     let feed: TasteFeedState
@@ -33,34 +32,36 @@ struct SmartSteering: View {
     let refresh: () -> Void
     let focus: (TasteFocus?) -> Void
     @Environment(AppEnvironment.self) private var env
-    private var level: Int { env.taste.control.discoveryLevel ?? 1 }
     private var threads: [TasteLearnedTag] {
-        guard let learning = feed.learning else { return [] }
-        return Array(learning.recentTags.prefix(8))
+        Array((feed.learning?.recentTags ?? []).filter { env.taste.control.allows($0.name, source: $0.source, mode: mode) }.prefix(8))
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker(L10n.text("How far to reach"), selection: Binding(get: { level }, set: { value in
+            Picker(L10n.text("How far to reach"), selection: Binding(get: { env.taste.control.discoveryLevel ?? 1 }, set: { value in
                 env.taste.change { $0.discoveryLevel = value }; refresh()
             })) {
                 Text(L10n.text("Familiar")).tag(0); Text(L10n.text("Balanced")).tag(1); Text(L10n.text("Adventurous")).tag(2)
             }.pickerStyle(.segmented).accessibilityIdentifier("taste.discovery")
-            if let active = feed.focus {
-                Button { focus(nil) } label: {
-                    Label(L10n.text("Showing: %@", active.why.label), systemImage: "xmark.circle.fill").font(.subheadline.weight(.semibold)).lineLimit(1)
-                }.buttonStyle(.bordered).tint(TastePresentation.accent).accessibilityIdentifier("taste.focus.clear")
-            } else if !threads.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    NavigationLink { TasteTunerView(mode: mode, feed: feed, source: source, refresh: refresh) } label: {
+                        Image(systemName: "dial.low").font(.subheadline.weight(.semibold)).foregroundStyle(.primary).frame(width: 40, height: 34).background(.quaternary.opacity(0.5), in: Capsule())
+                    }.accessibilityLabel(L10n.text("Tune your taste")).accessibilityIdentifier("taste.tuner")
+                    if let active = feed.focus {
+                        Button { focus(nil) } label: {
+                            Label(active.why.label, systemImage: "xmark").font(.subheadline.weight(.semibold)).lineLimit(1)
+                                .padding(.horizontal, 12).frame(height: 34).foregroundStyle(.white).background(TastePresentation.accent, in: Capsule())
+                        }.buttonStyle(.plain).accessibilityIdentifier("taste.focus.clear")
+                    } else {
                         ForEach(threads) { tag in
                             Button { focus(.init(seed: .init(source: tag.source, name: tag.name, general: tag.saves), why: .recent(tag.name))) } label: {
-                                Text(RecapText.tag(tag.name)).font(.subheadline.weight(.medium)).lineLimit(1)
-                                    .padding(.horizontal, 12).frame(minHeight: 36).background(.quaternary.opacity(0.5), in: Capsule())
+                                Text(RecapText.tag(tag.name)).font(.subheadline).lineLimit(1)
+                                    .padding(.horizontal, 12).frame(height: 34).background(.quaternary.opacity(0.5), in: Capsule())
                             }.buttonStyle(.plain).accessibilityHint(L10n.text("Shows only this for now")).accessibilityIdentifier("taste.thread.\(tag.name)")
                         }
-                    }.padding(.horizontal, 20)
-                }.padding(.horizontal, -20)
-            }
+                    }
+                }.padding(.horizontal, 20)
+            }.padding(.horizontal, -20)
         }
     }
 }
@@ -94,36 +95,42 @@ struct SmartArtwork: View {
     }
 }
 
-/// Today's top pick: the single best match, with its reason in plain words.
-struct SmartHeroCard: View {
-    let item: TasteRecommendation
-    let open: () -> Void
-    let toggle: () -> Void
-    var isBookmarked = false
+/// Three equal cards, so no single choice has to carry the page.
+struct SmartPicksView: View {
+    let items: [TasteRecommendation]
+    let open: (TasteRecommendation) -> Void
+    let toggle: (TasteRecommendation) -> Void
+    let bookmarks: Set<Int64>
     let feedback: RecommendationFeedback
+    /// Lines the cards up with the grid below, which follows the grid settings.
+    var inset: CGFloat = 0
     @Environment(AppEnvironment.self) private var env
-    private var mode: TasteMode { item.post == nil ? .comics : .booru }
-    private var saved: Bool { item.post.map { env.booru.favoriteIDs.contains($0.id) } ?? isBookmarked }
+    private func saved(_ item: TasteRecommendation) -> Bool { item.post.map { env.booru.favoriteIDs.contains($0.id) } ?? bookmarks.contains(item.item.id) }
     var body: some View {
-        Button(action: open) {
-            ZStack(alignment: .bottomLeading) {
-                SmartArtwork(item: item, large: true).aspectRatio(1.05, contentMode: .fit).frame(maxWidth: .infinity).clipped()
-                LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .center, endPoint: .bottom)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(L10n.text("Today's pick")).font(RecapType.folio(11)).textCase(.uppercase).kerning(1.2).opacity(0.85)
-                    if let title = item.gallery?.title { Text(title).font(RecapType.display(21, weight: .bold)).lineLimit(2) }
-                    if let why = item.why { Text(why.sentence).font(.subheadline.weight(.medium)).lineLimit(2).fixedSize(horizontal: false, vertical: true) }
-                }.foregroundStyle(.white).padding(16).padding(.trailing, 28)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Today's picks")).font(.title3.bold()).lineLimit(1).accessibilityAddTraits(.isHeader)
+                Text(L10n.text("One each from your usual taste, recent interests and something new.")).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            .overlay(alignment: .topLeading) {
-                if saved { Image(systemName: "bookmark.fill").foregroundStyle(.yellow).padding(9).background(.black.opacity(0.6), in: Circle()).padding(10).accessibilityHidden(true) }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 20)).contentShape(RoundedRectangle(cornerRadius: 20))
-        }.buttonStyle(RecapPressStyle()).accessibilityIdentifier("taste.work.\(item.item.id)")
-            .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in toggle() })
-            .accessibilityValue(WorkSaveResult.accessibilityValue(saved: saved, mode: mode))
-            .accessibilityAction(named: WorkSaveResult.actionTitle(saved: saved, mode: mode), toggle)
-            .overlay(alignment: .topTrailing) { RecommendationMenu(item: item, feedback: feedback).padding(4) }
+            HStack(spacing: 8) {
+                ForEach(items) { item in
+                    let mode: TasteMode = item.post == nil ? .comics : .booru
+                    Button { open(item) } label: {
+                        Color.clear.aspectRatio(0.74, contentMode: .fit).overlay { SmartArtwork(item: item) }
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(alignment: .topLeading) {
+                                if saved(item) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow).padding(6).accessibilityHidden(true) }
+                            }.contentShape(Rectangle())
+                    }.buttonStyle(RecapPressStyle()).accessibilityIdentifier("taste.work.\(item.item.id)")
+                        .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in toggle(item) })
+                        .accessibilityLabel(item.gallery?.title ?? item.why?.sentence ?? L10n.text("Open"))
+                        .accessibilityValue(WorkSaveResult.accessibilityValue(saved: saved(item), mode: mode))
+                        .accessibilityAction(named: WorkSaveResult.actionTitle(saved: saved(item), mode: mode)) { toggle(item) }
+                        .overlay(alignment: .topTrailing) { RecommendationMenu(item: item, feedback: feedback, compact: true) }
+                        .frame(maxWidth: 190)
+                }
+            }.padding(.horizontal, inset)
+        }
     }
 }
 
@@ -135,15 +142,15 @@ struct SmartShelfView: View {
     let feedback: RecommendationFeedback
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Label(shelf.plan.title, systemImage: shelf.plan.why.icon).font(.headline).lineLimit(1)
-                Text(shelf.plan.why.sentence).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
-            }.accessibilityElement(children: .combine).accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(shelf.plan.title).font(.title3.bold()).lineLimit(1).accessibilityAddTraits(.isHeader)
+                Text(shelf.plan.why.sentence).font(.footnote).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 10) {
+                LazyHStack(alignment: .top, spacing: 8) {
                     ForEach(shelf.items) { item in
                         Button { open(item) } label: {
-                            SmartArtwork(item: item).frame(width: 128, height: 172).clipShape(RoundedRectangle(cornerRadius: 12))
+                            SmartArtwork(item: item).frame(width: 132, height: 176).clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(alignment: .topLeading) {
                                     if bookmarks.contains(item.item.id) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow).padding(6) }
                                 }.contentShape(Rectangle())
@@ -154,7 +161,7 @@ struct SmartShelfView: View {
                     }
                 }.padding(.horizontal, 20)
             }.padding(.horizontal, -20)
-        }.padding(.vertical, 4).accessibilityElement(children: .contain).accessibilityIdentifier("taste.shelf.\(shelf.plan.kind.rawValue)")
+        }.accessibilityElement(children: .contain).accessibilityIdentifier("taste.shelf.\(shelf.plan.kind.rawValue)")
     }
 }
 
@@ -163,7 +170,7 @@ struct SmartUndoBar: View {
     let close: () -> Void
     var body: some View {
         HStack(spacing: 12) {
-            Text(L10n.text("Hidden. Your next refresh will learn from this.")).font(.subheadline).lineLimit(2)
+            Text(L10n.text("Hidden")).font(.subheadline).lineLimit(1)
             Spacer(minLength: 4)
             Button(L10n.text("Undo"), action: undo).font(.subheadline.bold()).accessibilityIdentifier("taste.undo")
         }
@@ -202,7 +209,7 @@ struct RecommendationWhyView: View {
                     Section {
                         ForEach(item.factors) { factor in row(factor) }
                     } header: { Text(L10n.text("What counted")) }
-                      footer: { Text(L10n.text("Longer bars mean stronger, more recent evidence. Your changes apply on the next refresh.")) }
+
                 }
             }
             .navigationTitle(L10n.text("Why this recommendation?")).navigationBarTitleDisplayMode(.inline)
@@ -245,6 +252,19 @@ struct SmartBoostControl: View {
     }
 }
 
+/// Leaving the dashboard cancels its load, so evidence reads the profile itself
+/// when the feed has nothing yet.
+private struct TasteLiveEvidence: View {
+    let feed: TasteFeedState
+    let mode: TasteMode
+    @Environment(AppEnvironment.self) private var env
+    @State private var loaded: [TasteTag] = []
+    var body: some View {
+        TasteTagList(tags: feed.snapshot?.tags ?? loaded, mode: mode)
+            .task { if feed.snapshot == nil, let value = try? await env.taste.snapshot(mode, period: .recommendations, offset: 0) { loaded = value.tags } }
+    }
+}
+
 /// Everything the feed believes about a person, and the means to correct it.
 struct TasteTunerView: View {
     let mode: TasteMode
@@ -254,18 +274,13 @@ struct TasteTunerView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var learning: TasteLearning?
-    @State private var changed = false
-    private var strongest: [TasteLearnedTag] { Array((learning?.ranked() ?? []).prefix(24)) }
+    private var strongest: [TasteLearnedTag] {
+        Array((learning?.ranked() ?? []).filter { env.taste.control.allows($0.name, source: $0.source, mode: mode) }.prefix(24))
+    }
     private var peak: Double { max(0.001, strongest.first?.weight ?? 1) }
     private var steered: [String] { (env.taste.control.tasteBoosts ?? [:]).keys.sorted() }
     var body: some View {
         List {
-            Section {
-                Picker(L10n.text("How far to reach"), selection: Binding(get: { env.taste.control.discoveryLevel ?? 1 }, set: { value in env.taste.change { $0.discoveryLevel = value }; changed = true })) {
-                    Text(L10n.text("Familiar")).tag(0); Text(L10n.text("Balanced")).tag(1); Text(L10n.text("Adventurous")).tag(2)
-                }.pickerStyle(.segmented)
-            } header: { Text(L10n.text("How far to reach")) }
-              footer: { Text(L10n.text("Recent saves count most, and older ones fade gradually. Long views and finished works count too. Opening a work briefly teaches nothing.")) }
             if !steered.isEmpty {
                 Section(L10n.text("Your adjustments")) {
                     ForEach(steered, id: \.self) { key in
@@ -312,9 +327,10 @@ struct TasteTunerView: View {
                 }
             }
             Section {
-                NavigationLink { TasteTagList(tags: feed.snapshot?.tags ?? [], mode: mode) } label: { Label(L10n.text("Recommendation evidence"), systemImage: "list.bullet.rectangle") }
+                NavigationLink { TasteLiveEvidence(feed: feed, mode: mode) } label: { Label(L10n.text("Recommendation evidence"), systemImage: "list.bullet.rectangle") }
+                    .accessibilityIdentifier("taste.evidence")
                 NavigationLink { RecommendationSettingsView(mode: mode, initialSource: source) } label: { Label(L10n.text("Recommendation filters"), systemImage: "line.3.horizontal.decrease") }
-            }
+            } footer: { Text(L10n.text("Recommendation searches send the selected tags to your connected websites. Your taste profile is not sent.")) }
         }
         .navigationTitle(L10n.text("Tune your taste")).navigationBarTitleDisplayMode(.inline)
         .tint(TastePresentation.accent)

@@ -105,7 +105,7 @@ struct RecapStoryView: View {
             }
         }
         .appSheet(item: $search) { search in searchSheet(search) }
-        .appSheet(isPresented: $sharing) { RecapShareView(recap: recap, palette: palette).environment(artwork) }
+        .appSheet(isPresented: $sharing) { RecapShareView(recap: recap, palette: palette) }
         .appSheet(isPresented: $browsing) {
             NavigationStack {
                 RecapWorksView(recap: recap, palette: palette).environment(artwork)

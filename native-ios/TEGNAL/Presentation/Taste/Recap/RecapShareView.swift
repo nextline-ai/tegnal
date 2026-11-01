@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Sharing is opt-in twice over: by default the card carries colors and numbers
-/// only. Artwork and tags appear only after the person turns them on.
+/// A share card never carries saved works: the cover is drawn, and tags stay off
+/// until the person turns them on.
 struct RecapShareView: View {
     let recap: TasteRecap
     let palette: RecapPalette
@@ -10,12 +10,9 @@ struct RecapShareView: View {
         var size: CGSize { self == .story ? CGSize(width: 360, height: 640) : CGSize(width: 360, height: 360) }
     }
     @Environment(AppEnvironment.self) private var env
-    @Environment(RecapArtwork.self) private var artwork
     @Environment(\.dismiss) private var dismiss
     @State private var format = Format.story
-    @State private var showsArtwork = false
     @State private var showsTags = false
-    @State private var cover: UIImage?
     @State private var rendered: UIImage?
     var body: some View {
         NavigationStack {
@@ -31,9 +28,8 @@ struct RecapShareView: View {
                     Picker(L10n.text("Format"), selection: $format) {
                         Text(L10n.text("Story")).tag(Format.story); Text(L10n.text("Square")).tag(Format.square)
                     }.pickerStyle(.segmented)
-                    Toggle(L10n.text("Show cover artwork"), isOn: $showsArtwork).accessibilityIdentifier("recap.share.artwork")
                     Toggle(L10n.text("Show top tags"), isOn: $showsTags).accessibilityIdentifier("recap.share.tags")
-                } footer: { Text(L10n.text("Off by default, so a shared card shows only colors and numbers. Check what's visible before you post.")) }
+                } footer: { Text(L10n.text("Share cards never include your saved works.")) }
             }
             .navigationTitle(L10n.text("Share cover")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -46,15 +42,12 @@ struct RecapShareView: View {
                     }
                 }
             }
-            .task(id: "\(format.rawValue):\(showsArtwork):\(showsTags)") {
-                if showsArtwork, cover == nil, let work = recap.cover { cover = await artwork.image(work, large: true, generated: recap.isSample) }
-                render()
-            }
+            .task(id: "\(format.rawValue):\(showsTags)") { render() }
         }
     }
     private var poster: some View {
         RecapCoverLayout(recap: recap, palette: palette, timeZone: RecapFormat.zone(env), showsTags: showsTags) {
-            if showsArtwork, let cover { Image(uiImage: cover).resizable().scaledToFill() } else { RecapColorField(palette: palette, seed: recap.issue) }
+            RecapCoverArt(palette: palette, seed: recap.coverSeed)
         }.overlay(alignment: .bottomTrailing) {
             Text(verbatim: "TEGNAL").font(RecapType.display(13, weight: .heavy)).kerning(1).foregroundStyle(.white.opacity(0.9)).padding(18)
         }

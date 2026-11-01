@@ -198,7 +198,7 @@ struct RecapHomeView: View {
             Toggle(isOn: $privateMode) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L10n.text("Hide artwork in Recap")).font(.subheadline.weight(.medium))
-                    Text(L10n.text("Show each issue's colors instead of your covers.")).font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.text("Inside pages show colors instead of your works.")).font(.caption).foregroundStyle(.secondary)
                 }
             }.disabled(env.booruSafeMode)
             Label(L10n.text("Made on this device from your own activity. Nothing is uploaded to build it."), systemImage: "lock").font(.footnote).foregroundStyle(.secondary)
@@ -213,35 +213,27 @@ struct RecapPressStyle: ButtonStyle {
     }
 }
 
-/// The Smart tab's way in: this month's cover and the latest state of play.
+/// The Smart tab's way in: the latest cover on a single quiet row.
 struct RecapEntryCard: View {
     let mode: TasteMode
     @Environment(AppEnvironment.self) private var env
     @State private var shelf = RecapShelf()
-    @State private var artwork: RecapArtwork?
-    @SwiftUI.AppStorage("recap.private") private var privateMode = false
-    private var hidesArtwork: Bool { privateMode || env.booruSafeMode }
     var body: some View {
         NavigationLink { RecapHomeView(mode: mode) } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Group {
-                    if let artwork, let recap = shelf.latest ?? shelf.sample {
-                        RecapArtTile(work: recap.cover, palette: shelf.palette(recap), generated: recap.isSample).environment(artwork)
-                    } else { TastePresentation.accent.opacity(0.14) }
-                }.frame(width: 58, height: 78).clipShape(RoundedRectangle(cornerRadius: 7)).environment(\.recapPrivate, hidesArtwork)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(verbatim: "RECAP").font(RecapType.display(19)).foregroundStyle(.primary)
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                    if let recap = shelf.latest ?? shelf.sample { RecapCoverArt(palette: shelf.palette(recap), seed: recap.coverSeed) }
+                    else { TastePresentation.accent.opacity(0.14) }
+                }.frame(width: 36, height: 48).clipShape(RoundedRectangle(cornerRadius: 5))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: "RECAP").font(RecapType.display(16)).foregroundStyle(.primary)
+                    if let latest = shelf.latest { Text(RecapFormat.title(latest, timeZone: RecapFormat.zone(env))).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-            }.padding(12).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18)).contentShape(RoundedRectangle(cornerRadius: 18))
+            }.padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14)).contentShape(RoundedRectangle(cornerRadius: 14))
         }.buttonStyle(RecapPressStyle()).accessibilityIdentifier("recap.entry")
-        .task { if artwork == nil { artwork = RecapArtwork(env: env) } }
         .task(id: "\(mode.rawValue):\(env.taste.revision)") { await shelf.load(mode: mode, env: env, key: "\(mode.rawValue)") }
-    }
-    private var subtitle: String {
-        guard let latest = shelf.latest else { return L10n.text("Your first issue is on its way") }
-        return L10n.text("No. %@ · %@", String(latest.issue), RecapFormat.title(latest, timeZone: RecapFormat.zone(env)))
     }
 }

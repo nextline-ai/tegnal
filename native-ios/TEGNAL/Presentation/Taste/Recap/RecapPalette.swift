@@ -37,6 +37,7 @@ struct RecapColor: Codable, Hashable, Sendable {
 /// swatches ordered by presence, with stage colors derived for legible type.
 struct RecapPalette: Codable, Hashable, Sendable {
     var swatches: [RecapColor]
+    var leadHue: Double { lead.hsb.hue }
     private var lead: RecapColor { swatches.max { vividness($0) < vividness($1) } ?? swatches[0] }
     private func vividness(_ color: RecapColor) -> Double { let value = color.hsb; return value.saturation * value.brightness }
     /// Always dark enough for white type, whatever the artwork's colors are.

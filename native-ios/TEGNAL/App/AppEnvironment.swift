@@ -277,6 +277,9 @@ public final class AppEnvironment: @unchecked Sendable {
         set {
             selectedMode = booruSafeMode ? .booru : newValue
             browserPreferences.set(selectedMode.rawValue, forKey: "content_mode")
+            // Observation notifies before storing, and SwiftUI can reevaluate the root
+            // inside that notification. Notify again so it cannot keep the old mode.
+            withMutation(keyPath: \.selectedMode) {}
         }
     }
     private(set) var booruSearchRevision = 0
