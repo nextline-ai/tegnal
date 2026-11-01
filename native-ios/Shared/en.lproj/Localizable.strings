@@ -1294,3 +1294,21 @@
 "This post was deleted or removed from the website." = "This post was deleted or removed from the website.";
 "If you can view this post on the website, contact the developer so we can fix it. Include the post link." = "If you can view this post on the website, contact the developer so we can fix it. Include the post link.";
 "Official Discord" = "Official Discord";
+
+/* Reader coach marks and information hints. */
+"Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.";
+"Scroll to Work Information" = "Scroll to Work Information";
+"Turn Pages" = "Turn Pages";
+"Step %@ of %@" = "Step %@ of %@";
+"Start Reading" = "Start Reading";
+"Tap the Center" = "Tap the Center";
+"Your Quick Menu" = "Your Quick Menu";
+"Pull Down to Close" = "Pull Down to Close";
+"Skip Guide" = "Skip Guide";
+"The guide will appear over the next work you open." = "The guide will appear over the next work you open.";
+"Scroll to read. Tap the center to open your menu." = "Scroll to read. Tap the center to open your menu.";
+"Tap the sides to turn pages. Tap the center to open your menu." = "Tap the sides to turn pages. Tap the center to open your menu.";
+"Swipe to turn pages. Tap the center to open your menu." = "Swipe to turn pages. Tap the center to open your menu.";
+"Open work information, save or translate here. Change how you read in Viewer Detail Settings." = "Open work information, save or translate here. Change how you read in Viewer Detail Settings.";
+"Pull down from the top reading area to return to the list. Move back up to cancel." = "Pull down from the top reading area to return to the list. Move back up to cancel.";
+"Pull the work down to return to the list. Move back up to cancel. Zoom out first." = "Pull the work down to return to the list. Move back up to cancel. Zoom out first.";

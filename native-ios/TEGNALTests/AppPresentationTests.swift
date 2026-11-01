@@ -4,7 +4,48 @@ import CoreImage
 @testable import TEGNAL
 
 final class AppPresentationTests: XCTestCase {
+    @MainActor func testMangaExitMovesTheWholeSavedAndRecommendationContainerAndDismissesOnce() async throws {
+        let preferences = ReaderPreferences.defaults
+        let previousHelp = preferences.object(forKey: "reader.helpHidden")
+        preferences.set(true, forKey: "reader.helpHidden")
+        defer { preferences.set(previousHelp, forKey: "reader.helpHidden") }
+        let env = AppEnvironment.preview(), source = FixtureContentSource()
+        let state = PresentationProbeState()
+        var closed = 0
+        let previous = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first(where: \.isKeyWindow)
+        let window = try show(Color.green.ignoresSafeArea()
+            .appFullScreenCover(isPresented: Binding(get: { state.cover }, set: { state.cover = $0 }), onDismiss: { state.dismissals += 1 }) {
+                // Saved and Smart Recommendations both enter through this
+                // navigation-wrapped root, unlike Explore's direct session.
+                NativeContentView(initialUrl: MangaUrls.readerUrl(for: 900000001), source: source, savesProgress: false,
+                                  willCloseManga: { _ in closed += 1 })
+            }.environment(env).environment(env.booru))
+        defer { window.rootViewController?.dismiss(animated: false); window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        state.cover = true
+        try await wait { window.rootViewController?.presentedViewController?.view.window != nil }
+        let modal = try XCTUnwrap(window.rootViewController?.presentedViewController)
+        func exitGesture(in view: UIView) -> ExitGestureView? {
+            if let view = view as? ExitGestureView { return view }
+            return view.subviews.lazy.compactMap { exitGesture(in: $0) }.first
+        }
+        let gesture = try XCTUnwrap(exitGesture(in: modal.view))
+        XCTAssertTrue(gesture.movesContainer)
+        var responder: UIResponder? = gesture
+        while responder != nil && !(responder is UIViewController) { responder = responder?.next }
+        let owner = try XCTUnwrap(responder as? UIViewController)
+        let surface = ReaderExitSurface.view(for: owner, movesContainer: gesture.movesContainer)
+        XCTAssertTrue(surface === modal.view, "Do not leave the outer navigation container behind")
+        let motion = ReaderExitMotion(); motion.begin(surface, snapshot: true); motion.update(distance: 180)
+        defer { motion.restore() }
+        assertGreenPresenter(in: window)
+        motion.finish(distance: window.bounds.height) { ReaderInteractiveExit.complete { gesture.exit() } }
+        try await wait { window.rootViewController?.presentedViewController == nil }
+        XCTAssertEqual(closed, 1); XCTAssertEqual(state.dismissals, 1); XCTAssertFalse(state.cover)
+    }
+
     @MainActor func testImageViewerDragExposesThePresentingScreenInsteadOfABlackBackdrop() async throws {
+        let preferences = ReaderPreferences.booruDefaults, previousHelp = preferences.object(forKey: "reader.helpHidden")
+        preferences.set(true, forKey: "reader.helpHidden"); defer { preferences.set(previousHelp, forKey: "reader.helpHidden") }
         let env = AppEnvironment.preview(), state = PresentationProbeState(), server = BooruServer.presets[0]
         env.mode = .booru; try env.booru.saveServer(server)
         var post = BooruFixtureSource.post(101, server: server)
@@ -36,8 +77,15 @@ final class AppPresentationTests: XCTestCase {
             XCTAssertEqual(surface.safeAreaInsets, safeArea)
             XCTAssertEqual(motion.surface?.transform.ty, distance)
         }
+        assertGreenPresenter(in: window)
+        motion.restore()
+        XCTAssertFalse(surface.isHidden)
+        XCTAssertNil(motion.surface)
+    }
+
+    @MainActor private func assertGreenPresenter(in window: UIWindow, file: StaticString = #filePath, line: UInt = #line) {
         let screenshot = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
-        let image = try XCTUnwrap(screenshot.cgImage)
+        guard let image = screenshot.cgImage else { return XCTFail("Missing rendered image", file: file, line: line) }
         let scale = CGFloat(image.width) / window.bounds.width
         let sample = CGRect(x: CGFloat(image.width) / 2, y: CGFloat(image.height) - 100 * scale, width: 1, height: 1)
         var pixel = [UInt8](repeating: 0, count: 4)
@@ -46,9 +94,6 @@ final class AppPresentationTests: XCTestCase {
         }
         XCTAssertGreaterThan(Int(pixel[1]), Int(pixel[0]) + 30, "The exposed area must show the green presenting screen, not a black cover")
         XCTAssertGreaterThan(Int(pixel[1]), Int(pixel[2]) + 30)
-        motion.restore()
-        XCTAssertFalse(surface.isHidden)
-        XCTAssertNil(motion.surface)
     }
 
     @MainActor func testDisabledResumeAnimationRemovesPrivacyCoverImmediately() {

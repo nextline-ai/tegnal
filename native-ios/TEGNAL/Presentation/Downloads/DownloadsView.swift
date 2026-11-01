@@ -106,7 +106,7 @@ struct DownloadsView: View {
             }
             HStack(spacing: style.inset(4)) {
                 Text(L10n.text(status(item.status))).lineLimit(1)
-                if item.status != .completed { Text("\(item.files.count)/\(item.total)").monospacedDigit() }
+                if item.status != .completed { Text("\(item.files.count)/\(item.total)") }
                 Spacer(minLength: 0)
                 Menu { actions(item) } label: {
                     Image(systemName: "ellipsis").frame(width: max(24, 36 * style.scale), height: max(24, 36 * style.scale)).contentShape(Rectangle())

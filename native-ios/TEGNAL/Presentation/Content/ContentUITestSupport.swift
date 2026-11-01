@@ -34,6 +34,7 @@ enum ContentUITestSupport {
         }
         if !BooruUITestSupport.enabled && !BooruUITestSupport.liveEnabled { env.mode = .manga }
         if BooruUITestSupport.enabled {
+            ReaderPreferences.booruDefaults.set(!ProcessInfo.processInfo.arguments.contains("--reader-help-test"), forKey: "reader.helpHidden")
             env.mode = .booru
             if !ProcessInfo.processInfo.arguments.contains("--onboarding-test") && !ProcessInfo.processInfo.arguments.contains("--no-sites-test") {
                 for server in BooruServer.presets { try! env.booru.saveServer(server) }

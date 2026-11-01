@@ -139,9 +139,26 @@ struct BooruViewerAccessNavigation {
     }
 }
 
+enum BooruViewerSheet: Equatable, Identifiable {
+    case information, settings, folder, downloads, note(BooruNote)
+    var id: String {
+        switch self {
+        case .information: "information"
+        case .settings: "settings"
+        case .folder: "folder"
+        case .downloads: "downloads"
+        case .note(let note): "note:\(note.id)"
+        }
+    }
+}
+
 struct BooruPostView: View {
     @Environment(\.discoveryContext) private var discovery
-    @State private var showDownloads = false
+    @State private var sheet: BooruViewerSheet?
+    private var showDownloads: Bool {
+        get { sheet == .downloads }
+        nonmutating set { setSheet(.downloads, visible: newValue) }
+    }
     @State private var posts: [BooruPost]
     var loadMore: (() async -> BooruViewerBatch)?
     var positionChanged: (BooruPost) -> Void
@@ -169,8 +186,17 @@ struct BooruPostView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var menuVisible = false
     @SwiftUI.AppStorage("booru.videoMenuHintSeen", store: ReaderPreferences.booruDefaults) private var videoMenuHintSeen = false
-    @State private var readerSettings = false
-    @State private var filing = false
+    private var readerSettings: Bool {
+        get { sheet == .settings }
+        nonmutating set { setSheet(.settings, visible: newValue) }
+    }
+    @State private var guide = ReaderGuideSession()
+    @State private var pendingGuide = false
+    @SwiftUI.AppStorage("reader.helpHidden", store: ReaderPreferences.booruDefaults) private var helpHidden = false
+    private var filing: Bool {
+        get { sheet == .folder }
+        nonmutating set { setSheet(.folder, visible: newValue) }
+    }
     @State private var translation: ReaderTranslationRequest?
     @State private var viewport = BooruViewerViewport()
     @State private var zoomed = false
@@ -192,8 +218,17 @@ struct BooruPostView: View {
     @SwiftUI.AppStorage("booru.original", store: ReaderPreferences.booruDefaults) private var loadOriginal = false
     @SwiftUI.AppStorage("booru.showNotes", store: ReaderPreferences.booruDefaults) private var showNotes = true
     @State private var original = false
-    @State private var info = false
-    @State private var selectedNote: BooruNote?
+    private var info: Bool {
+        get { sheet == .information }
+        nonmutating set { setSheet(.information, visible: newValue) }
+    }
+    private var selectedNote: BooruNote? {
+        get { if case .note(let note) = sheet { return note }; return nil }
+        nonmutating set { if let newValue { sheet = .note(newValue) } else if selectedNote != nil { sheet = nil } }
+    }
+    private func setSheet(_ target: BooruViewerSheet, visible: Bool) {
+        if visible { sheet = target } else if sheet == target { sheet = nil }
+    }
     @State private var mediaStatus = "loading"
     @State private var loadingIndicatorID: String?
     @State private var retry = 0
@@ -205,14 +240,21 @@ struct BooruPostView: View {
         _original = State(initialValue: ReaderPreferences.booruDefaults.bool(forKey: "booru.original"))
     }
     private var index: Int { posts.firstIndex(where: { $0.id == post.id }) ?? 0 }
-    private var isActive: Bool { !exiting && env.mode == browsingMode && scenePhase == .active }
+    private var isActive: Bool { !exiting && (challenge != nil || env.mode == browsingMode) && scenePhase == .active }
     private var mediaActive: Bool {
-        isActive && !post.isRemoved && mediaStatus != "removed" && store.isVisible(post) && !accessNavigation.restrictedIDs.contains(post.id) && translation == nil && !info && !readerSettings && !filing && !showJump && selectedNote == nil
+        isActive && sheet == nil && !post.isRemoved && mediaStatus != "removed" && store.isVisible(post) && !accessNavigation.restrictedIDs.contains(post.id) && translation == nil && !info && !readerSettings && !filing && !showJump && selectedNote == nil
     }
     private var resolvesMissingMedia: Bool { server.engine.usesGelbooruPages || server.engine == .danbooru }
     private var mediaReady: Bool { ["ready", "playing", "ended"].contains(mediaStatus) }
     private var waitingForMedia: Bool { mediaStatus == "loading" || loadingMore && wantsNext }
-    private var mayLoadNotes: Bool { isActive && (showNotes && mediaReady || info) }
+    private var mayLoadNotes: Bool { isActive && (info || sheet == nil && showNotes && mediaReady) }
+    private var mayAutoAdvance: Bool {
+        autoAdvance && guide.step == nil && isActive && sheet == nil && translation == nil && !menuVisible && !showJump && !zoomed && ["ready", "ended"].contains(mediaStatus)
+    }
+    private var autoAdvanceTaskID: String {
+        [String(guide.step?.rawValue ?? -1), post.id, mediaStatus, sheet?.id ?? "", translation?.id.uuidString ?? "", String(autoAdvance),
+         String(autoSeconds), String(menuVisible), String(showJump), String(zoomed), String(isActive)].joined(separator: ":")
+    }
     var body: some View {
         NavigationStack {
             ZStack {
@@ -247,7 +289,7 @@ struct BooruPostView: View {
                     if let toast { Text(toast).font(.subheadline.bold()).padding(12).background(.regularMaterial, in: Capsule()).accessibilityIdentifier("booru.toast") }
                     Spacer()
                     if menuVisible || post.isRemoved || ["error", "unavailable", "removed"].contains(mediaStatus) || post.viewerURL(original: original, reducedData: reducedData) == nil && !resolvesMissingMedia { quickMenu }
-                    else if pageNumber { Text("\(index + 1) / \(posts.count)").font(.caption.monospacedDigit()).padding(6).background(.black.opacity(0.5), in: Capsule()) }
+                    else if pageNumber { Text("\(index + 1) / \(posts.count)").font(.caption).padding(6).background(.black.opacity(0.5), in: Capsule()) }
                 }.padding(16)
             }
             .overlay {
@@ -261,7 +303,7 @@ struct BooruPostView: View {
             .foregroundStyle(.white).tint(.white).preferredColorScheme(.dark)
             .overlay(alignment: .top) {
                 ReaderDismissHandle(identifier: "booru.exitHandle", dismiss: closeViewer)
-                    .ignoresSafeArea(edges: .top)
+                    .ignoresSafeArea(edges: .top).allowsHitTesting(false)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if bottomMenu && !menuVisible && translation == nil { menuActions(compact: true).padding(12).modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
@@ -272,9 +314,9 @@ struct BooruPostView: View {
             .onChange(of: challenge?.session.phase) { _, phase in
                 if phase == .idle || phase == .ended { closeViewer() }
             }
-            .background(VideoMenuGesture(enabled: post.isVideo && !info && !readerSettings && !filing && translation == nil && selectedNote == nil && !showJump) { menuVisible.toggle() })
+            .background(VideoMenuGesture(enabled: post.isVideo && sheet == nil && translation == nil && !showJump) { menuVisible.toggle() })
             .accessibilityAction(named: L10n.text("Open Menu")) { menuVisible = true }
-            .background(ReaderKeyboardCommands(enabled: !info && !readerSettings && !filing && !showJump && selectedNote == nil, action: shortcut))
+            .background(ReaderKeyboardCommands(enabled: sheet == nil && !showJump, action: shortcut))
             .statusBarHidden(true)
             .persistentSystemOverlays(.hidden)
             .toolbar(.hidden, for: .navigationBar).toolbar(.hidden, for: .tabBar)
@@ -301,14 +343,20 @@ struct BooruPostView: View {
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
                 requestMore()
             }
-            .appSheet(isPresented: $filing) { BooruFolderPicker(post: post).environment(\.discoveryContext, activeDiscovery) }
-            .appSheet(isPresented: $readerSettings) { ReaderSettingsView(booru: true) }
+            .task(id: mediaReady && isActive && !helpHidden && sheet == nil && !menuVisible && !showJump && translation == nil) {
+                guard mediaReady, isActive, !helpHidden, !guide.hasStarted, sheet == nil, !menuVisible, !showJump, translation == nil else { return }
+                guide.start()
+            }
             .alert(L10n.text("Go to Page"), isPresented: $showJump) {
                 TextField(L10n.text("Page Number"), text: $jumpText).keyboardType(.numberPad)
                 Button(L10n.text("Go")) { if let number = Int(jumpText), posts.indices.contains(number - 1) { move(number - 1 - index) } }
                 Button(L10n.text("Cancel"), role: .cancel) {}
             }
-            .onAppear { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake }
+            .onAppear {
+                previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake
+                pagination.isActive = isActive
+                if isActive { completePendingAdvance() }
+            }
             .onChange(of: isActive, initial: true) { _, active in
                 pagination.isActive = active
                 if active { completePendingAdvance() }
@@ -331,8 +379,8 @@ struct BooruPostView: View {
                 guard toast != nil else { return }
                 do { try await Task.sleep(for: .seconds(2)); toast = nil } catch {}
             }
-            .task(id: "\(translation?.id.uuidString ?? ""):\(filing):\(autoAdvance):\(autoSeconds):\(post.id):\(menuVisible):\(readerSettings):\(info):\(showJump):\(selectedNote?.id ?? 0):\(zoomed):\(isActive):\(mediaStatus)") {
-                guard autoAdvance, isActive, translation == nil, !filing, !menuVisible, !readerSettings, !info, !showJump, selectedNote == nil, !zoomed, ["ready", "ended"].contains(mediaStatus) else { return }
+            .task(id: autoAdvanceTaskID) {
+                guard mayAutoAdvance else { return }
                 do {
                     try await Task.sleep(for: .seconds(min(120, max(2, autoSeconds))))
                     try Task.checkCancellation()
@@ -369,23 +417,37 @@ struct BooruPostView: View {
                     if !Task.isCancelled { notesError = error.localizedDescription; loadedNotesKey = key }
                 }
             }
-            .appSheet(isPresented: $info) { details }
-            .appSheet(item: $selectedNote) { note in
+        }
+        .presentationBackground(.clear)
+        .overlayPreferenceValue(ReaderGuideMenuBounds.self) { bounds in
+            if let step = guide.step, sheet == nil, translation == nil, !showJump {
+                ReaderGuideOverlay(step: step, configuration: ReaderGuideConfiguration(booru: true, defaults: ReaderPreferences.booruDefaults),
+                                   menuBounds: bounds, next: advanceGuide, finish: finishGuide)
+            }
+        }
+        .onChange(of: menuVisible) { _, visible in if visible { guide.openedMenu() } }
+        .appSheet(item: $sheet, onDismiss: {
+            if pendingGuide { pendingGuide = false; menuVisible = false; guide.start() }
+        }) { target in
+            switch target {
+            case .information: details
+            case .settings: ReaderSettingsView(booru: true, onShowGuide: { pendingGuide = true; sheet = nil })
+            case .folder: BooruFolderPicker(post: post).environment(\.discoveryContext, activeDiscovery)
+            case .downloads: DownloadsSheet(mode: .booru)
+            case .note(let note):
                 NavigationStack {
                     BooruNoteTranslationView(text: note.body)
                         .navigationTitle(L10n.text("Notes")).navigationBarTitleDisplayMode(.inline)
                         .toolbar { ToolbarItem(placement: .confirmationAction) {
-                            Button(L10n.text("Done")) { selectedNote = nil }.accessibilityIdentifier("booru.noteClose").keyboardShortcut(.cancelAction)
+                            Button(L10n.text("Done")) { sheet = nil }.accessibilityIdentifier("booru.noteClose").keyboardShortcut(.cancelAction)
                         } }
-                }
-                    .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+                }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
         }
-        .presentationBackground(.clear)
-        .background(ReaderExitGesture(enabled: !exiting && !zoomed && !menuVisible && !info && !readerSettings && !filing && !showJump && translation == nil && selectedNote == nil, movesContainer: true, progress: { _ in }, exit: { closeViewer() }))
+        .background(ReaderExitGesture(enabled: isActive && sheet == nil && !zoomed && !showJump && translation == nil, movesContainer: true, progress: { _ in }, exit: { closeViewer() }))
     }
     private func shortcut(_ command: ReaderShortcut) {
-        guard !info, !readerSettings, !filing, !showJump, selectedNote == nil else { return }
+        guard sheet == nil, !showJump else { return }
         if command == .exit {
             if translation != nil { translation = nil } else { closeViewer() }
             return
@@ -406,7 +468,7 @@ struct BooruPostView: View {
                 Button { move(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
                     .disabled(index == 0).accessibilityLabel(L10n.text("Previous")).accessibilityIdentifier("booru.previous")
                 Spacer()
-                Button { jumpText = String(index + 1); showJump = true } label: { Text("\(index + 1) / \(posts.count)").font(.headline.monospacedDigit()) }.accessibilityIdentifier("booru.position")
+                Button { jumpText = String(index + 1); showJump = true } label: { Text("\(index + 1) / \(posts.count)").font(.headline) }.accessibilityIdentifier("booru.position")
                 Spacer()
                 Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
                     .disabled(index >= posts.count - 1 && (loadMore == nil || !hasMorePages)).accessibilityLabel(L10n.text("Next")).accessibilityIdentifier("booru.next")
@@ -415,6 +477,7 @@ struct BooruPostView: View {
             }
             menuActions(compact: false)
         }.padding(16).buttonStyle(.plain).modifier(ReaderMenuGlass())
+        .anchorPreference(key: ReaderGuideMenuBounds.self, value: .bounds) { $0 }
     }
     private func menuActions(compact: Bool) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: compact ? 4 : 3), spacing: 18) {
@@ -432,7 +495,6 @@ struct BooruPostView: View {
             ShareLink(item: server.pageURL(postID: post.postID)) { menuLabel(L10n.text("Share"), icon: "square.and.arrow.up", compact: compact) }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "readerSettings", compact: compact) { readerSettings = true }
         }.buttonStyle(.plain).foregroundStyle(.white).tint(.white)
-            .appSheet(isPresented: $showDownloads) { DownloadsSheet(mode: .booru) }
     }
     private func menuLabel(_ title: String, icon: String, compact: Bool) -> some View {
         VStack(spacing: 6) {
@@ -446,15 +508,25 @@ struct BooruPostView: View {
     private func toggleFavorite() {
         saveFeedback = .perform { try BooruFavoriteAction.toggle(post, store: store, context: activeDiscovery) }
     }
+    private func advanceGuide() {
+        switch guide.step {
+        case .navigation: guide.advance(); menuVisible = true
+        case .tools: guide.advance(); menuVisible = false
+        case .exit: finishGuide()
+        case nil: break
+        }
+    }
+    private func finishGuide() { guide.finish(); helpHidden = true }
     private func closeViewer() {
         guard !exiting else { return }
+        if guide.step != nil { finishGuide() }
         exiting = true
         pagination.isActive = false; pagination.cancelAdvance()
         willClose(post)
         dismiss()
     }
     private func gesture(_ gesture: BooruMediaGesture) {
-        guard !info, !readerSettings, !filing, translation == nil, selectedNote == nil, !showJump else { return }
+        guard sheet == nil, translation == nil, !showJump else { return }
         switch gesture {
         case .shortcut(let command): shortcut(command)
         case .tap(let x):
@@ -463,7 +535,6 @@ struct BooruPostView: View {
         case .swipe(let delta): if !zoomed { move(delta * (rtl ? -1 : 1)) }
         case .hold:
             toggleFavorite()
-        case .dismiss: if !zoomed { closeViewer() }
         case .details: if !zoomed { info = true }
         case .zoom(let value): if zoomed != value { zoomed = value }
         case .viewport(let rect): viewport.rect = rect

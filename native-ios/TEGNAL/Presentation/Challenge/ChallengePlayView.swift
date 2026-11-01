@@ -76,7 +76,7 @@ struct ChallengePlayView: View {
                 Text(mission.text).font(.title3.weight(.medium)).accessibilityIdentifier("challenge.mission")
                 if !mission.tags.isEmpty {
                     DisclosureGroup(L10n.text("Search Tags")) {
-                        Text(mission.tags.joined(separator: " ")).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        Text(mission.tags.joined(separator: " ")).font(.caption).foregroundStyle(.secondary)
                         Button(L10n.text("Copy Tags"), systemImage: "doc.on.doc") { UIPasteboard.general.string = mission.tags.joined(separator: " ") }
                     }.font(.caption)
                 }
@@ -103,7 +103,7 @@ struct ChallengeReelsView: View {
                 Label(L10n.text("Progress"), systemImage: "flag.checkered").font(.headline).foregroundStyle(.secondary)
                 Spacer()
                 Text("\(controller.session.score) / \(controller.session.definition.target)")
-                    .font(.system(.title, design: .rounded, weight: .bold)).monospacedDigit().accessibilityIdentifier("challenge.score")
+                    .font(.system(.title, design: .rounded, weight: .bold)).accessibilityIdentifier("challenge.score")
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -214,7 +214,7 @@ struct ChallengeSessionControls: View {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         let seconds = controller.seconds(at: context.date)
                         Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
-                            .font(compact ? .title3.monospacedDigit() : .largeTitle.monospacedDigit()).accessibilityIdentifier("challenge.timer")
+                            .font(compact ? .title3 : .largeTitle).accessibilityIdentifier("challenge.timer")
                     }
                     let buttons = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout())
                     buttons {
@@ -225,7 +225,7 @@ struct ChallengeSessionControls: View {
                 } else {
                     HStack(spacing: 24) {
                         Button(action: { controller.adjust(-1) }) { Image(systemName: "minus.circle.fill").font(.title) }.accessibilityLabel(L10n.text("Decrease Count"))
-                        Text("\(controller.session.count) / \(mission.goal)").font(.title.monospacedDigit()).accessibilityIdentifier("challenge.count")
+                        Text("\(controller.session.count) / \(mission.goal)").font(.title).accessibilityIdentifier("challenge.count")
                         Button(action: { controller.adjust(1) }) { Image(systemName: "plus.circle.fill").font(.title) }.accessibilityLabel(L10n.text("Increase Count")).accessibilityIdentifier("challenge.increment")
                     }
                 }
@@ -325,11 +325,11 @@ struct ChallengeViewerControls: View {
         if mission.kind == .time {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let seconds = controller.seconds(at: context.date)
-                Text(String(format: "%02d:%02d", seconds / 60, seconds % 60)).monospacedDigit()
+                Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
                     .accessibilityLabel(L10n.text("Time")).accessibilityIdentifier("challenge.timer")
             }
         } else {
-            Text("\(controller.session.count)/\(mission.goal)").monospacedDigit()
+            Text("\(controller.session.count)/\(mission.goal)")
                 .accessibilityLabel(L10n.text("Count")).accessibilityIdentifier("challenge.count")
         }
     }

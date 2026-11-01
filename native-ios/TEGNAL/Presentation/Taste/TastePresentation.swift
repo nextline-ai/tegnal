@@ -67,7 +67,7 @@ struct TasteTagRow: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
-                Text(String(tag.count == 0 ? tag.searches : tag.count)).font(.headline.monospacedDigit()).foregroundStyle(.primary)
+                Text(String(tag.count == 0 ? tag.searches : tag.count)).font(.headline).foregroundStyle(.primary)
                 Text(L10n.text(tag.count == 0 ? "Searches" : "Saved works")).font(.caption2).foregroundStyle(.secondary)
             }
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)

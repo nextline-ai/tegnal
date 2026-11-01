@@ -1,6 +1,41 @@
 import XCTest
 
 final class ChallengeUITests: XCTestCase {
+    func testViewerDetailsAndSettingsStayOpenUntilExplicitlyClosed() {
+        let app = launch()
+        element(app, "challenge.game.ui-count").tap()
+        reveal(app, "challenge.draw").tap()
+        XCTAssertTrue(element(app, "challenge.mission").waitForExistence(timeout: 5))
+        reveal(app, "challenge.source").tap()
+        element(app, "challenge.sourceDone").tap()
+        reveal(app, "booru.post.101").tap()
+        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "ready"), object: element(app, "booru.mediaStatus"))
+        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 15), .completed)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let details = element(app, "booru.info")
+        XCTAssertTrue(details.waitForExistence(timeout: 5)); details.tap()
+        let number = element(app, "booru.postID")
+        XCTAssertTrue(number.waitForExistence(timeout: 5))
+        let detailsStable = expectation(description: "Details remains presented")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            XCTAssertTrue(number.exists); detailsStable.fulfill()
+        }
+        wait(for: [detailsStable], timeout: 3)
+        app.navigationBars["Details"].buttons["Done"].tap()
+        let settings = element(app, "booru.readerSettings")
+        XCTAssertTrue(settings.waitForExistence(timeout: 5)); settings.tap()
+        let done = element(app, "reader.settings.done")
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        let settingsStable = expectation(description: "Settings remains presented")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            XCTAssertTrue(done.exists); settingsStable.fulfill()
+        }
+        wait(for: [settingsStable], timeout: 3)
+        done.tap()
+        XCTAssertTrue(element(app, "challenge.viewerPanel").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "booru.info").exists, "Closing a submenu returns to the same quick menu")
+    }
+
     override func setUpWithError() throws { continueAfterFailure = false }
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch

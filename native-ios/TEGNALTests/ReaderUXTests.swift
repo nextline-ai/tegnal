@@ -4,6 +4,40 @@ import Translation
 @testable import TEGNAL
 
 final class ReaderUXTests: XCTestCase {
+    func testReaderGuideMatchesTheModesGestureSettingsWithoutChangingReadingProgress() throws {
+        let suite = "reader-guide-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(23, forKey: "reader_page_101")
+        let paged = ReaderGuideConfiguration(booru: false, defaults: defaults)
+        XCTAssertTrue(paged.tapNavigation); XCTAssertTrue(paged.informationSwipe)
+        XCTAssertFalse(paged.continuous); XCTAssertFalse(paged.vertical)
+        defaults.set("continuous", forKey: "reader.mode"); defaults.set(true, forKey: "reader.rtl")
+        defaults.set(false, forKey: "reader.tapNavigation")
+        let continuous = ReaderGuideConfiguration(booru: false, defaults: defaults)
+        XCTAssertTrue(continuous.continuous); XCTAssertTrue(continuous.vertical); XCTAssertTrue(continuous.rtl)
+        XCTAssertFalse(continuous.tapNavigation); XCTAssertFalse(continuous.informationSwipe)
+        defaults.set(true, forKey: "reader.continuousPreviewSwipe")
+        XCTAssertTrue(ReaderGuideConfiguration(booru: false, defaults: defaults).informationSwipe)
+        let image = ReaderGuideConfiguration(booru: true, defaults: defaults)
+        XCTAssertFalse(image.continuous); XCTAssertFalse(image.vertical); XCTAssertTrue(image.informationSwipe)
+        XCTAssertEqual(defaults.integer(forKey: "reader_page_101"), 23)
+        XCTAssertNil(defaults.object(forKey: "reader.helpHidden"), "Reading the guide configuration does not mark it completed")
+    }
+
+    func testReaderCoachAdvancesFromRealMenuAndFinishesWithoutReopening() {
+        var session = ReaderGuideSession()
+        XCTAssertNil(session.step); XCTAssertFalse(session.hasStarted)
+        session.openedMenu(); XCTAssertNil(session.step)
+        session.start(); XCTAssertEqual(session.step, .navigation)
+        session.openedMenu(); XCTAssertEqual(session.step, .tools)
+        session.openedMenu(); XCTAssertEqual(session.step, .tools)
+        session.advance(); XCTAssertEqual(session.step, .exit)
+        session.finish(); XCTAssertNil(session.step); XCTAssertTrue(session.hasStarted)
+        session.openedMenu(); XCTAssertNil(session.step)
+        session.start(); XCTAssertEqual(session.step, .navigation, "Settings can replay the overlay")
+        session.advance(); session.advance(); session.advance(); XCTAssertNil(session.step)
+    }
+
     func testMangaReturnFindsOnlyTheLastViewedVisibleWorkWithoutReloadingTheList() {
         var examined = 0
         let loaded = (1...200).lazy.map { examined += 1; return Int64($0) }

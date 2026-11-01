@@ -121,7 +121,7 @@ struct TasteTagList: View {
             ForEach(tags.filter { env.taste.control.allows($0.name, source: $0.source, mode: mode) && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || TastePresentation.name($0.name).localizedCaseInsensitiveContains(query)) }) { tag in
                 NavigationLink { TasteTagDetail(tag: tag, mode: mode) } label: {
                     VStack(alignment: .leading, spacing: 5) {
-                        HStack { Text(TastePresentation.name(tag.name)).font(.headline); Spacer(); Text(String(tag.count)).monospacedDigit().foregroundStyle(.secondary) }
+                        HStack { Text(TastePresentation.name(tag.name)).font(.headline); Spacer(); Text(String(tag.count)).foregroundStyle(.secondary) }
                         Text(TastePresentation.host(tag.source)).font(.caption).foregroundStyle(.secondary)
                     }.padding(.vertical, 4)
                 }

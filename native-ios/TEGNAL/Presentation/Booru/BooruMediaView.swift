@@ -225,7 +225,7 @@ struct BooruThumbnail: View {
 /// A minimal local media document: no website HTML, ads or third-party scripts.
 /// WebKit decodes GIF/WebP lazily and provides pinch zoom and hardware video playback.
 enum BooruMediaGesture {
-    case tap(CGFloat), hold, swipe(Int), dismiss, details, zoom(Bool), viewport(CGRect), shortcut(ReaderShortcut)
+    case tap(CGFloat), hold, swipe(Int), details, zoom(Bool), viewport(CGRect), shortcut(ReaderShortcut)
 }
 
 /// Holds useful pixels across local-document replacement. A cache miss takes at
@@ -590,7 +590,6 @@ struct BooruMediaView: UIViewRepresentable {
           const t=e.changedTouches[0],dx=t.clientX-s.x,dy=t.clientY-s.y,elapsed=Math.max(1,Date.now()-s.time);
           const atOriginal=s.zoom<=1.01&&zoom()<=1.01;
           if(atOriginal&&Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.3){clearTimeout(tapTimer);send({gesture:'swipe',delta:dx<0?1:-1});return;}
-          if(atOriginal&&dy>Math.abs(dx)*1.25&&(dy>=96||(dy>=24&&dy/elapsed>=0.55))){clearTimeout(tapTimer);send({gesture:'dismiss'});return;}
           if(atOriginal&&s.y>=innerHeight*0.75&&-dy>Math.abs(dx)*1.25&&(-dy>=96||(-dy>=24&&-dy/elapsed>=0.55))){clearTimeout(tapTimer);send({gesture:'details'});return;}
           if(Math.hypot(dx,dy)>10||s.video)return;
           const now=Date.now();
@@ -752,7 +751,6 @@ struct BooruMediaView: UIViewRepresentable {
             case "tap": onGesture?(.tap(value["x"] as? Double ?? 0.5))
             case "hold": onGesture?(.hold)
             case "swipe": onGesture?(.swipe(value["delta"] as? Int ?? 0))
-            case "dismiss": onGesture?(.dismiss)
             case "details": onGesture?(.details)
             case "double":
                 guard let view = message.webView else { return }

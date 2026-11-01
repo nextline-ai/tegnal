@@ -44,7 +44,7 @@ struct TasteStatisticsView: View {
                         Image(systemName: "heart.fill").foregroundStyle(TastePresentation.accent).accessibilityHidden(true)
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(snapshot.saves.formatted()).font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
+                        Text(snapshot.saves.formatted()).font(.system(.largeTitle, design: .rounded, weight: .bold))
                         if let previous = snapshot.previousSaves {
                             let change = snapshot.saves - previous
                             Text((change > 0 ? "+" : "") + String(change))
@@ -86,7 +86,7 @@ struct TasteStatisticsView: View {
     private func metric(_ title: String, value: Int, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(L10n.text(title), systemImage: icon).font(.caption).foregroundStyle(.secondary)
-            Text(value.formatted()).font(.title2.weight(.semibold)).monospacedDigit()
+            Text(value.formatted()).font(.title2.weight(.semibold))
         }.accessibilityElement(children: .combine)
     }
 }

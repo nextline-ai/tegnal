@@ -95,7 +95,7 @@ struct KeyboardShortcutsView: View {
             Section(L10n.text("Viewer")) {
                 ForEach(ReaderShortcut.allCases, id: \.self) { command in
                     LabeledContent(L10n.text(command.title)) {
-                        Text(command.displayKey).font(.body.monospaced()).foregroundStyle(.secondary)
+                        Text(command.displayKey).font(.body).foregroundStyle(.secondary)
                     }
                 }
             }

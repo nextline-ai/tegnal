@@ -210,7 +210,7 @@ struct BooruCookiesView: View {
                     DisclosureGroup {
                         LabeledContent(L10n.text("Domain"), value: cookie.domain)
                         LabeledContent(L10n.text("Path"), value: cookie.path)
-                        Text(cookie.value).font(.caption.monospaced()).textSelection(.enabled)
+                        Text(cookie.value).font(.caption).textSelection(.enabled)
                         if let date = cookie.expiresDate { LabeledContent(L10n.text("Expires"), value: date.formatted()) }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {

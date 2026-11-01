@@ -127,7 +127,7 @@ public struct WorkCardView: View {
                     Rectangle().fill(Color.secondary.opacity(0.12)).overlay {
                         VStack(spacing: style.inset(6)) {
                             Image(systemName: work.thumbStatus == "gone" ? "slash.circle" : "photo").font(.system(size: style.fontSize(22)))
-                            if style.showsTitle { Text(String(work.galleryId)).font(.system(size: style.fontSize(11), design: .monospaced)) }
+                            if style.showsTitle { Text(String(work.galleryId)).font(.system(size: style.fontSize(11))) }
                         }.foregroundStyle(.secondary)
                     }
                 }

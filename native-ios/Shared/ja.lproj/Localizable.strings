@@ -1294,3 +1294,21 @@
 "This post was deleted or removed from the website." = "ウェブサイトで削除されたか、公開が停止された作品です。";
 "If you can view this post on the website, contact the developer so we can fix it. Include the post link." = "ウェブサイトで作品を表示できる場合は、修正できるよう作品のリンクを添えて開発者にお知らせください。";
 "Official Discord" = "公式Discord";
+
+/* Reader coach marks and information hints. */
+"Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "作品情報でタグや作家名を長押しすると、ここに保存できます。もう一度長押しすると保存を解除できます。";
+"Scroll to Work Information" = "下の作品情報を見る";
+"Turn Pages" = "ページ移動";
+"Step %@ of %@" = "%@ / %@ ステップ";
+"Start Reading" = "読み始める";
+"Tap the Center" = "画面の中央をタップ";
+"Your Quick Menu" = "便利なクイックメニュー";
+"Pull Down to Close" = "下に引いて閉じる";
+"Skip Guide" = "ガイドをスキップ";
+"The guide will appear over the next work you open." = "次に作品を開くと、画面上で操作を案内します。";
+"Scroll to read. Tap the center to open your menu." = "スクロールして読み進めます。中央をタップするとメニューが開きます。";
+"Tap the sides to turn pages. Tap the center to open your menu." = "両端をタップするとページが切り替わります。中央をタップしてメニューを開いてみましょう。";
+"Swipe to turn pages. Tap the center to open your menu." = "スワイプでページを切り替えます。中央をタップするとメニューが開きます。";
+"Open work information, save or translate here. Change how you read in Viewer Detail Settings." = "作品情報、保存、翻訳が使えます。ビューア詳細設定で読み方を変更できます。";
+"Pull down from the top reading area to return to the list. Move back up to cancel." = "読書画面の上部から下に引くと一覧に戻ります。上に戻すとキャンセルできます。";
+"Pull the work down to return to the list. Move back up to cancel. Zoom out first." = "下に引くと一覧に戻ります。上に戻すとキャンセルできます。拡大中は先に縮小してください。";

@@ -304,12 +304,12 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(element(app, "content.detail.preview.3").waitForExistence(timeout: 5))
     }
 
-    func testEnglishLocalization() { verifyLocalization("en", explore: "Explore", read: "Read", guide: "Reader Guide", zoom: "Zoom & Translate") }
-    func testJapaneseLocalization() { verifyLocalization("ja", explore: "探索", read: "読む", guide: "ビューアの使い方", zoom: "拡大・翻訳") }
-    func testKoreanLocalization() { verifyLocalization("ko", explore: "탐색", read: "읽기", guide: "읽기 모드 안내", zoom: "확대·번역") }
-    func testUnsupportedLanguageFallsBackToEnglish() { verifyLocalization("fr", explore: "Explore", read: "Read", guide: "Reader Guide", zoom: "Zoom & Translate") }
+    func testEnglishLocalization() { verifyLocalization("en", explore: "Explore", read: "Read", guide: "Reader Guide", menu: "Quick Menu") }
+    func testJapaneseLocalization() { verifyLocalization("ja", explore: "探索", read: "読む", guide: "ビューアの使い方", menu: "クイックメニュー") }
+    func testKoreanLocalization() { verifyLocalization("ko", explore: "탐색", read: "읽기", guide: "읽기 모드 안내", menu: "퀵 메뉴") }
+    func testUnsupportedLanguageFallsBackToEnglish() { verifyLocalization("fr", explore: "Explore", read: "Read", guide: "Reader Guide", menu: "Quick Menu") }
 
-    private func verifyLocalization(_ language: String, explore: String, read: String, guide: String, zoom: String) {
+    private func verifyLocalization(_ language: String, explore: String, read: String, guide: String, menu menuTitle: String) {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--native-content-tab-test", "--reader-help-test",
                                "-AppleLanguages", "(\(language))", "-AppleLocale", language]
@@ -326,10 +326,10 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertEqual(readButton.label, read)
         readButton.tap()
         XCTAssertTrue(element(app, "reader.help.close").waitForExistence(timeout: 10))
-        XCTAssertTrue(app.navigationBars[guide].exists)
-        app.buttons[zoom].tap()
+        XCTAssertFalse(app.navigationBars[guide].exists)
+        element(app, "reader.help.next").tap()
         capture(app, "Localized guide " + language)
-        element(app, "reader.help.never").tap()
+        element(app, "reader.help.close").tap()
         menu(app)
         capture(app, "Localized quick menu " + language)
         element(app, "reader.settings").tap()
@@ -590,16 +590,51 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
     }
 
+    func testWorkInformationHintAppearsBeforeAnyScrollingOnFirstOpen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "NO",
+                               "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.information").tap()
+
+        // Do not scroll or select a preview before checking the initial layout.
+        let hint = element(app, "content.detail.moreInformation")
+        XCTAssertTrue(hint.waitForExistence(timeout: 3))
+        XCTAssertTrue(hint.isHittable)
+        capture(app, "Work Information hint on first open without scrolling")
+        hint.tap()
+        let title = element(app, "content.detail.title")
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: title)
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(hint.exists)
+        app.buttons["완료"].tap()
+        XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3", "The hint must scroll without selecting a page")
+
+        element(app, "reader.information").tap()
+        XCTAssertTrue(hint.waitForExistence(timeout: 3), "Reopening must also show the hint without a scroll")
+        XCTAssertTrue(hint.isHittable)
+    }
+
     func testHelpCanBeDismissedAndReopened() {
         let app = launchReader(extra: ["--reader-help-test"])
         XCTAssertTrue(element(app, "reader.help.close").waitForExistence(timeout: 5))
-        XCTAssertTrue(element(app, "reader.help.visual").exists)
-        capture(app, "Reader help tap overlay")
-        app.buttons["확대·번역"].tap()
-        capture(app, "Reader help zoom overlay")
-        app.buttons["나가기"].tap()
-        capture(app, "Reader help exit overlay")
-        element(app, "reader.help.never").tap()
+        XCTAssertTrue(element(app, "reader.help.overlay").exists)
+        XCTAssertTrue(element(app, "reader.image").exists, "The actual work stays behind the overlay")
+        XCTAssertFalse(app.segmentedControls.element.exists, "There is no separate manual")
+        capture(app, "Reader center coach mark")
+        tap(app, x: 0.5)
+        XCTAssertTrue(element(app, "reader.settings").waitForExistence(timeout: 5))
+        capture(app, "Reader real quick menu coach mark")
+        element(app, "reader.help.next").tap()
+        XCTAssertFalse(element(app, "reader.settings").exists)
+        capture(app, "Reader exit coach mark")
+        element(app, "reader.help.next").tap()
+        XCTAssertFalse(element(app, "reader.help.overlay").exists)
         menu(app)
         element(app, "reader.settings").tap()
         app.swipeUp()

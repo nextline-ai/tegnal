@@ -278,10 +278,10 @@ struct BooruBlacklistView: View {
     var body: some View {
         Form {
             Section {
-                TextEditor(text: $text).frame(minHeight: 240).font(.body.monospaced())
+                TextEditor(text: $text).frame(minHeight: 240).font(.body)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("booru.blacklistText")
             } header: { SettingsHelpLabel("Tag Blacklist", help: "Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again.") }
-            Section(L10n.text("Example")) { Text("spoilers\ngore -scenery\nrating:explicit\nartist_*").font(.footnote.monospaced()).foregroundStyle(.secondary) }
+            Section(L10n.text("Example")) { Text("spoilers\ngore -scenery\nrating:explicit\nartist_*").font(.footnote).foregroundStyle(.secondary) }
         }.navigationTitle(server.displayName).navigationBarTitleDisplayMode(.inline)
             .onAppear { text = store.blacklist(serverID: server.id) }
             .toolbar { ToolbarItem(placement: .confirmationAction) {

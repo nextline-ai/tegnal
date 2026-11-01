@@ -65,6 +65,9 @@ final class SavedCollectionsModel {
             default: values = manga.tags.filter { $0.kind == kind.mangaKind }.map(\.name)
             }
         }
+        // History follows its last-used timestamp, including installations that
+        // previously stored a manual order for this section.
+        if kind == .history { return values }
         return SavedCollectionOrdering.resolve(values, preferred: preferences.stringArray(forKey: orderKey(kind)) ?? [])
     }
     func refresh() throws {
@@ -108,6 +111,7 @@ final class SavedCollectionsModel {
         }
     }
     func reorder(_ kind: SavedCollectionKind, from: IndexSet, to: Int) {
+        guard kind != .history else { return }
         var values = names(kind)
         guard from.allSatisfy({ values.indices.contains($0) }), (0...values.count).contains(to) else { return }
         values.move(fromOffsets: from, toOffset: to)
@@ -138,6 +142,7 @@ final class SavedCollectionsModel {
         }
     }
     func move(_ source: String, to target: String, kind: SavedCollectionKind) {
+        guard kind != .history else { return }
         let current = names(kind)
         let changed = SavedCollectionOrdering.moved(current, source: source, target: target)
         guard changed != current else { return }
@@ -164,6 +169,7 @@ struct SavedCollectionsBrowser: View {
     @State private var name = ""
     @State private var kind = SavedCollectionKind.tag
     @State private var opened: SavedCollectionEntry?
+    @State private var editMode = EditMode.inactive
     let source: any BooruProviding
     init(database: AppDatabase, booru: BooruStore, server: BooruServer? = nil, source: any BooruProviding = BooruClient.shared) {
         _model = State(initialValue: SavedCollectionsModel(database: database, booru: booru, server: server)); self.source = source
@@ -173,7 +179,7 @@ struct SavedCollectionsBrowser: View {
             ForEach(model.sections) { section in
                 SavedCollectionSection(model: model, kind: section, full: false, open: { opened = $0 })
             }
-            Section(L10n.text("Save a Tag or Artist")) {
+            Section {
                 Picker(L10n.text("Type"), selection: $kind) {
                     ForEach(SavedCollectionKind.allCases.filter { $0 != .history }) { Text(L10n.text($0.title)).tag($0) }
                 }
@@ -184,8 +190,11 @@ struct SavedCollectionsBrowser: View {
                     Button(L10n.text("Add"), action: add).disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityIdentifier(model.isManga ? "manga.saveTag" : "booru.saveTag")
                 }
-            }
-        }.listStyle(.insetGrouped).environment(\.editMode, .constant(.active))
+            } header: { Text(L10n.text("Save a Tag or Artist")) }
+              footer: { Text(L10n.text("Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.")) }
+        }.listStyle(.insetGrouped)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton().accessibilityIdentifier("collections.edit") } }
+            .environment(\.editMode, $editMode)
             .navigationDestination(for: SavedCollectionKind.self) { kind in SavedCollectionFullView(model: model, kind: kind, source: source) }
             .modifier(SavedCollectionResults(model: model, source: source, opened: $opened))
             .modifier(SavedCollectionFeedback(model: model))
@@ -202,9 +211,14 @@ private struct SavedCollectionFullView: View {
     let kind: SavedCollectionKind
     let source: any BooruProviding
     @State private var opened: SavedCollectionEntry?
+    @State private var editMode = EditMode.inactive
     var body: some View {
         List { SavedCollectionSection(model: model, kind: kind, full: true, open: { opened = $0 }) }
-            .listStyle(.insetGrouped).environment(\.editMode, .constant(.active)).navigationTitle(L10n.text(kind.title)).navigationBarTitleDisplayMode(.inline)
+            .listStyle(.insetGrouped).navigationTitle(L10n.text(kind.title)).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if kind != .history { ToolbarItem(placement: .topBarTrailing) { EditButton().accessibilityIdentifier("collections.edit") } }
+            }
+            .environment(\.editMode, $editMode)
             .modifier(SavedCollectionResults(model: model, source: source, opened: $opened))
             .modifier(SavedCollectionFeedback(model: model))
     }
@@ -222,7 +236,7 @@ private struct SavedCollectionSection: View {
             if names.isEmpty { Text(L10n.text("Nothing Saved Yet")).foregroundStyle(.secondary) }
             ForEach(full ? names : SavedCollectionOrdering.preview(names), id: \.self) { name in
                 SavedCollectionRow(model: model, entry: .init(kind: kind, name: name), full: full, open: open)
-            }.onMove { model.reorder(kind, from: $0, to: $1) }
+            }.onMove(perform: kind == .history ? nil : { model.reorder(kind, from: $0, to: $1) })
             if !full && SavedCollectionOrdering.showsMore(names.count) {
                 NavigationLink(value: kind) { Text(L10n.text("Show More")) }
                     .accessibilityIdentifier("collections.moreBottom." + kind.rawValue)
@@ -230,7 +244,7 @@ private struct SavedCollectionSection: View {
         } header: {
             HStack {
                 Text(L10n.text(kind.title))
-                Text(String(names.count)).monospacedDigit().foregroundStyle(.secondary)
+                Text(String(names.count)).foregroundStyle(.secondary)
                 Spacer()
                 if kind == .history {
                     Button { confirmClear = true } label: { Image(systemName: "trash") }
@@ -246,13 +260,14 @@ private struct SavedCollectionSection: View {
 }
 
 private struct SavedCollectionRow: View {
+    @Environment(\.editMode) private var editMode
     let model: SavedCollectionsModel
     let entry: SavedCollectionEntry
     let full: Bool
     let open: (SavedCollectionEntry) -> Void
     var body: some View {
         HStack(spacing: 10) {
-            if full {
+            if full && editMode?.wrappedValue.isEditing != true {
                 rowButton.highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in model.toggle(entry.name, kind: entry.kind) })
             } else { rowButton }
             if entry.kind == .history {
@@ -262,9 +277,15 @@ private struct SavedCollectionRow: View {
                 }.buttonStyle(.borderless).accessibilityLabel(L10n.text("Saved Searches"))
             }
         }
-        .swipeActions { Button(L10n.text("Remove"), role: .destructive) { model.remove(entry.name, kind: entry.kind) } }
-        .accessibilityAction(named: L10n.text("Move Up")) { model.move(entry, direction: -1) }
-        .accessibilityAction(named: L10n.text("Move Down")) { model.move(entry, direction: 1) }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) { model.remove(entry.name, kind: entry.kind) } label: { Label(L10n.text("Delete"), systemImage: "trash") }
+        }
+        .accessibilityActions {
+            if entry.kind != .history {
+                Button(L10n.text("Move Up")) { model.move(entry, direction: -1) }
+                Button(L10n.text("Move Down")) { model.move(entry, direction: 1) }
+            }
+        }
         .contextMenu { Button(L10n.text("Remove"), role: .destructive) { model.remove(entry.name, kind: entry.kind) } }
         .accessibilityAction(named: L10n.text("Save Tag")) { model.toggle(entry.name, kind: entry.kind) }
     }

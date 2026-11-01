@@ -3,6 +3,61 @@ import GRDB
 @testable import TEGNAL
 
 final class LibraryBackupTests: XCTestCase {
+    @MainActor func testTagHistoryIgnoresLegacyManualOrderAndAlwaysFollowsLatestUseInBothModes() throws {
+        let database = try AppDatabase.inMemory(), booru = try BooruStore(), server = BooruServer.presets[0]
+        try booru.saveServer(server)
+        let suite = "tag-history-order-" + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { preferences.removePersistentDomain(forName: suite) }
+        let names = ["old", "middle", "new"], now = Date().timeIntervalSince1970
+        for (index, name) in names.enumerated() {
+            let timestamp = now - 30 + Double(index)
+            try database.dbWriter.write { try $0.execute(sql: "INSERT INTO search_history VALUES (?, ?)", arguments: [name, timestamp]) }
+            try booru.database.write { try $0.execute(sql: "INSERT INTO history VALUES (?, ?, ?)", arguments: [server.id, name, timestamp]) }
+        }
+        preferences.set(names, forKey: "collections.order.manga.history")
+        preferences.set(names, forKey: "collections.order.booru.\(server.id).history")
+        let manga = SavedCollectionsModel(database: database, booru: booru, preferences: preferences)
+        let image = SavedCollectionsModel(database: database, booru: booru, server: server, preferences: preferences)
+        try manga.refresh()
+        for model in [manga, image] {
+            XCTAssertEqual(model.names(.history), ["new", "middle", "old"])
+            model.reorder(.history, from: IndexSet(integer: 0), to: 3)
+            model.move("old", to: "new", kind: .history)
+            model.move(.init(kind: .history, name: "old"), direction: -1)
+            XCTAssertEqual(model.names(.history), ["new", "middle", "old"])
+        }
+        try database.recordSearch("old"); try booru.recordSearch("old", serverID: server.id); try manga.refresh()
+        XCTAssertEqual(manga.names(.history), ["old", "new", "middle"])
+        XCTAssertEqual(image.names(.history), ["old", "new", "middle"])
+    }
+
+    @MainActor func testRemovingEverySavedCollectionKindKeepsOtherKindsModesAndServersIntact() throws {
+        let database = try AppDatabase.inMemory(), booru = try BooruStore()
+        let first = BooruServer.presets[0], second = BooruServer.presets[1]
+        try booru.saveServer(first); try booru.saveServer(second)
+        let suite = "tag-swipe-delete-" + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { preferences.removePersistentDomain(forName: suite) }
+        let manga = SavedCollectionsModel(database: database, booru: booru, preferences: preferences)
+        let image = SavedCollectionsModel(database: database, booru: booru, server: first, preferences: preferences)
+        let other = SavedCollectionsModel(database: database, booru: booru, server: second, preferences: preferences)
+        for kind in SavedCollectionKind.allCases where kind != .history {
+            for model in [manga, image, other] { model.save("sample", kind: kind) }
+        }
+        try database.recordSearch("sample")
+        try booru.recordSearch("sample", serverID: first.id); try booru.recordSearch("sample", serverID: second.id)
+        try manga.refresh()
+        for kind in [.history] + SavedCollectionKind.allCases.filter({ $0 != .history }) {
+            XCTAssertEqual(manga.names(kind), ["sample"]); XCTAssertEqual(image.names(kind), ["sample"])
+            manga.remove("sample", kind: kind); manga.remove("sample", kind: kind)
+            XCTAssertTrue(manga.names(kind).isEmpty)
+            XCTAssertEqual(image.names(kind), ["sample"])
+            image.remove("sample", kind: kind); image.remove("sample", kind: kind)
+            XCTAssertTrue(image.names(kind).isEmpty)
+            XCTAssertEqual(other.names(kind), ["sample"])
+        }
+        XCTAssertNil(manga.error); XCTAssertNil(image.error); XCTAssertNil(other.error)
+    }
+
     func testClassificationAndDuplicateReviewPreserveDifferentLanguagesFoldersAndNotes() throws {
         let database = try AppDatabase.inMemory()
         let a = try database.createFolder(name: "A"), b = try database.createFolder(name: "B")

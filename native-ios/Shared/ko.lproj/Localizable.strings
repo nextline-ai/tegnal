@@ -1294,3 +1294,21 @@
 "This post was deleted or removed from the website." = "웹사이트에서 삭제되었거나 게시가 중단된 작품입니다.";
 "If you can view this post on the website, contact the developer so we can fix it. Include the post link." = "웹사이트에서는 작품이 보인다면, 수정할 수 있도록 작품 링크와 함께 개발자에게 알려주세요.";
 "Official Discord" = "공식 Discord";
+
+/* Reader coach marks and information hints. */
+"Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "작품 정보에서 태그나 작가 이름을 길게 누르면 이곳에 저장할 수 있습니다. 다시 길게 누르면 저장이 해제됩니다.";
+"Scroll to Work Information" = "아래 작품 정보 보기";
+"Turn Pages" = "페이지 넘기기";
+"Step %@ of %@" = "%@ / %@ 단계";
+"Start Reading" = "읽기 시작";
+"Tap the Center" = "화면 가운데를 눌러 보세요";
+"Your Quick Menu" = "필요한 기능은 퀵메뉴에";
+"Pull Down to Close" = "아래로 당겨 닫기";
+"Skip Guide" = "가이드 건너뛰기";
+"The guide will appear over the next work you open." = "다음에 작품을 열면 화면 위에서 사용 방법을 안내합니다.";
+"Scroll to read. Tap the center to open your menu." = "스크롤해서 읽으세요. 화면 가운데를 누르면 메뉴가 열립니다.";
+"Tap the sides to turn pages. Tap the center to open your menu." = "양옆을 누르면 페이지가 넘어갑니다. 가운데를 눌러 메뉴를 열어 보세요.";
+"Swipe to turn pages. Tap the center to open your menu." = "쓸어서 페이지를 넘기세요. 가운데를 누르면 메뉴가 열립니다.";
+"Open work information, save or translate here. Change how you read in Viewer Detail Settings." = "작품 정보, 저장, 번역을 바로 이용하세요. 뷰어 상세 설정에서 읽는 방식을 바꿀 수 있습니다.";
+"Pull down from the top reading area to return to the list. Move back up to cancel." = "화면 맨 위의 읽기 영역에서 아래로 당기면 목록으로 돌아갑니다. 다시 올리면 취소됩니다.";
+"Pull the work down to return to the list. Move back up to cancel. Zoom out first." = "아래로 당기면 목록으로 돌아갑니다. 다시 올리면 취소됩니다. 확대 중이라면 먼저 축소하세요.";

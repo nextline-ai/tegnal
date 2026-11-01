@@ -304,6 +304,7 @@ struct BooruFeedView: View {
     @SwiftUI.AppStorage("booru.useEmbeddedBrowser", store: ReaderPreferences.booruDefaults) private var useEmbeddedBrowser = false
     @State private var selectedPost: BooruPost?
     @State private var viewerPosition: BooruPost?
+    @State private var viewerReturn: ((String?, BooruPost) -> Void)?
     @State private var saveFeedback: WorkSaveFeedback?
     @FocusState private var searchFocused: Bool
     @SwiftUI.AppStorage("booru.rememberHistory", store: ReaderPreferences.booruDefaults) private var rememberHistory = true
@@ -323,7 +324,7 @@ struct BooruFeedView: View {
     }
     private var visiblePosts: [BooruPost] { loader.visiblePosts }
     private var hasAccessiblePosts: Bool { loader.posts.contains(where: store.isVisible) }
-    private var isActive: Bool { env.mode == browsingMode && scenePhase == .active }
+    private var isActive: Bool { (challenge != nil || env.mode == browsingMode) && scenePhase == .active }
     private func updateBlacklists() {
         loader.setBlacklists(Dictionary(uniqueKeysWithValues: servers.map { ($0.id, store.blacklist(serverID: $0.id)) }))
         loader.setExcludedPostIDs(store.confirmedGoldRestrictedIDs)
@@ -352,6 +353,14 @@ struct BooruFeedView: View {
             }.tint(.purple)
         }
         .appSheet(item: $accountServer) { WebsiteConnectionEditor(server: $0) }
+        .onAppear {
+            let loader = loader
+            viewerReturn = { [weak loader] opened, viewed in
+                guard let loader else { return }
+                BooruViewerReturn.restore(openedID: opened, viewedID: viewed.id, availableIDs: loader.visiblePosts.lazy.map(\.id), using: scrollProxy)
+            }
+        }
+        }
         .appFullScreenCover(item: $selectedPost) { post in
             if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: visiblePosts, server: server, source: source, loadMore: {
                 for _ in 0..<3 {
@@ -362,9 +371,8 @@ struct BooruFeedView: View {
                 }
                 return BooruViewerBatch(posts: visiblePosts, hasMore: loader.hasMore, failure: loader.error)
             }, positionChanged: { viewerPosition = $0; challenge?.select($0) }, willClose: { viewed in
-                BooruViewerReturn.restore(openedID: selectedPost?.id, viewedID: viewed.id, availableIDs: visiblePosts.lazy.map(\.id), using: scrollProxy)
-            }, challenge: challenge).environment(\.discoveryContext, discovery) }
-        }
+                viewerReturn?(selectedPost?.id, viewed)
+            }, challenge: challenge).environment(\.discoveryContext, discovery).id(post.id) }
         }
     }
     private var nativeFeed: some View {
@@ -397,7 +405,7 @@ struct BooruFeedView: View {
                             Text(loader.errors[server.id] ?? "").font(.subheadline).foregroundStyle(.secondary)
                             DisclosureGroup(L10n.text("Search Tags")) {
                                 Text(sort.query(query, engine: server.engine))
-                                    .font(.caption.monospaced()).textSelection(.enabled)
+                                    .font(.caption).textSelection(.enabled)
                             }
                             if server.engine == .danbooru && query.split(whereSeparator: \.isWhitespace).count >= 2 {
                                 Text(L10n.text("Danbooru limits searches by account level. Regular accounts usually allow up to two tags. For more tags, upgrade on the website and enter your username and API key here. Gelbooru does not have this two-tag limit. Connection errors can have other causes."))

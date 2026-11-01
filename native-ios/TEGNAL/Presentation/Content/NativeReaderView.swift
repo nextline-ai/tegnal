@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum ReaderSheet: String, Identifiable {
-    case settings, information, help, downloads
+    case settings, information, downloads
     var id: String { rawValue }
 }
 
@@ -40,6 +40,8 @@ struct NativeReaderView: View {
     @State private var retry = 0
     @State private var menuVisible = false
     @State private var sheet: ReaderSheet?
+    @State private var guide = ReaderGuideSession()
+    @State private var pendingGuide = false
     @State private var viewports: [Int: CGRect] = [:]
     @State private var toast: String?
     @State private var saveFeedback: WorkSaveFeedback?
@@ -93,7 +95,7 @@ struct NativeReaderView: View {
                 if menuVisible || gallery == nil { quickMenu }
                 else if pageNumber, let gallery {
                     Text("\(currentPage + 1) / \(gallery.pages.count)")
-                        .font(.caption.monospacedDigit()).padding(6).background(.black.opacity(0.5), in: Capsule()).foregroundStyle(.white)
+                        .font(.caption).padding(6).background(.black.opacity(0.5), in: Capsule()).foregroundStyle(.white)
                 }
             }.padding(16)
         }
@@ -105,6 +107,7 @@ struct NativeReaderView: View {
         }
         .background(ReaderExitGesture(enabled: readerActive && sheet == nil && !showJump && !zoomed,
                                       requiresTopSafeZone: mode == ReaderMode.continuous.rawValue,
+                                      movesContainer: true,
                                       progress: { _ in }, exit: closeReader))
         .background(ReaderInformationGesture(enabled: ReaderInformationReveal.isEnabled(mode: mode, continuousOptIn: continuousInformationSwipe) && readerActive && gallery != nil && !zoomed && !menuVisible && sheet == nil && !showJump,
                                          reveal: { sheet = .information }))
@@ -135,22 +138,30 @@ struct NativeReaderView: View {
         .toolbar(.hidden, for: .tabBar)
         .navigationBarBackButtonHidden(true)
         .interactiveDismissDisabled()
+        .presentationBackground(.clear)
+        .overlayPreferenceValue(ReaderGuideMenuBounds.self) { bounds in
+            if let step = guide.step, sheet == nil, translationRequest == nil, !showJump {
+                ReaderGuideOverlay(step: step, configuration: ReaderGuideConfiguration(booru: false, defaults: ReaderPreferences.defaults),
+                                   menuBounds: bounds, next: advanceGuide, finish: finishGuide)
+            }
+        }
+        .onChange(of: menuVisible) { _, visible in if visible { guide.openedMenu() } }
         // Keep VoiceOver in the reader while preserving its page and menu controls.
         // The presenting gallery/navigation stack remains mounted underneath.
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .appSheet(item: $sheet, onDismiss: {
             if let pendingSearch { self.pendingSearch = nil; search(pendingSearch) }
+            if pendingGuide { pendingGuide = false; menuVisible = false; guide.start() }
         }) { item in
             switch item {
             case .downloads: DownloadsSheet(mode: .manga)
-            case .settings: ReaderSettingsView()
+            case .settings: ReaderSettingsView(onShowGuide: { pendingGuide = true; sheet = nil })
             case .information:
                 if let gallery {
                     ReaderWorkInformationView(gallery: gallery, images: images, current: $currentPage,
                         search: { pendingSearch = $0; sheet = nil })
                 }
-            case .help: ReaderHelpView()
             }
         }
         .alert(L10n.text("Go to Page"), isPresented: $showJump) {
@@ -188,7 +199,7 @@ struct NativeReaderView: View {
             do { try await Task.sleep(for: .seconds(2)); toast = nil } catch {}
         }
         .task(id: autoTaskID) {
-            guard autoAdvance, readerActive, sheet == nil, !menuVisible, !showJump,
+            guard autoAdvance, guide.step == nil, readerActive, sheet == nil, !menuVisible, !showJump,
                   !zoomed, !exiting, translationRequest == nil, let gallery else { return }
             do {
                 try await Task.sleep(for: .seconds(min(120, max(2, autoSeconds))))
@@ -234,7 +245,7 @@ struct NativeReaderView: View {
                     .disabled(currentPage == 0).accessibilityLabel(L10n.text("Previous Page")).accessibilityIdentifier("reader.previous")
                 Spacer()
                 Button { jumpText = String(currentPage + 1); showJump = true } label: {
-                    Text("\(currentPage + 1) / \(gallery?.pages.count ?? 0)").monospacedDigit().font(.headline)
+                    Text("\(currentPage + 1) / \(gallery?.pages.count ?? 0)").font(.headline)
                 }.accessibilityLabel(L10n.text("Page %@ / %@", String(describing: currentPage + 1), String(describing: gallery?.pages.count ?? 0))).accessibilityIdentifier("reader.position")
                 Spacer()
                 Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
@@ -246,6 +257,7 @@ struct NativeReaderView: View {
         }
         .padding(16).foregroundStyle(.white).tint(.white).buttonStyle(.plain)
         .modifier(ReaderMenuGlass())
+        .anchorPreference(key: ReaderGuideMenuBounds.self, value: .bounds) { $0 }
     }
 
     private func menuActions(compact: Bool) -> some View {
@@ -275,7 +287,7 @@ struct NativeReaderView: View {
     }
 
     private var autoTaskID: String {
-        "\(autoAdvance):\(autoSeconds):\(currentPage):\(pagesPerSpread):\(menuVisible):\(sheet?.rawValue ?? ""):\(showJump):\(zoomed):\(exiting):\(translationRequest?.id.uuidString ?? ""):\(scenePhase):\(gallery?.id ?? 0):\(opening.needsConfirmation)"
+        "\(guide.step?.rawValue ?? -1):\(autoAdvance):\(autoSeconds):\(currentPage):\(pagesPerSpread):\(menuVisible):\(sheet?.rawValue ?? ""):\(showJump):\(zoomed):\(exiting):\(translationRequest?.id.uuidString ?? ""):\(scenePhase):\(gallery?.id ?? 0):\(opening.needsConfirmation)"
     }
     private var readerActive: Bool { scenePhase == .active && !exiting && translationRequest == nil && !opening.needsConfirmation }
     private var mayPrefetch: Bool { readerActive && sheet == nil && !zoomed }
@@ -310,8 +322,18 @@ struct NativeReaderView: View {
         guard let gallery else { return }
         currentPage = ReaderLayout.next(currentPage, delta: delta, count: pagesPerSpread, total: gallery.pages.count)
     }
+    private func advanceGuide() {
+        switch guide.step {
+        case .navigation: guide.advance(); menuVisible = true
+        case .tools: guide.advance(); menuVisible = false
+        case .exit: finishGuide()
+        case nil: break
+        }
+    }
+    private func finishGuide() { guide.finish(); helpHidden = true }
     private func closeReader() {
         guard !exiting else { return }
+        if guide.step != nil { finishGuide() }
         exiting = true
         exit()
     }
@@ -347,7 +369,7 @@ struct NativeReaderView: View {
             }
             // A cached initial page is already in @State and does not trigger onChange.
             if savesProgress { ReaderPreferences.defaults.set(currentPage + 1, forKey: "reader_page_\(galleryID)") }
-            if !helpHidden { sheet = .help }
+            if !helpHidden, !guide.hasStarted { guide.start() }
             let database = env.database, context = discovery, recordProgress = savesProgress
             let record = Task.detached(priority: .utility) {
                 try Task.checkCancellation()

@@ -68,7 +68,7 @@ private struct GalleryPreviewPagePicker: View {
                 HStack(spacing: 4) {
                     ForEach(0..<count, id: \.self) { page in
                         Button { withAnimation(.easeInOut(duration: 0.2)) { selection = page } } label: {
-                            Text(String(page + 1)).font(.subheadline.monospacedDigit().weight(selection == page ? .bold : .regular))
+                            Text(String(page + 1)).font(.subheadline.weight(selection == page ? .bold : .regular))
                                 .frame(minWidth: 32, minHeight: 36)
                                 .background(selection == page ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 10))
                         }.buttonStyle(.plain).id(page)

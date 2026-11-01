@@ -3,6 +3,19 @@ import WebKit
 @testable import TEGNAL
 
 @MainActor final class MediaInputTests: XCTestCase {
+    func testWebsiteBrowsersRetainTheDefaultWebKitUserAgent() async throws {
+        let manga = EmbeddedBrowserModel(initialUrl: "https://example.invalid")
+        let validation = BooruValidationModel(server: BooruServer.presets[0])
+        // WebKit may normalize an unset customUserAgent to an empty string.
+        XCTAssertTrue(manga.webView.customUserAgent?.isEmpty ?? true)
+        XCTAssertTrue(validation.webView.customUserAgent?.isEmpty ?? true)
+        let measured = try await manga.webView.evaluateJavaScript("navigator.userAgent")
+        let actual = try XCTUnwrap(measured as? String)
+        XCTAssertTrue(actual.contains("AppleWebKit/"))
+        let shared = await BooruBrowserSession.nativeUserAgent()
+        XCTAssertEqual(shared, actual, "API/media requests use the same platform UA as the browser")
+    }
+
     func testDeletedPostsShowOnDirectOpenAndSkipDuringNavigationInBothDirections() {
         let ids = ["first", "removed", "last"]
         var navigation = BooruViewerAccessNavigation()

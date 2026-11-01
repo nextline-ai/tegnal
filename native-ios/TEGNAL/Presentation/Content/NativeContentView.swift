@@ -326,7 +326,7 @@ private struct GalleryFeedView: View {
                                 suggestions = []
                             } label: {
                                 HStack(spacing: 8) {
-                                    Text(item.namespace).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    Text(item.namespace).font(.caption).foregroundStyle(.secondary)
                                     Text(item.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
                                     Spacer(minLength: 4)
                                     if let count = item.count { Text(count.formatted()).font(.caption).foregroundStyle(.secondary) }
@@ -587,14 +587,19 @@ struct GalleryWorkInformation: View {
 
     var body: some View {
         GeometryReader { viewport in
+            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     if previewsFirst {
                         GalleryDetailPreviews(gallery: gallery, images: images, enabled: true, select: selectPage)
                     }
-                    GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 1).id("gallery.metadata")
+                        GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
                         showsCover: showsCover, read: read,
                         bookmark: { bookmark = ContentBookmark(id: gallery.id) }, search: search)
+                    }
+                        .anchorPreference(key: GalleryMetadataBounds.self, value: .bounds) { $0 }
                         .onGeometryChange(for: Bool.self) { geometry in
                             !previewsFirst && GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
                                                              viewportHeight: viewport.size.height)
@@ -608,10 +613,51 @@ struct GalleryWorkInformation: View {
             }
             .coordinateSpace(name: "gallery.detailViewport")
             .accessibilityIdentifier("content.detail.scroll")
+            .overlayPreferenceValue(GalleryMetadataBounds.self) { anchor in
+                GeometryReader { visibleViewport in
+                    if previewsFirst, let anchor,
+                       visibleViewport[anchor].minY > visibleViewport.size.height - 64 {
+                        VStack {
+                            Spacer(minLength: 0)
+                            GalleryInformationScrollHint {
+                                withAnimation(.easeInOut(duration: 0.28)) { scrollProxy.scrollTo("gallery.metadata", anchor: .top) }
+                            }
+                        }
+                    }
+                }
+            }
+            }
         }
         .appSheet(item: $bookmark) { target in
             AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery)
         }
+    }
+}
+
+private struct GalleryMetadataBounds: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
+}
+
+private struct GalleryInformationScrollHint: View {
+    let scroll: () -> Void
+    var body: some View {
+        Button(action: scroll) {
+            Image(systemName: "chevron.down")
+                .font(.title3.weight(.bold)).foregroundStyle(.white.opacity(0.9))
+                .frame(maxWidth: .infinity, minHeight: 64)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background {
+            LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
+                                   .init(color: .black.opacity(0.82), location: 0.65),
+                                   .init(color: .black.opacity(0.95), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea(edges: .bottom).allowsHitTesting(false)
+        }
+        .accessibilityLabel(L10n.text("Scroll to Work Information"))
+        .accessibilityIdentifier("content.detail.moreInformation")
     }
 }
 

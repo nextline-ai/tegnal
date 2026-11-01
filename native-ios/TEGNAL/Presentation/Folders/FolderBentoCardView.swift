@@ -102,9 +102,9 @@ struct FolderCardCaption: View {
         HStack(alignment: .lastTextBaseline, spacing: style.inset(6)) {
             Text(title).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
                 .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
-            Text(L10n.text("%@ items", String(count)))
+            Text(count, format: .number)
                 .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
-                .monospacedDigit().foregroundStyle(color.opacity(0.85)).fixedSize()
+                .foregroundStyle(color.opacity(0.85)).fixedSize()
         }.foregroundStyle(color)
             .padding(.horizontal, style.inset(10))
             // Thumbnail inset 6 + caption inset 8 was 14; use 2/3 of that gap.

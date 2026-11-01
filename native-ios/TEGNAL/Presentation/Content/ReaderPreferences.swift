@@ -98,7 +98,8 @@ enum ReaderOpening: Equatable {
 struct ReaderSettingsView: View {
     var booru = false
     @Environment(\.dismiss) private var dismiss
-    @State private var showHelp = false
+    private var onShowGuide: (() -> Void)?
+    @State private var guideQueued = false
     @SwiftUI.AppStorage("reader.resumeBehavior", store: ReaderPreferences.defaults) private var resumeBehavior = ReaderResumeBehavior.ask.rawValue
     @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
     @SwiftUI.AppStorage("booru.original", store: ReaderPreferences.booruDefaults) private var original = false
@@ -118,8 +119,9 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false
 
-    init(booru: Bool = false) {
+    init(booru: Bool = false, onShowGuide: (() -> Void)? = nil) {
         self.booru = booru
+        self.onShowGuide = onShowGuide
         let preferences = booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults
         _pagesPerSpread = SwiftUI.AppStorage(wrappedValue: 1, "reader.pagesPerSpread", store: preferences)
         _autoAdvance = SwiftUI.AppStorage(wrappedValue: false, "reader.autoAdvance", store: preferences)
@@ -214,9 +216,13 @@ struct ReaderSettingsView: View {
                     SettingsHelpLabel("Viewer Gestures", help: booru
                         ? "Tap the center for the quick menu, hold to save, and tap the sides or swipe to change images. Double tap or pinch to zoom. Swipe up from the bottom for details, or swipe down at original zoom to close. For videos, tap with two fingers to open the quick menu."
                         : "Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close.")
-                    if !booru {
-                        Button(L10n.text("Reader Guide")) { showHelp = true }.accessibilityIdentifier("reader.settings.help")
-                    }
+                    Button(L10n.text("Reader Guide")) {
+                        if let onShowGuide { onShowGuide() }
+                        else {
+                            (booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults).set(false, forKey: "reader.helpHidden")
+                            guideQueued = true
+                        }
+                    }.accessibilityIdentifier("reader.settings.help")
                 }
                 Section { SettingsResetButton(booru: booru, viewerOnly: true) }
             }
@@ -228,104 +234,152 @@ struct ReaderSettingsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() }.accessibilityIdentifier("reader.settings.done") } }
         }
         .presentationBackground(Color(uiColor: .systemGroupedBackground))
-        .sheet(isPresented: $showHelp) { ReaderHelpView() }
+        .alert(L10n.text("Reader Guide"), isPresented: $guideQueued) {
+            Button(L10n.text("OK"), role: .cancel) {}
+        } message: { Text(L10n.text("The guide will appear over the next work you open.")) }
     }
 }
 
-struct ReaderHelpView: View {
-    @Environment(\.dismiss) private var dismiss
-    @SwiftUI.AppStorage("reader.helpHidden", store: ReaderPreferences.defaults) private var hidden = false
-    @SwiftUI.AppStorage("reader.rtl", store: ReaderPreferences.defaults) private var rtl = false
-    @SwiftUI.AppStorage("reader.mode", store: ReaderPreferences.defaults) private var mode = ReaderMode.horizontal.rawValue
-    @State private var step = 0
-    private let titles = [L10n.text("Read with Taps"), L10n.text("Zoom and Translate"), L10n.text("Exit the Work")]
-    private var descriptions: [String] { [
-        L10n.text("Tap either side to turn pages. Tap the center for the quick menu, or hold anywhere to bookmark."),
-        L10n.text("Double tap or pinch to zoom. Drag to position the area you want, then choose Translate in the quick menu."),
-        mode == ReaderMode.continuous.rawValue ? L10n.text("In Continuous Scroll, drag down from the top handle to close. Dragging the pages only scrolls.") : L10n.text("At the original zoom level, swipe down to exit. While zoomed, dragging only moves the image. You can also exit from the quick menu.")
-    ] }
+enum ReaderGuideStep: Int, CaseIterable, Identifiable {
+    case navigation, tools, exit
+    var id: Int { rawValue }
+    var title: String {
+        switch self {
+        case .navigation: L10n.text("Tap the Center")
+        case .tools: L10n.text("Your Quick Menu")
+        case .exit: L10n.text("Pull Down to Close")
+        }
+    }
+}
+
+struct ReaderGuideSession {
+    private(set) var step: ReaderGuideStep?
+    private(set) var hasStarted = false
+    mutating func start() { hasStarted = true; step = .navigation }
+    mutating func openedMenu() { if step == .navigation { step = .tools } }
+    mutating func advance() {
+        guard let step else { return }
+        self.step = ReaderGuideStep(rawValue: step.rawValue + 1)
+    }
+    mutating func finish() { step = nil }
+}
+
+struct ReaderGuideConfiguration: Equatable {
+    let booru: Bool
+    let continuous: Bool
+    let vertical: Bool
+    let rtl: Bool
+    let tapNavigation: Bool
+    let informationSwipe: Bool
+    init(booru: Bool, defaults: UserDefaults) {
+        self.booru = booru
+        let mode = ReaderMode(rawValue: defaults.string(forKey: "reader.mode") ?? "") ?? .horizontal
+        continuous = !booru && mode == .continuous
+        vertical = !booru && mode != .horizontal
+        rtl = defaults.bool(forKey: "reader.rtl")
+        tapNavigation = defaults.object(forKey: "reader.tapNavigation") as? Bool ?? true
+        informationSwipe = booru || ReaderInformationReveal.isEnabled(mode: mode.rawValue, continuousOptIn: defaults.bool(forKey: "reader.continuousPreviewSwipe"))
+    }
+    func instruction(for step: ReaderGuideStep) -> String {
+        switch step {
+        case .navigation:
+            L10n.text(continuous ? "Scroll to read. Tap the center to open your menu." : tapNavigation
+                ? "Tap the sides to turn pages. Tap the center to open your menu."
+                : "Swipe to turn pages. Tap the center to open your menu.")
+        case .tools:
+            L10n.text("Open work information, save or translate here. Change how you read in Viewer Detail Settings.")
+        case .exit:
+            L10n.text(continuous ? "Pull down from the top reading area to return to the list. Move back up to cancel."
+                : "Pull the work down to return to the list. Move back up to cancel. Zoom out first.")
+        }
+    }
+}
+
+struct ReaderGuideMenuBounds: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
+}
+
+/// A coach mark over the real reader. Only the tip card intercepts touches.
+struct ReaderGuideOverlay: View {
+    let step: ReaderGuideStep
+    let configuration: ReaderGuideConfiguration
+    var menuBounds: Anchor<CGRect>?
+    let next: () -> Void
+    let finish: () -> Void
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    Picker(L10n.text("Gesture Guide"), selection: $step) {
-                        Text(L10n.text("Taps")).tag(0); Text(L10n.text("Zoom & Translate")).tag(1); Text(L10n.text("Exit")).tag(2)
-                    }.pickerStyle(.segmented).accessibilityIdentifier("reader.help.steps")
-                    guideImage
-                    Text(titles[step]).font(.title3.bold())
-                    Text(descriptions[step]).font(.subheadline).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack {
-                        ForEach(0..<3) { index in
-                            Circle().fill(index == step ? Color.accentColor : Color.secondary.opacity(0.25)).frame(width: 6, height: 6)
-                        }
-                        Spacer()
-                        if step < 2 { Button(L10n.text("Next Tip"), systemImage: "arrow.right") { step += 1 }.accessibilityIdentifier("reader.help.next") }
-                    }
-                }.padding(16).frame(maxWidth: 460).frame(maxWidth: .infinity)
-            }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 6) {
-                    Button(L10n.text("Don't Show Again")) { hidden = true; dismiss() }
-                        .buttonStyle(.bordered).accessibilityIdentifier("reader.help.never")
-                    Text(L10n.text("You can reopen this guide in Reader Settings or Settings.")).font(.caption).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity).padding(12).background(Color(uiColor: .systemBackground))
-            }
-            .navigationTitle(L10n.text("Reader Guide")).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Close")) { dismiss() }.accessibilityIdentifier("reader.help.close") } }
-        }.presentationBackground(Color(uiColor: .systemBackground))
-    }
-    private var guideImage: some View {
-        Image("ReaderGuide").resizable().aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .overlay {
-                GeometryReader { geo in
-                    let size = geo.size
-                    ZStack {
-                        if step == 0 {
-                            HStack(spacing: 0) {
-                                Color.blue.opacity(0.12).frame(width: size.width * 0.3)
-                                Color.teal.opacity(0.12).frame(width: size.width * 0.4)
-                                Color.blue.opacity(0.12).frame(width: size.width * 0.3)
-                            }.padding(.vertical, size.height * 0.1)
-                            tip(rtl ? L10n.text("Next") : L10n.text("Previous"), icon: "hand.tap.fill")
-                                .position(x: size.width * 0.16, y: size.height * 0.43)
-                            tip(L10n.text("Quick Menu"), icon: "hand.tap.fill")
-                                .position(x: size.width * 0.5, y: size.height * 0.43)
-                            tip(rtl ? L10n.text("Previous") : L10n.text("Next"), icon: "hand.tap.fill")
-                                .position(x: size.width * 0.84, y: size.height * 0.43)
-                            tip(L10n.text("Hold to bookmark"), icon: "bookmark.fill")
-                                .position(x: size.width * 0.5, y: size.height * 0.68)
-                        } else if step == 1 {
-                            tip(L10n.text("Double tap or pinch to zoom"), icon: "arrow.up.left.and.arrow.down.right")
-                                .position(x: size.width * 0.5, y: size.height * 0.27)
-                            Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                                .font(.system(size: 56, weight: .light)).foregroundStyle(.white)
-                                .padding(20).background(.black.opacity(0.65), in: Circle())
-                                .position(x: size.width * 0.5, y: size.height * 0.5)
-                            tip(L10n.text("Drag to position"), icon: "hand.draw.fill")
-                                .position(x: size.width * 0.5, y: size.height * 0.7)
-                            tip(L10n.text("Tap center → Translate"), icon: "translate")
-                                .position(x: size.width * 0.5, y: size.height * 0.85)
-                        } else {
-                            tip(L10n.text("At original zoom"), icon: "arrow.down.right.and.arrow.up.left")
-                                .position(x: size.width * 0.5, y: size.height * 0.2)
-                            Image(systemName: "arrow.down").font(.system(size: 90, weight: .medium)).foregroundStyle(.white)
-                                .padding(24).background(.black.opacity(0.65), in: Capsule())
-                                .position(x: size.width * 0.5, y: size.height * 0.48)
-                            tip(L10n.text("Swipe down to exit"), icon: "hand.draw.fill")
-                                .position(x: size.width * 0.5, y: size.height * 0.77)
-                        }
-                    }
+        GeometryReader { safeArea in
+          GeometryReader { geometry in
+            let rect = highlight(in: geometry, safeTop: safeArea.safeAreaInsets.top)
+            ZStack {
+                ReaderGuideSpotlight(rect: rect).fill(.black.opacity(0.65), style: FillStyle(eoFill: true))
+                    .allowsHitTesting(false)
+                RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.95), lineWidth: 2)
+                    .frame(width: rect.width, height: rect.height).position(x: rect.midX, y: rect.midY)
+                    .allowsHitTesting(false)
+                if step == .navigation {
+                    Image(systemName: "hand.tap.fill").font(.system(size: 36)).foregroundStyle(.white)
+                        .position(x: rect.midX, y: rect.midY).allowsHitTesting(false).accessibilityHidden(true)
+                } else if step == .exit {
+                    Image(systemName: "arrow.down").font(.title.bold()).foregroundStyle(.white)
+                        .position(x: rect.midX, y: rect.midY).allowsHitTesting(false).accessibilityHidden(true)
                 }
-            }.clipShape(RoundedRectangle(cornerRadius: 18))
-            .accessibilityElement(children: .ignore).accessibilityLabel(descriptions[step])
-            .accessibilityIdentifier("reader.help.visual")
+                VStack {
+                    if step != .tools { Spacer(minLength: 16) }
+                    ReaderGuideTip(step: step, message: configuration.instruction(for: step), next: next, finish: finish)
+                        .frame(maxWidth: 420)
+                    if step == .tools { Spacer(minLength: 16) }
+                }
+                .padding(.leading, safeArea.safeAreaInsets.leading + 20)
+                .padding(.trailing, safeArea.safeAreaInsets.trailing + 20)
+                .padding(.top, safeArea.safeAreaInsets.top + 24)
+                .padding(.bottom, safeArea.safeAreaInsets.bottom + 24)
+            }
+          }.ignoresSafeArea()
+        }.accessibilityIdentifier("reader.help.overlay")
     }
-    private func tip(_ title: String, icon: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon).font(.title3)
-            Text(title).font(.caption.bold()).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-        }.foregroundStyle(.white).padding(10).background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 12))
+    private func highlight(in geometry: GeometryProxy, safeTop: CGFloat) -> CGRect {
+        let width = geometry.size.width, height = geometry.size.height
+        if step == .tools, let menuBounds { return geometry[menuBounds].insetBy(dx: -4, dy: -4) }
+        if step == .exit { return CGRect(x: 12, y: safeTop, width: width - 24, height: 64) }
+        return CGRect(x: width * 0.3, y: height * 0.29, width: width * 0.4, height: height * 0.27)
+    }
+}
+
+private struct ReaderGuideSpotlight: Shape {
+    let rect: CGRect
+    func path(in bounds: CGRect) -> Path {
+        var path = Path(bounds)
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: 20, height: 20))
+        return path
+    }
+}
+
+private struct ReaderGuideTip: View {
+    let step: ReaderGuideStep
+    let message: String
+    let next: () -> Void
+    let finish: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(L10n.text("Step %@ of %@", String(step.rawValue + 1), "3"))
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Button(action: finish) { Image(systemName: "xmark").frame(width: 32, height: 32).contentShape(Rectangle()) }
+                    .accessibilityLabel(L10n.text("Skip Guide")).accessibilityIdentifier("reader.help.close")
+            }
+            Text(step.title).font(.title2.bold())
+            Text(message).font(.body).fixedSize(horizontal: false, vertical: true)
+            Button(L10n.text(step == .exit ? "Start Reading" : "Next Tip"), action: next)
+                .buttonStyle(.borderedProminent).tint(.accentColor).controlSize(.large).frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityIdentifier("reader.help.next")
+        }
+        .padding(20).foregroundStyle(.white).tint(.white)
+        .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 24))
+        .environment(\.colorScheme, .dark)
+        .accessibilityElement(children: .contain).accessibilityIdentifier("reader.help.tip")
     }
 }
 

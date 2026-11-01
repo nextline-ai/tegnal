@@ -89,10 +89,10 @@ struct TasteReportsView: View {
                     ForEach(Array(snapshot.tags.prefix(5).enumerated()), id: \.element.id) { rank, tag in
                         NavigationLink { TasteTagDetail(tag: tag, mode: mode) } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                Text(String(rank + 1)).font(.title3.monospacedDigit()).opacity(0.65)
+                                Text(String(rank + 1)).font(.title3).opacity(0.65)
                                 Text(TastePresentation.name(tag.name)).font(.title2.bold()).multilineTextAlignment(.leading)
                                 Spacer(minLength: 0)
-                                Text(String(tag.count)).font(.headline.monospacedDigit())
+                                Text(String(tag.count)).font(.headline)
                             }.padding(.vertical, 10)
                         }.buttonStyle(.plain)
                     }

@@ -502,7 +502,9 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
         case .ended:
             intent.update(distance: max(0, delta.y))
             if intent.shouldFinish(delta: delta, velocity: gesture.velocity(in: window)) {
-                motion.finish(distance: window.bounds.height) { [weak self] in self?.exit() }
+                motion.finish(distance: window.bounds.height) { [weak self] in
+                    ReaderInteractiveExit.complete { self?.exit() }
+                }
             } else {
                 motion.cancel(); progress(0)
             }
@@ -510,6 +512,15 @@ final class ExitGestureView: UIView, UIGestureRecognizerDelegate {
             motion.cancel(); progress(0)
         default: break
         }
+    }
+}
+
+@MainActor enum ReaderInteractiveExit {
+    static func complete(_ exit: () -> Void) {
+        // The reader has already followed the finger offscreen. Do not run a
+        // second system dismissal or restore its navigation content in between.
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction, exit)
     }
 }
 

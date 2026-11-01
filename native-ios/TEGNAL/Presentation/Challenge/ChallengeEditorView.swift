@@ -181,7 +181,7 @@ private struct ChallengeRangeEditor: View {
         Form {
             Section {
                 Text(value.minimum == value.maximum ? String(value.minimum) : "\(value.minimum)…\(value.maximum)")
-                    .font(.largeTitle.monospacedDigit().bold()).foregroundStyle(.purple)
+                    .font(.largeTitle.bold()).foregroundStyle(.purple)
                 Text(L10n.text("Choose a fixed goal below, or customize a random range."))
                     .font(.subheadline).foregroundStyle(.secondary)
             }
