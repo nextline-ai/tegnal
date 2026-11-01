@@ -95,18 +95,41 @@ import GRDB
         XCTAssertEqual(try folderNames(2), ["Korean"])
     }
 
-    func testRuleLeavesOtherFoldersAloneUnlessItIncludesThem() throws {
-        let favorites = try database.createFolder(name: "Favorites")
-        ReaderPreferences.defaults.set(Int(favorites.id!), forKey: LibrarySavePreferences.defaultFolderKey)
+    func testRuleFilesWorksFromTheDefaultSaveFolderAndKeepsThemThere() throws {
+        let inbox = try database.createFolder(name: "Inbox")
+        ReaderPreferences.defaults.set(Int(inbox.id!), forKey: LibrarySavePreferences.defaultFolderKey)
         let korean = try database.createFolder(name: "Korean")
         try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
         try save(1)
+        XCTAssertEqual(try folderNames(1), ["Inbox", "Korean"])
+        _ = try database.upsertWork(galleryId: 2, folderId: try database.listFolders().first { $0.name == "미분류" }?.id, language: "korean", tags: "tag:full color")
+        XCTAssertEqual(try folderNames(2), ["Korean"], "Unfiled stays a target when another folder is the default")
+    }
+
+    func testRuleLeavesOtherFoldersAloneUnlessItIncludesThem() throws {
+        let favorites = try database.createFolder(name: "Favorites")
+        let korean = try database.createFolder(name: "Korean")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
+        _ = try database.upsertWork(galleryId: 1, folderId: favorites.id, language: "korean", tags: "tag:full color")
         XCTAssertEqual(try folderNames(1), ["Favorites"])
 
         let rule = try XCTUnwrap(database.folderRules().first?.rule)
         try database.saveFolderRule(id: rule.id, folderID: korean.id!, query: rule.query, excluded: "", includesOtherFolders: true)
-        try save(2)
+        _ = try database.upsertWork(galleryId: 2, folderId: favorites.id, language: "korean", tags: "tag:full color")
         XCTAssertEqual(try folderNames(2), ["Favorites", "Korean"])
+    }
+
+    func testFillingAFolderTakesWorksFromTheDefaultSaveFolderButNotAnother() throws {
+        let inbox = try database.createFolder(name: "Inbox"), kept = try database.createFolder(name: "Kept")
+        ReaderPreferences.defaults.set(Int(inbox.id!), forKey: LibrarySavePreferences.defaultFolderKey)
+        try save(1)
+        try save(2)
+        try database.addWork(galleryId: 2, folderID: kept.id!)
+        let korean = try database.createFolder(name: "Korean")
+        XCTAssertEqual(try database.matchingWorkCount(WorkQuery("language:korean")), 1)
+        try database.addMatchingWorks(WorkQuery("language:korean"), toFolder: korean.id!)
+        XCTAssertEqual(try folderNames(1), ["Inbox", "Korean"])
+        XCTAssertEqual(try folderNames(2), ["Inbox", "Kept"], "A work also placed in another folder was already sorted")
     }
 
     func testEveryRuleSeesAWorkArrivingInUnfiled() throws {
@@ -261,7 +284,7 @@ import GRDB
 
     func testChangingFolderLeavesFoldersARuleAdded() throws {
         let korean = try database.createFolder(name: "Korean"), other = try database.createFolder(name: "Other")
-        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "", includesOtherFolders: true)
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
         let favorites = try database.createFolder(name: "Favorites")
         ReaderPreferences.defaults.set(Int(favorites.id!), forKey: LibrarySavePreferences.defaultFolderKey)
         _ = try ContentBookmarkAction.toggle(id: 1, gallery: gallery(1), env: env)

@@ -73,7 +73,7 @@ struct FolderRuleEditor: View {
                     Toggle(L10n.text(creatingFolder ? "Also Add New Saves" : "Apply to Saved Works"), isOn: $extends).accessibilityIdentifier("folderRule.extends")
                     Toggle(L10n.text("Include Other Folders"), isOn: $includesOtherFolders).accessibilityIdentifier("folderRule.otherFolders")
                 } footer: {
-                    Text(L10n.text("Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders."))
+                    Text(L10n.text("Only works in Unfiled or your default save folder are added. Turn this on to add works from other folders too. They stay in those folders."))
                 }
             }
             .navigationTitle(L10n.text(creatingFolder ? "New Folder" : "Classification Rule")).navigationBarTitleDisplayMode(.inline)
@@ -130,7 +130,7 @@ struct FolderRulesView: View {
         List {
             Section {
                 Toggle(L10n.text("Classify New Saves"), isOn: $enabled).accessibilityIdentifier("folderRules.enabled")
-            } footer: { Text(L10n.text("A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them.")) }
+            } footer: { Text(L10n.text("A work with a rule's tag is added to that rule's folder when it lands in Unfiled or your default save folder. Works in other folders stay put unless the rule includes them.")) }
             Section {
                 ForEach(rules, id: \.rule.id) { item in
                     Button { editing = Editing(rule: item.rule, folderID: item.folder.id) } label: {

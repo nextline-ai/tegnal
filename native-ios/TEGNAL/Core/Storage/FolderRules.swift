@@ -8,7 +8,8 @@ struct FolderRule: Identifiable, Codable, Hashable, Sendable {
     var folder: String
     var query: String
     var excluded = ""
-    /// Unfiled works are the default. Optional so rules saved before this option still decode.
+    /// Works still waiting in Unfiled or the default save folder are the default.
+    /// Optional so rules saved before this option still decode.
     var includesOtherFolders: Bool?
     var workQuery: WorkQuery { WorkQuery(query, excluding: excluded) }
 }
@@ -23,7 +24,9 @@ enum LibrarySavePreferences {
 extension AppDatabase {
     private static let rulesKey = "folder_rules"
     /// A work in any other folder was put there by someone, so rules leave it alone by default.
-    private static let unplaced = "NOT EXISTS (SELECT 1 FROM folder_works fw JOIN folders f ON f.id = fw.folder_id WHERE fw.work_id = w.id AND f.name != '미분류')"
+    private static var unplaced: String {
+        "NOT EXISTS (SELECT 1 FROM folder_works fw JOIN folders f ON f.id = fw.folder_id WHERE fw.work_id = w.id AND f.name != '미분류' AND f.id != \(LibrarySavePreferences.defaultFolderID))"
+    }
 
     static func fetchFolderRules(_ db: Database) throws -> [FolderRule] {
         guard let data = try Data.fetchOne(db, sql: "SELECT value FROM library_order WHERE key = ?", arguments: [rulesKey]) else { return [] }

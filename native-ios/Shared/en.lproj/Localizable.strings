@@ -1507,8 +1507,8 @@
 "Classification Rule" = "Classification Rule";
 "Classify New Saves" = "Classify New Saves";
 "Include Other Folders" = "Include Other Folders";
-"Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders." = "Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders.";
-"A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them." = "A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them.";
+"Only works in Unfiled or your default save folder are added. Turn this on to add works from other folders too. They stay in those folders." = "Only works in Unfiled or your default save folder are added. Turn this on to add works from other folders too. They stay in those folders.";
+"A work with a rule's tag is added to that rule's folder when it lands in Unfiled or your default save folder. Works in other folders stay put unless the rule includes them." = "A work with a rule's tag is added to that rule's folder when it lands in Unfiled or your default save folder. Works in other folders stay put unless the rule includes them.";
 "Except %@" = "Except %@";
 "No rules yet." = "No rules yet.";
 "Automatic Classification" = "Automatic Classification";

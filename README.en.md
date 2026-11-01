@@ -35,7 +35,7 @@ Image mode also has Challenge Roulette, which is a different sort of thing: spin
 
 Hold a work to save it. You choose the default folder in Settings, and the notice that appears after saving lets you change it on the spot. Remove a bookmark by accident and saving it again before you quit the app puts it back where it was.
 
-A work can sit in several folders. Search your saved works for a tag like `language:korean` and turn the results into a folder, or add an automatic classification rule so works landing in Unfiled file themselves. Folders you filled by hand are left alone unless you turn on the option to include them. Each rule can exclude the tags you don't want.
+A work can sit in several folders. Search your saved works for a tag like `language:korean` and turn the results into a folder, or add an automatic classification rule so works landing in Unfiled or your default save folder file themselves. Folders you filled by hand are left alone unless you turn on the option to include them. Each rule can exclude the tags you don't want.
 
 Hold a saved work to find others with a similar composition, palette and style.
 
