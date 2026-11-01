@@ -13,7 +13,7 @@ struct TasteSettingsView: View {
             Section {
                 NavigationLink { TasteReportsView(mode: mode, period: .week) } label: { Label(L10n.text("Weekly statistics"), systemImage: "chart.bar.xaxis") }
                     .accessibilityIdentifier("taste.settings.weekly")
-                NavigationLink { TasteReportsView(mode: mode, period: .month) } label: { Label(L10n.text("Monthly Recap"), systemImage: "rectangle.stack.fill") }
+                NavigationLink { RecapHomeView(mode: mode) } label: { Label(L10n.text("Recap"), systemImage: "book.pages") }
                     .accessibilityIdentifier("taste.settings.monthly")
             }
             Section(L10n.text("Smart Recommendations")) {

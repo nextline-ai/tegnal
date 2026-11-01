@@ -45,7 +45,7 @@ struct TasteStore: Sendable {
         try database.write { db in
             let old = try Self.control(db)
             if old.epoch != value.epoch {
-                try db.execute(sql: "DELETE FROM taste_events; DELETE FROM taste_reports;")
+                try db.execute(sql: "DELETE FROM taste_events; DELETE FROM taste_reports; DELETE FROM taste_meta WHERE key LIKE 'recap.%';")
                 try Self.put(true, key: "bootstrapped", db: db)
             } else if remote && old.generation != value.generation {
                 // A peer that missed a pause must not upload activity collected under the old permission.
@@ -69,6 +69,28 @@ struct TasteStore: Sendable {
         if kind == .taxonomy { event.id = "taxonomy-" + tasteDigest(Data((control.epoch + item.source + item.metadata.sorted().joined(separator: "\n")).utf8)) }
         if kind == .open { event.id = "open-" + tasteDigest(Data((control.epoch + item.key + context.session).utf8)) }
         try insert(event, db: db, uploaded: false)
+    }
+    /// Each viewing is its own open event, so existing peers count it as the open it is.
+    static func recordDwell(_ dwell: TasteDwell, item: TasteItem, context: DiscoveryContext, db: Database, at: Date = Date()) throws {
+        let control = try control(db)
+        guard control.enabled else { return }
+        var event = TasteEvent(kind: .open, item: item, context: context, dwell: dwell)
+        event.id = "dwell-" + UUID().uuidString
+        event.at = at.timeIntervalSince1970; event.epoch = control.epoch; event.generation = control.generation
+        event.device = try get(String.self, key: "device", db: db) ?? ""
+        try insert(event, db: db, uploaded: false)
+    }
+    static func recordSignal(_ signal: TasteSignal, item: TasteItem, db: Database) throws {
+        let control = try control(db)
+        guard control.enabled else { return }
+        var event = TasteEvent(kind: .open, item: item, context: .init(origin: .external, session: "signal"), signal: signal.rawValue)
+        event.id = "signal-" + UUID().uuidString
+        event.epoch = control.epoch; event.generation = control.generation
+        event.device = try get(String.self, key: "device", db: db) ?? ""
+        try insert(event, db: db, uploaded: false)
+    }
+    func record(signal: TasteSignal, item: TasteItem) throws {
+        try database.write { try Self.recordSignal(signal, item: item, db: $0) }
     }
     static func insert(_ event: TasteEvent, db: Database, uploaded: Bool) throws {
         try db.execute(sql: "INSERT OR IGNORE INTO taste_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)", arguments: [event.id, event.epoch, event.generation, event.at, event.kind.rawValue, event.item.key, try JSONEncoder().encode(event), uploaded])

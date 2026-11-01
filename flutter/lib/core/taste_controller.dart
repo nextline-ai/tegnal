@@ -4,6 +4,7 @@ import '../data/library_store.dart';
 import 'content.dart';
 import 'insights.dart';
 import 'library.dart';
+import 'recap.dart';
 
 /// Local event evidence, separate from saved works and portable backups.
 class LocalTasteController {
@@ -53,6 +54,51 @@ class LocalTasteController {
     });
   }
 
+  /// Viewing time rows carry the dwell beside the item, so every other reader
+  /// of this table keeps seeing plain items for the kinds it asks for.
+  void recordView(ContentItem item, RecapDwell dwell, {DateTime? at}) {
+    if (!enabled) return;
+    store.database.execute(
+      'INSERT INTO taste_events_local(kind,item_key,mode,at,payload) VALUES (?,?,?,?,?)',
+      [
+        'view',
+        item.key,
+        item.mode.name,
+        (at ?? DateTime.now()).toUtc().toIso8601String(),
+        jsonEncode({...item.toJson(), 'dwell': dwell.toJson()}),
+      ],
+    );
+  }
+
+  /// The whole history, for the recap index. Times are local because a recap's
+  /// days and hours are the person's own.
+  List<RecapEvent> recapEvents(AppMode mode) {
+    final result = <RecapEvent>[];
+    for (final row in _rows(mode)) {
+      final item = _item(row['payload']);
+      final at = DateTime.tryParse(row['at'] as String);
+      if (item == null || at == null) continue;
+      RecapDwell? dwell;
+      if (row['kind'] == 'view') {
+        final payload = jsonDecode(row['payload'] as String) as Map;
+        if (payload['dwell'] is Map) {
+          dwell = RecapDwell.fromJson(
+            Map<String, dynamic>.from(payload['dwell'] as Map),
+          );
+        }
+      }
+      result.add(
+        RecapEvent(
+          kind: row['kind'] as String,
+          item: item,
+          at: at.toLocal(),
+          dwell: dwell,
+        ),
+      );
+    }
+    return result;
+  }
+
   void _insert(String kind, ContentItem item, DateTime at) =>
       store.database.execute(
         'INSERT INTO taste_events_local(kind,item_key,mode,at,payload) VALUES (?,?,?,?,?)',
@@ -67,6 +113,9 @@ class LocalTasteController {
 
   void reset() => store.transaction(() {
     store.database.execute('DELETE FROM taste_events_local');
+    store.database.execute(
+      "DELETE FROM settings WHERE key LIKE 'recap.palette.%'",
+    );
     store.setPortable(_key, {'initialized': true});
   });
 

@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_controller.dart';
 import '../core/content.dart';
+import '../core/recap.dart';
 import '../core/library.dart';
 import '../data/download_manager.dart';
 import '../data/booru_extras.dart';
@@ -102,6 +103,7 @@ class ReaderExitGesturePolicy {
 class _ReaderScreenState extends State<ReaderScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late ReaderPreferences _prefs;
+  final ViewingSession _viewing = ViewingSession();
   late final List<ContentItem> _sequence;
   int _postIndex = 0;
   ContentItem get _item => _sequence[_postIndex];
@@ -185,8 +187,14 @@ class _ReaderScreenState extends State<ReaderScreen>
         widget.initialPageIndex ?? widget.controller.readingPosition(_item);
     _scroll.addListener(_scrolled);
     WidgetsBinding.instance.addObserver(this);
+    _viewing.resume(DateTime.now());
     unawaited(_captureAwake());
     unawaited(_load());
+  }
+
+  void _recordViewing(ContentItem item) {
+    final dwell = _viewing.finish(DateTime.now());
+    if (dwell != null) widget.controller.taste.recordView(item, dwell);
   }
 
   Future<void> _captureAwake() async {
@@ -211,6 +219,11 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _active = state == AppLifecycleState.resumed;
+    if (_active) {
+      _viewing.resume(DateTime.now());
+    } else {
+      _viewing.pause(DateTime.now());
+    }
     if (!_active) {
       _prefetchGeneration++;
       _prefetchDebounce?.cancel();
@@ -542,6 +555,8 @@ class _ReaderScreenState extends State<ReaderScreen>
     _prefetchDebounce?.cancel();
     _postPrefetch.clear();
     _notesClient?.close();
+    _recordViewing(_item);
+    _viewing.resume(DateTime.now());
     setState(() {
       _postIndex = next;
       _resolvedItem = _item;
@@ -562,6 +577,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       _index = value;
       _zoomed = false;
     });
+    _viewing.show(value, isLast: value + _spread >= _count, at: DateTime.now());
     _savePosition();
     _scheduleAdjacentPrefetch();
   }
@@ -1982,6 +1998,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     _notesClient?.close();
     WidgetsBinding.instance.removeObserver(this);
     if (_sourcePages.isNotEmpty) _savePosition();
+    _recordViewing(_item);
     _pager?.dispose();
     _scroll.dispose();
     _focus.dispose();

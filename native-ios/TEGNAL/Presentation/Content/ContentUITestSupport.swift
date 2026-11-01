@@ -67,6 +67,7 @@ enum ContentUITestSupport {
                 }
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--taste-recap-demo") { RecapDemoLibrary.seed(env) }
         if ProcessInfo.processInfo.arguments.contains("--fill-heat-banner-test") {
             env.coverQueueState.total = 100
             env.coverQueueState.remaining = 100
@@ -75,7 +76,7 @@ enum ContentUITestSupport {
         if ProcessInfo.processInfo.arguments.contains("--challenge-ui-test") {
             try! ChallengeUITestSupport.seed(env.booru)
         }
-        if ProcessInfo.processInfo.arguments.contains("--taste-recap-test") {
+        if ProcessInfo.processInfo.arguments.contains("--taste-recap-test") || ProcessInfo.processInfo.arguments.contains("--taste-recap-demo") {
             Task { await env.taste.prepareCompletedReports() }
         }
         if BooruUITestSupport.liveEnabled {

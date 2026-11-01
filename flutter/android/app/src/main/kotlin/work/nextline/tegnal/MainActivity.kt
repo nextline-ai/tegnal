@@ -57,8 +57,8 @@ class MainActivity : FlutterActivity() {
                         try {
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "application/json"
-                                putExtra(Intent.EXTRA_TITLE, "tegnal-backup.json")
+                                type = call.argument<String>("mimeType") ?: "application/json"
+                                putExtra(Intent.EXTRA_TITLE, call.argument<String>("name") ?: "tegnal-backup.json")
                             }
                             startActivityForResult(intent, 7101)
                         } catch (error: Exception) {

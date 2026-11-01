@@ -411,8 +411,8 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
         }
         .appSheet(isPresented: $showingRecap, onDismiss: { env.taste.dismissRecap(tasteMode) }) {
             NavigationStack {
-                TasteReportsView(mode: tasteMode, period: .month)
-                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L10n.text("Done")) { showingRecap = false } } }
+                RecapHomeView(mode: tasteMode, opening: env.taste.pendingRecap(tasteMode))
+                    .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L10n.text("Done")) { showingRecap = false } } }
             }
         }
     }

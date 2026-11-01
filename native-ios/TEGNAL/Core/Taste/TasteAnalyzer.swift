@@ -165,8 +165,7 @@ actor TasteAnalysisCache {
         }
     }
 
-    func snapshot(store: TasteStore, control: TasteControl, period: DateInterval?, previous: DateInterval?, savedKeys: Set<String>? = nil) throws -> TasteSnapshot {
-        try Task.checkCancellation()
+    private func refreshed(store: TasteStore, control: TasteControl) throws -> Entry {
         var entry = entries[store.mode] ?? Entry()
         if entry.database.map({ ObjectIdentifier($0) }) != ObjectIdentifier(store.database) {
             let observer = TasteEventChanges()
@@ -195,6 +194,19 @@ actor TasteAnalysisCache {
             // Re-read next time if a write raced the database snapshot.
             entry.version = before == after ? after : nil
         }
+        return entry
+    }
+
+    func recapIndex(store: TasteStore, control: TasteControl, library: [String: RecapWorkInfo]) throws -> RecapIndex {
+        try Task.checkCancellation()
+        let entry = try refreshed(store: store, control: control)
+        entries[store.mode] = entry
+        return RecapIndex(events: entry.events, control: control, mode: store.mode, library: library)
+    }
+
+    func snapshot(store: TasteStore, control: TasteControl, period: DateInterval?, previous: DateInterval?, savedKeys: Set<String>? = nil) throws -> TasteSnapshot {
+        try Task.checkCancellation()
+        var entry = try refreshed(store: store, control: control)
         let key = SnapshotKey(analysis: control.analysisKey(store.mode), period: period, previous: previous, savedKeys: period == nil ? savedKeys : nil)
         if let index = entry.snapshots.firstIndex(where: { $0.0 == key }) {
             let cached = entry.snapshots.remove(at: index)

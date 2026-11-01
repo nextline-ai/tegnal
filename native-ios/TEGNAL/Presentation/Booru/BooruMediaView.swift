@@ -191,6 +191,9 @@ struct BooruThumbnail: View {
         .task(id: "\(post.id):\(post.previewURL?.absoluteString ?? post.sampleURL?.absoluteString ?? ""):\(retry)") {
             if image == nil { failed = false }
             #if DEBUG
+            if isFixture, ProcessInfo.processInfo.arguments.contains("--taste-recap-demo") {
+                image = RecapGeneratedArt.image(seed: Int(truncatingIfNeeded: post.postID)); return
+            }
             if isFixture {
                 // Exercise the same image rendering path as real wide thumbnails.
                 image = UIGraphicsImageRenderer(size: CGSize(width: 1600, height: 300)).image { context in

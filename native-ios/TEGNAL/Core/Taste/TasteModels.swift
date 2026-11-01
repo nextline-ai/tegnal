@@ -77,6 +77,13 @@ struct TasteItem: Codable, Hashable, Sendable {
     }
 }
 
+/// Foreground time on one work. Old peers ignore it and still decode the event.
+struct TasteDwell: Codable, Hashable, Sendable {
+    var seconds: Double
+    var pages = 1
+    var finished = false
+}
+
 struct TasteEvent: Codable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable { case save, remove, open, search, seed, imported, metadata, taxonomy }
     var id: String = UUID().uuidString
@@ -87,6 +94,10 @@ struct TasteEvent: Codable, Hashable, Sendable {
     var kind: Kind
     var item: TasteItem
     var context: DiscoveryContext = .unknown
+    var dwell: TasteDwell? = nil
+    /// Set on feedback carried by an open event. Older peers still decode it as a
+    /// non-organic open, so it never reaches their preference evidence.
+    var signal: String? = nil
     static func ordered(_ a: Self, _ b: Self) -> Bool { a.at == b.at ? a.id < b.id : a.at < b.at }
 }
 
@@ -130,6 +141,15 @@ struct TasteControl: Codable, Equatable, Sendable {
     var analysisExclusions: [String: [String]]?
     var sourceAnalysisExclusions: [String: [String]]?
     var recommendationPreferences: [String: RecommendationPreferences]?
+    /// Explicit steering of the learned profile, by tag key: +1 more, -1 less.
+    var tasteBoosts: [String: Int]?
+    /// 0 stays close to known taste, 1 is balanced, 2 reaches further out.
+    var discoveryLevel: Int?
+    func boost(_ key: String) -> Int { tasteBoosts?[key] ?? 0 }
+    mutating func setBoost(_ value: Int, key: String) {
+        if tasteBoosts == nil { tasteBoosts = [:] }
+        tasteBoosts?[key] = value == 0 ? nil : value
+    }
     func preferences(source: String) -> RecommendationPreferences { recommendationPreferences?[source] ?? .init() }
     mutating func setPreferences(_ value: RecommendationPreferences, source: String) {
         if recommendationPreferences == nil { recommendationPreferences = [:] }
@@ -166,6 +186,8 @@ struct TasteControl: Codable, Equatable, Sendable {
         try values.encodeIfPresent(analysisExclusions, forKey: .analysisExclusions)
         try values.encodeIfPresent(sourceAnalysisExclusions, forKey: .sourceAnalysisExclusions)
         try values.encodeIfPresent(recommendationPreferences, forKey: .recommendationPreferences)
+        try values.encodeIfPresent(tasteBoosts, forKey: .tasteBoosts)
+        try values.encodeIfPresent(discoveryLevel, forKey: .discoveryLevel)
     }
     func analysisExcluded(_ mode: TasteMode) -> Set<String> {
         if let saved = analysisExclusions?[mode.rawValue] { return Set(saved.map { Self.normalizeAnalysisExclusion($0, mode: mode) }) }
@@ -258,14 +280,14 @@ struct TasteSnapshot: Sendable {
     var previousTagCounts: [String: Int] = [:]
 }
 
-enum TastePeriod: String, CaseIterable, Identifiable { case recommendations, week, month
+enum TastePeriod: String, CaseIterable, Identifiable { case recommendations, week, month, year
     var id: String { rawValue }
-    var title: String { switch self { case .recommendations: L10n.text("Recommendations"); case .week: L10n.text("Weekly"); case .month: L10n.text("Monthly") } }
+    var title: String { switch self { case .recommendations: L10n.text("Recommendations"); case .week: L10n.text("Weekly"); case .month: L10n.text("Monthly"); case .year: L10n.text("Yearly") } }
     func interval(offset: Int, now: Date, timeZone: String) -> DateInterval? {
         guard self != .recommendations else { return nil }
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: timeZone) ?? .gmt
         calendar.firstWeekday = 2; calendar.minimumDaysInFirstWeek = 4
-        let unit: Calendar.Component = self == .week ? .weekOfYear : .month
+        let unit: Calendar.Component = self == .week ? .weekOfYear : self == .year ? .year : .month
         guard let date = calendar.date(byAdding: unit, value: offset, to: now) else { return nil }
         return calendar.dateInterval(of: unit, for: date)
     }

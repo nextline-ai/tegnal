@@ -380,5 +380,7 @@
   "source requests completed. Ranked locally without AI.": "건의 사이트 요청을 완료했습니다. AI 없이 이 기기에서 순위를 매겼습니다.",
   "sources were outside this fetch’s six-request budget.": "개 사이트는 이번 가져오기의 최대 6회 요청 한도에 따라 제외되었습니다.",
   "step": "간격",
-  "works": "작품"
+  "works": "작품",
+  "Peak streak": "최장 연속",
+  "Save image": "이미지 저장"
 }

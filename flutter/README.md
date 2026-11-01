@@ -13,6 +13,7 @@ Android-first port of TEGNAL, with Windows and Linux runners. This is an impleme
 - Detail/save/search flows; horizontal, vertical and continuous comic reading; progress, RTL, pinch/double-tap zoom, keyboard navigation, image notes, video controls and reader preferences.
 - Persisted foreground download queue with pause/resume/retry/remove, page-file verification, saved manifests and completed offline opening. Backgrounding pauses work; it does not promise an Android background-download service.
 - Native-compatible metadata backups and selected-file legacy imports; weighted Challenge definitions, editors, deadline/count goals, score bands/endings, local sessions and source/folder reference selection.
+- Recap: a monthly magazine built on the device from local activity, with a story reader, back issues, measured palettes, viewing time and privacy-first share cards.
 - Deterministic saved-metadata analysis and collection-based discovery/ranking, with source-scoped exclusions and saved-date recaps. These do not establish equivalence with the native activity-event recommendation/report engine.
 - Native English/Korean/Japanese catalogs with Flutter supplements. Theme/language choices and an optional blur/tint chrome adapter are wired into the app.
 - An Android WebView/cookie bridge and source-scoped request transport. Desktop opens an external browser; external browser sessions are not imported.

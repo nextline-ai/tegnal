@@ -34,6 +34,7 @@ import 'booru_pools_screen.dart';
 import 'detail_screen.dart';
 import 'onboarding_screen.dart';
 import 'insights_screen.dart';
+import 'recap_screen.dart';
 import 'reader_guide.dart';
 
 const _discordAddress = 'https://discord.gg/DFT9Hm66Gz';
@@ -2869,23 +2870,37 @@ class _TasteSettingsScreen extends StatelessWidget {
         children: [
           _SettingsGroup(
             children: [
-              for (final title in ['Weekly statistics', 'Monthly Recap'])
-                _SettingsRow(
-                  title: title,
-                  icon: Icons.bar_chart_outlined,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => InsightsScreen(
-                        controller: controller,
-                        mode: mode,
-                        reportDays: title == 'Weekly statistics' ? 7 : 30,
-                        onSearch: (query) =>
-                            controller.search(query: query, forMode: mode),
-                      ),
+              _SettingsRow(
+                title: 'Weekly statistics',
+                icon: Icons.bar_chart_outlined,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => InsightsScreen(
+                      controller: controller,
+                      mode: mode,
+                      reportDays: 7,
+                      onSearch: (query) =>
+                          controller.search(query: query, forMode: mode),
                     ),
                   ),
                 ),
+              ),
+              _SettingsRow(
+                title: 'Recap',
+                icon: Icons.auto_stories_outlined,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => RecapScreen(
+                      controller: controller,
+                      mode: mode,
+                      onSearch: (query) =>
+                          controller.search(query: query, forMode: mode),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           _SettingsGroup(

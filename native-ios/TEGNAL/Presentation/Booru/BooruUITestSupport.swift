@@ -32,6 +32,19 @@ actor BooruFixtureSource: BooruProviding {
         if ProcessInfo.processInfo.arguments.contains("--booru-initial-error") && !failed { failed = true; throw URLError(.notConnectedToInternet) }
         if ProcessInfo.processInfo.arguments.contains("--booru-tag-limit-test") && query.contains("mountain") { throw BooruError.unavailable(422) }
         if query == "empty" { return .init(posts: [], hasMore: false) }
+        if ProcessInfo.processInfo.arguments.contains("--taste-recap-demo") {
+            let extra = ["lantern", "snow", "shrine", "fox", "aurora", "rain", "neon", "harbor", "forest", "mist"]
+            let terms = query.split(separator: " ").map(String.init).filter { !$0.contains(":") }
+            let base = Int64(9000 + abs(query.hashValue % 700) * 20 + page * 20)
+            return .init(posts: (0..<16).map { index in
+                let id = base + Int64(index)
+                var post = Self.post(id, server: server, tags: (terms + [extra[index % 10], extra[(index * 3 + 1) % 10], "scenery"]).uniqued)
+                post.fileExtension = "png"
+                post.artists = [["mira_sato", "noa_lindqvist", "new_painter"][index % 3]]
+                post.tags.append(post.artists[0]); post.tagCategories = [post.artists[0]: 1]
+                return post
+            }, hasMore: page < 3)
+        }
         if ProcessInfo.processInfo.arguments.contains("--taste-ui-rich"), !query.isEmpty {
             return .init(posts: ((201 + page * 10)...(212 + page * 10)).map { Self.post(Int64($0), server: server) }, hasMore: page < 2)
         }

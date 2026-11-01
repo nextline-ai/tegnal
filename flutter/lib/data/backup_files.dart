@@ -29,6 +29,38 @@ class BackupFiles {
     return file.readAsString();
   }
 
+  /// Saves a recap card through the same user-chosen location as backups.
+  static Future<bool> exportImage(Uint8List bytes, String name) async {
+    if (Platform.isAndroid) {
+      final temp = await getTemporaryDirectory();
+      final file = File('${temp.path}/$name');
+      await file.writeAsBytes(bytes, flush: true);
+      try {
+        return await _channel.invokeMethod<bool>('exportBackup', {
+              'path': file.path,
+              'name': name,
+              'mimeType': 'image/png',
+            }) ??
+            false;
+      } finally {
+        if (await file.exists()) await file.delete();
+      }
+    }
+    final location = await getSaveLocation(
+      suggestedName: name,
+      acceptedTypeGroups: [
+        const XTypeGroup(label: 'PNG image', extensions: ['png']),
+      ],
+    );
+    if (location == null) return false;
+    await XFile.fromData(
+      bytes,
+      mimeType: 'image/png',
+      name: name,
+    ).saveTo(location.path);
+    return true;
+  }
+
   static Future<bool> export(String text) async {
     if (Platform.isAndroid) {
       final temp = await getTemporaryDirectory();

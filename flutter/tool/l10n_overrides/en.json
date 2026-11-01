@@ -380,5 +380,7 @@
   "source requests completed. Ranked locally without AI.": "source requests completed. Ranked locally without AI.",
   "sources were outside this fetch’s six-request budget.": "sources were outside this fetch’s six-request budget.",
   "step": "Step",
-  "works": "works"
+  "works": "works",
+  "Peak streak": "Best streak",
+  "Save image": "Save image"
 }

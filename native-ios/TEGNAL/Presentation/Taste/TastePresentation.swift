@@ -130,7 +130,9 @@ struct TasteRecommendationCard: View {
     let open: () -> Void
     let toggle: () -> Void
     var isBookmarked = false
+    var feedback: RecommendationFeedback? = nil
     @Environment(AppEnvironment.self) private var env
+    private var reasonText: String { item.why?.label ?? TastePresentation.name(item.reason.name) }
     var body: some View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: style.inset(6)) {
@@ -140,7 +142,7 @@ struct TasteRecommendationCard: View {
                     Color.secondary.opacity(0.12).aspectRatio(0.78, contentMode: .fit)
                         .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }.clipShape(RoundedRectangle(cornerRadius: style.radius(16)))
                 } else if let gallery = item.gallery {
-                    GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language, recommendationTag: reasonAllowed ? TastePresentation.name(item.reason.name) : nil) {
+                    GalleryCardLayout(title: gallery.title, artists: gallery.artists.joined(separator: ", "), language: gallery.language, recommendationTag: reasonAllowed ? reasonText : nil) {
                         TasteArtwork(gallery: gallery)
                     }.overlay(alignment: .topLeading) {
                         if isBookmarked {
@@ -149,7 +151,7 @@ struct TasteRecommendationCard: View {
                         }
                     }
                 }
-                if item.gallery == nil && reasonAllowed { Label(TastePresentation.name(item.reason.name), systemImage: "number")
+                if item.gallery == nil && reasonAllowed { Label(reasonText, systemImage: item.why?.icon ?? "number")
                     .font(.system(size: style.fontSize(captionSize, minimum: 9))).foregroundStyle(.secondary).lineLimit(style.width < 110 ? 1 : 2).padding(.horizontal, style.inset(2)) }
             }.contentShape(Rectangle())
         }.buttonStyle(.plain).hoverEffect(.highlight)
@@ -158,6 +160,7 @@ struct TasteRecommendationCard: View {
             .accessibilityElement(children: .combine)
             .accessibilityValue(WorkSaveResult.accessibilityValue(saved: saved, mode: item.post == nil ? .comics : .booru))
             .accessibilityAction(named: WorkSaveResult.actionTitle(saved: saved, mode: item.post == nil ? .comics : .booru), toggle)
+            .overlay(alignment: .topTrailing) { if let feedback { RecommendationMenu(item: item, feedback: feedback, compact: true) } }
     }
     private var reasonAllowed: Bool {
         env.taste.control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru)

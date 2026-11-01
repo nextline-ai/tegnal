@@ -180,6 +180,7 @@ struct BooruPostView: View {
     @Environment(\.booruBrowsingMode) private var browsingMode
     @Environment(\.dismiss) private var dismiss
     @State private var post: BooruPost
+    @State private var viewing = TasteViewingSession()
     @State private var notes: [BooruNote] = []
     @State private var notesError: String?
     @State private var loadedNotesKey: String?
@@ -240,6 +241,10 @@ struct BooruPostView: View {
         _original = State(initialValue: ReaderPreferences.booruDefaults.bool(forKey: "booru.original"))
     }
     private var index: Int { posts.firstIndex(where: { $0.id == post.id }) ?? 0 }
+    private func recordViewing(_ post: BooruPost) {
+        guard challenge == nil, let dwell = viewing.finish() else { return }
+        try? store.recordDwell(dwell, post: post, context: contextForPost?(post) ?? discovery)
+    }
     private var isActive: Bool { !exiting && (challenge != nil || env.mode == browsingMode) && scenePhase == .active }
     private var mediaActive: Bool {
         isActive && sheet == nil && !post.isRemoved && mediaStatus != "removed" && store.isVisible(post) && !accessNavigation.restrictedIDs.contains(post.id) && translation == nil && !info && !readerSettings && !filing && !showJump && selectedNote == nil
@@ -365,9 +370,16 @@ struct BooruPostView: View {
                 if ids.contains(post.id) { skipGoldRestricted(post.id) }
             }
             .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value }
+            .onChange(of: post) { previous, current in
+                if previous.id != current.id { recordViewing(previous); viewing.resume(); if !isActive { viewing.pause() } }
+            }
+            .onChange(of: isActive, initial: true) { _, active in
+                if active { viewing.resume() } else { viewing.pause() }
+            }
             .onDisappear {
                 UIApplication.shared.isIdleTimerDisabled = previousIdleTimer
                 pagination.isActive = false; pagination.cancelAdvance(); pagingTask?.cancel()
+                recordViewing(post)
             }
             .onChange(of: loadOriginal) { _, value in original = value }
             .onChange(of: post.viewerURL(original: original, reducedData: reducedData)) { _, _ in mediaStatus = "loading" }

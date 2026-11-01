@@ -13,6 +13,8 @@ struct TasteDashboard: View {
     @State private var saveFeedback: WorkSaveFeedback?
     @State private var opened: TasteRecommendation?
     @State private var detail: TasteTag?
+    @State private var explaining: TasteRecommendation?
+    @State private var openedShelf: TasteRecommendation?
     @State private var comicPrefetchTask: Task<Void, Never>?
     @State private var prefetchAnchor: Int?
     @State private var viewportWidth: CGFloat = 390
@@ -32,13 +34,27 @@ struct TasteDashboard: View {
         ScrollViewReader { scrollProxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                TasteDashboardHeading(tags: feed.snapshot?.tags ?? [], mode: mode)
-                    .padding(.bottom, 12)
-                if !sources.isEmpty, env.taste.control.enabled,
-                   let snapshot = feed.snapshot, let report = feed.report,
-                   let insight = report.insights.first, let tag = snapshot.tags.first(where: { $0.id == insight.tagKey }) {
-                    highlight(insight, tag: tag, report: report, snapshot: snapshot)
-                        .padding(.horizontal, layout.margin - 20)
+                TasteDashboardHeading(mode: mode, learning: feed.learning, source: source, feed: feed, refresh: refresh)
+                    .padding(.bottom, 4)
+                if env.taste.control.enabled { RecapEntryCard(mode: mode).padding(.horizontal, layout.margin - 20) }
+                if !sources.isEmpty, env.taste.control.enabled {
+                    SmartSteering(mode: mode, feed: feed, source: source, refresh: refresh, focus: setFocus)
+                    if let hero = heroItem {
+                        SmartHeroCard(item: hero, open: { opened = hero }, toggle: { toggle(hero) }, isBookmarked: bookmarks.contains(hero.item.id), feedback: feedback)
+                            .padding(.horizontal, layout.margin - 20)
+                    }
+                    ForEach(feed.visibleShelves(in: env.booru)) { shelf in
+                        if !shelf.items.isEmpty {
+                            SmartShelfView(shelf: shelf, open: { openedShelf = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback)
+                        }
+                    }
+                    if feed.focus == nil, let snapshot = feed.snapshot, let report = feed.report,
+                       let insight = report.insights.first, let tag = snapshot.tags.first(where: { $0.id == insight.tagKey }) {
+                        highlight(insight, tag: tag, report: report, snapshot: snapshot)
+                            .padding(.horizontal, layout.margin - 20)
+                    }
+                    if feed.starter { Label(L10n.text("We start with what is popular here. Every save teaches your feed."), systemImage: "chart.line.uptrend.xyaxis").font(.subheadline).foregroundStyle(.secondary) }
+                    else if !gridItems.isEmpty { TasteSectionHeading(title: "For you") }
                 }
                 if sources.count <= 1 && !sources.isEmpty { RecommendationFilters(mode: mode, source: source, onChange: refresh) }
                 else if mode == .booru {
@@ -54,10 +70,8 @@ struct TasteDashboard: View {
                 else {
                     if let failure = feed.error { message(failure, icon: "wifi.exclamationmark", action: "Try Again", perform: refresh) }
                     if let snapshot = feed.snapshot {
-                        if snapshot.tags.isEmpty && feed.results.items.isEmpty { gettingStarted }
-                        else {
-                            works
-                        }
+                        if snapshot.tags.isEmpty { gettingStarted }
+                        if !snapshot.tags.isEmpty || !feed.results.items.isEmpty { works }
                     } else if feed.loading {
                         TasteSurface { HStack(spacing: 12) { ProgressView(); Text(L10n.text("Preparing your insights…")).font(.subheadline).foregroundStyle(.secondary) }.padding(.vertical, 24) }
                     }
@@ -92,6 +106,17 @@ struct TasteDashboard: View {
             do { for try await ids in observation.values(in: env.database.dbWriter, bufferingPolicy: .bufferingNewest(1)) { bookmarks = ids } } catch { }
         }
         .transientMessage(Binding(get: { feed.sortMessage }, set: { feed.sortMessage = $0 }))
+        .overlay(alignment: .bottom) {
+            if let item = feed.lastDismissed {
+                SmartUndoBar(undo: { feed.undoDismiss(mode: mode, env: env) }, close: { feed.clearUndo() }).id(item.id)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.3), value: feed.lastDismissed?.id)
+        .appSheet(item: $explaining) { item in
+            RecommendationWhyView(item: item, mode: mode, feed: feed, refresh: refresh, moreLikeThis: { moreLikeThis(item) })
+        }
+        .tasteWorkPresentation($openedShelf) { .recommended($0.reason.name, session: feed.discoverySession) }
         .workSaveFeedback($saveFeedback, identifier: "taste.saveStatus")
         .onChange(of: sources) { _, _ in ensureLoaded() }
         .onChange(of: env.booruSearchRevision) { _, _ in
@@ -126,6 +151,23 @@ struct TasteDashboard: View {
         }
     }
 
+    private var gridItems: [TasteRecommendation] { feed.visibleItems(in: env.booru) }
+    /// Only a personal ranking has a top pick. A chosen sort keeps its own order.
+    private var heroItem: TasteRecommendation? {
+        let items = gridItems
+        guard items.count >= 5, !feed.starter, feed.focus == nil, sources.allSatisfy({ env.taste.control.preferences(source: $0).sort == .recommended }) else { return nil }
+        return items.first
+    }
+    private var feedback: RecommendationFeedback {
+        .init(why: { explaining = $0 }, more: moreLikeThis, dismiss: { item in feed.dismiss(item, mode: mode, env: env) })
+    }
+    private func setFocus(_ focus: TasteFocus?) { feed.setFocus(focus, mode: mode, env: env, language: comicLanguage) }
+    private func moreLikeThis(_ item: TasteRecommendation) {
+        let names = item.factors.filter { $0.kind == .tag }.map(\.name), fallback = (item.rankingTags ?? []).sorted()
+        let chosen = Array((names + fallback).uniqued.prefix(2))
+        guard let first = chosen.first else { return }
+        setFocus(.init(seed: .init(source: item.item.source, name: chosen.joined(separator: " "), general: 1), why: .similar(first)))
+    }
     private var gettingStarted: some View {
         TasteSurface {
             VStack(alignment: .leading, spacing: 20) {
@@ -175,8 +217,8 @@ struct TasteDashboard: View {
             if !items.isEmpty {
                 let prefetchThresholdIndex = max(0, items.count - lookahead)
                 ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20, topMarginScale: 0.5) { _ in
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id))
+                    ForEach(Array(items.enumerated()).filter { $0.element.id != heroItem?.id }, id: \.element.id) { index, item in
+                        TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id), feedback: feedback)
                             .id(item.id)
                             .onAppear {
                                 guard isActiveMode, scenePhase == .active else { return }
@@ -266,18 +308,40 @@ struct TasteDashboard: View {
     private func refresh() { feed.refresh(mode: mode, env: env, language: comicLanguage) }
 }
 
-private struct TasteDashboardHeading: View {
-    let tags: [TasteTag]
+/// Follows the feed, so evidence opened during a load fills in when it finishes.
+private struct TasteLiveEvidence: View {
+    let feed: TasteFeedState
     let mode: TasteMode
+    var body: some View { TasteTagList(tags: feed.snapshot?.tags ?? [], mode: mode) }
+}
+
+private struct TasteDashboardHeading: View {
+    let mode: TasteMode
+    var learning: TasteLearning? = nil
+    var source = ""
+    let feed: TasteFeedState
+    let refresh: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text(Date(), format: .dateTime.month(.wide).day().weekday(.wide)).font(RecapType.folio(12)).textCase(.uppercase).foregroundStyle(TastePresentation.accent)
             Text(L10n.text("Smart Recommendations")).font(.largeTitle.bold())
-            Text(L10n.text("Inspired by what you love. Made for your next discovery."))
-                .font(.subheadline).foregroundStyle(.secondary)
-            NavigationLink { TasteTagList(tags: tags, mode: mode) } label: {
-                Label(L10n.text("Recommendation evidence"), systemImage: "arrow.up.right")
-                    .font(.subheadline.weight(.medium))
-            }.accessibilityIdentifier("taste.evidence")
+            Text(summary).font(.subheadline).foregroundStyle(.secondary)
+            HStack(spacing: 18) {
+                NavigationLink { TasteTunerView(mode: mode, feed: feed, source: source, refresh: refresh) } label: {
+                    Label(L10n.text("Tune your taste"), systemImage: "dial.medium").font(.subheadline.weight(.medium))
+                }.accessibilityIdentifier("taste.tuner")
+                NavigationLink { TasteLiveEvidence(feed: feed, mode: mode) } label: {
+                    Label(L10n.text("Recommendation evidence"), systemImage: "arrow.up.right")
+                        .font(.subheadline.weight(.medium))
+                }.accessibilityIdentifier("taste.evidence")
+            }
         }.padding(.vertical, 4)
+    }
+    /// Says what today's page is built on rather than repeating a slogan.
+    private var summary: String {
+        guard let top = learning?.recentTags.first(where: { $0.source == source }) ?? learning?.ranked(source).first else {
+            return L10n.text("Inspired by what you love. Made for your next discovery.")
+        }
+        return L10n.text("Tuned to what you've saved lately, led by %@.", RecapText.tag(top.name))
     }
 }

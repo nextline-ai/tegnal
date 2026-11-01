@@ -31,6 +31,8 @@ SCOPES = {
     "sync": ["LibrarySyncTests"],
     "taste": ["TasteTests"],
     "taste-feed": ["TasteFeedTests"],
+    "taste-recap": ["TasteRecapTests"],
+    "taste-learning": ["TasteLearningTests"],
     "challenge": ["ChallengeTests"],
     "presentation": ["AppPresentationTests"],
 }

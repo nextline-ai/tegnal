@@ -172,10 +172,9 @@ final class BooruUITests: XCTestCase {
 
         let app = launch(extra: ["--taste-ui-rich"])
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
-        XCTAssertTrue(element(app, "taste.highlight").waitForExistence(timeout: 10))
-        XCTAssertTrue(element(app, "taste.work.201").waitForExistence(timeout: 20))
+        XCTAssertTrue(firstTasteCard(app).waitForExistence(timeout: 20))
         capture(app, "AI recommendations with works")
-        element(app, "taste.highlight").tap()
+        reveal(app, "taste.highlight").tap()
         XCTAssertTrue(element(app, "taste.tag.detail").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Your evidence"].exists)
         capture(app, "AI taste evidence")
@@ -228,6 +227,46 @@ final class BooruUITests: XCTestCase {
         capture(app, "AI infinite feed second page")
     }
 
+    func testSmartFeedExplainsLearnsAndCanBeTuned() {
+        let app = launch(extra: ["--taste-recap-demo"])
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
+        let first = firstTasteCard(app)
+        XCTAssertTrue(first.waitForExistence(timeout: 30))
+        XCTAssertTrue(element(app, "taste.discovery").waitForExistence(timeout: 5))
+        capture(app, "Smart front page")
+        let id = String(first.identifier.dropFirst("taste.work.".count))
+
+        let options = element(app, "taste.more.\(id)")
+        options.tap()
+        app.buttons["Why this recommendation?"].tap()
+        XCTAssertTrue(element(app, "taste.why").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["What counted"].waitForExistence(timeout: 5))
+        capture(app, "Why this recommendation")
+        element(app, "taste.why.dismiss").tap()
+
+        XCTAssertTrue(element(app, "taste.undo").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "taste.work.\(id)").waitForNonExistence(timeout: 5))
+        capture(app, "Dismissed recommendation with undo")
+        element(app, "taste.undo").tap()
+        XCTAssertTrue(element(app, "taste.work.\(id)").waitForExistence(timeout: 5))
+
+        let thread = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "taste.thread.")).firstMatch
+        XCTAssertTrue(thread.waitForExistence(timeout: 5))
+        thread.tap()
+        XCTAssertTrue(element(app, "taste.focus.clear").waitForExistence(timeout: 10))
+        capture(app, "Focused feed")
+        element(app, "taste.focus.clear").tap()
+        XCTAssertTrue(element(app, "taste.tuner").waitForExistence(timeout: 10))
+
+        element(app, "taste.tuner").tap()
+        XCTAssertTrue(element(app, "taste.tuner.view").waitForExistence(timeout: 5))
+        capture(app, "Taste tuner")
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["What your feed has learned"].waitForExistence(timeout: 5))
+        element(app, "taste.tuner.apply").tap()
+        XCTAssertTrue(element(app, "taste.discovery").waitForExistence(timeout: 10))
+    }
+
     func testTasteMonthlyRecapBannerAndAnalysisExclusions() {
         let app = launch(extra: ["--taste-ui-rich", "--taste-recap-test"])
         XCTAssertTrue(element(app, "taste.recap.open").waitForExistence(timeout: 15))
@@ -237,17 +276,19 @@ final class BooruUITests: XCTestCase {
         }
         capture(app, "Monthly recap banner across tabs")
         element(app, "taste.recap.open").tap()
-        XCTAssertTrue(element(app, "taste.monthly").waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["A month of discoveries"].exists)
-        capture(app, "Monthly recap overview")
+        XCTAssertTrue(element(app, "recap.story").waitForExistence(timeout: 10))
+        capture(app, "Monthly recap cover")
+        app.buttons["Next card"].tap()
         app.buttons["Next card"].tap()
         XCTAssertTrue(app.staticTexts["The tags that defined your month"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Done"].isHittable)
-        capture(app, "Monthly recap taste cards")
+        capture(app, "Monthly recap taste chart")
+        element(app, "recap.story.close").tap()
+        XCTAssertTrue(element(app, "taste.monthly").waitForExistence(timeout: 10))
         selectMode(app, "manga")
-        XCTAssertTrue(app.staticTexts["A month of discoveries"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "recap.latest").waitForExistence(timeout: 5))
+        capture(app, "Recap home for comics")
         selectMode(app, "booru")
-        XCTAssertTrue(app.staticTexts["The tags that defined your month"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "recap.latest").waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCTAssertFalse(element(app, "taste.recap.open").exists)
         app.navigationBars.buttons["Settings"].tap()
@@ -268,6 +309,32 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(element(again, "taste.recap.open").exists)
         again.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "More")).firstMatch.tap()
         XCTAssertFalse(element(again, "taste.recap.open").exists)
+    }
+
+    func testRecapStorySharesPrivatelyAndOpensFromSmartTab() {
+        let app = launch(extra: ["--taste-recap-demo", "--recap-manual"])
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart")).firstMatch.tap()
+        XCTAssertTrue(element(app, "recap.entry").waitForExistence(timeout: 20))
+        element(app, "recap.entry").tap()
+        XCTAssertTrue(element(app, "recap.latest").waitForExistence(timeout: 20))
+        capture(app, "Recap home")
+        element(app, "recap.latest").tap()
+        XCTAssertTrue(element(app, "recap.page.cover").waitForExistence(timeout: 10))
+        var pages = 1
+        while !element(app, "recap.page.next").exists, pages < 14 { app.buttons["Next card"].tap(); pages += 1 }
+        XCTAssertTrue(element(app, "recap.page.next").waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(pages, 8)
+        capture(app, "Recap closing page")
+        element(app, "recap.next.share").tap()
+        XCTAssertTrue(element(app, "recap.share.preview").waitForExistence(timeout: 10))
+        XCTAssertEqual(element(app, "recap.share.artwork").value as? String, "0")
+        XCTAssertEqual(element(app, "recap.share.tags").value as? String, "0")
+        capture(app, "Recap share card without artwork")
+        element(app, "recap.share.close").tap()
+        XCTAssertTrue(element(app, "recap.saved").waitForExistence(timeout: 5))
+        element(app, "recap.saved").tap()
+        XCTAssertTrue(element(app, "recap.works").waitForExistence(timeout: 10))
+        capture(app, "Recap saved works")
     }
 
     func testLegacySoloExclusionFiltersActualSoleTagInComicRecommendations() {

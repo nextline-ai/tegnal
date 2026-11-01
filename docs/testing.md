@@ -35,7 +35,7 @@ python3 native-ios/scripts/test.py --only TEGNALUITests/NativeContentUITests/tes
 | 이미지 보관함 / 썸네일 캐시 / 백업 | `booru-library` / `booru-cache` / `booru-backup` |
 | 이미지 디코딩 큐·뷰어 다운로드 수명 | `image-cache` |
 | 통합 백업 / 동기화 | `backup` / `sync` |
-| 취향 분석 / 추천 피드 | `taste` / `taste-feed` |
+| 취향 분석 / 추천 피드 / 학습 / 리캡 | `taste` / `taste-feed` / `taste-learning` / `taste-recap` |
 | 챌린지 / 모달 표시 | `challenge` / `presentation` |
 
 범위 하나도 큰 경우 관련 메서드를 지정한다. `reader`, `content`, `booru` 등은 클래스 단위로도 여러 테스트가 실행된다. UI 레이아웃 변경만으로 UI 클래스 전체나 모든 언어/기기 검증을 시작하지 않는다.

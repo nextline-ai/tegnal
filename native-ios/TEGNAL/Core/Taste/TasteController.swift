@@ -83,7 +83,7 @@ final class TasteController {
             Task { await cache.invalidate() }
         } catch { self.error = L10n.text("Unable to update taste analysis.") }
     }
-    func reset() { change { $0.epoch = UUID().uuidString }; cloud.status = L10n.text("iCloud deletion pending") }
+    func reset() { change { $0.epoch = UUID().uuidString; $0.tasteBoosts = nil; $0.discoveryLevel = nil }; cloud.status = L10n.text("iCloud deletion pending") }
     func rebindAccount() throws {
         let enabled = control.enabled
         var fresh = TasteControl(); fresh.enabled = enabled
@@ -111,6 +111,21 @@ final class TasteController {
         let keys = interval == nil ? try await Task.detached(priority: .utility) { try store.savedKeys() }.value : nil
         try Task.checkCancellation()
         return try await cache.snapshot(store: store, control: control, period: interval, previous: previous, savedKeys: keys)
+    }
+    func recapIndex(_ mode: TasteMode, hiddenComics: Set<Int64>) async throws -> RecapIndex {
+        try Task.checkCancellation()
+        await bootstrap()
+        let library = library, images = images, store = store(mode), control = control
+        let works = try await Task.detached(priority: .userInitiated) {
+            mode == .booru ? images.recapLibrary() : try library.recapLibrary(hidden: hiddenComics)
+        }.value
+        try Task.checkCancellation()
+        return try await cache.recapIndex(store: store, control: control, library: works)
+    }
+    func learning(_ mode: TasteMode, hiddenComics: Set<Int64>, now: Date = Date()) async throws -> TasteLearning {
+        let index = try await recapIndex(mode, hiddenComics: hiddenComics)
+        let control = control
+        return await Task.detached(priority: .userInitiated) { TasteLearning(index: index, control: control, now: now) }.value
     }
     func synchronize(env: AppEnvironment) async {
         await bootstrap()

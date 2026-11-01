@@ -35,6 +35,8 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.helpHidden", store: ReaderPreferences.defaults) private var helpHidden = false
     @State private var gallery: NativeGallery?
     @State private var currentPage = 0
+    @State private var viewing = TasteViewingSession()
+    @State private var viewedGallery: NativeGallery?
     @State private var pagePrefetcher = ReaderPagePrefetcher()
     @State private var error: String?
     @State private var retry = 0
@@ -217,6 +219,7 @@ struct NativeReaderView: View {
             if start != page { currentPage = start }
             translationRequest = nil; viewports = [:]; zoomed = false; zoomedPages = []
             if savesProgress && !opening.needsConfirmation { ReaderPreferences.defaults.set(page + 1, forKey: "reader_page_\(galleryID)") }
+            showViewingPage()
         }
         .onAppear { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake && scenePhase == .active }
         .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value && scenePhase == .active }
@@ -224,7 +227,24 @@ struct NativeReaderView: View {
             UIApplication.shared.isIdleTimerDisabled = keepAwake && phase == .active
             if phase != .active { pagePrefetcher.cancel() }
         }
-        .onDisappear { pagePrefetcher.cancel(); UIApplication.shared.isIdleTimerDisabled = previousIdleTimer }
+        .onChange(of: viewingActive, initial: true) { _, active in
+            if active { viewing.resume(); showViewingPage() } else { viewing.pause() }
+        }
+        .onChange(of: gallery?.id, initial: true) { _, _ in
+            recordViewing(); viewedGallery = gallery
+            if viewingActive { viewing.resume(); showViewingPage() }
+        }
+        .onDisappear { pagePrefetcher.cancel(); UIApplication.shared.isIdleTimerDisabled = previousIdleTimer; recordViewing() }
+    }
+    private var viewingActive: Bool { readerActive && gallery != nil && sheet == nil }
+    private func showViewingPage() {
+        guard let gallery, !gallery.pages.isEmpty else { return }
+        viewing.show(currentPage, isLast: currentPage + ReaderLayout.count(pagesPerSpread) >= gallery.pages.count)
+    }
+    private func recordViewing() {
+        guard let dwell = viewing.finish(), let gallery = viewedGallery else { return }
+        let database = env.database, context = discovery
+        Task.detached(priority: .utility) { try? database.recordDwell(dwell, gallery: gallery, context: context) }
     }
 
     @ViewBuilder private func reader(_ gallery: NativeGallery) -> some View {

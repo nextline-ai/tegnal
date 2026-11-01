@@ -6,6 +6,7 @@ import '../core/app_controller.dart';
 import '../core/content.dart';
 import '../core/insights.dart';
 import '../ui/session_image.dart';
+import 'recap_screen.dart';
 import '../ui/common.dart';
 import '../ui/l10n.dart';
 import '../ui/page_header.dart';
@@ -96,10 +97,27 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   : 'Smart',
             ),
             child: saved.isEmpty
-                ? const EmptyState(
+                ? ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      tegnalHeaderExtent + 20,
+                      20,
+                      navigationScrollInset(context, gap: 20),
+                    ),
+                    children: [
+                      RecapEntryCard(
+                        controller: widget.controller,
+                        mode: mode,
+                        onSearch: widget.onSearch,
+                        onOpen: widget.onOpen,
+                      ),
+                      const SizedBox(height: 40),
+                      const EmptyState(
                     icon: Icons.bar_chart,
                     title: 'Start with something you love',
                     message: 'Save a few works as you explore. Your collection statistics will grow from there.',
+                      ),
+                    ],
                   )
                 : ListView(
                     padding: EdgeInsets.fromLTRB(
@@ -109,6 +127,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       navigationScrollInset(context, gap: 20),
                     ),
                     children: [
+                      RecapEntryCard(
+                        controller: widget.controller,
+                        mode: mode,
+                        onSearch: widget.onSearch,
+                        onOpen: widget.onOpen,
+                      ),
+                      const SizedBox(height: 24),
                       Text(
                         L10n.tr(context, 'Your taste, in numbers'),
                         style: const TextStyle(

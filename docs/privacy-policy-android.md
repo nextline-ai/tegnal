@@ -12,7 +12,7 @@
 
 저장 작품, 폴더, 작가, 태그, 메모, 사이트 주소, 검색 기록, 읽던 위치, 다운로드 정보와 설정을 기기의 앱 저장소에 보관합니다. TEGNAL 자체 계정이나 개발자 운영 라이브러리 서버는 없으며, 정상적인 라이브러리 이용으로 이 데이터베이스 전체가 NextLine에 전송되지 않습니다. 앱은 자체 광고·행동 분석·오류 보고 업로드 서비스를 사용하지 않습니다.
 
-취향 통계는 기기에서 저장·열람 활동과 작품 정보를 이용해 계산합니다. 새 분석을 중단하거나 분석 기록을 초기화할 수 있습니다. 추천 검색에 사용하는 태그는 연결한 사이트로 전달됩니다. 앱은 생성형 AI 모델을 내려받지 않습니다.
+취향 통계는 기기에서 저장·열람 활동과 작품 정보를 이용해 계산합니다. 리캡의 감상 시간을 위해 작품이 화면에 머문 시간과 본 페이지 수도 기기에만 기록합니다. 새 분석을 중단하거나 분석 기록을 초기화할 수 있습니다. 추천 검색에 사용하는 태그는 연결한 사이트로 전달됩니다. 앱은 생성형 AI 모델을 내려받지 않습니다.
 
 ## 사이트 및 네트워크 요청
 
@@ -60,7 +60,7 @@ This policy applies to the **TEGNAL Android app**, developed by **NextLine**. Co
 
 Saved works, folders, artists, tags, notes, website addresses, search history, reading positions, download information and preferences are stored in the app's device storage. There is no TEGNAL account or developer-operated library server. Normal library use does not upload your entire database to NextLine. The app does not use its own advertising, behavioral analytics or crash-upload service.
 
-Taste statistics use saved/opened works locally. You can stop new analysis or reset its records. Tags used to request recommendations are sent to your configured website. The app does not download generative AI models.
+Taste statistics use saved/opened works locally. For Recap, viewing time and pages viewed are also recorded on this device only. You can stop new analysis or reset its records. Tags used to request recommendations are sent to your configured website. The app does not download generative AI models.
 
 ## Websites, enrichment and network services
 

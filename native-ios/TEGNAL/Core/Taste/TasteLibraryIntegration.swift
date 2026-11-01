@@ -17,6 +17,22 @@ extension BooruStore {
             for server in servers { try TasteStore.record(.search, item: .init(source: server.canonicalAddress, id: 0, tags: Array(context.included)), context: context, db: db) }
         }
     }
+    func recordDwell(_ dwell: TasteDwell, post: BooruPost, context: DiscoveryContext) throws {
+        try database.write { try TasteStore.recordDwell(dwell, item: Self.tasteItem(post, db: $0), context: context, db: $0) }
+    }
+    /// Favorites the library currently shows. Blacklisted and restricted posts stay out of every recap surface.
+    func recapLibrary() -> [String: RecapWorkInfo] {
+        let dates = favoriteSavedDates()
+        let addresses = Dictionary(servers.map { ($0.id, $0.canonicalAddress) }, uniquingKeysWith: { first, _ in first })
+        var result: [String: RecapWorkInfo] = [:]
+        for post in visibleFavorites() {
+            let categories = post.tagCategories ?? [:]
+            func named(_ category: Int) -> [String] { categories.filter { $0.value == category }.keys.sorted() }
+            result[(addresses[post.serverID] ?? post.serverID) + "#" + String(post.postID)] = .init(
+                artists: (post.artists + named(1)).uniqued, series: named(3), characters: named(4), savedAt: dates[post.id])
+        }
+        return result
+    }
     func tasteLibrary() throws -> [TasteItem] {
         try database.read { db in
             // Resolve each server once, rather than re-reading and decoding its
@@ -38,6 +54,24 @@ extension AppDatabase {
     func recordTasteSearch(_ context: DiscoveryContext) throws {
         guard context.origin == .search, !context.included.isEmpty else { return }
         try tasteStore.record(.search, item: .init(source: MangaUrls.source, id: 0, tags: Array(context.included)), context: context)
+    }
+    func recordDwell(_ dwell: TasteDwell, gallery: NativeGallery, context: DiscoveryContext) throws {
+        let item = TasteItem(source: MangaUrls.source, id: gallery.id, tags: gallery.tags)
+        try dbWriter.write { try TasteStore.recordDwell(dwell, item: item, context: context, db: $0) }
+    }
+    func recapLibrary(hidden: Set<Int64>) throws -> [String: RecapWorkInfo] {
+        func split(_ value: String?) -> [String] { (value ?? "").components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+        let dates = ISO8601DateFormatter()
+        return try dbWriter.read { db in
+            var result: [String: RecapWorkInfo] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT w.gallery_id, w.title, w.artists, w.series, w.bookmarked_at, w.thumb_path, c.characters FROM works w LEFT JOIN catalog_works c ON c.id = w.gallery_id") {
+                let id: Int64 = row["gallery_id"]
+                guard !hidden.contains(id) else { continue }
+                result[TasteItem.comic(id).key] = .init(title: row["title"], artists: split(row["artists"]), series: split(row["series"]), characters: split(row["characters"]),
+                                                        savedAt: (row["bookmarked_at"] as String?).flatMap(dates.date(from:)), thumbPath: row["thumb_path"])
+            }
+            return result
+        }
     }
     func tasteLibrary() throws -> [TasteItem] {
         try dbWriter.read { db in try Row.fetchAll(db, sql: "SELECT gallery_id, tags FROM works").map { TasteItem.comic($0["gallery_id"], tags: $0["tags"]) } }
