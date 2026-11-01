@@ -1506,7 +1506,9 @@
 "Apply to Saved Works" = "保存済みの作品にも適用";
 "Classification Rule" = "分類ルール";
 "Classify New Saves" = "新しく保存した作品を分類";
-"A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders." = "ルールのタグを持つ作品を保存すると、そのルールのフォルダにも追加されます。1つの作品を複数のフォルダに入れられます。";
+"Include Other Folders" = "他のフォルダの作品も含める";
+"Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders." = "標準では未分類の作品のみ追加します。オンにすると他のフォルダの作品も追加し、元のフォルダにもそのまま残ります。";
+"A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them." = "ルールのタグを持つ作品が未分類に保存されると、そのルールのフォルダに移動します。他のフォルダの作品は、ルールで含めるようにした場合のみ追加されます。";
 "Except %@" = "%@ を除く";
 "No rules yet." = "ルールはまだありません。";
 "Automatic Classification" = "自動分類";

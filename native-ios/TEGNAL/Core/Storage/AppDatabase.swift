@@ -867,6 +867,7 @@ public final class AppDatabase: Sendable {
 
             var updatedCount = 0
             for item in items {
+                let untagged = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ? AND COALESCE(tags, '') = ''", arguments: [item.id])
                 try updateStmt.execute(arguments: [
                     item.title,
                     item.artists,
@@ -882,6 +883,7 @@ public final class AppDatabase: Sendable {
                 if db.changesCount > 0 {
                     updatedCount += 1
                 }
+                if let untagged, !(item.tags ?? "").isEmpty { try Self.applyFolderRules(toWork: untagged, now: now, db: db) }
 
                 try catStmt.execute(arguments: [
                     item.id,
@@ -925,7 +927,13 @@ public final class AppDatabase: Sendable {
     }
 
     public func applyCatalogToWorks() throws {
+        let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
+            let untagged = try Int64.fetchAll(db, sql: """
+            SELECT w.id FROM works w JOIN catalog_works c ON c.id = w.gallery_id
+            WHERE COALESCE(w.tags, '') = '' AND COALESCE(c.tags, '') != ''
+              AND (w.title IS NULL OR w.metadata_source != 'manual')
+            """)
             let sql = """
             UPDATE works
             SET title = (SELECT c.title FROM catalog_works c WHERE c.id = works.gallery_id),
@@ -942,6 +950,7 @@ public final class AppDatabase: Sendable {
               AND (title IS NULL OR metadata_source != 'manual')
             """
             try db.execute(sql: sql)
+            for id in untagged { try Self.applyFolderRules(toWork: id, now: now, db: db) }
         }
     }
 

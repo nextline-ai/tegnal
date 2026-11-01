@@ -428,6 +428,45 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(close.waitForNonExistence(timeout: 5), "Pulling down must close the sheet")
     }
 
+    func testSavedTagSwipesToAnIconInBothModes() {
+        let app = launch()
+        for mode in ["manga", "booru"] {
+            selectMode(app, mode)
+            app.tabBars.buttons["Tags"].tap()
+            let name = element(app, mode + ".savedName")
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            name.tap()
+            name.typeText("sample")
+            element(app, mode + ".saveTag").tap()
+            app.swipeDown(velocity: .fast)
+            app.swipeDown(velocity: .fast)
+            let saved = app.staticTexts["sample"].firstMatch
+            XCTAssertTrue(saved.waitForExistence(timeout: 5))
+            saved.swipeLeft()
+            let delete = app.buttons["Delete"].firstMatch
+            XCTAssertTrue(delete.waitForExistence(timeout: 5))
+            capture(app, mode + " saved tag swipe")
+            delete.tap()
+            XCTAssertTrue(saved.waitForNonExistence(timeout: 5))
+        }
+    }
+
+    func testNewFolderFromATagOffersOtherFolders() {
+        let app = launch()
+        selectMode(app, "manga")
+        app.tabBars.buttons["Saved"].tap()
+        let create = element(app, "manga.createFolder")
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        create.tap()
+        let fromTag = element(app, "folder.fromTag")
+        XCTAssertTrue(fromTag.waitForExistence(timeout: 5))
+        fromTag.tap()
+        let others = element(app, "folderRule.otherFolders")
+        XCTAssertTrue(others.waitForExistence(timeout: 5))
+        XCTAssertEqual(others.value as? String, "0", "Only Unfiled works are included by default")
+        capture(app, "folder rule other folders option")
+    }
+
     func testModeSwitchKeepsAnsweringUnderRepeatedInput() {
         let app = launch(extra: ["--taste-ui-rich"])
         let iterations = Int(ProcessInfo.processInfo.environment["TEGNAL_MODE_STRESS"] ?? "") ?? 40

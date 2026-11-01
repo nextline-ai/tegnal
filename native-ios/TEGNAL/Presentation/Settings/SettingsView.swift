@@ -504,6 +504,7 @@ enum LibraryMaintenance {
                 if let note = work.note, !note.isEmpty, !notes.contains(note) { notes.append(note) }
                 try db.execute(sql: "DELETE FROM works WHERE id = ?", arguments: [oldID])
             }
+            try AppDatabase.leaveUnfiled(workID: keeperID, db: db)
             try db.execute(sql: "UPDATE works SET note = ? WHERE id = ?", arguments: [notes.joined(separator: "\n\n"), keeperID])
         }
     }

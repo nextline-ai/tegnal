@@ -8,6 +8,8 @@ struct FolderRule: Identifiable, Codable, Hashable, Sendable {
     var folder: String
     var query: String
     var excluded = ""
+    /// Unfiled works are the default. Optional so rules saved before this option still decode.
+    var includesOtherFolders: Bool?
     var workQuery: WorkQuery { WorkQuery(query, excluding: excluded) }
 }
 
@@ -20,6 +22,8 @@ enum LibrarySavePreferences {
 
 extension AppDatabase {
     private static let rulesKey = "folder_rules"
+    /// A work in any other folder was put there by someone, so rules leave it alone by default.
+    private static let unplaced = "NOT EXISTS (SELECT 1 FROM folder_works fw JOIN folders f ON f.id = fw.folder_id WHERE fw.work_id = w.id AND f.name != '미분류')"
 
     static func fetchFolderRules(_ db: Database) throws -> [FolderRule] {
         guard let data = try Data.fetchOne(db, sql: "SELECT value FROM library_order WHERE key = ?", arguments: [rulesKey]) else { return [] }
@@ -53,10 +57,10 @@ extension AppDatabase {
         }
     }
 
-    func saveFolderRule(id: String? = nil, folderID: Int64, query: String, excluded: String) throws {
+    func saveFolderRule(id: String? = nil, folderID: Int64, query: String, excluded: String, includesOtherFolders: Bool = false) throws {
         try dbWriter.write { db in
             var rules = try Self.fetchFolderRules(db)
-            let rule = FolderRule(id: id ?? UUID().uuidString, folder: try Self.folderIdentity(folderID, db: db), query: query, excluded: excluded)
+            let rule = FolderRule(id: id ?? UUID().uuidString, folder: try Self.folderIdentity(folderID, db: db), query: query, excluded: excluded, includesOtherFolders: includesOtherFolders)
             if let index = rules.firstIndex(where: { $0.id == rule.id }) { rules[index] = rule } else { rules.append(rule) }
             try Self.storeFolderRules(rules, db: db)
         }
@@ -68,16 +72,21 @@ extension AppDatabase {
         }
     }
 
-    func matchingWorkCount(_ query: WorkQuery) throws -> Int {
+    func matchingWorkCount(_ query: WorkQuery, includingOtherFolders: Bool = false) throws -> Int {
         guard !query.isEmpty else { return 0 }
-        let (conditions, arguments) = query.conditions
+        let (conditions, arguments) = Self.matching(query, includingOtherFolders: includingOtherFolders)
         return try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works w WHERE \(conditions)", arguments: StatementArguments(arguments)) ?? 0 }
     }
 
-    /// Adds saved works to a folder. Works keep their other folders, apart from Unfiled.
-    func addMatchingWorks(_ query: WorkQuery, toFolder folderID: Int64) throws {
-        guard !query.isEmpty else { return }
+    private static func matching(_ query: WorkQuery, includingOtherFolders: Bool) -> (sql: String, arguments: [DatabaseValueConvertible]) {
         let (conditions, arguments) = query.conditions
+        return (includingOtherFolders ? conditions : "\(conditions) AND \(unplaced)", arguments)
+    }
+
+    /// Adds saved works to a folder. Works keep their other folders, apart from Unfiled.
+    func addMatchingWorks(_ query: WorkQuery, toFolder folderID: Int64, includingOtherFolders: Bool = false) throws {
+        guard !query.isEmpty else { return }
+        let (conditions, arguments) = Self.matching(query, includingOtherFolders: includingOtherFolders)
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
             let values: [DatabaseValueConvertible] = [folderID, now] + arguments
@@ -95,7 +104,11 @@ extension AppDatabase {
     /// person takes out of a folder stays out.
     static func applyFolderRules(toWork workID: Int64, now: String, db: Database) throws {
         guard LibrarySavePreferences.rulesEnabled else { return }
-        for rule in try fetchFolderRules(db) where !rule.workQuery.isEmpty {
+        let rules = try fetchFolderRules(db)
+        guard !rules.isEmpty else { return }
+        // Read once, or the first match would hide the work from every later rule.
+        let wasUnplaced = try Bool.fetchOne(db, sql: "SELECT \(unplaced) FROM works w WHERE w.id = ?", arguments: [workID]) == true
+        for rule in rules where !rule.workQuery.isEmpty && (wasUnplaced || rule.includesOtherFolders == true) {
             guard let folderID = try folderID(ofRule: rule, db: db) else { continue }
             let (conditions, arguments) = rule.workQuery.conditions
             let values: [DatabaseValueConvertible] = [workID] + arguments
@@ -124,5 +137,14 @@ extension AppDatabase {
             try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
             try Self.leaveUnfiled(whenIn: folderID, db: db)
         }
+    }
+
+    /// For merges, which can bring a work's Unfiled membership along with real folders.
+    static func leaveUnfiled(workID: Int64, db: Database) throws {
+        try db.execute(sql: """
+        DELETE FROM folder_works
+        WHERE work_id = ? AND folder_id IN (SELECT id FROM folders WHERE name = '미분류')
+          AND EXISTS (SELECT 1 FROM folder_works fw JOIN folders f ON f.id = fw.folder_id WHERE fw.work_id = ? AND f.name != '미분류')
+        """, arguments: [workID, workID])
     }
 }

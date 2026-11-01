@@ -65,7 +65,9 @@ import GRDB
         try save(2)
         try save(3, language: "japanese")
         let korean = try database.createFolder(name: "Korean")
-        try database.addMatchingWorks(WorkQuery("language:korean"), toFolder: korean.id!)
+        XCTAssertEqual(try database.matchingWorkCount(WorkQuery("language:korean")), 1)
+        XCTAssertEqual(try database.matchingWorkCount(WorkQuery("language:korean"), includingOtherFolders: true), 2)
+        try database.addMatchingWorks(WorkQuery("language:korean"), toFolder: korean.id!, includingOtherFolders: true)
         XCTAssertEqual(try folderNames(1), ["Favorites", "Korean"])
         XCTAssertEqual(try folderNames(2), ["Korean"])
         XCTAssertEqual(try folderNames(3), ["미분류"])
@@ -82,13 +84,99 @@ import GRDB
         XCTAssertEqual(try folderNames(3), ["미분류"])
     }
 
-    func testRuleKeepsTheDefaultSaveFolderAlongsideItsOwn() throws {
+    func testFillingAFolderLeavesWorksInOtherFoldersByDefault() throws {
+        let favorites = try database.createFolder(name: "Favorites")
+        try save(1)
+        try database.addWork(galleryId: 1, folderID: favorites.id!)
+        try save(2)
+        let korean = try database.createFolder(name: "Korean")
+        try database.addMatchingWorks(WorkQuery("language:korean"), toFolder: korean.id!)
+        XCTAssertEqual(try folderNames(1), ["Favorites"])
+        XCTAssertEqual(try folderNames(2), ["Korean"])
+    }
+
+    func testRuleLeavesOtherFoldersAloneUnlessItIncludesThem() throws {
         let favorites = try database.createFolder(name: "Favorites")
         ReaderPreferences.defaults.set(Int(favorites.id!), forKey: LibrarySavePreferences.defaultFolderKey)
         let korean = try database.createFolder(name: "Korean")
         try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
         try save(1)
-        XCTAssertEqual(try folderNames(1), ["Favorites", "Korean"])
+        XCTAssertEqual(try folderNames(1), ["Favorites"])
+
+        let rule = try XCTUnwrap(database.folderRules().first?.rule)
+        try database.saveFolderRule(id: rule.id, folderID: korean.id!, query: rule.query, excluded: "", includesOtherFolders: true)
+        try save(2)
+        XCTAssertEqual(try folderNames(2), ["Favorites", "Korean"])
+    }
+
+    func testEveryRuleSeesAWorkArrivingInUnfiled() throws {
+        let korean = try database.createFolder(name: "Korean"), color = try database.createFolder(name: "Color")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
+        try database.saveFolderRule(folderID: color.id!, query: "tag:full_color", excluded: "")
+        try save(1)
+        XCTAssertEqual(try folderNames(1), ["Korean", "Color"])
+    }
+
+    func testRulesSavedBeforeTheOptionStillLoadAsUnfiledOnly() throws {
+        let saved = #"[{"id":"old","folder":"unsorted","query":"language:korean","excluded":""}]"#
+        let rules = try JSONDecoder().decode([FolderRule].self, from: Data(saved.utf8))
+        XCTAssertEqual(rules.map(\.query), ["language:korean"])
+        XCTAssertNil(rules[0].includesOtherFolders)
+    }
+
+    func testViewerImportFilesOnlyWorksArrivingUnfiled() throws {
+        let korean = try database.createFolder(name: "Korean")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
+        try database.upsertCatalogBatch([1, 2].map { CatalogWork(id: $0, language: "korean", tags: "tag:full color") })
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("rules_\(UUID().uuidString).db").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try DatabaseQueue(path: path).write { db in
+            try db.execute(sql: """
+            CREATE TABLE BookmarkGroup (Id INTEGER PRIMARY KEY, Name TEXT, Description TEXT, Color INTEGER, Gorder INTEGER);
+            CREATE TABLE BookmarkArticle (Id INTEGER PRIMARY KEY, Article TEXT, DateTime TEXT, GroupId INTEGER);
+            INSERT INTO BookmarkGroup (Id, Name, Gorder) VALUES (1, 'violet_default', 1), (2, 'Kept', 2);
+            INSERT INTO BookmarkArticle (Id, Article, GroupId, DateTime) VALUES (1, '1', 1, '2024-01-01'), (2, '2', 2, '2024-01-02');
+            """)
+        }
+        _ = try MangaViewerImportService(appDb: database).importUserDb(path: path)
+        XCTAssertEqual(try folderNames(1), ["Korean"])
+        XCTAssertEqual(try folderNames(2), ["Kept"])
+    }
+
+    func testCatalogTagsRunRulesOnlyWhereTheyWereMissing() throws {
+        let kept = try database.createFolder(name: "Kept"), korean = try database.createFolder(name: "Korean")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
+        let unfiled = try database.defaultSaveFolder().id
+        _ = try database.upsertWork(galleryId: 1, folderId: unfiled)
+        _ = try database.upsertWork(galleryId: 2, folderId: kept.id)
+        _ = try database.upsertWork(galleryId: 3, folderId: unfiled)
+        _ = try database.upsertWork(galleryId: 4, folderId: unfiled, language: "japanese", tags: "tag:old")
+        let catalog = { (id: Int64) in CatalogWork(id: id, language: "korean", tags: "tag:full color") }
+
+        XCTAssertEqual(try database.applyCatalogBatchToWorks([catalog(1), catalog(2), catalog(4)]), 3)
+        XCTAssertEqual(try folderNames(1), ["Korean"])
+        XCTAssertEqual(try folderNames(2), ["Kept"])
+        XCTAssertEqual(try folderNames(4), ["미분류"], "A work that already had tags was classified when they arrived")
+
+        try database.upsertCatalogBatch([catalog(3)])
+        try database.applyCatalogToWorks()
+        XCTAssertEqual(try folderNames(3), ["Korean"])
+    }
+
+    func testMergingDuplicatesLeavesUnfiledWhenARealFolderCameAlong() throws {
+        let kept = try database.createFolder(name: "Kept")
+        _ = try database.upsertWork(galleryId: 1, folderId: try database.defaultSaveFolder().id, title: "Same", artists: "Author", language: "korean", type: "manga")
+        _ = try database.upsertWork(galleryId: 2, folderId: kept.id, title: "Same", artists: "Author", language: "korean", type: "manga")
+        let group = try XCTUnwrap(LibraryMaintenance.duplicates(works: database.listWorks(), posts: []).first)
+        try LibraryMaintenance.mergeComics(group, keeping: 1, database: database)
+        XCTAssertEqual(try folderNames(1), ["Kept"])
+    }
+
+    func testAWorkInTwoFoldersIsNotADuplicate() throws {
+        let first = try database.createFolder(name: "First"), second = try database.createFolder(name: "Second")
+        _ = try database.upsertWork(galleryId: 1, folderId: first.id, title: "Same", artists: "Author", language: "korean", type: "manga")
+        try database.addWork(galleryId: 1, folderID: second.id!)
+        XCTAssertTrue(LibraryMaintenance.duplicates(works: try database.listWorks(), posts: []).isEmpty)
     }
 
     func testRuleRunsWhenTagsArriveButNeverRefilesAWorkTakenOut() throws {
@@ -153,7 +241,7 @@ import GRDB
 
     func testBackupCarriesRules() throws {
         let korean = try database.createFolder(name: "Korean")
-        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "tag:spoiler")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "tag:spoiler", includesOtherFolders: true)
         let backup = try MangaBackup.capture(database)
         try backup.validate()
         let restored = AppEnvironment.preview()
@@ -161,6 +249,7 @@ import GRDB
         let rules = try restored.database.folderRules()
         XCTAssertEqual(rules.map(\.rule.query), ["language:korean"])
         XCTAssertEqual(rules.map(\.rule.excluded), ["tag:spoiler"])
+        XCTAssertEqual(rules.map(\.rule.includesOtherFolders), [true])
         XCTAssertEqual(rules.map(\.folder.name), ["Korean"])
     }
 
@@ -172,7 +261,7 @@ import GRDB
 
     func testChangingFolderLeavesFoldersARuleAdded() throws {
         let korean = try database.createFolder(name: "Korean"), other = try database.createFolder(name: "Other")
-        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "", includesOtherFolders: true)
         let favorites = try database.createFolder(name: "Favorites")
         ReaderPreferences.defaults.set(Int(favorites.id!), forKey: LibrarySavePreferences.defaultFolderKey)
         _ = try ContentBookmarkAction.toggle(id: 1, gallery: gallery(1), env: env)

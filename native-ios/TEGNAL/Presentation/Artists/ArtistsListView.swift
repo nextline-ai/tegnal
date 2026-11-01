@@ -278,7 +278,8 @@ private struct SavedCollectionRow: View {
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) { model.remove(entry.name, kind: entry.kind) } label: { Label(L10n.text("Delete"), systemImage: "trash") }
+            Button(role: .destructive) { model.remove(entry.name, kind: entry.kind) } label: { Image(systemName: "trash") }
+                .accessibilityLabel(L10n.text("Delete")).accessibilityIdentifier("collections.delete")
         }
         .accessibilityActions {
             if entry.kind != .history {

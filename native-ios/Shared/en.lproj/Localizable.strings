@@ -1506,7 +1506,9 @@
 "Apply to Saved Works" = "Apply to Saved Works";
 "Classification Rule" = "Classification Rule";
 "Classify New Saves" = "Classify New Saves";
-"A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders." = "A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders.";
+"Include Other Folders" = "Include Other Folders";
+"Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders." = "Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders.";
+"A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them." = "A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them.";
 "Except %@" = "Except %@";
 "No rules yet." = "No rules yet.";
 "Automatic Classification" = "Automatic Classification";

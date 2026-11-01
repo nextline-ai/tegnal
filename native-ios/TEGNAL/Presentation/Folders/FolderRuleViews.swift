@@ -13,6 +13,7 @@ struct FolderRuleEditor: View {
     @State private var folderID: Int64?
     /// Keeps a new folder filling up, or runs a new rule over works already saved.
     @State private var extends = false
+    @State private var includesOtherFolders: Bool
     @State private var matches = 0
     @State private var error: String?
     @FocusState private var nameFocused: Bool
@@ -23,6 +24,7 @@ struct FolderRuleEditor: View {
         ruleID = nil
         _tag = State(initialValue: tag)
         _excluded = State(initialValue: "")
+        _includesOtherFolders = State(initialValue: false)
     }
 
     /// A rule for an existing folder.
@@ -31,6 +33,7 @@ struct FolderRuleEditor: View {
         ruleID = rule?.id
         _tag = State(initialValue: rule?.query ?? "")
         _excluded = State(initialValue: rule?.excluded ?? "")
+        _includesOtherFolders = State(initialValue: rule?.includesOtherFolders == true)
         _folderID = State(initialValue: folderID)
     }
 
@@ -68,6 +71,9 @@ struct FolderRuleEditor: View {
                 }
                 Section {
                     Toggle(L10n.text(creatingFolder ? "Also Add New Saves" : "Apply to Saved Works"), isOn: $extends).accessibilityIdentifier("folderRule.extends")
+                    Toggle(L10n.text("Include Other Folders"), isOn: $includesOtherFolders).accessibilityIdentifier("folderRule.otherFolders")
+                } footer: {
+                    Text(L10n.text("Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders."))
                 }
             }
             .navigationTitle(L10n.text(creatingFolder ? "New Folder" : "Classification Rule")).navigationBarTitleDisplayMode(.inline)
@@ -86,9 +92,9 @@ struct FolderRuleEditor: View {
             folders = ((try? env.database.listFolders()) ?? []).filter { $0.name != "미분류" }
             if creatingFolder { nameFocused = true } else if folderID == nil { folderID = folders.first?.id }
         }
-        .task(id: "\(tag)\u{0}\(excluded)") {
+        .task(id: "\(tag)\u{0}\(excluded)\u{0}\(includesOtherFolders)") {
             do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
-            matches = (try? env.database.matchingWorkCount(query)) ?? 0
+            matches = (try? env.database.matchingWorkCount(query, includingOtherFolders: includesOtherFolders)) ?? 0
         }
     }
 
@@ -96,9 +102,9 @@ struct FolderRuleEditor: View {
         do {
             let target = creatingFolder ? try env.database.createFolder(name: name).id : folderID
             guard let target else { return }
-            if creatingFolder || extends { try env.database.addMatchingWorks(query, toFolder: target) }
+            if creatingFolder || extends { try env.database.addMatchingWorks(query, toFolder: target, includingOtherFolders: includesOtherFolders) }
             if !creatingFolder || extends {
-                try env.database.saveFolderRule(id: ruleID, folderID: target, query: tag, excluded: excluded)
+                try env.database.saveFolderRule(id: ruleID, folderID: target, query: tag, excluded: excluded, includesOtherFolders: includesOtherFolders)
             }
             dismiss()
         } catch { self.error = error.localizedDescription }
@@ -124,7 +130,7 @@ struct FolderRulesView: View {
         List {
             Section {
                 Toggle(L10n.text("Classify New Saves"), isOn: $enabled).accessibilityIdentifier("folderRules.enabled")
-            } footer: { Text(L10n.text("A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders.")) }
+            } footer: { Text(L10n.text("A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them.")) }
             Section {
                 ForEach(rules, id: \.rule.id) { item in
                     Button { editing = Editing(rule: item.rule, folderID: item.folder.id) } label: {
@@ -134,6 +140,9 @@ struct FolderRulesView: View {
                                 Text(L10n.text("Except %@", item.rule.excluded.replacingOccurrences(of: "_", with: " "))).font(.caption).foregroundStyle(.secondary)
                             }
                             Label(item.folder.displayName, systemImage: "folder").font(.caption).foregroundStyle(.secondary)
+                            if item.rule.includesOtherFolders == true {
+                                Text(L10n.text("Include Other Folders")).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }.accessibilityIdentifier("folderRules.rule." + item.rule.id)
                 }

@@ -1506,7 +1506,9 @@
 "Apply to Saved Works" = "이미 저장한 작품에도 적용";
 "Classification Rule" = "분류 규칙";
 "Classify New Saves" = "새로 저장한 작품 분류";
-"A work saved with a rule's tag is also added to that rule's folder, and can stay in several folders." = "규칙의 태그가 있는 작품을 저장하면 그 규칙의 폴더에도 들어갑니다. 한 작품이 여러 폴더에 있을 수 있습니다.";
+"Include Other Folders" = "다른 폴더의 작품도 포함";
+"Only Unfiled works are added. Turn this on to add works from other folders too. They stay in those folders." = "기본으로는 미분류 작품만 넣습니다. 켜면 다른 폴더의 작품도 넣으며, 그 작품은 원래 폴더에도 그대로 남습니다.";
+"A work saved to Unfiled with a rule's tag moves to that rule's folder. Works in other folders stay put unless the rule includes them." = "규칙의 태그가 있는 작품이 미분류로 저장되면 그 규칙의 폴더로 옮겨집니다. 다른 폴더에 있는 작품은 규칙에서 포함하도록 켠 경우에만 들어갑니다.";
 "Except %@" = "%@ 제외";
 "No rules yet." = "아직 규칙이 없습니다.";
 "Automatic Classification" = "자동 분류";
