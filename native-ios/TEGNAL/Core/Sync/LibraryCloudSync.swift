@@ -122,6 +122,7 @@ final class LibraryCloudSync {
                 // destination. Publish this repair as new row changes too.
                 next.baseline = try snapshotCache.snapshot(adapter)
                 try env.booru.organizeLegacyImports()
+                try env.database.adoptLegacyFolderRules()
                 next.capture(try snapshotCache.snapshot(adapter), device: device)
                 try env.booru.refresh()
                 env.reloadSyncedPreferences()

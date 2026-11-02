@@ -8,7 +8,7 @@ import Security
 final class BooruStore: @unchecked Sendable {
     let database: DatabaseQueue
     private let prefetchSavedPreviews: Bool
-    private struct FavoriteRecord { let post: BooruPost; let folderID: String; let savedAt: Date }
+    struct FavoriteRecord { let post: BooruPost; let folderID: String; let savedAt: Date }
     private struct FavoriteQuery: Hashable { let folderID: String?; let query: String }
     @ObservationIgnored private let snapshotLock = NSLock()
     @ObservationIgnored private var cachedFavoriteIDs: (revision: Int, value: Set<String>)?
@@ -258,7 +258,7 @@ final class BooruStore: @unchecked Sendable {
             try db.execute(sql: "DELETE FROM favorites WHERE server_id = ? AND post_id = ?", arguments: [post.serverID, post.postID])
             let adding = db.changesCount == 0
             if adding {
-                let folder = try Self.defaultFolder(for: post.serverID, db: db)
+                let folder = try Self.smartDestination(for: post, landing: Self.defaultFolder(for: post.serverID, db: db), db: db)
                 try db.execute(sql: "INSERT INTO favorites (server_id, post_id, payload, saved_at, folder_id) VALUES (?, ?, ?, ?, ?)", arguments: [post.serverID, post.postID, try JSONEncoder().encode(post), Date().timeIntervalSince1970, folder])
             }
             try TasteStore.record(adding ? .save : .remove, item: Self.tasteItem(post, db: db), context: context, db: db)
@@ -276,7 +276,7 @@ final class BooruStore: @unchecked Sendable {
         }
     }
 
-    private func favoriteRecords() -> [FavoriteRecord] {
+    func favoriteRecords() -> [FavoriteRecord] {
         let revision = snapshotVersion
         if let value = snapshotLock.withLock({ cachedFavorites?.revision == revision ? cachedFavorites?.value : nil }) { return value }
         let value: [FavoriteRecord] = (try? database.read { db in
@@ -316,8 +316,9 @@ final class BooruStore: @unchecked Sendable {
         let revision = snapshotVersion
         if let value = snapshotLock.withLock({ cachedFolders?.revision == revision ? cachedFolders?.value : nil }) { return value }
         let value: [BooruFolder] = (try? database.read { db in
-            try Row.fetchAll(db, sql: "SELECT * FROM folders ORDER BY position, name").map {
-                BooruFolder(id: $0["id"], name: $0["name"], color: $0["color"])
+            let smart = Set(try Self.fetchFolderRules(db).filter(\.isActive).map(\.folder))
+            return try Row.fetchAll(db, sql: "SELECT * FROM folders ORDER BY position, name").map {
+                BooruFolder(id: $0["id"], name: $0["name"], color: $0["color"], isSmart: smart.contains($0["id"] as String))
             }
         }) ?? []
         snapshotLock.withLock { cachedFolders = (revision, value) }
@@ -349,6 +350,7 @@ final class BooruStore: @unchecked Sendable {
                 try db.execute(sql: "UPDATE favorites SET folder_id = 'unsorted' WHERE folder_id = ?", arguments: [id])
             }
             try db.execute(sql: "DELETE FROM folders WHERE id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])
         }
         revision += 1
     }
@@ -361,7 +363,7 @@ final class BooruStore: @unchecked Sendable {
     func saveFavorite(_ post: BooruPost, folderID: String? = nil, context: DiscoveryContext? = nil) throws {
         try database.write { db in
             let existing = try String.fetchOne(db, sql: "SELECT folder_id FROM favorites WHERE server_id = ? AND post_id = ?", arguments: [post.serverID, post.postID])
-            let folderID = try folderID ?? existing ?? Self.defaultFolder(for: post.serverID, db: db)
+            let folderID = try folderID ?? existing ?? Self.smartDestination(for: post, landing: Self.defaultFolder(for: post.serverID, db: db), db: db)
             guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ?)", arguments: [folderID]) == true else { throw BooruError.invalidResponse }
             try db.execute(sql: "INSERT INTO favorites (server_id, post_id, payload, saved_at, folder_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(server_id, post_id) DO UPDATE SET payload = excluded.payload, folder_id = excluded.folder_id", arguments: [post.serverID, post.postID, try JSONEncoder().encode(post), Date().timeIntervalSince1970, folderID])
             if existing == nil, let context { try TasteStore.record(.save, item: Self.tasteItem(post, db: db), context: context, db: db) }
@@ -452,6 +454,10 @@ final class BooruStore: @unchecked Sendable {
     }
     func setSetting(_ key: String, value: String) throws {
         try database.write { try $0.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: [key, value]) }
+        revision += 1
+    }
+    func removeSetting(_ key: String) throws {
+        try database.write { try $0.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [key]) }
         revision += 1
     }
 }

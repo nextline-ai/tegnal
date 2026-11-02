@@ -35,7 +35,7 @@ Image mode also has Challenge Roulette, which is a different sort of thing: spin
 
 Hold a work to save it. You choose the default folder in Settings, and the notice that appears after saving lets you change it on the spot. Remove a bookmark by accident and saving it again before you quit the app puts it back where it was.
 
-A work can sit in several folders. Search your saved works for a tag like `language:korean` and turn the results into a folder, or add an automatic classification rule so works landing in Unfiled or your default save folder file themselves. Folders you filled by hand are left alone unless you turn on the option to include them. Each rule can exclude the tags you don't want.
+A work can sit in several folders. Search your saved works for a tag like `language:korean` and turn the results into a folder, or hold a folder to make it a smart folder, so works landing in Unfiled or your default save folder file themselves by tag. You pick which folders it takes from, and each one can exclude the tags you don't want. A work you move yourself stays put even if its tags differ. Smart folders show ✦ after their name, work the same way in image mode, and their rules sync over iCloud.
 
 Hold a saved work to find others with a similar composition, palette and style.
 
@@ -90,7 +90,7 @@ This is beta 1.0.0-beta.5, for Android 7.0 and later. It isn't on Google Play, s
 
 Open the file to install it. If Android asks, allow installs from the browser or file app you downloaded it with, and nothing else. To update, install the new APK the same way. Changes and file hashes are on the [release page](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5).
 
-It's a beta, and it doesn't match the Apple version yet. There's no iCloud sync, similar-work search, default save folder or automatic classification, and Smart is still the older version. Image translation hands off to the Google Translate app. Google Drive sync is currently off.
+It's a beta, and it doesn't match the Apple version yet. There's no iCloud sync, similar-work search, default save folder or smart folders, and Smart is still the older version. Image translation hands off to the Google Translate app. Google Drive sync is currently off.
 
 ## Getting started
 

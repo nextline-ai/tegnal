@@ -9,6 +9,8 @@ struct BooruFavoritesView: View {
     @Environment(BooruStore.self) private var store
     @State private var creating = false
     @State private var newFolderName = ""
+    @State private var composing: SmartFolderDraft?
+    @State private var smartFolder: SmartFolderTarget?
     @State private var editing: BooruFolderEdit?
     @State private var deleting: BooruFolder?
     @State private var reordering = false
@@ -41,7 +43,8 @@ struct BooruFavoritesView: View {
                                 Button(L10n.text("Change Color"), systemImage: "paintpalette") { editing = .init(folder: folder) }
                                 Button(L10n.text("Reorder Folders"), systemImage: "arrow.up.arrow.down") { reordering = true }
                                 if folder.id != "unsorted" {
-                                    Button(L10n.text("Rename Folder"), systemImage: "pencil") { renaming = folder; renameDraft = folder.displayName; showRename = true }
+                                    Button(L10n.text("Rename Folder"), systemImage: "pencil") { renaming = folder; renameDraft = folder.plainName; showRename = true }
+                                    Button(L10n.text("Smart Folder"), systemImage: "sparkles") { smartFolder = .init(id: folder.id) }
                                 }
                                 Button(L10n.text("Delete Folder"), systemImage: "trash", role: .destructive) {
                                     if folder.id == "unsorted" {
@@ -63,7 +66,9 @@ struct BooruFavoritesView: View {
             }
         } }
         .transientMessage($folderMessage)
-        .booruCreateFolderAlert(isPresented: $creating, name: $newFolderName)
+        .booruCreateFolderAlert(isPresented: $creating, name: $newFolderName, onSmart: { composing = SmartFolderDraft(name: $0) })
+        .appSheet(item: $composing) { FolderRuleEditor(booru: true, name: $0.name) }
+        .appSheet(item: $smartFolder) { FolderRuleEditor(booru: true, folder: $0.id) }
         .appSheet(isPresented: $reordering) { FolderOrderView(booru: true) }
         .appSheet(item: $editing) { item in
             if let folder = item.folder {
@@ -106,7 +111,7 @@ private struct BooruFolderCard: View {
                     }
                 }.padding(style.inset(6))
             }.clipped()
-            FolderCardCaption(title: folder.displayName, count: posts.count, color: .white)
+            FolderCardCaption(title: folder.plainName, isSmart: folder.isSmart, count: posts.count, color: .white)
         }.foregroundStyle(.white).background(Color(argb: folder.color))
             .clipShape(RoundedRectangle(cornerRadius: style.radius(16))).overlay(RoundedRectangle(cornerRadius: style.radius(16)).stroke(.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5))
     }
@@ -246,9 +251,10 @@ private struct BooruCreateFolderModifier: ViewModifier {
     @Environment(BooruStore.self) private var store
     @Binding var isPresented: Bool
     @Binding var name: String
+    var onSmart: ((String) -> Void)?
     func body(content: Content) -> some View {
         content.background {
-            FolderNameAlert(isPresented: $isPresented, name: $name, identifier: "booru.folderName") { folderName in
+            FolderNameAlert(isPresented: $isPresented, name: $name, identifier: "booru.folderName", alternateTitle: onSmart == nil ? nil : "Make a Smart Folder", onAlternate: { onSmart?($0) }) { folderName in
                 store.perform { try store.saveFolder(name: folderName) }
             }.frame(width: 0, height: 0)
         }
@@ -256,7 +262,7 @@ private struct BooruCreateFolderModifier: ViewModifier {
 }
 
 private extension View {
-    func booruCreateFolderAlert(isPresented: Binding<Bool>, name: Binding<String>) -> some View {
-        modifier(BooruCreateFolderModifier(isPresented: isPresented, name: name))
+    func booruCreateFolderAlert(isPresented: Binding<Bool>, name: Binding<String>, onSmart: ((String) -> Void)? = nil) -> some View {
+        modifier(BooruCreateFolderModifier(isPresented: isPresented, name: name, onSmart: onSmart))
     }
 }

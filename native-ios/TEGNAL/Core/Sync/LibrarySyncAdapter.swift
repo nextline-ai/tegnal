@@ -60,7 +60,7 @@ struct LibrarySyncAdapter {
     let booru: BooruStore
     let mangaDefaults: UserDefaults
     let booruDefaults: UserDefaults
-    static let commonPreferences = ["site_verified", "app.language", "app_theme", "booru.app_theme", "manga.defaultTags", "manga.defaultExcludedTags", "manga.artistLanguage", "search.retentionDays", "search.rememberHistory", "reader.translationLanguage"]
+    static let commonPreferences = ["site_verified", "app.language", "app_theme", "booru.app_theme", "manga.defaultTags", "manga.defaultExcludedTags", "manga.artistLanguage", "search.retentionDays", "search.rememberHistory", "reader.translationLanguage", LibrarySavePreferences.defaultFolderKey, LibrarySavePreferences.rulesEnabledKey]
     static let booruPreferences = ["search.retentionDays", "reader.translationLanguage", "booru.rememberHistory", "booru.showNotes"]
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],
@@ -83,8 +83,12 @@ struct LibrarySyncAdapter {
                 let name: String = row["name"]
                 try db.execute(sql: "UPDATE folders SET sync_id = ? WHERE id = ?", arguments: [name == "미분류" ? "unsorted" : UUID().uuidString, row["id"] as Int64])
             }
+            _ = try LibrarySavePreferences.defaultFolderIdentity(db, defaults: mangaDefaults)
         }
     }
+
+    /// Image settings stay local unless they describe the library itself.
+    private static func travelsUnchanged(_ key: String?) -> Bool { key == "folder_order" || key?.hasPrefix(FolderRule.keyPrefix) == true }
 
     func snapshot() throws -> [String: LibrarySyncRow] {
         try assignFolderIdentities()
@@ -121,7 +125,7 @@ struct LibrarySyncAdapter {
                             values["payload"] = .blob(try Self.encode(post))
                         }
                     }
-                    if local == "settings", values["key"]?.string != "folder_order" {
+                    if local == "settings", !Self.travelsUnchanged(values["key"]?.string) {
                         guard let key = values["key"]?.string, key.hasPrefix("blacklist."), let address = addresses[String(key.dropFirst(10))] else { continue }
                         values["key"] = .text("blacklist." + address)
                     }
@@ -232,7 +236,7 @@ struct LibrarySyncAdapter {
                             row.values["payload"] = .blob(try Self.encode(JSONDecoder().decode(BooruPost.self, from: data).onServer(id)))
                         }
                     }
-                    if table == "settings", row.values["key"]?.string != "folder_order" {
+                    if table == "settings", !Self.travelsUnchanged(row.values["key"]?.string) {
                         guard let key = row.values["key"]?.string, key.hasPrefix("blacklist."), let id = mapping[String(key.dropFirst(10))] else { continue }
                         row.values["key"] = .text("blacklist." + id)
                     }

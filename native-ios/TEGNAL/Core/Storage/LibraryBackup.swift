@@ -139,7 +139,7 @@ struct MangaBackup: Codable, Sendable {
     }
     struct ArtistRecord: Codable, Sendable { var name: String; var kind: Int?; var note: String? }
     struct SearchRecord: Codable, Sendable { var query: String; var used_at: Double }
-    struct RuleRecord: Codable, Sendable { var folder: String; var query: String; var excluded: String?; var includesOtherFolders: Bool? }
+    struct RuleRecord: Codable, Sendable { var folder: String; var query: String; var excluded: String?; var includesOtherFolders: Bool?; var isEnabled: Bool?; var sources: [String]? }
     var version = 2
     var exported_at: String?
     var folders: [FolderRecord]
@@ -165,7 +165,8 @@ struct MangaBackup: Codable, Sendable {
                         saved_searches: try String.fetchAll(db, sql: "SELECT query FROM saved_searches ORDER BY query"),
                         folder_rules: try AppDatabase.fetchFolderRules(db).compactMap { rule in
                             guard let id = try AppDatabase.folderID(ofRule: rule, db: db), let folder = folders.first(where: { $0.id == id }) else { return nil }
-                            return .init(folder: folder.name, query: rule.query, excluded: rule.excluded, includesOtherFolders: rule.includesOtherFolders)
+                            let sources = try rule.sources?.compactMap { try String.fetchOne(db, sql: "SELECT name FROM folders WHERE sync_id = ?", arguments: [$0]) }
+                            return .init(folder: folder.name, query: rule.query, excluded: rule.excluded, includesOtherFolders: rule.includesOtherFolders, isEnabled: rule.isEnabled, sources: sources)
                         })
         }
     }
@@ -233,13 +234,11 @@ struct MangaBackup: Codable, Sendable {
             try db.execute(sql: "INSERT INTO search_history VALUES (?, ?) ON CONFLICT(query) DO UPDATE SET used_at = MAX(used_at, excluded.used_at)", arguments: [search.query, search.used_at])
         }
         for query in saved_searches ?? [] { try db.execute(sql: "INSERT OR IGNORE INTO saved_searches VALUES (?)", arguments: [query]) }
-        var rules = try AppDatabase.fetchFolderRules(db)
         for record in folder_rules ?? [] {
             guard let id = mapping[record.folder] else { continue }
-            let rule = FolderRule(folder: try AppDatabase.folderIdentity(id, db: db), query: record.query, excluded: record.excluded ?? "", includesOtherFolders: record.includesOtherFolders)
-            if let index = rules.firstIndex(where: { $0.folder == rule.folder && $0.query == rule.query && $0.excluded == rule.excluded }) { rules[index].includesOtherFolders = rule.includesOtherFolders } else { rules.append(rule) }
+            let sources = try record.sources?.compactMap { name in try mapping[name].map { try AppDatabase.folderIdentity($0, db: db) } }
+            try AppDatabase.storeFolderRule(FolderRule(folder: try AppDatabase.folderIdentity(id, db: db), query: record.query, excluded: record.excluded ?? "", isEnabled: record.isEnabled, sources: sources, includesOtherFolders: record.includesOtherFolders), db: db)
         }
-        if !(folder_rules ?? []).isEmpty { try AppDatabase.storeFolderRules(rules, db: db) }
     }
 }
 

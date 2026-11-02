@@ -45,7 +45,7 @@ public struct FolderBentoCardView: View {
             .clipped()
 
             // Bottom: Folder title & count
-            FolderCardCaption(title: folder.displayName, count: folder.workCount, color: textColor)
+            FolderCardCaption(title: folder.plainName, isSmart: folder.isSmart, count: folder.workCount, color: textColor)
         }
         .background(folderColor)
         .clipShape(RoundedRectangle(cornerRadius: style.radius(16), style: .continuous))
@@ -93,6 +93,7 @@ public struct FolderBentoCardView: View {
 /// Both libraries keep the count at the lower trailing edge of the title row.
 struct FolderCardCaption: View {
     let title: String
+    var isSmart = false
     let count: Int
     let color: Color
     @Environment(\.artworkCellStyle) private var style
@@ -100,8 +101,12 @@ struct FolderCardCaption: View {
     @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: style.inset(6)) {
-            Text(title).font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
-                .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+            // A long name truncates before the mark, never over it.
+            HStack(alignment: .lastTextBaseline, spacing: style.inset(3)) {
+                Text(title).lineLimit(1)
+                if isSmart { Text(verbatim: "✦").fixedSize().accessibilityLabel(L10n.text("Smart Folder")) }
+            }.font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
+                .frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
             Text(count, format: .number)
                 .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
                 .foregroundStyle(color.opacity(0.85)).fixedSize()

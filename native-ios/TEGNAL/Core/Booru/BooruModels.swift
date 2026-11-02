@@ -381,7 +381,9 @@ struct BooruFolder: Identifiable, Hashable, Sendable {
     let id: String
     var name: String
     var color: Int64
-    var displayName: String { id == "unsorted" ? L10n.text("Uncategorized") : BooruServer.displayName(name) }
+    var isSmart = false
+    var plainName: String { id == "unsorted" ? L10n.text("Uncategorized") : BooruServer.displayName(name) }
+    var displayName: String { FolderRule.markedName(plainName, isSmart: isSmart) }
 }
 
 

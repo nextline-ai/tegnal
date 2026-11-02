@@ -451,6 +451,58 @@ final class BooruUITests: XCTestCase {
         }
     }
 
+    func testSmartFoldersWorkFromTheCreatePromptAndALongPressInBothModes() {
+        let app = launch()
+        for (mode, create) in [("manga", "manga.createFolder"), ("booru", "booru.createFolder")] {
+            selectMode(app, mode)
+            app.tabBars.buttons["Saved"].tap()
+            let button = element(app, create)
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
+
+            button.tap()
+            var prompt = element(app, "folder.namePrompt")
+            XCTAssertTrue(prompt.waitForExistence(timeout: 5))
+            prompt.textFields.firstMatch.tap(); prompt.textFields.firstMatch.typeText("Plain " + mode)
+            prompt.buttons["Create"].firstMatch.tap()
+            let plain = app.staticTexts["Plain " + mode].firstMatch
+            XCTAssertTrue(plain.waitForExistence(timeout: 5))
+            plain.press(forDuration: 1)
+            let smart = app.buttons["Smart Folder"].firstMatch
+            XCTAssertTrue(smart.waitForExistence(timeout: 5))
+            capture(app, mode + " folder menu")
+            smart.tap()
+            XCTAssertTrue(element(app, "folderRule.smart").waitForExistence(timeout: 5))
+            XCTAssertTrue(element(app, "folderRule.sources").exists)
+            let tag = element(app, "folderRule.tag")
+            tag.tap(); tag.typeText("sample")
+            capture(app, mode + " smart folder editor")
+            element(app, "folderRule.save").tap()
+            let marked = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart Folder")).firstMatch
+            XCTAssertTrue(marked.waitForExistence(timeout: 5), "A smart folder shows its mark")
+            capture(app, mode + " smart folder mark")
+
+            app.staticTexts["Plain " + mode].firstMatch.press(forDuration: 1)
+            app.buttons["Smart Folder"].firstMatch.tap()
+            let toggle = element(app, "folderRule.smart")
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+            XCTAssertEqual(element(app, "folderRule.tag").value as? String, "sample")
+            toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+            element(app, "folderRule.save").tap()
+            XCTAssertTrue(marked.waitForNonExistence(timeout: 5), "Turning it off removes the mark")
+
+            button.tap()
+            prompt = element(app, "folder.namePrompt")
+            XCTAssertTrue(prompt.waitForExistence(timeout: 5))
+            prompt.textFields.firstMatch.tap(); prompt.textFields.firstMatch.typeText("Named")
+            capture(app, mode + " folder prompt")
+            element(app, "folder.fromTag").tap()
+            let name = element(app, "folderRule.name")
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            XCTAssertEqual(name.value as? String, "Named", "The name typed in the prompt carries over")
+            app.buttons["Cancel"].firstMatch.tap()
+        }
+    }
+
     func testNewFolderFromATagOffersOtherFolders() {
         let app = launch()
         selectMode(app, "manga")
@@ -461,10 +513,12 @@ final class BooruUITests: XCTestCase {
         let fromTag = element(app, "folder.fromTag")
         XCTAssertTrue(fromTag.waitForExistence(timeout: 5))
         fromTag.tap()
-        let others = element(app, "folderRule.otherFolders")
-        XCTAssertTrue(others.waitForExistence(timeout: 5))
-        XCTAssertEqual(others.value as? String, "0", "Only Unfiled works are included by default")
-        capture(app, "folder rule other folders option")
+        let sources = element(app, "folderRule.sources")
+        XCTAssertTrue(sources.waitForExistence(timeout: 5))
+        XCTAssertTrue(sources.label.contains("Unfiled"), "Only Unfiled works are included by default")
+        sources.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "All Folders")).firstMatch.waitForExistence(timeout: 5))
+        capture(app, "smart folder sources menu")
     }
 
     func testModeSwitchKeepsAnsweringUnderRepeatedInput() {

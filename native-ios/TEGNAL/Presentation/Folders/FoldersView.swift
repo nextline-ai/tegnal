@@ -25,7 +25,8 @@ public struct FoldersView: View {
     @State private var editError: String?
     @State private var reordering = false
     @State private var folderMessage: String?
-    @State private var composing = false
+    @State private var composing: SmartFolderDraft?
+    @State private var smartFolder: SmartFolderTarget?
     @State private var searchText = ""
     @State private var searchResults: SavedWorksSearch?
 
@@ -61,6 +62,9 @@ public struct FoldersView: View {
                                 if folder.name != "미분류" {
                                     Button(L10n.text("Rename Folder"), systemImage: "pencil") {
                                         renamingFolder = folder; renameDraft = folder.name; showRename = true
+                                    }
+                                    Button(L10n.text("Smart Folder"), systemImage: "sparkles") {
+                                        smartFolder = (folder.id.flatMap { try? env.database.identity(ofFolder: $0) }).map(SmartFolderTarget.init)
                                     }
                                 }
                                 Button(role: .destructive) {
@@ -115,12 +119,13 @@ public struct FoldersView: View {
             }
         }
         .background {
-            FolderNameAlert(isPresented: $showCreateAlert, name: $newFolderName, alternateTitle: "Fill from a Tag…", onAlternate: { composing = true }) { name in
+            FolderNameAlert(isPresented: $showCreateAlert, name: $newFolderName, alternateTitle: "Make a Smart Folder", onAlternate: { composing = SmartFolderDraft(name: $0) }) { name in
                 newFolderName = name
                 createFolder()
             }.frame(width: 0, height: 0)
         }
-        .appSheet(isPresented: $composing, onDismiss: loadFolders) { FolderRuleEditor() }
+        .appSheet(item: $composing, onDismiss: loadFolders) { FolderRuleEditor(name: $0.name) }
+        .appSheet(item: $smartFolder, onDismiss: loadFolders) { FolderRuleEditor(folder: $0.id) }
         .alert(
             L10n.text("Delete the folder '%@'?", String(describing: folderPendingDelete?.name ?? "")),
             isPresented: Binding(
@@ -271,7 +276,7 @@ struct FolderNameAlert: UIViewControllerRepresentable {
     var title = "New Folder"
     var actionTitle = "Create"
     var alternateTitle: String? = nil
-    var onAlternate: () -> Void = {}
+    var onAlternate: (String) -> Void = { _ in }
     let onCreate: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -308,9 +313,10 @@ struct FolderNameAlert: UIViewControllerRepresentable {
             guard prompt == nil, host.view.window != nil, host.presentedViewController == nil else { return }
             let content = FolderNamePrompt(name: parent.$name, identifier: parent.identifier, title: parent.title, actionTitle: parent.actionTitle, alternateTitle: parent.alternateTitle, alternate: { [weak self] in
                 guard let self else { return }
+                let name = self.parent.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 self.parent.isPresented = false
                 self.parent.name = ""
-                self.parent.onAlternate()
+                self.parent.onAlternate(name)
             }) { [weak self] name in
                 guard let self else { return }
                 self.parent.isPresented = false

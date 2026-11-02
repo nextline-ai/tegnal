@@ -288,6 +288,96 @@ final class LibrarySyncTests: XCTestCase {
         try a.apply(la.changes); try b.apply(lb.changes)
         la.baseline = try a.snapshot(); lb.baseline = try b.snapshot()
     }
+    func testSmartFolderRulesFollowEveryEditOnBothLibraries() throws {
+        let a = try adapter(), b = try adapter()
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        let kept = try a.manga.createFolder(name: "Kept"), korean = try a.manga.createFolder(name: "Korean")
+        let source = try a.manga.identity(ofFolder: kept.id!), identity = try a.manga.identity(ofFolder: korean.id!)
+        let scenery = try a.booru.saveFolder(name: "Scenery")
+        let comic = FolderRule(folder: identity, query: "language:korean", excluded: "tag:spoiler", sources: [source])
+        let image = FolderRule(folder: scenery, query: "mountain", excluded: "night", includesOtherFolders: true)
+        try a.manga.saveRule(comic); try a.booru.saveRule(image)
+        try exchange(a, b, &la, &lb)
+        try b.booru.refresh()
+        XCTAssertEqual(try b.manga.rule(forFolder: identity), comic)
+        XCTAssertEqual(try b.booru.rule(forFolder: scenery), image)
+        XCTAssertEqual(try b.manga.listFolders().first { $0.name == "Korean" }?.isSmart, true)
+        XCTAssertEqual(b.booru.folders().first { $0.id == scenery }?.isSmart, true)
+
+        var off = comic; off.isEnabled = false
+        var offImage = image; offImage.isEnabled = false
+        try b.manga.saveRule(off); try b.booru.saveRule(offImage)
+        try exchange(a, b, &la, &lb)
+        try a.booru.refresh()
+        XCTAssertEqual(try a.manga.listFolders().first { $0.name == "Korean" }?.isSmart, false)
+        XCTAssertEqual(a.booru.folders().first { $0.id == scenery }?.isSmart, false)
+        XCTAssertEqual(try a.manga.rule(forFolder: identity)?.excluded, "tag:spoiler")
+
+        try a.manga.deleteRule(forFolder: identity); try a.booru.deleteRule(forFolder: scenery)
+        try exchange(a, b, &la, &lb)
+        XCTAssertNil(try b.manga.rule(forFolder: identity))
+        XCTAssertNil(try b.booru.rule(forFolder: scenery))
+    }
+
+    func testEditsToDifferentSmartFoldersMergeInsteadOfOverwritingEachOther() throws {
+        let a = try adapter(), b = try adapter()
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        let first = try a.manga.createFolder(name: "First"), second = try a.manga.createFolder(name: "Second")
+        let one = try a.manga.identity(ofFolder: first.id!), two = try a.manga.identity(ofFolder: second.id!)
+        try a.manga.saveRule(FolderRule(folder: one, query: "tag:one"))
+        try a.manga.saveRule(FolderRule(folder: two, query: "tag:two"))
+        let site = try a.booru.saveFolder(name: "Images A"), other = try a.booru.saveFolder(name: "Images B")
+        try a.booru.saveRule(FolderRule(folder: site, query: "one"))
+        try a.booru.saveRule(FolderRule(folder: other, query: "two"))
+        try exchange(a, b, &la, &lb)
+
+        try a.manga.saveRule(FolderRule(folder: one, query: "tag:one-edited"))
+        try b.manga.saveRule(FolderRule(folder: two, query: "tag:two-edited"))
+        try a.booru.saveRule(FolderRule(folder: site, query: "one-edited"))
+        try b.booru.saveRule(FolderRule(folder: other, query: "two-edited"))
+        try exchange(a, b, &la, &lb)
+        for side in [a, b] {
+            XCTAssertEqual(try side.manga.rule(forFolder: one)?.query, "tag:one-edited")
+            XCTAssertEqual(try side.manga.rule(forFolder: two)?.query, "tag:two-edited")
+            XCTAssertEqual(try side.booru.rule(forFolder: site)?.query, "one-edited")
+            XCTAssertEqual(try side.booru.rule(forFolder: other)?.query, "two-edited")
+        }
+    }
+
+    func testRulesFromAnOlderDeviceAreAdoptedAndRepublished() throws {
+        let a = try adapter(), b = try adapter()
+        let folder = try a.manga.createFolder(name: "Korean")
+        let identity = try a.manga.identity(ofFolder: folder.id!)
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        try a.manga.dbWriter.write { db in
+            let rules = try JSONEncoder().encode([FolderRule(folder: identity, query: "language:korean")])
+            try db.execute(sql: "INSERT INTO library_order VALUES ('folder_rules', ?)", arguments: [rules])
+        }
+        la.capture(try a.snapshot(), device: "old-device")
+        lb.merge(la.changes)
+        try b.apply(lb.changes)
+        lb.baseline = try b.snapshot()
+        try b.manga.adoptLegacyFolderRules()
+        lb.capture(try b.snapshot(), device: "new-device")
+        XCTAssertEqual(try b.manga.rule(forFolder: identity)?.query, "language:korean")
+        XCTAssertTrue(lb.changes.values.contains { $0.row.table == "manga.library_order" && $0.row.values["key"] == .text(FolderRule.keyPrefix + identity) && !$0.deleted })
+        la.merge(lb.changes)
+        try a.apply(la.changes)
+        XCTAssertEqual(try a.manga.rule(forFolder: identity)?.query, "language:korean")
+    }
+
+    func testDefaultSaveFolderAndSmartFolderSwitchSyncByIdentity() throws {
+        let a = try adapter(), b = try adapter()
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        let inbox = try a.manga.createFolder(name: "Inbox")
+        a.mangaDefaults.set(Int(inbox.id!), forKey: LibrarySavePreferences.legacyDefaultFolderKey)
+        a.mangaDefaults.set(false, forKey: LibrarySavePreferences.rulesEnabledKey)
+        try exchange(a, b, &la, &lb)
+        let identity = try a.manga.identity(ofFolder: inbox.id!)
+        XCTAssertEqual(b.mangaDefaults.string(forKey: LibrarySavePreferences.defaultFolderKey), identity)
+        XCTAssertEqual(b.mangaDefaults.object(forKey: LibrarySavePreferences.rulesEnabledKey) as? Bool, false)
+    }
+
     @MainActor func testSnapshotCacheReusesIdleLibraryAndIncludesEditsAndPreferences() throws {
         let adapter = try adapter(), cache = LibrarySyncSnapshotCache()
         _ = try cache.snapshot(adapter)

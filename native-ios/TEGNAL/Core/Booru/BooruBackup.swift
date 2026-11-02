@@ -17,6 +17,8 @@ struct BooruBackup: Codable, Sendable {
     var savedTags: [Tag]
     var blacklist: [String: String]
     var selectedServerIDs: [String]
+    /// Optional so backups from before smart folders still read.
+    var folderRules: [FolderRule]?
 
     static func read(_ url: URL) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
@@ -46,7 +48,8 @@ struct BooruBackup: Codable, Sendable {
               favorites.allSatisfy({ serverIDs.contains($0.post.serverID) && folderIDs.contains($0.folderID) && $0.post.postID > 0 && $0.savedAt.isFinite }),
               history.allSatisfy({ serverIDs.contains($0.serverID) && !$0.query.isEmpty && $0.usedAt.isFinite }),
               savedTags.allSatisfy({ serverIDs.contains($0.serverID) && !$0.name.isEmpty && (SavedCollectionKind(rawValue: $0.kind).map { $0 != .history } ?? false) }),
-              Set(blacklist.keys).isSubset(of: serverIDs), Set(selectedServerIDs).isSubset(of: serverIDs)
+              Set(blacklist.keys).isSubset(of: serverIDs), Set(selectedServerIDs).isSubset(of: serverIDs),
+              (folderRules ?? []).allSatisfy({ folderIDs.contains($0.folder) && !$0.query.isEmpty })
         else { throw BooruError.invalidResponse }
         for server in servers { _ = try BooruServer.validatedURL(server.baseURL.absoluteString) }
         for favorite in favorites {
@@ -72,7 +75,7 @@ extension BooruStore {
             let tags = try Row.fetchAll(db, sql: "SELECT * FROM saved_tags ORDER BY server_id, kind, name").map { BooruBackup.Tag(serverID: $0["server_id"], name: $0["name"], kind: $0["kind"]) }
             var blacklist: [String: String] = [:]
             for server in servers { blacklist[server.id] = try String.fetchOne(db, sql: "SELECT value FROM settings WHERE key = ?", arguments: ["blacklist." + server.id]) ?? "" }
-            return BooruBackup(servers: servers, folders: folders, favorites: favorites, history: history, savedTags: tags, blacklist: blacklist, selectedServerIDs: selectedServerIDs)
+            return BooruBackup(servers: servers, folders: folders, favorites: favorites, history: history, savedTags: tags, blacklist: blacklist, selectedServerIDs: selectedServerIDs, folderRules: try Self.fetchFolderRules(db).filter { rule in folders.contains { $0.id == rule.folder } })
         }
     }
 
@@ -125,6 +128,7 @@ extension BooruStore {
             guard let targetServerID = mapping[id] else { continue }
             try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: ["blacklist." + targetServerID, rules])
         }
+        for rule in backup.folderRules ?? [] { try Self.storeFolderRule(rule, db: db) }
         if !backup.selectedServerIDs.isEmpty {
             try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('selected_servers', ?)", arguments: [String(decoding: JSONEncoder().encode(backup.selectedServerIDs.compactMap { mapping[$0] }), as: UTF8.self)])
         }

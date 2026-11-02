@@ -155,7 +155,7 @@ extension BooruStore {
                 let old = favorite.post
                 guard let id = mapping[old.serverID] else { continue }
                 let post = BooruPost(serverID: id, postID: old.postID, previewURL: old.previewURL, sampleURL: old.sampleURL, fileURL: old.fileURL, width: old.width, height: old.height, tags: old.tags, artists: old.artists, rating: old.rating, score: old.score, fileExtension: old.fileExtension, poolIDs: old.poolIDs, metadataTags: old.metadataTags)
-                let folderID = try options.folderID == "by-site" ? Self.defaultFolder(for: id, db: db) : options.folderID
+                let folderID = try Self.smartDestination(for: post, landing: options.folderID == "by-site" ? Self.defaultFolder(for: id, db: db) : options.folderID, db: db)
                 try db.execute(sql: "INSERT OR IGNORE INTO favorites (server_id, post_id, payload, saved_at, folder_id) VALUES (?, ?, ?, ?, ?)", arguments: [id, post.postID, try JSONEncoder().encode(post), favorite.savedAt, folderID])
                 if db.changesCount > 0 {
                     added += 1

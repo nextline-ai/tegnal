@@ -154,6 +154,7 @@ public final class AppDatabase: Sendable {
                 else { table.add(column: MangaImportMetadata.groupIDKey, .integer) }
             }
         }
+        migrator.registerMigration("v11_folder_rule_rows") { try Self.adoptLegacyFolderRules($0) }
         return migrator
     }
 
@@ -315,8 +316,9 @@ public final class AppDatabase: Sendable {
         ORDER BY f.sort_order ASC, f.id ASC
         """
         let rows = try Row.fetchAll(db, sql: sql)
+        let smart = Set(try fetchFolderRules(db).filter(\.isActive).map(\.folder))
         return rows.map { row in
-            Folder(
+            var folder = Folder(
                 id: row["id"],
                 name: row["name"],
                 description: row["description"],
@@ -326,6 +328,8 @@ public final class AppDatabase: Sendable {
                 sourceGroupId: row["source_group_id"],
                 workCount: row["work_count"]
             )
+            folder.isSmart = (row["sync_id"] as String?).map(smart.contains) ?? false
+            return folder
         }
     }
 
@@ -405,6 +409,9 @@ public final class AppDatabase: Sendable {
             guard let folder = try Folder.fetchOne(db, key: id) else { return }
             let hasWorks = try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM folder_works WHERE folder_id = ?)", arguments: [id]) == true
             if folder.name == "미분류", hasWorks { throw FolderDeletionError.containsWorks }
+            if let identity = try String.fetchOne(db, sql: "SELECT sync_id FROM folders WHERE id = ?", arguments: [id]) {
+                try db.execute(sql: "DELETE FROM library_order WHERE key = ?", arguments: [FolderRule.keyPrefix + identity])
+            }
             if !hasWorks {
                 try db.execute(sql: "DELETE FROM folders WHERE id = ?", arguments: [id])
                 return

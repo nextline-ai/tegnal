@@ -320,6 +320,8 @@ struct BooruMoreView: View {
                 }
                 NavigationLink { DownloadsView(mode: .booru) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
                     .accessibilityIdentifier("booru.downloadsLink")
+                NavigationLink { FolderRulesView(booru: true) } label: { Label(L10n.text("Smart Folders"), systemImage: "sparkles") }
+                    .accessibilityIdentifier("booru.folderRules")
             }
 
             ReaderSettingsSection(booru: true, isPresented: $showReader)

@@ -36,7 +36,10 @@ public struct Folder: Identifiable, Codable, Equatable, Hashable, Sendable, Fetc
 
     public var id: Int64?
     public var name: String
-    public var displayName: String { L10n.folderName(name) }
+    public var plainName: String { L10n.folderName(name) }
+    public var displayName: String { FolderRule.markedName(plainName, isSmart: isSmart) }
+    /// Filled in by folder listings from the synced rules.
+    public var isSmart = false
     public var description: String?
     public var color: Int64 // ARGB 32-bit integer
     public var sortOrder: Int
