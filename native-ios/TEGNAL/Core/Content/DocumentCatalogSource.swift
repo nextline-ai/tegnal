@@ -103,10 +103,15 @@ actor DocumentCatalogSource {
             feed = Feed(offset: offset)
         }
         let target = offset - feed.offset + count
+        let exclusions = Self.exclusions(query)
         var requests = 0
         while feed.ids.count < target && feed.more {
             try Task.checkCancellation()
-            guard requests < 4 else { throw ContentError.invalidResponse }
+            guard requests < 8 else {
+                // Heavy exclusions show what was found rather than an error.
+                if feed.ids.count > offset - feed.offset { break }
+                throw ContentError.invalidResponse
+            }
             let url = try Self.searchURL(query, site: site, offset: feed.started ? nil : offset,
                                          nextID: feed.nextID, nextViews: feed.nextViews)
             let (data, _) = try await transport.get(url, limit: 2_000_000)
@@ -116,7 +121,7 @@ actor DocumentCatalogSource {
             var seen = Set(feed.ids)
             for row in rows {
                 guard let id = (row["id"] as? NSNumber)?.int64Value, id > 0 else { throw ContentError.invalidResponse }
-                guard (row["blocked"] as? NSNumber)?.intValue ?? 0 == 0 else { continue }
+                guard (row["blocked"] as? NSNumber)?.intValue ?? 0 == 0, !Self.excludes(row, id: id, exclusions) else { continue }
                 if seen.insert(id).inserted { feed.ids.append(id) }
                 if let preview = Self.preview(row, site: site) {
                     previews.setObject(Preview(preview), forKey: "\(site)#\(id)" as NSString)
@@ -141,6 +146,7 @@ actor DocumentCatalogSource {
         if feed.lanes.isEmpty { feed.lanes = [FilterLane(visual: false), FilterLane(visual: true)] }
         let target = offset + count
         let selected = try Self.selectedCategories(query)
+        let exclusions = Self.exclusions(query)
         var seen = Set(feed.ids), requests = 0
         while feed.ids.count < target {
             for index in feed.lanes.indices where feed.lanes[index].pending.isEmpty && feed.lanes[index].more {
@@ -158,7 +164,7 @@ actor DocumentCatalogSource {
                     guard let id = (row["id"] as? NSNumber)?.int64Value, id > 0 else { throw ContentError.invalidResponse }
                     guard (row["blocked"] as? NSNumber)?.intValue ?? 0 == 0 else { continue }
                     let category = (row["category"] as? NSNumber)?.intValue ?? 0
-                    guard categories.contains(category) else { continue }
+                    guard categories.contains(category), !Self.excludes(row, id: id, exclusions) else { continue }
                     feed.lanes[index].pending.append(.init(id: id, views: (row["views"] as? NSNumber)?.int64Value ?? 0))
                     if let preview = Self.preview(row, site: site) { previews.setObject(Preview(preview), forKey: "\(site)#\(id)" as NSString) }
                 }
@@ -207,12 +213,12 @@ actor DocumentCatalogSource {
     nonisolated static func searchURL(_ query: GalleryQuery, site: String, offset: Int? = nil,
                                       nextID: Int64? = nil, nextViews: Int64? = nil, now: Date = .now, restrictCategories: Set<Int>? = nil) throws -> URL {
         guard var components = URLComponents(string: site + "ajax/search") else { throw ContentError.invalidQuery }
-        var terms = query.text.split(whereSeparator: \.isWhitespace).map { remoteTerm(String($0)) }
+        var terms = query.text.split(whereSeparator: \.isWhitespace).filter { !$0.hasPrefix("-") }.map { remoteTerm(String($0)) }
         if query.language != "all" { terms.append("language:" + query.language) }
         if let artist = query.artist { terms.append("artist:" + artist.replacingOccurrences(of: " ", with: "_")) }
         var categories = try selectedCategories(query)
         if let restrictCategories { categories.formIntersection(restrictCategories) }
-        terms.removeAll { $0.hasPrefix("type:") || $0.hasPrefix("-type:") }
+        terms.removeAll { $0.hasPrefix("type:") }
         var items = [URLQueryItem(name: "search", value: terms.joined(separator: " ")),
                      URLQueryItem(name: "sort", value: query.sort == .latest ? "id_desc" : "popular")]
         if categories.count != 11 { items.append(.init(name: "categories", value: categories.sorted().map(String.init).joined(separator: ","))) }
@@ -307,12 +313,23 @@ actor DocumentCatalogSource {
 
     private nonisolated static func metadata(_ object: [String: Any], id: Int64, pages: [GalleryPage]) -> NativeGallery {
         let pairs = (object["tags"] as? [[String: Any]] ?? []).compactMap { $0["tag"] as? [String] }.filter { $0.count == 2 }
-        let japanese = (object["title_jpn"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = japanese?.isEmpty == false ? japanese! : object["title"] as? String ?? "\(id)"
+        let languages = pairs.filter { $0[0] == "language" }.map { $0[1] }
+        let language = languages.first { !languageQualifiers.contains($0) } ?? ""
         let category = (object["category"] as? NSNumber)?.intValue ?? 0
-        return NativeGallery(id: id, title: NativeGallery.decodeEntities(title), artists: pairs.filter { $0[0] == "artist" }.map { $0[1] },
-            language: pairs.first { $0[0] == "language" }?[1] ?? "", type: categoryNames[category] ?? "",
+        return NativeGallery(id: id, title: NativeGallery.decodeEntities(title(object, id: id, language: language, translated: languages.contains("translated"))),
+            artists: pairs.filter { $0[0] == "artist" }.map { $0[1] },
+            language: language, type: categoryNames[category] ?? "",
             tags: pairs.filter { $0[0] != "language" && $0[0] != "artist" }.map { localNamespace($0[0]) + ":" + $0[1] }, pages: pages)
+    }
+
+    private nonisolated static let languageQualifiers: Set<String> = ["translated", "rewrite"]
+
+    /// The original-script title is kept even on translations, so it only leads for works still in Japanese.
+    private nonisolated static func title(_ object: [String: Any], id: Int64, language: String, translated: Bool) -> String {
+        let main = (object["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let original = (object["title_jpn"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let prefersOriginal = !translated && ["", "japanese", "speechless"].contains(language)
+        return [prefersOriginal ? original : main, main, original].first { !$0.isEmpty } ?? "\(id)"
     }
 
     nonisolated static func safeMediaURL(_ url: URL) -> Bool {
@@ -333,10 +350,17 @@ actor DocumentCatalogSource {
         namespace == "parody" ? "series" : namespace == "other" ? "tag" : namespace
     }
     private nonisolated static func remoteTerm(_ term: String) -> String {
-        let negative = term.hasPrefix("-") ? "-" : ""
-        let value = term.hasPrefix("-") ? String(term.dropFirst()) : term
-        if value.hasPrefix("series:") { return negative + "parody:" + value.dropFirst(7) }
-        if value.hasPrefix("tag:") { return negative + "other:" + value.dropFirst(4) }
+        if term.hasPrefix("series:") { return "parody:" + term.dropFirst(7) }
+        if term.hasPrefix("tag:") { return "other:" + term.dropFirst(4) }
         return term
+    }
+    /// The remote search reads a leading minus as part of an ordinary word, so
+    /// exclusions stay out of the request and are checked on the returned rows.
+    /// Categories are excluded in the request itself.
+    nonisolated static func exclusions(_ query: GalleryQuery) -> String {
+        query.text.split(whereSeparator: \.isWhitespace).filter { $0.hasPrefix("-") && !$0.hasPrefix("-type:") }.joined(separator: " ")
+    }
+    private nonisolated static func excludes(_ row: [String: Any], id: Int64, _ exclusions: String) -> Bool {
+        !exclusions.isEmpty && metadata(row, id: id, pages: []).isExcluded(by: exclusions)
     }
 }

@@ -214,6 +214,50 @@ struct GalleryQuery: Hashable, Sendable {
     }
 }
 
+extension GalleryQuery {
+    /// Narrows to one category unless the search already names one or the site lacks it.
+    func filtered(to category: String) -> Self {
+        let terms = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard GalleryCategory.available.contains(category), !terms.contains(where: { $0.hasPrefix("type:") }) else { return self }
+        var result = self
+        result.text = (terms + ["type:" + category]).joined(separator: " ")
+        return result
+    }
+}
+
+/// Work categories as the comics protocols name them.
+enum GalleryCategory {
+    private static let common = ["doujinshi", "manga", "artistcg", "gamecg", "imageset"]
+    /// What the connected site can filter by. Until its protocol is known, only categories every protocol has.
+    static var available: [String] {
+        guard MangaUrls.hasResolvedBackend else { return common }
+        return MangaUrls.backend == .document ? common + ["western", "non-h", "cosplay", "photo", "misc"] : common + ["anime"]
+    }
+
+    /// One spelling per category, whichever way a site or an imported catalog wrote it.
+    static func key(_ type: String) -> String {
+        type.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" }
+    }
+
+    static func title(_ type: String) -> String {
+        switch key(type) {
+        case "doujinshi": return L10n.text("Doujinshi")
+        case "manga": return L10n.text("Manga")
+        case "artistcg": return L10n.text("Artist CG")
+        case "gamecg": return L10n.text("Game CG")
+        case "imageset": return L10n.text("Image Set")
+        case "anime": return L10n.text("Anime")
+        case "western": return L10n.text("Western")
+        case "non-h": return L10n.text("Non-H")
+        case "cosplay": return L10n.text("Cosplay")
+        case "photo": return L10n.text("Photo")
+        case "misc": return L10n.text("Misc")
+        case "private": return L10n.text("Private")
+        default: return type.capitalized
+        }
+    }
+}
+
 /// Turns a work's related numbers into what is worth showing beside it.
 enum RelatedWorks {
     static func load(for gallery: NativeGallery, source: any ContentProviding, hidden: Set<Int64>, excluded: String) async -> [Int64] {

@@ -56,6 +56,50 @@ final class LibrarySyncTests: XCTestCase {
         }
     }
 
+    @MainActor func testRefreshReplacesSavedInformationButKeepsNotesCoversAndOtherWorks() async throws {
+        let db = try AppDatabase.inMemory()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let cover = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }.jpegData(compressionQuality: 0.8))
+        for (id, artist) in [(Int64(1001), "tegnal"), (1002, "another artist")] {
+            _ = try db.upsertWork(galleryId: id, title: "原題", artists: artist, language: "english", tags: "tag:old")
+            let file = root.appendingPathComponent("native_\(id).jpg")
+            try cover.write(to: file)
+            try db.setThumb(galleryId: id, status: "ready", path: file.path)
+        }
+        try db.setNote(galleryId: 1001, note: "kept")
+        let source = BackfillFixtureSource()
+        let queue = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+        let state = CoverQueueState()
+        await queue.start(state: state)
+        let untouched = await source.requests
+        XCTAssertTrue(untouched.isEmpty, "Nothing is missing, so filling alone fetches nothing")
+
+        let queued = try await queue.queueRefresh()
+        XCTAssertEqual(queued, 2)
+        await queue.start(state: state)
+        XCTAssertEqual(state.total, 2)
+        XCTAssertEqual(state.processed, 1)
+        XCTAssertEqual(state.gone, 1, "A different work under the same number is left alone")
+        let refreshed = try XCTUnwrap(db.getWork(galleryId: 1001))
+        XCTAssertEqual(refreshed.title, "네이티브 읽기 테스트")
+        XCTAssertTrue(refreshed.tags?.contains("female:sample") == true)
+        XCTAssertEqual(refreshed.note, "kept")
+        XCTAssertEqual(refreshed.thumbPath, root.appendingPathComponent("native_1001.jpg").path)
+        let other = try XCTUnwrap(db.getWork(galleryId: 1002))
+        XCTAssertEqual(other.title, "原題")
+        XCTAssertEqual(other.tags, "tag:old")
+
+        await source.setFailure(.missingGallery)
+        try await queue.queueRefresh()
+        await queue.start(state: state)
+        XCTAssertEqual(try db.getWork(galleryId: 1001)?.thumbStatus, "ready", "A refresh keeps covers of works the site no longer has")
+        XCTAssertEqual(try db.countNeedingFill(), 0)
+    }
+
     @MainActor func testManualFillReportsAndPersistsMissingGallery() async throws {
         let db = try AppDatabase.inMemory()
         _ = try db.upsertWork(galleryId: 1234)

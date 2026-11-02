@@ -233,6 +233,8 @@ private struct GalleryFeedView: View {
     @State private var history: [String] = []
     @State private var savedSearches: [String] = []
     @State private var loadedQuery: GalleryQuery?
+    @State private var openedCategory = ""
+    private let isMainFeed: Bool
     @State private var loadedSite: String?
     private struct InitialRequest: Hashable { let query: GalleryQuery; let site: String }
     @State private var loader: GalleryFeedLoader
@@ -245,14 +247,51 @@ private struct GalleryFeedView: View {
         self.navigate = navigate
         let browsesArtist = artist != nil || ArtistBrowsing.matches(initialQuery)
         self.browsesArtist = browsesArtist
+        isMainFeed = artist == nil && initialQuery.isEmpty
         _query = State(initialValue: GalleryQuery(language: browsesArtist ? ArtistBrowsing.language : initialQuery.isEmpty ? L10n.contentLanguage : "all", artist: artist, text: initialQuery))
         _searchText = State(initialValue: initialQuery)
     }
 
-    private var effectiveQuery: GalleryQuery {
-        var result = query.applyingDefaults(tags: env.defaultTags, excluded: env.defaultExcludedTags)
+    private var effectiveQuery: GalleryQuery { effectiveQuery(category: category.wrappedValue) }
+
+    private func effectiveQuery(category: String) -> GalleryQuery {
+        var result = query.filtered(to: category).applyingDefaults(tags: env.defaultTags, excluded: env.defaultExcludedTags)
         result.allowsLanguageExceptions = env.allowsMangaLanguageExceptions
         return result
+    }
+
+    /// The main feed remembers its category; a feed opened from a tag or artist starts with all.
+    private var category: Binding<String> {
+        isMainFeed ? Binding(get: { env.mangaBrowseCategory }, set: { env.mangaBrowseCategory = $0 }) : $openedCategory
+    }
+
+    private var languageMenu: some View {
+        BrowseFilterMenu(title: L10n.text(query.language.capitalized), icon: "globe") {
+            Picker(L10n.text("Language"), selection: $query.language) {
+                Text(L10n.text("Korean")).tag("korean")
+                Text(L10n.text("Japanese")).tag("japanese")
+                Text(L10n.text("English")).tag("english")
+                Text(L10n.text("All")).tag("all")
+            }
+        }.accessibilityIdentifier("content.language")
+    }
+
+    private var categoryMenu: some View {
+        let selected = GalleryCategory.available.contains(category.wrappedValue) ? category.wrappedValue : ""
+        return BrowseFilterMenu(title: selected.isEmpty ? L10n.text("Category") : GalleryCategory.title(selected), icon: "square.stack") {
+            Picker(L10n.text("Category"), selection: Binding(get: { selected }, set: { category.wrappedValue = $0 })) {
+                Text(L10n.text("All Categories")).tag("")
+                ForEach(GalleryCategory.available, id: \.self) { Text(GalleryCategory.title($0)).tag($0) }
+            }
+        }.accessibilityIdentifier("content.category")
+    }
+
+    private var sortMenu: some View {
+        BrowseFilterMenu(title: query.sort.title, icon: "arrow.up.arrow.down") {
+            Picker(L10n.text("Sort"), selection: $query.sort) {
+                ForEach(GallerySort.allCases) { Text($0.title).tag($0) }
+            }
+        }.accessibilityIdentifier("content.sort")
     }
 
     private var isActive: Bool { env.mode == .manga && scenePhase == .active }
@@ -263,21 +302,12 @@ private struct GalleryFeedView: View {
         ZStack(alignment: .top) {
         ScrollView {
             LazyVStack(spacing: 8) {
-                HStack {
-                BrowseFilterMenu(title: L10n.text(query.language.capitalized), icon: "globe") {
-                Picker(L10n.text("Language"), selection: $query.language) {
-                    Text(L10n.text("Korean")).tag("korean")
-                    Text(L10n.text("Japanese")).tag("japanese")
-                    Text(L10n.text("English")).tag("english")
-                    Text(L10n.text("All")).tag("all")
-                }
-                }.accessibilityIdentifier("content.language")
-                Spacer()
-                BrowseFilterMenu(title: query.sort.title, icon: "arrow.up.arrow.down") {
-                Picker(L10n.text("Sort"), selection: $query.sort) {
-                    ForEach(GallerySort.allCases) { Text($0.title).tag($0) }
-                }
-                }.accessibilityIdentifier("content.sort")
+                ViewThatFits(in: .horizontal) {
+                    HStack { languageMenu; categoryMenu; Spacer(minLength: 0); sortMenu }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack { languageMenu; Spacer(minLength: 0); sortMenu }
+                        categoryMenu
+                    }
                 }
                 ArtworkGrid(mode: .manga, surroundingPadding: 16, topMarginScale: 0.5) { style in
                     let prefetchColumns = style.columns
@@ -308,6 +338,13 @@ private struct GalleryFeedView: View {
                             Label(L10n.text("No Works in This Language"), systemImage: "globe")
                         } actions: {
                             Button(L10n.text("Show All Languages")) { query.language = "all" }.accessibilityIdentifier("content.allLanguages")
+                        }
+                    }
+                    else if loader.ids.isEmpty, effectiveQuery != effectiveQuery(category: "") {
+                        ContentUnavailableView {
+                            Label(L10n.text("No Works in This Category"), systemImage: "square.stack")
+                        } actions: {
+                            Button(L10n.text("Show All Categories")) { category.wrappedValue = "" }.accessibilityIdentifier("content.allCategories")
                         }
                     }
                     else if loader.ids.isEmpty { ContentUnavailableView.search(text: query.text) }
@@ -520,7 +557,7 @@ private struct GalleryGridCard: View {
     }
 
     var body: some View {
-        GalleryCardLayout(title: preview.display?.title ?? L10n.text("Work %@", String(describing: id)), artists: preview.display?.artists ?? "", language: preview.display?.language ?? "") {
+        GalleryCardLayout(title: preview.display?.title ?? L10n.text("Work %@", String(describing: id)), artists: preview.display?.artists ?? "", language: preview.display?.language ?? "", type: preview.display?.type ?? "") {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
             else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: AppMode.manga.icon).foregroundStyle(.secondary) } }
         }
@@ -1106,10 +1143,12 @@ final class GalleryFeedPreview {
         let title: String
         let artists: String
         let language: String
+        let type: String
         init(_ gallery: NativeGallery) {
             title = gallery.title
             artists = gallery.artists.joined(separator: ", ")
             language = gallery.language
+            type = gallery.type
         }
     }
     let id: Int64

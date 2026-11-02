@@ -128,6 +128,18 @@ final class NativeContentTests: XCTestCase {
         XCTAssertEqual(Folder(name: "미분류").name, "미분류")
     }
 
+    func testCategoryFilterAddsOneTypeUnlessTheSearchNamesOne() {
+        XCTAssertEqual(GalleryQuery(text: "female:sample").filtered(to: "doujinshi").text, "female:sample type:doujinshi")
+        XCTAssertEqual(GalleryQuery(text: "type:manga").filtered(to: "doujinshi").text, "type:manga")
+        XCTAssertEqual(GalleryQuery().filtered(to: "").text, "")
+        XCTAssertEqual(GalleryQuery().filtered(to: "unknown").text, "", "A category the site cannot filter by is ignored")
+        let narrowed = GalleryQuery().filtered(to: "manga").applyingDefaults(tags: "", excluded: "female:excluded")
+        XCTAssertEqual(narrowed.text, "type:manga -female:excluded")
+        XCTAssertEqual(GalleryCategory.key("Artist CG"), "artistcg")
+        XCTAssertEqual(GalleryCategory.key("non-h"), "non-h")
+        XCTAssertEqual(GalleryCategory.title("unknown"), "Unknown")
+    }
+
     func testSearchVisibilityAccumulatesSlowScrollAndKeepsFocusedSearchVisible() {
         let tracker = ScrollSearchVisibility()
         for y in stride(from: CGFloat(100), through: 128, by: 4) {

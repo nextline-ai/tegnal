@@ -719,6 +719,22 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
 
+    func testRefreshingSavedWorkInformationAsksFirst() {
+        let app = launch(extra: ["--taste-ui-rich"])
+        selectMode(app, "manga")
+        app.tabBars.buttons["Settings"].tap()
+        reveal(app, "settings.libraryManagement").tap()
+        let refresh = reveal(app, "library.refreshInformation")
+        XCTAssertTrue(refresh.isEnabled)
+        refresh.tap()
+        let confirm = app.buttons.matching(NSPredicate(format: "label IN %@", ["Refresh Information", "다시 받기", "再取得"])).firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        capture(app, "Refresh saved work information")
+        // The confirmation is a popover, so tapping outside cancels it.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertFalse(confirm.waitForExistence(timeout: 1))
+    }
+
     func testBothModesOfferTheSameCombinedJSONBackup() {
         let app = launch()
         app.tabBars.buttons["More"].tap()

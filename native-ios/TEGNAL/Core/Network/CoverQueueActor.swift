@@ -42,6 +42,8 @@ public actor CoverQueueActor {
     private var isRunning: Bool = false
     private var isPaused: Bool = false
     private var kickAgain: Bool = false
+    /// Saved works whose information is fetched again even though nothing is missing.
+    private var refreshing: [Int64] = []
 
     public init(database: AppDatabase, thumbsDir: URL = AppStorage.thumbsDirURL) {
         self.database = database
@@ -65,6 +67,12 @@ public actor CoverQueueActor {
 
     public func resume() {
         isPaused = false
+    }
+
+    /// Queues every saved work so a fix in how a site is read reaches works saved before it.
+    @discardableResult func queueRefresh() throws -> Int {
+        refreshing = try database.savedGalleryIDs()
+        return refreshing.count
     }
 
     public func start(state: CoverQueueState, downloadsEnabled: Bool = true) async {
@@ -92,7 +100,7 @@ public actor CoverQueueActor {
                 checkedThumbnailFiles = true
             }
             try FileManager.default.createDirectory(at: thumbsDir, withIntermediateDirectories: true)
-            let total = try database.countNeedingFill()
+            let total = refreshing.count + (try database.countNeedingFill(exclude: Set(refreshing)))
             await MainActor.run { state.total = total; state.remaining = total; state.isRunning = downloadsEnabled && total > 0 }
 
             var attempted = Set<Int64>()
@@ -100,33 +108,38 @@ public actor CoverQueueActor {
             repeat {
                 kickAgain = false
                 while downloadsEnabled && !isPaused && !Task.isCancelled && allowsBackfill() {
-                    let batch = try database.worksNeedingFill(limit: 6, exclude: attempted)
+                    let refresh = Array(refreshing.prefix(6))
+                    let batch = refresh.isEmpty ? try database.worksNeedingFill(limit: 6, exclude: attempted).map(\.galleryId) : refresh
                     if batch.isEmpty { break }
-                    let planned = attempted.count + (try database.countNeedingFill(exclude: attempted))
+                    let planned = attempted.count + refreshing.count + (try database.countNeedingFill(exclude: attempted.union(refreshing)))
                     await MainActor.run { state.total = max(state.total, planned) }
 
-                    for work in batch {
+                    for galleryId in batch {
                         if isPaused || Task.isCancelled || !allowsBackfill() { break }
-                        attempted.insert(work.galleryId)
+                        let refreshes = refreshing.first == galleryId
+                        if refreshes { refreshing.removeFirst() }
+                        attempted.insert(galleryId)
 
                         do {
-                            try await fetchOne(work.galleryId)
+                            try await fetchOne(galleryId, refresh: refreshes)
                             // A removed bookmark is not a successfully filled work.
-                            if let saved = try database.getWork(galleryId: work.galleryId) {
+                            if let saved = try database.getWork(galleryId: galleryId) {
                                 guard saved.hasThumb, saved.hasTitle,
                                       !(saved.tags ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ContentError.invalidResponse }
                                 await MainActor.run { state.processed += 1 }
                             }
                         } catch is CancellationError {
+                            if refreshes { refreshing.insert(galleryId, at: 0) }
                             break
                         } catch let error as URLError where error.code == .cancelled {
+                            if refreshes { refreshing.insert(galleryId, at: 0) }
                             break
                         } catch ContentError.galleryNotFound {
                             await MainActor.run { state.gone += 1 }
                         } catch {
                             await MainActor.run { state.failed += 1 }
-                            if (try? database.getWork(galleryId: work.galleryId)?.hasThumb) != true {
-                                try? database.setThumb(galleryId: work.galleryId, status: "failed")
+                            if (try? database.getWork(galleryId: galleryId)?.hasThumb) != true {
+                                try? database.setThumb(galleryId: galleryId, status: "failed")
                             }
                         }
 
@@ -146,7 +159,7 @@ public actor CoverQueueActor {
         await MainActor.run { state.isRunning = false }
     }
 
-    public func fetchOne(_ galleryId: Int64) async throws {
+    public func fetchOne(_ galleryId: Int64, refresh: Bool = false) async throws {
         try Task.checkCancellation()
         var existing = try database.getWork(galleryId: galleryId)
 
@@ -175,7 +188,7 @@ public actor CoverQueueActor {
         let needCover = existing?.hasThumb != true
         let needTags = (existing?.tags ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-        if !needTitle && !needCover && !needTags {
+        if !refresh && !needTitle && !needCover && !needTags {
             if existing?.thumbStatus != "ready" {
                 try database.setThumb(galleryId: galleryId, status: "ready", path: existing?.thumbPath)
             }
@@ -189,13 +202,15 @@ public actor CoverQueueActor {
             try Task.checkCancellation()
             // Only a missing gallery document means the work is gone. A 404
             // from an image/CDN request below remains a retryable failure.
-            try database.setThumb(galleryId: galleryId, status: "gone")
+            // A refresh keeps the cover the work already has.
+            if !refresh { try database.setThumb(galleryId: galleryId, status: "gone") }
             throw ContentError.galleryNotFound
         }
         try Task.checkCancellation()
-        guard try database.getWork(galleryId: galleryId) != nil else { return }
+        guard let saved = try database.getWork(galleryId: galleryId) else { return }
+        if refresh, !Self.isSameWork(saved, gallery) { throw ContentError.galleryNotFound }
         _ = try database.upsertWork(
-            galleryId: galleryId, title: needTitle ? gallery.title : nil,
+            galleryId: galleryId, title: needTitle || refresh ? gallery.title : nil,
             artists: gallery.artists.joined(separator: ", "), language: gallery.language,
             type: gallery.type, tags: gallery.tags.joined(separator: ", "), metadataSource: "manga"
         )
@@ -212,5 +227,17 @@ public actor CoverQueueActor {
             guard AppStorage.isReadableThumbnail(file) else { throw ContentError.unsupportedFormat }
             try database.setThumb(galleryId: galleryId, status: "ready", path: file.path, page: page)
         }
+    }
+
+    /// Saved numbers do not record their site, so a refresh leaves a work alone
+    /// when the current site has a different work under the same number.
+    static func isSameWork(_ saved: Work, _ gallery: NativeGallery) -> Bool {
+        func names(_ values: [String]) -> Set<String> {
+            Set(values.map { $0.lowercased().replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+        }
+        let savedArtists = names((saved.artists ?? "").split(separator: ",").map(String.init)), artists = names(gallery.artists)
+        if !savedArtists.isEmpty && !artists.isEmpty { return !savedArtists.isDisjoint(with: artists) }
+        let language = (saved.language ?? "").lowercased()
+        return ["", "translated", "rewrite"].contains(language) || gallery.language.isEmpty || language == gallery.language.lowercased()
     }
 }

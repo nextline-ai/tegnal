@@ -414,6 +414,10 @@ public final class AppEnvironment: @unchecked Sendable {
     var defaultExcludedTags: String {
         didSet { browserPreferences.set(defaultExcludedTags, forKey: "manga.defaultExcludedTags") }
     }
+    /// The category the main comics feed is narrowed to, empty for all.
+    var mangaBrowseCategory: String {
+        didSet { browserPreferences.set(mangaBrowseCategory, forKey: "manga.browseCategory") }
+    }
     var hiddenMangaGalleryIDs: Set<Int64> {
         didSet { browserPreferences.set(hiddenMangaGalleryIDs.sorted().map(String.init), forKey: "manga.hiddenGalleryIDs") }
     }
@@ -479,7 +483,7 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     var launchMangaQuery: GalleryQuery {
-        var query = GalleryQuery(language: L10n.contentLanguage).applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
+        var query = GalleryQuery(language: L10n.contentLanguage).filtered(to: mangaBrowseCategory).applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
         query.allowsLanguageExceptions = allowsMangaLanguageExceptions
         return query
     }
@@ -579,6 +583,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
         self.defaultTags = browserPreferences.string(forKey: "manga.defaultTags") ?? ""
         self.defaultExcludedTags = browserPreferences.string(forKey: "manga.defaultExcludedTags") ?? ""
+        self.mangaBrowseCategory = browserPreferences.string(forKey: "manga.browseCategory") ?? ""
         self.hiddenMangaGalleryIDs = Set((browserPreferences.stringArray(forKey: "manga.hiddenGalleryIDs") ?? []).compactMap(Int64.init))
 
         // New opt-in fallback; the old preference selected native UI versus external Safari.
@@ -658,6 +663,14 @@ public final class AppEnvironment: @unchecked Sendable {
                 await coverQueueActor.start(state: coverQueueState, downloadsEnabled: isSiteVerified)
             } while coverQueueRequested && !Task.isCancelled && coverQueueActive && CoverQueuePolicy.allowsBackfill
             if !CoverQueuePolicy.allowsBackfill { resumeCoverQueue = true }
+        }
+    }
+
+    /// Fetches every saved work's information again through the background queue.
+    @MainActor func refreshSavedWorkInformation() {
+        Task {
+            _ = try? await coverQueueActor.queueRefresh()
+            startCoverQueue()
         }
     }
 

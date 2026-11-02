@@ -256,6 +256,8 @@ struct TEGNALApp: App {
                     NavigationStack {
                         WorksGridView(folder: try? env.database.listFolders().first(where: { $0.name == "이동 테스트" }))
                     }
+                } else if ContentUITestSupport.categoryLibraryTest {
+                    NavigationStack { WorksGridView() }
                 } else if isContentUITest && (ProcessInfo.processInfo.arguments.contains("--native-content-tab-test") || BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled) {
                     AppRootTabView()
                 } else if isContentUITest {

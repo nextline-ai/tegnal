@@ -102,6 +102,7 @@ struct MangaLibraryToolsView: View {
     @State private var showDataDbPicker = false
     @State private var showDataDbActionSheet = false
     @State private var showNoWorksAlert = false
+    @State private var confirmingRefresh = false
     @State private var pendingDataDbUrl: URL? = nil
     @State private var importTask: Task<Void, Never>? = nil
 
@@ -158,6 +159,22 @@ struct MangaLibraryToolsView: View {
                         }
                     }
                     .padding(.vertical, 4)
+
+                    Button { confirmingRefresh = true } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label(L10n.text("Refresh Saved Work Information"), systemImage: "arrow.triangle.2.circlepath")
+                            Text(L10n.text("Fetches titles and tags again from the current site, for example after an update changes how a site is read."))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(worksCount == 0 || !env.isSiteVerified)
+                    .accessibilityIdentifier("library.refreshInformation")
+                    .confirmationDialog(L10n.text("Refresh information for %@ saved works?", String(worksCount)), isPresented: $confirmingRefresh, titleVisibility: .visible) {
+                        Button(L10n.text("Refresh Information")) { env.refreshSavedWorkInformation() }
+                        Button(L10n.text("Cancel"), role: .cancel) {}
+                    } message: {
+                        Text(L10n.text("Titles and tags are replaced with what the current site shows. Notes, folders, and covers stay as they are, and works the site shows as a different work are left unchanged."))
+                    }
                 }
             }
             Section(header: Text(L10n.text("Import Data (Other Manga Viewer)"))) {

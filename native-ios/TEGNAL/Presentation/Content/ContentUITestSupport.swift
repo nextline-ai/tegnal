@@ -6,6 +6,7 @@ enum ContentUITestSupport {
     static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("--native-content-ui-test") || BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled }
     static let source = FixtureContentSource()
     static var libraryJumpTest: Bool { enabled && ProcessInfo.processInfo.arguments.contains("--library-jump-test") }
+    static var categoryLibraryTest: Bool { enabled && ProcessInfo.processInfo.arguments.contains("--category-library-test") }
     @MainActor private static var websiteRetryAttempts = 0
     @MainActor static func websiteHTML(for url: URL) async throws -> String {
         switch url.host {
@@ -94,6 +95,13 @@ enum ContentUITestSupport {
             let folder = try! env.database.createFolder(name: "Offline library")
             _ = try! env.database.upsertWork(galleryId: 900000001, folderId: folder.id, title: "Imported work")
         }
+        if categoryLibraryTest {
+            for index in 0..<6 {
+                let id = Int64(900000001 + index)
+                _ = try! env.database.upsertWork(galleryId: id, title: "샘플 작품 \(index + 1)", artists: "TEGNAL", language: "korean",
+                    type: FixtureContentSource.categories[Int(id % 5)], tags: "tag:example")
+            }
+        }
         if ProcessInfo.processInfo.arguments.contains("--browser-fallback-test") { env.useEmbeddedBrowser = true }
         if libraryJumpTest {
             let folder = try! env.database.createFolder(name: "이동 테스트")
@@ -118,6 +126,7 @@ enum ContentUITestSupport {
 
 /// Synthetic pages keep device UI automation independent of private library data and the network.
 actor FixtureContentSource: ContentProviding {
+    static let categories = ["doujinshi", "manga", "artistcg", "gamecg", "imageset"]
     private var shouldFail: Bool
     private(set) var imageRequests = 0
     init() { shouldFail = ProcessInfo.processInfo.arguments.contains("--native-content-initial-error") }
@@ -127,7 +136,7 @@ actor FixtureContentSource: ContentProviding {
         let linked = ProcessInfo.processInfo.arguments.contains("--work-links-test")
         let versions = [GalleryVersion(id: 900000001, language: "english", localName: "English"), GalleryVersion(id: 900000002, language: "korean", localName: "한국어"), GalleryVersion(id: 900000003, language: "japanese", localName: "日本語")]
         let version = linked ? versions.first { $0.id == id } : nil
-        return NativeGallery(id: id, title: linked ? "Work \(id)" : "네이티브 읽기 테스트", artists: ["TEGNAL"], language: version?.language ?? "english", type: "테스트",
+        return NativeGallery(id: id, title: linked ? "Work \(id)" : "네이티브 읽기 테스트", artists: ["TEGNAL"], language: version?.language ?? "english", type: Self.categories[Int(id % 5)],
                       tags: ["group:sample circle", "female:sample", "tag:example"], pages: (1...3).map { index in
                           GalleryPage(hash: scrolling || linked ? String(format: "%064llx", id * 10 + Int64(index)) : String(repeating: "a", count: 63) + String(index), name: "\(index).png", width: 800, height: 1200, hasAVIF: false)
                       }, versions: version == nil ? nil : versions, relatedIDs: version == nil ? nil : [900000002, 900000011, 900000012])
@@ -139,8 +148,10 @@ actor FixtureContentSource: ContentProviding {
             return GalleryBatch(ids: offset < 48 ? (0..<24).map { Int64(900000001 + offset + $0) } : [], hasMore: offset < 24)
         }
         if ProcessInfo.processInfo.arguments.contains("--native-content-long-feed") {
-            let end = min(120, offset + count)
-            return GalleryBatch(ids: (offset..<end).map { Int64(900000001 + $0) }, hasMore: end < 120)
+            let type = query.text.split(separator: " ").first { $0.hasPrefix("type:") }.map { String($0.dropFirst(5)) }
+            let ids = (0..<120).map { Int64(900000001 + $0) }.filter { type == nil || Self.categories[Int($0 % 5)] == type }
+            let end = min(ids.count, offset + count)
+            return GalleryBatch(ids: Array(ids[min(offset, end)..<end]), hasMore: end < ids.count)
         }
         return GalleryBatch(ids: offset == 0 ? [900000001] : [], hasMore: false)
     }

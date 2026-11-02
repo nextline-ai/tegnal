@@ -141,12 +141,42 @@ final class DocumentCatalogTests: XCTestCase {
         let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
         let search = try XCTUnwrap(items.first { $0.name == "search" }?.value)
         XCTAssertTrue(search.contains("parody:sample"))
-        XCTAssertTrue(search.contains("-other:excluded"))
+        XCTAssertFalse(search.contains("excluded"), "The remote search would read a minus as an ordinary word")
         XCTAssertTrue(search.contains("artist:sample_artist"))
         XCTAssertTrue(items.contains(.init(name: "categories", value: "2")))
         XCTAssertTrue(items.contains { $0.name == "start-date" })
         let suggestions = try await source.suggestions(for: "series:sam")
         XCTAssertEqual(suggestions, [.init(namespace: "series", name: "sample_series", count: nil)])
+    }
+
+    func testTranslationsKeepTheirTranslatedTitleWhileOriginalsKeepTheirOwnScript() throws {
+        let fixture = fixture()
+        fixture.originalTitles = [2000: "原題", 1999: "原題", 1998: "原題"]
+        fixture.languages = [2000: ["translated", "korean"], 1999: [], 1998: ["english"]]
+        let translated = try DocumentCatalogSource.parseGallery(fixture.document(2000), id: 2000, site: MangaUrls.home)
+        XCTAssertEqual(translated.title, "Sample {book}")
+        XCTAssertEqual(translated.language, "korean", "A translation marker is not the work's language")
+        let original = try DocumentCatalogSource.parseGallery(fixture.document(1999), id: 1999, site: MangaUrls.home)
+        XCTAssertEqual(original.title, "原題")
+        XCTAssertEqual(original.language, "")
+        let otherOriginal = try DocumentCatalogSource.parseGallery(fixture.document(1998), id: 1998, site: MangaUrls.home)
+        XCTAssertEqual(otherOriginal.title, "Sample {book}")
+    }
+
+    func testExcludedTagsStayOutOfTheRequestAndRemoveMatchingRows() async throws {
+        let fixture = fixture(); fixture.markEvenRows = true; fixture.visualCollections = true
+        let source = MangaContentSource(transport: fixture.transport())
+        let batch = try await source.list(GalleryQuery(text: "-female:marked_tag"), offset: 0, count: 4)
+        XCTAssertEqual(batch.ids, [1999, 1997, 1995, 1993])
+        let next = try await source.list(GalleryQuery(text: "-female:marked_tag"), offset: 4, count: 2)
+        XCTAssertEqual(next.ids, [1991, 1989])
+        let defaults = try await source.list(GalleryQuery().applyingDefaults(tags: "", excluded: "female:marked_tag"), offset: 0, count: 2)
+        XCTAssertEqual(defaults.ids, [1999, 1997], "Default exclusions take the same path")
+        let mixed = try await source.list(GalleryQuery(text: "-female:marked_tag", allowsLanguageExceptions: true), offset: 0, count: 5)
+        XCTAssertEqual(mixed.ids, [2003, 2002, 2001, 1999, 1997])
+        let searches = fixture.requests.filter { $0.path == "/ajax/search" }
+            .compactMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "search" }?.value }
+        XCTAssertTrue(searches.allSatisfy { !$0.contains("marked") })
     }
 
     func testEmbeddedJSONHandlesEscapesAndDoesNotExecuteFollowingScripts() throws {
@@ -421,6 +451,9 @@ private final class CatalogFixture: @unchecked Sendable {
     var expireFirstManifest = false
     var omitThumbnails = false
     var visualCollections = false
+    var markEvenRows = false
+    var originalTitles: [Int64: String] = [:]
+    var languages: [Int64: [String]] = [:]
     let image = Data(repeating: 0x42, count: 64)
     var requests: [URL] { lock.withLock { recorded } }
     func count(_ path: String) -> Int { requests.filter { $0.path == path }.count }
@@ -430,9 +463,11 @@ private final class CatalogFixture: @unchecked Sendable {
         return ContentTransport(configuration: configuration)
     }
     private func row(_ id: Int64) -> [String: Any] {
-        ["id": id, "title": "Sample {book}", "title_jpn": NSNull(), "category": 2, "views": id * 10, "blocked": 0,
-         "thumb_extension": "jpg", "tags": [["tag": ["language", "korean"]], ["tag": ["artist", "sample_artist"]],
-                                                   ["tag": ["parody", "sample_series"]], ["tag": ["other", "sample_tag"]]]]
+        var tags: [[String: Any]] = (languages[id] ?? ["korean"]).map { ["tag": ["language", $0]] }
+        tags += [["tag": ["artist", "sample_artist"]], ["tag": ["parody", "sample_series"]], ["tag": ["other", "sample_tag"]]]
+        if markEvenRows && id.isMultiple(of: 2) { tags.append(["tag": ["female", "marked tag"]]) }
+        return ["id": id, "title": "Sample {book}", "title_jpn": originalTitles[id] ?? NSNull(), "category": 2, "views": id * 10, "blocked": 0,
+                "thumb_extension": "jpg", "tags": tags]
     }
     func document(_ id: Int64) -> Data {
         var object = row(id)

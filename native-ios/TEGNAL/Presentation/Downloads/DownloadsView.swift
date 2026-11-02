@@ -79,7 +79,7 @@ struct DownloadsView: View {
     @ViewBuilder private func card(_ item: WorkDownload, style: ArtworkCellStyle) -> some View {
         VStack(alignment: .leading, spacing: style.inset(4)) {
             if let gallery = item.gallery {
-                GalleryCardLayout(title: item.title, artists: item.artists.joined(separator: ", "), language: gallery.language) {
+                GalleryCardLayout(title: item.title, artists: item.artists.joined(separator: ", "), language: gallery.language, type: gallery.type) {
                     DownloadCoverView(url: store.urls(item).first, isVideo: false)
                 }
             } else if let post = item.post {

@@ -155,6 +155,41 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertFalse(app.webViews.firstMatch.exists)
     }
 
+    func testCategoryMenuNarrowsTheFeedAndCardsShowTheirCategory() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "-manga.browseCategory", "", "-AppleLanguages", "(en)"]
+        app.launch()
+        let manga = element(app, "content.gallery.900000001")
+        XCTAssertTrue(manga.waitForExistence(timeout: 15))
+        XCTAssertTrue(manga.label.contains("Manga"), manga.label)
+        element(app, "content.category").tap()
+        app.buttons["Doujinshi"].tap()
+        let doujinshi = element(app, "content.gallery.900000005")
+        XCTAssertTrue(doujinshi.waitForExistence(timeout: 10))
+        XCTAssertTrue(doujinshi.label.contains("Doujinshi"), doujinshi.label)
+        XCTAssertFalse(manga.exists)
+        XCTAssertTrue(element(app, "content.category").label.contains("Doujinshi"))
+        capture(app, "Feed narrowed to one category")
+        element(app, "content.category").tap()
+        app.buttons["All Categories"].tap()
+        XCTAssertTrue(manga.waitForExistence(timeout: 10))
+    }
+
+    func testLibraryCategoryMenuCountsAndNarrowsSavedWorks() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--category-library-test", "-AppleLanguages", "(en)"]
+        app.launch()
+        XCTAssertTrue(element(app, "works.card.900000002").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "works.card.900000002").label.contains("Artist CG"))
+        element(app, "works.category").tap()
+        capture(app, "Library category menu")
+        app.buttons["Manga (2)"].tap()
+        XCTAssertTrue(element(app, "works.card.900000001").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "works.card.900000006").exists)
+        XCTAssertFalse(element(app, "works.card.900000002").exists)
+        capture(app, "Library narrowed to one category")
+    }
+
     func testLibraryWorkOpensRequestedInformationInBrowserAndCloses() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--library-jump-test", "--browser-fallback-test", "-AppleLanguages", "(en)"]

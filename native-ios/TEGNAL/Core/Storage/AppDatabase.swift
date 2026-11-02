@@ -807,6 +807,10 @@ public final class AppDatabase: Sendable {
         return try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE " + Self.needsFill + exclusions) ?? 0 }
     }
 
+    public func savedGalleryIDs() throws -> [Int64] {
+        try dbWriter.read { try Int64.fetchAll($0, sql: "SELECT gallery_id FROM works ORDER BY bookmarked_at DESC, id DESC") }
+    }
+
     public func worksCount() throws -> Int {
         try dbWriter.read { db in
             try Work.fetchCount(db)

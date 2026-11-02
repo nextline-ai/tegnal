@@ -11,6 +11,10 @@ public struct WorksGridView: View {
     private let opensSearch: Bool
 
     @State private var works: [Work] = []
+    /// Everything in this folder or search, before the category narrows it.
+    @State private var scopeWorks: [Work] = []
+    @State private var categories: [(key: String, count: Int)] = []
+    @State private var category = ""
     @State private var reloadGeneration = 0
     @State private var similarity: VisualSimilaritySeed?
     @State private var selecting = false
@@ -58,7 +62,17 @@ public struct WorksGridView: View {
                 VStack(spacing: 0) {
                     Color.clear.frame(height: 56).id("works.top")
 
-                    if works.isEmpty {
+                    if categories.count > 1 || !category.isEmpty {
+                        HStack { categoryMenu; Spacer(minLength: 0) }.padding(.horizontal, 16).padding(.bottom, 8)
+                    }
+
+                    if works.isEmpty, !category.isEmpty, !scopeWorks.isEmpty {
+                        ContentUnavailableView {
+                            Label(L10n.text("No Works in This Category"), systemImage: "square.stack")
+                        } actions: {
+                            Button(L10n.text("Show All Categories")) { category = "" }.accessibilityIdentifier("works.allCategories")
+                        }.padding(.top, 40)
+                    } else if works.isEmpty {
                         ContentUnavailableView(
                             L10n.text("No Works"),
                             systemImage: "square.grid.2x2",
@@ -102,6 +116,7 @@ public struct WorksGridView: View {
                 .allowsHitTesting(isSearchBarVisible).accessibilityHidden(!isSearchBarVisible)
         }
         .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
+        .onChange(of: category) { applyCategory() }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isPushed)
@@ -285,11 +300,34 @@ public struct WorksGridView: View {
             }.removeDuplicates()
             for try await snapshot in observation.values(in: env.database.dbWriter, bufferingPolicy: .bufferingNewest(1)) {
                 try Task.checkCancellation()
-                works = snapshot.works
+                scopeWorks = snapshot.works
+                applyCategory()
                 if allFolders != snapshot.folders { allFolders = snapshot.folders }
             }
         } catch is CancellationError { }
         catch { showToast(error.localizedDescription) }
+    }
+
+    private var categoryMenu: some View {
+        BrowseFilterMenu(title: category.isEmpty ? L10n.text("Category") : GalleryCategory.title(category), icon: "square.stack") {
+            Picker(L10n.text("Category"), selection: $category) {
+                Text(L10n.text("All Categories")).tag("")
+                ForEach(categories, id: \.key) { item in
+                    Text(L10n.text("%@ (%@)", GalleryCategory.title(item.key), item.count.formatted())).tag(item.key)
+                }
+            }
+        }
+        .accessibilityIdentifier("works.category")
+    }
+
+    private func applyCategory() {
+        var counts: [String: Int] = [:]
+        for work in scopeWorks {
+            let key = GalleryCategory.key(work.type ?? "")
+            if !key.isEmpty { counts[key, default: 0] += 1 }
+        }
+        categories = counts.map { (key: $0.key, count: $0.value) }.sorted { $0.count != $1.count ? $0.count > $1.count : $0.key < $1.key }
+        works = category.isEmpty ? scopeWorks : scopeWorks.filter { GalleryCategory.key($0.type ?? "") == category }
     }
 
     private func browserSelection(information: Bool) -> Binding<IdentifiableString?> {

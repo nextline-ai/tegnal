@@ -88,16 +88,21 @@ struct GalleryCardLayout<Cover: View>: View {
     let title: String
     let artists: String
     let language: String
+    var type = ""
     var showsLanguage = true
     var recommendationTag: String? = nil
     @ViewBuilder let cover: () -> Cover
+    private var category: String { type.isEmpty ? "" : GalleryCategory.title(type) }
     var body: some View {
         VStack(alignment: .leading, spacing: style.inset(6)) {
-            ZStack(alignment: .bottomTrailing) {
+            ZStack(alignment: .bottom) {
                 Color.clear.aspectRatio(0.72, contentMode: .fit).overlay { cover() }.clipped()
-                if showsLanguage, !language.isEmpty {
-                    Text(language).font(.system(size: style.fontSize(badgeSize), weight: .bold)).padding(.horizontal, style.inset(6)).padding(.vertical, style.inset(2))
-                        .background(.ultraThinMaterial, in: Capsule()).padding(style.inset(6))
+                if showsLanguage {
+                    // A narrow card keeps the language and lets the category go.
+                    ViewThatFits(in: .horizontal) {
+                        badges(category: category)
+                        badges(category: "")
+                    }.padding(style.inset(6))
                 }
             }.clipShape(RoundedRectangle(cornerRadius: style.radius(12), style: .continuous))
             if style.showsTitle || style.showsArtists && !artists.isEmpty || recommendationTag != nil {
@@ -111,7 +116,41 @@ struct GalleryCardLayout<Cover: View>: View {
             }
         }.frame(maxWidth: .infinity, alignment: .topLeading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel([title, artists, language].filter { !$0.isEmpty }.joined(separator: " · "))
+            .accessibilityLabel([title, artists, category, language].filter { !$0.isEmpty }.joined(separator: " · "))
+    }
+
+    private func badges(category: String) -> some View {
+        HStack(spacing: style.inset(4)) {
+            if !category.isEmpty {
+                badge(category).foregroundStyle(.white).background(GalleryCategory.color(type), in: Capsule())
+            }
+            Spacer(minLength: 0)
+            if !language.isEmpty { badge(language).background(.ultraThinMaterial, in: Capsule()) }
+        }
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text).font(.system(size: style.fontSize(badgeSize), weight: .bold)).lineLimit(1).fixedSize()
+            .padding(.horizontal, style.inset(6)).padding(.vertical, style.inset(2))
+    }
+}
+
+extension GalleryCategory {
+    /// Distinct hues let a grid be scanned by category at a glance.
+    static func color(_ type: String) -> Color {
+        switch key(type) {
+        case "doujinshi": return Color(red: 0.80, green: 0.24, blue: 0.24)
+        case "manga": return Color(red: 0.86, green: 0.45, blue: 0.10)
+        case "artistcg": return Color(red: 0.72, green: 0.56, blue: 0.04)
+        case "gamecg": return Color(red: 0.20, green: 0.58, blue: 0.30)
+        case "imageset": return Color(red: 0.30, green: 0.36, blue: 0.80)
+        case "anime": return Color(red: 0.08, green: 0.56, blue: 0.62)
+        case "western": return Color(red: 0.45, green: 0.58, blue: 0.10)
+        case "non-h": return Color(red: 0.16, green: 0.46, blue: 0.82)
+        case "cosplay": return Color(red: 0.56, green: 0.30, blue: 0.76)
+        case "photo": return Color(red: 0.80, green: 0.30, blue: 0.56)
+        default: return Color(white: 0.42)
+        }
     }
 }
 
@@ -120,7 +159,7 @@ public struct WorkCardView: View {
     public let work: Work
     public init(work: Work) { self.work = work }
     public var body: some View {
-        GalleryCardLayout(title: work.hasTitle ? work.title ?? "" : String(work.galleryId), artists: work.artists ?? "", language: work.language ?? "") {
+        GalleryCardLayout(title: work.hasTitle ? work.title ?? "" : String(work.galleryId), artists: work.artists ?? "", language: work.language ?? "", type: work.type ?? "") {
             LocalThumbnailView(path: work.thumbStatus == "ready" ? work.thumbPath : nil, revision: String(work.thumbPage ?? 1)) { image in
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
