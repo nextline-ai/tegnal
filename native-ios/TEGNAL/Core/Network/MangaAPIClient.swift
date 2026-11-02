@@ -145,7 +145,7 @@ public enum MangaAPIClient {
             }
         }
 
-        let tagsList = NativeGallery.parseTags(json["tags"])
+        let tagsList = NativeGallery.parseCredits(json) + NativeGallery.parseTags(json["tags"])
 
         let rawTitle = (json["japanese_title"] as? String) ?? (json["title"] as? String)
         let unescapedTitle = rawTitle?

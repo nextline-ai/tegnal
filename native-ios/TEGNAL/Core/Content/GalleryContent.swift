@@ -50,6 +50,14 @@ struct GalleryPage: Codable, Sendable, Hashable {
     var sourceSite: String? = nil
 }
 
+/// One language of a work. Each language is a gallery with its own number.
+struct GalleryVersion: Codable, Sendable, Hashable, Identifiable {
+    let id: Int64
+    let language: String
+    let localName: String?
+    var displayName: String { localName?.isEmpty == false ? localName! : language.capitalized }
+}
+
 struct NativeGallery: Codable, Identifiable, Sendable {
     let id: Int64
     let title: String
@@ -58,6 +66,33 @@ struct NativeGallery: Codable, Identifiable, Sendable {
     let type: String
     let tags: [String]
     let pages: [GalleryPage]
+    /// Optional so works downloaded before these were read still decode.
+    var versions: [GalleryVersion]? = nil
+    var relatedIDs: [Int64]? = nil
+
+    /// The other languages of this work, with the given language first.
+    func otherVersions(preferring language: String) -> [GalleryVersion] {
+        let others = (versions ?? []).filter { $0.id != id }
+        return others.filter { $0.language == language } + others.filter { $0.language != language }
+    }
+
+    /// The version to offer someone who wants this language, unless this already is it.
+    func suggestedVersion(for language: String) -> GalleryVersion? {
+        guard self.language.lowercased() != language.lowercased() else { return nil }
+        return otherVersions(preferring: language).first { $0.language.lowercased() == language.lowercased() }
+    }
+
+    /// Default exclusions only reach searches, so works reached another way check them here.
+    func isExcluded(by terms: String) -> Bool {
+        func normal(_ text: String) -> String { text.lowercased().replacingOccurrences(of: "_", with: " ") }
+        let labels = Set((tags + artists.map { "artist:" + $0 } + ["language:" + language, "type:" + type]).map(normal))
+        let names = Set(labels.compactMap { $0.split(separator: ":", maxSplits: 1).last.map(String.init) })
+        return terms.split { $0.isWhitespace || $0 == "," }.contains { token in
+            let term = normal(String(token.drop { $0 == "-" }))
+            guard !term.isEmpty else { return false }
+            return term.contains(":") ? labels.contains(term) : names.contains(term) || normal(title).contains(term)
+        }
+    }
 
     static func parse(_ data: Data, id: Int64) throws -> NativeGallery {
         try Task.checkCancellation()
@@ -90,7 +125,27 @@ struct NativeGallery: Codable, Identifiable, Sendable {
         return NativeGallery(id: id, title: decodeEntities(title),
                              artists: (json["artists"] as? [[String: Any]] ?? []).compactMap { $0["artist"] as? String },
                              language: json["language"] as? String ?? "", type: json["type"] as? String ?? "",
-                             tags: Self.parseTags(json["tags"]), pages: pages)
+                             tags: Self.parseCredits(json) + Self.parseTags(json["tags"]), pages: pages,
+                             versions: Self.parseVersions(json["languages"]), relatedIDs: Self.parseRelatedIDs(json["related"]))
+    }
+
+    static func parseVersions(_ value: Any?) -> [GalleryVersion] {
+        var seen = Set<Int64>()
+        return (value as? [[String: Any]] ?? []).compactMap { item in
+            guard let id = galleryID(item["galleryid"]), let language = item["name"] as? String, !language.isEmpty,
+                  seen.insert(id).inserted else { return nil }
+            return GalleryVersion(id: id, language: language, localName: item["language_localname"] as? String)
+        }
+    }
+
+    static func parseRelatedIDs(_ value: Any?) -> [Int64] {
+        var seen = Set<Int64>()
+        return Array((value as? [Any] ?? []).compactMap { galleryID($0) }.filter { seen.insert($0).inserted }.prefix(12))
+    }
+
+    private static func galleryID(_ value: Any?) -> Int64? {
+        let id = (value as? NSNumber)?.int64Value ?? (value as? String).flatMap { Int64($0) }
+        return id.flatMap { $0 > 0 ? $0 : nil }
     }
 
     private static func validPageHash(_ hash: String) -> Bool {
@@ -103,6 +158,13 @@ struct NativeGallery: Codable, Identifiable, Sendable {
             guard let tag = item["tag"] as? String else { return [] }
             let namespaces = ["female", "male"].filter { flag(item[$0]) }
             return (namespaces.isEmpty ? ["tag"] : namespaces).map { $0 + ":" + tag }
+        }
+    }
+
+    /// Groups, series and characters come in their own lists, so they read as namespaced tags.
+    static func parseCredits(_ json: [String: Any]) -> [String] {
+        [("groups", "group", "group"), ("parodys", "parody", "series"), ("characters", "character", "character")].flatMap { list, key, namespace in
+            (json[list] as? [[String: Any]] ?? []).compactMap { $0[key] as? String }.filter { !$0.isEmpty }.map { namespace + ":" + $0 }
         }
     }
 
@@ -149,6 +211,33 @@ struct GalleryQuery: Hashable, Sendable {
         var seen = Set<String>()
         result.text = (explicit + includes + excludes).filter { seen.insert($0).inserted }.joined(separator: " ")
         return result
+    }
+}
+
+/// Turns a work's related numbers into what is worth showing beside it.
+enum RelatedWorks {
+    static func load(for gallery: NativeGallery, source: any ContentProviding, hidden: Set<Int64>, excluded: String) async -> [Int64] {
+        let related = gallery.relatedIDs ?? []
+        let loaded = await withTaskGroup(of: (Int, NativeGallery?).self) { group in
+            for (index, id) in related.enumerated() { group.addTask { (index, try? await source.gallery(id)) } }
+            var results: [(Int, NativeGallery)] = []
+            for await (index, work) in group { if let work { results.append((index, work)) } }
+            return results.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+        return select(loaded, for: gallery, hidden: hidden, excluded: excluded)
+    }
+
+    /// Keeps the site's order, drops other languages of works already shown,
+    /// and prefers the language of the work being read.
+    static func select(_ works: [NativeGallery], for gallery: NativeGallery, hidden: Set<Int64>, excluded: String) -> [Int64] {
+        var seen = Set([gallery.id] + (gallery.versions ?? []).map(\.id))
+        return works.compactMap { work in
+            let family = Set([work.id] + (work.versions ?? []).map(\.id))
+            guard seen.isDisjoint(with: family), !work.isExcluded(by: excluded) else { return nil }
+            seen.formUnion(family)
+            let shown = work.suggestedVersion(for: gallery.language)?.id ?? work.id
+            return hidden.contains(work.id) || hidden.contains(shown) ? nil : shown
+        }
     }
 }
 

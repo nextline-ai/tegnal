@@ -4,6 +4,13 @@ import GRDB
 @testable import TEGNAL
 
 final class GridLayoutTests: XCTestCase {
+    func testShortWorksOnlyTakeTheRowsTheyFill() {
+        XCTAssertEqual(GalleryPreviewLayout.filledRows(total: 3, columns: 4, rows: 5), 1)
+        XCTAssertEqual(GalleryPreviewLayout.filledRows(total: 9, columns: 4, rows: 5), 3)
+        XCTAssertEqual(GalleryPreviewLayout.filledRows(total: 200, columns: 4, rows: 5), 5)
+        XCTAssertEqual(GalleryPreviewLayout.filledRows(total: 0, columns: 4, rows: 5), 1)
+    }
+
     @MainActor func testDiscordInvitationCadenceAndDismissalPersistAcrossSettingsAndRelaunch() throws {
         let suite = "discord-invitation-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

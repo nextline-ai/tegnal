@@ -16,6 +16,8 @@ struct NativeReaderView: View {
     let resumesProgress: Bool
     let offline: Bool
     let search: (String) -> Void
+    private let openWork: ((Int64, Int?) -> Void)?
+    @State private var pendingWork: (id: Int64, page: Int?)?
     let exit: () -> Void
     let changeWork: ((Int) -> Bool)?
     @SwiftUI.AppStorage("reader.continuousBackSwipe", store: ReaderPreferences.defaults) private var continuousBackSwipe = false
@@ -61,12 +63,12 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false
 
     init(galleryID: Int64, initialPage: Int, source: any ContentProviding, images: PageImageStore,
-         savesProgress: Bool, offline: Bool = false, resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void, changeWork: ((Int) -> Bool)? = nil) {
+         savesProgress: Bool, offline: Bool = false, resumesProgress: Bool = true, search: @escaping (String) -> Void, exit: @escaping () -> Void, changeWork: ((Int) -> Bool)? = nil, openWork: ((Int64, Int?) -> Void)? = nil) {
         self.changeWork = changeWork
         self.galleryID = galleryID; self.initialPage = initialPage
         self.source = source; self.images = images; self.savesProgress = savesProgress; self.offline = offline
         self.resumesProgress = resumesProgress
-        self.search = search; self.exit = exit
+        self.search = search; self.exit = exit; self.openWork = openWork
         let defaults = ReaderPreferences.defaults
         let saved = savesProgress ? defaults.integer(forKey: "reader_page_\(galleryID)") : 0
         let opening = ReaderResumeBehavior.stored(in: defaults).opening(initial: initialPage, saved: saved, resumesProgress: resumesProgress)
@@ -154,6 +156,7 @@ struct NativeReaderView: View {
         .accessibilityAddTraits(.isModal)
         .appSheet(item: $sheet, onDismiss: {
             if let pendingSearch { self.pendingSearch = nil; search(pendingSearch) }
+            if let pendingWork { self.pendingWork = nil; openWork?(pendingWork.id, pendingWork.page) }
             if pendingGuide { pendingGuide = false; menuVisible = false; guide.start() }
         }) { item in
             switch item {
@@ -162,7 +165,11 @@ struct NativeReaderView: View {
             case .information:
                 if let gallery {
                     ReaderWorkInformationView(gallery: gallery, images: images, current: $currentPage,
-                        search: { pendingSearch = $0; sheet = nil })
+                        search: { pendingSearch = $0; sheet = nil }, links: openWork.map { _ in
+                            // Another language keeps your place; a related work is a new start.
+                            GalleryWorkLinks(source: source, openVersion: { pendingWork = ($0, currentPage + 1); sheet = nil },
+                                             openRelated: { pendingWork = ($0, nil); sheet = nil })
+                        })
                 }
             }
         }
@@ -451,11 +458,17 @@ struct MangaReaderSession: View {
         self.savesProgress = savesProgress; self.resumesProgress = resumesProgress; self.search = search; self.exit = exit
     }
     @State private var switched = false
+    /// The work a linked work was opened from, so paging onward still follows the list.
+    @State private var position: Int64?
+    @State private var keptPage: Int?
     var body: some View {
-        NativeReaderView(galleryID: selected, initialPage: switched ? 1 : initialPage, source: source, images: images,
-                         savesProgress: savesProgress, resumesProgress: resumesProgress, search: { text in prepareClose(); search(text) }, exit: { prepareClose(); exit() }, changeWork: { delta in
-            guard let id = MangaReaderSequence.neighbor(selected, delta: delta, ids: sequence?.ids ?? []) else { return false }
-            selected = id; switched = true; return true
+        NativeReaderView(galleryID: selected, initialPage: keptPage ?? (switched ? 1 : initialPage), source: source, images: images,
+                         savesProgress: savesProgress, resumesProgress: keptPage == nil && resumesProgress, search: { text in prepareClose(); search(text) }, exit: { prepareClose(); exit() }, changeWork: { delta in
+            guard let id = MangaReaderSequence.neighbor(position ?? selected, delta: delta, ids: sequence?.ids ?? []) else { return false }
+            selected = id; switched = true; keptPage = nil; position = nil; return true
+        }, openWork: { id, page in
+            position = position ?? selected
+            selected = id; switched = true; keptPage = page
         }).id(selected)
     }
     private func prepareClose() {

@@ -1519,3 +1519,7 @@
 "Matching images move here from the folders you choose." = "選んだフォルダからタグが一致する画像をこのフォルダへ移動します。";
 "Matching works from the folders you choose are added here. They stay in those folders too." = "選んだフォルダからタグが一致する作品をこのフォルダに追加します。元のフォルダにも残ります。";
 "Hold a folder to make it a smart folder. Smart folders show %@ after their name." = "フォルダを長押しするとスマートフォルダにできます。スマートフォルダには名前の末尾に%@が付きます。";
+"Other Languages" = "他の言語";
+"Related Works" = "関連作品";
+"View in %@" = "%@版を見る";
+"Open the %@ version" = "%@版を開く";

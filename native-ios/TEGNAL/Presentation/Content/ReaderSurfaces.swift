@@ -43,7 +43,7 @@ struct GalleryDetailPreviews: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: GalleryPreviewLayout.height(rows: rows, geometry: geometry))
+                .frame(height: GalleryPreviewLayout.height(rows: GalleryPreviewLayout.filledRows(total: gallery.pages.count, columns: columns, rows: rows), geometry: geometry))
                 .padding(.horizontal, -20)
                 .onChange(of: columns) { _, _ in selectedPage = 0 }
                 .onChange(of: rows) { _, _ in selectedPage = 0 }
@@ -94,6 +94,10 @@ enum GalleryPreviewLayout {
         let size = pageSize(columns: columns, rows: rows)
         let start = min(max(0, page) * size, max(0, total))
         return start..<min(start + size, max(0, total))
+    }
+    /// A short work stops at the rows it fills, so what follows isn't left behind a gap.
+    static func filledRows(total: Int, columns: Int, rows: Int) -> Int {
+        min(max(1, rows), max(1, (max(0, total) + max(1, columns) - 1) / max(1, columns)))
     }
     static func height(rows: Int, geometry: ArtworkGridGeometry) -> CGFloat {
         let rows = max(1, rows)

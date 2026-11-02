@@ -195,6 +195,87 @@ final class NativeContentTests: XCTestCase {
         XCTAssertEqual(WorkMonthDestination.make([works[1]]).first?.firstGalleryID, 20)
     }
 
+    func testGalleryKeepsGroupsSeriesAndCharactersSoTheyCanBeSaved() throws {
+        let json: [String: Any] = ["title": "Credits", "artists": [["artist": "painter"]], "groups": [["group": "circle one"], ["group": ""]],
+                                   "parodys": [["parody": "some show"]], "characters": [["character": "hero"]], "tags": [["tag": "full color"]],
+                                   "files": [["hash": sampleHash, "name": "1.jpg"]]]
+        let gallery = try NativeGallery.parse(Data("var galleryinfo = ".utf8) + JSONSerialization.data(withJSONObject: json), id: 7)
+        XCTAssertEqual(gallery.tags, ["group:circle one", "series:some show", "character:hero", "tag:full color"])
+
+        let groups = ArtworkTagGroup.make(tags: gallery.tags)
+        XCTAssertEqual(Set(groups.map(\.category)), [.group, .series, .character, .general])
+        let database = try AppDatabase.inMemory()
+        for tag in groups.flatMap(\.tags) where tag.category != .general {
+            let kind = SavedCollectionKind(category: tag.category)
+            XCTAssertTrue(try database.toggleCollectionTag(tag.query, kind: kind))
+            let saved = try database.listArtists().filter { $0.kind == kind.mangaKind }.map { kind.query($0.name, manga: true) }
+            XCTAssertEqual(saved, [tag.query.replacingOccurrences(of: " ", with: "_")], "The saved star must match the tag")
+        }
+        XCTAssertTrue(try database.listArtists().contains { $0.name == "circle_one" && $0.kind == SavedCollectionKind.group.mangaKind })
+    }
+
+    func testGalleryReadsItsOtherLanguagesAndRelatedWorks() throws {
+        let json: [String: Any] = ["title": "Linked", "language": "english", "files": [["hash": sampleHash, "name": "1.jpg"]],
+            "languages": [["galleryid": 7, "name": "english", "language_localname": "English"],
+                          ["galleryid": "8", "name": "korean", "language_localname": "한국어"],
+                          ["galleryid": 8, "name": "korean"], ["galleryid": 9, "name": "japanese", "language_localname": NSNull()], ["name": "broken"]],
+            "related": [11, "12", 11, 0, "nope"]]
+        let gallery = try NativeGallery.parse(Data("var galleryinfo = ".utf8) + JSONSerialization.data(withJSONObject: json), id: 7)
+        XCTAssertEqual(gallery.versions?.map(\.id), [7, 8, 9], "Repeats and entries without a number are dropped")
+        XCTAssertEqual(gallery.relatedIDs, [11, 12])
+        XCTAssertEqual(gallery.otherVersions(preferring: "japanese").map(\.displayName), ["Japanese", "한국어"], "This work is left out and your language comes first")
+        XCTAssertEqual(gallery.suggestedVersion(for: "korean")?.id, 8)
+        XCTAssertNil(gallery.suggestedVersion(for: "english"), "Nothing to suggest when this is already the language")
+        XCTAssertNil(gallery.suggestedVersion(for: "french"))
+    }
+
+    func testAlternatesAreOptionalInAWorkAlreadyDownloaded() throws {
+        let saved = #"{"id":1,"title":"Old","artists":[],"language":"","type":"","tags":[],"pages":[]}"#
+        let gallery = try JSONDecoder().decode(NativeGallery.self, from: Data(saved.utf8))
+        XCTAssertNil(gallery.versions); XCTAssertNil(gallery.relatedIDs)
+        XCTAssertEqual(gallery.otherVersions(preferring: "korean"), [])
+    }
+
+    func testDefaultExclusionsApplyToAWorkLoadedDirectly() {
+        let gallery = NativeGallery(id: 1, title: "Summer Trip", artists: ["some_artist"], language: "korean", type: "manga",
+                                    tags: ["female:long hair", "group:circle one", "tag:full color"], pages: [])
+        for term in ["female:long_hair", "-female:long_hair", "artist:Some_Artist", "group:circle_one", "full_color", "summer", "type:manga", "a b language:korean"] {
+            XCTAssertTrue(gallery.isExcluded(by: term), term)
+        }
+        for term in ["", "-", "female:short_hair", "male:long_hair", "tag:long_hair", "winter", "language:japanese"] {
+            XCTAssertFalse(gallery.isExcluded(by: term), term)
+        }
+    }
+
+    func testRelatedWorksKeepOrderAndSkipWhatShouldNotShow() {
+        func work(_ id: Int64, language: String = "korean", versions: [GalleryVersion]? = nil, tags: [String] = []) -> NativeGallery {
+            NativeGallery(id: id, title: "Work \(id)", artists: [], language: language, type: "manga", tags: tags, pages: [], versions: versions)
+        }
+        let korean = GalleryVersion(id: 2, language: "korean", localName: nil), japanese = GalleryVersion(id: 3, language: "japanese", localName: nil)
+        let current = work(1, versions: [GalleryVersion(id: 1, language: "korean", localName: nil), GalleryVersion(id: 4, language: "english", localName: nil)])
+        let translated = GalleryVersion(id: 21, language: "korean", localName: nil), raw = GalleryVersion(id: 20, language: "japanese", localName: nil)
+        let works = [work(10), work(4, language: "english"), work(30, tags: ["tag:skip me"]), work(40), work(20, language: "japanese", versions: [raw, translated]),
+                     work(21, versions: [raw, translated]), work(3, language: "japanese", versions: [japanese, korean])]
+        XCTAssertEqual(RelatedWorks.select(works, for: current, hidden: [40], excluded: "tag:skip_me"), [10, 21, 2],
+                       "Order stays, this work's other languages go, hidden and excluded works go, and each work appears once in the reader's language")
+        XCTAssertEqual(RelatedWorks.select([work(3, language: "japanese", versions: [japanese, korean])], for: current, hidden: [2], excluded: ""), [])
+    }
+
+    func testRelatedWorksOutliveAWorkThatFailsToLoad() async {
+        let gallery = NativeGallery(id: 1, title: "Work", artists: [], language: "korean", type: "manga", tags: [], pages: [], relatedIDs: [5, 404, 6])
+        struct Source: ContentProviding {
+            func gallery(_ id: Int64) async throws -> NativeGallery {
+                if id == 404 { throw ContentError.galleryNotFound }
+                if id == 5 { try await Task.sleep(for: .milliseconds(50)) }
+                return NativeGallery(id: id, title: "Work", artists: [], language: "korean", type: "manga", tags: [], pages: [])
+            }
+            func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch { GalleryBatch(ids: [], hasMore: false) }
+            func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data { Data() }
+        }
+        let ids = await RelatedWorks.load(for: gallery, source: Source(), hidden: [], excluded: "")
+        XCTAssertEqual(ids, [5, 6], "The slower work keeps its place")
+    }
+
     func testGalleryParsesEntitiesAndPreservesPages() throws {
         let json: [String: Any] = ["title": "A &amp; B &#x1F4D6;", "japanese_title": "",
                                   "files": [["hash": sampleHash, "name": "page.png", "width": 800, "height": 1200, "hasavif": 1]]]

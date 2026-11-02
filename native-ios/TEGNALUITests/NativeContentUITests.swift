@@ -607,6 +607,98 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertEqual(artist.frame.minY, line, accuracy: 3)
     }
 
+    func testHoldingAGroupSavesIt() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.information").tap()
+        let group = element(app, "tags.group.group:sample circle")
+        XCTAssertTrue(group.waitForExistence(timeout: 5))
+        group.press(forDuration: 0.8)
+        Thread.sleep(forTimeInterval: 1)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); attachment.name = "group saved"; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    private func launchLinkedWork(_ language: String, locale: String, extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--work-links-test", "-AppleLanguages", "(\(language))", "-AppleLocale", locale] + extra
+        app.launch()
+        return app
+    }
+    private func shot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    func testAWorkLeadsToItsOtherLanguagesAndRelatedWorks() {
+        let app = launchLinkedWork("ko", locale: "ko_KR", extra: ["-manga.showInformationBeforeReading", "YES"])
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        let suggestion = element(app, "content.detail.versionSuggestion")
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 10), "An English work with a Korean version offers it to a Korean reader")
+        XCTAssertGreaterThan(suggestion.frame.minY, element(app, "content.bookmark").frame.maxY, "It sits just below Save to Library")
+        shot("language suggestion")
+        suggestion.tap()
+        wait(element(app, "content.detail.metadata"), "label BEGINSWITH %@", "korean")
+        XCTAssertFalse(element(app, "content.detail.versionSuggestion").exists, "Already in the reader's language")
+        XCTAssertTrue(element(app, "content.detail.version.900000001").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "content.detail.version.900000002").exists, "A work never links to itself")
+        shot("opened version")
+        app.navigationBars.buttons["BackButton"].tap()
+        wait(element(app, "content.detail.metadata"), "label BEGINSWITH %@", "english")
+
+        let scroll = app.scrollViews.matching(identifier: "content.detail.scroll").firstMatch
+        let related = element(app, "content.gallery.900000011")
+        for _ in 0..<8 where !related.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(related.waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "content.gallery.900000012").exists)
+        XCTAssertFalse(app.scrollViews.matching(identifier: "content.detail.related").firstMatch.descendants(matching: .any).matching(identifier: "content.gallery.900000002").firstMatch.exists,
+                       "This work's own translation is not a related work")
+        shot("related works")
+        related.tap()
+        wait(element(app, "content.detail.title"), "label CONTAINS %@", "900000011")
+    }
+
+    func testReaderInformationOffersYourLanguageBelowSaving() {
+        let app = launchLinkedWork("ko", locale: "ko_KR")
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.information").tap()
+        let suggestion = element(app, "content.detail.versionSuggestion")
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(suggestion.frame.minY, element(app, "content.bookmark").frame.maxY)
+        shot("reader language suggestion")
+    }
+
+    func testChangingLanguageInTheReaderKeepsThePage() {
+        let app = launchLinkedWork("en", locale: "en_US")
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        element(app, "reader.next").tap()
+        XCTAssertEqual(element(app, "reader.position").label, "Page 2 / 3")
+        element(app, "reader.information").tap()
+        let version = element(app, "content.detail.version.900000002")
+        XCTAssertTrue(version.waitForExistence(timeout: 5))
+        shot("reader languages")
+        version.tap()
+        XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
+        menu(app)
+        XCTAssertEqual(element(app, "reader.position").label, "Page 2 / 3")
+        element(app, "reader.information").tap()
+        wait(element(app, "content.detail.metadata"), "label BEGINSWITH %@", "korean")
+    }
+
     func testChoosingAFolderSavesAtOnceAndOffersAnotherChange() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

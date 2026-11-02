@@ -82,6 +82,11 @@ public struct NativeContentView: View {
         default: path.append(route)
         }
     }
+    /// A work linked from another work stacks on it, so going back returns there.
+    private func follow(_ route: ContentRoute) {
+        if case .discoveredReader(let id, let page, let context) = route { openReader(id, page, context) }
+        else { path.append(route) }
+    }
 
     public init(initialUrl: String = MangaUrls.home, embedded: Bool = false) {
         self.init(initialUrl: initialUrl, source: MangaContentSource.shared, embedded: embedded)
@@ -143,7 +148,7 @@ public struct NativeContentView: View {
     @ViewBuilder private func destination(_ route: ContentRoute) -> some View {
         switch route {
         case .discoveredGallery(let id, let context):
-            RemoteGalleryView(galleryID: id, source: source, images: images, read: openReader).environment(\.discoveryContext, context)
+            RemoteGalleryView(galleryID: id, source: source, images: images, read: openReader, follow: follow).environment(\.discoveryContext, context)
         case .discoveredReader(let id, let page, let context):
             MangaReaderSession(galleryID: id, initialPage: page, source: source, images: images, savesProgress: savesProgress, search: { text in
                 if !path.isEmpty { path.removeLast() }; path.append(.query(text))
@@ -154,7 +159,7 @@ public struct NativeContentView: View {
                 path.append(.query(text))
             }, exit: { if path.isEmpty { dismiss() } else { path.removeLast() } }, willClose: willCloseManga)
         case .gallery(let id):
-            RemoteGalleryView(galleryID: id, source: source, images: images, read: openReader)
+            RemoteGalleryView(galleryID: id, source: source, images: images, read: openReader, follow: follow)
         case .artist(let name):
             GalleryFeedView(artist: name, source: source, images: images, navigate: navigate)
         case .query(let text):
@@ -561,13 +566,21 @@ private struct RemoteGalleryView: View {
     @State private var error: String?
     @State private var retry = 0
     var read: (Int64, Int, DiscoveryContext, Bool) -> Void
+    var follow: (ContentRoute) -> Void
+
+    private var links: GalleryWorkLinks {
+        GalleryWorkLinks(source: source,
+            openVersion: { follow(.discoveredGallery($0, discovery)) },
+            // A related work wasn't searched for, so it must not count as a match for this search.
+            openRelated: { follow(MangaThumbnailOpening.stored().route(for: $0, context: DiscoveryContext(origin: .feed, session: discovery.session))) })
+    }
 
     var body: some View {
         Group {
             if let gallery {
                 GalleryWorkInformation(gallery: gallery, images: images, cover: cover, coverFinished: coverFinished,
                     read: { read(galleryID, 1, discovery, true) },
-                    selectPage: { read(galleryID, $0 + 1, discovery, false) })
+                    selectPage: { read(galleryID, $0 + 1, discovery, false) }, links: links)
             } else if let error { ContentFailureView(message: error) { retry += 1 } }
             else { ProgressView(L10n.text("Loading work details")) }
         }
@@ -594,10 +607,18 @@ private struct RemoteGalleryView: View {
     }
 }
 
+/// Where a work's other languages and related works lead. Offline reading has none.
+struct GalleryWorkLinks {
+    let source: any ContentProviding
+    let openVersion: (Int64) -> Void
+    let openRelated: (Int64) -> Void
+}
+
 /// Explore, saved works and the viewer use the same work information sections.
 /// The viewer omits only the cover and the action that would open another reader.
 struct GalleryWorkInformation: View {
     @Environment(\.discoveryContext) private var discovery
+    @Environment(AppEnvironment.self) private var env
     let gallery: NativeGallery
     let images: PageImageStore
     var cover: UIImage? = nil
@@ -606,8 +627,11 @@ struct GalleryWorkInformation: View {
     var read: (() -> Void)? = nil
     let selectPage: (Int) -> Void
     var search: ((String) -> Void)? = nil
+    var links: GalleryWorkLinks? = nil
     @State private var previewsEnabled = false
     @State private var bookmark: ContentBookmark?
+    @State private var savedIDs = Set<Int64>()
+    @State private var saveFeedback: WorkSaveFeedback?
 
     var body: some View {
         GeometryReader { viewport in
@@ -615,22 +639,108 @@ struct GalleryWorkInformation: View {
                 VStack(alignment: .leading, spacing: 22) {
                     GalleryInformation(gallery: gallery, cover: cover, coverFinished: coverFinished,
                         showsCover: showsCover, read: read,
-                        bookmark: { bookmark = ContentBookmark(id: gallery.id) }, search: search)
+                        bookmark: { bookmark = ContentBookmark(id: gallery.id) }, search: search,
+                        openVersion: links?.openVersion, savedIDs: savedIDs)
                         .onGeometryChange(for: Bool.self) { geometry in
                             GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
                                                              viewportHeight: viewport.size.height)
                         } action: { if $0 { previewsEnabled = true } }
                     GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled, select: selectPage)
                         .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
+                    if let links, previewsEnabled, gallery.relatedIDs?.isEmpty == false {
+                        GalleryRelatedWorks(gallery: gallery, images: images, links: links, savedIDs: savedIDs, feedback: $saveFeedback)
+                    }
                     MangaContentControls(gallery: gallery)
                 }.padding(20)
             }
             .coordinateSpace(name: "gallery.detailViewport")
             .accessibilityIdentifier("content.detail.scroll")
         }
+        .workSaveFeedback($saveFeedback, identifier: "content.toast")
         .appSheet(item: $bookmark) { target in
             AddWorkSheet(initialText: String(target.id)).environment(\.discoveryContext, discovery)
         }
+        .task {
+            guard links != nil else { return }
+            do {
+                let observation = ValueObservation.tracking { db in
+                    Set(try Int64.fetchAll(db, sql: "SELECT gallery_id FROM works"))
+                }
+                for try await ids in observation.values(in: env.database.dbWriter) { savedIDs = ids }
+            } catch { /* Saved marks are a hint, so a dropped observation keeps the last ones. */ }
+        }
+    }
+}
+
+/// Five or so works sit better in a rail than in a grid set for browsing a whole feed.
+private struct GalleryRelatedWorks: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.discoveryContext) private var discovery
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 132
+    let gallery: NativeGallery
+    let images: PageImageStore
+    let links: GalleryWorkLinks
+    let savedIDs: Set<Int64>
+    @Binding var feedback: WorkSaveFeedback?
+    @State private var ids: [Int64]?
+
+    private var style: ArtworkCellStyle {
+        ArtworkCellStyle(width: cardWidth, showsTitle: env.showsMangaTitles, showsArtists: env.showsMangaArtists)
+    }
+
+    var body: some View {
+        let visible = ids?.filter { !env.hiddenMangaGalleryIDs.contains($0) }
+        Group {
+            if visible?.isEmpty != true {
+                VStack(alignment: .leading, spacing: 16) {
+                    Divider()
+                    Text(L10n.text("Related Works")).font(.headline)
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            if let visible {
+                                ForEach(visible, id: \.self) { id in
+                                    GalleryGridCard(id: id, preview: nil, isBookmarked: savedIDs.contains(id), source: links.source, images: images, open: { links.openRelated(id) }) { work in
+                                        feedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: work, env: env, images: images, context: discovery) }
+                                    }.frame(width: cardWidth)
+                                }
+                            } else {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    RoundedRectangle(cornerRadius: style.radius(12), style: .continuous).fill(Color.secondary.opacity(0.12))
+                                        .aspectRatio(0.72, contentMode: .fit).frame(width: cardWidth)
+                                }.accessibilityHidden(true)
+                            }
+                        }.scrollTargetLayout()
+                    }
+                    .scrollIndicators(.hidden).scrollTargetBehavior(.viewAligned)
+                    .contentMargins(.horizontal, 20, for: .scrollContent).padding(.horizontal, -20)
+                    .environment(\.artworkCellStyle, style)
+                    .accessibilityIdentifier("content.detail.related")
+                }
+            }
+        }
+        .task(id: gallery.id) {
+            let found = await RelatedWorks.load(for: gallery, source: links.source, hidden: env.hiddenMangaGalleryIDs, excluded: env.defaultExcludedTags)
+            if !Task.isCancelled { ids = found }
+        }
+    }
+}
+
+/// Reading in your own language is usually the point of having versions at all.
+private struct GalleryVersionSuggestion: View {
+    let version: GalleryVersion
+    let open: () -> Void
+    var body: some View {
+        let color = ArtworkTagCategory.language.color
+        Button(action: open) {
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                Text(L10n.text("View in %@", version.displayName)).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.bold()).opacity(0.6)
+            }
+            .foregroundStyle(color).padding(.horizontal, 14).padding(.vertical, 11)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        }.buttonStyle(.plain).accessibilityIdentifier("content.detail.versionSuggestion")
     }
 }
 
@@ -640,10 +750,11 @@ struct ReaderWorkInformationView: View {
     let images: PageImageStore
     @Binding var current: Int
     let search: (String) -> Void
+    var links: GalleryWorkLinks? = nil
     var body: some View {
         NavigationStack {
             GalleryWorkInformation(gallery: gallery, images: images, showsCover: false,
-                selectPage: { current = $0; dismiss() }, search: search)
+                selectPage: { current = $0; dismiss() }, search: search, links: links)
                 .navigationTitle(L10n.text("Work Details")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
         }
@@ -659,12 +770,23 @@ private struct GalleryInformation: View {
     let read: (() -> Void)?
     let bookmark: () -> Void
     let search: ((String) -> Void)?
+    let openVersion: ((Int64) -> Void)?
+    let savedIDs: Set<Int64>
+    @Environment(AppEnvironment.self) private var env
+    private var suggestion: GalleryVersion? {
+        gallery.suggestedVersion(for: L10n.contentLanguage).flatMap { env.hiddenMangaGalleryIDs.contains($0.id) ? nil : $0 }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             if showsCover { WorkDetailCover(image: cover, loading: !coverFinished) }
             GalleryDetailHeading(title: gallery.title, metadata: L10n.text("%@ · %@ · %@ pages", gallery.language, gallery.type, String(gallery.pages.count)))
-            GalleryDetailActions(read: read, bookmark: bookmark)
-            GalleryDetailMetadata(gallery: gallery, search: search)
+            VStack(spacing: 11) {
+                GalleryDetailActions(read: read, bookmark: bookmark)
+                if let openVersion, let suggestion {
+                    GalleryVersionSuggestion(version: suggestion) { openVersion(suggestion.id) }
+                }
+            }
+            GalleryDetailMetadata(gallery: gallery, search: search, openVersion: openVersion, savedIDs: savedIDs)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -673,6 +795,8 @@ private struct GalleryDetailMetadata: View {
     @Environment(AppEnvironment.self) private var env
     let gallery: NativeGallery
     let search: ((String) -> Void)?
+    let openVersion: ((Int64) -> Void)?
+    let savedIDs: Set<Int64>
     @State private var favoriteArtists = Set<String>()
     @State private var favoriteError: String?
     @State private var savedTagQueries = Set<String>()
@@ -712,6 +836,20 @@ private struct GalleryDetailMetadata: View {
                         .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(gallery.language, kind: .language) })
                 }
             }
+            if let openVersion, !versions.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text("Other Languages")).font(.headline)
+                    FlowLayout(spacing: 6) {
+                        ForEach(versions) { version in
+                            Button { openVersion(version.id) } label: { versionTag(version) }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(L10n.text("Open the %@ version", version.displayName))
+                                .accessibilityValue(savedIDs.contains(version.id) ? L10n.text("Bookmarked") : L10n.text("Not bookmarked"))
+                                .accessibilityIdentifier("content.detail.version.\(version.id)")
+                        }
+                    }
+                }
+            }
             VStack(alignment: .leading, spacing: 4) {
                 SettingsHelpLabel("Tags", help: "Hold an artist or tag to add it to your favorites. Hold it again to remove it.").font(.headline)
                 if groups.allSatisfy({ $0.tags.isEmpty }) { MetadataPlaceholder() }
@@ -727,6 +865,17 @@ private struct GalleryDetailMetadata: View {
         .alert(L10n.text("Unable to Save"), isPresented: Binding(get: { favoriteError != nil }, set: { if !$0 { favoriteError = nil } })) {
             Button(L10n.text("Done"), role: .cancel) { favoriteError = nil }
         } message: { Text(favoriteError ?? "") }
+    }
+    private var versions: [GalleryVersion] {
+        gallery.otherVersions(preferring: L10n.contentLanguage).filter { !env.hiddenMangaGalleryIDs.contains($0.id) }
+    }
+    /// The chevron sets these apart from the language above, which searches instead of opening a work.
+    private func versionTag(_ version: GalleryVersion) -> some View {
+        HStack(spacing: 4) {
+            if savedIDs.contains(version.id) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow) }
+            Text(version.displayName)
+            Image(systemName: "chevron.right").font(.caption2.bold()).opacity(0.6)
+        }.foregroundStyle(ArtworkTagCategory.language.color).modifier(ArtworkTagPill(color: ArtworkTagCategory.language.color))
     }
     private var languageSaved: Bool { savedTagQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true)) }
     private var languageTag: some View {
