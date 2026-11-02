@@ -722,7 +722,7 @@ private struct GalleryRelatedWorks: View {
     @State private var ids: [Int64]?
 
     private var style: ArtworkCellStyle {
-        ArtworkCellStyle(width: cardWidth, showsTitle: env.showsMangaTitles, showsArtists: env.showsMangaArtists)
+        ArtworkCellStyle(width: cardWidth, showsTitle: env.showsMangaTitles, showsArtists: env.showsMangaArtists, showsCategory: env.showsMangaCategories)
     }
 
     var body: some View {

@@ -138,6 +138,7 @@ final class NativeContentTests: XCTestCase {
         XCTAssertEqual(GalleryCategory.key("Artist CG"), "artistcg")
         XCTAssertEqual(GalleryCategory.key("non-h"), "non-h")
         XCTAssertEqual(GalleryCategory.title("unknown"), "Unknown")
+        XCTAssertFalse(AppEnvironment.preview().showsMangaCategories, "Thumbnails show categories only once turned on")
     }
 
     func testSearchVisibilityAccumulatesSlowScrollAndKeepsFocusedSearchVisible() {

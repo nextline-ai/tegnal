@@ -1545,3 +1545,5 @@
 "No Works in This Category" = "No Works in This Category";
 "Show All Categories" = "Show All Categories";
 "%@ (%@)" = "%@ (%@)";
+"Show Work Categories" = "Show Work Categories";
+"Shows each work's category, such as doujinshi or manga, in the bottom-left corner of its thumbnail." = "Shows each work's category, such as doujinshi or manga, in the bottom-left corner of its thumbnail.";

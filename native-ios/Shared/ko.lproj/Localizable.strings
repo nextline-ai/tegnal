@@ -1545,3 +1545,5 @@
 "No Works in This Category" = "이 카테고리에 작품이 없습니다";
 "Show All Categories" = "모든 카테고리 보기";
 "%@ (%@)" = "%@ (%@)";
+"Show Work Categories" = "작품 카테고리 표시";
+"Shows each work's category, such as doujinshi or manga, in the bottom-left corner of its thumbnail." = "썸네일 왼쪽 아래에 동인지, 만화 같은 작품 카테고리를 표시합니다.";

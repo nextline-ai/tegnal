@@ -157,7 +157,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testCategoryMenuNarrowsTheFeedAndCardsShowTheirCategory() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "-manga.browseCategory", "", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "--show-categories", "-AppleLanguages", "(en)"]
         app.launch()
         let manga = element(app, "content.gallery.900000001")
         XCTAssertTrue(manga.waitForExistence(timeout: 15))
@@ -177,7 +177,7 @@ final class NativeContentUITests: XCTestCase {
 
     func testLibraryCategoryMenuCountsAndNarrowsSavedWorks() {
         let app = XCUIApplication()
-        app.launchArguments = ["--native-content-ui-test", "--category-library-test", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["--native-content-ui-test", "--category-library-test", "--show-categories", "-AppleLanguages", "(en)"]
         app.launch()
         XCTAssertTrue(element(app, "works.card.900000002").waitForExistence(timeout: 10))
         XCTAssertTrue(element(app, "works.card.900000002").label.contains("Artist CG"))

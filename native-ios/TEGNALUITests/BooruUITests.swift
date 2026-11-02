@@ -719,6 +719,26 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
 
+    func testComicCategoriesOnThumbnailsStartHiddenAndCanBeShown() {
+        let app = launch()
+        selectMode(app, "manga")
+        app.tabBars.buttons["Settings"].tap()
+        let toggle = reveal(app, "settings.showMangaCategories")
+        // A partly visible row can sit under the floating tab bar.
+        for _ in 0..<4 where toggle.frame.maxY > app.frame.maxY - 140 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        }
+        XCTAssertEqual(toggle.value as? String, "0", "Categories stay off the thumbnails until turned on")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: toggle)
+        waitForExpectations(timeout: 5)
+        capture(app, "Comic category display setting")
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
+        capture(app, "Comic thumbnails with categories")
+    }
+
     func testRefreshingSavedWorkInformationAsksFirst() {
         let app = launch(extra: ["--taste-ui-rich"])
         selectMode(app, "manga")

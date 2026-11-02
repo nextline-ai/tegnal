@@ -14,6 +14,7 @@ struct ArtworkCellStyle: Equatable {
     var removesPadding = false
     var showsTitle = true
     var showsArtists = true
+    var showsCategory = false
     var columns = 1
     var scale: CGFloat { min(1, max(0.2, width / 160)) }
     func inset(_ value: CGFloat) -> CGFloat { removesPadding ? 0 : value * scale }
@@ -65,7 +66,8 @@ struct ArtworkGrid<Content: View>: View {
         let geometry = ArtworkGridGeometry(width: width, columns: columns,
             minimum: kind == .folders && sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: mode))
         let style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: env.removesGridPadding(for: mode),
-            showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists, columns: geometry.count)
+            showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists,
+            showsCategory: mode == .manga && env.showsMangaCategories, columns: geometry.count)
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing, alignment: .top), count: geometry.count), alignment: .leading, spacing: geometry.spacing) {
             content(style)
         }
@@ -100,7 +102,7 @@ struct GalleryCardLayout<Cover: View>: View {
                 if showsLanguage {
                     // A narrow card keeps the language and lets the category go.
                     ViewThatFits(in: .horizontal) {
-                        badges(category: category)
+                        badges(category: style.showsCategory ? category : "")
                         badges(category: "")
                     }.padding(style.inset(6))
                 }

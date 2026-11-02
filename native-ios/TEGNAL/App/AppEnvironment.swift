@@ -346,6 +346,7 @@ public final class AppEnvironment: @unchecked Sendable {
     private var booruRemovesGridPadding: Bool
     var showsMangaTitles: Bool { didSet { browserPreferences.set(showsMangaTitles, forKey: "manga.grid.showTitles") } }
     var showsMangaArtists: Bool { didSet { browserPreferences.set(showsMangaArtists, forKey: "manga.grid.showArtists") } }
+    var showsMangaCategories: Bool { didSet { browserPreferences.set(showsMangaCategories, forKey: "manga.grid.showCategories") } }
     private var mangaFolderColumns: Int
     private var booruFolderColumns: Int
 
@@ -471,7 +472,7 @@ public final class AppEnvironment: @unchecked Sendable {
             booruSafeMode = false; booruSafeRating = .general
         } else {
             mangaTheme = .dark; mangaColumns = 0; mangaFolderColumns = 0; mangaRemovesGridPadding = false
-            mangaPreviewColumns = 0; mangaPreviewRows = 5; showsMangaTitles = true; showsMangaArtists = true
+            mangaPreviewColumns = 0; mangaPreviewRows = 5; showsMangaTitles = true; showsMangaArtists = true; showsMangaCategories = false
             allowsMangaLanguageExceptions = false; defaultTags = ""; defaultExcludedTags = ""; useEmbeddedBrowser = false
         }
         browserPreferences.set(AppTheme.dark.rawValue, forKey: booru ? "booru.app_theme" : "app_theme")
@@ -578,6 +579,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.booruRemovesGridPadding = browserPreferences.bool(forKey: "booru.grid.noPadding")
         self.showsMangaTitles = browserPreferences.object(forKey: "manga.grid.showTitles") as? Bool ?? true
         self.showsMangaArtists = browserPreferences.object(forKey: "manga.grid.showArtists") as? Bool ?? true
+        self.showsMangaCategories = browserPreferences.bool(forKey: "manga.grid.showCategories")
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")

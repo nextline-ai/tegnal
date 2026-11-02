@@ -102,6 +102,7 @@ enum ContentUITestSupport {
                     type: FixtureContentSource.categories[Int(id % 5)], tags: "tag:example")
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--show-categories") { env.showsMangaCategories = true }
         if ProcessInfo.processInfo.arguments.contains("--browser-fallback-test") { env.useEmbeddedBrowser = true }
         if libraryJumpTest {
             let folder = try! env.database.createFolder(name: "이동 테스트")

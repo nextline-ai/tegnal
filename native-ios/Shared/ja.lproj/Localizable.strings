@@ -1545,3 +1545,5 @@
 "No Works in This Category" = "このカテゴリの作品はありません";
 "Show All Categories" = "すべてのカテゴリを表示";
 "%@ (%@)" = "%@(%@)";
+"Show Work Categories" = "作品カテゴリを表示";
+"Shows each work's category, such as doujinshi or manga, in the bottom-left corner of its thumbnail." = "サムネイルの左下に同人誌やマンガなどの作品カテゴリを表示します。";

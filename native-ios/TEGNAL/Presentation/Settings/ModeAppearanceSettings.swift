@@ -36,6 +36,9 @@ struct ModeAppearanceSettings: View {
                 }.pickerStyle(.menu).accessibilityIdentifier("settings.previewRows")
                 Toggle(L10n.text("Show Work Titles"), isOn: $env.showsMangaTitles).accessibilityIdentifier("settings.showMangaTitles")
                 Toggle(L10n.text("Show Work Artists"), isOn: $env.showsMangaArtists).accessibilityIdentifier("settings.showMangaArtists")
+                Toggle(isOn: $env.showsMangaCategories) {
+                    SettingsHelpLabel("Show Work Categories", help: "Shows each work's category, such as doujinshi or manga, in the bottom-left corner of its thumbnail.")
+                }.accessibilityIdentifier("settings.showMangaCategories")
             }
         }
     }
