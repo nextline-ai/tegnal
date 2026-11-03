@@ -21,6 +21,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The theme or language changed in Settings, so the app rebuilds around it.
+  void appearanceChanged() => notifyListeners();
+
   AppTab get tab => _tab;
   set tab(AppTab value) {
     if (value == _tab) return;

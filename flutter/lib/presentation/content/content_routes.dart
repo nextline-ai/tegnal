@@ -8,6 +8,8 @@ import '../../core/taste/taste_models.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import 'content_bookmark.dart';
+import '../design/app_sheet.dart';
+import '../settings/downloads_view.dart';
 import 'explore_view.dart';
 import 'gallery_detail_view.dart';
 import 'page_image_store.dart';
@@ -17,7 +19,15 @@ import 'work_save_feedback.dart';
 
 /// Where works open from Explore, details and the reader: `NativeContentView.navigate`.
 class ContentRoutes {
-  ContentRoutes({required this.state, required this.content, required this.database, required this.images, required this.preferences, required this.bookmarks});
+  ContentRoutes({
+    required this.state,
+    required this.content,
+    required this.database,
+    required this.images,
+    required this.preferences,
+    required this.bookmarks,
+    this.downloads,
+  });
 
   final AppState state;
   final ContentEnvironment content;
@@ -25,6 +35,9 @@ class ContentRoutes {
   final PageImageStore images;
   final Preferences preferences;
   final BookmarkSession bookmarks;
+
+  /// Where the reader's Download Work queues a work.
+  final DownloadsContext? downloads;
 
   ContentProviding get source => content.source;
 
@@ -81,7 +94,16 @@ class ContentRoutes {
     resumesProgress: resumesProgress,
     bookmark: (gallery) async => toggleBookmark(context, id, gallery),
     search: (text) => search(context, text),
+    download: downloads == null
+        ? null
+        : (readerContext, gallery) {
+            downloads!.store.enqueue(gallery);
+            _showDownloads(readerContext);
+          },
   );
+
+  void _showDownloads(BuildContext context) =>
+      showAppSheet<void>(context, builder: (context, controller) => DownloadsView(downloads: downloads!, inSheet: true));
 
   void toggleBookmark(BuildContext context, int id, NativeGallery? gallery, {bool aboveTabBar = false}) => showWorkSaveFeedback(
     context,

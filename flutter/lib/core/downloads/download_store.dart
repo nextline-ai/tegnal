@@ -27,6 +27,60 @@ enum WorkDownloadStatus {
 
   static WorkDownloadStatus fromRawValue(String value) =>
       values.firstWhere((status) => status.name == value, orElse: () => throw SwiftJsonError('Unknown status "$value"'));
+
+  /// The English key for `L10n.text`, as the downloads list labels each item.
+  String get title => switch (this) {
+    queued => 'Queued',
+    downloading => 'Downloading',
+    paused => 'Paused',
+    failed => 'Failed',
+    completed => 'Completed',
+  };
+
+  /// The download actions menu offers Pause while running, and Retry or Resume when stopped.
+  bool get canPause => this == queued || this == downloading;
+  bool get canResume => this == paused || this == failed;
+  String get resumeTitle => this == failed ? 'Retry' : 'Resume';
+}
+
+/// `ByteCountFormatter` with the `.file` style: decimal units, whole kilobytes,
+/// one decimal for megabytes and two above, in the app language's spelling.
+abstract final class FileByteCount {
+  static String format(int bytes, {required String language}) {
+    final spaced = language != 'ko';
+    String unit(String value, String name) => spaced ? '$value $name' : '$value$name';
+    if (bytes <= 0) {
+      return switch (language) {
+        'ko' => '0KB',
+        'ja' => '0 KB',
+        _ => 'Zero KB',
+      };
+    }
+    if (bytes < 1000) {
+      return switch (language) {
+        'ko' => '$bytes바이트',
+        'ja' => '$bytes バイト',
+        _ => bytes == 1 ? '1 byte' : '$bytes bytes',
+      };
+    }
+    const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+    var value = bytes / 1000;
+    var index = 0;
+    while (value >= 999.5 && index < units.length - 1) {
+      value /= 1000;
+      index++;
+    }
+    final digits = index == 0 ? 0 : (index == 1 ? 1 : 2);
+    var text = value.toStringAsFixed(digits);
+    if (text.contains('.')) text = text.replaceFirst(RegExp(r'\.?0+$'), '');
+    return unit(_grouped(text), units[index]);
+  }
+
+  static String _grouped(String number) {
+    final parts = number.split('.');
+    final whole = parts[0].replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (match) => '${match[1]},');
+    return parts.length > 1 ? '$whole.${parts[1]}' : whole;
+  }
 }
 
 /// `WorkDownload`: one downloaded work and its files, as `downloads.json` stores it.

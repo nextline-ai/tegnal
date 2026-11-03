@@ -259,3 +259,48 @@ class _PalettePainter extends CustomPainter {
   @override
   bool shouldRepaint(_PalettePainter old) => old.color != color;
 }
+
+/// `externaldrive`: a drive's rounded box, with its status light and a slot along the bottom.
+class ExternalDriveSymbol extends StatelessWidget {
+  const ExternalDriveSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _ExternalDrivePainter(resolved));
+  }
+}
+
+class _ExternalDrivePainter extends CustomPainter {
+  _ExternalDrivePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * unit
+      ..strokeJoin = StrokeJoin.round;
+    // The body: a flat top edge tapering in from the sides, over a rounded box.
+    final body = Path()
+      ..moveTo(4.6 * unit, 6.5 * unit)
+      ..lineTo(19.4 * unit, 6.5 * unit)
+      ..lineTo(22.2 * unit, 13 * unit)
+      ..lineTo(22.2 * unit, 16.5 * unit)
+      ..arcToPoint(Offset(20 * unit, 18.7 * unit), radius: Radius.circular(2.2 * unit))
+      ..lineTo(4 * unit, 18.7 * unit)
+      ..arcToPoint(Offset(1.8 * unit, 16.5 * unit), radius: Radius.circular(2.2 * unit))
+      ..lineTo(1.8 * unit, 13 * unit)
+      ..close();
+    canvas.drawPath(body, stroke);
+    canvas.drawLine(Offset(1.8 * unit, 13 * unit), Offset(22.2 * unit, 13 * unit), stroke);
+    canvas.drawCircle(Offset(18.2 * unit, 15.9 * unit), 1.1 * unit, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_ExternalDrivePainter old) => old.color != color;
+}

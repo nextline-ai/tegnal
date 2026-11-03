@@ -46,12 +46,56 @@ SYSTEM = {
     },
 }
 
+# Android-only wording, where the native app names an Apple service (iCloud) that the
+# Android app replaces with Google Drive. The rest of the sync wording is native.
+ANDROID = {
+    "Google Drive": {"en": "Google Drive", "ko": "Google 드라이브", "ja": "Google ドライブ"},
+    "Google Drive Sync": {"en": "Google Drive Sync", "ko": "Google 드라이브 동기화", "ja": "Google ドライブ同期"},
+    "Connect Google Account": {"en": "Connect Google Account", "ko": "Google 계정 연결", "ja": "Google アカウントを接続"},
+    "Disconnect Google Account": {"en": "Disconnect Google Account", "ko": "Google 계정 연결 해제", "ja": "Google アカウントの接続を解除"},
+    "Google Account": {"en": "Google Account", "ko": "Google 계정", "ja": "Google アカウント"},
+    "Sync is not set up in this build.": {
+        "en": "Sync is not set up in this build.",
+        "ko": "이 빌드에는 동기화가 설정되어 있지 않습니다.",
+        "ja": "このビルドでは同期が設定されていません。",
+    },
+    "Sign in to Google to sync.": {
+        "en": "Sign in to Google to sync.",
+        "ko": "동기화하려면 Google에 로그인하세요.",
+        "ja": "同期するには Google にサインインしてください。",
+    },
+    "Waiting for Google Drive": {"en": "Waiting for Google Drive", "ko": "Google 드라이브를 기다리는 중", "ja": "Google ドライブを待っています"},
+    "Google Drive Sync On": {"en": "Google Drive Sync On", "ko": "Google 드라이브 동기화 켜짐", "ja": "Google ドライブ同期オン"},
+    "Some Google Drive files could not be read. Other changes were merged. Try syncing again.": {
+        "en": "Some Google Drive files could not be read. Other changes were merged. Try syncing again.",
+        "ko": "일부 Google 드라이브 파일을 읽지 못했습니다. 나머지 변경 사항은 병합되었습니다. 다시 동기화해 보세요.",
+        "ja": "一部の Google ドライブのファイルを読み込めませんでした。ほかの変更は統合されました。もう一度同期してください。",
+    },
+    "Google Drive Sync Documents": {"en": "Google Drive Sync Documents", "ko": "Google 드라이브 동기화 문서", "ja": "Google ドライブ同期書類"},
+    "Keeps both libraries, folders and general settings in sync across your Android devices through a TEGNAL folder in your Google Drive. Layout, viewer preferences, downloaded media and sign-in details stay on each device.": {
+        "en": "Keeps both libraries, folders and general settings in sync across your Android devices through a TEGNAL folder in your Google Drive. Layout, viewer preferences, downloaded media and sign-in details stay on each device.",
+        "ko": "Google 드라이브의 TEGNAL 폴더를 통해 Android 기기 사이에서 두 라이브러리, 폴더, 일반 설정을 동기화합니다. 레이아웃, 뷰어 설정, 다운로드한 미디어, 로그인 정보는 각 기기에만 남습니다.",
+        "ja": "Google ドライブの TEGNAL フォルダを通じて、Android デバイス間で両方のライブラリ、フォルダ、一般設定を同期します。レイアウト、ビューアの設定、ダウンロードしたメディア、サインイン情報は各デバイスに残ります。",
+    },
+    "Turn Off Google Drive Sync?": {"en": "Turn Off Google Drive Sync?", "ko": "Google 드라이브 동기화를 끌까요?", "ja": "Google ドライブ同期をオフにしますか？"},
+    "Changes on this device will stop syncing. Existing data on this device and in Google Drive will be kept. Turning sync on again will merge changes.": {
+        "en": "Changes on this device will stop syncing. Existing data on this device and in Google Drive will be kept. Turning sync on again will merge changes.",
+        "ko": "이 기기의 변경 사항이 더 이상 동기화되지 않습니다. 이 기기와 Google 드라이브에 있는 기존 데이터는 유지됩니다. 동기화를 다시 켜면 변경 사항이 병합됩니다.",
+        "ja": "このデバイスの変更は同期されなくなります。このデバイスと Google ドライブにある既存のデータは保持されます。同期を再びオンにすると変更が統合されます。",
+    },
+    "Unable to connect Google Account: %@": {
+        "en": "Unable to connect Google Account: %@",
+        "ko": "Google 계정을 연결할 수 없습니다: %@",
+        "ja": "Google アカウントを接続できません: %@",
+    },
+}
+
 
 def main() -> None:
     TARGET.mkdir(parents=True, exist_ok=True)
     for language in ("en", "ko", "ja"):
         table = parse(SOURCE / f"{language}.lproj" / "Localizable.strings")
-        for key, values in SYSTEM.items():
+        for key, values in {**SYSTEM, **ANDROID}.items():
             table.setdefault(key, values[language])
         output = TARGET / f"{language}.json"
         output.write_text(json.dumps(table, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")

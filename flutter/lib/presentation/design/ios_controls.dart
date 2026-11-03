@@ -145,3 +145,79 @@ class TegnalSlider extends StatelessWidget {
     );
   }
 }
+
+/// The iOS 26 segmented `Picker`: a 32 pt capsule track with a 2 pt inset pill under the choice.
+class TegnalSegmented<T> extends StatelessWidget {
+  const TegnalSegmented({super.key, required this.options, required this.selected, required this.onSelected});
+  final List<(T, String)> options;
+  final T selected;
+  final ValueChanged<T> onSelected;
+
+  static const track = CupertinoDynamicColor.withBrightness(color: Color(0xFFE6E6EB), darkColor: Color(0xFF313136));
+  static const pill = CupertinoDynamicColor.withBrightness(color: Color(0xFFFFFFFF), darkColor: Color(0xFF69696F));
+
+  @override
+  Widget build(BuildContext context) {
+    final label = TegnalColors.label.resolveFrom(context);
+    final index = options.indexWhere((option) => option.$1 == selected);
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.all(2),
+      decoration: ShapeDecoration(color: track.resolveFrom(context), shape: const StadiumBorder()),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth / options.length;
+          return Stack(
+            children: [
+              if (index >= 0)
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  left: width * index,
+                  top: 0,
+                  bottom: 0,
+                  width: width,
+                  child: Container(
+                    decoration: ShapeDecoration(
+                      color: pill.resolveFrom(context),
+                      shape: const StadiumBorder(),
+                      shadows: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                          ? const []
+                          : const [BoxShadow(color: Color(0x1F000000), blurRadius: 6, offset: Offset(0, 2))],
+                    ),
+                  ),
+                ),
+              Row(
+                children: [
+                  for (final (value, title) in options)
+                    Expanded(
+                      child: Semantics(
+                        button: true,
+                        selected: value == selected,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (value == selected) return;
+                            HapticFeedback.selectionClick();
+                            onSelected(value);
+                          },
+                          child: Center(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TegnalType.style(14, weight: value == selected ? FontWeight.w600 : FontWeight.w400, color: label),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}

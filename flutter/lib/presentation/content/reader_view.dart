@@ -38,6 +38,7 @@ Future<void> openReader(
   bool resumesProgress = true,
   required Future<void> Function(NativeGallery gallery) bookmark,
   ValueChanged<String>? search,
+  void Function(BuildContext context, NativeGallery gallery)? download,
 }) => Navigator.of(context, rootNavigator: true).push<void>(
   PageRouteBuilder<void>(
     opaque: true,
@@ -55,6 +56,7 @@ Future<void> openReader(
       resumesProgress: resumesProgress,
       bookmark: bookmark,
       search: search,
+      download: download,
     ),
     transitionsBuilder: (context, animation, secondary, child) => SlideTransition(
       position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
@@ -78,6 +80,7 @@ class NativeReaderView extends StatefulWidget {
     this.savesProgress = true,
     this.resumesProgress = true,
     this.search,
+    this.download,
   });
 
   final int galleryID;
@@ -93,6 +96,9 @@ class NativeReaderView extends StatefulWidget {
   final bool resumesProgress;
   final Future<void> Function(NativeGallery gallery) bookmark;
   final ValueChanged<String>? search;
+
+  /// Queues the work for offline reading and shows the downloads, as the quick menu does.
+  final void Function(BuildContext context, NativeGallery gallery)? download;
 
   @override
   State<NativeReaderView> createState() => _NativeReaderViewState();
@@ -607,8 +613,12 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   Widget _menuActions({required bool compact}) {
     final hasGallery = _gallery != null;
     final items = <(String, Widget Function(Color), VoidCallback?)>[
-      // Downloads and translation arrive with their own rebuild steps.
-      (L10n.text('Download Work'), (color) => Icon(CupertinoIcons.arrow_down_circle, size: 24, color: color), null),
+      // Translation arrives with its own rebuild step.
+      (
+        L10n.text('Download Work'),
+        (color) => Icon(CupertinoIcons.arrow_down_circle, size: 24, color: color),
+        hasGallery && widget.download != null ? () => widget.download!(context, _gallery!) : null,
+      ),
       (L10n.text('Bookmark'), (color) => Icon(CupertinoIcons.bookmark, size: 24, color: color), hasGallery ? _bookmark : null),
       (L10n.text('Exit'), (color) => ExitSymbol(color: color), _close),
       (L10n.text('Translate'), (color) => TranslateSymbol(color: color), null),

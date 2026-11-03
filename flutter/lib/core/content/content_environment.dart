@@ -107,6 +107,32 @@ class ContentEnvironment extends ChangeNotifier {
     _store('manga.hiddenGalleryIDs', (value.toList()..sort()).map((id) => '$id').toList());
   }
 
+  /// Reads synced preferences again after a library sync wrote them. Only changed values
+  /// are assigned: writing back absent defaults would upload them as fresh edits.
+  void reloadSyncedPreferences() {
+    final preferences = browserPreferences;
+    final tags = preferences.string('manga.defaultTags') ?? '';
+    final exclusions = preferences.string('manga.defaultExcludedTags') ?? '';
+    final hidden = _ids(preferences.object('manga.hiddenGalleryIDs'));
+    final address = preferences.string('manga.site_address') ?? '';
+    final verified = (preferences.boolean('site_verified') ?? false) && supportsComicsAddress(address);
+    final changed =
+        _defaultTags != tags ||
+        _defaultExcludedTags != exclusions ||
+        !setEquals(_hiddenMangaGalleryIDs, hidden) ||
+        _isSiteVerified != verified ||
+        _mangaSiteAddress != address;
+    _defaultTags = tags;
+    _defaultExcludedTags = exclusions;
+    _hiddenMangaGalleryIDs = hidden;
+    _isSiteVerified = verified;
+    if (_mangaSiteAddress != address) {
+      _mangaSiteAddress = address;
+      MangaUrls.resetResolvedBackend();
+    }
+    if (changed) notifyListeners();
+  }
+
   void setMangaGalleryHidden(int id, {required bool hidden}) {
     if (id <= 0) return;
     hiddenMangaGalleryIDs = hidden ? {..._hiddenMangaGalleryIDs, id} : (_hiddenMangaGalleryIDs.toSet()..remove(id));

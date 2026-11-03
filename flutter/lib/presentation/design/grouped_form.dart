@@ -58,7 +58,13 @@ class FormSection extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final (index, child) in children.indexed) ...[
-                    if (index > 0) Container(height: 0.5, margin: const EdgeInsets.only(left: 16, right: 16), color: separator),
+                    // The line under a row starts where that row's text does.
+                    if (index > 0)
+                      Container(
+                        height: 0.5,
+                        margin: EdgeInsets.only(left: children[index - 1] is FormRow ? (children[index - 1] as FormRow).separatorInset : 16, right: 16),
+                        color: separator,
+                      ),
                     child,
                   ],
                 ],
@@ -81,16 +87,22 @@ class FormSection extends StatelessWidget {
 
 /// One 52 pt form row with 16 pt insets, as measured on the native forms.
 class FormRow extends StatelessWidget {
-  const FormRow({super.key, required this.child, this.onTap});
+  const FormRow({super.key, required this.child, this.onTap, this.separatorInset = 16, this.minHeight = 52});
   final Widget child;
   final VoidCallback? onTap;
+
+  /// In a `List` a row whose title carries a 32 pt info button grows to about 61 pt.
+  final double minHeight;
+
+  /// Rows that lead with an icon start their separator under the title instead.
+  final double separatorInset;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 52),
+      constraints: BoxConstraints(minHeight: minHeight),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Align(

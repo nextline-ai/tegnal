@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app/localization.dart';
@@ -10,9 +11,12 @@ import 'core/content/content_environment.dart';
 import 'core/content/fixture_content_source.dart';
 import 'core/content/manga_content_source.dart';
 import 'core/content/manga_urls.dart';
+import 'core/content/site_account.dart';
+import 'core/downloads/download_store.dart';
 import 'core/storage/app_database.dart';
 import 'core/storage/app_storage.dart';
 import 'core/support/preferences.dart';
+import 'core/support/secure_secret_store.dart';
 import 'presentation/content/page_image_store.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
@@ -63,6 +67,15 @@ Future<void> main() async {
   runApp(TegnalApp(services: services, initialTab: AppTab.values.where((tab) => tab.name == _tab).firstOrNull ?? AppTab.folders));
 }
 
+/// The installed version name, as Settings shows the bundle version.
+Future<String> _version() async {
+  try {
+    return await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<String>('version') ?? '';
+  } on Object {
+    return '';
+  }
+}
+
 Future<AppServices> _launch() async {
   final preferences = await AppPreferences.load();
   ContentPreferences.defaults = preferences.defaults;
@@ -70,11 +83,17 @@ Future<AppServices> _launch() async {
   ReaderPreferences.install(preferences);
   PageImageStore.defaultDiskDirectory = Directory('${(await getApplicationCacheDirectory()).path}/MangaPageCache');
   await loadLocalization(preferences.defaults);
+  // Sign-in cookies live in the Android Keystore, never in the database or backups.
+  SiteAccount.store = await SecureSecretStore.load();
+  final support = await getApplicationSupportDirectory();
   return AppServices(
     preferences: preferences,
     database: AppDatabase.open(preferences: preferences),
     booru: BooruStore(path: AppStorage.booruDbPath, preferences: preferences),
     content: ContentEnvironment(browserPreferences: preferences.defaults, source: MangaContentSource.shared),
+    downloadsDirectory: DownloadStore.defaultDirectory,
+    syncDirectory: Directory('${support.path}/drive-sync'),
+    version: await _version(),
   );
 }
 
@@ -105,6 +124,9 @@ Future<AppServices> _launchFixture() async {
     database: database,
     booru: BooruStore.inMemory(preferences: preferences),
     content: content,
+    downloadsDirectory: Directory('${Directory.systemTemp.path}/fixture-downloads'),
+    syncDirectory: Directory('${Directory.systemTemp.path}/fixture-drive-sync'),
+    version: await _version(),
     isTesting: true,
   );
 }
