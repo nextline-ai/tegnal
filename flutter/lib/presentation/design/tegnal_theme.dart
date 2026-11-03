@@ -17,6 +17,7 @@ abstract final class TegnalColors {
 
   /// Liquid Glass over plain backgrounds, measured from the native app.
   static const glassFill = CupertinoDynamicColor.withBrightness(color: Color(0xF2FFFFFF), darkColor: Color(0x6B404040));
+  static const elevatedGlassFill = CupertinoDynamicColor.withBrightness(color: Color(0xF2FFFFFF), darkColor: Color(0xFF3A3A3C));
   static const glassStroke = CupertinoDynamicColor.withBrightness(color: Color(0x1F000000), darkColor: Color(0x1AFFFFFF));
   static const glassSelection = CupertinoDynamicColor.withBrightness(color: Color(0x22000000), darkColor: Color(0x4D000000));
 }

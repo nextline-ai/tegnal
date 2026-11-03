@@ -12,10 +12,13 @@ const double rootBarHeight = 54;
 /// The top of every root screen: a title capsule on the leading side and the
 /// mode switch in the title position, floating above content without a bar background.
 class RootHeader extends StatelessWidget {
-  const RootHeader({super.key, required this.title, required this.state, this.trailing});
+  const RootHeader({super.key, required this.title, required this.state, this.trailing, this.onBack});
   final String title;
   final AppState state;
   final Widget? trailing;
+
+  /// A pushed screen shows a back button before its title and no mode switch.
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -26,13 +29,23 @@ class RootHeader extends StatelessWidget {
         height: rootBarHeight,
         child: Stack(
           children: [
-            Positioned(left: 16, top: 0, child: TitleCapsule(title)),
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: AppModeSwitch(state: state),
+            Positioned(
+              left: 16,
+              top: 0,
+              child: Row(
+                children: [
+                  if (onBack != null) ...[_BackButton(onPressed: onBack!), const SizedBox(width: 8)],
+                  TitleCapsule(title),
+                ],
               ),
             ),
+            if (onBack == null)
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: AppModeSwitch(state: state),
+                ),
+              ),
             if (trailing != null) Positioned(right: 16, top: 0, child: trailing!),
           ],
         ),
@@ -146,4 +159,24 @@ class _AppModeSwitchState extends State<AppModeSwitch> {
 
   Widget _segment(bool selected, IconData filled, IconData outlined) =>
       SizedBox(width: 42, height: 38, child: Icon(selected ? filled : outlined, size: 23, color: selected ? const Color(0xFF000000) : const Color(0xFF8E8E93)));
+}
+
+/// The iOS 26 back button: a chevron in its own glass circle.
+class _BackButton extends StatelessWidget {
+  const _BackButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: L10n.text('Back'),
+    excludeSemantics: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: Glass.circle(
+        child: SizedBox.square(dimension: 44, child: Icon(CupertinoIcons.chevron_left, size: 22, color: TegnalColors.label.resolveFrom(context))),
+      ),
+    ),
+  );
 }

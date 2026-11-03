@@ -5,6 +5,8 @@ import '../core/content/content_environment.dart';
 import '../core/storage/app_database.dart';
 import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
+import '../presentation/content/content_bookmark.dart';
+import '../presentation/content/content_routes.dart';
 import '../presentation/content/explore_view.dart';
 import '../presentation/content/page_image_store.dart';
 import '../presentation/design/tegnal_theme.dart';
@@ -15,14 +17,16 @@ import '../presentation/settings/website_setup.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
-  AppServices({required this.preferences, required this.database, required this.booru, required this.content})
-    : images = PageImageStore(source: content.source);
+  AppServices({required this.preferences, required this.database, required this.booru, required this.content, bool isTesting = false})
+    : images = PageImageStore(source: content.source),
+      bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting);
 
   final AppPreferences preferences;
   final AppDatabase database;
   final BooruStore booru;
   final ContentEnvironment content;
   final PageImageStore images;
+  final BookmarkSession bookmarks;
 }
 
 class TegnalApp extends StatefulWidget {
@@ -102,6 +106,14 @@ class _ExploreRoot extends StatelessWidget {
     listenable: services.content,
     builder: (context, _) {
       final content = services.content;
+      final routes = ContentRoutes(
+        state: state,
+        content: content,
+        database: services.database,
+        images: services.images,
+        preferences: services.preferences.defaults,
+        bookmarks: services.bookmarks,
+      );
       if (!content.isSiteVerified) {
         final top = MediaQuery.paddingOf(context).top + rootBarHeight;
         return Stack(
@@ -126,7 +138,8 @@ class _ExploreRoot extends StatelessWidget {
         database: services.database,
         content: content,
         isActive: state.tab == AppTab.works && state.mode == AppMode.manga,
-        openGallery: (_) {},
+        openGallery: (id) => routes.openThumbnail(context, id),
+        bookmark: (id, gallery) => routes.toggleBookmark(context, id, gallery),
       );
     },
   );

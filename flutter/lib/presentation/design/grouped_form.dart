@@ -1,5 +1,8 @@
+import 'dart:ui' as ui;
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/support/l10n.dart';
 import 'glass.dart';
 import 'tegnal_theme.dart';
 
@@ -11,8 +14,11 @@ abstract final class FormColors {
 
 /// A `Form` section: an optional header, then rows on one rounded card with 26 pt corners.
 class FormSection extends StatelessWidget {
-  const FormSection({super.key, this.header, required this.children, this.footer});
+  const FormSection({super.key, this.header, required this.children, this.footer, this.prominentHeader = false});
   final Widget? header;
+
+  /// A plain `Form` inside a navigation stack titles its sections in semibold, closer to the rows.
+  final bool prominentHeader;
   final List<Widget> children;
   final Widget? footer;
 
@@ -27,9 +33,13 @@ class FormSection extends StatelessWidget {
         children: [
           if (header != null)
             Padding(
-              padding: const EdgeInsets.only(left: 18, right: 18, bottom: 16),
+              padding: EdgeInsets.only(left: 16, right: 16, bottom: prominentHeader ? 10 : 16),
               child: DefaultTextStyle(
-                style: TegnalType.style(17, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                style: TegnalType.style(
+                  17,
+                  weight: prominentHeader ? FontWeight.w600 : FontWeight.w400,
+                  color: TegnalColors.secondaryLabel.resolveFrom(context),
+                ),
                 child: header!,
               ),
             ),
@@ -41,7 +51,7 @@ class FormSection extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final (index, child) in children.indexed) ...[
-                    if (index > 0) Container(height: 0.5, margin: const EdgeInsets.only(left: 18, right: 18), color: separator),
+                    if (index > 0) Container(height: 0.5, margin: const EdgeInsets.only(left: 16, right: 16), color: separator),
                     child,
                   ],
                 ],
@@ -50,7 +60,7 @@ class FormSection extends StatelessWidget {
           ),
           if (footer != null)
             Padding(
-              padding: const EdgeInsets.only(left: 18, right: 18, top: 8),
+              padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
               child: DefaultTextStyle(
                 style: TegnalType.style(13, color: TegnalColors.secondaryLabel.resolveFrom(context)),
                 child: footer!,
@@ -62,7 +72,7 @@ class FormSection extends StatelessWidget {
   }
 }
 
-/// One 52 pt form row with 18 pt insets.
+/// One 52 pt form row with 16 pt insets, as measured on the native forms.
 class FormRow extends StatelessWidget {
   const FormRow({super.key, required this.child, this.onTap});
   final Widget child;
@@ -75,7 +85,7 @@ class FormRow extends StatelessWidget {
     child: ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 52),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Align(
           alignment: Alignment.centerLeft,
           child: DefaultTextStyle(
@@ -113,6 +123,92 @@ class SheetNavigationBar extends StatelessWidget {
   );
 }
 
+/// `SettingsInfoButton`: a secondary info glyph in a 32 pt target that explains a setting.
+class FormHelpButton extends StatelessWidget {
+  const FormHelpButton({super.key, required this.title, required this.message});
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: L10n.text('About %@', [title]),
+    excludeSemantics: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showCupertinoDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => CupertinoAlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],
+        ),
+      ),
+      child: SizedBox.square(
+        dimension: 32,
+        child: Icon(CupertinoIcons.info_circle, size: 20, color: TegnalColors.tint.resolveFrom(context).withValues(alpha: 0.6)),
+      ),
+    ),
+  );
+}
+
+/// A sheet with its navigation bar over the content. Once the content scrolls beneath it,
+/// the bar gets the iOS 26 hard scroll edge: a blurred band with a sharp lower edge.
+class ScrollEdgeSheet extends StatefulWidget {
+  const ScrollEdgeSheet({super.key, required this.bar, required this.child, this.background});
+  final Widget bar;
+  final Widget child;
+  final Color? background;
+
+  /// The band covers the bar and a little below its buttons, as the native band does.
+  static const double edgeHeight = 69;
+
+  @override
+  State<ScrollEdgeSheet> createState() => _ScrollEdgeSheetState();
+}
+
+class _ScrollEdgeSheetState extends State<ScrollEdgeSheet> {
+  bool _scrolled = false;
+
+  bool _update(ScrollNotification notification) {
+    if (notification.depth == 0 && notification.metrics.axis == Axis.vertical) {
+      final scrolled = notification.metrics.pixels > 0.5;
+      if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    return ColoredBox(
+      color: widget.background ?? FormColors.background.resolveFrom(context),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: NotificationListener<ScrollNotification>(onNotification: _update, child: widget.child),
+          ),
+          if (_scrolled)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: ScrollEdgeSheet.edgeHeight,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: ColoredBox(color: dark ? const Color(0xF0242426) : const Color(0xF0F7F7F7)),
+                ),
+              ),
+            ),
+          Positioned(left: 0, right: 0, top: 0, child: widget.bar),
+        ],
+      ),
+    );
+  }
+}
+
 /// A toolbar text button in its own glass capsule, 44 pt tall.
 class GlassTextButton extends StatelessWidget {
   const GlassTextButton({super.key, required this.label, this.onPressed, this.prominent = false});
@@ -133,6 +229,7 @@ class GlassTextButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
         child: Glass.capsule(
+          elevated: true,
           child: SizedBox(
             height: 44,
             child: Padding(

@@ -7,21 +7,24 @@ import 'tegnal_theme.dart';
 /// The native app's `glassCapsule`, `glassCircle` and `glassSurface`: a blurred,
 /// translucent surface with a hairline edge, drawn above scrolling content.
 class Glass extends StatelessWidget {
-  const Glass({super.key, required this.shape, required this.child, this.blur = 6});
+  const Glass({super.key, required this.shape, required this.child, this.blur = 6, this.elevated = false});
 
-  const Glass.capsule({super.key, required this.child, this.blur = 6}) : shape = const StadiumBorder();
-  const Glass.circle({super.key, required this.child, this.blur = 6}) : shape = const CircleBorder();
-  Glass.surface({super.key, required this.child, double cornerRadius = 16, this.blur = 6})
+  const Glass.capsule({super.key, required this.child, this.blur = 6, this.elevated = false}) : shape = const StadiumBorder();
+  const Glass.circle({super.key, required this.child, this.blur = 6, this.elevated = false}) : shape = const CircleBorder();
+  Glass.surface({super.key, required this.child, double cornerRadius = 16, this.blur = 6, this.elevated = false})
     : shape = RoundedSuperellipseBorder(borderRadius: BorderRadius.all(Radius.circular(cornerRadius)));
 
   final ShapeBorder shape;
   final Widget child;
   final double blur;
 
+  /// Controls in a sheet sit on a lighter surface and read lighter, as they do on iOS.
+  final bool elevated;
+
   @override
   Widget build(BuildContext context) {
     final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final fill = TegnalColors.glassFill.resolveFrom(context);
+    final fill = (elevated ? TegnalColors.elevatedGlassFill : TegnalColors.glassFill).resolveFrom(context);
     final stroke = TegnalColors.glassStroke.resolveFrom(context);
     return DecoratedBox(
       decoration: ShapeDecoration(

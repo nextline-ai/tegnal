@@ -56,7 +56,10 @@ class ExploreView extends StatefulWidget {
     required this.database,
     required this.content,
     required this.openGallery,
+    this.bookmark,
     this.isActive = true,
+    this.initialQuery = '',
+    this.onBack,
   });
 
   final AppState state;
@@ -65,7 +68,14 @@ class ExploreView extends StatefulWidget {
   final AppDatabase database;
   final ContentEnvironment content;
   final void Function(int id) openGallery;
+
+  /// Holding a card toggles its bookmark.
+  final void Function(int id, NativeGallery? gallery)? bookmark;
   final bool isActive;
+
+  /// A feed opened from a tag or search starts with that query and offers a way back.
+  final String initialQuery;
+  final VoidCallback? onBack;
 
   @override
   State<ExploreView> createState() => _ExploreViewState();
@@ -73,8 +83,12 @@ class ExploreView extends StatefulWidget {
 
 class _ExploreViewState extends State<ExploreView> {
   late final GalleryFeedLoader _loader = GalleryFeedLoader(source: widget.source, images: widget.images);
-  late GalleryQuery _query = GalleryQuery(language: L10n.contentLanguage);
-  final _search = TextEditingController();
+  late GalleryQuery _query = GalleryQuery(
+    language: ArtistBrowsing.matches(widget.initialQuery) ? ArtistBrowsing.language : (widget.initialQuery.isEmpty ? L10n.contentLanguage : 'all'),
+    text: widget.initialQuery,
+  );
+  late String _openedCategory = '';
+  late final _search = TextEditingController(text: widget.initialQuery);
   final _searchFocus = FocusNode();
   final _scroll = ScrollController();
   final _visibility = ScrollSearchVisibility();
@@ -114,8 +128,10 @@ class _ExploreViewState extends State<ExploreView> {
     });
   }
 
-  String get _category => widget.content.mangaBrowseCategory;
-  set _category(String value) => setState(() => widget.content.mangaBrowseCategory = value);
+  /// The main feed remembers its category; a feed opened from a tag or artist starts with all.
+  bool get _isMainFeed => widget.onBack == null;
+  String get _category => _isMainFeed ? widget.content.mangaBrowseCategory : _openedCategory;
+  set _category(String value) => setState(() => _isMainFeed ? widget.content.mangaBrowseCategory = value : _openedCategory = value);
 
   GalleryQuery _effective(String category) {
     final content = widget.content;
@@ -263,6 +279,7 @@ class _ExploreViewState extends State<ExploreView> {
                     style: style,
                     bookmarked: _bookmarked.contains(id),
                     open: () => widget.openGallery(id),
+                    hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery),
                   );
                 },
               ),
@@ -291,7 +308,7 @@ class _ExploreViewState extends State<ExploreView> {
             left: 0,
             right: 0,
             top: 0,
-            child: RootHeader(title: title, state: widget.state),
+            child: RootHeader(title: title, state: widget.state, onBack: widget.onBack),
           ),
         ],
       ),
@@ -545,12 +562,13 @@ class ContentUnavailable extends StatelessWidget {
 }
 
 class _GalleryGridCard extends StatefulWidget {
-  const _GalleryGridCard({super.key, required this.id, required this.preview, required this.style, required this.bookmarked, required this.open});
+  const _GalleryGridCard({super.key, required this.id, required this.preview, required this.style, required this.bookmarked, required this.open, this.hold});
   final int id;
   final GalleryFeedPreview? preview;
   final ArtworkCellStyle style;
   final bool bookmarked;
   final VoidCallback open;
+  final VoidCallback? hold;
 
   @override
   State<_GalleryGridCard> createState() => _GalleryGridCardState();
@@ -593,6 +611,7 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.open,
+      onLongPress: widget.hold,
       child: Stack(
         children: [
           GalleryCardLayout(

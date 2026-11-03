@@ -2,17 +2,22 @@ import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import 'tegnal_theme.dart';
+
 /// The iOS 26 large sheet (`.appSheet` with the large detent): it rises from the bottom to
 /// just below the status bar with 40 pt top corners, over a darkened screen, and a
 /// downward drag or a tap above it dismisses it.
-Future<T?> showAppSheet<T>(BuildContext context, {required Widget Function(BuildContext context, ScrollController controller) builder}) =>
-    Navigator.of(context, rootNavigator: true).push<T>(_AppSheetRoute<T>(builder: builder));
+Future<T?> showAppSheet<T>(BuildContext context, {required Widget Function(BuildContext context, ScrollController controller) builder, bool grabber = false}) =>
+    Navigator.of(context, rootNavigator: true).push<T>(_AppSheetRoute<T>(builder: builder, grabber: grabber));
 
 const double _cornerRadius = 40;
 
 class _AppSheetRoute<T> extends PopupRoute<T> {
-  _AppSheetRoute({required this.builder});
+  _AppSheetRoute({required this.builder, this.grabber = false});
   final Widget Function(BuildContext context, ScrollController controller) builder;
+
+  /// `.presentationDragIndicator(.visible)`.
+  final bool grabber;
 
   @override
   Color? get barrierColor => const Color(0x66000000);
@@ -92,7 +97,28 @@ class _SheetBodyState extends State<_SheetBody> {
             onVerticalDragEnd: (details) => _dragEnd(details, height),
             child: ClipRSuperellipse(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(_cornerRadius)),
-              child: MediaQuery.removePadding(context: context, removeTop: true, child: widget.route.builder(context, _controller)),
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: widget.route.builder(context, _controller)),
+                    if (widget.route.grabber)
+                      Positioned(
+                        top: 5,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            width: 36,
+                            height: 5,
+                            decoration: ShapeDecoration(color: TegnalColors.tertiaryLabel.resolveFrom(context), shape: const StadiumBorder()),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
