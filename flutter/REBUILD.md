@@ -70,7 +70,3 @@ For each area, finish in this order: logic tests passing, then screens compared 
 - Increase the version code in `pubspec.yaml` (it must be greater than the latest value in the Play Console).
 - Build with `flutter build apk --release` or `flutter build appbundle --release`, and confirm with `apksigner verify --print-certs` that the certificate SHA-256 matches the value in CLAUDE.md.
 - Check with `aapt dump badging` that the package is `work.nextline.tegnal`.
-
-## Example first message for the next session
-
-> Read flutter/CLAUDE.md and flutter/REBUILD.md, then start the rebuild. First, propose a plan for step 1 (data model, storage, backup compatibility), with the list of Swift files and tests that map to it. Do not change the app ID or the signing setup.
