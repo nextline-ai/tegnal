@@ -1,5 +1,5 @@
 name: tegnal
-description: Android and desktop companion to the native TEGNAL app.
+description: Android version of the native TEGNAL app.
 publish_to: none
 version: 1.0.0-beta.5+7
 environment:
@@ -9,23 +9,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  ech_http: 0.2.3
-  http: ^1.6.0
-  path_provider: ^2.1.6
-  file_selector: ^1.1.0
-  sqlite3: ^3.8.0
-  xml: ^7.1.0
-  crypto: ^3.0.8
-  html: ^0.15.7
-  url_launcher: ^6.3.3
-  media_kit: ^1.2.6
-  media_kit_video: ^2.0.1
-  media_kit_libs_video: ^1.0.7
-  wakelock_plus: ^1.8.2
-  material_ui: ^1.8.0
-  google_sign_in: ^7.2.0
-  flutter_secure_storage: ^11.2.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -33,14 +16,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/l10n/
-    - assets/branding/
-    - assets/fonts/OFL.txt
-  fonts:
-    - family: Pretendard
-      fonts:
-        - asset: assets/fonts/PretendardVariable.ttf
-    - family: Pretendard JP
-      fonts:
-        - asset: assets/fonts/PretendardJPVariable.ttf

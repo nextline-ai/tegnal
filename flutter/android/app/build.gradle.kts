@@ -19,7 +19,6 @@ if (!hasReleaseSigning && gradle.startParameter.taskNames.any { it.contains("rel
 
 android {
     namespace = "work.nextline.tegnal"
-    // OkHttp AndroidDns uses the Android 17 ECH APIs.
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
@@ -71,8 +70,4 @@ kotlin {
 
 flutter {
     source = "../.."
-}
-
-dependencies {
-    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 }
