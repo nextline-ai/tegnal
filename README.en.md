@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Android_button_en_mobile.svg"><img src="docs/assets/readme/Android_button_en.svg" alt="Download Android beta APK"></picture></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" height="80"></a>
 </p>
 
 # TEGNAL
@@ -21,7 +21,7 @@ Comics and illustrations, in one app.
 
 A switch at the top of the screen moves you between comic sites like Hitomi and image boards like Danbooru, Gelbooru and Moebooru. No site comes built in. You connect the addresses you already use, and TEGNAL shows their works in its own screens.
 
-The Apple version is on TestFlight and the Android beta is an APK. Both are free.
+The Apple version is on TestFlight and the Android version is on Google Play. Both are free.
 
 ## Viewing
 
@@ -83,14 +83,14 @@ An IPA has to be re-signed with your own Apple account in the install tool. How 
 
 ### Android
 
-This is beta 1.0.0-beta.5, for Android 7.0 and later. It isn't on Google Play, so you download the APK yourself.
+Install it from [Google Play](https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en). It runs on Android 7.0 and later, and updates arrive through Google Play too.
 
-- [ARM64 APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk): the right one for most recent phones.
-- [Universal APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android.apk): covers 32-bit ARM, ARM64 and x86-64, if you're not sure what your device uses.
+<details>
+<summary>Old beta APKs</summary>
 
-Open the file to install it. If Android asks, allow installs from the browser or file app you downloaded it with, and nothing else. To update, install the new APK the same way. Changes and file hashes are on the [release page](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5).
+The beta APKs released before the Google Play launch are no longer updated and can't receive automatic updates, so use the Google Play version unless you have a specific reason not to. The files are still on the [release page](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5).
 
-It's a beta, and it doesn't match the Apple version yet. There's no iCloud sync, similar-work search, default save folder or smart folders, and Smart is still the older version. Image translation hands off to the Google Translate app. Google Drive sync is currently off.
+</details>
 
 ## Getting started
 
