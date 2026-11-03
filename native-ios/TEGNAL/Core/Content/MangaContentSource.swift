@@ -17,6 +17,7 @@ actor MangaContentSource: ContentProviding {
     static let shared = MangaContentSource()
     private let transport: ContentTransport
     private let documents: DocumentCatalogSource
+    private let keyed: KeyedCatalogSource
     private var activeSite = ""
     private var routing: (CDNRouting, Date)?
     private var routingTask: Task<CDNRouting, Error>?
@@ -44,6 +45,7 @@ actor MangaContentSource: ContentProviding {
     init(transport: ContentTransport = .shared) {
         self.transport = transport
         self.documents = DocumentCatalogSource(transport: transport)
+        self.keyed = KeyedCatalogSource(transport: transport)
         galleryCache.countLimit = 512
         galleryCache.totalCostLimit = 32 * 1024 * 1024
     }
@@ -54,7 +56,7 @@ actor MangaContentSource: ContentProviding {
     }
 
     nonisolated func cachedPreview(_ id: Int64) -> NativeGallery? {
-        cachedGallery(id) ?? (MangaUrls.backend == .document ? documents.cachedPreview(id) : nil)
+        cachedGallery(id) ?? (MangaUrls.backend == .document ? documents.cachedPreview(id) : MangaUrls.backend == .keyed ? keyed.cachedPreview(id) : nil)
     }
 
     private func prepareSite() throws -> String {
@@ -77,13 +79,18 @@ actor MangaContentSource: ContentProviding {
     private func resolve(_ site: String) async throws -> MangaUrls.Backend {
         await MangaUrls.resolveBackend(transport: transport)
         guard MangaUrls.home == site else { throw CancellationError() }
+        if MangaUrls.requiresSignIn { throw ContentError.signInRequired }
         return MangaUrls.backend
     }
 
     func suggestions(for token: String) async throws -> [TagSuggestion] {
         guard let context = TagCompletionContext(token) else { return [] }
         let site = try prepareSite()
-        if try await resolve(site) == .document { return try await documents.suggestions(token, site: site) }
+        switch try await resolve(site) {
+        case .document: return try await documents.suggestions(token, site: site)
+        case .keyed: return try await keyed.suggestions(token, site: site)
+        case .indexed: break
+        }
         let key = context.token
         if let cached = suggestionCache[key], Date().timeIntervalSince(cached.1) < 900 { return cached.0 }
         let target = try Self.suggestionURL(key)
@@ -131,11 +138,11 @@ actor MangaContentSource: ContentProviding {
                     galleryFlights[id] = flight
                     return
                 }
-                let token = UUID(), transport = transport, documents = documents
+                let token = UUID(), transport = transport, documents = documents, keyed = keyed
                 let task = Task.detached(priority: Task.currentPriority) {
                     do {
-                        if backend == .document {
-                            let document = try await documents.gallery(id, site: site)
+                        if backend != .indexed {
+                            let document = backend == .keyed ? try await keyed.gallery(id, site: site) : try await documents.gallery(id, site: site)
                             try Task.checkCancellation()
                             guard MangaUrls.home == site else { throw CancellationError() }
                             await self.finishGallery(id, token: token, result: .success(document), cost: max(1024, document.pages.count * 512))
@@ -155,6 +162,19 @@ actor MangaContentSource: ContentProviding {
             try Task.checkCancellation()
             return document
         } onCancel: { Task { await self.cancelGallery(id, waiter: waiter) } }
+    }
+
+    /// The signed-in account's favorites, a page at a time, on catalogs that keep them.
+    func accountFavorites(after next: String?) async throws -> (ids: [Int64], next: String?) {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.favorites(after: next, site: site)
+    }
+
+    func setAccountFavorite(_ id: Int64, saved: Bool) async throws {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return }
+        try await keyed.setFavorite(id, saved: saved, site: site)
     }
 
     /// Used by performance regression tests to wait for consumers, not wall-clock delays.
@@ -182,7 +202,11 @@ actor MangaContentSource: ContentProviding {
         guard query.language.range(of: #"^[a-z]{2,24}$"#, options: .regularExpression) != nil,
               offset >= 0, offset < 10_000_000, (1...100).contains(count) else { throw ContentError.invalidQuery }
         let site = try prepareSite()
-        if try await resolve(site) == .document { return try await documents.list(query, offset: offset, count: count, site: site) }
+        switch try await resolve(site) {
+        case .document: return try await documents.list(query, offset: offset, count: count, site: site)
+        case .keyed: return try await keyed.list(query, offset: offset, count: count, site: site)
+        case .indexed: break
+        }
         if query.language != "all", query.allowsLanguageExceptions, query.sort == .latest, query.artist == nil, query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let target = ((offset + count + 128) / 128) * 128
             var ids = Set(try await indexPrefix("index-\(query.language).nozomi", count: target))
@@ -231,6 +255,7 @@ actor MangaContentSource: ContentProviding {
             return try await image(updated.pages[index], galleryID: galleryID, thumbnail: thumbnail)
         }
         if backend == .document { return try await documents.image(page, galleryID: galleryID, thumbnail: thumbnail, site: site) }
+        if backend == .keyed { return try await keyed.image(page, galleryID: galleryID, thumbnail: thumbnail, site: site) }
         let formats = page.hasAVIF ? ["webp", "avif"] : ["webp"]
         var lastError: Error = ContentError.unsupportedFormat
         for refresh in [false, true] {

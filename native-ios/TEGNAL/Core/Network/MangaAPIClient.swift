@@ -17,7 +17,7 @@ public enum MangaAPIClient {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
         await MangaUrls.resolveBackend()
         try Task.checkCancellation()
-        if MangaUrls.backend == .document {
+        if MangaUrls.backend != .indexed {
             let gallery = try await MangaContentSource.shared.gallery(galleryId)
             return MangaGalleryInfo(hash: gallery.pages.first?.hash, title: gallery.title, artists: gallery.artists.joined(separator: ", "),
                                     language: gallery.language, type: gallery.type, published: nil, tags: gallery.tags.joined(separator: ", "))
@@ -63,7 +63,7 @@ public enum MangaAPIClient {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
         await MangaUrls.resolveBackend()
         try Task.checkCancellation()
-        if MangaUrls.backend == .document { return try await MangaContentSource.shared.gallery(galleryId).pages.map(\.hash) }
+        if MangaUrls.backend != .indexed { return try await MangaContentSource.shared.gallery(galleryId).pages.map(\.hash) }
         let urls = [
             "\(MangaUrls.dataBaseURL)galleries/\(galleryId).js",
             "\(MangaUrls.home)galleries/\(galleryId).js"
@@ -172,7 +172,7 @@ public enum MangaAPIClient {
         guard !MangaUrls.configuredHost.isEmpty else { throw URLError(.unsupportedURL) }
         await MangaUrls.resolveBackend()
         try Task.checkCancellation()
-        if MangaUrls.backend == .document {
+        if MangaUrls.backend != .indexed {
             let gallery = try await MangaContentSource.shared.gallery(galleryId)
             guard let page = gallery.pages.first(where: { $0.hash == hash }) else { throw ContentError.invalidResponse }
             let data = try await MangaContentSource.shared.image(page, galleryID: galleryId, thumbnail: true)

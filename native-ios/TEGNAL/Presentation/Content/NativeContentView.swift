@@ -171,14 +171,30 @@ public struct NativeContentView: View {
 struct ContentFailureView: View {
     let message: String
     let retry: () -> Void
+    /// Optional because failures also show in screens hosted outside the app's environment.
+    @Environment(AppEnvironment.self) private var env: AppEnvironment?
+    @State private var signingIn = false
+    /// A website that shows nothing until someone signs in gets its sign-in right here.
+    private var asksForSignIn: Bool {
+        env != nil && message == ContentError.signInRequired.localizedDescription && MangaUrls.signInURL != nil
+    }
     var body: some View {
         ContentUnavailableView {
-            Label(L10n.text("Unable to Load"), systemImage: "wifi.exclamationmark")
+            Label(L10n.text(asksForSignIn ? "Sign In Required" : "Unable to Load"), systemImage: asksForSignIn ? "person.crop.circle" : "wifi.exclamationmark")
         } description: {
             Text(message)
         } actions: {
-            Button(L10n.text("Try Again"), action: retry).buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("content.retry")
+            if asksForSignIn {
+                Button(L10n.text("Sign In to Website")) { signingIn = true }.buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("content.signIn")
+                Button(L10n.text("Try Again"), action: retry).accessibilityIdentifier("content.retry")
+            } else {
+                Button(L10n.text("Try Again"), action: retry).buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("content.retry")
+            }
+        }
+        .appSheet(isPresented: $signingIn) {
+            SiteSignInView { env?.siteSignInFinished(); retry() }
         }
     }
 }
@@ -289,7 +305,7 @@ private struct GalleryFeedView: View {
     private var sortMenu: some View {
         BrowseFilterMenu(title: query.sort.title, icon: "arrow.up.arrow.down") {
             Picker(L10n.text("Sort"), selection: $query.sort) {
-                ForEach(GallerySort.allCases) { Text($0.title).tag($0) }
+                ForEach(GallerySort.available) { Text($0.title).tag($0) }
             }
         }.accessibilityIdentifier("content.sort")
     }

@@ -347,6 +347,9 @@ public final class AppEnvironment: @unchecked Sendable {
     var showsMangaTitles: Bool { didSet { browserPreferences.set(showsMangaTitles, forKey: "manga.grid.showTitles") } }
     var showsMangaArtists: Bool { didSet { browserPreferences.set(showsMangaArtists, forKey: "manga.grid.showArtists") } }
     var showsMangaCategories: Bool { didSet { browserPreferences.set(showsMangaCategories, forKey: "manga.grid.showCategories") } }
+    /// Signed in to the connected website, for sites that use accounts.
+    var siteAccountSignedIn = SiteAccount.isSignedIn
+    var syncsAccountFavorites: Bool { didSet { browserPreferences.set(syncsAccountFavorites, forKey: "manga.syncAccountFavorites") } }
     private var mangaFolderColumns: Int
     private var booruFolderColumns: Int
 
@@ -580,6 +583,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.showsMangaTitles = browserPreferences.object(forKey: "manga.grid.showTitles") as? Bool ?? true
         self.showsMangaArtists = browserPreferences.object(forKey: "manga.grid.showArtists") as? Bool ?? true
         self.showsMangaCategories = browserPreferences.bool(forKey: "manga.grid.showCategories")
+        self.syncsAccountFavorites = browserPreferences.bool(forKey: "manga.syncAccountFavorites")
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
@@ -666,6 +670,47 @@ public final class AppEnvironment: @unchecked Sendable {
             } while coverQueueRequested && !Task.isCancelled && coverQueueActive && CoverQueuePolicy.allowsBackfill
             if !CoverQueuePolicy.allowsBackfill { resumeCoverQueue = true }
         }
+    }
+
+    /// A finished sign-in changes what the site shows, so its protocol is read again.
+    @MainActor func siteSignInFinished() {
+        siteAccountSignedIn = SiteAccount.isSignedIn
+        MangaUrls.resetResolvedBackend()
+        ContentBrowserTransport.reset()
+    }
+
+    @MainActor func signOutOfSite() {
+        SiteAccount.signOut()
+        siteAccountSignedIn = false
+        syncsAccountFavorites = false
+        MangaUrls.resetResolvedBackend()
+        ContentBrowserTransport.reset()
+    }
+
+    /// Bookmarks every account favorite not already saved, into the default folder.
+    @MainActor func importAccountFavorites() async throws -> Int {
+        let folder = try database.defaultSaveFolder().id
+        var next: String?, added = 0, pages = 0
+        repeat {
+            let page = try await MangaContentSource.shared.accountFavorites(after: next)
+            try Task.checkCancellation()
+            for id in page.ids where try database.getWork(galleryId: id) == nil {
+                let work = MangaContentSource.shared.cachedPreview(id)
+                _ = try database.upsertWork(galleryId: id, folderId: folder, title: work?.title, artists: work?.artists.joined(separator: ", "),
+                                            language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote")
+                added += 1
+            }
+            next = page.next
+            pages += 1
+        } while next != nil && pages < 500
+        if added > 0 { startCoverQueue() }
+        return added
+    }
+
+    /// Mirrors a bookmark change to the account's favorites when that is turned on.
+    @MainActor func syncAccountFavorite(_ id: Int64, saved: Bool) {
+        guard syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
+        Task { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved) }
     }
 
     /// Fetches every saved work's information again through the background queue.

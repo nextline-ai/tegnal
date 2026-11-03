@@ -325,7 +325,7 @@ actor DocumentCatalogSource {
     private nonisolated static let languageQualifiers: Set<String> = ["translated", "rewrite"]
 
     /// The original-script title is kept even on translations, so it only leads for works still in Japanese.
-    private nonisolated static func title(_ object: [String: Any], id: Int64, language: String, translated: Bool) -> String {
+    nonisolated static func title(_ object: [String: Any], id: Int64, language: String, translated: Bool) -> String {
         let main = (object["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let original = (object["title_jpn"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let prefersOriginal = !translated && ["", "japanese", "speechless"].contains(language)

@@ -5,11 +5,14 @@ import WebKit
 final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     static let shared = ContentTransport()
     typealias BrowserFetch = @Sendable (URL, URL, Int, Range<Int>?, TimeInterval) async throws -> (Data, HTTPURLResponse)
+    typealias BrowserPost = @Sendable (URL, URL, Data, String, Int, TimeInterval) async throws -> (Data, HTTPURLResponse)
     private let browserFetch: BrowserFetch
+    private let browserPost: BrowserPost
     private var session: URLSession!
     private let lock = NSLock()
     private var requests: [Int: Download] = [:]
     private var browserOrigins = Set<String>()
+    private var foreignRedirects: [URL: URL] = [:]
 
     private final class Download {
         let limit: Int
@@ -35,8 +38,12 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     init(configuration: URLSessionConfiguration = .ephemeral,
          browserFetch: @escaping BrowserFetch = { url, origin, limit, range, timeout in
              try await ContentBrowserTransport.get(url, origin: origin, limit: limit, range: range, timeout: timeout)
+         },
+         browserPost: @escaping BrowserPost = { url, origin, body, type, limit, timeout in
+             try await ContentBrowserTransport.post(url, origin: origin, body: body, contentType: type, limit: limit, timeout: timeout)
          }) {
         self.browserFetch = browserFetch
+        self.browserPost = browserPost
         super.init()
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
@@ -47,8 +54,11 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     }
 
     static func allows(_ url: URL) -> Bool {
-        guard url.scheme == "https", url.user == nil, url.password == nil,
-              url.port == nil || url.port == 443, let host = url.host?.lowercased() else { return false }
+        guard url.scheme == "https", url.user == nil, url.password == nil, let host = url.host?.lowercased() else { return false }
+        guard url.port == nil || url.port == 443 else {
+            // Volunteer image hosts of keyed catalogs listen on their own ports.
+            return MangaUrls.backend == .keyed && MangaUrls.allowsMedia(host) && KeyedCatalogSource.safeMediaURL(url)
+        }
         let configured = MangaUrls.configuredHost
         guard !configured.isEmpty else { return false }
         if host == configured || host.hasSuffix("." + configured) { return true }
@@ -63,8 +73,18 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(request.url.map(Self.allows) == true ? request : nil)
+        if request.url.map(Self.allows) == true { completionHandler(request); return }
+        if let origin = task.originalRequest?.url, let target = request.url {
+            lock.withLock {
+                if foreignRedirects.count > 16 { foreignRedirects.removeAll() }
+                foreignRedirects[origin] = target
+            }
+        }
+        completionHandler(nil)
     }
+
+    /// Where the site tried to send a request it was refused to follow.
+    func foreignRedirect(from url: URL) -> URL? { lock.withLock { foreignRedirects[url] } }
 
     func get(_ url: URL, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil, timeout: TimeInterval = 20) async throws -> (Data, HTTPURLResponse) {
         guard Self.allows(url), limit > 0 else { throw URLError(.unsupportedURL) }
@@ -92,7 +112,15 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         try Task.checkCancellation()
         let usesBrowser = lock.withLock { browserOrigins.contains(site) }
         if usesBrowser, url.host == MangaUrls.configuredHost, let origin = URL(string: site) {
-            return try await browserFetch(url, origin, limit, range, timeout)
+            do { return try await browserFetch(url, origin, limit, range, timeout) }
+            catch {
+                // Filtered networks come and go; a browser that cannot connect hands the request back.
+                try Task.checkCancellation()
+                guard MangaUrls.home == site, Self.isTransient(error) else { throw error }
+                let result = try await direct(url, limit: limit, range: range, galleryID: galleryID, timeout: timeout)
+                _ = lock.withLock { browserOrigins.remove(site) }
+                return result
+            }
         }
         do { return try await direct(url, limit: limit, range: range, galleryID: galleryID, timeout: timeout) }
         catch {
@@ -116,9 +144,36 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         return error.domain == WKError.errorDomain && error.code == WKError.webContentProcessTerminated.rawValue
     }
 
-    private func direct(_ url: URL, limit: Int, range: Range<Int>?, galleryID: Int64?, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+    /// Sends a form or JSON body to the connected site, through the browser when the network only lets WebKit reach it.
+    func post(_ url: URL, body: Data, contentType: String, limit: Int, timeout: TimeInterval = 20) async throws -> (Data, HTTPURLResponse) {
+        guard Self.allows(url), limit > 0 else { throw URLError(.unsupportedURL) }
+        let site = MangaUrls.home
+        let usesBrowser = lock.withLock { browserOrigins.contains(site) }
+        if usesBrowser, url.host == MangaUrls.configuredHost, let origin = URL(string: site) {
+            return try await browserPost(url, origin, body, contentType, limit, timeout)
+        }
+        do { return try await direct(url, limit: limit, range: nil, galleryID: nil, timeout: timeout, body: body, contentType: contentType) }
+        catch {
+            try Task.checkCancellation()
+            guard MangaUrls.home == site, url.host == MangaUrls.configuredHost, let network = error as? URLError,
+                  [.secureConnectionFailed, .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed].contains(network.code),
+                  let origin = URL(string: site) else { throw error }
+            let result = try await browserPost(url, origin, body, contentType, limit, timeout)
+            _ = lock.withLock { browserOrigins.insert(site) }
+            return result
+        }
+    }
+
+    private func direct(_ url: URL, limit: Int, range: Range<Int>?, galleryID: Int64?, timeout: TimeInterval,
+                        body: Data? = nil, contentType: String? = nil) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
+        if let body {
+            request.httpMethod = "POST"
+            request.httpBody = body
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+        if let cookies = SiteAccount.cookieHeader(for: url) { request.setValue(cookies, forHTTPHeaderField: "Cookie") }
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         request.setValue(galleryID.map { MangaUrls.readerUrl(for: $0) } ?? MangaUrls.home, forHTTPHeaderField: "Referer")
         if let range { request.setValue("bytes=\(range.lowerBound)-\(range.upperBound - 1)", forHTTPHeaderField: "Range") }
@@ -172,6 +227,7 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         guard let download = lock.withLock({ requests[dataTask.taskIdentifier] }), let http = response as? HTTPURLResponse else {
             finish(dataTask, error: ContentError.invalidResponse); completionHandler(.cancel); return
         }
+        SiteAccount.store(http)
         guard [200, 206, 416].contains(http.statusCode) else {
             finish(dataTask, error: ContentError.unavailable(http.statusCode)); completionHandler(.cancel); return
         }

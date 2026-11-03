@@ -19,7 +19,7 @@ enum ContentPreferences {
 
 public enum MangaUrls {
     static var preferences: UserDefaults { ContentPreferences.defaults }
-    enum Backend: String { case indexed, document }
+    enum Backend: String { case indexed, document, keyed }
     static var backend: Backend {
         guard preferences.string(forKey: "manga.resolved_backend_site") == home else { return .indexed }
         return Backend(rawValue: preferences.string(forKey: "manga.resolved_protocol") ?? "") ?? .indexed
@@ -48,18 +48,40 @@ public enum MangaUrls {
     public static var source: String { String(home.dropLast(home.hasSuffix("/") ? 1 : 0)) }
 
     public static func galleryUrl(for galleryId: Int64) -> String {
-        home.isEmpty ? "" : backend == .document ? "\(home)r/\(galleryId)" : "\(home)galleries/\(galleryId).html"
+        guard !home.isEmpty else { return "" }
+        switch backend {
+        case .document: return "\(home)r/\(galleryId)"
+        case .keyed: return keyedGalleryURL(galleryId)
+        case .indexed: return "\(home)galleries/\(galleryId).html"
+        }
     }
 
     public static func readerUrl(for galleryId: Int64, page: Int = 1) -> String {
         guard !home.isEmpty else { return "" }
-        return backend == .document ? "\(home)r/\(galleryId)#\(max(1, page))" : "\(home)reader/\(galleryId).html#\(max(1, page))"
+        switch backend {
+        case .document: return "\(home)r/\(galleryId)#\(max(1, page))"
+        case .keyed: return keyedGalleryURL(galleryId)
+        case .indexed: return "\(home)reader/\(galleryId).html#\(max(1, page))"
+        }
+    }
+
+    /// Without its key a work is still one search away.
+    private static func keyedGalleryURL(_ galleryId: Int64) -> String {
+        if let key = GalleryKeys.shared.key(for: galleryId) { return "\(home)g/\(galleryId)/\(key)/" }
+        var url = URLComponents(string: home)!
+        url.queryItems = [URLQueryItem(name: "f_search", value: "gid:\(galleryId)")]
+        return url.url?.absoluteString ?? home
     }
 
     public static func artistAllUrl(for artist: String) -> String {
         guard !home.isEmpty else { return "" }
         let trimmed = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? trimmed
+        if backend == .keyed {
+            var url = URLComponents(string: home)!
+            url.queryItems = [URLQueryItem(name: "f_search", value: KeyedCatalogSource.remoteTerm("artist:" + trimmed.replacingOccurrences(of: " ", with: "_")))]
+            return url.url?.absoluteString ?? ""
+        }
         if backend == .document {
             var url = URLComponents(string: home)!
             url.queryItems = [URLQueryItem(name: "search", value: "artist:" + trimmed.replacingOccurrences(of: " ", with: "_"))]
@@ -185,6 +207,79 @@ public enum MangaUrls {
         return true
     }
 
+    /// A listing whose works link as number plus key, with its own search form.
+    static func isKeyedPage(_ text: String) -> Bool {
+        guard text.contains("f_search") || text.contains("searchnav") else { return false }
+        return !KeyedCatalogSource.links(in: text).isEmpty
+    }
+
+    @discardableResult
+    static func extractKeyedBackend(from text: String, site: String) -> Bool {
+        guard home == site, let host = URL(string: site)?.host?.lowercased(), isKeyedPage(text) else { return false }
+        let defaults = preferences
+        if defaults.string(forKey: "manga.resolved_backend_site") != site {
+            for key in ["manga.resolved_media_hosts", "manga.resolved_preview_base", "manga.resolved_api", "manga.resolved_login"] { defaults.removeObject(forKey: key) }
+        }
+        defaults.set(host, forKey: "manga.resolved_data_host")
+        defaults.set(host, forKey: "manga.resolved_cdn_host")
+        defaults.set(Backend.keyed.rawValue, forKey: "manga.resolved_protocol")
+        defaults.set(site, forKey: "manga.resolved_backend_site")
+        defaults.removeObject(forKey: "manga.account_required")
+        return true
+    }
+
+    /// A work page names the data endpoint and the sign-in page; keep them when they stay on the site.
+    static func extractKeyedEndpoints(from text: String, site: String) {
+        guard home == site, let host = URL(string: site)?.host?.lowercased() else { return }
+        func value(_ name: String) -> URL? {
+            guard let range = text.range(of: #"\b"# + name + #"\s*=\s*"([^"]+)""#, options: .regularExpression) else { return nil }
+            let declaration = String(text[range])
+            guard let start = declaration.firstIndex(of: "\""), let url = URL(string: String(declaration[declaration.index(after: start)...].dropLast())),
+                  url.scheme == "https", url.user == nil, url.password == nil, url.port == nil || url.port == 443,
+                  let target = url.host?.lowercased(),
+                  target == host || target.hasSuffix("." + SiteAccount.registrableDomain(host)) else { return nil }
+            return url
+        }
+        if let api = value("api_url") { preferences.set(api.absoluteString, forKey: "manga.resolved_api") }
+        if let login = value("login_url") { preferences.set(login.absoluteString, forKey: "manga.resolved_login") }
+    }
+
+    static var keyedAPI: URL? {
+        guard hasResolvedBackend, backend == .keyed else { return nil }
+        if let saved = preferences.string(forKey: "manga.resolved_api"), let url = URL(string: saved) { return url }
+        return URL(string: home + "api.php")
+    }
+
+    /// Where the person signs in: what the site itself named, else the account host it sent visitors to.
+    static var signInURL: URL? {
+        guard !home.isEmpty else { return nil }
+        if backend == .keyed, hasResolvedBackend, let saved = preferences.string(forKey: "manga.resolved_login"), let url = URL(string: saved) { return url }
+        if let host = accountHost { return URL(string: "https://\(host)/index.php?act=Login&CODE=00") }
+        return backend == .keyed && hasResolvedBackend ? URL(string: home + "favorites.php") : nil
+    }
+
+    /// The host a members-only site sends signed-out visitors to.
+    static var accountHost: String? {
+        guard preferences.string(forKey: "manga.account_site") == home else { return nil }
+        return preferences.string(forKey: "manga.account_host")
+    }
+
+    /// The site showed nothing to this visitor and asks for an account first.
+    static var requiresSignIn: Bool {
+        !hasResolvedBackend && preferences.string(forKey: "manga.account_site") == home && preferences.bool(forKey: "manga.account_required")
+    }
+
+    static var usesAccount: Bool {
+        (hasResolvedBackend && backend == .keyed) || preferences.string(forKey: "manga.account_site") == home
+    }
+
+    static func markRequiresSignIn(site: String, accountHost: String?) {
+        guard home == site else { return }
+        preferences.set(site, forKey: "manga.account_site")
+        if let accountHost { preferences.set(accountHost, forKey: "manga.account_host") }
+        preferences.set(true, forKey: "manga.account_required")
+    }
+
     static func isIndexedPage(_ text: String) -> Bool {
         guard indexedBackendHosts(in: text) != nil else { return false }
         return text.contains(".nozomi") || text.range(of: #"/(?:common\.js|gg\.js|galleries/[0-9]+\.js)(?:[?"'\s>]|$)"#, options: .regularExpression) != nil
@@ -192,13 +287,21 @@ public enum MangaUrls {
 
     static func registerMedia(_ urls: [URL], site: String) {
         guard site == home else { return }
+        let keyed = backend == .keyed
         var hosts = Set(preferences.stringArray(forKey: "manga.resolved_media_hosts") ?? [])
-        hosts.formUnion(urls.filter { DocumentCatalogSource.safeMediaURL($0) }.compactMap { $0.host?.lowercased() })
+        // Keyed catalogs spread images across many volunteer hosts under one domain.
+        let incoming = urls.filter { keyed ? KeyedCatalogSource.safeMediaURL($0) : DocumentCatalogSource.safeMediaURL($0) }
+            .compactMap { $0.host?.lowercased() }.map { keyed ? SiteAccount.registrableDomain($0) : $0 }
+        guard !hosts.isSuperset(of: incoming) else { return }
+        hosts.formUnion(incoming)
         preferences.set(Array(hosts.prefix(64)), forKey: "manga.resolved_media_hosts")
     }
 
     static func allowsMedia(_ host: String) -> Bool {
-        hasResolvedBackend && backend == .document && (preferences.stringArray(forKey: "manga.resolved_media_hosts") ?? []).contains(host)
+        guard hasResolvedBackend, backend != .indexed else { return false }
+        let hosts = preferences.stringArray(forKey: "manga.resolved_media_hosts") ?? []
+        if backend == .keyed { return hosts.contains { host == $0 || host.hasSuffix("." + $0) } }
+        return hosts.contains(host)
     }
 
     /// Keep discovery anchored to the user's address, including its own common.js.
@@ -210,11 +313,34 @@ public enum MangaUrls {
         guard let homepage = URL(string: site), !site.isEmpty else { return false }
         var scripts: [URL] = []
         do {
-            let (data, _) = try await transport.get(homepage, limit: 1_000_000, timeout: 8)
+            let data: Data
+            do { (data, _) = try await transport.get(homepage, limit: 1_000_000, timeout: 8) }
+            catch {
+                // A site that hands signed-out visitors to another host with a one-time
+                // token is asking for an account; a plain move to a new address is not.
+                if let target = transport.foreignRedirect(from: homepage), let host = target.host?.lowercased(), target.query?.isEmpty == false {
+                    markRequiresSignIn(site: site, accountHost: host)
+                    return false
+                }
+                throw error
+            }
             guard home == site, !Task.isCancelled else { return false }
             let body = String(decoding: data, as: UTF8.self)
             if extractBackend(from: body, site: site) { return true }
             if extractDocumentBackend(from: body, site: site) { return true }
+            if extractKeyedBackend(from: body, site: site) {
+                if let link = KeyedCatalogSource.links(in: body).first,
+                   let page = URL(string: "\(site)g/\(link.id)/\(link.key)/"),
+                   let (detail, _) = try? await transport.get(page, limit: 2_000_000, timeout: 8) {
+                    extractKeyedEndpoints(from: String(decoding: detail, as: UTF8.self), site: site)
+                }
+                return true
+            }
+            if body.trimmingCharacters(in: .whitespacesAndNewlines).count < 64, preferences.string(forKey: "manga.account_site") == site {
+                // Signed in, yet the site still shows nothing: the account lacks access.
+                markRequiresSignIn(site: site, accountHost: nil)
+                return false
+            }
             let pattern = #"<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]"#
             let regex = try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
             for match in regex.matches(in: body, range: NSRange(body.startIndex..., in: body)) {
@@ -236,8 +362,15 @@ public enum MangaUrls {
         return false
     }
 
+    /// Changes whenever the resolved protocol is forgotten, so a failed lookup's cooldown does not outlive it.
+    private static let resetLock = NSLock()
+    private nonisolated(unsafe) static var resets = 0
+    static var resetGeneration: Int { resetLock.withLock { resets } }
+
     public static func resetResolvedBackend() {
-        for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base"] {
+        resetLock.withLock { resets += 1 }
+        for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base",
+                    "manga.resolved_api", "manga.resolved_login", "manga.account_required"] {
             preferences.removeObject(forKey: key)
         }
     }
@@ -249,20 +382,20 @@ public enum MangaUrls {
 private actor MangaBackendResolver {
     static let shared = MangaBackendResolver()
     private var flights: [String: Task<Bool, Never>] = [:]
-    private var failedAt: [String: Date] = [:]
+    private var failedAt: [String: (Date, Int)] = [:]
 
     func resolve(transport: ContentTransport, force: Bool) async {
         let site = MangaUrls.home
         guard !site.isEmpty, !Task.isCancelled else { return }
         if let flight = flights[site] { _ = await flight.value; return }
         if !force && MangaUrls.hasResolvedBackend { return }
-        if !force, let date = failedAt[site], Date().timeIntervalSince(date) < 10 { return }
+        if !force, let (date, generation) = failedAt[site], generation == MangaUrls.resetGeneration, Date().timeIntervalSince(date) < 10 { return }
         let task = Task { await MangaUrls.discoverBackend(site: site, transport: transport) }
         flights[site] = task
         let succeeded = await task.value
         flights[site] = nil
         if succeeded { failedAt[site] = nil }
-        else { failedAt[site] = Date() }
+        else { failedAt[site] = (Date(), MangaUrls.resetGeneration) }
     }
 }
 
@@ -299,6 +432,9 @@ public enum GalleryIDParser {
 
         func addFrom(_ value: String, depth: Int = 0) {
             guard depth <= 3 else { return }
+            let keyed = KeyedCatalogSource.links(in: value)
+            GalleryKeys.shared.remember(keyed.map { ($0.id, $0.key) })
+            for link in keyed where seen.insert(link.id).inserted { ids.append(link.id) }
             let nsValue = value as NSString
             let matches = mangaIdRegex.matches(in: value, range: NSRange(location: 0, length: nsValue.length))
             for match in matches {

@@ -7,6 +7,12 @@ import WebKit
 enum ContentBrowserTransport {
     private static var sessions: [String: Browser] = [:]
 
+    /// A sign-in or sign-out changes the cookies a browser session was started with.
+    static func reset() {
+        for browser in sessions.values { browser.view.stopLoading() }
+        sessions.removeAll()
+    }
+
     static func inspectWebsite(at origin: URL) async throws -> String {
         for attempt in 0..<3 {
             do { return try await websiteHTML(at: origin) }
@@ -31,6 +37,15 @@ enum ContentBrowserTransport {
     }
 
     static func get(_ url: URL, origin: URL, limit: Int, range: Range<Int>?, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        try await fetch(url, origin: origin, limit: limit, range: range, timeout: timeout, body: nil, contentType: nil)
+    }
+
+    static func post(_ url: URL, origin: URL, body: Data, contentType: String, limit: Int, timeout: TimeInterval) async throws -> (Data, HTTPURLResponse) {
+        try await fetch(url, origin: origin, limit: limit, range: nil, timeout: timeout, body: body, contentType: contentType)
+    }
+
+    private static func fetch(_ url: URL, origin: URL, limit: Int, range: Range<Int>?, timeout: TimeInterval,
+                              body: Data?, contentType: String?) async throws -> (Data, HTTPURLResponse) {
         guard ContentTransport.allows(url), origin.absoluteString == MangaUrls.home else { throw URLError(.unsupportedURL) }
         let key = origin.absoluteString
         if sessions[key] == nil {
@@ -58,7 +73,9 @@ enum ContentBrowserTransport {
                 try {
                     const headers = {};
                     if (range) headers.Range = range;
-                    const response = await fetch(target.href, {headers, redirect:'error',
+                    if (contentType) headers['Content-Type'] = contentType;
+                    const response = await fetch(target.href, {headers, redirect:'error', method: body === null ? 'GET' : 'POST',
+                        body: body === null ? undefined : body,
                         credentials:target.origin === location.origin ? 'include' : 'omit', signal:controller.signal});
                     const reader = response.body.getReader();
                     const chunks = [];
@@ -67,7 +84,7 @@ enum ContentBrowserTransport {
                         const chunk = await reader.read();
                         if (chunk.done) break;
                         size += chunk.value.length;
-                        if (size > limit) { await reader.cancel(); throw new Error('Response too large'); }
+                        if (size > limit) { await reader.cancel(); return {tooLarge:true}; }
                         chunks.push(chunk.value);
                     }
                     let binary = '';
@@ -87,7 +104,8 @@ enum ContentBrowserTransport {
                 }
                 """, arguments: ["address": url.absoluteString, "requestID": requestID, "limit": limit,
                                   "timeout": Int(timeout * 1000),
-                                  "range": range.map { "bytes=\($0.lowerBound)-\($0.upperBound - 1)" } ?? ""],
+                                  "range": range.map { "bytes=\($0.lowerBound)-\($0.upperBound - 1)" } ?? "",
+                                  "body": body.map { String(decoding: $0, as: UTF8.self) } ?? NSNull(), "contentType": contentType ?? ""],
                 in: nil, contentWorld: .defaultClient)
         } onCancel: {
             Task { @MainActor in
@@ -97,6 +115,7 @@ enum ContentBrowserTransport {
         }
         try Task.checkCancellation()
         guard origin.absoluteString == MangaUrls.home, ContentTransport.allows(url) else { throw CancellationError() }
+        if let result = value as? [String: Any], result["tooLarge"] as? Bool == true { throw ContentError.tooLarge }
         if let result = value as? [String: Any], let failure = result["networkError"] as? String {
             throw URLError(failure == "timeout" ? .timedOut : .networkConnectionLost)
         }
@@ -115,6 +134,7 @@ enum ContentBrowserTransport {
         let view: WKWebView
         private var committed = false
         private var failure: Error?
+        private var pendingCookies = 0
         init(origin: URL) {
             self.origin = origin
             let configuration = WKWebViewConfiguration()
@@ -123,12 +143,19 @@ enum ContentBrowserTransport {
             super.init()
             view.navigationDelegate = self
             view.load(URLRequest(url: origin))
+            // A cookie store that has not served a page yet may never confirm a cookie, so the
+            // page loads at once and requests wait briefly for the account's cookies instead.
+            let cookies = SiteAccount.browserCookies(for: origin.host?.lowercased() ?? "")
+            pendingCookies = cookies.count
+            for cookie in cookies {
+                view.configuration.websiteDataStore.httpCookieStore.setCookie(cookie) { [weak self] in self?.pendingCookies -= 1 }
+            }
         }
         func ready() async throws {
-            for _ in 0..<200 {
+            for attempt in 0..<200 {
                 try Task.checkCancellation()
                 if let failure { throw failure }
-                if committed, view.url?.host == origin.host,
+                if committed, view.url?.host == origin.host, pendingCookies <= 0 || attempt >= 30,
                    (try? await view.evaluateJavaScript("document.readyState !== 'loading'", in: nil, contentWorld: .defaultClient)) as? Bool == true { return }
                 try await Task.sleep(for: .milliseconds(100))
             }

@@ -1,7 +1,7 @@
 import Foundation
 
 enum ContentError: LocalizedError {
-    case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery, galleryNotFound, tooManySearchTerms(Int)
+    case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery, galleryNotFound, tooManySearchTerms(Int), signInRequired, imageLimit
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +13,8 @@ enum ContentError: LocalizedError {
         case .unavailable: return L10n.text("Unable to connect to the server. Try again shortly.")
         case .invalidQuery: return L10n.text("Check your search. Separate terms with spaces and join words within a tag with underscores.")
         case .tooManySearchTerms(let limit): return L10n.text("Use up to %@ search terms, including default and excluded tags.", String(limit))
+        case .signInRequired: return L10n.text("This website shows works only to signed-in accounts. Sign in, then try again.")
+        case .imageLimit: return L10n.text("This website’s image allowance for you has run out. Try again later.")
         }
     }
 
@@ -231,7 +233,7 @@ enum GalleryCategory {
     /// What the connected site can filter by. Until its protocol is known, only categories every protocol has.
     static var available: [String] {
         guard MangaUrls.hasResolvedBackend else { return common }
-        return MangaUrls.backend == .document ? common + ["western", "non-h", "cosplay", "photo", "misc"] : common + ["anime"]
+        return MangaUrls.backend == .indexed ? common + ["anime"] : common + ["western", "non-h", "cosplay", "photo", "misc"]
     }
 
     /// One spelling per category, whichever way a site or an imported catalog wrote it.
@@ -288,6 +290,10 @@ enum RelatedWorks {
 enum GallerySort: String, CaseIterable, Identifiable, Sendable {
     case latest, today, week, month, year
     var id: String { rawValue }
+    /// Keyed catalogs only rank what is popular right now.
+    static var available: [GallerySort] {
+        MangaUrls.hasResolvedBackend && MangaUrls.backend == .keyed ? [.latest, .today] : allCases
+    }
     var title: String {
         switch self {
         case .latest: return L10n.text("Latest")
@@ -354,6 +360,15 @@ enum ContentRoute: Hashable {
     static func initial(_ raw: String) -> ContentRoute? {
         guard let url = URL(string: raw), url.scheme == "https",
               !MangaUrls.configuredHost.isEmpty, url.host?.lowercased() == MangaUrls.configuredHost else { return nil }
+        if url.path.hasPrefix("/g/"), let link = KeyedCatalogSource.links(in: url.path).first {
+            GalleryKeys.shared.remember(link.id, key: link.key)
+            return .gallery(link.id)
+        }
+        // The site's own search form writes spaces as plus signs.
+        if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQueryItems?.first(where: { $0.name == "f_search" })?.value,
+           let search = raw.replacingOccurrences(of: "+", with: "%20").removingPercentEncoding {
+            return keyedSearch(search)
+        }
         if let id = GalleryIDParser.parse(raw).first {
             if url.path.hasPrefix("/reader/") || (url.path.hasPrefix("/r/") && url.fragment != nil) {
                 return .reader(id, max(1, Int(url.fragment ?? "1") ?? 1))
@@ -368,6 +383,35 @@ enum ContentRoute: Hashable {
             return .artist(String(url.lastPathComponent.dropLast("-all.html".count)))
         }
         return nil
+    }
+
+    /// Reads a keyed catalog's own search back into the app's tag spelling.
+    private static func keyedSearch(_ search: String) -> ContentRoute? {
+        let text = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("gid:"), let id = Int64(text.dropFirst(4)), id > 0 { return .gallery(id) }
+        let words = tokens(text).map { token -> String in
+            var word = token.hasSuffix("$") ? String(token.dropLast()) : token
+            let excluded = word.hasPrefix("-")
+            if excluded { word.removeFirst() }
+            if word.hasPrefix("parody:") { word = "series:" + word.dropFirst(7) }
+            if word.hasPrefix("other:") { word = "tag:" + word.dropFirst(6) }
+            return (excluded ? "-" : "") + word.replacingOccurrences(of: " ", with: "_")
+        }.filter { !$0.isEmpty }
+        return words.isEmpty ? nil : .query(words.joined(separator: " "))
+    }
+
+    /// Splits on spaces outside quotes, dropping the quotes.
+    private static func tokens(_ text: String) -> [String] {
+        var result: [String] = [], current = "", quoted = false
+        for character in text {
+            if character == "\"" { quoted.toggle(); continue }
+            if character == " " && !quoted {
+                if !current.isEmpty { result.append(current) }
+                current = ""
+            } else { current.append(character) }
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
     }
 }
 

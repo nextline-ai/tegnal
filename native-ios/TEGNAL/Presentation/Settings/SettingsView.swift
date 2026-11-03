@@ -26,6 +26,7 @@ public struct SettingsView: View {
                 }
                     .accessibilityIdentifier("settings.mangaInfoBeforeReading")
             } header: { Text(L10n.text("Browsing")) }
+            SiteAccountSection()
             ReaderSettingsSection(booru: false, isPresented: $showReader)
             Section {
                 NavigationLink { DownloadsView(mode: .manga) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
