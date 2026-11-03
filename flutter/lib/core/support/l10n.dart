@@ -3,13 +3,46 @@
 abstract final class L10n {
   static Map<String, String> table = const {};
 
+  /// `en`, `ko` or `ja`: the app language setting, or the device language it follows.
+  static String language = 'en';
+
+  static String get contentLanguage => switch (language) {
+    'ko' => 'korean',
+    'ja' => 'japanese',
+    _ => 'english',
+  };
+
+  /// `String(format:)` with `%@` and positional `%1$@` arguments.
   static String text(String key, [List<String> arguments = const []]) {
     var value = table[key] ?? key;
-    for (final argument in arguments) {
-      value = value.replaceFirst('%@', argument);
-    }
-    return value;
+    if (language == 'ko') value = keepingWords(value);
+    if (arguments.isEmpty) return value;
+    value = value.replaceAllMapped(RegExp(r'%(\d+)\$@'), (match) {
+      final index = int.parse(match[1]!) - 1;
+      return index < arguments.length ? arguments[index] : match[0]!;
+    });
+    var next = 0;
+    return value.replaceAllMapped(RegExp('%@'), (match) => next < arguments.length ? arguments[next++] : match[0]!);
   }
 
+  /// iOS wraps Korean between words. Joining the letters of each word with
+  /// U+2060 WORD JOINER makes text layout wrap the same way instead of mid-word.
+  static String keepingWords(String value) {
+    if (!_hangul.hasMatch(value)) return value;
+    final buffer = StringBuffer();
+    final characters = value.runes.toList();
+    for (var index = 0; index < characters.length; index++) {
+      final current = characters[index];
+      buffer.writeCharCode(current);
+      if (index + 1 < characters.length && _joins(current) && _joins(characters[index + 1])) buffer.write('\u2060');
+    }
+    return buffer.toString();
+  }
+
+  static final _hangul = RegExp('[\uAC00-\uD7A3]');
+  static bool _joins(int rune) =>
+      rune >= 0xAC00 && rune <= 0xD7A3 || rune >= 0x30 && rune <= 0x39 || rune >= 0x41 && rune <= 0x5A || rune >= 0x61 && rune <= 0x7A;
+
+  /// Keep the historical database sentinel intact; never rename user data on locale changes.
   static String folderName(String storedName) => storedName == '미분류' ? text('Unfiled') : storedName;
 }

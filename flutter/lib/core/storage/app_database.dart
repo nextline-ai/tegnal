@@ -39,7 +39,7 @@ class AppDatabase implements SmartFolderLibrary {
   }
 
   /// The source naming comics in taste events: the configured site address.
-  String get comicSource => MangaUrls.source(preferences.defaults);
+  String get comicSource => MangaUrls.sourceIn(preferences.defaults);
   TasteItem comicItem(int galleryId, [String? tags]) => TasteItem.comic(galleryId, tags: tags, source: comicSource);
 
   SqlMigrator get _migrator {
