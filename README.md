@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Android_button_kr_mobile.svg"><img src="docs/assets/readme/Android_button_kr.svg" alt="Android 베타 APK 다운로드"></picture></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" height="80"></a>
 </p>
 
 # TEGNAL
@@ -21,7 +21,7 @@
 
 화면 위쪽의 전환 버튼을 누르면 Hitomi 같은 만화 사이트와 Danbooru, Gelbooru, Moebooru 같은 이미지 사이트를 바로 오갈 수 있습니다. 앱에 사이트가 들어 있는 것은 아닙니다. 쓰는 사이트의 주소를 연결하면 그 사이트의 작품을 앱 화면으로 보여 줍니다.
 
-Apple 기기용은 TestFlight로, Android용은 베타 APK로 배포합니다. 모두 무료입니다.
+Apple 기기용은 TestFlight로, Android용은 Google Play로 배포합니다. 모두 무료입니다.
 
 ## 보기
 
@@ -83,14 +83,14 @@ IPA는 설치 도구에서 자신의 Apple 계정으로 다시 서명해야 합�
 
 ### Android
 
-Android 7.0 이상에서 설치할 수 있는 베타 1.0.0-beta.5입니다. Google Play에는 없고 APK 파일을 직접 받습니다.
+[Google Play](https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko)에서 설치합니다. Android 7.0 이상에서 쓸 수 있고, 업데이트도 Google Play로 받습니다.
 
-- [ARM64 APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android-arm64.apk): 최신 휴대폰은 대부분 이 파일입니다.
-- [공용 APK](https://github.com/nextline-ai/tegnal/releases/download/android-v1.0.0-beta.5/TEGNAL-1.0.0-beta.5-android.apk): 기기 종류를 모르겠다면 이 파일을 받습니다. 32비트 ARM, ARM64, x86-64를 모두 지원합니다.
+<details>
+<summary>예전 베타 APK</summary>
 
-받은 파일을 열어 설치합니다. Android가 물어보면 파일을 받은 브라우저나 파일 앱에만 설치를 허용하면 됩니다. 업데이트할 때도 새 APK를 같은 방법으로 설치합니다. 변경 내역과 파일 해시는 [릴리스 페이지](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5)에 있습니다.
+Google Play 정식 출시 전에 배포한 베타 APK는 더 이상 갱신하지 않습니다. 자동 업데이트를 받을 수 없으니 특별한 이유가 없다면 Google Play 버전을 쓰세요. 파일은 [릴리스 페이지](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5)에 남겨 두었습니다.
 
-베타라서 아직 Apple 버전과 같지 않습니다. iCloud 동기화, 비슷한 그림 찾기, 기본 저장 폴더와 스마트 폴더는 없고, 스마트 추천은 이전 버전입니다. 이미지 번역은 설치된 Google 번역 앱으로 넘깁니다. Google Drive 동기화는 지금 꺼져 있습니다.
+</details>
 
 ## 처음 시작할 때
 
