@@ -12,13 +12,17 @@ const double rootBarHeight = 54;
 /// The top of every root screen: a title capsule on the leading side and the
 /// mode switch in the title position, floating above content without a bar background.
 class RootHeader extends StatelessWidget {
-  const RootHeader({super.key, required this.title, required this.state, this.trailing, this.onBack});
+  const RootHeader({super.key, required this.title, required this.state, this.trailing, this.onBack, this.backInTitle = false, this.showsModeSwitch = true});
   final String title;
   final AppState state;
   final Widget? trailing;
 
   /// A pushed screen shows a back button before its title and no mode switch.
   final VoidCallback? onBack;
+
+  /// Saved works put the chevron inside the title capsule instead of its own circle.
+  final bool backInTitle;
+  final bool showsModeSwitch;
 
   @override
   Widget build(BuildContext context) {
@@ -34,12 +38,16 @@ class RootHeader extends StatelessWidget {
               top: 0,
               child: Row(
                 children: [
-                  if (onBack != null) ...[_BackButton(onPressed: onBack!), const SizedBox(width: 8)],
-                  TitleCapsule(title),
+                  if (onBack != null && backInTitle)
+                    BackTitleCapsule(title: title, onPressed: onBack!)
+                  else ...[
+                    if (onBack != null) ...[_BackButton(onPressed: onBack!), const SizedBox(width: 8)],
+                    TitleCapsule(title),
+                  ],
                 ],
               ),
             ),
-            if (onBack == null)
+            if (onBack == null && showsModeSwitch)
               Positioned.fill(
                 child: Align(
                   alignment: Alignment.topCenter,
@@ -179,4 +187,104 @@ class _BackButton extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// `WorksGridView`'s back button: a bold chevron and the folder's name in one glass capsule.
+class BackTitleCapsule extends StatelessWidget {
+  const BackTitleCapsule({super.key, required this.title, required this.onPressed});
+  final String title;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = TegnalColors.label.resolveFrom(context);
+    return Semantics(
+      button: true,
+      label: L10n.text('Back'),
+      value: title,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Glass.capsule(
+          child: SizedBox(
+            height: 44,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 13, right: 15),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.chevron_left, size: 17, color: label, fontWeight: FontWeight.w700),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TegnalType.style(15, weight: FontWeight.w700, color: label),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `AppToolbarActions`: toolbar buttons sharing one 44 pt glass capsule, 40 pt apart.
+class ToolbarGroup extends StatelessWidget {
+  const ToolbarGroup({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Glass.capsule(
+    child: SizedBox(
+      height: 44,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (index, child) in children.indexed) ...[if (index > 0) const SizedBox(width: 4), child],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// One icon in a [ToolbarGroup]; a null action dims it.
+class ToolbarIconButton extends StatelessWidget {
+  const ToolbarIconButton({super.key, required this.label, required this.onPressed, this.icon, this.symbol, this.size = 22});
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final Widget Function(Color color)? symbol;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = TegnalColors.label.resolveFrom(context).withValues(alpha: onPressed == null ? 0.3 : 1);
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: SizedBox(
+          width: 36,
+          height: 44,
+          child: Center(
+            child: symbol?.call(color) ?? Icon(icon, size: size, color: color),
+          ),
+        ),
+      ),
+    );
+  }
 }

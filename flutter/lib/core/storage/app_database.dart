@@ -9,6 +9,7 @@ import '../support/swift_json.dart';
 import '../taste/taste_models.dart';
 import '../taste/taste_store.dart';
 import 'app_storage.dart';
+import 'local_thumbnail_cache.dart';
 import 'folder_rules.dart';
 import 'work_query.dart';
 
@@ -25,6 +26,13 @@ class AppDatabase implements SmartFolderLibrary {
 
   final SqlDatabase dbWriter;
   final AppPreferences preferences;
+
+  /// Fires after every committed write; library screens fetch again on each one, as
+  /// GRDB's `ValueObservation` re-runs their queries natively.
+  Stream<int> get changes => dbWriter.changes;
+
+  /// How many writes have committed, for comparing whether a fetched snapshot is current.
+  int get revision => dbWriter.revision;
 
   static AppDatabase open({String? path, required AppPreferences preferences}) {
     final database = AppDatabase(SqlDatabase.open(path ?? AppStorage.localDbPath), preferences: preferences);
@@ -603,6 +611,8 @@ class AppDatabase implements SmartFolderLibrary {
 
   void setThumb(int galleryId, String status, {String? path, int? page}) {
     final now = iso8601();
+    // Invalidate before observers receive the updated thumbnail record.
+    if (path != null) LocalThumbnailCache.shared.invalidate(path);
     dbWriter.write((db) {
       if (status == 'failed' || status == 'gone') {
         db.execute('UPDATE works SET thumb_status = ?, thumb_failed_at = ? WHERE gallery_id = ?', [status, now, galleryId]);
@@ -647,6 +657,10 @@ class AppDatabase implements SmartFolderLibrary {
         );
       }
     });
+    for (final change in changes) {
+      if (change.old case final old?) LocalThumbnailCache.shared.invalidate(old);
+      if (change.recovered case final recovered?) LocalThumbnailCache.shared.invalidate(recovered);
+    }
   }
 
   static const _needsFill = '''

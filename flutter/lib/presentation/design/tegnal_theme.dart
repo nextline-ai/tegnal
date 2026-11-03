@@ -16,6 +16,8 @@ abstract final class TegnalColors {
   static const coverPlaceholder = CupertinoDynamicColor.withBrightness(color: Color(0x1F3C3C43), darkColor: Color(0x1FEBEBF5));
 
   /// Liquid Glass over plain backgrounds, measured from the native app.
+  /// The `.searchable` field: tertiary fill over the screen.
+  static const searchFieldFill = CupertinoDynamicColor.withBrightness(color: Color(0xFFEEEEEF), darkColor: Color(0xFF1C1C1F));
   static const glassFill = CupertinoDynamicColor.withBrightness(color: Color(0xF2FFFFFF), darkColor: Color(0x6B404040));
   static const elevatedGlassFill = CupertinoDynamicColor.withBrightness(color: Color(0xF2FFFFFF), darkColor: Color(0xFF3A3A3C));
   static const glassStroke = CupertinoDynamicColor.withBrightness(color: Color(0x1F000000), darkColor: Color(0x1AFFFFFF));

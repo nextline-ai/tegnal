@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/content/gallery_content.dart';
 import '../design/tegnal_theme.dart';
 
 /// `ArtworkCellStyle`: everything scales with the cell against a 160 pt reference.
@@ -263,3 +264,18 @@ class GalleryCardLayout extends StatelessWidget {
     );
   }
 }
+
+/// `GalleryCategory.color`: distinct hues let a grid be scanned by category at a glance.
+Color galleryCategoryColor(String type) => switch (GalleryCategory.key(type)) {
+  'doujinshi' => const Color.from(alpha: 1, red: 0.80, green: 0.24, blue: 0.24),
+  'manga' => const Color.from(alpha: 1, red: 0.86, green: 0.45, blue: 0.10),
+  'artistcg' => const Color.from(alpha: 1, red: 0.72, green: 0.56, blue: 0.04),
+  'gamecg' => const Color.from(alpha: 1, red: 0.20, green: 0.58, blue: 0.30),
+  'imageset' => const Color.from(alpha: 1, red: 0.30, green: 0.36, blue: 0.80),
+  'anime' => const Color.from(alpha: 1, red: 0.08, green: 0.56, blue: 0.62),
+  'western' => const Color.from(alpha: 1, red: 0.45, green: 0.58, blue: 0.10),
+  'non-h' => const Color.from(alpha: 1, red: 0.16, green: 0.46, blue: 0.82),
+  'cosplay' => const Color.from(alpha: 1, red: 0.56, green: 0.30, blue: 0.76),
+  'photo' => const Color.from(alpha: 1, red: 0.80, green: 0.30, blue: 0.56),
+  _ => const Color.from(alpha: 1, red: 0.42, green: 0.42, blue: 0.42),
+};

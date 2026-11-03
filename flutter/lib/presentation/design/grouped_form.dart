@@ -10,12 +10,19 @@ import 'tegnal_theme.dart';
 abstract final class FormColors {
   static const background = CupertinoDynamicColor.withBrightness(color: Color(0xFFF2F2F7), darkColor: Color(0xFF1C1C1E));
   static const row = CupertinoDynamicColor.withBrightness(color: Color(0xFFFFFFFF), darkColor: Color(0xFF2C2C2E));
+
+  /// An inset-grouped list on the screen itself, not in a sheet: rows over the system background.
+  static const listRow = CupertinoDynamicColor.withBrightness(color: Color(0xFFFFFFFF), darkColor: Color(0xFF1C1C1E));
+  static const listBackground = CupertinoDynamicColor.withBrightness(color: Color(0xFFF2F2F7), darkColor: Color(0xFF000000));
 }
 
 /// A `Form` section: an optional header, then rows on one rounded card with 26 pt corners.
 class FormSection extends StatelessWidget {
-  const FormSection({super.key, this.header, required this.children, this.footer, this.prominentHeader = false});
+  const FormSection({super.key, this.header, required this.children, this.footer, this.prominentHeader = false, this.rowColor});
   final Widget? header;
+
+  /// Rows on the screen use [FormColors.listRow]; rows in sheets keep [FormColors.row].
+  final Color? rowColor;
 
   /// A plain `Form` inside a navigation stack titles its sections in semibold, closer to the rows.
   final bool prominentHeader;
@@ -33,7 +40,7 @@ class FormSection extends StatelessWidget {
         children: [
           if (header != null)
             Padding(
-              padding: EdgeInsets.only(left: 16, right: 16, bottom: prominentHeader ? 10 : 16),
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
               child: DefaultTextStyle(
                 style: TegnalType.style(
                   17,
@@ -46,7 +53,7 @@ class FormSection extends StatelessWidget {
           ClipRSuperellipse(
             borderRadius: BorderRadius.circular(26),
             child: ColoredBox(
-              color: FormColors.row.resolveFrom(context),
+              color: rowColor ?? FormColors.row.resolveFrom(context),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -211,10 +218,13 @@ class _ScrollEdgeSheetState extends State<ScrollEdgeSheet> {
 
 /// A toolbar text button in its own glass capsule, 44 pt tall.
 class GlassTextButton extends StatelessWidget {
-  const GlassTextButton({super.key, required this.label, this.onPressed, this.prominent = false});
+  const GlassTextButton({super.key, required this.label, this.onPressed, this.prominent = false, this.elevated = true});
   final String label;
   final VoidCallback? onPressed;
   final bool prominent;
+
+  /// In a sheet the glass is lighter; on a screen's toolbar it is the plain glass.
+  final bool elevated;
 
   @override
   Widget build(BuildContext context) {
@@ -229,7 +239,7 @@ class GlassTextButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
         child: Glass.capsule(
-          elevated: true,
+          elevated: elevated,
           child: SizedBox(
             height: 44,
             child: Padding(

@@ -2,6 +2,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../core/booru/booru_store.dart';
 import '../core/content/content_environment.dart';
+import '../core/content/cover_queue.dart';
 import '../core/storage/app_database.dart';
 import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
@@ -11,22 +12,38 @@ import '../presentation/content/explore_view.dart';
 import '../presentation/content/page_image_store.dart';
 import '../presentation/design/tegnal_theme.dart';
 import '../presentation/navigation/app_header.dart';
+import '../presentation/library/collections_view.dart';
+import '../presentation/library/folders_view.dart';
+import '../presentation/library/library_routes.dart';
 import '../presentation/navigation/app_state.dart';
 import '../presentation/navigation/root_tab_view.dart';
+import '../presentation/navigation/tab_navigator.dart';
 import '../presentation/settings/website_setup.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
-  AppServices({required this.preferences, required this.database, required this.booru, required this.content, bool isTesting = false})
-    : images = PageImageStore(source: content.source),
-      bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting);
+  AppServices({required this.preferences, required this.database, required this.booru, required this.content, this.isTesting = false})
+    : images = PageImageStore(source: content.source) {
+    // Fixture runs and tests never fill covers from the network, as in the native app.
+    coverQueue = isTesting
+        ? CoverQueue.disabled(database: database, source: content.source)
+        : CoverQueue(
+            database: database,
+            source: content.source,
+            thumbnailData: (page, id) => images.data(page, galleryID: id, thumbnail: true),
+            isSiteVerified: () => content.isSiteVerified,
+          );
+    bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting, startCoverQueue: coverQueue.start);
+  }
 
   final AppPreferences preferences;
   final AppDatabase database;
   final BooruStore booru;
   final ContentEnvironment content;
   final PageImageStore images;
-  final BookmarkSession bookmarks;
+  final bool isTesting;
+  late final CoverQueue coverQueue;
+  late final BookmarkSession bookmarks;
 }
 
 class TegnalApp extends StatefulWidget {
@@ -69,10 +86,40 @@ class _TegnalAppState extends State<TegnalApp> {
   }
 }
 
-class _Root extends StatelessWidget {
+class _Root extends StatefulWidget {
   const _Root({required this.state, required this.services});
   final AppState state;
   final AppServices services;
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  AppServices get services => widget.services;
+  AppState get state => widget.state;
+
+  late final _contentRoutes = ContentRoutes(
+    state: state,
+    content: services.content,
+    database: services.database,
+    images: services.images,
+    preferences: services.preferences.defaults,
+    bookmarks: services.bookmarks,
+  );
+  late final _library = LibraryRoutes(
+    state: state,
+    database: services.database,
+    content: services.content,
+    contentRoutes: _contentRoutes,
+    startCoverQueue: services.coverQueue.start,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (!services.isTesting) services.coverQueue.start();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,9 +130,18 @@ class _Root extends StatelessWidget {
         builder: (context, _) => RootTabView(
           state: state,
           pages: {
-            AppTab.folders: _PendingRoot(title: L10n.text('Saved'), state: state),
-            AppTab.works: _ExploreRoot(state: state, services: services),
-            AppTab.artists: _PendingRoot(title: L10n.text('Tags'), state: state),
+            AppTab.folders: TabNavigator(
+              active: state.tab == AppTab.folders,
+              builder: (context) => FoldersView(state: state, routes: _library),
+            ),
+            AppTab.works: TabNavigator(
+              active: state.tab == AppTab.works,
+              builder: (context) => _ExploreRoot(state: state, services: services),
+            ),
+            AppTab.artists: TabNavigator(
+              active: state.tab == AppTab.artists,
+              builder: (context) => CollectionsView(state: state, routes: _library, preferences: services.preferences.defaults),
+            ),
             AppTab.settings: _PendingRoot(title: L10n.text('Settings'), state: state),
             AppTab.insights: _PendingRoot(title: L10n.text('Smart'), state: state),
           },
@@ -139,7 +195,7 @@ class _ExploreRoot extends StatelessWidget {
         content: content,
         isActive: state.tab == AppTab.works && state.mode == AppMode.manga,
         openGallery: (id) => routes.openThumbnail(context, id),
-        bookmark: (id, gallery) => routes.toggleBookmark(context, id, gallery),
+        bookmark: (id, gallery) => routes.toggleBookmark(context, id, gallery, aboveTabBar: true),
       );
     },
   );

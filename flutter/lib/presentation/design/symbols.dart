@@ -213,3 +213,49 @@ class _HandTapPainter extends CustomPainter {
   @override
   bool shouldRepaint(_HandTapPainter old) => old.color != color;
 }
+
+/// `paintpalette`: a painter's palette outline with four paint dots and a thumb hole.
+class PaletteSymbol extends StatelessWidget {
+  const PaletteSymbol({super.key, this.size = 21, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _PalettePainter(resolved));
+  }
+}
+
+class _PalettePainter extends CustomPainter {
+  _PalettePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.7 * unit
+      ..strokeJoin = StrokeJoin.round;
+    final outline = Path()
+      ..moveTo(12 * unit, 2.5 * unit)
+      ..cubicTo(5.8 * unit, 2.5 * unit, 1.5 * unit, 6.6 * unit, 1.5 * unit, 11.8 * unit)
+      ..cubicTo(1.5 * unit, 17.4 * unit, 6 * unit, 21.5 * unit, 11.4 * unit, 21.5 * unit)
+      ..cubicTo(13.2 * unit, 21.5 * unit, 13.6 * unit, 20.2 * unit, 13 * unit, 18.9 * unit)
+      ..cubicTo(12.3 * unit, 17.4 * unit, 13.2 * unit, 15.6 * unit, 15 * unit, 15.6 * unit)
+      ..lineTo(17.6 * unit, 15.6 * unit)
+      ..cubicTo(20.5 * unit, 15.6 * unit, 22.5 * unit, 13.7 * unit, 22.5 * unit, 11 * unit)
+      ..cubicTo(22.5 * unit, 6.2 * unit, 17.8 * unit, 2.5 * unit, 12 * unit, 2.5 * unit)
+      ..close();
+    canvas.drawPath(outline, stroke);
+    final fill = Paint()..color = color;
+    for (final dot in const [Offset(6.4, 12.4), Offset(8, 7.6), Offset(12.6, 6), Offset(17, 8)]) {
+      canvas.drawCircle(dot * unit, 1.7 * unit, fill);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PalettePainter old) => old.color != color;
+}

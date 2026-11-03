@@ -160,8 +160,14 @@ class _ExploreViewState extends State<ExploreView> {
     _search.addListener(_textChanged);
     _loader.addListener(() => setState(() {}));
     _reloadBookmarks();
+    // Saved marks follow the works table, as the native view observes it.
+    _libraryChanges = widget.database.changes.listen((_) {
+      if (mounted) setState(_reloadBookmarks);
+    });
     if (widget.isActive) _loader.load(_effectiveQuery, reset: true);
   }
+
+  StreamSubscription<int>? _libraryChanges;
 
   @override
   void didUpdateWidget(ExploreView old) {
@@ -177,6 +183,7 @@ class _ExploreViewState extends State<ExploreView> {
 
   @override
   void dispose() {
+    _libraryChanges?.cancel();
     _loader.dispose();
     _suggestionTimer?.cancel();
     _search.dispose();
@@ -620,6 +627,7 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
             artists: display?.artists ?? '',
             language: display?.language ?? '',
             category: type.isEmpty ? '' : GalleryCategory.title(type),
+            categoryColor: galleryCategoryColor(type),
             cover: image != null
                 ? RawImage(image: image, fit: BoxFit.cover, filterQuality: ui.FilterQuality.medium)
                 : ColoredBox(

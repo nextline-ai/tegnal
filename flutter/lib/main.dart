@@ -29,6 +29,34 @@ const _tab = String.fromEnvironment('TEGNAL_TAB');
 const _theme = String.fromEnvironment('TEGNAL_THEME');
 const _details = bool.fromEnvironment('TEGNAL_DETAILS');
 
+/// The native UI tests' saved libraries: `localLibrary` (`--comics-local-library-test`),
+/// `categoryLibrary` (`--category-library-test`) and `libraryJump` (`--library-jump-test`).
+void _seedLibrary(AppDatabase database, Set<String> names) {
+  if (names.contains('localLibrary')) {
+    final folder = database.createFolder(name: 'Offline library');
+    database.upsertWork(galleryId: 900000001, folderId: folder.id, title: 'Imported work');
+  }
+  if (names.contains('categoryLibrary')) {
+    const categories = ['doujinshi', 'manga', 'artistcg', 'gamecg', 'imageset'];
+    for (var index = 0; index < 6; index++) {
+      final id = 900000001 + index;
+      database.upsertWork(galleryId: id, title: '샘플 작품 ${index + 1}', artists: 'TEGNAL', language: 'korean', type: categories[id % 5], tags: 'tag:example');
+    }
+  }
+  if (names.contains('libraryJump')) {
+    final folder = database.createFolder(name: '이동 테스트');
+    for (var index = 0; index < 120; index++) {
+      final month = 10 - index ~/ 30, day = 30 - index % 30;
+      database.upsertWork(
+        galleryId: 910000001 + index,
+        folderId: folder.id,
+        title: '샘플 작품 ${index + 1}',
+        bookmarkedAt: '2026-${'$month'.padLeft(2, '0')}-${'$day'.padLeft(2, '0')}T12:00:00Z',
+      );
+    }
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final services = _fixture.isEmpty ? await _launch() : await _launchFixture();
@@ -70,9 +98,11 @@ Future<AppServices> _launchFixture() async {
           source: FixtureContentSource(options: options),
         )
       : ContentEnvironment.fixture(preferences: preferences.defaults, options: options);
+  final database = AppDatabase.inMemory(preferences: preferences);
+  _seedLibrary(database, names);
   return AppServices(
     preferences: preferences,
-    database: AppDatabase.inMemory(preferences: preferences),
+    database: database,
     booru: BooruStore.inMemory(preferences: preferences),
     content: content,
     isTesting: true,

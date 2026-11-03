@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -16,6 +17,15 @@ class SqlDatabase {
 
   final sqlite.Database _db;
   int _depth = 0;
+  final _changes = StreamController<int>.broadcast();
+
+  /// Counts committed writes. Screens that list library rows observe [changes] and fetch
+  /// again, standing in for GRDB's `ValueObservation`, which re-runs a query after each
+  /// committed transaction that may have changed it.
+  int revision = 0;
+
+  /// The new [revision] after every committed `write`, delivered asynchronously.
+  Stream<int> get changes => _changes.stream;
 
   /// Rows changed by the last INSERT, UPDATE or DELETE (`db.changesCount`).
   int get changesCount => _db.updatedRows;
@@ -37,6 +47,8 @@ class SqlDatabase {
     try {
       final result = body(this);
       _db.execute('COMMIT');
+      revision += 1;
+      _changes.add(revision);
       return result;
     } catch (_) {
       _db.execute('ROLLBACK');
@@ -79,7 +91,10 @@ class SqlDatabase {
 
   List<String> columns(String table) => [for (final row in rows('PRAGMA table_info("$table")')) row['name'] as String];
 
-  void close() => _db.close();
+  void close() {
+    _db.close();
+    _changes.close();
+  }
 
   static List<Object?> _bind(List<Object?> arguments) => [for (final value in arguments) value is bool ? (value ? 1 : 0) : value];
 

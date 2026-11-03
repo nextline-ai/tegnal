@@ -33,10 +33,26 @@ def parse(path: pathlib.Path) -> dict:
     return {unescape(key): unescape(value) for key, value in ENTRY.findall(text)}
 
 
+# Wording iOS supplies itself (PasteButton, ContentUnavailableView.search), which the
+# native strings files do not hold. Keys are the English system wording.
+SYSTEM = {
+    "Paste": {"en": "Paste", "ko": "붙여넣기", "ja": "ペースト"},
+    "No Results": {"en": "No Results", "ko": "결과 없음", "ja": "結果なし"},
+    "No Results for “%@”": {"en": "No Results for “%@”", "ko": "‘%@’에 대한 결과 없음", "ja": "“%@”の結果なし"},
+    "Check the spelling or try a new search.": {
+        "en": "Check the spelling or try a new search.",
+        "ko": "철자를 확인하거나 새로운 검색을 시도하십시오.",
+        "ja": "スペルを確認するか、新しい検索を試してください。",
+    },
+}
+
+
 def main() -> None:
     TARGET.mkdir(parents=True, exist_ok=True)
     for language in ("en", "ko", "ja"):
         table = parse(SOURCE / f"{language}.lproj" / "Localizable.strings")
+        for key, values in SYSTEM.items():
+            table.setdefault(key, values[language])
         output = TARGET / f"{language}.json"
         output.write_text(json.dumps(table, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         print(f"{output.relative_to(ROOT)}: {len(table)} strings")

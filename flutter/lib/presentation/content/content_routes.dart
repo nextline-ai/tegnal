@@ -6,6 +6,7 @@ import '../../core/storage/app_database.dart';
 import '../../core/support/preferences.dart';
 import '../../core/taste/taste_models.dart';
 import '../navigation/app_state.dart';
+import '../navigation/root_tab_view.dart';
 import 'content_bookmark.dart';
 import 'explore_view.dart';
 import 'gallery_detail_view.dart';
@@ -51,6 +52,7 @@ class ContentRoutes {
           () => ContentBookmarkAction.save(id, gallery: gallery, session: bookmarks, images: images, context: DiscoveryContext.unknown),
           galleryID: id,
         ),
+        session: bookmarks,
       ),
       search: (text) {
         Navigator.of(sheetContext).pop();
@@ -81,12 +83,14 @@ class ContentRoutes {
     search: (text) => search(context, text),
   );
 
-  void toggleBookmark(BuildContext context, int id, NativeGallery? gallery) => showWorkSaveFeedback(
+  void toggleBookmark(BuildContext context, int id, NativeGallery? gallery, {bool aboveTabBar = false}) => showWorkSaveFeedback(
     context,
     WorkSaveFeedback.perform(
       () => ContentBookmarkAction.toggle(id, gallery: gallery, session: bookmarks, images: images),
       galleryID: id,
     ),
+    session: bookmarks,
+    bottom: aboveTabBar ? tabBarClearance(context) + 8 : null,
   );
 
   /// A tag, artist or search opens its own feed on top of Explore.
@@ -101,7 +105,7 @@ class ContentRoutes {
         initialQuery: text,
         onBack: () => Navigator.of(context).pop(),
         openGallery: (id) => openThumbnail(context, id),
-        bookmark: (id, gallery) => toggleBookmark(context, id, gallery),
+        bookmark: (id, gallery) => toggleBookmark(context, id, gallery, aboveTabBar: true),
       ),
     ),
   );

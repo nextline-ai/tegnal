@@ -346,13 +346,10 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                     header: Row(
                       children: [
                         Text(L10n.text('Website Address')),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () => _showHelp(
-                            context,
-                            'Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode.',
-                          ),
-                          child: Icon(CupertinoIcons.info_circle, size: 18, color: tint),
+                        const SizedBox(width: 4),
+                        FormHelpButton(
+                          title: L10n.text('Website Address'),
+                          message: L10n.text('Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode.'),
                         ),
                       ],
                     ),
@@ -444,14 +441,4 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
       ),
     );
   }
-
-  void _showHelp(BuildContext context, String help) => showCupertinoDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (context) => CupertinoAlertDialog(
-      title: Text(L10n.text('Website Address')),
-      content: Text(L10n.text(help)),
-      actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
-    ),
-  );
 }

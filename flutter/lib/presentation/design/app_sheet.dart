@@ -102,7 +102,15 @@ class _SheetBodyState extends State<_SheetBody> {
                 removeTop: true,
                 child: Stack(
                   children: [
-                    Positioned.fill(child: widget.route.builder(context, _controller)),
+                    // The keyboard shortens the sheet's content, so a focused field scrolls above it.
+                    Positioned.fill(
+                      bottom: media.viewInsets.bottom,
+                      child: MediaQuery.removeViewInsets(
+                        context: context,
+                        removeBottom: true,
+                        child: Builder(builder: (context) => widget.route.builder(context, _controller)),
+                      ),
+                    ),
                     if (widget.route.grabber)
                       Positioned(
                         top: 5,
