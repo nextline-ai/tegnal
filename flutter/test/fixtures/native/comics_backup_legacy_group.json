@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "exported_at": "2025-06-01T00:00:00Z",
+  "folders": [
+    {"id": 3, "name": "미분류", "color": 4280391411, "sort_order": 1, "description": "기본 폴더"},
+    {"id": 5, "name": "Old Reading", "color": 4279383126, "sort_order": 0, "legacy_group_id": 42, "description": "Imported from an older app"},
+    {"id": 6, "name": "No Color", "sort_order": 2, "legacy_group_id": 77}
+  ],
+  "works": [
+    {"gallery_id": 2001, "title": "Legacy Work", "artists": "old artist", "note": "Old note", "bookmarked_at": "2025-05-01T10:00:00Z", "folders": ["Old Reading"], "thumb_page": 3},
+    {"gallery_id": 2002, "title": "Legacy Unfiled", "bookmarked_at": "2025-05-02T10:00:00Z"},
+    {"gallery_id": 2003, "tags": "female:glasses", "bookmarked_at": "2025-05-03T10:00:00Z", "folders": ["No Color", "Old Reading"]}
+  ],
+  "artists": [
+    {"name": "old artist"},
+    {"name": "old circle", "kind": 1, "note": "Group note"}
+  ]
+}

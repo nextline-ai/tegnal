@@ -1,0 +1,306 @@
+{
+  "blacklist" : {
+    "server-alpha" : "gore\nrating:e -safe_tag",
+    "server-beta" : "",
+    "server-gamma" : "# comment line\nscat"
+  },
+  "exportedAt" : 815416820.664167,
+  "favorites" : [
+    {
+      "folderID" : "folder-poses",
+      "post" : {
+        "artists" : [
+
+        ],
+        "commentCount" : 1,
+        "favoriteCount" : 4,
+        "fileExtension" : "mp4",
+        "fileURL" : "https:\/\/img.gamma.example\/images\/90\/9001.mp4",
+        "height" : 720,
+        "poolIDs" : [
+          3
+        ],
+        "postID" : 9001,
+        "previewURL" : "https:\/\/img.gamma.example\/thumbnails\/90\/thumbnail_9001.jpg",
+        "rating" : "e",
+        "score" : 15,
+        "serverID" : "server-gamma",
+        "tags" : [
+          "video",
+          "sound",
+          "dancing"
+        ],
+        "width" : 1280
+      },
+      "savedAt" : 1767409445.125
+    },
+    {
+      "folderID" : "folder-refs",
+      "post" : {
+        "animated" : true,
+        "animationVideoURL" : "https:\/\/cdn.alpha.example\/sample\/ef\/ef.webm",
+        "artists" : [
+          "artist_two",
+          "artist_three"
+        ],
+        "favoriteCount" : 0,
+        "fileExtension" : "zip",
+        "fileURL" : "https:\/\/cdn.alpha.example\/original\/ef\/ef.zip?download=1&name=a%20b",
+        "height" : 600,
+        "isBanned" : true,
+        "isDeleted" : true,
+        "metadataTags" : [
+          "animated",
+          "ugoira"
+        ],
+        "poolIDs" : [
+
+        ],
+        "postID" : 5002,
+        "previewURL" : "https:\/\/cdn.alpha.example\/preview\/ef\/ef.jpg",
+        "rating" : "q",
+        "sampleURL" : "https:\/\/cdn.alpha.example\/sample\/ef\/ef.webm",
+        "score" : -3,
+        "serverID" : "server-alpha",
+        "tagCategories" : {
+          "artist_three" : 1,
+          "artist_two" : 1,
+          "日本語タグ" : 4
+        },
+        "tags" : [
+          "animated",
+          "ugoira",
+          "日本語タグ",
+          "blue_sky"
+        ],
+        "width" : 800
+      },
+      "savedAt" : 1767323046.5
+    },
+    {
+      "folderID" : "folder-sky",
+      "post" : {
+        "animated" : false,
+        "artists" : [
+          "artist_one"
+        ],
+        "commentCount" : 3,
+        "favoriteCount" : 99,
+        "fileExtension" : "png",
+        "fileURL" : "https:\/\/cdn.alpha.example\/original\/ab\/cd\/abcd1234.png",
+        "height" : 1080,
+        "isDeleted" : false,
+        "metadataTags" : [
+          "highres"
+        ],
+        "poolIDs" : [
+          7,
+          12
+        ],
+        "postID" : 5001,
+        "previewURL" : "https:\/\/cdn.alpha.example\/preview\/ab\/cd\/abcd1234.jpg",
+        "rating" : "s",
+        "reducedDataURL" : "https:\/\/cdn.alpha.example\/reduced\/abcd1234.webp",
+        "sampleURL" : "https:\/\/cdn.alpha.example\/sample\/ab\/cd\/sample-abcd1234.jpg",
+        "score" : 42,
+        "serverID" : "server-alpha",
+        "tagCategories" : {
+          "1girl" : 0,
+          "artist_one" : 1,
+          "blue_sky" : 0,
+          "cloud" : 0,
+          "highres" : 5
+        },
+        "tags" : [
+          "1girl",
+          "blue_sky",
+          "cloud",
+          "artist_one",
+          "highres"
+        ],
+        "upvoteCount" : 50,
+        "width" : 1920
+      },
+      "savedAt" : 1767323045
+    },
+    {
+      "folderID" : "unsorted",
+      "post" : {
+        "artists" : [
+
+        ],
+        "fileExtension" : "jpg",
+        "height" : 0,
+        "poolIDs" : [
+
+        ],
+        "postID" : 7001,
+        "previewURL" : "https:\/\/files.beta.example\/sub\/preview\/7001.jpg",
+        "rating" : "q",
+        "score" : 0,
+        "serverID" : "server-beta",
+        "tags" : [
+
+        ],
+        "width" : 0
+      },
+      "savedAt" : 1767236645
+    },
+    {
+      "folderID" : "site:https:\/\/beta.example\/sub",
+      "post" : {
+        "artists" : [
+          "painter_x"
+        ],
+        "fileExtension" : "jpg",
+        "fileURL" : "https:\/\/files.beta.example\/sub\/image\/7002.jpg",
+        "height" : 3000,
+        "poolIDs" : [
+
+        ],
+        "postID" : 7002,
+        "previewURL" : "https:\/\/files.beta.example\/sub\/preview\/7002.jpg",
+        "rating" : "s",
+        "sampleURL" : "https:\/\/files.beta.example\/sub\/sample\/7002.jpg",
+        "score" : 8,
+        "serverID" : "server-beta",
+        "tags" : [
+          "landscape",
+          "mountain"
+        ],
+        "width" : 2000
+      },
+      "savedAt" : 1767150245
+    }
+  ],
+  "folderRules" : [
+    {
+      "excluded" : "gore, rating:e",
+      "folder" : "folder-sky",
+      "includesOtherFolders" : false,
+      "isEnabled" : true,
+      "query" : "blue_sky",
+      "sources" : [
+        "folder-refs",
+        "unsorted"
+      ]
+    }
+  ],
+  "folders" : [
+    {
+      "color" : 4278355143,
+      "id" : "folder-sky",
+      "name" : "Sky"
+    },
+    {
+      "color" : 4289449455,
+      "id" : "folder-refs",
+      "name" : "References"
+    },
+    {
+      "color" : 4281549909,
+      "id" : "unsorted",
+      "name" : ""
+    },
+    {
+      "color" : 4280640491,
+      "id" : "site:https:\/\/beta.example\/sub",
+      "name" : "beta.example\/sub"
+    },
+    {
+      "color" : 4278556265,
+      "id" : "folder-poses",
+      "name" : "Poses \/ 포즈"
+    }
+  ],
+  "format" : "tegnal-image-library",
+  "history" : [
+    {
+      "query" : "blue_sky rating:s",
+      "serverID" : "server-alpha",
+      "usedAt" : 1767323045.75
+    },
+    {
+      "query" : "artist_one",
+      "serverID" : "server-alpha",
+      "usedAt" : 1767323000
+    },
+    {
+      "query" : "landscape",
+      "serverID" : "server-beta",
+      "usedAt" : 1767236645
+    },
+    {
+      "query" : "video -sound",
+      "serverID" : "server-gamma",
+      "usedAt" : 1767150245.5
+    }
+  ],
+  "savedTags" : [
+    {
+      "kind" : "artist",
+      "name" : "artist_one",
+      "serverID" : "server-alpha"
+    },
+    {
+      "kind" : "female",
+      "name" : "glasses",
+      "serverID" : "server-alpha"
+    },
+    {
+      "kind" : "search",
+      "name" : "blue_sky rating:s",
+      "serverID" : "server-alpha"
+    },
+    {
+      "kind" : "series",
+      "name" : "series_name",
+      "serverID" : "server-alpha"
+    },
+    {
+      "kind" : "tag",
+      "name" : "blue_sky",
+      "serverID" : "server-alpha"
+    },
+    {
+      "kind" : "metadata",
+      "name" : "highres",
+      "serverID" : "server-beta"
+    },
+    {
+      "kind" : "tag",
+      "name" : "mountain",
+      "serverID" : "server-beta"
+    },
+    {
+      "kind" : "character",
+      "name" : "dancing",
+      "serverID" : "server-gamma"
+    }
+  ],
+  "selectedServerIDs" : [
+    "server-alpha",
+    "server-gamma"
+  ],
+  "servers" : [
+    {
+      "baseURL" : "https:\/\/alpha.example",
+      "engine" : "danbooru",
+      "id" : "server-alpha",
+      "name" : "Alpha Images"
+    },
+    {
+      "baseURL" : "https:\/\/beta.example\/sub",
+      "engine" : "moebooru",
+      "id" : "server-beta",
+      "name" : "https:\/\/beta.example\/sub"
+    },
+    {
+      "baseURL" : "https:\/\/gamma.example\/board",
+      "engine" : "gelbooru",
+      "id" : "server-gamma",
+      "name" : "Gamma Board"
+    }
+  ],
+  "version" : 1
+}

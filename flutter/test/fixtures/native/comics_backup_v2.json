@@ -1,0 +1,196 @@
+{
+  "artists" : [
+    {
+      "kind" : 0,
+      "name" : "artist one",
+      "note" : "Artist note"
+    },
+    {
+      "kind" : 1,
+      "name" : "circle a"
+    },
+    {
+      "kind" : 2,
+      "name" : "full color"
+    },
+    {
+      "kind" : 7,
+      "name" : "glasses",
+      "note" : "Glasses note \/ 메모"
+    },
+    {
+      "kind" : 3,
+      "name" : "series alpha"
+    },
+    {
+      "kind" : 0,
+      "name" : "shared name"
+    },
+    {
+      "kind" : 1,
+      "name" : "shared name",
+      "note" : "Group-only note"
+    },
+    {
+      "kind" : 9,
+      "name" : "uncensored"
+    }
+  ],
+  "exported_at" : "2026-11-03T16:40:20Z",
+  "folder_rules" : [
+    {
+      "excluded" : "male:hero, tag:color",
+      "folder" : "Smart Glasses",
+      "includesOtherFolders" : false,
+      "isEnabled" : true,
+      "query" : "female:glasses",
+      "sources" : [
+        "Reading",
+        "미분류"
+      ]
+    },
+    {
+      "excluded" : "",
+      "folder" : "Archive",
+      "includesOtherFolders" : true,
+      "isEnabled" : false,
+      "query" : "language:korean"
+    }
+  ],
+  "folders" : [
+    {
+      "color" : 4292943176,
+      "description" : "Best of \/ 최고",
+      "id" : 3,
+      "name" : "Favorites ★",
+      "sort_order" : 0
+    },
+    {
+      "color" : 4279383126,
+      "description" : "Currently reading",
+      "id" : 2,
+      "name" : "Reading",
+      "sort_order" : 1,
+      "source_group_id" : 42
+    },
+    {
+      "color" : 4280391411,
+      "description" : "기본 폴더",
+      "id" : 1,
+      "name" : "미분류",
+      "sort_order" : 2
+    },
+    {
+      "color" : 4286331629,
+      "description" : "Rule driven \"smart\" folder",
+      "id" : 5,
+      "name" : "Smart Glasses",
+      "sort_order" : 3
+    },
+    {
+      "color" : 4279080072,
+      "id" : 4,
+      "name" : "Archive",
+      "sort_order" : 4
+    }
+  ],
+  "history" : [
+    {
+      "query" : "female:glasses -male:hero",
+      "used_at" : 1767409445
+    },
+    {
+      "query" : "artist:artist one",
+      "used_at" : 1767323045.25
+    },
+    {
+      "query" : "검색어",
+      "used_at" : 1767236645.5
+    }
+  ],
+  "saved_searches" : [
+    "female:glasses",
+    "series:series alpha"
+  ],
+  "version" : 2,
+  "works" : [
+    {
+      "bookmarked_at" : "2026-01-06T00:00:00Z",
+      "folders" : [
+        "Archive"
+      ],
+      "gallery_id" : 1005,
+      "thumb_page" : 1,
+      "title" : "Minimal"
+    },
+    {
+      "artists" : "artist four",
+      "bookmarked_at" : "2026-01-05T10:20:30Z",
+      "folders" : [
+        "Favorites ★"
+      ],
+      "gallery_id" : 1004,
+      "groups" : "circle d",
+      "language" : "chinese",
+      "note" : "",
+      "published_at" : "2022-01-01T00:00:00Z",
+      "series" : "series gamma",
+      "tags" : "male:hero, tag:color",
+      "thumb_page" : 7,
+      "title" : "Favorite Work",
+      "type" : "manga"
+    },
+    {
+      "artists" : "artist one",
+      "bookmarked_at" : "2026-01-04T05:06:07Z",
+      "folders" : [
+        "Archive"
+      ],
+      "gallery_id" : 1003,
+      "groups" : "circle a, circle c",
+      "language" : "korean",
+      "note" : "Archive note",
+      "published_at" : "2023-07-15T08:30:00Z",
+      "series" : "series beta",
+      "tags" : "artist:artist one, female:glasses, other:url https:\/\/x.example\/a?b=c&d=e",
+      "thumb_page" : 3,
+      "title" : "Archived Work",
+      "type" : "artistcg"
+    },
+    {
+      "artists" : "artist three",
+      "bookmarked_at" : "2026-01-03T00:00:00Z",
+      "folders" : [
+        "미분류"
+      ],
+      "gallery_id" : 1002,
+      "groups" : "circle b",
+      "language" : "english",
+      "note" : "Unfiled note",
+      "published_at" : "2024-02-29T12:00:00Z",
+      "series" : "original",
+      "tags" : "female:cat ears, tag:sole female",
+      "thumb_page" : 3,
+      "title" : "Unfiled Work",
+      "type" : "doujinshi"
+    },
+    {
+      "artists" : "artist one, artist two",
+      "bookmarked_at" : "2026-01-02T03:04:05Z",
+      "folders" : [
+        "Favorites ★",
+        "Reading"
+      ],
+      "gallery_id" : 1001,
+      "groups" : "circle a",
+      "language" : "japanese",
+      "note" : "Line one\nLine two\ttabbed",
+      "published_at" : "2025-12-31T23:59:59Z",
+      "series" : "series alpha",
+      "tags" : "artist:artist one, female:glasses, male:hero, tag:full color",
+      "thumb_page" : 3,
+      "title" : "Comic \"One\" \/ 첫 번째",
+      "type" : "manga"
+    }
+  ]
+}

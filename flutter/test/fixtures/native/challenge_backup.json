@@ -1,0 +1,258 @@
+{
+  "format" : "tegnal-challenges",
+  "games" : [
+    {
+      "bands" : [
+        {
+          "id" : "band-low",
+          "maximum" : 20,
+          "minimum" : 10,
+          "through" : 50
+        },
+        {
+          "id" : "band-mid",
+          "maximum" : 9,
+          "minimum" : 5,
+          "through" : 100
+        },
+        {
+          "id" : "band-high",
+          "maximum" : 4,
+          "minimum" : 1,
+          "through" : 150
+        }
+      ],
+      "detail" : "Draw two prompts.\nThen finish the goal.",
+      "endings" : [
+        {
+          "badge" : "★",
+          "color" : "green",
+          "detail" : "Finished!",
+          "id" : "end-a",
+          "title" : "Great",
+          "weight" : 7
+        },
+        {
+          "badge" : "",
+          "color" : "orange",
+          "detail" : "",
+          "id" : "end-b",
+          "title" : "Good",
+          "weight" : 3
+        }
+      ],
+      "fixedEndingID" : "end-b",
+      "goal" : {
+        "count" : {
+          "maximum" : 6,
+          "minimum" : 2,
+          "step" : 2
+        },
+        "countWeight" : 70,
+        "mode" : "mixed",
+        "time" : {
+          "maximum" : 300,
+          "minimum" : 60,
+          "step" : 60
+        },
+        "timeWeight" : 30
+      },
+      "groups" : [
+        {
+          "filter" : "",
+          "id" : "extra-medium",
+          "options" : [
+            {
+              "enabled" : true,
+              "group" : "",
+              "id" : "opt-pencil",
+              "tags" : [
+                "traditional_media"
+              ],
+              "text" : "Pencil",
+              "weight" : 5
+            }
+          ],
+          "title" : "Medium"
+        }
+      ],
+      "helpPages" : [
+        {
+          "body" : "Score points until 150.",
+          "id" : "rules",
+          "title" : "Rules"
+        },
+        {
+          "body" : "Use references: https://ref.example/path",
+          "id" : "tips",
+          "title" : "Tips"
+        }
+      ],
+      "id" : "fixture.challenge.custom",
+      "multiplier" : 1.5,
+      "reels" : [
+        {
+          "filter" : "people",
+          "id" : "reel-subject",
+          "options" : [
+            {
+              "enabled" : true,
+              "group" : "people",
+              "id" : "opt-person",
+              "tags" : [
+                "solo",
+                "1girl"
+              ],
+              "text" : "Person",
+              "weight" : 3
+            },
+            {
+              "enabled" : true,
+              "group" : "nature",
+              "id" : "opt-animal",
+              "tags" : [
+                "animal"
+              ],
+              "text" : "Animal",
+              "weight" : 1
+            },
+            {
+              "enabled" : false,
+              "group" : "people",
+              "id" : "opt-disabled",
+              "tags" : [
+
+              ],
+              "text" : "Disabled",
+              "weight" : 10000
+            }
+          ],
+          "title" : "Subject"
+        },
+        {
+          "filter" : "",
+          "id" : "reel-method",
+          "options" : [
+            {
+              "enabled" : true,
+              "group" : "",
+              "id" : "opt-outline",
+              "tags" : [
+
+              ],
+              "text" : "Outline",
+              "weight" : 1
+            },
+            {
+              "enabled" : true,
+              "group" : "",
+              "id" : "opt-shapes",
+              "tags" : [
+
+              ],
+              "text" : "Large Shapes",
+              "weight" : 2
+            }
+          ],
+          "title" : "Method"
+        }
+      ],
+      "target" : 150,
+      "template" : "{reel1} with {reel2} in {extra1} — goal {goal}",
+      "title" : "Fixture Challenge / 도전"
+    },
+    {
+      "bands" : [
+        {
+          "id" : "b1",
+          "maximum" : 20,
+          "minimum" : 12,
+          "through" : 40
+        },
+        {
+          "id" : "b2",
+          "maximum" : 11,
+          "minimum" : 6,
+          "through" : 80
+        },
+        {
+          "id" : "b3",
+          "maximum" : 5,
+          "minimum" : 1,
+          "through" : 100
+        }
+      ],
+      "detail" : "",
+      "endings" : [
+        {
+          "badge" : "✓",
+          "color" : "purple",
+          "detail" : "All done",
+          "id" : "e1",
+          "title" : "Done",
+          "weight" : 1
+        }
+      ],
+      "goal" : {
+        "count" : {
+          "maximum" : 3,
+          "minimum" : 1,
+          "step" : 1
+        },
+        "countWeight" : 50,
+        "mode" : "time",
+        "time" : {
+          "maximum" : 120,
+          "minimum" : 30,
+          "step" : 30
+        },
+        "timeWeight" : 50
+      },
+      "groups" : [
+
+      ],
+      "id" : "fixture.challenge.minimal",
+      "multiplier" : 0.5,
+      "reels" : [
+        {
+          "filter" : "",
+          "id" : "r1",
+          "options" : [
+            {
+              "enabled" : true,
+              "group" : "",
+              "id" : "o1",
+              "tags" : [
+
+              ],
+              "text" : "First",
+              "weight" : 1
+            }
+          ],
+          "title" : "One"
+        },
+        {
+          "filter" : "",
+          "id" : "r2",
+          "options" : [
+            {
+              "enabled" : true,
+              "group" : "",
+              "id" : "o2",
+              "tags" : [
+
+              ],
+              "text" : "Second",
+              "weight" : 1
+            }
+          ],
+          "title" : "Two"
+        }
+      ],
+      "target" : 100,
+      "template" : "{reel1} · {reel2} · {goal}",
+      "title" : "Minimal Challenge"
+    }
+  ],
+  "schemaVersion" : 1
+}

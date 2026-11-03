@@ -1,0 +1,1511 @@
+{
+  "after_first_restore" : {
+    "comics" : {
+      "artists" : [
+        {
+          "folder_id" : null,
+          "kind" : 0,
+          "name" : "artist one",
+          "note" : "Artist note"
+        },
+        {
+          "folder_id" : null,
+          "kind" : 1,
+          "name" : "circle a",
+          "note" : null
+        },
+        {
+          "folder_id" : null,
+          "kind" : 2,
+          "name" : "full color",
+          "note" : null
+        },
+        {
+          "folder_id" : null,
+          "kind" : 7,
+          "name" : "glasses",
+          "note" : "Glasses note / 메모"
+        },
+        {
+          "folder_id" : null,
+          "kind" : 3,
+          "name" : "series alpha",
+          "note" : null
+        },
+        {
+          "folder_id" : null,
+          "kind" : 0,
+          "name" : "shared name",
+          "note" : null
+        },
+        {
+          "folder_id" : null,
+          "kind" : 1,
+          "name" : "shared name",
+          "note" : "Group-only note"
+        },
+        {
+          "folder_id" : null,
+          "kind" : 9,
+          "name" : "uncensored",
+          "note" : null
+        }
+      ],
+      "folder_works" : [
+        {
+          "added_at" : "2026-01-04T05:06:07Z",
+          "folder" : "Archive",
+          "gallery_id" : 1003
+        },
+        {
+          "added_at" : "2026-01-06T00:00:00Z",
+          "folder" : "Archive",
+          "gallery_id" : 1005
+        },
+        {
+          "added_at" : "2026-01-02T03:04:05Z",
+          "folder" : "Favorites ★",
+          "gallery_id" : 1001
+        },
+        {
+          "added_at" : "2026-01-05T10:20:30Z",
+          "folder" : "Favorites ★",
+          "gallery_id" : 1004
+        },
+        {
+          "added_at" : "2026-01-02T03:04:05Z",
+          "folder" : "Reading",
+          "gallery_id" : 1001
+        },
+        {
+          "added_at" : "2026-01-03T00:00:00Z",
+          "folder" : "미분류",
+          "gallery_id" : 1002
+        }
+      ],
+      "folders" : [
+        {
+          "color" : 4292943176,
+          "description" : "Best of / 최고",
+          "name" : "Favorites ★",
+          "sort_order" : 0,
+          "source_group_id" : null,
+          "sync_id_is_unsorted" : false,
+          "sync_id_present" : true
+        },
+        {
+          "color" : 4279383126,
+          "description" : "Currently reading",
+          "name" : "Reading",
+          "sort_order" : 1,
+          "source_group_id" : 42,
+          "sync_id_is_unsorted" : false,
+          "sync_id_present" : true
+        },
+        {
+          "color" : 4280391411,
+          "description" : "기본 폴더",
+          "name" : "미분류",
+          "sort_order" : 2,
+          "source_group_id" : null,
+          "sync_id_is_unsorted" : true,
+          "sync_id_present" : true
+        },
+        {
+          "color" : 4286331629,
+          "description" : "Rule driven \"smart\" folder",
+          "name" : "Smart Glasses",
+          "sort_order" : 3,
+          "source_group_id" : null,
+          "sync_id_is_unsorted" : false,
+          "sync_id_present" : true
+        },
+        {
+          "color" : 4279080072,
+          "description" : null,
+          "name" : "Archive",
+          "sort_order" : 4,
+          "source_group_id" : null,
+          "sync_id_is_unsorted" : false,
+          "sync_id_present" : true
+        }
+      ],
+      "library_order" : [
+        {
+          "key" : "folder_rule.<sync:Archive>",
+          "value" : {
+            "excluded" : "",
+            "folder" : "<sync:Archive>",
+            "includesOtherFolders" : true,
+            "isEnabled" : false,
+            "query" : "language:korean"
+          }
+        },
+        {
+          "key" : "folder_rule.<sync:Smart Glasses>",
+          "value" : {
+            "excluded" : "male:hero, tag:color",
+            "folder" : "<sync:Smart Glasses>",
+            "includesOtherFolders" : false,
+            "isEnabled" : true,
+            "query" : "female:glasses",
+            "sources" : [
+              "<sync:Reading>",
+              "unsorted"
+            ]
+          }
+        },
+        {
+          "key" : "folders",
+          "value" : [
+            "<sync:Favorites ★>",
+            "<sync:Reading>",
+            "unsorted",
+            "<sync:Smart Glasses>",
+            "<sync:Archive>"
+          ]
+        }
+      ],
+      "note" : "works: every column except id. folder_works: (folder name, gallery_id, added_at). library_order: sync ids replaced by '<sync:FolderName>' (or 'unsorted'); folder rule values are parsed JSON. created_at/bookmarked_at of folders/artists omitted (wall clock).",
+      "saved_searches" : [
+        "female:glasses",
+        "series:series alpha"
+      ],
+      "search_history" : [
+        {
+          "query" : "female:glasses -male:hero",
+          "used_at" : 1767409445
+        },
+        {
+          "query" : "artist:artist one",
+          "used_at" : 1767323045.25
+        },
+        {
+          "query" : "검색어",
+          "used_at" : 1767236645.5
+        }
+      ],
+      "works" : [
+        {
+          "artists" : "artist one, artist two",
+          "bookmarked_at" : "2026-01-02T03:04:05Z",
+          "catalog_matched" : 0,
+          "gallery_id" : 1001,
+          "groups" : "circle a",
+          "language" : "japanese",
+          "last_opened_at" : null,
+          "metadata_source" : null,
+          "note" : "Line one\nLine two\ttabbed",
+          "published_at" : "2025-12-31T23:59:59Z",
+          "series" : "series alpha",
+          "tags" : "artist:artist one, female:glasses, male:hero, tag:full color",
+          "thumb_failed_at" : null,
+          "thumb_page" : 3,
+          "thumb_path" : null,
+          "thumb_status" : "missing",
+          "title" : "Comic \"One\" / 첫 번째",
+          "type" : "manga",
+          "updated_at" : null
+        },
+        {
+          "artists" : "artist three",
+          "bookmarked_at" : "2026-01-03T00:00:00Z",
+          "catalog_matched" : 0,
+          "gallery_id" : 1002,
+          "groups" : "circle b",
+          "language" : "english",
+          "last_opened_at" : null,
+          "metadata_source" : null,
+          "note" : "Unfiled note",
+          "published_at" : "2024-02-29T12:00:00Z",
+          "series" : "original",
+          "tags" : "female:cat ears, tag:sole female",
+          "thumb_failed_at" : null,
+          "thumb_page" : 3,
+          "thumb_path" : null,
+          "thumb_status" : "missing",
+          "title" : "Unfiled Work",
+          "type" : "doujinshi",
+          "updated_at" : null
+        },
+        {
+          "artists" : "artist one",
+          "bookmarked_at" : "2026-01-04T05:06:07Z",
+          "catalog_matched" : 0,
+          "gallery_id" : 1003,
+          "groups" : "circle a, circle c",
+          "language" : "korean",
+          "last_opened_at" : null,
+          "metadata_source" : null,
+          "note" : "Archive note",
+          "published_at" : "2023-07-15T08:30:00Z",
+          "series" : "series beta",
+          "tags" : "artist:artist one, female:glasses, other:url https://x.example/a?b=c&d=e",
+          "thumb_failed_at" : null,
+          "thumb_page" : 3,
+          "thumb_path" : null,
+          "thumb_status" : "missing",
+          "title" : "Archived Work",
+          "type" : "artistcg",
+          "updated_at" : null
+        },
+        {
+          "artists" : "artist four",
+          "bookmarked_at" : "2026-01-05T10:20:30Z",
+          "catalog_matched" : 0,
+          "gallery_id" : 1004,
+          "groups" : "circle d",
+          "language" : "chinese",
+          "last_opened_at" : null,
+          "metadata_source" : null,
+          "note" : "",
+          "published_at" : "2022-01-01T00:00:00Z",
+          "series" : "series gamma",
+          "tags" : "male:hero, tag:color",
+          "thumb_failed_at" : null,
+          "thumb_page" : 7,
+          "thumb_path" : null,
+          "thumb_status" : "missing",
+          "title" : "Favorite Work",
+          "type" : "manga",
+          "updated_at" : null
+        },
+        {
+          "artists" : null,
+          "bookmarked_at" : "2026-01-06T00:00:00Z",
+          "catalog_matched" : 0,
+          "gallery_id" : 1005,
+          "groups" : null,
+          "language" : null,
+          "last_opened_at" : null,
+          "metadata_source" : null,
+          "note" : null,
+          "published_at" : null,
+          "series" : null,
+          "tags" : null,
+          "thumb_failed_at" : null,
+          "thumb_page" : 1,
+          "thumb_path" : null,
+          "thumb_status" : "missing",
+          "title" : "Minimal",
+          "type" : null,
+          "updated_at" : null
+        }
+      ]
+    },
+    "images" : {
+      "challenges" : [
+        {
+          "id" : "fixture.challenge.custom",
+          "payload" : {
+            "bands" : [
+              {
+                "id" : "band-low",
+                "maximum" : 20,
+                "minimum" : 10,
+                "through" : 50
+              },
+              {
+                "id" : "band-mid",
+                "maximum" : 9,
+                "minimum" : 5,
+                "through" : 100
+              },
+              {
+                "id" : "band-high",
+                "maximum" : 4,
+                "minimum" : 1,
+                "through" : 150
+              }
+            ],
+            "detail" : "Draw two prompts.\nThen finish the goal.",
+            "endings" : [
+              {
+                "badge" : "★",
+                "color" : "green",
+                "detail" : "Finished!",
+                "id" : "end-a",
+                "title" : "Great",
+                "weight" : 7
+              },
+              {
+                "badge" : "",
+                "color" : "orange",
+                "detail" : "",
+                "id" : "end-b",
+                "title" : "Good",
+                "weight" : 3
+              }
+            ],
+            "fixedEndingID" : "end-b",
+            "goal" : {
+              "count" : {
+                "maximum" : 6,
+                "minimum" : 2,
+                "step" : 2
+              },
+              "countWeight" : 70,
+              "mode" : "mixed",
+              "time" : {
+                "maximum" : 300,
+                "minimum" : 60,
+                "step" : 60
+              },
+              "timeWeight" : 30
+            },
+            "groups" : [
+              {
+                "filter" : "",
+                "id" : "extra-medium",
+                "options" : [
+                  {
+                    "enabled" : true,
+                    "group" : "",
+                    "id" : "opt-pencil",
+                    "tags" : [
+                      "traditional_media"
+                    ],
+                    "text" : "Pencil",
+                    "weight" : 5
+                  }
+                ],
+                "title" : "Medium"
+              }
+            ],
+            "helpPages" : [
+              {
+                "body" : "Score points until 150.",
+                "id" : "rules",
+                "title" : "Rules"
+              },
+              {
+                "body" : "Use references: https://ref.example/path",
+                "id" : "tips",
+                "title" : "Tips"
+              }
+            ],
+            "id" : "fixture.challenge.custom",
+            "multiplier" : 1.5,
+            "reels" : [
+              {
+                "filter" : "people",
+                "id" : "reel-subject",
+                "options" : [
+                  {
+                    "enabled" : true,
+                    "group" : "people",
+                    "id" : "opt-person",
+                    "tags" : [
+                      "solo",
+                      "1girl"
+                    ],
+                    "text" : "Person",
+                    "weight" : 3
+                  },
+                  {
+                    "enabled" : true,
+                    "group" : "nature",
+                    "id" : "opt-animal",
+                    "tags" : [
+                      "animal"
+                    ],
+                    "text" : "Animal",
+                    "weight" : 1
+                  },
+                  {
+                    "enabled" : false,
+                    "group" : "people",
+                    "id" : "opt-disabled",
+                    "tags" : [
+
+                    ],
+                    "text" : "Disabled",
+                    "weight" : 10000
+                  }
+                ],
+                "title" : "Subject"
+              },
+              {
+                "filter" : "",
+                "id" : "reel-method",
+                "options" : [
+                  {
+                    "enabled" : true,
+                    "group" : "",
+                    "id" : "opt-outline",
+                    "tags" : [
+
+                    ],
+                    "text" : "Outline",
+                    "weight" : 1
+                  },
+                  {
+                    "enabled" : true,
+                    "group" : "",
+                    "id" : "opt-shapes",
+                    "tags" : [
+
+                    ],
+                    "text" : "Large Shapes",
+                    "weight" : 2
+                  }
+                ],
+                "title" : "Method"
+              }
+            ],
+            "target" : 150,
+            "template" : "{reel1} with {reel2} in {extra1} — goal {goal}",
+            "title" : "Fixture Challenge / 도전"
+          }
+        },
+        {
+          "id" : "fixture.challenge.minimal",
+          "payload" : {
+            "bands" : [
+              {
+                "id" : "b1",
+                "maximum" : 20,
+                "minimum" : 12,
+                "through" : 40
+              },
+              {
+                "id" : "b2",
+                "maximum" : 11,
+                "minimum" : 6,
+                "through" : 80
+              },
+              {
+                "id" : "b3",
+                "maximum" : 5,
+                "minimum" : 1,
+                "through" : 100
+              }
+            ],
+            "detail" : "",
+            "endings" : [
+              {
+                "badge" : "✓",
+                "color" : "purple",
+                "detail" : "All done",
+                "id" : "e1",
+                "title" : "Done",
+                "weight" : 1
+              }
+            ],
+            "goal" : {
+              "count" : {
+                "maximum" : 3,
+                "minimum" : 1,
+                "step" : 1
+              },
+              "countWeight" : 50,
+              "mode" : "time",
+              "time" : {
+                "maximum" : 120,
+                "minimum" : 30,
+                "step" : 30
+              },
+              "timeWeight" : 50
+            },
+            "groups" : [
+
+            ],
+            "id" : "fixture.challenge.minimal",
+            "multiplier" : 0.5,
+            "reels" : [
+              {
+                "filter" : "",
+                "id" : "r1",
+                "options" : [
+                  {
+                    "enabled" : true,
+                    "group" : "",
+                    "id" : "o1",
+                    "tags" : [
+
+                    ],
+                    "text" : "First",
+                    "weight" : 1
+                  }
+                ],
+                "title" : "One"
+              },
+              {
+                "filter" : "",
+                "id" : "r2",
+                "options" : [
+                  {
+                    "enabled" : true,
+                    "group" : "",
+                    "id" : "o2",
+                    "tags" : [
+
+                    ],
+                    "text" : "Second",
+                    "weight" : 1
+                  }
+                ],
+                "title" : "Two"
+              }
+            ],
+            "target" : 100,
+            "template" : "{reel1} · {reel2} · {goal}",
+            "title" : "Minimal Challenge"
+          }
+        }
+      ],
+      "favorites" : [
+        {
+          "folder_id" : "folder-sky",
+          "payload" : {
+            "artists" : [
+              "artist_one"
+            ],
+            "commentCount" : 3,
+            "favoriteCount" : 99,
+            "fileExtension" : "png",
+            "fileURL" : "https://cdn.alpha.example/original/ab/cd/abcd1234.png",
+            "height" : 1080,
+            "isDeleted" : false,
+            "metadataTags" : [
+              "highres"
+            ],
+            "poolIDs" : [
+              7,
+              12
+            ],
+            "postID" : 5001,
+            "previewURL" : "https://cdn.alpha.example/preview/ab/cd/abcd1234.jpg",
+            "rating" : "s",
+            "sampleURL" : "https://cdn.alpha.example/sample/ab/cd/sample-abcd1234.jpg",
+            "score" : 42,
+            "serverID" : "server-alpha",
+            "tags" : [
+              "1girl",
+              "blue_sky",
+              "cloud",
+              "artist_one",
+              "highres"
+            ],
+            "upvoteCount" : 50,
+            "width" : 1920
+          },
+          "post_id" : 5001,
+          "saved_at" : 1767323045,
+          "server_id" : "server-alpha"
+        },
+        {
+          "folder_id" : "folder-refs",
+          "payload" : {
+            "artists" : [
+              "artist_two",
+              "artist_three"
+            ],
+            "favoriteCount" : 0,
+            "fileExtension" : "zip",
+            "fileURL" : "https://cdn.alpha.example/original/ef/ef.zip?download=1&name=a%20b",
+            "height" : 600,
+            "isBanned" : true,
+            "isDeleted" : true,
+            "metadataTags" : [
+              "animated",
+              "ugoira"
+            ],
+            "poolIDs" : [
+
+            ],
+            "postID" : 5002,
+            "previewURL" : "https://cdn.alpha.example/preview/ef/ef.jpg",
+            "rating" : "q",
+            "sampleURL" : "https://cdn.alpha.example/sample/ef/ef.webm",
+            "score" : -3,
+            "serverID" : "server-alpha",
+            "tags" : [
+              "animated",
+              "ugoira",
+              "日本語タグ",
+              "blue_sky"
+            ],
+            "width" : 800
+          },
+          "post_id" : 5002,
+          "saved_at" : 1767323046.5,
+          "server_id" : "server-alpha"
+        },
+        {
+          "folder_id" : "unsorted",
+          "payload" : {
+            "artists" : [
+
+            ],
+            "fileExtension" : "jpg",
+            "height" : 0,
+            "poolIDs" : [
+
+            ],
+            "postID" : 7001,
+            "previewURL" : "https://files.beta.example/sub/preview/7001.jpg",
+            "rating" : "q",
+            "score" : 0,
+            "serverID" : "server-beta",
+            "tags" : [
+
+            ],
+            "width" : 0
+          },
+          "post_id" : 7001,
+          "saved_at" : 1767236645,
+          "server_id" : "server-beta"
+        },
+        {
+          "folder_id" : "site:https://beta.example/sub",
+          "payload" : {
+            "artists" : [
+              "painter_x"
+            ],
+            "fileExtension" : "jpg",
+            "fileURL" : "https://files.beta.example/sub/image/7002.jpg",
+            "height" : 3000,
+            "poolIDs" : [
+
+            ],
+            "postID" : 7002,
+            "previewURL" : "https://files.beta.example/sub/preview/7002.jpg",
+            "rating" : "s",
+            "sampleURL" : "https://files.beta.example/sub/sample/7002.jpg",
+            "score" : 8,
+            "serverID" : "server-beta",
+            "tags" : [
+              "landscape",
+              "mountain"
+            ],
+            "width" : 2000
+          },
+          "post_id" : 7002,
+          "saved_at" : 1767150245,
+          "server_id" : "server-beta"
+        },
+        {
+          "folder_id" : "folder-poses",
+          "payload" : {
+            "artists" : [
+
+            ],
+            "commentCount" : 1,
+            "favoriteCount" : 4,
+            "fileExtension" : "mp4",
+            "fileURL" : "https://img.gamma.example/images/90/9001.mp4",
+            "height" : 720,
+            "poolIDs" : [
+              3
+            ],
+            "postID" : 9001,
+            "previewURL" : "https://img.gamma.example/thumbnails/90/thumbnail_9001.jpg",
+            "rating" : "e",
+            "score" : 15,
+            "serverID" : "server-gamma",
+            "tags" : [
+              "video",
+              "sound",
+              "dancing"
+            ],
+            "width" : 1280
+          },
+          "post_id" : 9001,
+          "saved_at" : 1767409445.125,
+          "server_id" : "server-gamma"
+        }
+      ],
+      "folders" : [
+        {
+          "color" : 4278355143,
+          "id" : "folder-sky",
+          "name" : "Sky",
+          "position" : 0
+        },
+        {
+          "color" : 4289449455,
+          "id" : "folder-refs",
+          "name" : "References",
+          "position" : 1
+        },
+        {
+          "color" : 4281549909,
+          "id" : "unsorted",
+          "name" : "",
+          "position" : 2
+        },
+        {
+          "color" : 4280640491,
+          "id" : "site:https://beta.example/sub",
+          "name" : "beta.example/sub",
+          "position" : 3
+        },
+        {
+          "color" : 4278556265,
+          "id" : "folder-poses",
+          "name" : "Poses / 포즈",
+          "position" : 4
+        }
+      ],
+      "history" : [
+        {
+          "query" : "artist_one",
+          "server_id" : "server-alpha",
+          "used_at" : 1767323000
+        },
+        {
+          "query" : "blue_sky rating:s",
+          "server_id" : "server-alpha",
+          "used_at" : 1767323045.75
+        },
+        {
+          "query" : "landscape",
+          "server_id" : "server-beta",
+          "used_at" : 1767236645
+        },
+        {
+          "query" : "video -sound",
+          "server_id" : "server-gamma",
+          "used_at" : 1767150245.5
+        }
+      ],
+      "note" : "payload BLOB columns are parsed JSON. settings values are raw strings exactly as stored, except folder_rule.* values, which native writes with an unsorted JSONEncoder (key order varies run to run) and are therefore given parsed.",
+      "saved_tags" : [
+        {
+          "kind" : "artist",
+          "name" : "artist_one",
+          "server_id" : "server-alpha"
+        },
+        {
+          "kind" : "female",
+          "name" : "glasses",
+          "server_id" : "server-alpha"
+        },
+        {
+          "kind" : "search",
+          "name" : "blue_sky rating:s",
+          "server_id" : "server-alpha"
+        },
+        {
+          "kind" : "series",
+          "name" : "series_name",
+          "server_id" : "server-alpha"
+        },
+        {
+          "kind" : "tag",
+          "name" : "blue_sky",
+          "server_id" : "server-alpha"
+        },
+        {
+          "kind" : "metadata",
+          "name" : "highres",
+          "server_id" : "server-beta"
+        },
+        {
+          "kind" : "tag",
+          "name" : "mountain",
+          "server_id" : "server-beta"
+        },
+        {
+          "kind" : "character",
+          "name" : "dancing",
+          "server_id" : "server-gamma"
+        }
+      ],
+      "servers" : [
+        {
+          "id" : "server-alpha",
+          "payload" : {
+            "baseURL" : "https://alpha.example",
+            "engine" : "danbooru",
+            "id" : "server-alpha",
+            "name" : "Alpha Images"
+          },
+          "position" : 0
+        },
+        {
+          "id" : "server-beta",
+          "payload" : {
+            "baseURL" : "https://beta.example/sub",
+            "engine" : "moebooru",
+            "id" : "server-beta",
+            "name" : "https://beta.example/sub"
+          },
+          "position" : 1
+        },
+        {
+          "id" : "server-gamma",
+          "payload" : {
+            "baseURL" : "https://gamma.example/board",
+            "engine" : "gelbooru",
+            "id" : "server-gamma",
+            "name" : "Gamma Board"
+          },
+          "position" : 2
+        }
+      ],
+      "settings" : [
+        {
+          "key" : "blacklist.server-alpha",
+          "value" : "gore\nrating:e -safe_tag"
+        },
+        {
+          "key" : "blacklist.server-beta",
+          "value" : ""
+        },
+        {
+          "key" : "blacklist.server-gamma",
+          "value" : "# comment line\nscat"
+        },
+        {
+          "key" : "folder_order",
+          "value" : "[\"folder-sky\",\"folder-refs\",\"unsorted\",\"site:https:\\/\\/beta.example\\/sub\",\"folder-poses\"]"
+        },
+        {
+          "key" : "folder_rule.folder-sky",
+          "value" : {
+            "excluded" : "gore, rating:e",
+            "folder" : "folder-sky",
+            "includesOtherFolders" : false,
+            "isEnabled" : true,
+            "query" : "blue_sky",
+            "sources" : [
+              "folder-refs",
+              "unsorted"
+            ]
+          },
+          "value_parsed_from_unsorted_json_string" : true
+        },
+        {
+          "key" : "selected_servers",
+          "value" : "[\"server-alpha\",\"server-gamma\"]"
+        }
+      ]
+    }
+  },
+  "after_second_restore_identical" : true,
+  "decode_checks" : {
+    "challenge_backup.json" : {
+      "accepted" : true,
+      "game_ids" : [
+        "fixture.challenge.custom",
+        "fixture.challenge.minimal"
+      ],
+      "has_challenges" : true,
+      "has_comics" : false,
+      "has_images" : false
+    },
+    "comics_backup_legacy_group.json" : {
+      "accepted" : true,
+      "decoded_comics_reencoded_sorted" : {
+        "artists" : [
+          {
+            "name" : "old artist"
+          },
+          {
+            "kind" : 1,
+            "name" : "old circle",
+            "note" : "Group note"
+          }
+        ],
+        "exported_at" : "2025-06-01T00:00:00Z",
+        "folders" : [
+          {
+            "color" : 4280391411,
+            "description" : "기본 폴더",
+            "id" : 3,
+            "name" : "미분류",
+            "sort_order" : 1
+          },
+          {
+            "color" : 4279383126,
+            "description" : "Imported from an older app",
+            "id" : 5,
+            "name" : "Old Reading",
+            "sort_order" : 0,
+            "source_group_id" : 42
+          },
+          {
+            "id" : 6,
+            "name" : "No Color",
+            "sort_order" : 2,
+            "source_group_id" : 77
+          }
+        ],
+        "version" : 1,
+        "works" : [
+          {
+            "artists" : "old artist",
+            "bookmarked_at" : "2025-05-01T10:00:00Z",
+            "folders" : [
+              "Old Reading"
+            ],
+            "gallery_id" : 2001,
+            "note" : "Old note",
+            "thumb_page" : 3,
+            "title" : "Legacy Work"
+          },
+          {
+            "bookmarked_at" : "2025-05-02T10:00:00Z",
+            "gallery_id" : 2002,
+            "title" : "Legacy Unfiled"
+          },
+          {
+            "bookmarked_at" : "2025-05-03T10:00:00Z",
+            "folders" : [
+              "No Color",
+              "Old Reading"
+            ],
+            "gallery_id" : 2003,
+            "tags" : "female:glasses"
+          }
+        ]
+      },
+      "has_challenges" : false,
+      "has_comics" : true,
+      "has_images" : false,
+      "restored_comics_state" : {
+        "artists" : [
+          {
+            "folder_id" : null,
+            "kind" : 0,
+            "name" : "old artist",
+            "note" : null
+          },
+          {
+            "folder_id" : null,
+            "kind" : 1,
+            "name" : "old circle",
+            "note" : "Group note"
+          }
+        ],
+        "folder_works" : [
+          {
+            "added_at" : "2025-05-03T10:00:00Z",
+            "folder" : "No Color",
+            "gallery_id" : 2003
+          },
+          {
+            "added_at" : "2025-05-01T10:00:00Z",
+            "folder" : "Old Reading",
+            "gallery_id" : 2001
+          },
+          {
+            "added_at" : "2025-05-03T10:00:00Z",
+            "folder" : "Old Reading",
+            "gallery_id" : 2003
+          },
+          {
+            "added_at" : "2025-05-02T10:00:00Z",
+            "folder" : "미분류",
+            "gallery_id" : 2002
+          }
+        ],
+        "folders" : [
+          {
+            "color" : 4279383126,
+            "description" : "Imported from an older app",
+            "name" : "Old Reading",
+            "sort_order" : 0,
+            "source_group_id" : 42,
+            "sync_id_is_unsorted" : false,
+            "sync_id_present" : true
+          },
+          {
+            "color" : 4280391411,
+            "description" : "기본 폴더",
+            "name" : "미분류",
+            "sort_order" : 1,
+            "source_group_id" : null,
+            "sync_id_is_unsorted" : true,
+            "sync_id_present" : true
+          },
+          {
+            "color" : 4288585374,
+            "description" : null,
+            "name" : "No Color",
+            "sort_order" : 2,
+            "source_group_id" : 77,
+            "sync_id_is_unsorted" : false,
+            "sync_id_present" : true
+          }
+        ],
+        "library_order" : [
+          {
+            "key" : "folders",
+            "value" : [
+              "<sync:Old Reading>",
+              "unsorted",
+              "<sync:No Color>"
+            ]
+          }
+        ],
+        "note" : "works: every column except id. folder_works: (folder name, gallery_id, added_at). library_order: sync ids replaced by '<sync:FolderName>' (or 'unsorted'); folder rule values are parsed JSON. created_at/bookmarked_at of folders/artists omitted (wall clock).",
+        "saved_searches" : [
+
+        ],
+        "search_history" : [
+
+        ],
+        "works" : [
+          {
+            "artists" : "old artist",
+            "bookmarked_at" : "2025-05-01T10:00:00Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 2001,
+            "groups" : null,
+            "language" : null,
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : "Old note",
+            "published_at" : null,
+            "series" : null,
+            "tags" : null,
+            "thumb_failed_at" : null,
+            "thumb_page" : 3,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Legacy Work",
+            "type" : null,
+            "updated_at" : null
+          },
+          {
+            "artists" : null,
+            "bookmarked_at" : "2025-05-02T10:00:00Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 2002,
+            "groups" : null,
+            "language" : null,
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : null,
+            "published_at" : null,
+            "series" : null,
+            "tags" : null,
+            "thumb_failed_at" : null,
+            "thumb_page" : null,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Legacy Unfiled",
+            "type" : null,
+            "updated_at" : null
+          },
+          {
+            "artists" : null,
+            "bookmarked_at" : "2025-05-03T10:00:00Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 2003,
+            "groups" : null,
+            "language" : null,
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : null,
+            "published_at" : null,
+            "series" : null,
+            "tags" : "female:glasses",
+            "thumb_failed_at" : null,
+            "thumb_page" : null,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : null,
+            "type" : null,
+            "updated_at" : null
+          }
+        ]
+      }
+    },
+    "comics_backup_v2.json" : {
+      "accepted" : true,
+      "folderCount" : 5,
+      "has_challenges" : false,
+      "has_comics" : true,
+      "has_images" : false,
+      "restored_comics_state" : {
+        "artists" : [
+          {
+            "folder_id" : null,
+            "kind" : 0,
+            "name" : "artist one",
+            "note" : "Artist note"
+          },
+          {
+            "folder_id" : null,
+            "kind" : 1,
+            "name" : "circle a",
+            "note" : null
+          },
+          {
+            "folder_id" : null,
+            "kind" : 2,
+            "name" : "full color",
+            "note" : null
+          },
+          {
+            "folder_id" : null,
+            "kind" : 7,
+            "name" : "glasses",
+            "note" : "Glasses note / 메모"
+          },
+          {
+            "folder_id" : null,
+            "kind" : 3,
+            "name" : "series alpha",
+            "note" : null
+          },
+          {
+            "folder_id" : null,
+            "kind" : 0,
+            "name" : "shared name",
+            "note" : null
+          },
+          {
+            "folder_id" : null,
+            "kind" : 1,
+            "name" : "shared name",
+            "note" : "Group-only note"
+          },
+          {
+            "folder_id" : null,
+            "kind" : 9,
+            "name" : "uncensored",
+            "note" : null
+          }
+        ],
+        "folder_works" : [
+          {
+            "added_at" : "2026-01-04T05:06:07Z",
+            "folder" : "Archive",
+            "gallery_id" : 1003
+          },
+          {
+            "added_at" : "2026-01-06T00:00:00Z",
+            "folder" : "Archive",
+            "gallery_id" : 1005
+          },
+          {
+            "added_at" : "2026-01-02T03:04:05Z",
+            "folder" : "Favorites ★",
+            "gallery_id" : 1001
+          },
+          {
+            "added_at" : "2026-01-05T10:20:30Z",
+            "folder" : "Favorites ★",
+            "gallery_id" : 1004
+          },
+          {
+            "added_at" : "2026-01-02T03:04:05Z",
+            "folder" : "Reading",
+            "gallery_id" : 1001
+          },
+          {
+            "added_at" : "2026-01-03T00:00:00Z",
+            "folder" : "미분류",
+            "gallery_id" : 1002
+          }
+        ],
+        "folders" : [
+          {
+            "color" : 4292943176,
+            "description" : "Best of / 최고",
+            "name" : "Favorites ★",
+            "sort_order" : 0,
+            "source_group_id" : null,
+            "sync_id_is_unsorted" : false,
+            "sync_id_present" : true
+          },
+          {
+            "color" : 4279383126,
+            "description" : "Currently reading",
+            "name" : "Reading",
+            "sort_order" : 1,
+            "source_group_id" : 42,
+            "sync_id_is_unsorted" : false,
+            "sync_id_present" : true
+          },
+          {
+            "color" : 4280391411,
+            "description" : "기본 폴더",
+            "name" : "미분류",
+            "sort_order" : 2,
+            "source_group_id" : null,
+            "sync_id_is_unsorted" : true,
+            "sync_id_present" : true
+          },
+          {
+            "color" : 4286331629,
+            "description" : "Rule driven \"smart\" folder",
+            "name" : "Smart Glasses",
+            "sort_order" : 3,
+            "source_group_id" : null,
+            "sync_id_is_unsorted" : false,
+            "sync_id_present" : true
+          },
+          {
+            "color" : 4279080072,
+            "description" : null,
+            "name" : "Archive",
+            "sort_order" : 4,
+            "source_group_id" : null,
+            "sync_id_is_unsorted" : false,
+            "sync_id_present" : true
+          }
+        ],
+        "library_order" : [
+          {
+            "key" : "folder_rule.<sync:Archive>",
+            "value" : {
+              "excluded" : "",
+              "folder" : "<sync:Archive>",
+              "includesOtherFolders" : true,
+              "isEnabled" : false,
+              "query" : "language:korean"
+            }
+          },
+          {
+            "key" : "folder_rule.<sync:Smart Glasses>",
+            "value" : {
+              "excluded" : "male:hero, tag:color",
+              "folder" : "<sync:Smart Glasses>",
+              "includesOtherFolders" : false,
+              "isEnabled" : true,
+              "query" : "female:glasses",
+              "sources" : [
+                "<sync:Reading>",
+                "unsorted"
+              ]
+            }
+          },
+          {
+            "key" : "folders",
+            "value" : [
+              "<sync:Favorites ★>",
+              "<sync:Reading>",
+              "unsorted",
+              "<sync:Smart Glasses>",
+              "<sync:Archive>"
+            ]
+          }
+        ],
+        "note" : "works: every column except id. folder_works: (folder name, gallery_id, added_at). library_order: sync ids replaced by '<sync:FolderName>' (or 'unsorted'); folder rule values are parsed JSON. created_at/bookmarked_at of folders/artists omitted (wall clock).",
+        "saved_searches" : [
+          "female:glasses",
+          "series:series alpha"
+        ],
+        "search_history" : [
+          {
+            "query" : "female:glasses -male:hero",
+            "used_at" : 1767409445
+          },
+          {
+            "query" : "artist:artist one",
+            "used_at" : 1767323045.25
+          },
+          {
+            "query" : "검색어",
+            "used_at" : 1767236645.5
+          }
+        ],
+        "works" : [
+          {
+            "artists" : "artist one, artist two",
+            "bookmarked_at" : "2026-01-02T03:04:05Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 1001,
+            "groups" : "circle a",
+            "language" : "japanese",
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : "Line one\nLine two\ttabbed",
+            "published_at" : "2025-12-31T23:59:59Z",
+            "series" : "series alpha",
+            "tags" : "artist:artist one, female:glasses, male:hero, tag:full color",
+            "thumb_failed_at" : null,
+            "thumb_page" : 3,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Comic \"One\" / 첫 번째",
+            "type" : "manga",
+            "updated_at" : null
+          },
+          {
+            "artists" : "artist three",
+            "bookmarked_at" : "2026-01-03T00:00:00Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 1002,
+            "groups" : "circle b",
+            "language" : "english",
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : "Unfiled note",
+            "published_at" : "2024-02-29T12:00:00Z",
+            "series" : "original",
+            "tags" : "female:cat ears, tag:sole female",
+            "thumb_failed_at" : null,
+            "thumb_page" : 3,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Unfiled Work",
+            "type" : "doujinshi",
+            "updated_at" : null
+          },
+          {
+            "artists" : "artist one",
+            "bookmarked_at" : "2026-01-04T05:06:07Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 1003,
+            "groups" : "circle a, circle c",
+            "language" : "korean",
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : "Archive note",
+            "published_at" : "2023-07-15T08:30:00Z",
+            "series" : "series beta",
+            "tags" : "artist:artist one, female:glasses, other:url https://x.example/a?b=c&d=e",
+            "thumb_failed_at" : null,
+            "thumb_page" : 3,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Archived Work",
+            "type" : "artistcg",
+            "updated_at" : null
+          },
+          {
+            "artists" : "artist four",
+            "bookmarked_at" : "2026-01-05T10:20:30Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 1004,
+            "groups" : "circle d",
+            "language" : "chinese",
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : "",
+            "published_at" : "2022-01-01T00:00:00Z",
+            "series" : "series gamma",
+            "tags" : "male:hero, tag:color",
+            "thumb_failed_at" : null,
+            "thumb_page" : 7,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Favorite Work",
+            "type" : "manga",
+            "updated_at" : null
+          },
+          {
+            "artists" : null,
+            "bookmarked_at" : "2026-01-06T00:00:00Z",
+            "catalog_matched" : 0,
+            "gallery_id" : 1005,
+            "groups" : null,
+            "language" : null,
+            "last_opened_at" : null,
+            "metadata_source" : null,
+            "note" : null,
+            "published_at" : null,
+            "series" : null,
+            "tags" : null,
+            "thumb_failed_at" : null,
+            "thumb_page" : 1,
+            "thumb_path" : null,
+            "thumb_status" : "missing",
+            "title" : "Minimal",
+            "type" : null,
+            "updated_at" : null
+          }
+        ]
+      },
+      "workCount" : 5
+    },
+    "image_backup_historical.json" : {
+      "accepted" : true,
+      "format_after_decode" : "tegnal-image-library",
+      "has_comics" : false,
+      "has_images" : true,
+      "restored_favorites_equal_unified_restore" : true
+    },
+    "image_backup.json" : {
+      "accepted" : true,
+      "format_after_decode" : "tegnal-image-library",
+      "has_challenges" : false,
+      "has_comics" : false,
+      "has_images" : true
+    },
+    "library_backup.json" : {
+      "accepted" : true,
+      "folderCount" : 10,
+      "has_challenges" : true,
+      "has_comics" : true,
+      "has_images" : true,
+      "workCount" : 10
+    }
+  },
+  "fresh_state_before_restore" : {
+    "comics" : {
+      "artists" : [
+
+      ],
+      "folder_works" : [
+
+      ],
+      "folders" : [
+        {
+          "color" : 4280391411,
+          "description" : "기본 폴더",
+          "name" : "미분류",
+          "sort_order" : 1,
+          "source_group_id" : null,
+          "sync_id_is_unsorted" : true,
+          "sync_id_present" : true
+        }
+      ],
+      "library_order" : [
+
+      ],
+      "note" : "works: every column except id. folder_works: (folder name, gallery_id, added_at). library_order: sync ids replaced by '<sync:FolderName>' (or 'unsorted'); folder rule values are parsed JSON. created_at/bookmarked_at of folders/artists omitted (wall clock).",
+      "saved_searches" : [
+
+      ],
+      "search_history" : [
+
+      ],
+      "works" : [
+
+      ]
+    },
+    "images" : {
+      "challenges" : [
+
+      ],
+      "favorites" : [
+
+      ],
+      "folders" : [
+
+      ],
+      "history" : [
+
+      ],
+      "note" : "payload BLOB columns are parsed JSON. settings values are raw strings exactly as stored, except folder_rule.* values, which native writes with an unsorted JSONEncoder (key order varies run to run) and are therefore given parsed.",
+      "saved_tags" : [
+
+      ],
+      "servers" : [
+
+      ],
+      "settings" : [
+
+      ]
+    }
+  },
+  "restored_challenges" : [
+    {
+      "id" : "fixture.challenge.custom",
+      "title" : "Fixture Challenge / 도전"
+    },
+    {
+      "id" : "fixture.challenge.minimal",
+      "title" : "Minimal Challenge"
+    }
+  ],
+  "source" : "library_backup.json decoded with LibraryBackupImport.decode, restored with LibraryBackupImport.restore into AppDatabase.inMemory() + BooruStore() (fresh, in-memory)."
+}

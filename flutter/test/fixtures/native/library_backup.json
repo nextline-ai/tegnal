@@ -1,0 +1,765 @@
+{
+  "challenges" : {
+    "format" : "tegnal-challenges",
+    "games" : [
+      {
+        "bands" : [
+          {
+            "id" : "band-low",
+            "maximum" : 20,
+            "minimum" : 10,
+            "through" : 50
+          },
+          {
+            "id" : "band-mid",
+            "maximum" : 9,
+            "minimum" : 5,
+            "through" : 100
+          },
+          {
+            "id" : "band-high",
+            "maximum" : 4,
+            "minimum" : 1,
+            "through" : 150
+          }
+        ],
+        "detail" : "Draw two prompts.\nThen finish the goal.",
+        "endings" : [
+          {
+            "badge" : "★",
+            "color" : "green",
+            "detail" : "Finished!",
+            "id" : "end-a",
+            "title" : "Great",
+            "weight" : 7
+          },
+          {
+            "badge" : "",
+            "color" : "orange",
+            "detail" : "",
+            "id" : "end-b",
+            "title" : "Good",
+            "weight" : 3
+          }
+        ],
+        "fixedEndingID" : "end-b",
+        "goal" : {
+          "count" : {
+            "maximum" : 6,
+            "minimum" : 2,
+            "step" : 2
+          },
+          "countWeight" : 70,
+          "mode" : "mixed",
+          "time" : {
+            "maximum" : 300,
+            "minimum" : 60,
+            "step" : 60
+          },
+          "timeWeight" : 30
+        },
+        "groups" : [
+          {
+            "filter" : "",
+            "id" : "extra-medium",
+            "options" : [
+              {
+                "enabled" : true,
+                "group" : "",
+                "id" : "opt-pencil",
+                "tags" : [
+                  "traditional_media"
+                ],
+                "text" : "Pencil",
+                "weight" : 5
+              }
+            ],
+            "title" : "Medium"
+          }
+        ],
+        "helpPages" : [
+          {
+            "body" : "Score points until 150.",
+            "id" : "rules",
+            "title" : "Rules"
+          },
+          {
+            "body" : "Use references: https://ref.example/path",
+            "id" : "tips",
+            "title" : "Tips"
+          }
+        ],
+        "id" : "fixture.challenge.custom",
+        "multiplier" : 1.5,
+        "reels" : [
+          {
+            "filter" : "people",
+            "id" : "reel-subject",
+            "options" : [
+              {
+                "enabled" : true,
+                "group" : "people",
+                "id" : "opt-person",
+                "tags" : [
+                  "solo",
+                  "1girl"
+                ],
+                "text" : "Person",
+                "weight" : 3
+              },
+              {
+                "enabled" : true,
+                "group" : "nature",
+                "id" : "opt-animal",
+                "tags" : [
+                  "animal"
+                ],
+                "text" : "Animal",
+                "weight" : 1
+              },
+              {
+                "enabled" : false,
+                "group" : "people",
+                "id" : "opt-disabled",
+                "tags" : [
+
+                ],
+                "text" : "Disabled",
+                "weight" : 10000
+              }
+            ],
+            "title" : "Subject"
+          },
+          {
+            "filter" : "",
+            "id" : "reel-method",
+            "options" : [
+              {
+                "enabled" : true,
+                "group" : "",
+                "id" : "opt-outline",
+                "tags" : [
+
+                ],
+                "text" : "Outline",
+                "weight" : 1
+              },
+              {
+                "enabled" : true,
+                "group" : "",
+                "id" : "opt-shapes",
+                "tags" : [
+
+                ],
+                "text" : "Large Shapes",
+                "weight" : 2
+              }
+            ],
+            "title" : "Method"
+          }
+        ],
+        "target" : 150,
+        "template" : "{reel1} with {reel2} in {extra1} — goal {goal}",
+        "title" : "Fixture Challenge / 도전"
+      },
+      {
+        "bands" : [
+          {
+            "id" : "b1",
+            "maximum" : 20,
+            "minimum" : 12,
+            "through" : 40
+          },
+          {
+            "id" : "b2",
+            "maximum" : 11,
+            "minimum" : 6,
+            "through" : 80
+          },
+          {
+            "id" : "b3",
+            "maximum" : 5,
+            "minimum" : 1,
+            "through" : 100
+          }
+        ],
+        "detail" : "",
+        "endings" : [
+          {
+            "badge" : "✓",
+            "color" : "purple",
+            "detail" : "All done",
+            "id" : "e1",
+            "title" : "Done",
+            "weight" : 1
+          }
+        ],
+        "goal" : {
+          "count" : {
+            "maximum" : 3,
+            "minimum" : 1,
+            "step" : 1
+          },
+          "countWeight" : 50,
+          "mode" : "time",
+          "time" : {
+            "maximum" : 120,
+            "minimum" : 30,
+            "step" : 30
+          },
+          "timeWeight" : 50
+        },
+        "groups" : [
+
+        ],
+        "id" : "fixture.challenge.minimal",
+        "multiplier" : 0.5,
+        "reels" : [
+          {
+            "filter" : "",
+            "id" : "r1",
+            "options" : [
+              {
+                "enabled" : true,
+                "group" : "",
+                "id" : "o1",
+                "tags" : [
+
+                ],
+                "text" : "First",
+                "weight" : 1
+              }
+            ],
+            "title" : "One"
+          },
+          {
+            "filter" : "",
+            "id" : "r2",
+            "options" : [
+              {
+                "enabled" : true,
+                "group" : "",
+                "id" : "o2",
+                "tags" : [
+
+                ],
+                "text" : "Second",
+                "weight" : 1
+              }
+            ],
+            "title" : "Two"
+          }
+        ],
+        "target" : 100,
+        "template" : "{reel1} · {reel2} · {goal}",
+        "title" : "Minimal Challenge"
+      }
+    ],
+    "schemaVersion" : 1
+  },
+  "comics" : {
+    "artists" : [
+      {
+        "kind" : 0,
+        "name" : "artist one",
+        "note" : "Artist note"
+      },
+      {
+        "kind" : 1,
+        "name" : "circle a"
+      },
+      {
+        "kind" : 2,
+        "name" : "full color"
+      },
+      {
+        "kind" : 7,
+        "name" : "glasses",
+        "note" : "Glasses note / 메모"
+      },
+      {
+        "kind" : 3,
+        "name" : "series alpha"
+      },
+      {
+        "kind" : 0,
+        "name" : "shared name"
+      },
+      {
+        "kind" : 1,
+        "name" : "shared name",
+        "note" : "Group-only note"
+      },
+      {
+        "kind" : 9,
+        "name" : "uncensored"
+      }
+    ],
+    "exported_at" : "2026-11-03T16:40:20Z",
+    "folder_rules" : [
+      {
+        "excluded" : "male:hero, tag:color",
+        "folder" : "Smart Glasses",
+        "includesOtherFolders" : false,
+        "isEnabled" : true,
+        "query" : "female:glasses",
+        "sources" : [
+          "Reading",
+          "미분류"
+        ]
+      },
+      {
+        "excluded" : "",
+        "folder" : "Archive",
+        "includesOtherFolders" : true,
+        "isEnabled" : false,
+        "query" : "language:korean"
+      }
+    ],
+    "folders" : [
+      {
+        "color" : 4292943176,
+        "description" : "Best of / 최고",
+        "id" : 3,
+        "name" : "Favorites ★",
+        "sort_order" : 0
+      },
+      {
+        "color" : 4279383126,
+        "description" : "Currently reading",
+        "id" : 2,
+        "name" : "Reading",
+        "sort_order" : 1,
+        "source_group_id" : 42
+      },
+      {
+        "color" : 4280391411,
+        "description" : "기본 폴더",
+        "id" : 1,
+        "name" : "미분류",
+        "sort_order" : 2
+      },
+      {
+        "color" : 4286331629,
+        "description" : "Rule driven \"smart\" folder",
+        "id" : 5,
+        "name" : "Smart Glasses",
+        "sort_order" : 3
+      },
+      {
+        "color" : 4279080072,
+        "id" : 4,
+        "name" : "Archive",
+        "sort_order" : 4
+      }
+    ],
+    "history" : [
+      {
+        "query" : "female:glasses -male:hero",
+        "used_at" : 1767409445
+      },
+      {
+        "query" : "artist:artist one",
+        "used_at" : 1767323045.25
+      },
+      {
+        "query" : "검색어",
+        "used_at" : 1767236645.5
+      }
+    ],
+    "saved_searches" : [
+      "female:glasses",
+      "series:series alpha"
+    ],
+    "version" : 2,
+    "works" : [
+      {
+        "bookmarked_at" : "2026-01-06T00:00:00Z",
+        "folders" : [
+          "Archive"
+        ],
+        "gallery_id" : 1005,
+        "thumb_page" : 1,
+        "title" : "Minimal"
+      },
+      {
+        "artists" : "artist four",
+        "bookmarked_at" : "2026-01-05T10:20:30Z",
+        "folders" : [
+          "Favorites ★"
+        ],
+        "gallery_id" : 1004,
+        "groups" : "circle d",
+        "language" : "chinese",
+        "note" : "",
+        "published_at" : "2022-01-01T00:00:00Z",
+        "series" : "series gamma",
+        "tags" : "male:hero, tag:color",
+        "thumb_page" : 7,
+        "title" : "Favorite Work",
+        "type" : "manga"
+      },
+      {
+        "artists" : "artist one",
+        "bookmarked_at" : "2026-01-04T05:06:07Z",
+        "folders" : [
+          "Archive"
+        ],
+        "gallery_id" : 1003,
+        "groups" : "circle a, circle c",
+        "language" : "korean",
+        "note" : "Archive note",
+        "published_at" : "2023-07-15T08:30:00Z",
+        "series" : "series beta",
+        "tags" : "artist:artist one, female:glasses, other:url https://x.example/a?b=c&d=e",
+        "thumb_page" : 3,
+        "title" : "Archived Work",
+        "type" : "artistcg"
+      },
+      {
+        "artists" : "artist three",
+        "bookmarked_at" : "2026-01-03T00:00:00Z",
+        "folders" : [
+          "미분류"
+        ],
+        "gallery_id" : 1002,
+        "groups" : "circle b",
+        "language" : "english",
+        "note" : "Unfiled note",
+        "published_at" : "2024-02-29T12:00:00Z",
+        "series" : "original",
+        "tags" : "female:cat ears, tag:sole female",
+        "thumb_page" : 3,
+        "title" : "Unfiled Work",
+        "type" : "doujinshi"
+      },
+      {
+        "artists" : "artist one, artist two",
+        "bookmarked_at" : "2026-01-02T03:04:05Z",
+        "folders" : [
+          "Favorites ★",
+          "Reading"
+        ],
+        "gallery_id" : 1001,
+        "groups" : "circle a",
+        "language" : "japanese",
+        "note" : "Line one\nLine two\ttabbed",
+        "published_at" : "2025-12-31T23:59:59Z",
+        "series" : "series alpha",
+        "tags" : "artist:artist one, female:glasses, male:hero, tag:full color",
+        "thumb_page" : 3,
+        "title" : "Comic \"One\" / 첫 번째",
+        "type" : "manga"
+      }
+    ]
+  },
+  "exportedAt" : "2026-11-03T16:40:20Z",
+  "format" : "tegnal-library",
+  "images" : {
+    "blacklist" : {
+      "server-alpha" : "gore\nrating:e -safe_tag",
+      "server-beta" : "",
+      "server-gamma" : "# comment line\nscat"
+    },
+    "exportedAt" : 815416820.650992,
+    "favorites" : [
+      {
+        "folderID" : "folder-poses",
+        "post" : {
+          "artists" : [
+
+          ],
+          "commentCount" : 1,
+          "favoriteCount" : 4,
+          "fileExtension" : "mp4",
+          "fileURL" : "https://img.gamma.example/images/90/9001.mp4",
+          "height" : 720,
+          "poolIDs" : [
+            3
+          ],
+          "postID" : 9001,
+          "previewURL" : "https://img.gamma.example/thumbnails/90/thumbnail_9001.jpg",
+          "rating" : "e",
+          "score" : 15,
+          "serverID" : "server-gamma",
+          "tags" : [
+            "video",
+            "sound",
+            "dancing"
+          ],
+          "width" : 1280
+        },
+        "savedAt" : 1767409445.125
+      },
+      {
+        "folderID" : "folder-refs",
+        "post" : {
+          "animated" : true,
+          "animationVideoURL" : "https://cdn.alpha.example/sample/ef/ef.webm",
+          "artists" : [
+            "artist_two",
+            "artist_three"
+          ],
+          "favoriteCount" : 0,
+          "fileExtension" : "zip",
+          "fileURL" : "https://cdn.alpha.example/original/ef/ef.zip?download=1&name=a%20b",
+          "height" : 600,
+          "isBanned" : true,
+          "isDeleted" : true,
+          "metadataTags" : [
+            "animated",
+            "ugoira"
+          ],
+          "poolIDs" : [
+
+          ],
+          "postID" : 5002,
+          "previewURL" : "https://cdn.alpha.example/preview/ef/ef.jpg",
+          "rating" : "q",
+          "sampleURL" : "https://cdn.alpha.example/sample/ef/ef.webm",
+          "score" : -3,
+          "serverID" : "server-alpha",
+          "tagCategories" : {
+            "artist_three" : 1,
+            "artist_two" : 1,
+            "日本語タグ" : 4
+          },
+          "tags" : [
+            "animated",
+            "ugoira",
+            "日本語タグ",
+            "blue_sky"
+          ],
+          "width" : 800
+        },
+        "savedAt" : 1767323046.5
+      },
+      {
+        "folderID" : "folder-sky",
+        "post" : {
+          "animated" : false,
+          "artists" : [
+            "artist_one"
+          ],
+          "commentCount" : 3,
+          "favoriteCount" : 99,
+          "fileExtension" : "png",
+          "fileURL" : "https://cdn.alpha.example/original/ab/cd/abcd1234.png",
+          "height" : 1080,
+          "isDeleted" : false,
+          "metadataTags" : [
+            "highres"
+          ],
+          "poolIDs" : [
+            7,
+            12
+          ],
+          "postID" : 5001,
+          "previewURL" : "https://cdn.alpha.example/preview/ab/cd/abcd1234.jpg",
+          "rating" : "s",
+          "reducedDataURL" : "https://cdn.alpha.example/reduced/abcd1234.webp",
+          "sampleURL" : "https://cdn.alpha.example/sample/ab/cd/sample-abcd1234.jpg",
+          "score" : 42,
+          "serverID" : "server-alpha",
+          "tagCategories" : {
+            "1girl" : 0,
+            "artist_one" : 1,
+            "blue_sky" : 0,
+            "cloud" : 0,
+            "highres" : 5
+          },
+          "tags" : [
+            "1girl",
+            "blue_sky",
+            "cloud",
+            "artist_one",
+            "highres"
+          ],
+          "upvoteCount" : 50,
+          "width" : 1920
+        },
+        "savedAt" : 1767323045
+      },
+      {
+        "folderID" : "unsorted",
+        "post" : {
+          "artists" : [
+
+          ],
+          "fileExtension" : "jpg",
+          "height" : 0,
+          "poolIDs" : [
+
+          ],
+          "postID" : 7001,
+          "previewURL" : "https://files.beta.example/sub/preview/7001.jpg",
+          "rating" : "q",
+          "score" : 0,
+          "serverID" : "server-beta",
+          "tags" : [
+
+          ],
+          "width" : 0
+        },
+        "savedAt" : 1767236645
+      },
+      {
+        "folderID" : "site:https://beta.example/sub",
+        "post" : {
+          "artists" : [
+            "painter_x"
+          ],
+          "fileExtension" : "jpg",
+          "fileURL" : "https://files.beta.example/sub/image/7002.jpg",
+          "height" : 3000,
+          "poolIDs" : [
+
+          ],
+          "postID" : 7002,
+          "previewURL" : "https://files.beta.example/sub/preview/7002.jpg",
+          "rating" : "s",
+          "sampleURL" : "https://files.beta.example/sub/sample/7002.jpg",
+          "score" : 8,
+          "serverID" : "server-beta",
+          "tags" : [
+            "landscape",
+            "mountain"
+          ],
+          "width" : 2000
+        },
+        "savedAt" : 1767150245
+      }
+    ],
+    "folderRules" : [
+      {
+        "excluded" : "gore, rating:e",
+        "folder" : "folder-sky",
+        "includesOtherFolders" : false,
+        "isEnabled" : true,
+        "query" : "blue_sky",
+        "sources" : [
+          "folder-refs",
+          "unsorted"
+        ]
+      }
+    ],
+    "folders" : [
+      {
+        "color" : 4278355143,
+        "id" : "folder-sky",
+        "name" : "Sky"
+      },
+      {
+        "color" : 4289449455,
+        "id" : "folder-refs",
+        "name" : "References"
+      },
+      {
+        "color" : 4281549909,
+        "id" : "unsorted",
+        "name" : ""
+      },
+      {
+        "color" : 4280640491,
+        "id" : "site:https://beta.example/sub",
+        "name" : "beta.example/sub"
+      },
+      {
+        "color" : 4278556265,
+        "id" : "folder-poses",
+        "name" : "Poses / 포즈"
+      }
+    ],
+    "format" : "tegnal-image-library",
+    "history" : [
+      {
+        "query" : "blue_sky rating:s",
+        "serverID" : "server-alpha",
+        "usedAt" : 1767323045.75
+      },
+      {
+        "query" : "artist_one",
+        "serverID" : "server-alpha",
+        "usedAt" : 1767323000
+      },
+      {
+        "query" : "landscape",
+        "serverID" : "server-beta",
+        "usedAt" : 1767236645
+      },
+      {
+        "query" : "video -sound",
+        "serverID" : "server-gamma",
+        "usedAt" : 1767150245.5
+      }
+    ],
+    "savedTags" : [
+      {
+        "kind" : "artist",
+        "name" : "artist_one",
+        "serverID" : "server-alpha"
+      },
+      {
+        "kind" : "female",
+        "name" : "glasses",
+        "serverID" : "server-alpha"
+      },
+      {
+        "kind" : "search",
+        "name" : "blue_sky rating:s",
+        "serverID" : "server-alpha"
+      },
+      {
+        "kind" : "series",
+        "name" : "series_name",
+        "serverID" : "server-alpha"
+      },
+      {
+        "kind" : "tag",
+        "name" : "blue_sky",
+        "serverID" : "server-alpha"
+      },
+      {
+        "kind" : "metadata",
+        "name" : "highres",
+        "serverID" : "server-beta"
+      },
+      {
+        "kind" : "tag",
+        "name" : "mountain",
+        "serverID" : "server-beta"
+      },
+      {
+        "kind" : "character",
+        "name" : "dancing",
+        "serverID" : "server-gamma"
+      }
+    ],
+    "selectedServerIDs" : [
+      "server-alpha",
+      "server-gamma"
+    ],
+    "servers" : [
+      {
+        "baseURL" : "https://alpha.example",
+        "engine" : "danbooru",
+        "id" : "server-alpha",
+        "name" : "Alpha Images"
+      },
+      {
+        "baseURL" : "https://beta.example/sub",
+        "engine" : "moebooru",
+        "id" : "server-beta",
+        "name" : "https://beta.example/sub"
+      },
+      {
+        "baseURL" : "https://gamma.example/board",
+        "engine" : "gelbooru",
+        "id" : "server-gamma",
+        "name" : "Gamma Board"
+      }
+    ],
+    "version" : 1
+  },
+  "version" : 1
+}
