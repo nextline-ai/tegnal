@@ -187,7 +187,8 @@ struct RecapIndex: Sendable {
     init(events input: [TasteEvent], control: TasteControl, mode: TasteMode, library: [String: RecapWorkInfo]) {
         self.mode = mode; self.library = library
         timeZone = TimeZone(identifier: control.timeZone) ?? .gmt
-        let events = Dictionary(input.filter { $0.epoch == control.epoch }.map { ($0.id, $0) }, uniquingKeysWith: { a, b in TasteEvent.ordered(a, b) ? b : a }).values.sorted(by: TasteEvent.ordered)
+        let unique = Dictionary(input.filter { $0.epoch == control.epoch }.map { ($0.id, $0) }, uniquingKeysWith: { a, b in TasteEvent.ordered(a, b) ? b : a }).values.sorted(by: TasteEvent.ordered)
+        let events = TasteEvent.withoutUndoneSaves(unique)
         var metadata: [String: Set<String>] = [:]
         for event in events { metadata[event.item.source, default: []].formUnion(event.item.metadata.map(TasteTagPolicy.normalize)) }
         func eligible(_ item: TasteItem) -> [String] {

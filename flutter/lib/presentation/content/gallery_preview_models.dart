@@ -200,14 +200,30 @@ class ArtworkTagGroup {
 
 /// What the work information screen shows below the actions (`GalleryDetailMetadata`).
 abstract final class GalleryDetailMetadata {
-  /// Tag groups without artists and language, with Other Tags always last (empty when there are none).
-  static List<ArtworkTagGroup> groups(NativeGallery gallery) {
-    final tags = ArtworkTagGroup.make(tags: gallery.tags)
-        .where((group) => group.category != ArtworkTagCategory.artist && group.category != ArtworkTagCategory.language);
-    return [
-      ...tags.where((group) => group.category != ArtworkTagCategory.general),
-      tags.where((group) => group.category == ArtworkTagCategory.general).firstOrNull ?? const ArtworkTagGroup(category: ArtworkTagCategory.general, tags: []),
-    ];
+  /// Who made the work, what it comes from and who appears in it, each under its own heading
+  /// before the language; the descriptive tags follow together, set apart by color.
+  static const creditCategories = [ArtworkTagCategory.group, ArtworkTagCategory.series, ArtworkTagCategory.character];
+  static const tagCategories = [
+    ArtworkTagCategory.female,
+    ArtworkTagCategory.male,
+    ArtworkTagCategory.general,
+    ArtworkTagCategory.metadata,
+    ArtworkTagCategory.type,
+  ];
+
+  /// Groups, series and characters that the work has, in that order.
+  static List<ArtworkTagGroup> credits(NativeGallery gallery) {
+    final groups = ArtworkTagGroup.make(tags: gallery.tags);
+    return [for (final category in creditCategories) ?groups.where((group) => group.category == category).firstOrNull];
+  }
+
+  /// Every descriptive tag in one group, possibly empty.
+  static ArtworkTagGroup tags(NativeGallery gallery) {
+    final groups = ArtworkTagGroup.make(tags: gallery.tags);
+    return ArtworkTagGroup(
+      category: ArtworkTagCategory.general,
+      tags: [for (final category in tagCategories) ...?groups.where((group) => group.category == category).firstOrNull?.tags],
+    );
   }
 
   /// The work's artists followed by `artist:` tags, once each however they are spelled.

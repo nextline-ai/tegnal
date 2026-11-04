@@ -31,7 +31,7 @@
     {
       "target": {
         "containerPath": "container:TEGNAL.xcodeproj",
-        "identifier": "467FC908A4CFDF6B49B8406C",
+        "identifier": "CF335F251FE13B8D612BEAA4",
         "name": "TEGNALTests"
       },
       "parallelizable": false,

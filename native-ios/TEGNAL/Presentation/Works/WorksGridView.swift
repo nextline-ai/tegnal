@@ -36,6 +36,8 @@ public struct WorksGridView: View {
     @State private var showJumpSheet = false
     @State private var pendingJump: Int64?
     @State private var composingFolder = false
+    /// A work saved from another website that numbers its works differently.
+    @State private var siteChoice: Work?
     @FocusState private var isSearchFocused: Bool
 
     public init(folder: Folder? = nil, artist: String? = nil) {
@@ -89,7 +91,7 @@ public struct WorksGridView: View {
                                     .onTapGesture {
                                         if selecting {
                                             if selection.contains(work.galleryId) { selection.remove(work.galleryId) } else { selection.insert(work.galleryId) }
-                                        } else { openManga(for: work.galleryId) }
+                                        } else { open(work) }
                                     }
                                     .overlay(alignment: .topTrailing) {
                                         if selecting { Image(systemName: selection.contains(work.galleryId) ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
@@ -207,6 +209,16 @@ public struct WorksGridView: View {
                     }
                 }
             }
+        }
+        .alert(L10n.text("Saved from %@", siteChoice?.site ?? ""), isPresented: Binding(get: { siteChoice != nil }, set: { if !$0 { siteChoice = nil } }), presenting: siteChoice) { work in
+            Button(L10n.text("Switch and Open")) {
+                if let site = work.site { env.switchComicsSite(to: site) }
+                openManga(for: work.galleryId)
+            }
+            Button(L10n.text("Open Here")) { openManga(for: work.galleryId) }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: { work in
+            Text(L10n.text("This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work.", work.site ?? "", env.mangaSiteAddress))
         }
         .alert(L10n.text("Delete Selected Items?"), isPresented: $confirmingDelete) {
             Button(L10n.text("Delete"), role: .destructive) {
@@ -336,6 +348,12 @@ public struct WorksGridView: View {
         }, set: { item in
             if activeBrowserShowsInformation == information { activeBrowserUrl = item?.id }
         })
+    }
+    /// A work from another connected website whose numbers mean other works opens there.
+    private func open(_ work: Work) {
+        if let site = work.site, site != env.mangaSiteAddress, env.comicSites.contains(site), !ComicSites.sharesNumbers(site, env.mangaSiteAddress) {
+            siteChoice = work
+        } else { openManga(for: work.galleryId) }
     }
     private func openManga(for galleryId: Int64) {
         let opening = MangaThumbnailOpening.stored()

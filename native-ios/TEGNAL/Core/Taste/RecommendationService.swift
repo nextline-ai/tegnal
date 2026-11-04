@@ -28,6 +28,48 @@ struct TasteRecommendations: Sendable {
     var cursor = RecommendationCursor()
 }
 
+/// Saved works, matched by number and also as the same work under another number: a
+/// version the site lists in another language, or the same original title by a shared artist.
+struct SavedWorkIndex {
+    private let ids: Set<Int64>
+    private let titles: Set<String>
+
+    init(database: AppDatabase) throws {
+        var ids = Set<Int64>(), titles = Set<String>()
+        try database.dbWriter.read { db in
+            for row in try Row.fetchAll(db, sql: "SELECT gallery_id, title, artists FROM works") {
+                ids.insert(row["gallery_id"])
+                let title = Self.baseTitle((row["title"] as String?) ?? "")
+                guard !title.isEmpty else { continue }
+                for artist in Self.names((row["artists"] as String? ?? "").components(separatedBy: ",")) { titles.insert(artist + "\u{0}" + title) }
+            }
+        }
+        self.ids = ids; self.titles = titles
+    }
+
+    func contains(_ gallery: NativeGallery) -> Bool {
+        if ids.contains(gallery.id) || (gallery.versions ?? []).contains(where: { ids.contains($0.id) }) { return true }
+        let title = Self.baseTitle(gallery.title)
+        return !title.isEmpty && Self.names(gallery.artists).contains { titles.contains($0 + "\u{0}" + title) }
+    }
+
+    /// The original title: before a translated title after " | ", without bracketed notes
+    /// such as the event, translator or language, and with only letters and digits kept.
+    static func baseTitle(_ title: String) -> String {
+        var text = title.components(separatedBy: " | ").first ?? title
+        text = text.replacingOccurrences(of: #"\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|【[^】]*】|（[^）]*）"#, with: " ", options: .regularExpression)
+        let folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+        let words = folded.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        let joined = words.joined(separator: " ")
+        // Very short titles name too many different works.
+        return joined.count >= 4 ? joined : ""
+    }
+
+    static func names(_ values: [String]) -> [String] {
+        values.map { $0.lowercased().replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+}
+
 struct RecommendationService {
     /// The library-wide evidence and denominator are constant for every
     /// candidate from a source. Build them once for each requested page.
@@ -245,6 +287,8 @@ struct RecommendationService {
         } else if env.isSiteVerified {
             let preferences = settings(for: MangaUrls.source)
             var fetched = Set<Int64>()
+            // Other language versions and re-uploads of saved works count as saved too.
+            let savedWorks = try SavedWorkIndex(database: env.database)
             for seed in seeds(MangaUrls.source) {
                 activeSeeds.insert(seed.id)
                 guard !cursor.finished.contains(seed.id) else { continue }
@@ -269,7 +313,7 @@ struct RecommendationService {
                     for gallery in galleries {
                         let id = gallery.id
                         try Task.checkCancellation()
-                        guard !savedAfterLoading.contains(id) else { continue }
+                        guard !savedAfterLoading.contains(id), !savedWorks.contains(gallery) else { continue }
                         let item = TasteItem(source: MangaUrls.source, id: id, tags: gallery.tags)
                         let eligible = Set(item.eligibleTags)
                         // The site's artist search already matched; galleries credit people apart from tags.

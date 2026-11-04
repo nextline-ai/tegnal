@@ -4,6 +4,23 @@ import UIKit
 @testable import TEGNAL
 
 final class TasteTests: XCTestCase {
+    func testSmartPicksTreatOtherVersionsOfSavedWorksAsSaved() throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 1001, title: "Career Women to sono Joushi | 커리어 우먼과 그 상사", artists: "mira, noa")
+        _ = try db.upsertWork(galleryId: 1002, title: "Ai", artists: "mira")
+        let index = try SavedWorkIndex(database: db)
+        func gallery(_ id: Int64, _ title: String, _ artists: [String], versions: [Int64] = []) -> NativeGallery {
+            NativeGallery(id: id, title: title, artists: artists, language: "japanese", type: "doujinshi", tags: [], pages: [],
+                          versions: versions.map { GalleryVersion(id: $0, language: "korean", localName: nil) })
+        }
+        XCTAssertTrue(index.contains(gallery(1001, "Anything", [])), "The saved number itself")
+        XCTAssertTrue(index.contains(gallery(2001, "Other Title", [], versions: [1001])), "A version the site lists for a saved work")
+        XCTAssertTrue(index.contains(gallery(2002, "[Mira] Career Women to Sono Joushi (C99) [Digital]", ["Mira"])), "The same original by a shared artist")
+        XCTAssertFalse(index.contains(gallery(2003, "Career Women to sono Joushi", ["theo"])), "Another artist's work of the same name")
+        XCTAssertFalse(index.contains(gallery(2004, "Career Women to sono Joushi 2", ["mira"])), "A sequel")
+        XCTAssertFalse(index.contains(gallery(2005, "AI", ["mira"])), "Titles this short are not matched")
+    }
+
     private var originalSite: String?
     override func setUp() {
         super.setUp()

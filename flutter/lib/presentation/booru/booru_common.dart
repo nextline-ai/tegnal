@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
@@ -111,10 +112,25 @@ class BooruThumbnail extends StatefulWidget {
   State<BooruThumbnail> createState() => _BooruThumbnailState();
 }
 
+/// The decode width for a thumbnail of this size, as the native cache decodes it: the shorter
+/// side keeps about 720 pixels, so a tall or wide image cropped to fill a cell stays sharp,
+/// the longer side stops at 2048, and the file is never enlarged.
+int booruThumbnailDecodeWidth(int width, int height) {
+  const shortSide = 720, longSide = 2048;
+  final long = width > height ? width : height;
+  final short = (width < height ? width : height).clamp(1, 1 << 30);
+  final scale = [1.0, shortSide / short, longSide / long].reduce((a, b) => a < b ? a : b);
+  return (width * scale).round().clamp(1, width);
+}
+
 class _BooruThumbnailState extends State<BooruThumbnail> {
   Uint8List? _image;
+  int? _decodeWidth;
   bool _failed = false;
   int _generation = 0;
+
+  /// Decode widths of recent thumbnails, so cached ones draw at once.
+  static final _decodeWidths = <String, int>{};
 
   String? get _url => widget.post.previewURL ?? widget.post.sampleURL;
 
@@ -129,6 +145,7 @@ class _BooruThumbnailState extends State<BooruThumbnail> {
     super.didUpdateWidget(old);
     if (old.post.id != widget.post.id || (old.post.previewURL ?? old.post.sampleURL) != _url) {
       _image = null;
+      _decodeWidth = null;
       _load();
     }
   }
@@ -143,15 +160,41 @@ class _BooruThumbnailState extends State<BooruThumbnail> {
       return;
     }
     final cached = widget.booru.thumbnails.cached(url, widget.server);
-    if (cached != null) {
+    final known = _decodeWidths[url];
+    if (cached != null && known != null) {
       _image = cached;
+      _decodeWidth = known;
       return;
     }
     try {
-      final data = await widget.booru.thumbnails.load(url, widget.server);
-      if (mounted && generation == _generation) setState(() => _image = data);
+      final data = cached ?? await widget.booru.thumbnails.load(url, widget.server);
+      final width = await _measure(data);
+      if (width != null) {
+        if (_decodeWidths.length >= 512) _decodeWidths.remove(_decodeWidths.keys.first);
+        _decodeWidths[url] = width;
+      }
+      if (mounted && generation == _generation) {
+        setState(() {
+          _image = data;
+          _decodeWidth = width;
+        });
+      }
     } on Object {
       if (mounted && generation == _generation) setState(() => _failed = true);
+    }
+  }
+
+  /// Reads only the image header for its size.
+  static Future<int?> _measure(Uint8List data) async {
+    try {
+      final buffer = await ui.ImmutableBuffer.fromUint8List(data);
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final width = booruThumbnailDecodeWidth(descriptor.width, descriptor.height);
+      descriptor.dispose();
+      buffer.dispose();
+      return width;
+    } on Object {
+      return null;
     }
   }
 
@@ -183,7 +226,7 @@ class _BooruThumbnailState extends State<BooruThumbnail> {
           fit: widget.booru.fitsThumbnails ? BoxFit.contain : BoxFit.cover,
           width: constraints.maxWidth,
           height: constraints.maxHeight,
-          cacheWidth: constraints.maxWidth.isFinite ? (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context) * 1.5).round() : null,
+          cacheWidth: _decodeWidth,
           gaplessPlayback: true,
           filterQuality: FilterQuality.medium,
           errorBuilder: (context, _, _) => _failure(context),

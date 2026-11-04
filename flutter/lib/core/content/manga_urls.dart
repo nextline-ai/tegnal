@@ -396,22 +396,127 @@ abstract final class MangaUrls {
   /// Changes whenever the resolved protocol is forgotten, so a failed lookup's cooldown does not outlive it.
   static int get resetGeneration => _resets;
 
+  static const resolvedKeys = [
+    'manga.resolved_data_host',
+    'manga.resolved_cdn_host',
+    'manga.resolved_backend_site',
+    'manga.resolved_protocol',
+    'manga.resolved_media_hosts',
+    'manga.resolved_preview_base',
+    'manga.resolved_api',
+    'manga.resolved_login',
+    'manga.account_required',
+  ];
+
   static void resetResolvedBackend() {
     _resets += 1;
-    for (final key in [
-      'manga.resolved_data_host',
-      'manga.resolved_cdn_host',
-      'manga.resolved_backend_site',
-      'manga.resolved_protocol',
-      'manga.resolved_media_hosts',
-      'manga.resolved_preview_base',
-      'manga.resolved_api',
-      'manga.resolved_login',
-      'manga.account_required',
-    ]) {
+    for (final key in resolvedKeys) {
       preferences.remove(key);
     }
   }
+
+  /// The home address of a connected site, from the host the settings keep.
+  static String homeForSite(String site) => site.isEmpty ? '' : 'https://$site/';
+}
+
+/// `ComicSites`: the comics websites a person connected. One is active at a time; each keeps
+/// what was learned about it, so switching back never repeats the check. Sites that number their
+/// works the same way can open each other's saved works.
+abstract final class ComicSites {
+  static Preferences get _preferences => MangaUrls.preferences;
+  static const _listKey = 'manga.sites';
+
+  /// Kept as JSON text, since stored preferences hold only plain values.
+  static const _snapshotsKey = 'manga.siteSnapshots';
+
+  /// Account details that belong to one site, kept with what was learned about it.
+  static const _snapshotKeys = [...MangaUrls.resolvedKeys, 'manga.account_site', 'manga.account_host'];
+
+  static String get active => _preferences.string('manga.site_address') ?? '';
+
+  /// Connected sites by host, the active one included.
+  static List<String> get all {
+    final stored = _preferences.object(_listKey);
+    final sites = stored is List ? stored.whereType<String>().toList() : <String>[];
+    final current = active;
+    if (current.isNotEmpty && !sites.contains(current)) sites.add(current);
+    return sites;
+  }
+
+  static void add(String site) {
+    if (site.isEmpty) return;
+    final sites = all;
+    if (!sites.contains(site)) sites.add(site);
+    _preferences.set(_listKey, sites);
+  }
+
+  /// Forgets a site and what was learned about it.
+  static void remove(String site) {
+    _preferences.set(_listKey, all.where((value) => value != site).toList());
+    final snapshots = _snapshots()..remove(site);
+    _save(snapshots);
+  }
+
+  static Map<String, Map<String, Object?>> _snapshots() {
+    final text = _preferences.string(_snapshotsKey);
+    if (text == null) return {};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) return {};
+      return {
+        for (final MapEntry(:key, :value) in decoded.entries)
+          if (key is String && value is Map) key: {for (final entry in value.entries) '${entry.key}': entry.value},
+      };
+    } on FormatException {
+      return {};
+    }
+  }
+
+  static void _save(Map<String, Map<String, Object?>> snapshots) => _preferences.set(_snapshotsKey, jsonEncode(snapshots));
+
+  /// Keeps what was learned about [from] and brings back what was learned about [to].
+  static void switchSite({required String from, required String to}) {
+    if (from == to) {
+      MangaUrls.resetResolvedBackend();
+      return;
+    }
+    final snapshots = _snapshots();
+    if (from.isNotEmpty) {
+      final home = MangaUrls.homeForSite(from);
+      final owns = _preferences.string('manga.resolved_backend_site') == home || _preferences.string('manga.account_site') == home;
+      if (owns) {
+        snapshots[from] = {for (final key in _snapshotKeys) key: ?_preferences.object(key)};
+      }
+    }
+    MangaUrls.resetResolvedBackend();
+    for (final key in ['manga.account_site', 'manga.account_host']) {
+      _preferences.remove(key);
+    }
+    for (final MapEntry(:key, :value) in (snapshots[to] ?? const {}).entries) {
+      if (!_snapshotKeys.contains(key)) continue;
+      // JSON brings lists back untyped; stored preferences want a list of text.
+      _preferences.set(key, value is List ? value.whereType<String>().toList() : value);
+    }
+    _save(snapshots);
+  }
+
+  /// How a site's works are reached, once learned.
+  static MangaBackend? backendOf(String site) {
+    if (site == active) return MangaUrls.hasResolvedBackend ? MangaUrls.backend : null;
+    final saved = _snapshots()[site];
+    if (saved == null || saved['manga.resolved_backend_site'] != MangaUrls.homeForSite(site)) return null;
+    return MangaBackend.fromRawValue(saved['manga.resolved_protocol'] as String?);
+  }
+
+  /// Two sites read their works the same way, so a saved number names the same work on both.
+  static bool sharesNumbers(String a, String b) {
+    if (a == b) return true;
+    final first = backendOf(a), second = backendOf(b);
+    return first != null && first == second;
+  }
+
+  /// Other connected sites that can open this site's works.
+  static List<String> siblings(String site) => all.where((other) => other != site && sharesNumbers(other, site)).toList();
 }
 
 /// Coalesce discovery for concurrent covers and lists. Failed discovery has a

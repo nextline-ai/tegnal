@@ -42,6 +42,11 @@
             value = "1"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "TEGNAL_LIVE_COMICS_SITE"
+            value = "$(TEGNAL_LIVE_COMICS_SITE)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
       <Testables>
          <TestableReference

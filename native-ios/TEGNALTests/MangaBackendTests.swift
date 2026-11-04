@@ -198,6 +198,48 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertNil(MangaUrls.preferences.object(forKey: "manga.resolved_backend_site"))
     }
 
+    func testConnectedSitesKeepWhatWasLearnedAndKnowWhichShareNumbers() {
+        let preferences = MangaUrls.preferences
+        let kept = ["manga.sites", "manga.siteSnapshots", "manga.account_site", "manga.account_host"].map { ($0, preferences.object(forKey: $0)) }
+        defer { for (key, value) in kept { preferences.set(value, forKey: key) } }
+        for (key, _) in kept { preferences.removeObject(forKey: key) }
+        func learn(_ site: String, _ backend: MangaUrls.Backend) {
+            let home = MangaUrls.home(forSite: site)
+            preferences.set(site, forKey: "manga.site_address")
+            preferences.set(site, forKey: "manga.resolved_data_host"); preferences.set(site, forKey: "manga.resolved_cdn_host")
+            preferences.set(backend.rawValue, forKey: "manga.resolved_protocol"); preferences.set(home, forKey: "manga.resolved_backend_site")
+            ComicSites.add(site)
+        }
+        learn("keyed-one.example", .keyed)
+        ComicSites.switchSite(from: "keyed-one.example", to: "keyed-two.example")
+        learn("keyed-two.example", .keyed)
+        ComicSites.switchSite(from: "keyed-two.example", to: "indexed.example")
+        learn("indexed.example", .indexed)
+        XCTAssertEqual(ComicSites.all, ["keyed-one.example", "keyed-two.example", "indexed.example"])
+
+        ComicSites.switchSite(from: "indexed.example", to: "keyed-one.example")
+        preferences.set("keyed-one.example", forKey: "manga.site_address")
+        XCTAssertTrue(MangaUrls.hasResolvedBackend, "Switching back needs no new check")
+        XCTAssertEqual(MangaUrls.backend, .keyed)
+        XCTAssertTrue(ComicSites.sharesNumbers("keyed-one.example", "keyed-two.example"))
+        XCTAssertFalse(ComicSites.sharesNumbers("keyed-one.example", "indexed.example"))
+        XCTAssertEqual(ComicSites.siblings(of: "keyed-one.example"), ["keyed-two.example"])
+
+        ComicSites.remove("keyed-two.example")
+        XCTAssertEqual(ComicSites.siblings(of: "keyed-one.example"), [])
+        XCTAssertNil(ComicSites.backend(of: "keyed-two.example"), "A removed site forgets what was learned")
+    }
+
+    func testASavedWorkKeepsTheFirstSiteItWasSavedFrom() throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 10, site: "one.example")
+        _ = try db.upsertWork(galleryId: 10, title: "Later", site: "two.example")
+        XCTAssertEqual(try db.getWork(galleryId: 10)?.site, "one.example")
+        _ = try db.upsertWork(galleryId: 11)
+        _ = try db.upsertWork(galleryId: 11, site: "two.example")
+        XCTAssertEqual(try db.getWork(galleryId: 11)?.site, "two.example", "An unknown site is filled in when it becomes known")
+    }
+
     func testFrontendGalleryLinksDoNotMasqueradeAsDataEndpoints() {
         _ = fixture()
         XCTAssertFalse(MangaUrls.extractBackend(from: #"<a href="https://front.example/galleries/1234.html">Work</a>"#))

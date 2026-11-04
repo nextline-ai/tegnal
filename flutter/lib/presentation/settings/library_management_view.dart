@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/booru/booru_models.dart';
@@ -51,15 +53,23 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
 
   CoverQueueState get _queue => widget.library.coverQueue.state;
 
+  /// Imports and the cover queue change the counts while this screen is open.
+  StreamSubscription<int>? _libraryChanges;
+
   @override
   void initState() {
     super.initState();
     _loadStats();
     _queue.addListener(_changed);
+    _libraryChanges = widget.library.database.changes.listen((_) {
+      if (!mounted) return;
+      setState(_loadStats);
+    });
   }
 
   @override
   void dispose() {
+    _libraryChanges?.cancel();
     _queue.removeListener(_changed);
     super.dispose();
   }
@@ -141,7 +151,7 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
         title: Text(L10n.text('Refresh information for %@ saved works?', ['$_works'])),
         message: Text(
           L10n.text(
-            'Titles and tags are replaced with what the current site shows. Notes, folders, and covers stay as they are, and works the site shows as a different work are left unchanged.',
+            'Titles and tags are replaced with what the current site shows. If the app closes or some works can’t be fetched, it picks up with the remaining works later. Notes, folders, and covers stay as they are, and works the site shows as a different work are left unchanged.',
           ),
         ),
         actions: [CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Refresh Information')))],

@@ -422,7 +422,7 @@ actor BooruClient: BooruProviding {
         case .gelbooru:
             // Gelbooru's current public notes live in data-* attributes on the post page.
             // Legacy DAPI instances still expose XML notes.
-            if server.baseURL.host == "gelbooru.com" || server.baseURL.host == "www.gelbooru.com" {
+            if BooruServer.bareHost(server.baseURL) == "gelbooru.com" {
                 raw = try await postPage(server: server, id: postID, reuse: true)
                 return try BooruHTML.notes(raw)
             }

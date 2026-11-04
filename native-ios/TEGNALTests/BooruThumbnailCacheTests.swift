@@ -4,10 +4,19 @@ import UIKit
 
 final class BooruThumbnailCacheTests: XCTestCase {
     private func directory() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true) }
+    /// A 2400 × 1200 pixel preview, whatever the device scale.
     @MainActor private func preview() -> Data {
-        UIGraphicsImageRenderer(size: CGSize(width: 800, height: 400)).image { context in
-            UIColor.systemBlue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 800, height: 400))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: 2400, height: 1200), format: format).image { context in
+            UIColor.systemBlue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2400, height: 1200))
         }.pngData()!
+    }
+    func testThumbnailsKeepTheShorterSideSharpWithinBounds() {
+        XCTAssertEqual(BooruThumbnailCache.thumbnailPixelSize(width: 2400, height: 1200), 1440, "A wide image keeps 720 pixels of height")
+        XCTAssertEqual(BooruThumbnailCache.thumbnailPixelSize(width: 1000, height: 1500), 1080, "A tall image keeps 720 pixels of width")
+        XCTAssertEqual(BooruThumbnailCache.thumbnailPixelSize(width: 800, height: 400), 800, "A small file is never enlarged")
+        XCTAssertEqual(BooruThumbnailCache.thumbnailPixelSize(width: 1000, height: 6000), 2048, "A long strip stops at the longest size")
     }
     func testDiskCacheBoundsRecencyAndClearAcrossRelaunch() throws {
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
@@ -33,7 +42,7 @@ final class BooruThumbnailCacheTests: XCTestCase {
         let url = URL(string: "https://example.test/preview.png")!, server = BooruServer.presets[0]
         let first = BooruThumbnailCache(directory: root, loadData: { url, _ in try await loader.load(url) })
         let downloaded = try await first.image(url: url, server: server)
-        XCTAssertEqual(downloaded.size.width, 600)
+        XCTAssertEqual(downloaded.size.width, 1440)
         await loader.goOffline()
         let relaunched = BooruThumbnailCache(directory: root, loadData: { url, _ in try await loader.load(url) })
         let restored = try await relaunched.image(url: url, server: server)
@@ -62,10 +71,10 @@ final class BooruThumbnailCacheTests: XCTestCase {
         let loader = ThumbnailLoader(data: preview())
         let url = URL(string: "https://example.test/corrupt.png")!, server = BooruServer.presets[0]
         var disk = BooruThumbnailDiskCache(directory: root)
-        disk.write(Data("invalid image".utf8), key: server.canonicalAddress + ":" + server.id + ":" + url.absoluteString)
+        disk.write(Data("invalid image".utf8), key: "v2:" + server.canonicalAddress + ":" + server.id + ":" + url.absoluteString)
         let cache = BooruThumbnailCache(directory: root, loadData: { url, _ in try await loader.load(url) })
         let image = try await cache.image(url: url, server: server)
-        XCTAssertEqual(image.size.width, 600)
+        XCTAssertEqual(image.size.width, 1440)
         let calls = await loader.calls; XCTAssertEqual(calls, 1)
     }
     @MainActor func testViewerCachesFullPixelsAndDeduplicatesAcrossRelaunch() async throws {

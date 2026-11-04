@@ -139,6 +139,7 @@ class TasteEvent {
     DiscoveryContext? context,
     this.dwell,
     this.signal,
+    this.launch,
   }) : id = id ?? uuidString(),
        at = at ?? unixSeconds(),
        context = context ?? DiscoveryContext.unknown;
@@ -157,8 +158,44 @@ class TasteEvent {
   /// non-organic open, so it never reaches their preference evidence.
   String? signal;
 
+  /// The app launch that recorded a save, removal or open. Older peers leave it out.
+  String? launch;
+
   static bool ordered(TasteEvent a, TasteEvent b) => a.at == b.at ? a.id.compareTo(b.id) < 0 : a.at < b.at;
   static int compare(TasteEvent a, TasteEvent b) => a.at == b.at ? a.id.compareTo(b.id) : a.at.compareTo(b.at);
+
+  /// Identifies this launch of the app.
+  static final currentLaunch = uuidString();
+
+  /// A save taken back in the same launch was a slip: the save, its removal and that launch's
+  /// opens of the work leave no trace, so the work weighs nothing and can be recommended again.
+  /// A save kept past the launch is a real choice and stays.
+  static List<TasteEvent> withoutUndoneSaves(List<TasteEvent> events) {
+    final slips = <String>{};
+    final saves = <String, String>{};
+    for (final event in [...events]..sort(compare)) {
+      final launch = event.launch;
+      if (launch == null) continue;
+      final key = event.item.key;
+      switch (event.kind) {
+        case TasteEventKind.save:
+          saves[key] = launch;
+        case TasteEventKind.remove:
+          if (saves.remove(key) == launch) slips.add('$launch\n$key');
+        default:
+          break;
+      }
+    }
+    if (slips.isEmpty) return events;
+    return [
+      for (final event in events)
+        if (!(const {TasteEventKind.save, TasteEventKind.remove, TasteEventKind.open}.contains(event.kind) &&
+            event.signal == null &&
+            event.launch != null &&
+            slips.contains('${event.launch}\n${event.item.key}')))
+          event,
+    ];
+  }
 
   factory TasteEvent.fromJson(JsonObject json) => TasteEvent(
     id: json.string('id'),
@@ -171,6 +208,7 @@ class TasteEvent {
     context: DiscoveryContext.fromJson(json.object('context')),
     dwell: json.objectOrNull('dwell') == null ? null : TasteDwell.fromJson(json.object('dwell')),
     signal: json.stringOrNull('signal'),
+    launch: json.stringOrNull('launch'),
   );
 
   JsonObject toJson() =>
@@ -185,7 +223,8 @@ class TasteEvent {
           'context': context.toJson(),
         }
         ..putIfPresent('dwell', dwell?.toJson())
-        ..putIfPresent('signal', signal);
+        ..putIfPresent('signal', signal)
+        ..putIfPresent('launch', launch);
 }
 
 enum RecommendationSort {

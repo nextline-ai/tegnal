@@ -5,7 +5,10 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/content/content_errors.dart';
 import '../../core/content/gallery_content.dart';
+import 'image_translation.dart';
 import 'page_image_store.dart';
+import 'reader_models.dart';
+import 'reader_translation.dart';
 
 /// How a page reports a tap: the horizontal position as a fraction of the reader's width.
 typedef ReaderTap = void Function(double x);
@@ -338,7 +341,13 @@ class _ReaderPageViewState extends State<ReaderPageView> {
     return Stack(
       children: [
         Positioned.fill(
-          child: ZoomablePageView(image: image, tap: widget.tap, bookmark: widget.bookmark, onZoomChanged: widget.onZoomChanged),
+          child: ZoomablePageView(
+            image: image,
+            tap: widget.tap,
+            bookmark: widget.bookmark,
+            onZoomChanged: widget.onZoomChanged,
+            translation: ReaderTranslationScope.of(context)?.balloons(widget.page.hash) ?? const [],
+          ),
         ),
         if (_error != null)
           Positioned(
@@ -386,8 +395,11 @@ class _PageError extends StatelessWidget {
 /// `ZoomablePageView`: the page fitted to the screen, pinch or double tap to zoom up to 5×.
 /// A single tap reports where it landed (the center while zoomed); holding bookmarks.
 class ZoomablePageView extends StatefulWidget {
-  const ZoomablePageView({super.key, required this.image, required this.tap, required this.bookmark, required this.onZoomChanged});
+  const ZoomablePageView({super.key, required this.image, required this.tap, required this.bookmark, required this.onZoomChanged, this.translation = const []});
   final ui.Image image;
+
+  /// Translated balloons laid over the page, zooming and panning with it.
+  final List<TranslatedRegion> translation;
   final ReaderTap tap;
   final VoidCallback bookmark;
   final ValueChanged<bool> onZoomChanged;
@@ -402,6 +414,9 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
   Animation<Matrix4>? _zoom;
   Offset? _doubleTapPosition;
   bool _zoomed = false;
+
+  /// Read on every build, so a change in the viewer settings reaches pages already open.
+  bool get _doubleTapZooms => ReaderPreferences.doubleTapZooms;
 
   @override
   void initState() {
@@ -450,6 +465,12 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
     );
   }
 
+  /// Where the fitted page sits inside the view.
+  Rect _imageRect(Size size) {
+    final fitted = applyBoxFit(BoxFit.contain, Size(widget.image.width.toDouble(), widget.image.height.toDouble()), size).destination;
+    return Alignment.center.inscribe(fitted, Offset.zero & size);
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -458,8 +479,10 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: (details) => widget.tap(_zoomed ? 0.5 : details.localPosition.dx / math.max(1, size.width)),
-          onDoubleTapDown: (details) => _doubleTapPosition = details.localPosition,
-          onDoubleTap: () => _doubleTap(size),
+          // Without double tap zoom, quick taps on the sides only turn pages, and a tap no
+          // longer waits to see whether a second one follows.
+          onDoubleTapDown: _doubleTapZooms ? (details) => _doubleTapPosition = details.localPosition : null,
+          onDoubleTap: _doubleTapZooms ? () => _doubleTap(size) : null,
           onLongPress: widget.bookmark,
           child: InteractiveViewer(
             transformationController: _transform,
@@ -469,7 +492,18 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
             boundaryMargin: _zoomed ? EdgeInsets.symmetric(horizontal: size.width / 2, vertical: size.height / 2) : EdgeInsets.zero,
             child: SizedBox.fromSize(
               size: size,
-              child: RawImage(image: widget.image, fit: BoxFit.contain, filterQuality: ui.FilterQuality.medium),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: RawImage(image: widget.image, fit: BoxFit.contain, filterQuality: ui.FilterQuality.medium),
+                  ),
+                  if (widget.translation.isNotEmpty)
+                    Positioned.fromRect(
+                      rect: _imageRect(size),
+                      child: TranslatedRegionsLayer(regions: widget.translation),
+                    ),
+                ],
+              ),
             ),
           ),
         );

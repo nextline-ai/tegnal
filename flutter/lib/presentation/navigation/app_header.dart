@@ -135,19 +135,24 @@ class AppModeSwitch extends StatefulWidget {
 }
 
 class _AppModeSwitchState extends State<AppModeSwitch> {
-  double? _dragPosition;
+  /// Each mode's header has its own switch, and the other one appears as the mode changes.
+  /// Sharing the drag keeps that one's thumb under the finger too, so it continues from
+  /// where the drag let go instead of sliding over from the old side.
+  static final _drag = ValueNotifier<double?>(null);
+
+  double? get _dragPosition => _drag.value;
 
   static double _position(AppMode mode) => mode == AppMode.manga ? 0 : 44;
 
   void _change(AppMode mode) {
-    setState(() => _dragPosition = null);
+    _drag.value = null;
     widget.state.mode = mode;
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.state,
+      listenable: Listenable.merge([widget.state, _drag]),
       builder: (context, _) {
         final current = widget.state.mode;
         final position = _dragPosition ?? _position(current);
@@ -159,12 +164,12 @@ class _AppModeSwitchState extends State<AppModeSwitch> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _change(current == AppMode.manga ? AppMode.booru : AppMode.manga),
-            onHorizontalDragUpdate: (details) => setState(() => _dragPosition = ((_dragPosition ?? _position(current)) + details.delta.dx).clamp(0, 44)),
+            onHorizontalDragUpdate: (details) => _drag.value = ((_dragPosition ?? _position(current)) + details.delta.dx).clamp(0, 44),
             onHorizontalDragEnd: (details) {
               final end = (_dragPosition ?? _position(current)) + (details.primaryVelocity ?? 0) * 0.1;
               _change(end > 22 ? AppMode.booru : AppMode.manga);
             },
-            onHorizontalDragCancel: () => setState(() => _dragPosition = null),
+            onHorizontalDragCancel: () => _drag.value = null,
             child: Glass.capsule(
               child: Padding(
                 padding: const EdgeInsets.all(3),

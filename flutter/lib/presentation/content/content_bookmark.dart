@@ -80,6 +80,7 @@ abstract final class ContentBookmarkAction {
       type: gallery?.type,
       tags: gallery?.tags.join(', '),
       metadataSource: 'remote',
+      site: ComicSites.active,
       discoveryContext: context ?? DiscoveryContext.unknown,
     );
     for (final other in restored.skip(1)) {

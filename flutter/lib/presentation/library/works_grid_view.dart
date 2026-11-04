@@ -22,6 +22,7 @@ import 'folders_view.dart';
 import 'library_routes.dart';
 import 'local_thumbnail.dart';
 import '../design/alert_dialog.dart';
+import '../../core/content/manga_urls.dart';
 
 /// `WorksGridView`: a folder's saved works, every saved work, or a saved-works search,
 /// with the category filter, selection, quick jumps and each work's menu.
@@ -125,8 +126,34 @@ class _WorksGridViewState extends State<WorksGridView> {
     if (_selecting) {
       setState(() => _selection.contains(work.galleryId) ? _selection.remove(work.galleryId) : _selection.add(work.galleryId));
     } else {
-      widget.routes.openWork(context, work.galleryId);
+      _openOnItsSite(work);
     }
+  }
+
+  /// A work from another connected website whose numbers mean other works opens there.
+  Future<void> _openOnItsSite(Work work) async {
+    final content = widget.routes.content;
+    final site = work.site;
+    final current = content.mangaSiteAddress;
+    if (site == null || site == current || !content.comicSites.contains(site) || ComicSites.sharesNumbers(site, current)) {
+      widget.routes.openWork(context, work.galleryId);
+      return;
+    }
+    final choice = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => TegnalAlertDialog(
+        title: Text(L10n.text('Saved from %@', [site])),
+        content: Text(L10n.text('This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work.', [site, current])),
+        actions: [
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Switch and Open'))),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Open Here'))),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice) content.switchComicsSite(site);
+    widget.routes.openWork(context, work.galleryId);
   }
 
   void _toast(String message) => widget.routes.showMessage(context, message);

@@ -521,12 +521,39 @@ public final class AppEnvironment: @unchecked Sendable {
 
     public var mangaSiteAddress: String {
         didSet {
-            MangaUrls.resetResolvedBackend()
+            // A site connected before the list existed joins it before another takes its place.
+            ComicSites.add(oldValue)
+            ComicSites.switchSite(from: oldValue, to: mangaSiteAddress)
             browserPreferences.set(mangaSiteAddress, forKey: "manga.site_address")
             if ContentPreferences.isIsolated {
                 MangaUrls.preferences.set(mangaSiteAddress, forKey: "manga.site_address")
             }
+            ComicSites.add(mangaSiteAddress)
+            comicSitesRevision += 1
         }
+    }
+
+    /// Changes when a comics site is added, removed or switched, so lists of sites redraw.
+    public private(set) var comicSitesRevision = 0
+    public var comicSites: [String] { _ = comicSitesRevision; return ComicSites.all }
+
+    /// Makes another connected site the active one.
+    @MainActor public func switchComicsSite(to site: String) {
+        guard site != mangaSiteAddress, ComicSites.all.contains(site) else { return }
+        isSiteVerified = true
+        mangaSiteAddress = site
+        ContentBrowserTransport.reset()
+    }
+
+    /// Forgets a site; forgetting the active one moves to the next, or disconnects.
+    @MainActor public func removeComicsSite(_ site: String) {
+        let remaining = ComicSites.all.filter { $0 != site }
+        if site == mangaSiteAddress {
+            if let next = remaining.first { switchComicsSite(to: next) }
+            else { isSiteVerified = false; mangaSiteAddress = "" }
+        }
+        ComicSites.remove(site)
+        comicSitesRevision += 1
     }
 
     public var useEmbeddedBrowser: Bool {
@@ -621,7 +648,9 @@ public final class AppEnvironment: @unchecked Sendable {
               let host = url.host?.lowercased() else {
             return raw.lowercased()
         }
-        return host
+        // As for image servers, a site is the same with or without `www.`, and its other
+        // hosts are named from the bare one.
+        return BooruServer.bareHost(host)
     }
 
     @discardableResult
@@ -697,7 +726,7 @@ public final class AppEnvironment: @unchecked Sendable {
             for id in page.ids where try database.getWork(galleryId: id) == nil {
                 let work = MangaContentSource.shared.cachedPreview(id)
                 _ = try database.upsertWork(galleryId: id, folderId: folder, title: work?.title, artists: work?.artists.joined(separator: ", "),
-                                            language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote")
+                                            language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active)
                 added += 1
             }
             next = page.next

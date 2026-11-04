@@ -150,7 +150,9 @@ class TegnalSlider extends StatelessWidget {
 }
 
 /// The iOS 26 segmented `Picker`: a 32 pt capsule track with a 2 pt inset pill under the choice.
-class TegnalSegmented<T> extends StatelessWidget {
+/// As on iOS, the pill can be dragged: it follows the finger a segment at a time and the
+/// segment under the finger is chosen when it lifts.
+class TegnalSegmented<T> extends StatefulWidget {
   const TegnalSegmented({super.key, required this.options, required this.selected, required this.onSelected});
   final List<(T, String)> options;
   final T selected;
@@ -160,64 +162,92 @@ class TegnalSegmented<T> extends StatelessWidget {
   static const pill = CupertinoDynamicColor.withBrightness(color: Color(0xFFFFFFFF), darkColor: Color(0xFF69696F));
 
   @override
+  State<TegnalSegmented<T>> createState() => _TegnalSegmentedState<T>();
+}
+
+class _TegnalSegmentedState<T> extends State<TegnalSegmented<T>> {
+  /// The segment under a dragging finger.
+  int? _dragIndex;
+
+  int _segment(double dx, double width) => (dx / width).floor().clamp(0, widget.options.length - 1);
+
+  void _choose(int index) {
+    final value = widget.options[index].$1;
+    if (value == widget.selected) return;
+    HapticFeedback.selectionClick();
+    widget.onSelected(value);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final label = TegnalColors.label.resolveFrom(context);
-    final index = options.indexWhere((option) => option.$1 == selected);
+    final selected = widget.options.indexWhere((option) => option.$1 == widget.selected);
+    final index = _dragIndex ?? selected;
     return Container(
       height: 32,
       padding: const EdgeInsets.all(2),
-      decoration: ShapeDecoration(color: track.resolveFrom(context), shape: const StadiumBorder()),
+      decoration: ShapeDecoration(color: TegnalSegmented.track.resolveFrom(context), shape: const StadiumBorder()),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth / options.length;
-          return Stack(
-            children: [
-              if (index >= 0)
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                  left: width * index,
-                  top: 0,
-                  bottom: 0,
-                  width: width,
-                  child: Container(
-                    decoration: ShapeDecoration(
-                      color: pill.resolveFrom(context),
-                      shape: const StadiumBorder(),
-                      shadows: CupertinoTheme.brightnessOf(context) == Brightness.dark
-                          ? const []
-                          : const [BoxShadow(color: Color(0x1F000000), blurRadius: 6, offset: Offset(0, 2))],
+          final width = constraints.maxWidth / widget.options.length;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (details) => setState(() => _dragIndex = _segment(details.localPosition.dx, width)),
+            onHorizontalDragUpdate: (details) {
+              final next = _segment(details.localPosition.dx, width);
+              if (next != _dragIndex) setState(() => _dragIndex = next);
+            },
+            onHorizontalDragEnd: (_) {
+              final index = _dragIndex;
+              setState(() => _dragIndex = null);
+              if (index != null) _choose(index);
+            },
+            onHorizontalDragCancel: () => setState(() => _dragIndex = null),
+            child: Stack(
+              children: [
+                if (index >= 0)
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    left: width * index,
+                    top: 0,
+                    bottom: 0,
+                    width: width,
+                    child: Container(
+                      decoration: ShapeDecoration(
+                        color: TegnalSegmented.pill.resolveFrom(context),
+                        shape: const StadiumBorder(),
+                        shadows: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                            ? const []
+                            : const [BoxShadow(color: Color(0x1F000000), blurRadius: 6, offset: Offset(0, 2))],
+                      ),
                     ),
                   ),
-                ),
-              Row(
-                children: [
-                  for (final (value, title) in options)
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        selected: value == selected,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            if (value == selected) return;
-                            HapticFeedback.selectionClick();
-                            onSelected(value);
-                          },
-                          child: Center(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TegnalType.style(14, weight: value == selected ? FontWeight.w600 : FontWeight.w400, color: label),
+                Row(
+                  children: [
+                    for (final (position, (value, title)) in widget.options.indexed)
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          selected: value == widget.selected,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _choose(position),
+                            child: Center(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TegnalType.style(14, weight: position == index ? FontWeight.w600 : FontWeight.w400, color: label),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           );
         },
       ),

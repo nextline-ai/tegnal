@@ -70,6 +70,16 @@ struct FolderRuleEditor: View {
         FolderRule(folder: folder ?? "", query: tag, excluded: excluded, isEnabled: isSmart ? nil : false,
                    sources: sources.map { $0.sorted() }, includesOtherFolders: everyFolder ? true : nil)
     }
+    /// The toggle files works already saved once, when Save is tapped; a smart folder alone
+    /// only takes works saved after it.
+    private var fillFooter: String {
+        if fillsSavedWorks || !isSmart {
+            return L10n.text(booru ? "When you tap Save, matching images already in the chosen folders move here once."
+                                   : "When you tap Save, matching works already in the chosen folders are added here once. They stay in those folders too.")
+        }
+        return L10n.text(booru ? "Only images saved from now on move here. Images you already saved stay where they are."
+                               : "Only works saved from now on come here. Works you already saved stay where they are.")
+    }
     private var canSave: Bool {
         if creatingFolder { return !query.isEmpty && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         return folder != nil && (!query.isEmpty || !isSmart)
@@ -109,9 +119,9 @@ struct FolderRuleEditor: View {
                 }.disabled(!usesTags)
                 Section {
                     LabeledContent(L10n.text("Take Works From")) { sourceMenu }
-                    Toggle(L10n.text("Apply to Saved Works"), isOn: $fillsSavedWorks).accessibilityIdentifier("folderRule.extends")
+                    Toggle(L10n.text(booru ? "Move Saved Images Now" : "Add Saved Works Now"), isOn: $fillsSavedWorks).accessibilityIdentifier("folderRule.extends")
                 } footer: {
-                    Text(L10n.text(booru ? "Matching images move here from the folders you choose." : "Matching works from the folders you choose are added here. They stay in those folders too."))
+                    Text(fillFooter)
                 }.disabled(!usesTags)
             }
             .scrollDismissesKeyboard(.interactively)

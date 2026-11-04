@@ -72,6 +72,7 @@ abstract final class SiteAccountActions {
           type: work?.type,
           tags: work?.tags.join(', '),
           metadataSource: 'remote',
+          site: ComicSites.active,
         );
         added += 1;
       }

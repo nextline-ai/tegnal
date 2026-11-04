@@ -16,6 +16,7 @@ import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import 'gallery_feed_loader.dart';
 import 'page_image_store.dart';
+import '../design/pull_down_menu.dart';
 
 /// Accumulates scroll travel so slow drags behave like fast swipes (`ScrollSearchVisibility`).
 class ScrollSearchVisibility {
@@ -315,7 +316,12 @@ class _ExploreViewState extends State<ExploreView> {
             left: 0,
             right: 0,
             top: 0,
-            child: RootHeader(title: title, state: widget.state, onBack: widget.onBack),
+            child: RootHeader(
+              title: title,
+              state: widget.state,
+              onBack: widget.onBack,
+              trailing: widget.content.comicSites.length > 1 ? ComicSiteMenu(content: widget.content) : null,
+            ),
           ),
         ],
       ),
@@ -518,6 +524,32 @@ abstract final class _MeasuredWidth {
     visit(row);
     return total;
   }
+}
+
+/// `ComicSiteMenu`: switches between the connected comics websites; lists reload for the chosen one.
+class ComicSiteMenu extends StatelessWidget {
+  const ComicSiteMenu({super.key, required this.content});
+  final ContentEnvironment content;
+
+  @override
+  Widget build(BuildContext context) => ToolbarGroup(
+    children: [
+      Builder(
+        builder: (context) => ToolbarIconButton(
+          label: L10n.text('Website'),
+          icon: Symbols.globe,
+          onPressed: () async {
+            final site = await showPullDownMenu<String>(
+              context,
+              anchor: anchorRectOf(context),
+              items: [for (final site in content.comicSites) PullDownMenuItem(value: site, title: site, checked: site == content.mangaSiteAddress)],
+            );
+            if (site != null) content.switchComicsSite(site);
+          },
+        ),
+      ),
+    ],
+  );
 }
 
 /// `ContentUnavailableView`: a centered symbol, title, message and optional action.

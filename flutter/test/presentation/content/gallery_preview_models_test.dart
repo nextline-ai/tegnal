@@ -3,6 +3,7 @@
 import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/presentation/content/gallery_preview_models.dart';
 import 'package:tegnal/presentation/works/artwork_grid.dart';
@@ -45,6 +46,34 @@ void main() {
     expect(group(ArtworkTagCategory.female)?.tags.first.query, 'female:long_hair');
     expect(group(ArtworkTagCategory.male)?.tags.first.name, 'glasses');
     expect(group(ArtworkTagCategory.general)?.tags.first.name, 'sky');
+  });
+
+  test('work information puts credits before the language and gathers descriptive tags', () {
+    const gallery = NativeGallery(
+      id: 1,
+      title: 'Work',
+      artists: ['mira'],
+      language: 'korean',
+      type: 'doujinshi',
+      tags: ['tag:sole', 'character:noa', 'female:glasses', 'series:original', 'male:muscle', 'group:studio', 'type:doujinshi'],
+      pages: [],
+    );
+    expect(GalleryDetailMetadata.credits(gallery).map((group) => group.category), [
+      ArtworkTagCategory.group,
+      ArtworkTagCategory.series,
+      ArtworkTagCategory.character,
+    ]);
+    final tags = GalleryDetailMetadata.tags(gallery).tags;
+    expect(tags.map((tag) => tag.name), ['glasses', 'muscle', 'sole', 'doujinshi']);
+    expect(tags.map((tag) => tag.category).toSet(), {
+      ArtworkTagCategory.female,
+      ArtworkTagCategory.male,
+      ArtworkTagCategory.general,
+      ArtworkTagCategory.type,
+    }, reason: 'Each tag keeps its own color');
+    const bare = NativeGallery(id: 2, title: 'Bare', artists: [], language: '', type: '', tags: [], pages: []);
+    expect(GalleryDetailMetadata.credits(bare), isEmpty);
+    expect(GalleryDetailMetadata.tags(bare).tags, isEmpty);
   });
 
   test('favorite artist tags persist and recognize spaces and underscores', () {

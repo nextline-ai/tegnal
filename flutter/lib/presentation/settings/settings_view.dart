@@ -130,18 +130,25 @@ class _SettingsViewState extends State<SettingsView> {
                 section(
                   header: L10n.text('Browsing'),
                   children: [
-                    SettingsLinkRow(
-                      title: L10n.text('Website Connection'),
-                      icon: CupertinoIcons.globe,
-                      tinted: true,
-                      chevron: false,
-                      onTap: () => showWebsiteConnectionEditor(
-                        context,
-                        content: _content,
-                        state: _deps.state,
-                        initialAddress: _content.isSiteVerified ? _content.mangaSiteAddress : '',
+                    if (_content.comicSites.isEmpty)
+                      SettingsLinkRow(
+                        title: L10n.text('Website Connection'),
+                        icon: CupertinoIcons.globe,
+                        tinted: true,
+                        chevron: false,
+                        onTap: () => showWebsiteConnectionEditor(context, content: _content, state: _deps.state),
+                      )
+                    else
+                      SettingsLinkRow(
+                        title: L10n.text('Website Connection'),
+                        icon: CupertinoIcons.globe,
+                        value: _content.mangaSiteAddress,
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => ComicSitesPage(content: _content, state: _deps.state),
+                          ),
+                        ),
                       ),
-                    ),
                     SettingsToggleRow(
                       title: L10n.text('Use Embedded Browser'),
                       help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),

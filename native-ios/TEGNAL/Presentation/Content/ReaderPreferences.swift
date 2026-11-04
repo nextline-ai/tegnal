@@ -29,6 +29,14 @@ enum ReaderPreferences {
         #endif
         return ContentPreferences.defaults
     }
+
+    static let doubleTapZoomKey = "reader.doubleTapZoom"
+    static let continuousTranslationKey = "reader.continuousTranslation"
+    /// Off by default: Translate shows the system translation of one page. On, translation stays
+    /// on while pages turn and the on-device model reads each page with the ones before it.
+    static var continuousTranslation: Bool { defaults.bool(forKey: continuousTranslationKey) }
+    /// Comics pages zoom on a double tap unless a person turned it off.
+    static var doubleTapZooms: Bool { defaults.object(forKey: doubleTapZoomKey) as? Bool ?? true }
 }
 
 enum ReaderMode: String, CaseIterable, Identifiable {
@@ -115,6 +123,8 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("reader.prefetch", store: ReaderPreferences.defaults) private var prefetch = 3
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.defaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
+    @SwiftUI.AppStorage(ReaderPreferences.doubleTapZoomKey, store: ReaderPreferences.defaults) private var doubleTapZoom = true
+    @SwiftUI.AppStorage(ReaderPreferences.continuousTranslationKey, store: ReaderPreferences.defaults) private var continuousTranslation = false
     @SwiftUI.AppStorage("reader.continuousBackSwipe", store: ReaderPreferences.defaults) private var continuousBackSwipe = false
     @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false
@@ -134,6 +144,7 @@ struct ReaderSettingsView: View {
         _prefetch = SwiftUI.AppStorage(wrappedValue: 3, "reader.prefetch", store: preferences)
         _dimming = SwiftUI.AppStorage(wrappedValue: 0.0, "reader.dimming", store: preferences)
         _tapNavigation = SwiftUI.AppStorage(wrappedValue: true, "reader.tapNavigation", store: preferences)
+        _doubleTapZoom = SwiftUI.AppStorage(wrappedValue: true, ReaderPreferences.doubleTapZoomKey, store: preferences)
     }
 
     var body: some View {
@@ -168,6 +179,11 @@ struct ReaderSettingsView: View {
                     }
                     Toggle(L10n.text("Read Right to Left"), isOn: $rtl).accessibilityIdentifier("reader.settings.rtl")
                     Toggle(L10n.text("Tap the Sides to Turn Pages"), isOn: $tapNavigation)
+                    Toggle(isOn: $doubleTapZoom) {
+                        SettingsHelpLabel("Double Tap to Zoom", help: booru
+                            ? "Turn off so quick taps on the sides never zoom in. Images then change without waiting for a second tap. Pinch still zooms."
+                            : "Turn off so quick taps on the sides never zoom in. Pages then turn without waiting for a second tap. Pinch still zooms.")
+                    }.accessibilityIdentifier("reader.settings.doubleTapZoom")
                 }
                 if booru {
                     Section(L10n.text("Media")) {
@@ -178,6 +194,13 @@ struct ReaderSettingsView: View {
                         Toggle(isOn: $reducedData) {
                             SettingsHelpLabel("Reduce Image Data Further", help: "Uses smaller compressed images when available. Load Original Images takes priority over this setting.")
                         }.disabled(original).accessibilityIdentifier("reader.settings.reducedData")
+                    }
+                }
+                if !booru, ReaderTranslationSession.isSupported {
+                    Section(L10n.text("Translation")) {
+                        Toggle(isOn: $continuousTranslation) {
+                            SettingsHelpLabel("AI Translation (Beta)", help: "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.")
+                        }.accessibilityIdentifier("reader.settings.continuousTranslation")
                     }
                 }
                 Section(L10n.text("Display")) {
@@ -424,7 +447,7 @@ enum ContentBookmarkAction {
         env.savedFolders[id] = folder
         _ = try env.database.upsertWork(galleryId: id, folderId: folder,
             title: gallery?.title, artists: gallery?.artists.joined(separator: ", "),
-            language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", discoveryContext: context)
+            language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active, discoveryContext: context)
         for folder in restored.dropFirst() { try env.database.addWork(galleryId: id, folderID: folder) }
         if let note = removed?.note { try env.database.setNote(galleryId: id, note: note) }
         env.syncAccountFavorite(id, saved: true)

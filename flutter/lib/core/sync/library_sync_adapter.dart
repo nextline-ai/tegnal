@@ -121,6 +121,7 @@ class LibrarySyncAdapter {
       'metadata_source',
       'catalog_matched',
       'thumb_page',
+      'site',
     ],
     'manga.folder_works': ['folder_id', 'work_id', 'added_at'],
     'manga.artists': ['name', 'kind', 'note', 'bookmarked_at'],
@@ -134,6 +135,9 @@ class LibrarySyncAdapter {
     'booru.saved_tags': ['server_id', 'name', 'kind'],
     'booru.settings': ['key', 'value'],
   };
+
+  /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
+  static const keepsKnownValue = {'site'};
 
   /// Also gives identities to legacy imports and folders made outside the app.
   void _assignFolderIdentities() {
@@ -433,11 +437,16 @@ class LibrarySyncAdapter {
   static void _upsert(LibrarySyncRow incoming, SqlDatabase db) {
     final row = incoming.table == 'manga.folders' ? LibrarySyncRow(table: incoming.table, values: MangaImportMetadata.normalized(incoming.values)) : incoming;
     final allowed = columns[row.table], keys = LibrarySyncRow.keys[row.table];
-    if (allowed == null || keys == null || !row.values.keys.every(allowed.contains) || !keys.every(row.values.containsKey)) {
+    if (allowed == null || keys == null || !keys.every(row.values.containsKey)) {
       throw const BooruError(BooruErrorKind.invalidResponse);
     }
+    // Columns this version does not know yet, sent by a newer one, are left out rather than
+    // turning the whole row away; the record itself still carries them on to other devices.
     final fields = allowed.where(row.values.containsKey).toList();
-    final updates = fields.where((field) => !keys.contains(field)).map((field) => '$field = excluded.$field').join(',');
+    final updates = fields
+        .where((field) => !keys.contains(field))
+        .map((field) => keepsKnownValue.contains(field) ? '$field = COALESCE(excluded.$field, $field)' : '$field = excluded.$field')
+        .join(',');
     final local = row.table.split('.')[1];
     final sql =
         'INSERT INTO $local (${fields.join(',')}) VALUES (${fields.map((_) => '?').join(',')}) ON CONFLICT(${keys.join(',')}) DO ${updates.isEmpty ? 'NOTHING' : 'UPDATE SET $updates'}';

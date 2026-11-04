@@ -5,7 +5,12 @@ import ImageIO
 
 struct ReaderTextRegion: Sendable, Equatable {
     let text: String
+    /// Vision's normalized coordinates, with the origin at the bottom left.
     let bounds: CGRect
+    /// How many lines or columns the original ran over; a label's text matches one of them.
+    var lines = 1
+    /// The original ran in vertical columns, so its label sizes text by width.
+    var vertical = false
 }
 
 actor ReaderTextRecognizer {

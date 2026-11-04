@@ -63,6 +63,7 @@ struct TasteStore: Sendable {
             guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM taste_events WHERE work_key = ? AND kind IN ('save','seed','imported'))", arguments: [item.key]) == true else { return }
         }
         var event = TasteEvent(kind: kind, item: item, context: context)
+        if [.save, .remove, .open].contains(kind) { event.launch = TasteEvent.currentLaunch }
         event.at = at.timeIntervalSince1970; event.epoch = control.epoch; event.generation = control.generation
         event.device = try get(String.self, key: "device", db: db) ?? ""
         if kind == .seed { event.id = "seed-" + tasteDigest(Data((control.epoch + item.key).utf8)); event.at = 0 }
@@ -75,6 +76,7 @@ struct TasteStore: Sendable {
         let control = try control(db)
         guard control.enabled else { return }
         var event = TasteEvent(kind: .open, item: item, context: context, dwell: dwell)
+        event.launch = TasteEvent.currentLaunch
         event.id = "dwell-" + UUID().uuidString
         event.at = at.timeIntervalSince1970; event.epoch = control.epoch; event.generation = control.generation
         event.device = try get(String.self, key: "device", db: db) ?? ""

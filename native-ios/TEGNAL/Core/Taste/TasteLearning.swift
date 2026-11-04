@@ -73,6 +73,62 @@ extension TasteRecommendation {
     }
 }
 
+/// Today's picks change once a day. Within a day they stay put; the next day the works picked
+/// on recent days step aside, and newer works are favored alongside relevance.
+enum TodayPicks {
+    /// Picks from the last week stay out of the following days while there is enough else.
+    static let memory = 21
+
+    struct Stored: Codable, Equatable {
+        var day: String
+        var ids: [String]
+        var earlier: [String] = []
+    }
+
+    static func day(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    /// Chooses from the ranked [items] and returns what to remember for the rest of the day.
+    static func choose(from items: [TasteRecommendation], stored: Stored?, today: String, count: Int = 3) -> (picks: [TasteRecommendation], stored: Stored) {
+        let earlier = stored.map { $0.day == today ? $0.earlier : Array(($0.earlier + $0.ids).suffix(memory)) } ?? []
+        var kept: [TasteRecommendation] = []
+        if let stored, stored.day == today {
+            kept = stored.ids.compactMap { id in items.first { $0.id == id } }
+            if kept.count >= count { return (Array(kept.prefix(count)), stored) }
+        }
+        let skipped = Set(earlier).union(kept.map(\.id))
+        var pool = items.filter { !skipped.contains($0.id) }
+        if pool.count < count * 2 { pool = items.filter { item in !kept.contains { $0.id == item.id } } }
+        let picks = kept + TasteRecommendation.picks(from: ordered(pool, day: today), count: count - kept.count)
+        return (picks, Stored(day: today, ids: picks.map(\.id), earlier: earlier))
+    }
+
+    /// Relevance (the feed's order), freshness (newer numbers on the same source) and a small
+    /// change from day to day.
+    static func ordered(_ items: [TasteRecommendation], day: String) -> [TasteRecommendation] {
+        let count = Double(max(1, items.count - 1))
+        var freshness: [String: Double] = [:]
+        for (_, group) in Dictionary(grouping: items, by: \.item.source) {
+            let newest = group.sorted { $0.item.id > $1.item.id }
+            let span = Double(max(1, newest.count - 1))
+            for (rank, item) in newest.enumerated() { freshness[item.id] = 1 - Double(rank) / span }
+        }
+        func value(_ index: Int, _ item: TasteRecommendation) -> Double {
+            0.4 * (1 - Double(index) / count) + 0.45 * (freshness[item.id] ?? 0) + 0.15 * jitter(day + "\n" + item.id)
+        }
+        return items.enumerated().map { ($0.element, value($0.offset, $0.element)) }.sorted { $0.1 > $1.1 }.map(\.0)
+    }
+
+    /// A stable number in 0..<1 for the same text on every launch.
+    static func jitter(_ text: String) -> Double {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in text.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100000001b3 }
+        return Double(hash % 10_000) / 10_000
+    }
+}
+
 /// One line of the explanation sheet. `strength` is relative within a work.
 struct RecommendationFactor: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable { case tag, person, boosted, reduced, fresh }

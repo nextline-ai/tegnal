@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/support/l10n.dart';
 import '../design/glass.dart';
@@ -55,9 +56,22 @@ class _TabItem {
   final IconData icon;
 }
 
-class FloatingTabBar extends StatelessWidget {
+/// The floating tab bar. As on iOS 26, a finger can slide along the capsule: the selection
+/// follows it, each tab it crosses ticks, and the tab under it opens when it lifts.
+class FloatingTabBar extends StatefulWidget {
   const FloatingTabBar({super.key, required this.state});
   final AppState state;
+
+  @override
+  State<FloatingTabBar> createState() => _FloatingTabBarState();
+}
+
+class _FloatingTabBarState extends State<FloatingTabBar> {
+  /// The finger's position along the tabs while it slides, and the tab under it.
+  double? _dragX;
+  int? _hovered;
+
+  AppState get state => widget.state;
 
   List<_TabItem> get _items {
     final booru = state.mode == AppMode.booru;
@@ -69,12 +83,32 @@ class FloatingTabBar extends StatelessWidget {
     ];
   }
 
+  void _slide(double x, double slot, int count) {
+    final hovered = (x / slot).floor().clamp(0, count - 1);
+    if (hovered != _hovered) HapticFeedback.selectionClick();
+    setState(() {
+      _dragX = x;
+      _hovered = hovered;
+    });
+  }
+
+  void _lift(List<_TabItem> items) {
+    final hovered = _hovered;
+    setState(() {
+      _dragX = null;
+      _hovered = null;
+    });
+    if (hovered != null) state.tab = items[hovered].tab;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tint = TegnalColors.tint.resolveFrom(context);
     final label = TegnalColors.label.resolveFrom(context);
     final selection = TegnalColors.glassSelection.resolveFrom(context);
     final items = _items;
+    final current = items.indexWhere((item) => item.tab == state.tab);
+    final active = _hovered ?? current;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _tabBarGap),
       // The tab capsule and the Smart circle sit apart, so they share one backdrop.
@@ -87,20 +121,58 @@ class FloatingTabBar extends StatelessWidget {
                   height: tabBarHeight,
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Row(
-                      children: [
-                        for (final item in items)
-                          Expanded(
-                            child: _TabButton(
-                              title: item.title,
-                              selected: state.tab == item.tab,
-                              selection: selection,
-                              color: state.tab == item.tab ? tint : label,
-                              onTap: () => state.tab = item.tab,
-                              icon: Icon(item.icon, size: 27, color: state.tab == item.tab ? tint : label),
-                            ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final slot = constraints.maxWidth / items.length;
+                        final dragX = _dragX;
+                        // Following the finger, the selection stays whole inside the capsule.
+                        final left = dragX == null
+                            ? slot * math.max(0, active)
+                            : (dragX - slot / 2).clamp(0.0, constraints.maxWidth - slot);
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragStart: (details) => _slide(details.localPosition.dx, slot, items.length),
+                          onHorizontalDragUpdate: (details) => _slide(details.localPosition.dx, slot, items.length),
+                          onHorizontalDragEnd: (_) => _lift(items),
+                          onHorizontalDragCancel: () => setState(() {
+                            _dragX = null;
+                            _hovered = null;
+                          }),
+                          child: Stack(
+                            children: [
+                              if (active >= 0)
+                                AnimatedPositioned(
+                                  duration: dragX == null ? const Duration(milliseconds: 260) : Duration.zero,
+                                  curve: Curves.easeOutCubic,
+                                  left: left,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: slot,
+                                  child: AnimatedScale(
+                                    scale: dragX == null ? 1 : 1.06,
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOut,
+                                    child: DecoratedBox(decoration: ShapeDecoration(color: selection, shape: const StadiumBorder())),
+                                  ),
+                                ),
+                              Row(
+                                children: [
+                                  for (final (index, item) in items.indexed)
+                                    Expanded(
+                                      child: _TabButton(
+                                        title: item.title,
+                                        selected: state.tab == item.tab,
+                                        color: index == active ? tint : label,
+                                        onTap: () => state.tab = item.tab,
+                                        icon: Icon(item.icon, size: 27, color: index == active ? tint : label),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -129,10 +201,9 @@ class FloatingTabBar extends StatelessWidget {
 }
 
 class _TabButton extends StatelessWidget {
-  const _TabButton({required this.title, required this.selected, required this.selection, required this.color, required this.onTap, required this.icon});
+  const _TabButton({required this.title, required this.selected, required this.color, required this.onTap, required this.icon});
   final String title;
   final bool selected;
-  final Color selection;
   final Color color;
   final VoidCallback onTap;
   final Widget icon;
@@ -147,22 +218,17 @@ class _TabButton extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          decoration: ShapeDecoration(color: selected ? selection : selection.withAlpha(0), shape: const StadiumBorder()),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              icon,
-              const SizedBox(height: 2),
-              Text(
-                title,
-                maxLines: 1,
-                style: TegnalType.style(10, weight: FontWeight.w600, color: color),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            icon,
+            const SizedBox(height: 2),
+            Text(
+              title,
+              maxLines: 1,
+              style: TegnalType.style(10, weight: FontWeight.w600, color: color),
+            ),
+          ],
         ),
       ),
     );

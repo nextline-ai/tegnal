@@ -100,6 +100,40 @@ final class LibrarySyncTests: XCTestCase {
         XCTAssertEqual(try db.countNeedingFill(), 0)
     }
 
+    @MainActor func testARefreshThatFailsStaysQueuedAndResumesInALaterRun() async throws {
+        let db = try AppDatabase.inMemory()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let cover = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }.jpegData(compressionQuality: 0.8))
+        _ = try db.upsertWork(galleryId: 1001, title: "原題", artists: "tegnal", language: "english", tags: "tag:old")
+        let file = root.appendingPathComponent("native_1001.jpg")
+        try cover.write(to: file)
+        try db.setThumb(galleryId: 1001, status: "ready", path: file.path)
+
+        let source = BackfillFixtureSource(failure: .offline)
+        let first = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+        try await first.queueRefresh()
+        let state = CoverQueueState()
+        await first.start(state: state)
+        XCTAssertEqual(state.failed, 1)
+        XCTAssertEqual(state.remaining, 1, "The work still waits for its refresh")
+        XCTAssertEqual(try db.countAwaitingRefresh(), 1)
+        XCTAssertEqual(try db.getWork(galleryId: 1001)?.title, "原題", "Nothing is lost while the site cannot be reached")
+
+        // A later launch continues without the refresh being asked for again.
+        await source.setFailure(.none)
+        let later = CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero)
+        await later.start(state: CoverQueueState())
+        XCTAssertEqual(try db.getWork(galleryId: 1001)?.title, "네이티브 읽기 테스트")
+        XCTAssertEqual(try db.countAwaitingRefresh(), 0)
+        await later.start(state: CoverQueueState())
+        let requests = await source.requests
+        XCTAssertEqual(requests, [1001, 1001], "A finished refresh is not fetched again")
+    }
+
     @MainActor func testManualFillReportsAndPersistsMissingGallery() async throws {
         let db = try AppDatabase.inMemory()
         _ = try db.upsertWork(galleryId: 1234)
@@ -168,18 +202,36 @@ final class LibrarySyncTests: XCTestCase {
         }
     }
 
-    @MainActor func testAStoredCoverDoesNotHideUnfilledTitleOrTags() async throws {
-        for failure in [BackfillFixtureSource.Failure.emptyTitle, .emptyTags] {
-            let db = try AppDatabase.inMemory()
-            _ = try db.upsertWork(galleryId: 1234)
-            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-            defer { try? FileManager.default.removeItem(at: root) }
-            let actor = CoverQueueActor(database: db, thumbsDir: root, source: BackfillFixtureSource(failure: failure), allowsBackfill: { true }, delay: .zero)
-            let state = CoverQueueState()
-            await actor.start(state: state)
-            XCTAssertEqual(state.processed, 0); XCTAssertEqual(state.failed, 1); XCTAssertEqual(state.remaining, 1)
-            XCTAssertTrue(try XCTUnwrap(db.getWork(galleryId: 1234)).hasThumb, "Keep the successfully saved cover while retrying metadata")
-        }
+    @MainActor func testAStoredCoverDoesNotHideAnUnfilledTitle() async throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 1234)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let actor = CoverQueueActor(database: db, thumbsDir: root, source: BackfillFixtureSource(failure: .emptyTitle), allowsBackfill: { true }, delay: .zero)
+        let state = CoverQueueState()
+        await actor.start(state: state)
+        XCTAssertEqual(state.processed, 0); XCTAssertEqual(state.failed, 1); XCTAssertEqual(state.remaining, 1)
+        XCTAssertTrue(try XCTUnwrap(db.getWork(galleryId: 1234)).hasThumb, "Keep the successfully saved cover while retrying metadata")
+    }
+
+    @MainActor func testAWorkTheSiteListsWithoutTagsIsFilledOnce() async throws {
+        let db = try AppDatabase.inMemory()
+        _ = try db.upsertWork(galleryId: 1234)
+        // Saved without the site's answer, empty tags still need filling.
+        _ = try db.upsertWork(galleryId: 5678, title: "Saved elsewhere", metadataSource: "remote")
+        XCTAssertEqual(try db.countNeedingFill(), 2)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = BackfillFixtureSource(failure: .emptyTags)
+        let state = CoverQueueState()
+        await CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero).start(state: state)
+        XCTAssertEqual(state.processed, 2); XCTAssertEqual(state.failed, 0); XCTAssertEqual(state.remaining, 0)
+        let work = try XCTUnwrap(db.getWork(galleryId: 1234))
+        XCTAssertTrue(work.hasThumb); XCTAssertTrue(work.hasTitle); XCTAssertEqual(work.tags ?? "", "")
+
+        await CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: { true }, delay: .zero).start(state: CoverQueueState())
+        let requests = await source.requests
+        XCTAssertEqual(requests.sorted(), [1234, 5678], "A work the site lists without tags is not asked for again")
     }
 
     @MainActor func testAutomaticBackfillRunsWhileImageModeIsSelected() async throws {
@@ -549,6 +601,28 @@ final class LibrarySyncTests: XCTestCase {
         let before = lb.changes
         lb.capture(try b.snapshot(), device: "B")
         XCTAssertEqual(lb.changes, before)
+    }
+
+    func testTheSiteAWorkWasSavedFromSyncsAndAnUnknownColumnDoesNotTurnTheRowAway() throws {
+        let a = try adapter(), b = try adapter()
+        let folder = try a.manga.createFolder(name: "Art")
+        _ = try a.manga.upsertWork(galleryId: 100, folderId: folder.id, title: "First", site: "comics-older.net")
+        _ = try b.manga.upsertWork(galleryId: 200, title: "Second")
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        try exchange(a, b, &la, &lb)
+        XCTAssertEqual(try b.manga.getWork(galleryId: 100)?.site, "comics-older.net")
+        XCTAssertNil(try a.manga.getWork(galleryId: 200)?.site)
+
+        // A peer that never learned the site sends it empty, and a newer version adds a column.
+        let known = LibrarySyncRow(table: "manga.works", values: ["gallery_id": .integer(100), "title": .text("Renamed"), "bookmarked_at": .text("2026-11-05 00:00:00.000"), "site": .null])
+        let later = LibrarySyncRow(table: "manga.works", values: ["gallery_id": .integer(300), "title": .text("Third"), "bookmarked_at": .text("2026-11-05 00:00:00.000"), "site": .text("comics-newer.net"), "a_later_column": .text("value")])
+        try b.apply([known.key: .init(row: known, timestamp: 100, device: "C", deleted: false), later.key: .init(row: later, timestamp: 100, device: "C", deleted: false)])
+        XCTAssertEqual(try b.manga.getWork(galleryId: 100)?.title, "Renamed")
+        XCTAssertEqual(try b.manga.getWork(galleryId: 100)?.site, "comics-older.net", "An empty value never clears a known site")
+        XCTAssertEqual(try b.manga.getWork(galleryId: 300)?.site, "comics-newer.net", "The columns this version knows are still saved")
+        var ledger = LibrarySyncLedger()
+        ledger.merge([later.key: .init(row: later, timestamp: 100, device: "C", deleted: false)])
+        XCTAssertEqual(ledger.changes[later.key]?.row.values["a_later_column"], .text("value"), "The record passes the column on unchanged")
     }
 
     func testPersistedLedgerRejectsStalePeerAfterOfflineDeleteAndRestart() throws {

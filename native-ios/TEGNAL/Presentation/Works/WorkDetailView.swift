@@ -68,7 +68,9 @@ struct WorkDetailCover: View {
             .frame(height: 300)
             .overlay {
                 if let image {
-                    Image(uiImage: image).resizable().scaledToFit().padding(8)
+                    // Rounded like its frame, so a cover with dark or light edges keeps soft corners.
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous)).padding(8)
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: AppMode.manga.icon).font(.largeTitle).foregroundStyle(.tertiary)

@@ -367,14 +367,93 @@ public enum MangaUrls {
     private nonisolated(unsafe) static var resets = 0
     static var resetGeneration: Int { resetLock.withLock { resets } }
 
+    static let resolvedKeys = ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts",
+                               "manga.resolved_preview_base", "manga.resolved_api", "manga.resolved_login", "manga.account_required"]
+
     public static func resetResolvedBackend() {
         resetLock.withLock { resets += 1 }
-        for key in ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base",
-                    "manga.resolved_api", "manga.resolved_login", "manga.account_required"] {
-            preferences.removeObject(forKey: key)
-        }
+        for key in resolvedKeys { preferences.removeObject(forKey: key) }
     }
 
+    /// The home address of a connected site, from the host the settings keep.
+    static func home(forSite site: String) -> String { site.isEmpty ? "" : "https://\(site)/" }
+
+}
+
+/// The comics websites a person connected. One is active at a time; each keeps what was learned
+/// about it, so switching back never repeats the check. Sites that number their works the same
+/// way can open each other's saved works.
+enum ComicSites {
+    private static var preferences: UserDefaults { MangaUrls.preferences }
+    private static let listKey = "manga.sites"
+    private static let snapshotsKey = "manga.siteSnapshots"
+    /// Account details that belong to one site, kept with what was learned about it.
+    private static var snapshotKeys: [String] { MangaUrls.resolvedKeys + ["manga.account_site", "manga.account_host"] }
+
+    /// Connected sites by host, the active one included.
+    static var all: [String] {
+        var sites = preferences.stringArray(forKey: listKey) ?? []
+        let active = active
+        if !active.isEmpty, !sites.contains(active) { sites.append(active) }
+        return sites
+    }
+
+    static var active: String { preferences.string(forKey: "manga.site_address") ?? "" }
+
+    static func add(_ site: String) {
+        guard !site.isEmpty else { return }
+        var sites = all
+        if !sites.contains(site) { sites.append(site) }
+        preferences.set(sites, forKey: listKey)
+    }
+
+    /// Forgets a site and what was learned about it.
+    static func remove(_ site: String) {
+        preferences.set(all.filter { $0 != site }, forKey: listKey)
+        var snapshots = preferences.dictionary(forKey: snapshotsKey) ?? [:]
+        snapshots.removeValue(forKey: site)
+        preferences.set(snapshots, forKey: snapshotsKey)
+    }
+
+    /// Keeps what was learned about [old] and brings back what was learned about [new].
+    static func switchSite(from old: String, to new: String) {
+        guard old != new else { MangaUrls.resetResolvedBackend(); return }
+        var snapshots = preferences.dictionary(forKey: snapshotsKey) ?? [:]
+        if !old.isEmpty {
+            let home = MangaUrls.home(forSite: old)
+            let owns = preferences.string(forKey: "manga.resolved_backend_site") == home || preferences.string(forKey: "manga.account_site") == home
+            if owns {
+                var saved: [String: Any] = [:]
+                for key in snapshotKeys { if let value = preferences.object(forKey: key) { saved[key] = value } }
+                snapshots[old] = saved
+            }
+        }
+        MangaUrls.resetResolvedBackend()
+        for key in ["manga.account_site", "manga.account_host"] { preferences.removeObject(forKey: key) }
+        if let saved = snapshots[new] as? [String: Any] {
+            for (key, value) in saved where snapshotKeys.contains(key) { preferences.set(value, forKey: key) }
+        }
+        preferences.set(snapshots, forKey: snapshotsKey)
+    }
+
+    /// How a site's works are reached, once learned.
+    static func backend(of site: String) -> MangaUrls.Backend? {
+        let home = MangaUrls.home(forSite: site)
+        if site == active { return MangaUrls.hasResolvedBackend ? MangaUrls.backend : nil }
+        guard let saved = (preferences.dictionary(forKey: snapshotsKey) ?? [:])[site] as? [String: Any],
+              saved["manga.resolved_backend_site"] as? String == home else { return nil }
+        return MangaUrls.Backend(rawValue: saved["manga.resolved_protocol"] as? String ?? "")
+    }
+
+    /// Two sites read their works the same way, so a saved number names the same work on both.
+    static func sharesNumbers(_ a: String, _ b: String) -> Bool {
+        if a == b { return true }
+        guard let first = backend(of: a), let second = backend(of: b) else { return false }
+        return first == second
+    }
+
+    /// Other connected sites that can open this site's works.
+    static func siblings(of site: String) -> [String] { all.filter { $0 != site && sharesNumbers($0, site) } }
 }
 
 /// Coalesce discovery for concurrent covers and lists. Failed discovery has a

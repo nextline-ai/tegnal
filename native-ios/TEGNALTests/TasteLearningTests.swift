@@ -24,6 +24,38 @@ final class TasteLearningTests: XCTestCase {
 
     // MARK: Learning
 
+    private func launched(_ value: TasteEvent, _ launch: String) -> TasteEvent { var copy = value; copy.launch = launch; return copy }
+
+    func testASaveTakenBackInTheSameLaunchWeighsNothingAndCanBeRecommendedAgain() {
+        let opened = launched(event(.open, 7, tags: ["rain"], days: 2), "one")
+        let saved = launched(event(.save, 7, tags: ["rain"], days: 2), "one")
+        let removed = launched(event(.remove, 7, tags: ["rain"], days: 1.9), "one")
+        let slip = learning([opened, saved, removed])
+        XCTAssertEqual(weight(slip, "rain"), 0)
+        XCTAssertFalse(slip.seen.contains(saved.item.key), "The work stays eligible for recommendations")
+
+        let viewed = launched(event(.open, 8, tags: ["sun"], days: 3), "one")
+        let kept = launched(event(.save, 8, tags: ["sun"], days: 3), "one")
+        let later = launched(event(.remove, 8, tags: ["sun"], days: 1), "two")
+        XCTAssertTrue(learning([viewed, kept, later]).seen.contains(kept.item.key), "A save kept past its launch was a real choice")
+
+        let dismissed = launched(event(.open, 7, tags: ["rain"], days: 1.8, signal: .dismissed), "one")
+        XCTAssertTrue(learning([opened, saved, removed, dismissed]).dismissed.contains(saved.item.key), "Feedback is never erased")
+    }
+
+    func testTodaysPicksStayAllDayChangeTheNextDayAndFavorNewerWorks() {
+        let items = (1...12).map { candidate(Int64($0), tags: ["tag\($0)"], score: 1 - Double($0) / 20) }
+        let first = TodayPicks.choose(from: items, stored: nil, today: "2026-11-05")
+        XCTAssertEqual(first.picks.count, 3)
+        XCTAssertEqual(TodayPicks.choose(from: items, stored: first.stored, today: "2026-11-05").picks.map(\.id), first.picks.map(\.id), "The same all day")
+        let tomorrow = TodayPicks.choose(from: items, stored: first.stored, today: "2026-11-06")
+        XCTAssertTrue(Set(tomorrow.picks.map(\.id)).isDisjoint(with: first.picks.map(\.id)))
+        XCTAssertTrue(Set(tomorrow.stored.earlier).isSuperset(of: first.stored.ids))
+        let top = TodayPicks.ordered(items, day: "2026-11-05").prefix(4).map(\.item.id)
+        XCTAssertGreaterThanOrEqual(top.filter { $0 > 6 }.count, 2, "Newer numbers rise even when ranked lower")
+        XCTAssertEqual(TodayPicks.jitter("2026-11-05\na"), 0.3805, accuracy: 0.0001, "The same number as on Android")
+    }
+
     func testRecentSavesOutweighOldOnes() {
         let model = learning([event(.save, 1, tags: ["new"], days: 2), event(.save, 2, tags: ["old"], days: 400)])
         XCTAssertGreaterThan(weight(model, "new"), weight(model, "old") * 20)

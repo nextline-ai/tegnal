@@ -213,6 +213,7 @@ struct BooruPostView: View {
     @SwiftUI.AppStorage("reader.keepAwake", store: ReaderPreferences.booruDefaults) private var keepAwake = true
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.booruDefaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.booruDefaults) private var tapNavigation = true
+    @SwiftUI.AppStorage(ReaderPreferences.doubleTapZoomKey, store: ReaderPreferences.booruDefaults) private var doubleTapZoom = true
     @SwiftUI.AppStorage("reader.autoAdvance", store: ReaderPreferences.booruDefaults) private var autoAdvance = false
     @SwiftUI.AppStorage("reader.autoSeconds", store: ReaderPreferences.booruDefaults) private var autoSeconds = 10.0
     @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
@@ -271,7 +272,7 @@ struct BooruPostView: View {
                                    onNote: { selectedNote = $0 }, onStatus: { [postID = post.id] status in
                                        if post.id == postID, !accessNavigation.restrictedIDs.contains(postID) { mediaStatus = status }
                                    }, onGesture: gesture, onGoldRequired: { [postID = post.id] in skipGoldRestricted(postID) },
-                                   onRemoved: { [postID = post.id] in removedPost(postID) })
+                                   onRemoved: { [postID = post.id] in removedPost(postID) }, doubleTapZoom: doubleTapZoom)
                         .ignoresSafeArea().id("\(server.id)-\(retry)")
                     #if DEBUG
                     if BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled {
@@ -496,7 +497,8 @@ struct BooruPostView: View {
             menuButton(L10n.text("Download Work"), icon: "arrow.down.circle", id: "download", compact: compact) {
                 DownloadStore.shared.enqueue(post, server: server); showDownloads = true
             }
-            menuButton(L10n.text(store.isFavorite(post) ? "Remove Favorite" : "Add Favorite"), icon: store.isFavorite(post) ? "heart.fill" : "heart", id: "favorite", compact: compact) { toggleFavorite() }
+            menuButton(L10n.text(store.isFavorite(post) ? "Remove Favorite" : "Add Favorite"), icon: store.isFavorite(post) ? "heart.fill" : "heart", id: "favorite", compact: compact,
+                       color: store.isFavorite(post) ? WorkSaveResult.added(.booru).color : nil) { toggleFavorite() }
             menuButton(L10n.text("Save to Folder"), icon: "folder", id: "folder", compact: compact) { filing = true }
             menuButton(L10n.text("Translate"), icon: "translate", id: "translate", compact: compact) {
                 menuVisible = false; translation = .init(index: index, rect: viewport.rect)
@@ -508,14 +510,14 @@ struct BooruPostView: View {
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "readerSettings", compact: compact) { readerSettings = true }
         }.buttonStyle(.plain).foregroundStyle(.white).tint(.white)
     }
-    private func menuLabel(_ title: String, icon: String, compact: Bool) -> some View {
+    private func menuLabel(_ title: String, icon: String, compact: Bool, color: Color? = nil) -> some View {
         VStack(spacing: 6) {
-            Image(systemName: icon).font(.system(size: 21))
+            Image(systemName: icon).font(.system(size: 21)).foregroundStyle(color ?? .white)
             Text(title).font(compact ? .system(size: 9, weight: .medium) : .caption).lineLimit(1).minimumScaleFactor(0.8)
         }.frame(maxWidth: .infinity, minHeight: 44)
     }
-    private func menuButton(_ title: String, icon: String, id: String, compact: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { menuLabel(title, icon: icon, compact: compact) }.accessibilityLabel(title).accessibilityIdentifier("booru." + id)
+    private func menuButton(_ title: String, icon: String, id: String, compact: Bool, color: Color? = nil, action: @escaping () -> Void) -> some View {
+        Button(action: action) { menuLabel(title, icon: icon, compact: compact, color: color) }.accessibilityLabel(title).accessibilityIdentifier("booru." + id)
     }
     private func toggleFavorite() {
         saveFeedback = .perform { try BooruFavoriteAction.toggle(post, store: store, context: activeDiscovery) }

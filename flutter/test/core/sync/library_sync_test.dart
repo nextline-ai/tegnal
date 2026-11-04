@@ -268,6 +268,43 @@ void main() {
     expect(changesEquality.equals(old, la.changes), isTrue, reason: 'Applying remote records must not create an endless echo');
   });
 
+  test('the site a work was saved from syncs and an unknown column does not turn the row away', () {
+    final a = adapter(), b = adapter();
+    final folder = a.manga.createFolder(name: 'Art');
+    a.manga.upsertWork(galleryId: 100, folderId: folder.id, title: 'First', site: 'comics-older.net');
+    b.manga.upsertWork(galleryId: 200, title: 'Second');
+    final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
+    exchange(a, b, la, lb);
+    expect(b.manga.getWork(100)?.site, 'comics-older.net');
+    expect(a.manga.getWork(200)?.site, isNull);
+
+    // A peer that never learned the site sends it empty, and a newer version adds a column.
+    final known = LibrarySyncRow(
+      table: 'manga.works',
+      values: {'gallery_id': const SyncValue.integer(100), 'title': const SyncValue.text('Renamed'), 'bookmarked_at': const SyncValue.real(1), 'site': SyncValue.null_},
+    );
+    final later = LibrarySyncRow(
+      table: 'manga.works',
+      values: {
+        'gallery_id': const SyncValue.integer(300),
+        'title': const SyncValue.text('Third'),
+        'bookmarked_at': const SyncValue.real(1),
+        'site': const SyncValue.text('comics-newer.net'),
+        'a_later_column': const SyncValue.text('value'),
+      },
+    );
+    final changes = {
+      known.key: LibrarySyncChange(row: known, timestamp: 100, device: 'C', deleted: false),
+      later.key: LibrarySyncChange(row: later, timestamp: 100, device: 'C', deleted: false),
+    };
+    b.apply(changes);
+    expect(b.manga.getWork(100)?.title, 'Renamed');
+    expect(b.manga.getWork(100)?.site, 'comics-older.net', reason: 'An empty value never clears a known site');
+    expect(b.manga.getWork(300)?.site, 'comics-newer.net', reason: 'The columns this version knows are still saved');
+    final ledger = LibrarySyncLedger()..merge({later.key: changes[later.key]!});
+    expect(ledger.changes[later.key]?.row.values['a_later_column']?.string, 'value', reason: 'The record passes the column on unchanged');
+  });
+
   test('a server added by hand syncs as user data with its folder order', () {
     final a = adapter(), b = adapter();
     final server = presetServer();

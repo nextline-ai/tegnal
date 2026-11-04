@@ -24,8 +24,12 @@ class TranslatedRegion {
     required this.height,
     this.vertical = false,
     this.lines = 1,
+    this.source,
   });
   final String text;
+
+  /// The original text, remembered so the next page can read on from it.
+  final String? source;
   final double left, top, width, height;
 
   /// How many lines or columns the original ran over; the label's text matches one of them.
@@ -54,13 +58,21 @@ abstract final class ImageTranslation {
     }
   }
 
-  static Future<List<TranslatedRegion>> translate(Uint8List image, String target) async {
+  /// [context] holds lines of the pages before, original and translated, so the on-device model
+  /// can keep speakers and names consistent.
+  static Future<List<TranslatedRegion>> translate(Uint8List image, String target, {List<(String, String)> context = const []}) async {
     final folder = Directory('${(await getApplicationCacheDirectory()).path}/translation');
     await folder.create(recursive: true);
     final file = File('${folder.path}/page');
     await file.writeAsBytes(image, flush: true);
     try {
-      final result = await _channel.invokeMapMethod<Object?, Object?>('translate', {'path': file.path, 'target': target});
+      final result = await _channel.invokeMapMethod<Object?, Object?>('translate', {
+        'path': file.path,
+        'target': target,
+        'context': [
+          for (final (source, translation) in context) {'source': source, 'translation': translation},
+        ],
+      });
       return [
         for (final item in (result?['regions'] as List?) ?? const [])
           if (item is Map && item['text'] is String)
@@ -72,10 +84,11 @@ abstract final class ImageTranslation {
               height: (item['height'] as num).toDouble(),
               vertical: item['vertical'] == true,
               lines: math.max(1, (item['lines'] as num?)?.toInt() ?? 1),
+              source: item['source'] as String?,
             ),
       ];
     } on PlatformException catch (error) {
-      throw TranslationError(switch (error.code) {
+      throw TranslationError(code: error.code, switch (error.code) {
         'noText' => L10n.text('No text was found in this image.'),
         'alreadyTarget' => L10n.text('This image is already in the translation language.'),
         'download' => L10n.text('The translation model could not be downloaded. Check your connection and try again.'),
@@ -92,8 +105,14 @@ abstract final class ImageTranslation {
 }
 
 class TranslationError implements Exception {
-  const TranslationError(this.message);
+  const TranslationError(this.message, {this.code});
   final String message;
+
+  /// The platform's reason, such as `noText` or `alreadyTarget`.
+  final String? code;
+
+  /// A page without text to translate is not a failure in translation mode.
+  bool get isQuiet => code == 'noText' || code == 'alreadyTarget';
   @override
   String toString() => message;
 }
@@ -247,7 +266,7 @@ class _ImageTranslationViewState extends State<ImageTranslationView> {
                       builder: (context, box) => Stack(
                         children: [
                           Positioned.fill(child: Image.memory(image, fit: BoxFit.fill, gaplessPlayback: true)),
-                          for (final region in _regions) _label(region, box.biggest),
+                          Positioned.fill(child: TranslatedRegionsLayer(regions: _regions)),
                         ],
                       ),
                     ),
@@ -301,8 +320,19 @@ class _ImageTranslationViewState extends State<ImageTranslationView> {
       ),
     );
   }
+}
 
-  /// White labels over each text block, three points larger than it, as the native labels are.
+/// White labels over each balloon, three points larger than it, as the native labels are. Lay it
+/// over the image's own rectangle so the labels zoom and pan with the page.
+class TranslatedRegionsLayer extends StatelessWidget {
+  const TranslatedRegionsLayer({super.key, required this.regions});
+  final List<TranslatedRegion> regions;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: LayoutBuilder(builder: (context, constraints) => Stack(children: [for (final region in regions) _label(region, constraints.biggest)])),
+  );
+
   Widget _label(TranslatedRegion region, Size box) {
     final frame = Rect.fromLTWH(region.left * box.width, region.top * box.height, region.width * box.width, region.height * box.height).inflate(3);
     final bounded = frame.intersect(Offset.zero & box);

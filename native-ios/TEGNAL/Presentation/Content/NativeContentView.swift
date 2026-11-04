@@ -168,6 +168,21 @@ public struct NativeContentView: View {
     }
 }
 
+/// Switches between the connected comics websites; lists reload for the chosen one.
+struct ComicSiteMenu: View {
+    @Environment(AppEnvironment.self) private var env
+    var body: some View {
+        Menu {
+            Picker(L10n.text("Website"), selection: Binding(get: { env.mangaSiteAddress }, set: { env.switchComicsSite(to: $0) })) {
+                ForEach(env.comicSites, id: \.self) { site in Text(site).tag(site) }
+            }
+        } label: {
+            Label(L10n.text("Website"), systemImage: "globe")
+        }
+        .accessibilityIdentifier("content.siteMenu")
+    }
+}
+
 struct ContentFailureView: View {
     let message: String
     let retry: () -> Void
@@ -177,6 +192,14 @@ struct ContentFailureView: View {
     /// A website that shows nothing until someone signs in gets its sign-in right here.
     private var asksForSignIn: Bool {
         env != nil && message == ContentError.signInRequired.localizedDescription && MangaUrls.signInURL != nil
+    }
+    /// A connected website that numbers works the same way may still show what this one won't.
+    private var sibling: String? {
+        guard let env, env.isSiteVerified else { return nil }
+        let blocked = [ContentError.signInRequired, .galleryNotFound, .unavailable(403), .unavailable(404), .unavailable(410)].map(\.localizedDescription)
+        guard blocked.contains(message) else { return nil }
+        _ = env.comicSitesRevision
+        return ComicSites.siblings(of: env.mangaSiteAddress).first
     }
     var body: some View {
         ContentUnavailableView {
@@ -191,6 +214,10 @@ struct ContentFailureView: View {
             } else {
                 Button(L10n.text("Try Again"), action: retry).buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("content.retry")
+            }
+            if let sibling, let env {
+                Button(L10n.text("Open on %@", sibling)) { env.switchComicsSite(to: sibling); retry() }
+                    .accessibilityIdentifier("content.openOnSibling")
             }
         }
         .appSheet(isPresented: $signingIn) {
@@ -450,9 +477,14 @@ private struct GalleryFeedView: View {
         }
         .navigationTitle("")
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar { ToolbarItem(placement: .topBarLeading) {
-            LiquidGlassTitleCapsule(artist ?? (query.text.isEmpty ? L10n.text("Explore") : L10n.text("Search Results")))
-        } }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                LiquidGlassTitleCapsule(artist ?? (query.text.isEmpty ? L10n.text("Explore") : L10n.text("Search Results")))
+            }
+            if env.comicSites.count > 1 {
+                ToolbarItem(placement: .topBarTrailing) { ComicSiteMenu() }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .task(id: isActive) {
             guard isActive else { return }
@@ -853,10 +885,18 @@ private struct GalleryDetailMetadata: View {
     @State private var favoriteArtists = Set<String>()
     @State private var favoriteError: String?
     @State private var savedTagQueries = Set<String>()
-    private var groups: [ArtworkTagGroup] {
-        let tags = ArtworkTagGroup.make(tags: gallery.tags).filter { $0.category != .artist && $0.category != .language }
-        // Keep Other Tags last, including a one-character placeholder when empty.
-        return tags.filter { $0.category != .general } + [tags.first { $0.category == .general } ?? .init(category: .general, tags: [])]
+    /// Who made the work, what it comes from and who appears in it, each under its own heading
+    /// before the language; the descriptive tags follow together, set apart by color.
+    static let creditCategories: [ArtworkTagCategory] = [.group, .series, .character]
+    static let tagCategories: [ArtworkTagCategory] = [.female, .male, .general, .metadata, .type]
+    private var tagGroups: [ArtworkTagGroup] { ArtworkTagGroup.make(tags: gallery.tags) }
+    private var credits: [ArtworkTagGroup] {
+        let groups = tagGroups
+        return Self.creditCategories.compactMap { category in groups.first { $0.category == category } }
+    }
+    private var tags: ArtworkTagGroup {
+        let groups = tagGroups
+        return .init(category: .general, tags: Self.tagCategories.flatMap { category in groups.first { $0.category == category }?.tags ?? [] })
     }
     private var artists: [String] {
         var seen = Set<String>()
@@ -864,7 +904,7 @@ private struct GalleryDetailMetadata: View {
         return (gallery.artists + tagged).filter { !MangaArtistFavorite.key($0).isEmpty && seen.insert(MangaArtistFavorite.key($0)).inserted }
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.text("Artists")).font(.headline)
                 if artists.isEmpty { MetadataPlaceholder() }
@@ -874,6 +914,16 @@ private struct GalleryDetailMetadata: View {
                             MangaArtistTag(name: name, favorite: isFavorite(name), search: search) { saveTag(name, kind: .artist) }
                         }
                     }
+                }
+            }
+            ForEach(credits) { group in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text(group.category.title)).font(.headline)
+                    ArtworkTagCloud(groups: [group], headingStyle: .hidden,
+                        destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
+                        action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
+                        savedQueries: savedTagQueries,
+                        save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) })
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
@@ -888,10 +938,9 @@ private struct GalleryDetailMetadata: View {
                         .buttonStyle(.plain).accessibilityIdentifier("content.detail.language")
                         .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(gallery.language, kind: .language) })
                 }
-            }
-            if let openVersion, !versions.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.text("Other Languages")).font(.headline)
+                // Other versions belong with the language, a step below it.
+                if let openVersion, !versions.isEmpty {
+                    Text(L10n.text("Other Languages")).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 6)
                     FlowLayout(spacing: 6) {
                         ForEach(versions) { version in
                             Button { openVersion(version.id) } label: { versionTag(version) }
@@ -905,8 +954,7 @@ private struct GalleryDetailMetadata: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 SettingsHelpLabel("Tags", help: "Hold an artist or tag to add it to your favorites. Hold it again to remove it.").font(.headline)
-                if groups.allSatisfy({ $0.tags.isEmpty }) { MetadataPlaceholder() }
-                ArtworkTagCloud(groups: groups, headingStyle: .detail,
+                ArtworkTagCloud(groups: [tags], headingStyle: .hidden,
                     destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
                     action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
                     savedQueries: savedTagQueries,

@@ -42,8 +42,7 @@ actor BooruThumbnailCache {
         disk = .init(directory: directory, capacity: diskCapacity); self.loadData = loadData
     }
     nonisolated func cachedImage(url: URL, server: BooruServer) -> UIImage? {
-        let key = server.canonicalAddress + ":" + server.id + ":" + url.absoluteString as NSString
-        return cache.object(forKey: key)
+        cache.object(forKey: Self.key(url, server) as NSString)
     }
     nonisolated func prefetch(_ items: [(URL, BooruServer)]) {
         guard !items.isEmpty else { return }
@@ -81,7 +80,11 @@ actor BooruThumbnailCache {
             }
         }
     }
-    private func cacheKey(_ url: URL, _ server: BooruServer) -> String { server.canonicalAddress + ":" + server.id + ":" + url.absoluteString }
+    private func cacheKey(_ url: URL, _ server: BooruServer) -> String { Self.key(url, server) }
+    /// The prefix names the decode size, so covers saved at the earlier, smaller size are not reused.
+    private nonisolated static func key(_ url: URL, _ server: BooruServer) -> String {
+        "v2:" + server.canonicalAddress + ":" + server.id + ":" + url.absoluteString
+    }
     func translationImage(post: BooruPost, server: BooruServer, rect: CGRect) async throws -> UIImage {
         #if DEBUG
         if BooruUITestSupport.enabled {
@@ -118,7 +121,7 @@ actor BooruThumbnailCache {
             try Task.checkCancellation()
             guard captured == generation, let image = Self.thumbnail(source), let cgImage = image.cgImage else { throw BooruError.invalidResponse }
             cache.setObject(image, forKey: key as NSString, cost: cgImage.bytesPerRow * cgImage.height)
-            if let data = image.pngData() { disk.write(data, key: key) }
+            if let data = Self.encoded(image, cgImage) { disk.write(data, key: key) }
             return image
         }
         inFlight[key] = task
@@ -126,13 +129,38 @@ actor BooruThumbnailCache {
         return try await task.value
     }
 
+    /// Pixels kept on the shorter side, and the most kept on the longer one.
+    static let thumbnailShortSide = 720, thumbnailLongSide = 2048
+
+    /// The decode size for an image of this size: the shorter side keeps about 720 pixels, so
+    /// a tall or wide image cropped to fill a cell stays sharp. Never larger than the file.
+    static func thumbnailPixelSize(width: Int, height: Int) -> Int {
+        let long = max(width, height), short = max(1, min(width, height))
+        let scale = min(1, Double(thumbnailShortSide) / Double(short), Double(thumbnailLongSide) / Double(long))
+        return max(1, Int((Double(long) * scale).rounded()))
+    }
+
     private static func thumbnail(_ source: CGImageSource) -> UIImage? {
+        var longSide = thumbnailShortSide
+        if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int,
+           width > 0, height > 0 {
+            longSide = thumbnailPixelSize(width: width, height: height)
+        }
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: 600, kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: longSide, kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
         // Disk hits must be decoded off the main actor too; UIImage(data:)
         // leaves that work until SwiftUI first draws the cell.
         return UIImage(cgImage: image)
+    }
+
+    /// Opaque covers go to disk as JPEG, which stays small at the larger decode size.
+    private static func encoded(_ image: UIImage, _ cgImage: CGImage) -> Data? {
+        switch cgImage.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast: return image.jpegData(compressionQuality: 0.9)
+        default: return image.pngData()
+        }
     }
 
     private func imageSource(_ url: URL, server: BooruServer) async throws -> (CGImageSource, URL?) {
@@ -335,6 +363,8 @@ struct BooruMediaView: UIViewRepresentable {
     let onGesture: (BooruMediaGesture) -> Void
     var onGoldRequired: () -> Void = {}
     var onRemoved: () -> Void = {}
+    /// Off, a quick second tap is another tap: it never zooms, and taps do not wait for it.
+    var doubleTapZoom = true
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> WKWebView {
@@ -366,6 +396,10 @@ struct BooruMediaView: UIViewRepresentable {
         coordinator.onNote = onNote; coordinator.onStatus = onStatus; coordinator.notes = notes
         coordinator.showNotes = showNotes
         coordinator.onGesture = onGesture
+        if coordinator.doubleTapZoom != doubleTapZoom {
+            coordinator.doubleTapZoom = doubleTapZoom
+            view.evaluateJavaScript("window.doubleTapZoom=\(doubleTapZoom)")
+        }
         coordinator.onGoldRequired = onGoldRequired
         coordinator.onRemoved = onRemoved
         let url = post.viewerURL(original: original, reducedData: reducedData)
@@ -392,7 +426,7 @@ struct BooruMediaView: UIViewRepresentable {
             }
             // A snapshot can finish after activity changes. Every new document
             // starts suspended; didFinish applies the current native policy.
-            coordinator.document = url == nil ? "" : Self.document(post: post, url: displayURL, identifier: coordinator.documentID, muted: coordinator.audio.muted)
+            coordinator.document = url == nil ? "" : Self.document(post: post, url: displayURL, identifier: coordinator.documentID, muted: coordinator.audio.muted, doubleTapZoom: doubleTapZoom)
             coordinator.baseURL = server.baseURL
             let preview = url.flatMap { BooruViewerImageCache.shared.cachedImage(url: $0, server: server) }
                 ?? (post.previewURL ?? post.sampleURL).flatMap { BooruThumbnailCache.shared.cachedImage(url: $0, server: server) }
@@ -443,7 +477,7 @@ struct BooruMediaView: UIViewRepresentable {
             .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "'", with: "&#39;")
     }
-    static func document(post: BooruPost, url: URL?, identifier: String = "", active: Bool = false, muted: Bool = true) -> String {
+    static func document(post: BooruPost, url: URL?, identifier: String = "", active: Bool = false, muted: Bool = true, doubleTapZoom: Bool = true) -> String {
         var source = url?.absoluteString ?? ""
         #if DEBUG
         if BooruUITestSupport.enabled {
@@ -546,6 +580,7 @@ struct BooruMediaView: UIViewRepresentable {
         }
         window.addEventListener('resize',fit);fit();
         let start=null,holdTimer=null,tapTimer=null,lastTap=0,held=false,lastTouchAt=0;
+        window.doubleTapZoom=\(doubleTapZoom);
         const zoom=()=>window.visualViewport?.scale||1;
         let viewportFrame=null,lastViewport=null,lastZoom=null;
         const reportViewport=()=>{
@@ -595,6 +630,8 @@ struct BooruMediaView: UIViewRepresentable {
           if(atOriginal&&Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.3){clearTimeout(tapTimer);send({gesture:'swipe',delta:dx<0?1:-1});return;}
           if(atOriginal&&s.y>=innerHeight*0.75&&-dy>Math.abs(dx)*1.25&&(-dy>=96||(-dy>=24&&-dy/elapsed>=0.55))){clearTimeout(tapTimer);send({gesture:'details'});return;}
           if(Math.hypot(dx,dy)>10||s.video)return;
+          // Without double tap zoom a tap acts at once, and WebKit never zooms on a quick second one.
+          if(!window.doubleTapZoom){e.preventDefault();clearTimeout(tapTimer);send({gesture:'tap',x:atOriginal?t.clientX/innerWidth:0.5});return;}
           const now=Date.now();
           if(now-lastTap<300){clearTimeout(tapTimer);lastTap=0;e.preventDefault();send({gesture:'double',x:t.clientX/innerWidth,y:t.clientY/innerHeight});}
           else{lastTap=now;tapTimer=setTimeout(()=>send({gesture:'tap',x:atOriginal?t.clientX/innerWidth:0.5}),300);}
@@ -604,11 +641,12 @@ struct BooruMediaView: UIViewRepresentable {
         document.addEventListener('click',e=>{
           if(Date.now()-lastTouchAt<700||e.target.closest('button,video'))return;
           clearTimeout(tapTimer);
+          if(!window.doubleTapZoom){send({gesture:'tap',x:zoom()<=1.01?e.clientX/innerWidth:0.5});return;}
           if(e.detail>1)return;
           tapTimer=setTimeout(()=>send({gesture:'tap',x:zoom()<=1.01?e.clientX/innerWidth:0.5}),300);
         });
         document.addEventListener('dblclick',e=>{
-          if(Date.now()-lastTouchAt<700||e.target.closest('button,video'))return;
+          if(!window.doubleTapZoom||Date.now()-lastTouchAt<700||e.target.closest('button,video'))return;
           clearTimeout(tapTimer);e.preventDefault();
           send({gesture:'double',x:e.clientX/innerWidth,y:e.clientY/innerHeight});
         });
@@ -638,6 +676,7 @@ struct BooruMediaView: UIViewRepresentable {
             audio = BooruVideoAudioPreferences(defaults: audioDefaults)
             super.init()
         }
+        var doubleTapZoom = true
         weak var view: WKWebView?
         func observeLifecycle(of view: WKWebView) {
             NotificationCenter.default.removeObserver(self)

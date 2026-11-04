@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
@@ -199,7 +200,19 @@ class _TasteDashboardState extends State<TasteDashboard> {
         !_sources.every((source) => control.preferences(source).sort == RecommendationSort.recommended)) {
       return const [];
     }
-    return TasteRecommendation.picks(items);
+    final defaults = ContentPreferences.defaults;
+    final key = 'taste.todayPicks.${_mode.name}';
+    final saved = defaults.string(key);
+    TodayPicksStored? stored;
+    try {
+      stored = saved == null ? null : TodayPicksStored.fromJson(jsonDecode(saved));
+    } on FormatException {
+      stored = null;
+    }
+    final chosen = TodayPicks.choose(items, stored: stored, today: TodayPicks.day(DateTime.now()));
+    // Remember the day's picks once; later builds read them back unchanged. Preferences hold text.
+    if (chosen.stored != stored) defaults.set(key, jsonEncode(chosen.stored.toJson()));
+    return chosen.picks;
   }
 
   void _openSettings() => Navigator.of(context).push(

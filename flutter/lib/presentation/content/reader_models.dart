@@ -13,6 +13,17 @@ abstract final class ReaderPreferences {
   /// Comics reader options and reading progress (`ReaderPreferences.defaults`).
   static Preferences get defaults => ContentPreferences.defaults;
 
+  static const doubleTapZoomKey = 'reader.doubleTapZoom';
+
+  /// Comics pages zoom on a double tap unless a person turned it off.
+  static bool get doubleTapZooms => defaults.boolean(doubleTapZoomKey) ?? true;
+
+  static const continuousTranslationKey = 'reader.continuousTranslation';
+
+  /// Off by default: Translate shows one translated page. On, translation stays on while pages
+  /// turn and the on-device model reads each page with the ones before it.
+  static bool get continuousTranslation => defaults.boolean(continuousTranslationKey) ?? false;
+
   /// Image-mode viewer options, installed at launch from `AppPreferences.booruDefaults`.
   static Preferences booruDefaults = MemoryPreferences();
 
@@ -36,6 +47,7 @@ abstract final class ReaderSettingKeys {
   static const prefetch = 'reader.prefetch'; // 3; 0, 2, 3 or 5
   static const dimming = 'reader.dimming'; // 0.0, 0...0.65
   static const tapNavigation = 'reader.tapNavigation'; // true
+  static const doubleTapZoom = 'reader.doubleTapZoom'; // true
   static const continuousBackSwipe = 'reader.continuousBackSwipe'; // false
   static const continuousWorkSwipe = 'reader.continuousWorkSwipe'; // false
   static const continuousPreviewSwipe = 'reader.continuousPreviewSwipe'; // false
@@ -79,7 +91,12 @@ abstract final class ReaderPreferenceReset {
   static const keys = [
     'reader.resumeBehavior', 'reader.pagesPerSpread', 'reader.autoAdvance', 'reader.autoSeconds', 'reader.mode', 'reader.rtl', //
     'reader.bottomMenu', 'reader.pageNumber', 'reader.keepAwake', 'reader.prefetch', 'reader.dimming', 'reader.tapNavigation', //
-    'reader.continuousPreviewSwipe', 'reader.continuousWorkSwipe', 'reader.continuousBackSwipe', 'reader.helpHidden', //
+    'reader.doubleTapZoom',
+    'reader.continuousTranslation',
+    'reader.continuousPreviewSwipe',
+    'reader.continuousWorkSwipe',
+    'reader.continuousBackSwipe',
+    'reader.helpHidden', //
     'reader.translationLanguage',
   ];
 

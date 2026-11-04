@@ -103,6 +103,11 @@ class AppDatabase implements SmartFolderLibrary {
       }
     });
     migrator.registerMigration('v11_folder_rule_rows', AppDatabaseFolderRules.adoptLegacyFolderRules);
+    // Local only: the sync and backup table lists leave it out.
+    migrator.registerMigration('v12_refresh_queue', (db) => db.execute('CREATE TABLE IF NOT EXISTS refresh_queue (gallery_id INTEGER PRIMARY KEY NOT NULL)'));
+    migrator.registerMigration('v13_work_site', (db) {
+      if (!db.columns('works').contains('site')) db.execute('ALTER TABLE works ADD COLUMN site TEXT');
+    });
     return migrator;
   }
 
@@ -494,6 +499,7 @@ class AppDatabase implements SmartFolderLibrary {
     String? metadataSource,
     bool catalogMatched = false,
     bool overwriteMetadata = false,
+    String? site,
     DiscoveryContext? discoveryContext,
   }) => dbWriter.write((db) {
     final now = iso8601();
@@ -515,6 +521,8 @@ class AppDatabase implements SmartFolderLibrary {
         if (metadataSource != null) existing.metadataSource = metadataSource;
         existing.catalogMatched = catalogMatched || existing.catalogMatched;
       }
+      // The first site a work is known from stays its site.
+      if (existing.site == null && site != null && site.isNotEmpty) existing.site = site;
       existing.updatedAt = now;
       updateWork(existing, db);
     } else {
@@ -532,6 +540,7 @@ class AppDatabase implements SmartFolderLibrary {
         updatedAt: now,
         metadataSource: metadataSource,
         catalogMatched: catalogMatched,
+        site: site == null || site.isEmpty ? null : site,
       );
       insertWork(work, db);
     }
@@ -663,10 +672,13 @@ class AppDatabase implements SmartFolderLibrary {
     }
   }
 
+  /// Empty tags need filling until the site itself has answered: some works carry no tags
+  /// there, and asking again would never fill them.
   static const _needsFill = '''
     (thumb_status != 'gone' AND (thumb_status IN ('missing', 'failed')
      OR (thumb_status = 'ready' AND COALESCE(thumb_path, '') = '')
-     OR TRIM(COALESCE(title, '')) = '' OR TRIM(COALESCE(tags, '')) = ''))
+     OR TRIM(COALESCE(title, '')) = ''
+     OR (TRIM(COALESCE(tags, '')) = '' AND COALESCE(metadata_source, '') != 'manga')))
     ''';
 
   List<Work> worksNeedingFill({int limit = 8, Set<int> exclude = const {}}) => dbWriter.read((db) {
@@ -677,6 +689,39 @@ class AppDatabase implements SmartFolderLibrary {
   int countNeedingFill({Set<int> exclude = const {}}) {
     final exclusions = exclude.isEmpty ? '' : ' AND gallery_id NOT IN (${exclude.join(',')})';
     return dbWriter.read((db) => db.value<int>('SELECT COUNT(*) FROM works WHERE $_needsFill$exclusions') ?? 0);
+  }
+
+  // MARK: - Refresh queue
+
+  /// Queues every saved work to be read from the site again. The queue lives in the
+  /// database, so a refresh picks up where it stopped after the app closes, and a work
+  /// that could not be fetched stays queued for the next run instead of being skipped.
+  int queueRefresh() => dbWriter.write((db) {
+    db.execute('DELETE FROM refresh_queue WHERE gallery_id NOT IN (SELECT gallery_id FROM works)');
+    db.execute('INSERT OR IGNORE INTO refresh_queue (gallery_id) SELECT gallery_id FROM works');
+    return db.value<int>('SELECT COUNT(*) FROM refresh_queue') ?? 0;
+  });
+
+  /// Queued works, newest saves first, like the fill queue.
+  List<int> worksAwaitingRefresh({int limit = 8, Set<int> exclude = const {}}) => dbWriter.read((db) {
+    final exclusions = exclude.isEmpty ? '' : 'WHERE w.gallery_id NOT IN (${exclude.join(',')})';
+    return db.column<int>(
+      'SELECT w.gallery_id FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id\n$exclusions\nORDER BY w.bookmarked_at DESC, w.id DESC\nLIMIT ?',
+      [limit],
+    );
+  });
+
+  int countAwaitingRefresh() => dbWriter.read((db) => db.value<int>('SELECT COUNT(*) FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id') ?? 0);
+
+  /// Takes a work off the refresh queue once the site has answered for it.
+  void finishRefresh(int galleryId) => dbWriter.write((db) => db.execute('DELETE FROM refresh_queue WHERE gallery_id = ?', [galleryId]));
+
+  /// Works the queue still has to visit: missing information, or waiting for a refresh.
+  int countPendingFill({Set<int> exclude = const {}}) {
+    final exclusions = exclude.isEmpty ? '' : ' AND gallery_id NOT IN (${exclude.join(',')})';
+    return dbWriter.read(
+      (db) => db.value<int>('SELECT COUNT(*) FROM works WHERE ($_needsFill OR gallery_id IN (SELECT gallery_id FROM refresh_queue))$exclusions') ?? 0,
+    );
   }
 
   List<int> savedGalleryIDs() => dbWriter.read((db) => db.column<int>('SELECT gallery_id FROM works ORDER BY bookmarked_at DESC, id DESC'));

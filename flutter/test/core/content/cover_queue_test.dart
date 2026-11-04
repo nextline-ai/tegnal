@@ -171,6 +171,33 @@ void main() {
     expect(db.countNeedingFill(), 0);
   });
 
+  test('a refresh that fails stays queued and resumes in a later run', () async {
+    final db = AppDatabase.inMemory();
+    final root = temporaryDirectory(addTearDown);
+    db.upsertWork(galleryId: 1001, title: '原題', artists: 'tegnal', language: 'english', tags: 'tag:old');
+    final file = File('${root.path}/native_1001.jpg')..writeAsBytesSync(await cover());
+    db.setThumb(1001, 'ready', path: file.path);
+
+    final source = BackfillFixtureSource(Failure.offline);
+    final first = actor(db, root, source);
+    first.queueRefresh();
+    final state = CoverQueueState();
+    await first.start(state);
+    expect(state.failed, 1);
+    expect(state.remaining, 1, reason: 'The work still waits for its refresh');
+    expect(db.countAwaitingRefresh(), 1);
+    expect(db.getWork(1001)?.title, '原題', reason: 'Nothing is lost while the site cannot be reached');
+
+    // A later launch continues without the refresh being asked for again.
+    source.failure = Failure.none;
+    final later = actor(db, root, source);
+    await later.start(CoverQueueState());
+    expect(db.getWork(1001)?.title, '네이티브 읽기 테스트');
+    expect(db.countAwaitingRefresh(), 0);
+    await later.start(CoverQueueState());
+    expect(source.requests, [1001, 1001], reason: 'A finished refresh is not fetched again');
+  });
+
   test('manual fill reports and persists a missing gallery', () async {
     final db = AppDatabase.inMemory();
     db.upsertWork(galleryId: 1234);
@@ -227,16 +254,32 @@ void main() {
     }
   });
 
-  test('a stored cover does not hide an unfilled title or tags', () async {
-    for (final failure in [Failure.emptyTitle, Failure.emptyTags]) {
-      final db = AppDatabase.inMemory();
-      db.upsertWork(galleryId: 1234);
-      final root = temporaryDirectory(addTearDown);
-      final state = CoverQueueState();
-      await actor(db, root, BackfillFixtureSource(failure)).start(state);
-      expect((state.processed, state.failed, state.remaining), (0, 1, 1));
-      expect(db.getWork(1234)!.hasThumb, isTrue, reason: 'Keep the successfully saved cover while retrying metadata');
-    }
+  test('a stored cover does not hide an unfilled title', () async {
+    final db = AppDatabase.inMemory();
+    db.upsertWork(galleryId: 1234);
+    final root = temporaryDirectory(addTearDown);
+    final state = CoverQueueState();
+    await actor(db, root, BackfillFixtureSource(Failure.emptyTitle)).start(state);
+    expect((state.processed, state.failed, state.remaining), (0, 1, 1));
+    expect(db.getWork(1234)!.hasThumb, isTrue, reason: 'Keep the successfully saved cover while retrying metadata');
+  });
+
+  test('a work the site lists without tags is filled once', () async {
+    final db = AppDatabase.inMemory();
+    db.upsertWork(galleryId: 1234);
+    // Saved without the site's answer, empty tags still need filling.
+    db.upsertWork(galleryId: 5678, title: 'Saved elsewhere', metadataSource: 'remote');
+    expect(db.countNeedingFill(), 2);
+    final root = temporaryDirectory(addTearDown);
+    final source = BackfillFixtureSource(Failure.emptyTags);
+    final state = CoverQueueState();
+    await actor(db, root, source).start(state);
+    expect((state.processed, state.failed, state.remaining), (2, 0, 0));
+    final work = db.getWork(1234)!;
+    expect((work.hasThumb, work.hasTitle, work.tags ?? ''), (true, true, ''));
+
+    await actor(db, root, source).start(CoverQueueState());
+    expect(source.requests..sort(), [1234, 5678], reason: 'A work the site lists without tags is not asked for again');
   });
 
   test('the driver fills automatically and runs again when asked mid-run', () async {

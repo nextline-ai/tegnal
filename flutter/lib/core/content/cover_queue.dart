@@ -80,9 +80,6 @@ class CoverQueueActor {
   bool _kickAgain = false;
   bool _cancelled = false;
 
-  /// Saved works whose information is fetched again even though nothing is missing.
-  final List<int> _refreshing = [];
-
   void pause() => _isPaused = true;
   void resume() => _isPaused = false;
 
@@ -94,12 +91,7 @@ class CoverQueueActor {
   }
 
   /// Queues every saved work so a fix in how a site is read reaches works saved before it.
-  int queueRefresh() {
-    _refreshing
-      ..clear()
-      ..addAll(database.savedGalleryIDs());
-    return _refreshing.length;
-  }
+  int queueRefresh() => database.queueRefresh();
 
   Future<void> start(CoverQueueState state, {bool downloadsEnabled = true}) async {
     _isPaused = false;
@@ -127,50 +119,53 @@ class CoverQueueActor {
         _checkedThumbnailFiles = true;
       }
       thumbsDir.createSync(recursive: true);
-      final total = _refreshing.length + database.countNeedingFill(exclude: _refreshing.toSet());
+      final total = database.countPendingFill();
       state.update((state) {
         state.total = total;
         state.remaining = total;
         state.isRunning = downloadsEnabled && total > 0;
       });
 
+      // Each work is tried once per run; a queued refresh that fails is tried again next run.
       final attempted = <int>{};
       do {
         _kickAgain = false;
         while (downloadsEnabled && !_isPaused && !_cancelled && _allowsBackfill()) {
-          final refresh = _refreshing.take(6).toList();
+          final refresh = database.worksAwaitingRefresh(limit: 6, exclude: attempted);
           final batch = refresh.isEmpty ? database.worksNeedingFill(limit: 6, exclude: attempted).map((work) => work.galleryId).toList() : refresh;
           if (batch.isEmpty) break;
-          final planned = attempted.length + _refreshing.length + database.countNeedingFill(exclude: {...attempted, ..._refreshing});
+          final planned = attempted.length + database.countPendingFill(exclude: attempted);
           state.update((state) => state.total = state.total > planned ? state.total : planned);
 
           var stopped = false;
           for (final galleryId in batch) {
             if (_isPaused || _cancelled || !_allowsBackfill()) break;
-            final refreshes = _refreshing.firstOrNull == galleryId;
-            if (refreshes) _refreshing.removeAt(0);
+            final refreshes = refresh.isNotEmpty;
             attempted.add(galleryId);
 
             try {
               await fetchOne(galleryId, refresh: refreshes);
-              // A removed bookmark is not a successfully filled work.
+              // A removed bookmark is not a successfully filled work. Tags may stay empty
+              // only when the site itself lists none.
               final saved = database.getWork(galleryId);
               if (saved != null) {
-                if (!saved.hasThumb || !saved.hasTitle || (saved.tags ?? '').trim().isEmpty) throw ContentError.invalidResponse;
+                final tagged = (saved.tags ?? '').trim().isNotEmpty || saved.metadataSource == 'manga';
+                if (!saved.hasThumb || !saved.hasTitle || !tagged) throw ContentError.invalidResponse;
                 state.update((state) => state.processed += 1);
               }
+              if (refreshes) database.finishRefresh(galleryId);
             } on CancellationError {
-              if (refreshes) _refreshing.insert(0, galleryId);
               stopped = true;
             } on NetworkError catch (error) {
               if (error.code == NetworkErrorCode.cancelled) {
-                if (refreshes) _refreshing.insert(0, galleryId);
                 stopped = true;
               } else {
                 _recordFailure(galleryId, state);
               }
             } on ContentError catch (error) {
               if (error.kind == ContentErrorKind.galleryNotFound) {
+                // Gone, or a different work under the same number: nothing more to read.
+                if (refreshes) database.finishRefresh(galleryId);
                 state.update((state) => state.gone += 1);
               } else {
                 _recordFailure(galleryId, state);
@@ -180,7 +175,7 @@ class CoverQueueActor {
             }
             if (stopped) break;
 
-            final remaining = database.countNeedingFill();
+            final remaining = database.countPendingFill();
             state.update((state) => state.remaining = remaining);
             // Politeness delay
             if (delay > Duration.zero) await Future<void>.delayed(delay);

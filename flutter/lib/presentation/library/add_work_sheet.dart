@@ -13,6 +13,7 @@ import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import 'folder_name_prompt.dart';
 import 'library_routes.dart';
+import '../../core/content/manga_urls.dart';
 
 /// `AddWorkSheet`: saves every work number or link in the text into the chosen folder.
 class AddWorkSheet extends StatefulWidget {
@@ -94,6 +95,7 @@ class _AddWorkSheetState extends State<AddWorkSheet> {
         publishedAt: catalog?.published,
         metadataSource: catalog != null ? 'catalog' : null,
         catalogMatched: catalog != null,
+        site: ComicSites.active,
         discoveryContext: widget.discovery,
       );
       if (existing == null) created++;

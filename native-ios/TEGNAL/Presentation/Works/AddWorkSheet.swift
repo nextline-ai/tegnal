@@ -175,6 +175,7 @@ public struct AddWorkSheet: View {
                     publishedAt: catalog?.published,
                     metadataSource: catalog != nil ? "catalog" : nil,
                     catalogMatched: catalog != nil,
+                    site: ComicSites.active,
                     discoveryContext: discovery
                 )
                 if existing == nil {

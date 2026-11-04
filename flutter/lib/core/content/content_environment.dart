@@ -63,10 +63,39 @@ class ContentEnvironment extends ChangeNotifier {
   String _mangaSiteAddress;
   String get mangaSiteAddress => _mangaSiteAddress;
   set mangaSiteAddress(String value) {
+    final previous = _mangaSiteAddress;
+    // A site connected before the list existed joins it before another takes its place.
+    ComicSites.add(previous);
     _mangaSiteAddress = value;
-    MangaUrls.resetResolvedBackend();
+    ComicSites.switchSite(from: previous, to: value);
     browserPreferences.set('manga.site_address', value);
     if (ContentPreferences.isIsolated) MangaUrls.preferences.set('manga.site_address', value);
+    ComicSites.add(value);
+    notifyListeners();
+  }
+
+  /// The connected comics websites, the active one included.
+  List<String> get comicSites => ComicSites.all;
+
+  /// Makes another connected site the active one.
+  void switchComicsSite(String site) {
+    if (site == _mangaSiteAddress || !ComicSites.all.contains(site)) return;
+    isSiteVerified = true;
+    mangaSiteAddress = site;
+  }
+
+  /// Forgets a site; forgetting the active one moves to the next, or disconnects.
+  void removeComicsSite(String site) {
+    final remaining = ComicSites.all.where((value) => value != site).toList();
+    if (site == _mangaSiteAddress) {
+      if (remaining.isNotEmpty) {
+        switchComicsSite(remaining.first);
+      } else {
+        isSiteVerified = false;
+        mangaSiteAddress = '';
+      }
+    }
+    ComicSites.remove(site);
     notifyListeners();
   }
 
@@ -127,8 +156,11 @@ class ContentEnvironment extends ChangeNotifier {
     _hiddenMangaGalleryIDs = hidden;
     _isSiteVerified = verified;
     if (_mangaSiteAddress != address) {
+      final previous = _mangaSiteAddress;
+      ComicSites.add(previous);
       _mangaSiteAddress = address;
-      MangaUrls.resetResolvedBackend();
+      ComicSites.switchSite(from: previous, to: address);
+      ComicSites.add(address);
     }
     if (changed) notifyListeners();
   }
@@ -217,7 +249,10 @@ class ContentEnvironment extends ChangeNotifier {
   static String normalizedComicsAddress(String input) {
     final raw = input.trim();
     final host = SwiftURLComponents.parse(raw.contains('://') ? raw : 'https://$raw')?.host?.toLowerCase();
-    return host ?? raw.toLowerCase();
+    if (host == null) return raw.toLowerCase();
+    // As for image servers, a site is the same with or without `www.`, and its other hosts
+    // are named from the bare one.
+    return host.startsWith('www.') ? host.substring(4) : host;
   }
 
   bool verifySite(String input) {

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -133,7 +134,7 @@ class _RemoteGalleryViewState extends State<RemoteGalleryView> {
     } else if (_error != null) {
       body = Center(
         child: SingleChildScrollView(
-          child: ContentFailure(message: _error!, retry: _load),
+          child: ContentFailure(message: _error!, retry: _load, content: widget.content),
         ),
       );
     } else {
@@ -187,9 +188,21 @@ class GlassIconButton extends StatelessWidget {
 
 /// `ContentFailureView`: the reason a load failed and a retry.
 class ContentFailure extends StatelessWidget {
-  const ContentFailure({super.key, required this.message, required this.retry});
+  const ContentFailure({super.key, required this.message, required this.retry, this.content});
   final String message;
   final VoidCallback retry;
+
+  /// With the environment, a connected website that numbers works the same way can be offered.
+  final ContentEnvironment? content;
+
+  /// A connected website that numbers works the same way may still show what this one won't.
+  String? get _sibling {
+    final content = this.content;
+    if (content == null || !content.isSiteVerified) return null;
+    const blocked = [ContentError.signInRequired, ContentError.galleryNotFound, ContentError.unavailable(403), ContentError.unavailable(404), ContentError.unavailable(410)];
+    if (!blocked.any((error) => ContentError.message(error) == message)) return null;
+    return ComicSites.siblings(content.mangaSiteAddress).firstOrNull;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -220,6 +233,14 @@ class ContentFailure extends StatelessWidget {
               style: TegnalType.style(15, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
             ),
           ),
+          if (_sibling case final sibling?)
+            CupertinoButton(
+              onPressed: () {
+                content?.switchComicsSite(sibling);
+                retry();
+              },
+              child: Text(L10n.text('Open on %@', [sibling]), style: TegnalType.style(15, color: TegnalColors.tint.resolveFrom(context))),
+            ),
         ],
       ),
     );
@@ -418,7 +439,14 @@ class WorkDetailCover extends StatelessWidget {
         padding: image == null ? EdgeInsets.zero : const EdgeInsets.all(8),
         alignment: Alignment.center,
         child: image != null
-            ? RawImage(image: image, fit: BoxFit.contain, filterQuality: ui.FilterQuality.medium)
+            // Rounded like its frame, so a cover with dark or light edges keeps soft corners.
+            ? AspectRatio(
+                aspectRatio: image!.width / math.max(1, image!.height),
+                child: ClipRSuperellipse(
+                  borderRadius: BorderRadius.circular(8),
+                  child: RawImage(image: image, fit: BoxFit.fill, filterQuality: ui.FilterQuality.medium),
+                ),
+              )
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -663,16 +691,6 @@ class _GalleryDetailMetadata extends StatelessWidget {
     return [...gallery.artists, ...tagged].where((name) => MangaArtistFavorite.key(name).isNotEmpty && seen.add(MangaArtistFavorite.key(name))).toList();
   }
 
-  List<ArtworkTagGroup> get _groups {
-    final tags = ArtworkTagGroup.make(tags: gallery.tags)
-        .where((group) => group.category != ArtworkTagCategory.artist && group.category != ArtworkTagCategory.language);
-    // Keep Other Tags last, including an empty placeholder.
-    return [
-      ...tags.where((group) => group.category != ArtworkTagCategory.general),
-      tags.where((group) => group.category == ArtworkTagCategory.general).firstOrNull ?? const ArtworkTagGroup(category: ArtworkTagCategory.general, tags: []),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final label = TegnalColors.label.resolveFrom(context);
@@ -681,7 +699,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
     final languageColor = artworkTagColor(ArtworkTagCategory.language, context);
     final artistColor = artworkTagColor(ArtworkTagCategory.artist, context);
     Widget section(Widget heading, Widget body) => Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const SizedBox(height: 4), body]),
     );
     final artists = _artists;
@@ -707,11 +725,16 @@ class _GalleryDetailMetadata extends StatelessWidget {
                   ],
                 ),
         ),
+        for (final group in GalleryDetailMetadata.credits(gallery)) section(Text(L10n.text(group.category.title), style: headline), _tagFlow(context, group)),
         section(
           Text(L10n.text('Language'), style: headline),
-          gallery.language.trim().isEmpty
-              ? const _MetadataPlaceholder()
-              : FlowLayout(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (gallery.language.trim().isEmpty)
+                const _MetadataPlaceholder()
+              else
+                FlowLayout(
                   children: [
                     ArtworkTagPill(
                       color: languageColor,
@@ -722,33 +745,40 @@ class _GalleryDetailMetadata extends StatelessWidget {
                     ),
                   ],
                 ),
-        ),
-        if (openVersion != null && versions.isNotEmpty)
-          section(
-            Text(L10n.text('Other Languages'), style: headline),
-            FlowLayout(
-              spacing: 6,
-              children: [
-                for (final version in versions)
-                  ArtworkTagPill(
-                    color: languageColor,
-                    onTap: () => openVersion!(version.id),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (savedIDs.contains(version.id)) ...[
-                          Icon(Symbols.bookmarkFill, size: 13, color: CupertinoColors.systemYellow.resolveFrom(context)),
-                          const SizedBox(width: 4),
-                        ],
-                        Text(version.displayName),
-                        const SizedBox(width: 4),
-                        Icon(CupertinoIcons.chevron_right, size: 11, color: languageColor.withValues(alpha: 0.6)),
-                      ],
-                    ),
-                  ),
+              // Other versions belong with the language, a step below it.
+              if (openVersion != null && versions.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  L10n.text('Other Languages'),
+                  style: TegnalType.style(15, weight: FontWeight.w600, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                ),
+                const SizedBox(height: 4),
+                FlowLayout(
+                  spacing: 6,
+                  children: [
+                    for (final version in versions)
+                      ArtworkTagPill(
+                        color: languageColor,
+                        onTap: () => openVersion!(version.id),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (savedIDs.contains(version.id)) ...[
+                              Icon(Symbols.bookmarkFill, size: 13, color: CupertinoColors.systemYellow.resolveFrom(context)),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(version.displayName),
+                            const SizedBox(width: 4),
+                            Icon(CupertinoIcons.chevron_right, size: 11, color: languageColor.withValues(alpha: 0.6)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ],
-            ),
+            ],
           ),
+        ),
         section(
           Row(
             children: [
@@ -778,40 +808,27 @@ class _GalleryDetailMetadata extends StatelessWidget {
               ),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_groups.every((group) => group.tags.isEmpty)) const _MetadataPlaceholder(),
-              for (final (index, group) in _groups.indexed) ...[if (index > 0) const SizedBox(height: 12), _tagGroup(context, group, headline)],
-            ],
-          ),
+          _tagFlow(context, GalleryDetailMetadata.tags(gallery)),
         ),
         GalleryWorkNumber(number: gallery.id),
       ],
     );
   }
 
-  Widget _tagGroup(BuildContext context, ArtworkTagGroup group, TextStyle headline) {
-    final color = artworkTagColor(group.category, context);
-    final hidesHeading = group.category == ArtworkTagCategory.female || group.category == ArtworkTagCategory.male;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  /// Each tag keeps its own category's color, so tags gathered in one section stay apart.
+  Widget _tagFlow(BuildContext context, ArtworkTagGroup group) {
+    if (group.tags.isEmpty) return const _MetadataPlaceholder();
+    return FlowLayout(
+      spacing: 6,
       children: [
-        if (!hidesHeading) ...[Text(L10n.text(group.category.title), style: headline.copyWith(color: color)), const SizedBox(height: 4)],
-        if (group.tags.isEmpty) const _MetadataPlaceholder(),
-        FlowLayout(
-          spacing: 6,
-          children: [
-            for (final tag in group.tags)
-              ArtworkTagPill(
-                color: color,
-                starred: savedQueries.contains(tag.query.replaceAll(' ', '_')),
-                onTap: search == null ? null : () => search!(tag.query.replaceAll(' ', '_')),
-                onLongPress: () => toggleSaved(tag.query, tag.category.savedKind),
-                child: Text(tag.name),
-              ),
-          ],
-        ),
+        for (final tag in group.tags)
+          ArtworkTagPill(
+            color: artworkTagColor(tag.category, context),
+            starred: savedQueries.contains(tag.query.replaceAll(' ', '_')),
+            onTap: search == null ? null : () => search!(tag.query.replaceAll(' ', '_')),
+            onLongPress: () => toggleSaved(tag.query, tag.category.savedKind),
+            child: Text(tag.name),
+          ),
       ],
     );
   }

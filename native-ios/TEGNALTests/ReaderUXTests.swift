@@ -2,8 +2,61 @@ import XCTest
 import SwiftUI
 import Translation
 @testable import TEGNAL
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 final class ReaderUXTests: XCTestCase {
+    func testTranslationJoinsTheLinesOfOneBalloonAndKeepsNeighboursApart() {
+        // Vision's origin is at the bottom left; three close lines and one balloon beside them.
+        let lines = [
+            ReaderTextRegion(text: "We should go", bounds: CGRect(x: 0.10, y: 0.80, width: 0.20, height: 0.03)),
+            ReaderTextRegion(text: "before it rains", bounds: CGRect(x: 0.11, y: 0.765, width: 0.19, height: 0.03)),
+            ReaderTextRegion(text: "again.", bounds: CGRect(x: 0.14, y: 0.73, width: 0.10, height: 0.03)),
+            ReaderTextRegion(text: "Who are you?", bounds: CGRect(x: 0.60, y: 0.80, width: 0.20, height: 0.03)),
+        ]
+        let balloons = ReaderBalloonGrouping.balloons(lines)
+        XCTAssertEqual(balloons.count, 2)
+        let first = balloons.first { $0.text.hasPrefix("We") }
+        XCTAssertEqual(first?.text, "We should go before it rains again.")
+        XCTAssertEqual(first?.lines, 3)
+        XCTAssertEqual(balloons.first { $0.text.hasPrefix("Who") }?.lines, 1)
+    }
+
+    /// Runs the real on-device model: device validation only (`TEGNAL_LIVE_TESTS=1`).
+    func testOnDeviceModelTranslatesAPageWithItsContext() async throws {
+        guard ProcessInfo.processInfo.environment["TEGNAL_LIVE_TESTS"] == "1" else { throw XCTSkip("Device validation only") }
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *) else { throw XCTSkip("The on-device model needs iOS 26") }
+        let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+        print("TEGNAL model availability:", model.availability, "korean:", model.supportsLocale(Locale(identifier: "ko")))
+        guard model.isAvailable else { throw XCTSkip("Apple Intelligence is not available: \(model.availability)") }
+        var context = ReaderTranslationContext()
+        context.pairs = [("ユウカちゃん、遅いよ！", "유우카, 늦었잖아!")]
+        let lines = ["ごめんごめん、電車が止まっちゃって…", "もう、ユウカちゃんはいつもそうなんだから。", "明日は雨だって。傘、持ってきた？"]
+        let started = Date()
+        let translated = try await ReaderModelTranslator.translate(lines, target: "ko", context: context)
+        print("TEGNAL model translation (\(String(format: "%.1f", Date().timeIntervalSince(started))) s):", translated ?? ["nil"])
+        let result = try XCTUnwrap(translated, "Every numbered line comes back")
+        XCTAssertEqual(result.count, lines.count)
+        XCTAssertTrue(result.allSatisfy { $0.unicodeScalars.contains { (0xAC00...0xD7A3).contains($0.value) } }, "Each line is in Korean")
+        XCTAssertTrue(result.joined().contains("유우카"), "The name keeps the spelling from the earlier page")
+        #else
+        throw XCTSkip("This SDK has no on-device model")
+        #endif
+    }
+
+    func testModelRepliesNeedEveryNumberedLine() throws {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *) else { throw XCTSkip("The on-device model needs iOS 26") }
+        XCTAssertEqual(ReaderModelTranslator.parse("1. 가자\n2) 누구야?\n", count: 2), ["가자", "누구야?"])
+        XCTAssertEqual(ReaderModelTranslator.parse("Here you go:\n2. 누구야?\n1. 가자", count: 2), ["가자", "누구야?"])
+        XCTAssertNil(ReaderModelTranslator.parse("1. 가자", count: 2), "A missing line falls back to Apple Translation")
+        #else
+        throw XCTSkip("This SDK has no on-device model")
+        #endif
+    }
+
     func testReaderGuideMatchesTheModesGestureSettingsWithoutChangingReadingProgress() throws {
         let suite = "reader-guide-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }

@@ -98,7 +98,35 @@ struct TasteEvent: Codable, Hashable, Sendable {
     /// Set on feedback carried by an open event. Older peers still decode it as a
     /// non-organic open, so it never reaches their preference evidence.
     var signal: String? = nil
+    /// The app launch that recorded a save, removal or open. Older peers leave it out.
+    var launch: String? = nil
     static func ordered(_ a: Self, _ b: Self) -> Bool { a.at == b.at ? a.id < b.id : a.at < b.at }
+
+    /// Identifies this launch of the app.
+    static let currentLaunch = UUID().uuidString
+
+    /// A save taken back in the same launch was a slip: the save, its removal and that
+    /// launch's opens of the work leave no trace, so the work weighs nothing and can be
+    /// recommended again. A save kept past the launch is a real choice and stays.
+    static func withoutUndoneSaves(_ events: [Self]) -> [Self] {
+        var slips = Set<String>()
+        var saves: [String: String] = [:]
+        for event in events.sorted(by: ordered) {
+            guard let launch = event.launch else { continue }
+            let key = event.item.key
+            switch event.kind {
+            case .save: saves[key] = launch
+            case .remove:
+                if saves.removeValue(forKey: key) == launch { slips.insert(launch + "\n" + key) }
+            default: break
+            }
+        }
+        guard !slips.isEmpty else { return events }
+        return events.filter { event in
+            guard [.save, .remove, .open].contains(event.kind), event.signal == nil, let launch = event.launch else { return true }
+            return !slips.contains(launch + "\n" + event.item.key)
+        }
+    }
 }
 
 enum RecommendationSort: String, Codable, CaseIterable, Identifiable, Sendable {

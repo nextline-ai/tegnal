@@ -22,6 +22,7 @@ struct ReaderPageView: View {
     let bookmark: () -> Void
     var viewport: (CGRect, CGFloat) -> Void = { _, _ in }
     var isActive: Bool
+    @Environment(ReaderTranslationSession.self) private var translation: ReaderTranslationSession?
     @State private var loadedImage: ReaderPageImage?
     @State private var error: String?
     @State private var retry = 0
@@ -40,7 +41,8 @@ struct ReaderPageView: View {
     var body: some View {
         Group {
             if let shown = loadedImage, shown.hash == page.hash {
-                ZoomablePageView(image: shown.image, tap: tap, bookmark: bookmark, viewport: viewport, contentID: page.hash)
+                ZoomablePageView(image: shown.image, tap: tap, bookmark: bookmark, viewport: viewport, contentID: page.hash,
+                                 translation: translation?.balloons(for: page.hash) ?? [])
                     .overlay(alignment: .bottom) {
                         if let error {
                             Button { retry += 1 } label: {
@@ -85,12 +87,18 @@ struct ZoomablePageView: UIViewRepresentable {
     let bookmark: () -> Void
     var viewport: (CGRect, CGFloat) -> Void = { _, _ in }
     var contentID: String?
+    /// Translated balloons laid over the page, zooming and panning with it.
+    var translation: [ReaderTextRegion] = []
+    /// Observed so a change in the viewer settings reaches pages already open.
+    @SwiftUI.AppStorage(ReaderPreferences.doubleTapZoomKey, store: ReaderPreferences.defaults) private var doubleTapZoom = true
     func makeUIView(context: Context) -> PageScrollView { PageScrollView() }
     func updateUIView(_ view: PageScrollView, context: Context) {
         view.tap = tap
         view.bookmark = bookmark
         view.viewport = viewport
+        view.setDoubleTapZoom(doubleTapZoom)
         view.update(image: image, contentID: contentID)
+        view.setTranslation(translation)
     }
 }
 
@@ -160,16 +168,9 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
         imageView.accessibilityLabel = L10n.text("Page image")
         imageView.isAccessibilityElement = true
         addSubview(imageView)
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        let singleTap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
-        singleTap.require(toFail: doubleTap)
-        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
         longPress.minimumPressDuration = 0.55
-        singleTap.require(toFail: longPress)
-        addGestureRecognizer(singleTap)
-        addGestureRecognizer(doubleTap)
         addGestureRecognizer(longPress)
+        installTaps(doubleTapZoom: ReaderPreferences.doubleTapZooms)
         panGestureRecognizer.isEnabled = false
         imageView.accessibilityCustomActions = [
             UIAccessibilityCustomAction(name: L10n.text("Quick Menu"), target: self, selector: #selector(accessibleMenu)),
@@ -179,6 +180,67 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
         ]
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    private lazy var longPress = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
+    private var translation: [ReaderTextRegion] = []
+    private var translationLabels: [UILabel] = []
+    private var translationLayoutSize = CGSize.zero
+    /// White labels over each balloon, children of the image so they zoom and pan with it.
+    func setTranslation(_ regions: [ReaderTextRegion]) {
+        guard regions != translation else { return }
+        translation = regions
+        translationLabels.forEach { $0.removeFromSuperview() }
+        translationLabels = regions.enumerated().map { index, region in
+            let label = UILabel()
+            label.text = region.text
+            label.textColor = .black
+            label.backgroundColor = .white
+            label.numberOfLines = 0
+            label.textAlignment = .center
+            label.adjustsFontSizeToFitWidth = true
+            label.minimumScaleFactor = 0.4
+            label.layer.cornerRadius = 3
+            label.clipsToBounds = true
+            label.accessibilityIdentifier = "reader.translation.text.\(index)"
+            imageView.addSubview(label)
+            return label
+        }
+        translationLayoutSize = .zero
+        placeTranslation()
+    }
+    private func placeTranslation() {
+        let size = imageView.bounds.size
+        guard size.width > 0, size.height > 0, size != translationLayoutSize else { return }
+        translationLayoutSize = size
+        for (index, region) in translation.enumerated() where translationLabels.indices.contains(index) {
+            let box = region.bounds
+            let frame = CGRect(x: box.minX * size.width, y: (1 - box.maxY) * size.height, width: box.width * size.width, height: box.height * size.height)
+            let bounded = frame.insetBy(dx: -3, dy: -3).intersection(CGRect(origin: .zero, size: size))
+            translationLabels[index].frame = bounded
+            let basis = (region.vertical ? bounded.width * 0.6 : bounded.height * 0.78) / CGFloat(max(1, region.lines))
+            translationLabels[index].font = .systemFont(ofSize: max(8, min(22, basis)), weight: .medium)
+        }
+    }
+    private var singleTap: UITapGestureRecognizer?
+    private var doubleTap: UITapGestureRecognizer?
+    func setDoubleTapZoom(_ enabled: Bool) {
+        if enabled != (doubleTap != nil) { installTaps(doubleTapZoom: enabled) }
+    }
+    /// Without double tap zoom, quick taps on the sides only turn pages, and a tap no
+    /// longer waits to see whether a second one follows.
+    private func installTaps(doubleTapZoom: Bool) {
+        [singleTap, doubleTap].compactMap { $0 }.forEach(removeGestureRecognizer)
+        let single = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+        single.require(toFail: longPress)
+        if doubleTapZoom {
+            let double = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
+            double.numberOfTapsRequired = 2
+            single.require(toFail: double)
+            addGestureRecognizer(double)
+            doubleTap = double
+        } else { doubleTap = nil }
+        addGestureRecognizer(single)
+        singleTap = single
+    }
     @objc private func accessibleMenu() -> Bool { reportViewport(); tap(0.5); return true }
     @objc private func accessibleBookmark() -> Bool { bookmark(); return true }
     @objc private func accessibleNext() -> Bool { tap(0.9); return true }
@@ -210,6 +272,7 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
             setContentOffset(CGPoint(x: -contentInset.left, y: -contentInset.top), animated: false)
             DispatchQueue.main.async { [weak self] in self?.reportViewport() }
         }
+        placeTranslation()
         geometryChanged()
     }
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }

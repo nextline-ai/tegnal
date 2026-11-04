@@ -40,15 +40,19 @@ class BooruServer {
 
   String get canonicalAddress => BooruServer.canonicalAddressOf(baseURL);
 
-  /// Stable across devices: the same site entered with or without `https`, a
+  /// A host without its leading `www.`: every site is the same site with or without it.
+  static String bareHost(String host) {
+    final lowered = host.toLowerCase();
+    return lowered.startsWith('www.') ? lowered.substring(4) : lowered;
+  }
+
+  /// Stable across devices: the same site entered with or without `https`, `www.`, a
   /// default port, a query or `index.php` is one server.
-  // The native app also folds `www.` for three specific hosts. That list names
-  // sites, so it waits for a decision before being ported.
   static String canonicalAddressOf(String url) {
     final parts = SwiftURLComponents.parse(url);
     if (parts == null) return url;
     parts.scheme = 'https';
-    parts.host = parts.host?.toLowerCase() ?? '';
+    parts.host = bareHost(parts.host ?? '');
     if (parts.port == 443) parts.port = null;
     parts.query = null;
     parts.fragment = null;

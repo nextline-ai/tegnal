@@ -170,7 +170,7 @@ struct SettingsResetButton: View {
 }
 
 enum ReaderPreferenceReset {
-    static let keys = ["reader.resumeBehavior", "reader.pagesPerSpread", "reader.autoAdvance", "reader.autoSeconds", "reader.mode", "reader.rtl", "reader.bottomMenu", "reader.pageNumber", "reader.keepAwake", "reader.prefetch", "reader.dimming", "reader.tapNavigation", "reader.continuousPreviewSwipe", "reader.continuousWorkSwipe", "reader.continuousBackSwipe", "reader.helpHidden", "reader.translationLanguage"]
+    static let keys = ["reader.resumeBehavior", "reader.pagesPerSpread", "reader.autoAdvance", "reader.autoSeconds", "reader.mode", "reader.rtl", "reader.bottomMenu", "reader.pageNumber", "reader.keepAwake", "reader.prefetch", "reader.dimming", "reader.tapNavigation", "reader.doubleTapZoom", "reader.continuousTranslation", "reader.continuousPreviewSwipe", "reader.continuousWorkSwipe", "reader.continuousBackSwipe", "reader.helpHidden", "reader.translationLanguage"]
     static func reset(booru: Bool, defaults: UserDefaults? = nil) {
         let store = defaults ?? (booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults)
         for key in keys + (booru ? ["booru.original", "booru.reducedData", "booru.showNotes"] : []) { store.removeObject(forKey: key) }

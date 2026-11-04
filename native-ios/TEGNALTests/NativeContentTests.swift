@@ -441,14 +441,18 @@ final class NativeContentLiveTests: XCTestCase {
         XCTAssertEqual(result.ids.count, 2)
     }
 
-    func testLiveHitomiCatalogConnection() async throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["TEGNAL_LIVE_TESTS"] == "1")
+    /// The address comes from `TEGNAL_LIVE_COMICS_SITE`, so no site is named in the code.
+    func testLiveIndexedCatalogConnection() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["TEGNAL_LIVE_TESTS"] == "1", let site = environment["TEGNAL_LIVE_COMICS_SITE"], !site.isEmpty else {
+            throw XCTSkip("Opt-in network test; set TEGNAL_LIVE_COMICS_SITE")
+        }
         let keys = ["manga.site_address", "manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site",
                     "manga.resolved_protocol", "manga.resolved_media_hosts", "manga.resolved_preview_base"]
         let defaults = MangaUrls.preferences
         let previous = keys.map { ($0, defaults.object(forKey: $0)) }
         defer { for (key, value) in previous { defaults.set(value, forKey: key) } }
-        defaults.set("hitomi.la", forKey: "manga.site_address")
+        defaults.set(site, forKey: "manga.site_address")
         MangaUrls.resetResolvedBackend()
         let source = MangaContentSource(transport: ContentTransport())
         let batch = try await source.list(GalleryQuery(), offset: 0, count: 1)

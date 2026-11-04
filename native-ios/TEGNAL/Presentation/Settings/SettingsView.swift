@@ -14,9 +14,17 @@ public struct SettingsView: View {
         List {
             if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
             Section {
-                Button { showConnection = true } label: {
-                    Label(L10n.text("Website Connection"), systemImage: "globe")
-                }.accessibilityIdentifier("settings.connection")
+                if env.comicSites.isEmpty {
+                    Button { showConnection = true } label: {
+                        Label(L10n.text("Website Connection"), systemImage: "globe")
+                    }.accessibilityIdentifier("settings.connection")
+                } else {
+                    NavigationLink { ComicSitesView() } label: {
+                        LabeledContent { Text(env.mangaSiteAddress).lineLimit(1) } label: {
+                            Label(L10n.text("Website Connection"), systemImage: "globe")
+                        }
+                    }.accessibilityIdentifier("settings.connection")
+                }
                 Toggle(isOn: $env.useEmbeddedBrowser) {
                     SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.")
                 }
@@ -68,6 +76,37 @@ struct ComicsSetupView: View {
         WebsiteSetupView(connectionIdentifier: "comics.enterAddress", mangaImportIdentifier: "comics.importMangaViewer")
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .accessibilityIdentifier("comics.setup")
+    }
+}
+
+/// The connected comics websites: tap one to use it, swipe to remove it, or add another.
+struct ComicSitesView: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var adding = false
+    var body: some View {
+        List {
+            Section {
+                ForEach(env.comicSites, id: \.self) { site in
+                    Button { env.switchComicsSite(to: site) } label: {
+                        HStack {
+                            Text(site).foregroundStyle(.primary)
+                            Spacer()
+                            if site == env.mangaSiteAddress { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }
+                    .swipeActions { Button(L10n.text("Delete"), role: .destructive) { env.removeComicsSite(site) } }
+                    .accessibilityIdentifier("settings.site.\(site)")
+                }
+            } footer: {
+                Text(L10n.text("Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too."))
+            }
+            Section {
+                Button { adding = true } label: { Label(L10n.text("Add Website"), systemImage: "plus") }
+                    .accessibilityIdentifier("settings.addSite")
+            }
+        }
+        .navigationTitle(L10n.text("Website Connection")).navigationBarTitleDisplayMode(.inline)
+        .appSheet(isPresented: $adding) { WebsiteConnectionEditor(server: nil) }
     }
 }
 
@@ -174,7 +213,7 @@ struct MangaLibraryToolsView: View {
                         Button(L10n.text("Refresh Information")) { env.refreshSavedWorkInformation() }
                         Button(L10n.text("Cancel"), role: .cancel) {}
                     } message: {
-                        Text(L10n.text("Titles and tags are replaced with what the current site shows. Notes, folders, and covers stay as they are, and works the site shows as a different work are left unchanged."))
+                        Text(L10n.text("Titles and tags are replaced with what the current site shows. If the app closes or some works can’t be fetched, it picks up with the remaining works later. Notes, folders, and covers stay as they are, and works the site shows as a different work are left unchanged."))
                     }
                 }
             }

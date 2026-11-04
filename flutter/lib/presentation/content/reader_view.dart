@@ -23,8 +23,12 @@ import 'image_translation.dart';
 import 'page_image_store.dart';
 import 'reader_guide_overlay.dart';
 import 'reader_models.dart';
+import 'viewer_dismiss.dart';
 import 'reader_pager.dart';
+import 'reader_translation.dart';
 import '../design/alert_dialog.dart';
+import '../../core/taste/taste_models.dart';
+import 'content_bookmark.dart';
 
 /// Opens the reader full screen over everything, as `fullScreenCover` does.
 Future<void> openReader(
@@ -42,11 +46,8 @@ Future<void> openReader(
   ValueChanged<String>? search,
   void Function(BuildContext context, NativeGallery gallery)? download,
 }) => Navigator.of(context, rootNavigator: true).push<void>(
-  PageRouteBuilder<void>(
-    opaque: true,
-    transitionDuration: const Duration(milliseconds: 380),
-    reverseTransitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (context, animation, secondary) => NativeReaderView(
+  ViewerRoute<void>(
+    builder: (context) => NativeReaderView(
       galleryID: galleryID,
       initialPage: initialPage,
       source: source,
@@ -59,10 +60,6 @@ Future<void> openReader(
       bookmark: bookmark,
       search: search,
       download: download,
-    ),
-    transitionsBuilder: (context, animation, secondary, child) => SlideTransition(
-      position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-      child: child,
     ),
   ),
 );
@@ -106,7 +103,7 @@ class NativeReaderView extends StatefulWidget {
   State<NativeReaderView> createState() => _NativeReaderViewState();
 }
 
-class _NativeReaderViewState extends State<NativeReaderView> {
+class _NativeReaderViewState extends State<NativeReaderView> with TickerProviderStateMixin {
   NativeGallery? _gallery;
   late ReaderOpening _opening;
   bool _resumeReady = false;
@@ -118,10 +115,17 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   String? _toast;
   Timer? _toastTimer;
 
-  /// The page being translated, shown over the reader until Original closes it.
+  /// The page being translated on its own, shown over the reader until Original closes it.
   int? _translating;
+
+  /// Translation mode, kept while pages turn.
+  late final _translation = ReaderTranslationSession(widget.preferences)..addListener(_translationChanged);
+
+  /// The translation pill shows for a moment after something changes, then fades away.
+  Timer? _pillTimer;
+  bool _pillShown = false;
   Timer? _autoTimer;
-  double _drag = 0;
+  late final _dismiss = ViewerDismiss(vsync: this);
   bool _exiting = false;
   final _guide = ReaderGuideSession();
   bool _pendingGuide = false;
@@ -193,6 +197,11 @@ class _NativeReaderViewState extends State<NativeReaderView> {
     _lifecycle.dispose();
     _prefetcher.cancel();
     _autoTimer?.cancel();
+    _pillTimer?.cancel();
+    _translation
+      ..removeListener(_translationChanged)
+      ..dispose();
+    _dismiss.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     ReaderScreen.keepAwake(false);
     super.dispose();
@@ -275,6 +284,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
     });
     _saveProgress();
     _scheduleAuto();
+    _followTranslation();
   }
 
   void _move(int delta) {
@@ -315,6 +325,8 @@ class _NativeReaderViewState extends State<NativeReaderView> {
     final gallery = _gallery;
     if (gallery == null) return;
     await widget.bookmark(gallery);
+    // The quick menu shows whether the work is now bookmarked.
+    if (mounted) setState(() {});
   }
 
   void _advanceGuide() {
@@ -444,148 +456,234 @@ class _NativeReaderViewState extends State<NativeReaderView> {
     final media = MediaQuery.of(context);
     return CupertinoTheme(
       data: tegnalTheme(Brightness.dark),
-      child: ColoredBox(
-        color: const Color(0xFF000000),
-        child: Transform.translate(
-          offset: Offset(0, _drag),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: gallery != null && (!_opening.needsConfirmation || _resumeReady)
-                    ? _reader(gallery)
-                    : _error != null
-                    ? Center(
-                        child: ContentFailure(message: _error!, retry: _load),
-                      )
-                    : Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CupertinoActivityIndicator(color: Color(0xFFFFFFFF)),
-                            const SizedBox(height: 8),
-                            Text(L10n.text('Loading page'), style: TegnalType.style(15, color: const Color(0xFFFFFFFF))),
-                          ],
-                        ),
-                      ),
-              ),
-              if (_dimming > 0)
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.translucent,
+        gestures: _swipes(gallery, media),
+        child: ViewerDismissSurface(
+          dismiss: _dismiss,
+          child: ColoredBox(
+            color: const Color(0xFF000000),
+            child: Stack(
+              children: [
                 Positioned.fill(
-                  child: IgnorePointer(child: ColoredBox(color: Color.fromRGBO(0, 0, 0, _dimming.clamp(0, 0.65)))),
+                  child: gallery != null && (!_opening.needsConfirmation || _resumeReady)
+                      ? ReaderTranslationScope(session: _translation, child: _reader(gallery))
+                      : _error != null
+                      ? Center(
+                          child: ContentFailure(message: _error!, retry: _load, content: widget.content),
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CupertinoActivityIndicator(color: Color(0xFFFFFFFF)),
+                              const SizedBox(height: 8),
+                              Text(L10n.text('Loading page'), style: TegnalType.style(15, color: const Color(0xFFFFFFFF))),
+                            ],
+                          ),
+                        ),
                 ),
-              // `ReaderDismissHandle`, and a downward drag from the top edge that closes the reader.
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                height: math.max(44, media.padding.top + 24),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragUpdate: _zoomed ? null : (details) => setState(() => _drag = math.max(0, _drag + details.delta.dy)),
-                  onVerticalDragEnd: _zoomed
-                      ? null
-                      : (details) {
-                          if (_drag > 120 || (details.primaryVelocity ?? 0) > 900) {
-                            _close();
-                          } else {
-                            setState(() => _drag = 0);
-                          }
-                        },
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Semantics(
-                        button: true,
-                        label: L10n.text('Swipe down to exit the work'),
-                        onTap: _close,
-                        child: Container(
-                          width: 60,
-                          height: 4,
-                          decoration: const ShapeDecoration(color: Color(0xFF636366), shape: StadiumBorder()),
+                if (_dimming > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(child: ColoredBox(color: Color.fromRGBO(0, 0, 0, _dimming.clamp(0, 0.65)))),
+                  ),
+                // `ReaderDismissHandle`; the pull itself belongs to the whole reader.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: math.max(44, media.padding.top + 24),
+                  child: IgnorePointer(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Semantics(
+                          button: true,
+                          label: L10n.text('Swipe down to exit the work'),
+                          onTap: _close,
+                          child: Container(
+                            width: 60,
+                            height: 4,
+                            decoration: const ShapeDecoration(color: Color(0xFF636366), shape: StadiumBorder()),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 16,
-                right: 16,
-                // The native menu sits above the home indicator; immersive Android has no inset there,
-                // so keep the same clearance from the gesture area.
-                bottom: 16 + math.max(media.padding.bottom, 34),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_menuVisible || gallery == null)
-                      _quickMenu(gallery)
-                    else if (_pageNumber)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
-                        child: Text('${_current + 1} / ${gallery.pages.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
-                      ),
-                    if (_bottomMenu && !_menuVisible && gallery != null) ...[
-                      const SizedBox(height: 8),
-                      ReaderMenuGlass(
-                        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: _menuActions(compact: true)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (_guide.step case final step? when !_sheetOpen)
-                Positioned.fill(
-                  child: ReaderGuideOverlay(
-                    step: step,
-                    configuration: ReaderGuideConfiguration(booru: false, defaults: _defaults),
-                    menuKey: _menuKey,
-                    next: _advanceGuide,
-                    finish: _finishGuide,
-                  ),
-                ),
-              if (_translating case final index? when gallery != null && index < gallery.pages.length)
-                Positioned.fill(
-                  child: ImageTranslationView(
-                    key: ValueKey(index),
-                    loadImage: () => widget.images.data(gallery.pages[index], galleryID: widget.galleryID),
-                    preferences: _defaults,
-                    finished: () => setState(() => _translating = null),
-                    failed: (message) {
-                      setState(() => _translating = null);
-                      _showToast(message);
-                    },
-                  ),
-                ),
-              if (_toast != null)
                 Positioned(
-                  top: media.padding.top + 16,
                   left: 16,
                   right: 16,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: const ShapeDecoration(color: Color(0xE6303030), shape: StadiumBorder()),
-                      child: Text(
-                        _toast!,
-                        style: TegnalType.style(15, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                  // The native menu sits above the home indicator; immersive Android has no inset there,
+                  // so keep the same clearance from the gesture area.
+                  bottom: 16 + math.max(media.padding.bottom, 34),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_menuVisible || gallery == null)
+                        _quickMenu(gallery)
+                      else if (_pageNumber)
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
+                          child: Text('${_current + 1} / ${gallery.pages.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
+                        ),
+                      if (_bottomMenu && !_menuVisible && gallery != null) ...[
+                        const SizedBox(height: 8),
+                        ReaderMenuGlass(
+                          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: _menuActions(compact: true)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (_guide.step case final step? when !_sheetOpen)
+                  Positioned.fill(
+                    child: ReaderGuideOverlay(
+                      step: step,
+                      configuration: ReaderGuideConfiguration(booru: false, defaults: _defaults),
+                      menuKey: _menuKey,
+                      next: _advanceGuide,
+                      finish: _finishGuide,
+                    ),
+                  ),
+                if (_translating case final index? when gallery != null && index < gallery.pages.length)
+                  Positioned.fill(
+                    child: ImageTranslationView(
+                      key: ValueKey(index),
+                      loadImage: () => widget.images.data(gallery.pages[index], galleryID: widget.galleryID),
+                      preferences: _defaults,
+                      finished: () => setState(() => _translating = null),
+                      failed: (message) {
+                        setState(() => _translating = null);
+                        _showToast(message);
+                      },
+                    ),
+                  ),
+                if (_translation.isOn && gallery != null && _current < gallery.pages.length)
+                  Positioned(
+                    top: media.padding.top + 8,
+                    right: 16,
+                    child: Builder(
+                      builder: (context) {
+                        final working = _translation.isWorking(gallery.pages[_current].hash);
+                        final visible = _menuVisible || working || _pillShown;
+                        return IgnorePointer(
+                          ignoring: !visible,
+                          child: AnimatedOpacity(
+                            opacity: visible ? 1 : 0,
+                            duration: const Duration(milliseconds: 250),
+                            child: ReaderTranslationToggle(
+                              showsOriginal: _translation.showsOriginal,
+                              working: working,
+                              onPressed: () {
+                                _translation.toggleOriginal();
+                                _showPill();
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                if (_toast != null)
+                  Positioned(
+                    top: media.padding.top + 16,
+                    left: 16,
+                    right: 16,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: const ShapeDecoration(color: Color(0xE6303030), shape: StadiumBorder()),
+                        child: Text(
+                          _toast!,
+                          style: TegnalType.style(15, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  /// `ReaderExitGesture` and `ReaderInformationGesture`: pulling down closes the reader from
+  /// anywhere when pages turn sideways, or from the top 64 points when they scroll vertically;
+  /// swiping up from the bottom quarter opens work information.
+  Map<Type, GestureRecognizerFactory> _swipes(NativeGallery? gallery, MediaQueryData media) {
+    final bounds = Offset.zero & media.size;
+    final mode = _mode;
+    return {
+      ViewerPullDownRecognizer: GestureRecognizerFactoryWithHandlers<ViewerPullDownRecognizer>(
+        () => ViewerPullDownRecognizer(accepts: (point) => false),
+        (recognizer) => recognizer
+          ..accepts = ((point) =>
+              _active && !_zoomed && (mode == ReaderMode.horizontal.rawValue || ReaderDismissal.isInExitZone(point, bounds, safeTop: media.padding.top)))
+          ..onStart = (() => _dismiss.begin(context))
+          ..onUpdate = ((delta) => _dismiss.update(delta.dy))
+          ..onEnd = ((delta, velocity) => _dismiss.end(delta: delta, velocity: velocity, screenHeight: media.size.height, exit: _close))
+          ..onCancel = _dismiss.cancel,
+      ),
+      ViewerSwipeUpRecognizer: GestureRecognizerFactoryWithHandlers<ViewerSwipeUpRecognizer>(
+        () => ViewerSwipeUpRecognizer(accepts: (point) => false),
+        (recognizer) => recognizer
+          ..accepts = ((point) =>
+              gallery != null &&
+              _active &&
+              !_zoomed &&
+              !_menuVisible &&
+              ReaderInformationReveal.isEnabled(mode: mode, continuousOptIn: _defaults.boolean(ReaderSettingKeys.continuousPreviewSwipe) ?? false) &&
+              ReaderInformationReveal.isInZone(point, bounds))
+          ..onEnd = ((delta, velocity) {
+            if (ReaderInformationReveal.shouldReveal(delta: delta, velocity: velocity)) _openInformation();
+          }),
+      ),
+    };
+  }
+
+  /// Turns translation mode on or off from the quick menu.
   void _translate() {
-    setState(() {
-      _translating = _current;
-      _menuVisible = false;
-    });
+    if (!ReaderPreferences.continuousTranslation && !_translation.isOn) {
+      setState(() {
+        _translating = _current;
+        _menuVisible = false;
+      });
+      _scheduleAuto();
+      return;
+    }
+    setState(() => _menuVisible = false);
+    _translation.toggle();
+    _followTranslation();
     _scheduleAuto();
+  }
+
+  void _followTranslation() {
+    final gallery = _gallery;
+    if (!_translation.isOn || gallery == null) return;
+    _translation.follow(gallery, index: _current, count: _count, images: widget.images);
+    _showPill();
+  }
+
+  void _showPill() {
+    _pillTimer?.cancel();
+    if (mounted) setState(() => _pillShown = true);
+    _pillTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted) setState(() => _pillShown = false);
+    });
+  }
+
+  void _translationChanged() {
+    if (!mounted) return;
+    final message = _translation.message;
+    if (message != null) {
+      _translation.message = null;
+      _showToast(message);
+    }
+    setState(() {});
   }
 
   void _showToast(String message) {
@@ -685,7 +783,11 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   }
 
   Widget _menuActions({required bool compact}) {
-    final hasGallery = _gallery != null;
+    final gallery = _gallery;
+    final hasGallery = gallery != null;
+    // Read each time the menu draws, so a change from the details sheet shows too.
+    final saved = gallery != null && widget.database.getWork(gallery.id) != null;
+    final savedColor = SystemColors.yellow.resolveFrom(context);
     final items = <(String, Widget Function(Color), VoidCallback?)>[
       // Translation arrives with its own rebuild step.
       (
@@ -693,9 +795,17 @@ class _NativeReaderViewState extends State<NativeReaderView> {
         (color) => Icon(CupertinoIcons.arrow_down_circle, size: 24, color: color),
         hasGallery && widget.download != null ? () => widget.download!(context, _gallery!) : null,
       ),
-      (L10n.text('Bookmark'), (color) => Icon(CupertinoIcons.bookmark, size: 24, color: color), hasGallery ? _bookmark : null),
+      (
+        WorkSaveResult.actionTitle(saved: saved, mode: TasteMode.comics),
+        (color) => saved ? Icon(CupertinoIcons.bookmark_fill, size: 24, color: savedColor) : Icon(CupertinoIcons.bookmark, size: 24, color: color),
+        hasGallery ? _bookmark : null,
+      ),
       (L10n.text('Exit'), (color) => ExitSymbol(color: color), _close),
-      (L10n.text('Translate'), (color) => TranslateSymbol(color: color), hasGallery ? _translate : null),
+      (
+        L10n.text(_translation.isOn ? 'Stop Translating' : 'Translate'),
+        (color) => TranslateSymbol(color: _translation.isOn ? TegnalColors.tint.resolveFrom(context) : color),
+        hasGallery ? _translate : null,
+      ),
       (L10n.text('Work Details'), (color) => Icon(CupertinoIcons.info_circle, size: 24, color: color), hasGallery ? _openInformation : null),
       (L10n.text('More Settings'), (color) => Icon(CupertinoIcons.slider_horizontal_3, size: 24, color: color), _openSettings),
     ];
@@ -892,6 +1002,14 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
                 value: _bool('reader.tapNavigation', true),
                 onChanged: (value) => _set('reader.tapNavigation', value),
               ),
+              _ToggleRow(
+                title: L10n.text('Double Tap to Zoom'),
+                help: widget.booru
+                    ? 'Turn off so quick taps on the sides never zoom in. Images then change without waiting for a second tap. Pinch still zooms.'
+                    : 'Turn off so quick taps on the sides never zoom in. Pages then turn without waiting for a second tap. Pinch still zooms.',
+                value: _bool(ReaderPreferences.doubleTapZoomKey, true),
+                onChanged: (value) => _set(ReaderPreferences.doubleTapZoomKey, value),
+              ),
             ],
           ),
           const SizedBox(height: 26),
@@ -916,6 +1034,21 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
                   help: 'Uses smaller compressed images when available. Load Original Images takes priority over this setting.',
                   value: _bool('booru.reducedData', false),
                   onChanged: _bool('booru.original', false) ? null : (value) => _set('booru.reducedData', value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 26),
+          ],
+          if (!widget.booru) ...[
+            FormSection(
+              prominentHeader: true,
+              header: Text(L10n.text('Translation')),
+              children: [
+                _ToggleRow(
+                  title: L10n.text('AI Translation (Beta)'),
+                  help: 'Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.',
+                  value: _bool(ReaderPreferences.continuousTranslationKey, false),
+                  onChanged: (value) => _set(ReaderPreferences.continuousTranslationKey, value),
                 ),
               ],
             ),

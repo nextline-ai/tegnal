@@ -134,6 +134,14 @@ ANDROID = {
         "ko": "Google 계정을 연결할 수 없습니다: %@",
         "ja": "Google アカウントを接続できません: %@",
     },
+    # Violet's Android bookmark backup, which the native app does not import.
+    "Import from Violet": {"en": "Import from Violet", "ko": "Violet에서 데이터 가져오기", "ja": "Violetから読み込む"},
+    "Bookmarks, folders and artists": {"en": "Bookmarks, folders and artists", "ko": "북마크, 폴더, 작가", "ja": "ブックマーク、フォルダ、作家"},
+    "Export your bookmarks in Violet, then choose the saved file.": {"en": "Export your bookmarks in Violet, then choose the saved file.", "ko": "Violet에서 북마크를 내보낸 뒤 저장된 파일을 선택하세요.", "ja": "Violetでブックマークをエクスポートしてから、保存されたファイルを選択してください。"},
+    "This file is not a Violet bookmark backup.": {"en": "This file is not a Violet bookmark backup.", "ko": "Violet 북마크 백업 파일이 아닙니다.", "ja": "Violetのブックマークバックアップではありません。"},
+    "Importing bookmarks from Violet…": {"en": "Importing bookmarks from Violet…", "ko": "Violet 북마크를 가져오는 중…", "ja": "Violetのブックマークを読み込み中…"},
+    "Violet data imported!\n%@ folders, %@ works, %@ artists": {"en": "Violet data imported!\n%@ folders, %@ works, %@ artists", "ko": "Violet 데이터를 가져왔습니다!\n폴더 %@개, 작품 %@개, 작가 %@명", "ja": "Violetのデータを読み込みました！\nフォルダ %@件、作品 %@件、作家 %@人"},
+    "Titles, tags and covers are filled in from the connected website in the background.": {"en": "Titles, tags and covers are filled in from the connected website in the background.", "ko": "제목, 태그, 커버는 연결된 웹사이트에서 백그라운드로 채워집니다.", "ja": "タイトル、タグ、表紙は接続中のウェブサイトからバックグラウンドで補完されます。"},
 }
 
 

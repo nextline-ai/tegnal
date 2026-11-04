@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/gestures.dart' show VelocityTracker;
 import 'package:video_player/video_player.dart';
 
 import '../../core/booru/booru_client.dart';
@@ -12,6 +13,7 @@ import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_support.dart';
 import '../../core/support/l10n.dart';
 import '../design/tegnal_theme.dart';
+import '../content/reader_models.dart';
 import 'booru_common.dart';
 
 /// What the media reports to the viewer, as the native document's messages do.
@@ -82,7 +84,9 @@ class BooruMediaView extends StatefulWidget {
 
   /// The downward drag at original zoom that closes the viewer: its distance, then null with
   /// whether it should close.
-  final void Function(double offset, {bool? end, double velocity}) onExitDrag;
+  /// A pull down: each move with [end] null, then `end: true` when the finger lifts (with its
+  /// sideways distance and speed in points per second) or `end: false` when it is cancelled.
+  final void Function(double offset, {bool? end, double velocity, double sideways}) onExitDrag;
   final VoidCallback onGoldRequired;
   final VoidCallback onRemoved;
 
@@ -118,6 +122,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   DateTime? _lastTap;
   bool _held = false;
   bool _exitDragging = false;
+  VelocityTracker? _velocity;
   bool _lastZoomed = false;
 
   double get _zoom => _transform.value.getMaxScaleOnAxis();
@@ -303,6 +308,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
       return;
     }
     _start = _GestureStart(event.localPosition, _zoom, video: video);
+    _velocity = VelocityTracker.withKind(event.kind)..addPosition(event.timeStamp, event.localPosition);
     _holdTimer = Timer(const Duration(milliseconds: 550), () {
       if (_start == null) return;
       _tapTimer?.cancel();
@@ -321,6 +327,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
       return;
     }
     final delta = event.localPosition - start.position;
+    _velocity?.addPosition(event.timeStamp, event.localPosition);
     if (delta.distance > 10) _cancelHold();
     // A downward drag at original zoom carries the viewer with it until it closes.
     if (start.zoom <= 1.01 && _zoom <= 1.01 && (_exitDragging || (delta.dy > 12 && delta.dy > delta.dx.abs() * 1.3))) {
@@ -347,7 +354,8 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
     final atOriginal = start.zoom <= 1.01 && _zoom <= 1.01;
     if (_exitDragging) {
       _exitDragging = false;
-      widget.onExitDrag(math.max(0, delta.dy), end: delta.dy > 120 || delta.dy / elapsed > 0.9, velocity: delta.dy / elapsed);
+      _velocity?.addPosition(event.timeStamp, event.localPosition);
+      widget.onExitDrag(delta.dy, end: true, velocity: _velocity?.getVelocity().pixelsPerSecond.dy ?? delta.dy / elapsed * 1000, sideways: delta.dx);
       return;
     }
     if (atOriginal && delta.dx.abs() > 50 && delta.dx.abs() > delta.dy.abs() * 1.3) {
@@ -365,6 +373,12 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
     if (start.video) {
       setState(() => _videoControls = !_videoControls);
       _scheduleControlsHide();
+      return;
+    }
+    // Without double tap zoom a tap acts at once instead of waiting for a second one.
+    if (!(ReaderPreferences.booruDefaults.boolean(ReaderPreferences.doubleTapZoomKey) ?? true)) {
+      _tapTimer?.cancel();
+      widget.onGesture(BooruTap(atOriginal && size.width > 0 ? event.localPosition.dx / size.width : 0.5));
       return;
     }
     final now = DateTime.now();

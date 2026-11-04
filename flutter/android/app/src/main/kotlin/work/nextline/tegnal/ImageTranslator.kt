@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.google.android.gms.common.api.OptionalModuleApi
@@ -12,6 +13,8 @@ import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.MlKitException
 import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.genai.common.FeatureStatus
+import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
@@ -27,6 +30,8 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.concurrent.Executors
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The native app's image translation on Android: ML Kit reads the text on the device, names its
@@ -55,11 +60,14 @@ object ImageTranslator {
                 "translate" -> {
                     val path = call.argument<String>("path")
                     val target = call.argument<String>("target")
+                    // Lines of the pages before, original and translated, so a page reads on from the last.
+                    val context = call.argument<List<Map<String, String>>>("context").orEmpty()
+                        .mapNotNull { pair -> pair["source"]?.let { source -> pair["translation"]?.let { source to it } } }
                     if (path == null || target == null) {
                         result.error("invalid", "An image and a target language are required.", null)
                     } else {
                         executor.execute {
-                            val outcome = runCatching { translate(File(path), target) }
+                            val outcome = runCatching { translate(File(path), target, context) }
                             main.post {
                                 outcome.fold(
                                     onSuccess = { result.success(it) },
@@ -79,10 +87,66 @@ object ImageTranslator {
 
     private class TranslationFailure(val code: String, message: String) : Exception(message)
 
+    /**
+     * Gemini Nano through Android AICore translates a whole page at once, so speakers keep their
+     * voice and a sentence split across balloons reads as one. It runs on the device and is used
+     * only where the model is already installed; elsewhere ML Kit Translate takes over.
+     */
+    private object PageModel {
+        fun translate(lines: List<String>, target: String, context: List<Pair<String, String>>): List<String>? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || lines.isEmpty()) return null
+            val language = java.util.Locale.forLanguageTag(target).getDisplayLanguage(java.util.Locale.ENGLISH)
+            val prompt = buildString {
+                append("You translate the speech balloons of one comic page into natural, conversational $language. ")
+                append("Keep each speaker's tone, keep names consistent with the earlier lines, and keep sound effects short. ")
+                append("Reply with exactly one line per numbered line, in the form \"number. translation\", and nothing else.\n\n")
+                if (context.isNotEmpty()) {
+                    append("Earlier lines, already translated:\n")
+                    context.takeLast(12).forEach { (source, translation) -> append("$source → $translation\n") }
+                    append("\n")
+                }
+                append("Lines on this page:\n")
+                lines.forEachIndexed { index, line -> append("${index + 1}. ${line.replace('\n', ' ')}\n") }
+            }
+            return try {
+                runBlocking {
+                    withTimeoutOrNull(30_000) {
+                        val model = Generation.getClient()
+                        try {
+                            if (model.checkStatus() != FeatureStatus.AVAILABLE) {
+                                null
+                            } else {
+                                parse(model.generateContent(prompt).candidates.firstOrNull()?.text.orEmpty(), lines.size)
+                            }
+                        } finally {
+                            model.close()
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                null
+            }
+        }
+
+        /** One translation for every numbered line, or nothing when the reply misses some. */
+        fun parse(reply: String, count: Int): List<String>? {
+            val found = HashMap<Int, String>()
+            for (raw in reply.lines()) {
+                val line = raw.trim()
+                val mark = line.indexOfFirst { it == '.' || it == ')' }
+                if (mark <= 0) continue
+                val number = line.substring(0, mark).toIntOrNull() ?: continue
+                val text = line.substring(mark + 1).trim()
+                if (number in 1..count && text.isNotEmpty()) found.putIfAbsent(number, text)
+            }
+            return if (found.size == count) (1..count).map { found.getValue(it) } else null
+        }
+    }
+
     /** One text block with the language it is written in, and its words when it is one line. */
     private class Block(val box: Rect, val text: String, val language: String, val lines: Int, val words: List<Pair<Rect, String>> = emptyList())
 
-    private fun translate(file: File, target: String): Map<String, Any?> {
+    private fun translate(file: File, target: String, context: List<Pair<String, String>>): Map<String, Any?> {
         val bitmap = decode(file) ?: throw TranslationFailure("unsupported", "The image could not be read.")
         try {
             val targetLanguage = TranslateLanguage.fromLanguageTag(target)
@@ -93,7 +157,10 @@ object ImageTranslator {
             val foreign = blocks.filter { it.language != targetLanguage }
             if (foreign.isEmpty()) throw TranslationFailure("alreadyTarget", "This image is already in the translation language.")
             val translated = HashMap<Block, String>()
-            for ((source, group) in foreign.groupBy { it.language }) {
+            PageModel.translate(foreign.map { it.text }, target, context)?.let { lines ->
+                foreign.zip(lines).forEach { (block, line) -> translated[block] = line }
+            }
+            for ((source, group) in foreign.filter { it !in translated }.groupBy { it.language }) {
                 val translator = Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(targetLanguage).build())
                 try {
                     try {
@@ -112,6 +179,7 @@ object ImageTranslator {
                 "regions" to foreign.map { block ->
                     mapOf(
                         "text" to translated[block],
+                        "source" to block.text,
                         "left" to block.box.left / width,
                         "top" to block.box.top / height,
                         "width" to block.box.width() / width,

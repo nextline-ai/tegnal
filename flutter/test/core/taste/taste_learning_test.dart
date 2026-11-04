@@ -103,6 +103,41 @@ class _PairSource implements BooruProviding {
 }
 
 void main() {
+  test('a save taken back in the same launch weighs nothing and can be recommended again', () {
+    final opened = _event(TasteEventKind.open, 7, tags: ['rain'], days: 2)..launch = 'one';
+    final saved = _event(TasteEventKind.save, 7, tags: ['rain'], days: 2)..launch = 'one';
+    final removed = _event(TasteEventKind.remove, 7, tags: ['rain'], days: 1.9)..launch = 'one';
+    final slip = _learning([opened, saved, removed]);
+    expect(_weight(slip, 'rain'), 0);
+    expect(slip.seen, isNot(contains(saved.item.key)), reason: 'The work stays eligible for recommendations');
+
+    final kept = _event(TasteEventKind.save, 8, tags: ['sun'], days: 3)..launch = 'one';
+    final later = _event(TasteEventKind.remove, 8, tags: ['sun'], days: 1)..launch = 'two';
+    final viewed = _event(TasteEventKind.open, 8, tags: ['sun'], days: 3)..launch = 'one';
+    final decided = _learning([viewed, kept, later]);
+    expect(decided.seen, contains(kept.item.key), reason: 'A save kept past its launch was a real choice');
+
+    final dismissed = _event(TasteEventKind.open, 7, tags: ['rain'], days: 1.8, signal: TasteSignal.dismissed)..launch = 'one';
+    expect(_learning([opened, saved, removed, dismissed]).dismissed, contains(saved.item.key), reason: 'Feedback is never erased');
+  });
+
+  test("today's picks stay all day, change the next day and favor newer works", () {
+    final items = [for (var id = 1; id <= 12; id++) _candidate(id, ['tag$id'], score: 1 - id / 20)];
+    final first = TodayPicks.choose(items, stored: null, today: '2026-11-05');
+    expect(first.picks, hasLength(3));
+    final again = TodayPicks.choose(items, stored: first.stored, today: '2026-11-05');
+    expect(again.picks.map((item) => item.id), first.picks.map((item) => item.id), reason: 'The same all day');
+
+    final tomorrow = TodayPicks.choose(items, stored: first.stored, today: '2026-11-06');
+    expect(tomorrow.picks.map((item) => item.id).toSet().intersection(first.picks.map((item) => item.id).toSet()), isEmpty);
+    expect(tomorrow.stored.earlier, containsAll(first.stored.ids));
+
+    final ordered = TodayPicks.ordered(items, day: '2026-11-05');
+    final top = ordered.take(4).map((item) => item.item.id);
+    expect(top.where((id) => id > 6).length, greaterThanOrEqualTo(2), reason: 'Newer numbers rise even when ranked lower');
+    expect(TodayPicks.jitter('2026-11-05\na'), 0.3805, reason: 'The same number as on iOS');
+  });
+
   group('learning', () {
     test('recent saves outweigh old ones', () {
       final model = _learning([

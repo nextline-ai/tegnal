@@ -16,7 +16,7 @@ enum BooruEngine: String, Codable, CaseIterable, Identifiable, Sendable {
     static func suggested(for url: URL) -> BooruEngine? {
         let host = url.host?.lowercased() ?? ""
         if host.hasSuffix(".booru.org") { return .oldGelbooru }
-        switch host.hasPrefix("www.") ? String(host.dropFirst(4)) : host {
+        switch BooruServer.bareHost(host) {
         case "safebooru.org", "gelbooru.com": return .gelbooru
         case "danbooru.donmai.us": return .danbooru
         case "yande.re", "konachan.com", "konachan.net": return .moebooru
@@ -31,7 +31,13 @@ struct BooruServer: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var baseURL: URL
     var engine: BooruEngine
-    var isGelbooruWebsite: Bool { engine == .gelbooru && ["gelbooru.com", "www.gelbooru.com"].contains(baseURL.host?.lowercased() ?? "") }
+    var isGelbooruWebsite: Bool { engine == .gelbooru && Self.bareHost(baseURL) == "gelbooru.com" }
+    /// A host without its leading `www.`: every site is the same site with or without it.
+    static func bareHost(_ url: URL) -> String { bareHost(url.host ?? "") }
+    static func bareHost(_ host: String) -> String {
+        let lowered = host.lowercased()
+        return lowered.hasPrefix("www.") ? String(lowered.dropFirst(4)) : lowered
+    }
     var displayName: String { Self.displayName(name) }
     static func displayName(_ name: String) -> String {
         let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,9 +50,7 @@ struct BooruServer: Codable, Identifiable, Hashable, Sendable {
     static func canonicalAddress(_ url: URL) -> String {
         var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)!
         parts.scheme = "https"
-        var host = parts.host?.lowercased() ?? ""
-        if ["www.gelbooru.com", "www.safebooru.org", "www.danbooru.donmai.us"].contains(host) { host = String(host.dropFirst(4)) }
-        parts.host = host
+        parts.host = bareHost(parts.host ?? "")
         if parts.port == 443 { parts.port = nil }
         parts.query = nil; parts.fragment = nil
         if parts.path.hasSuffix("/index.php") { parts.path.removeLast(10) }

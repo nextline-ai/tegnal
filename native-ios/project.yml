@@ -119,6 +119,7 @@ schemes:
       targets: [TEGNALTests, TEGNALUITests]
       environmentVariables:
         TEGNAL_LIVE_TESTS: "1"
+        TEGNAL_LIVE_COMICS_SITE: "$(TEGNAL_LIVE_COMICS_SITE)"
   BooruDeviceValidation:
     build:
       targets:

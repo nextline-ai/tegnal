@@ -138,7 +138,12 @@ struct TasteDashboard: View {
     private var picks: [TasteRecommendation] {
         let items = gridItems
         guard items.count >= 6, !feed.starter, feed.focus == nil, sources.allSatisfy({ env.taste.control.preferences(source: $0).sort == .recommended }) else { return [] }
-        return TasteRecommendation.picks(from: items)
+        let key = "taste.todayPicks." + mode.rawValue
+        let stored = ReaderPreferences.defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(TodayPicks.Stored.self, from: $0) }
+        let chosen = TodayPicks.choose(from: items, stored: stored, today: TodayPicks.day(Date()))
+        // Remember the day's picks once; later renders read them back unchanged.
+        if chosen.stored != stored, let data = try? JSONEncoder().encode(chosen.stored) { ReaderPreferences.defaults.set(data, forKey: key) }
+        return chosen.picks
     }
     private var feedback: RecommendationFeedback {
         .init(why: { explaining = $0 }, more: moreLikeThis, dismiss: { item in feed.dismiss(item, mode: mode, env: env) })

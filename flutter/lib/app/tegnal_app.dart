@@ -244,7 +244,12 @@ class _RootState extends State<_Root> {
     fixture: services.isTesting,
   );
 
-  late final _imports = ImportContext(booru: _booru, database: services.database, startCoverQueue: services.coverQueue.start);
+  late final _imports = ImportContext(
+    booru: _booru,
+    database: services.database,
+    startCoverQueue: services.coverQueue.start,
+    libraryChanged: _library.notifyChanged,
+  );
 
   late final _taste = TasteContext(
     controller: services.taste,
@@ -352,12 +357,17 @@ class _RootState extends State<_Root> {
                 rowColor: FormColors.listRow.resolveFrom(context),
                 header: Text(L10n.text('Import Data (Other Manga Viewer)')),
                 children: [
+                  SettingsLinkRow(title: L10n.text('Import from Violet'), icon: CupertinoIcons.book, onTap: () => showImportData(context, _imports)),
                   SettingsLinkRow(
                     title: L10n.text('Import from Another Manga Viewer'),
                     icon: CupertinoIcons.square_arrow_down,
                     onTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
-                        builder: (_) => MangaViewerImportView(database: services.database, startCoverQueue: services.coverQueue.start),
+                        builder: (_) => MangaViewerImportView(
+                          database: services.database,
+                          startCoverQueue: services.coverQueue.start,
+                          libraryChanged: _library.notifyChanged,
+                        ),
                       ),
                     ),
                   ),

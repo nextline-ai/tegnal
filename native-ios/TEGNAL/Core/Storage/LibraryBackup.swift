@@ -135,6 +135,8 @@ struct MangaBackup: Codable, Sendable {
         var tags: String?
         var published_at: String?
         var thumb_page: Int?
+        /// The comics site the work was saved from; older backups leave it out.
+        var site: String? = nil
         var folders: [String]?
     }
     struct ArtistRecord: Codable, Sendable { var name: String; var kind: Int?; var note: String? }
@@ -159,7 +161,7 @@ struct MangaBackup: Codable, Sendable {
             }, works: works.map {
                 .init(gallery_id: $0.galleryId, title: $0.title, artists: $0.artists, note: $0.note, bookmarked_at: $0.bookmarkedAt,
                       language: $0.language, type: $0.type, series: $0.series, groups: $0.groups, tags: $0.tags,
-                      published_at: $0.publishedAt, thumb_page: $0.thumbPage, folders: $0.folders.map(\.name))
+                      published_at: $0.publishedAt, thumb_page: $0.thumbPage, site: $0.site, folders: $0.folders.map(\.name))
             }, artists: artists.map { .init(name: $0.name, kind: $0.kind, note: $0.note) },
                         history: try Row.fetchAll(db, sql: "SELECT * FROM search_history ORDER BY used_at DESC").map { .init(query: $0["query"], used_at: $0["used_at"]) },
                         saved_searches: try String.fetchAll(db, sql: "SELECT query FROM saved_searches ORDER BY query"),
@@ -216,6 +218,7 @@ struct MangaBackup: Codable, Sendable {
             work.groups = record.groups ?? work.groups; work.tags = record.tags ?? work.tags
             work.bookmarkedAt = record.bookmarked_at ?? work.bookmarkedAt
             work.publishedAt = record.published_at ?? work.publishedAt; work.thumbPage = record.thumb_page ?? work.thumbPage
+            if work.site == nil { work.site = record.site }
             try work.save(db)
             var destinations = (record.folders ?? []).compactMap { mapping[$0] }
             if destinations.isEmpty, try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder_works WHERE work_id = ?", arguments: [work.id]) == 0 {

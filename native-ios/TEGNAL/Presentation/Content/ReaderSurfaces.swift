@@ -263,7 +263,8 @@ struct ArtworkTagHeading: View {
         }.foregroundStyle(category.color)
     }
 }
-enum ArtworkTagHeadingStyle { case compact, detail }
+/// `hidden` draws only the tags, for a section that already has its own heading.
+enum ArtworkTagHeadingStyle { case compact, detail, hidden }
 struct ArtworkTagCloud: View {
     let groups: [ArtworkTagGroup]
     var headingStyle: ArtworkTagHeadingStyle = .compact
@@ -275,7 +276,7 @@ struct ArtworkTagCloud: View {
         VStack(alignment: .leading, spacing: headingStyle == .detail ? 12 : 16) {
             ForEach(groups) { group in
                 VStack(alignment: .leading, spacing: headingStyle == .detail ? 4 : 6) {
-                    if group.category != .female && group.category != .male {
+                    if headingStyle != .hidden && group.category != .female && group.category != .male {
                         ArtworkTagHeading(category: group.category, showsIcon: headingStyle != .detail)
                             .font(headingStyle == .detail ? .headline : .caption.weight(.semibold))
                     }
@@ -284,7 +285,7 @@ struct ArtworkTagCloud: View {
                         ForEach(group.tags) { tag in
                             ArtworkTagCloudItem(tag: tag, saved: savedQueries.contains(tag.query.replacingOccurrences(of: " ", with: "_")),
                                 destination: destination, action: action, save: save)
-                                .accessibilityLabel(L10n.text(group.category.title) + ": " + tag.name)
+                                .accessibilityLabel(L10n.text(tag.category.title) + ": " + tag.name)
                                 .accessibilityIdentifier("tags." + group.category.rawValue + "." + tag.query)
                         }
                     }

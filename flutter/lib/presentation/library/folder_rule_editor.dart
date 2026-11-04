@@ -59,6 +59,24 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
   bool get _fixedFolder => !widget.creatingFolder && widget.folder != null;
   WorkQuery get _query => WorkQuery(_tag.text, excluding: _excluded.text);
   bool get _usesTags => widget.creatingFolder || _isSmart;
+
+  /// The toggle files works already saved once, when Save is tapped; a smart folder alone
+  /// only takes works saved after it.
+  String get _fillFooter {
+    if (_fillsSavedWorks || !_isSmart) {
+      return L10n.text(
+        widget.booru
+            ? 'When you tap Save, matching images already in the chosen folders move here once.'
+            : 'When you tap Save, matching works already in the chosen folders are added here once. They stay in those folders too.',
+      );
+    }
+    return L10n.text(
+      widget.booru
+          ? 'Only images saved from now on move here. Images you already saved stay where they are.'
+          : 'Only works saved from now on come here. Works you already saved stay where they are.',
+    );
+  }
+
   List<SmartFolderChoice> get _sourceChoices => _choices.where((choice) => choice.id != _folder).toList();
   Set<String> get _selected => (_sources ?? _defaultSources).difference({?_folder});
 
@@ -318,13 +336,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
             child: Opacity(
               opacity: _usesTags ? 1 : 0.4,
               child: FormSection(
-                footer: footer(
-                  L10n.text(
-                    widget.booru
-                        ? 'Matching images move here from the folders you choose.'
-                        : 'Matching works from the folders you choose are added here. They stay in those folders too.',
-                  ),
-                ),
+                footer: footer(_fillFooter),
                 children: [
                   Builder(
                     builder: (context) => FormRow(
@@ -351,7 +363,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
                   FormRow(
                     child: Row(
                       children: [
-                        Expanded(child: Text(L10n.text('Apply to Saved Works'))),
+                        Expanded(child: Text(L10n.text(widget.booru ? 'Move Saved Images Now' : 'Add Saved Works Now'))),
                         Transform.translate(
                           offset: const Offset(2, 0),
                           child: TegnalSwitch(value: _fillsSavedWorks, onChanged: (value) => setState(() => _fillsSavedWorks = value)),

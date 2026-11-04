@@ -65,7 +65,7 @@ struct LibrarySyncAdapter {
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],
         "manga.folders": ["sync_id", "name", "description", "color", "sort_order", "created_at", "source_group_id"],
-        "manga.works": ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page"],
+        "manga.works": ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page", "site"],
         "manga.folder_works": ["folder_id", "work_id", "added_at"],
         "manga.artists": ["name", "kind", "note", "bookmarked_at"],
         "manga.search_history": ["query", "used_at"], "manga.saved_searches": ["query"],
@@ -75,6 +75,8 @@ struct LibrarySyncAdapter {
         "booru.history": ["server_id", "query", "used_at"], "booru.saved_tags": ["server_id", "name", "kind"],
         "booru.settings": ["key", "value"]
     ]
+    /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
+    static let keepsKnownValue: Set<String> = ["site"]
 
     private func assignFolderIdentities() throws {
         // Also assigns identities to legacy imports and share-extension-created folders.
@@ -295,9 +297,11 @@ struct LibrarySyncAdapter {
     private static func upsert(_ incoming: LibrarySyncRow, db: Database) throws {
         var row = incoming
         if row.table == "manga.folders" { row.values = MangaImportMetadata.normalized(row.values) }
-        guard let allowed = columns[row.table], let keys = LibrarySyncRow.keys[row.table], Set(row.values.keys).isSubset(of: Set(allowed)), keys.allSatisfy({ row.values[$0] != nil }) else { throw BooruError.invalidResponse }
+        guard let allowed = columns[row.table], let keys = LibrarySyncRow.keys[row.table], keys.allSatisfy({ row.values[$0] != nil }) else { throw BooruError.invalidResponse }
+        // Columns this version does not know yet, sent by a newer one, are left out rather than
+        // turning the whole row away; the record itself still carries them on to other devices.
         let fields = allowed.filter { row.values[$0] != nil }
-        let updates = fields.filter { !keys.contains($0) }.map { "\($0) = excluded.\($0)" }.joined(separator: ",")
+        let updates = fields.filter { !keys.contains($0) }.map { keepsKnownValue.contains($0) ? "\($0) = COALESCE(excluded.\($0), \($0))" : "\($0) = excluded.\($0)" }.joined(separator: ",")
         let sql = "INSERT INTO \(row.table.split(separator: ".")[1]) (\(fields.joined(separator: ","))) VALUES (\(fields.map { _ in "?" }.joined(separator: ","))) ON CONFLICT(\(keys.joined(separator: ","))) DO " + (updates.isEmpty ? "NOTHING" : "UPDATE SET " + updates)
         try db.execute(sql: sql, arguments: StatementArguments(fields.map { row.values[$0]!.databaseValue }))
     }

@@ -155,6 +155,13 @@ public final class AppDatabase: Sendable {
             }
         }
         migrator.registerMigration("v11_folder_rule_rows") { try Self.adoptLegacyFolderRules($0) }
+        // Local only: the sync and backup table lists leave it out.
+        migrator.registerMigration("v12_refresh_queue") { db in
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS refresh_queue (gallery_id INTEGER PRIMARY KEY NOT NULL)")
+        }
+        migrator.registerMigration("v13_work_site") { db in
+            if try !db.columns(in: "works").map(\.name).contains("site") { try db.execute(sql: "ALTER TABLE works ADD COLUMN site TEXT") }
+        }
         return migrator
     }
 
@@ -555,6 +562,7 @@ public final class AppDatabase: Sendable {
         metadataSource: String? = nil,
         catalogMatched: Bool = false,
         overwriteMetadata: Bool = false,
+        site: String? = nil,
         discoveryContext: DiscoveryContext? = nil
     ) throws -> Work {
         try dbWriter.write { db in
@@ -576,6 +584,8 @@ public final class AppDatabase: Sendable {
                     if let metadataSource { existing.metadataSource = metadataSource }
                     existing.catalogMatched = catalogMatched || existing.catalogMatched
                 }
+                // The first site a work is known from stays its site.
+                if existing.site == nil, let site, !site.isEmpty { existing.site = site }
                 existing.updatedAt = now
                 try existing.update(db)
                 work = existing
@@ -593,7 +603,8 @@ public final class AppDatabase: Sendable {
                     publishedAt: publishedAt,
                     updatedAt: now,
                     metadataSource: metadataSource,
-                    catalogMatched: catalogMatched
+                    catalogMatched: catalogMatched,
+                    site: site?.isEmpty == true ? nil : site
                 )
                 try newWork.insert(db)
                 if newWork.id == nil {
@@ -783,10 +794,13 @@ public final class AppDatabase: Sendable {
         }
     }
 
+    /// Empty tags need filling until the site itself has answered: some works carry no tags
+    /// there, and asking again would never fill them.
     private static let needsFill = """
         (thumb_status != 'gone' AND (thumb_status IN ('missing', 'failed')
          OR (thumb_status = 'ready' AND COALESCE(thumb_path, '') = '')
-         OR TRIM(COALESCE(title, '')) = '' OR TRIM(COALESCE(tags, '')) = ''))
+         OR TRIM(COALESCE(title, '')) = ''
+         OR (TRIM(COALESCE(tags, '')) = '' AND COALESCE(metadata_source, '') != 'manga')))
         """
 
     public func worksNeedingFill(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Work] {
@@ -805,6 +819,49 @@ public final class AppDatabase: Sendable {
     public func countNeedingFill(exclude: Set<Int64> = []) throws -> Int {
         let exclusions = exclude.isEmpty ? "" : " AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
         return try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE " + Self.needsFill + exclusions) ?? 0 }
+    }
+
+    // MARK: - Refresh queue
+
+    /// Queues every saved work to be read from the site again. The queue lives in the
+    /// database, so a refresh picks up where it stopped after the app closes, and a work
+    /// that could not be fetched stays queued for the next run instead of being skipped.
+    @discardableResult public func queueRefresh() throws -> Int {
+        try dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM refresh_queue WHERE gallery_id NOT IN (SELECT gallery_id FROM works)")
+            try db.execute(sql: "INSERT OR IGNORE INTO refresh_queue (gallery_id) SELECT gallery_id FROM works")
+            return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM refresh_queue") ?? 0
+        }
+    }
+
+    /// Queued works, newest saves first, like the fill queue.
+    public func worksAwaitingRefresh(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Int64] {
+        let exclusions = exclude.isEmpty ? "" : "WHERE w.gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+        return try dbWriter.read {
+            try Int64.fetchAll($0, sql: """
+            SELECT w.gallery_id FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id
+            \(exclusions)
+            ORDER BY w.bookmarked_at DESC, w.id DESC
+            LIMIT ?
+            """, arguments: [limit])
+        }
+    }
+
+    public func countAwaitingRefresh() throws -> Int {
+        try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id") ?? 0 }
+    }
+
+    /// Takes a work off the refresh queue once the site has answered for it.
+    public func finishRefresh(galleryId: Int64) throws {
+        try dbWriter.write { try $0.execute(sql: "DELETE FROM refresh_queue WHERE gallery_id = ?", arguments: [galleryId]) }
+    }
+
+    /// Works the queue still has to visit: missing information, or waiting for a refresh.
+    public func countPendingFill(exclude: Set<Int64> = []) throws -> Int {
+        let exclusions = exclude.isEmpty ? "" : " AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+        return try dbWriter.read {
+            try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE (" + Self.needsFill + " OR gallery_id IN (SELECT gallery_id FROM refresh_queue))" + exclusions) ?? 0
+        }
     }
 
     public func savedGalleryIDs() throws -> [Int64] {

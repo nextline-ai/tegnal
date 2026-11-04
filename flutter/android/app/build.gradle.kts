@@ -81,4 +81,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.1")
     implementation("com.google.android.gms:play-services-mlkit-language-id:17.0.0")
     implementation("com.google.mlkit:translate:17.0.3")
+    // Gemini Nano through Android AICore, on the devices that have it: a whole page translated on
+    // the device with the lines before it as context. Older devices keep ML Kit Translate.
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
 }

@@ -68,6 +68,7 @@ class TasteStore {
     }
     final event = TasteEvent(kind: kind, item: item, context: context, at: unixSeconds(at), epoch: control.epoch, generation: control.generation)
       ..device = get('device', db) as String? ?? '';
+    if (const {TasteEventKind.save, TasteEventKind.remove, TasteEventKind.open}.contains(kind)) event.launch = TasteEvent.currentLaunch;
     if (kind == TasteEventKind.seed) {
       event
         ..id = 'seed-${tasteDigestOf(control.epoch + item.key)}'
@@ -93,6 +94,7 @@ class TasteStore {
       at: unixSeconds(at),
       epoch: control.epoch,
       generation: control.generation,
+      launch: TasteEvent.currentLaunch,
     )..device = get('device', db) as String? ?? '';
     insert(event, db, uploaded: false);
   }

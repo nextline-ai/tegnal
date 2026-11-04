@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import '../booru/booru_client.dart';
@@ -151,6 +152,140 @@ class TasteEnvironment {
 
   /// `booruQuery`: Safe Mode's rating tag added to image searches.
   final String Function(String query) booruQuery;
+}
+
+/// Saved works, matched by number and also as the same work under another number: a
+/// version the site lists in another language, or the same original title by a shared artist.
+class SavedWorkIndex {
+  SavedWorkIndex(AppDatabase database) {
+    database.dbWriter.read((db) {
+      for (final row in db.rows('SELECT gallery_id, title, artists FROM works')) {
+        _ids.add(row['gallery_id'] as int);
+        final title = baseTitle((row['title'] as String?) ?? '');
+        if (title.isEmpty) continue;
+        for (final artist in names(((row['artists'] as String?) ?? '').split(','))) {
+          _titles.add('$artist\u0000$title');
+        }
+      }
+    });
+  }
+
+  final _ids = <int>{};
+  final _titles = <String>{};
+
+  bool contains(NativeGallery gallery) {
+    if (_ids.contains(gallery.id) || (gallery.versions ?? const []).any((version) => _ids.contains(version.id))) return true;
+    final title = baseTitle(gallery.title);
+    return title.isNotEmpty && names(gallery.artists).any((artist) => _titles.contains('$artist\u0000$title'));
+  }
+
+  static final _brackets = RegExp(r'\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|【[^】]*】|（[^）]*）');
+  static final _words = RegExp(r'[\p{L}\p{N}]+', unicode: true);
+
+  /// The original title: before a translated title after " | ", without bracketed notes
+  /// such as the event, translator or language, and with only letters and digits kept.
+  /// Native also folds accents, which Dart cannot without a normalization table.
+  static String baseTitle(String title) {
+    final original = title.split(' | ').first.replaceAll(_brackets, ' ');
+    // Full-width letters and digits read as their ASCII forms, as `widthInsensitive` does.
+    final narrow = String.fromCharCodes(original.runes.map((rune) => rune >= 0xFF01 && rune <= 0xFF5E ? rune - 0xFEE0 : rune));
+    final joined = _words.allMatches(narrow.toLowerCase()).map((match) => match[0]).join(' ');
+    // Very short titles name too many different works.
+    return joined.length >= 4 ? joined : '';
+  }
+
+  static List<String> names(List<String> values) =>
+      [for (final value in values) value.toLowerCase().replaceAll('_', ' ').trim()].where((value) => value.isNotEmpty).toList();
+}
+
+/// `TodayPicks`: today's picks change once a day. Within a day they stay put; the next day the
+/// works picked on recent days step aside, and newer works are favored alongside relevance.
+abstract final class TodayPicks {
+  /// Picks from the last week stay out of the following days while there is enough else.
+  static const memory = 21;
+
+  static String day(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  /// Chooses from the ranked [items] and returns what to remember for the rest of the day.
+  static ({List<TasteRecommendation> picks, TodayPicksStored stored}) choose(
+    List<TasteRecommendation> items, {
+    required TodayPicksStored? stored,
+    required String today,
+    int count = 3,
+  }) {
+    final earlier = stored == null
+        ? const <String>[]
+        : stored.day == today
+        ? stored.earlier
+        : [...stored.earlier, ...stored.ids].reversed.take(memory).toList().reversed.toList();
+    var kept = <TasteRecommendation>[];
+    if (stored != null && stored.day == today) {
+      kept = [for (final id in stored.ids) ?items.where((item) => item.id == id).firstOrNull];
+      if (kept.length >= count) return (picks: kept.take(count).toList(), stored: stored);
+    }
+    final skipped = {...earlier, ...kept.map((item) => item.id)};
+    var pool = items.where((item) => !skipped.contains(item.id)).toList();
+    if (pool.length < count * 2) pool = items.where((item) => !kept.any((other) => other.id == item.id)).toList();
+    final picks = [...kept, ...TasteRecommendation.picks(ordered(pool, day: today), count: count - kept.length)];
+    return (picks: picks, stored: TodayPicksStored(day: today, ids: [for (final item in picks) item.id], earlier: earlier));
+  }
+
+  /// Relevance (the feed's order), freshness (newer numbers on the same source) and a small
+  /// change from day to day.
+  static List<TasteRecommendation> ordered(List<TasteRecommendation> items, {required String day}) {
+    final span = math.max(1, items.length - 1).toDouble();
+    final freshness = <String, double>{};
+    final bySource = <String, List<TasteRecommendation>>{};
+    for (final item in items) {
+      bySource.putIfAbsent(item.item.source, () => []).add(item);
+    }
+    for (final group in bySource.values) {
+      final newest = [...group]..sort((a, b) => b.item.id.compareTo(a.item.id));
+      final range = math.max(1, newest.length - 1).toDouble();
+      for (final (rank, item) in newest.indexed) {
+        freshness[item.id] = 1 - rank / range;
+      }
+    }
+    final scored = [
+      for (final (index, item) in items.indexed) (item, 0.4 * (1 - index / span) + 0.45 * (freshness[item.id] ?? 0) + 0.15 * jitter('$day\n${item.id}')),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final (item, _) in scored) item];
+  }
+
+  /// A stable number in 0..<1 for the same text on every launch (FNV-1a, as native).
+  static double jitter(String text) {
+    var hash = BigInt.parse('cbf29ce484222325', radix: 16);
+    final prime = BigInt.parse('100000001b3', radix: 16);
+    final mask = (BigInt.one << 64) - BigInt.one;
+    for (final byte in utf8.encode(text)) {
+      hash = ((hash ^ BigInt.from(byte)) * prime) & mask;
+    }
+    return (hash % BigInt.from(10000)).toInt() / 10000;
+  }
+}
+
+class TodayPicksStored {
+  const TodayPicksStored({required this.day, required this.ids, this.earlier = const []});
+  final String day;
+  final List<String> ids;
+  final List<String> earlier;
+
+  static TodayPicksStored? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final day = json['day'], ids = json['ids'], earlier = json['earlier'];
+    if (day is! String || ids is! List) return null;
+    return TodayPicksStored(day: day, ids: ids.whereType<String>().toList(), earlier: earlier is List ? earlier.whereType<String>().toList() : const []);
+  }
+
+  Map<String, Object?> toJson() => {'day': day, 'ids': ids, 'earlier': earlier};
+
+  @override
+  bool operator ==(Object other) =>
+      other is TodayPicksStored && other.day == day && other.ids.join('\n') == ids.join('\n') && other.earlier.join('\n') == earlier.join('\n');
+
+  @override
+  int get hashCode => Object.hash(day, ids.join('\n'), earlier.join('\n'));
 }
 
 abstract final class RecommendationService {
@@ -324,6 +459,8 @@ abstract final class RecommendationService {
       final source = MangaUrls.source;
       final preferences = settings(source);
       final fetched = <int>{};
+      // Other language versions and re-uploads of saved works count as saved too.
+      final savedWorks = SavedWorkIndex(env.database);
       for (final seed in seeds(source)) {
         activeSeeds.add(seed.id);
         if (start.finished.contains(seed.id)) continue;
@@ -348,7 +485,7 @@ abstract final class RecommendationService {
           // Recheck after metadata awaits so saving a work while the request runs still excludes it.
           final savedAfterLoading = _savedComicIDs(galleries.map((gallery) => gallery.id).toList(), env.database);
           for (final gallery in galleries) {
-            if (savedAfterLoading.contains(gallery.id)) continue;
+            if (savedAfterLoading.contains(gallery.id) || savedWorks.contains(gallery)) continue;
             final item = TasteItem(source: source, id: gallery.id, tags: gallery.tags);
             final eligible = item.eligibleTags.toSet();
             // The site's artist search already matched; galleries credit people apart from tags.

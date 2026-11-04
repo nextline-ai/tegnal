@@ -54,3 +54,9 @@ These still vary between runs: `exportedAt`/`exported_at`, folder `created_at`, 
 - `LibraryBackup.capture` keeps only http(s) preview/sample/file URLs (`cloudMetadata`). Restoring a favorite goes through
   `BooruPost.onServer`, which drops `reducedDataURL`, `tagCategories`, `animated` and `animationVideoURL`.
   `restore_expectations.json` shows the payloads after that loss.
+
+## Later schema changes
+
+- `works.site` (migration `v13_work_site`, native and Dart): every work row in
+  `restore_expectations.json` gained `"site": null`, which is what the native dump now writes for
+  backups that carry no site.

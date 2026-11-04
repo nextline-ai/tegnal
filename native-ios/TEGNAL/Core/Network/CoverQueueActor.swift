@@ -42,8 +42,6 @@ public actor CoverQueueActor {
     private var isRunning: Bool = false
     private var isPaused: Bool = false
     private var kickAgain: Bool = false
-    /// Saved works whose information is fetched again even though nothing is missing.
-    private var refreshing: [Int64] = []
 
     public init(database: AppDatabase, thumbsDir: URL = AppStorage.thumbsDirURL) {
         self.database = database
@@ -70,10 +68,7 @@ public actor CoverQueueActor {
     }
 
     /// Queues every saved work so a fix in how a site is read reaches works saved before it.
-    @discardableResult func queueRefresh() throws -> Int {
-        refreshing = try database.savedGalleryIDs()
-        return refreshing.count
-    }
+    @discardableResult func queueRefresh() throws -> Int { try database.queueRefresh() }
 
     public func start(state: CoverQueueState, downloadsEnabled: Bool = true) async {
         isPaused = false
@@ -100,41 +95,44 @@ public actor CoverQueueActor {
                 checkedThumbnailFiles = true
             }
             try FileManager.default.createDirectory(at: thumbsDir, withIntermediateDirectories: true)
-            let total = refreshing.count + (try database.countNeedingFill(exclude: Set(refreshing)))
+            let total = try database.countPendingFill()
             await MainActor.run { state.total = total; state.remaining = total; state.isRunning = downloadsEnabled && total > 0 }
 
+            // Each work is tried once per run; a queued refresh that fails is tried again next run.
             var attempted = Set<Int64>()
 
             repeat {
                 kickAgain = false
                 while downloadsEnabled && !isPaused && !Task.isCancelled && allowsBackfill() {
-                    let refresh = Array(refreshing.prefix(6))
+                    let refresh = try database.worksAwaitingRefresh(limit: 6, exclude: attempted)
                     let batch = refresh.isEmpty ? try database.worksNeedingFill(limit: 6, exclude: attempted).map(\.galleryId) : refresh
                     if batch.isEmpty { break }
-                    let planned = attempted.count + refreshing.count + (try database.countNeedingFill(exclude: attempted.union(refreshing)))
+                    let planned = attempted.count + (try database.countPendingFill(exclude: attempted))
                     await MainActor.run { state.total = max(state.total, planned) }
 
                     for galleryId in batch {
                         if isPaused || Task.isCancelled || !allowsBackfill() { break }
-                        let refreshes = refreshing.first == galleryId
-                        if refreshes { refreshing.removeFirst() }
+                        let refreshes = !refresh.isEmpty
                         attempted.insert(galleryId)
 
                         do {
                             try await fetchOne(galleryId, refresh: refreshes)
-                            // A removed bookmark is not a successfully filled work.
+                            // A removed bookmark is not a successfully filled work. Tags may stay
+                            // empty only when the site itself lists none.
                             if let saved = try database.getWork(galleryId: galleryId) {
                                 guard saved.hasThumb, saved.hasTitle,
-                                      !(saved.tags ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ContentError.invalidResponse }
+                                      !(saved.tags ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        || saved.metadataSource == "manga" else { throw ContentError.invalidResponse }
                                 await MainActor.run { state.processed += 1 }
                             }
+                            if refreshes { try database.finishRefresh(galleryId: galleryId) }
                         } catch is CancellationError {
-                            if refreshes { refreshing.insert(galleryId, at: 0) }
                             break
                         } catch let error as URLError where error.code == .cancelled {
-                            if refreshes { refreshing.insert(galleryId, at: 0) }
                             break
                         } catch ContentError.galleryNotFound {
+                            // Gone, or a different work under the same number: nothing more to read.
+                            if refreshes { try? database.finishRefresh(galleryId: galleryId) }
                             await MainActor.run { state.gone += 1 }
                         } catch {
                             await MainActor.run { state.failed += 1 }
@@ -143,7 +141,7 @@ public actor CoverQueueActor {
                             }
                         }
 
-                        let remaining = try database.countNeedingFill()
+                        let remaining = try database.countPendingFill()
                         await MainActor.run { state.remaining = remaining }
                         // Politeness delay
                         do { try await Task.sleep(for: delay) } catch { break }

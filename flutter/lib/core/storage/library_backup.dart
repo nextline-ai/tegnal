@@ -211,6 +211,7 @@ class MangaWorkRecord {
     this.tags,
     this.publishedAt,
     this.thumbPage,
+    this.site,
     this.folders,
   });
   final int galleryId;
@@ -225,6 +226,9 @@ class MangaWorkRecord {
   final String? tags;
   final String? publishedAt;
   final int? thumbPage;
+
+  /// The comics site the work was saved from; older backups leave it out.
+  final String? site;
   final List<String>? folders;
 
   factory MangaWorkRecord.fromJson(JsonObject json) => MangaWorkRecord(
@@ -240,6 +244,7 @@ class MangaWorkRecord {
     tags: json.stringOrNull('tags'),
     publishedAt: json.stringOrNull('published_at'),
     thumbPage: json.integerOrNull('thumb_page'),
+    site: json.stringOrNull('site'),
     folders: json.stringsOrNull('folders'),
   );
   JsonObject toJson() => <String, Object?>{'gallery_id': galleryId}
@@ -254,6 +259,7 @@ class MangaWorkRecord {
     ..putIfPresent('tags', tags)
     ..putIfPresent('published_at', publishedAt)
     ..putIfPresent('thumb_page', thumbPage)
+    ..putIfPresent('site', site)
     ..putIfPresent('folders', folders);
 }
 
@@ -397,6 +403,7 @@ class MangaBackup {
             tags: work.tags,
             publishedAt: work.publishedAt,
             thumbPage: work.thumbPage,
+            site: work.site,
             folders: work.folders.map((folder) => folder.name).toList(),
           ),
       ],
@@ -471,7 +478,8 @@ class MangaBackup {
         ..tags = record.tags ?? work.tags
         ..bookmarkedAt = record.bookmarkedAt ?? work.bookmarkedAt
         ..publishedAt = record.publishedAt ?? work.publishedAt
-        ..thumbPage = record.thumbPage ?? work.thumbPage;
+        ..thumbPage = record.thumbPage ?? work.thumbPage
+        ..site = work.site ?? record.site;
       AppDatabase.saveWork(work, db);
       var destinations = (record.folders ?? const <String>[]).map((name) => mapping[name]).nonNulls.toList();
       if (destinations.isEmpty && db.value<int>('SELECT COUNT(*) FROM folder_works WHERE work_id = ?', [work.id]) == 0) {

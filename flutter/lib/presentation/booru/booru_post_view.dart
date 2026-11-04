@@ -15,6 +15,7 @@ import '../../core/support/preferences.dart';
 import '../../core/taste/taste_models.dart';
 import '../../core/taste/taste_viewing.dart';
 import '../content/content_bookmark.dart';
+import '../content/viewer_dismiss.dart';
 import '../content/reader_guide_overlay.dart';
 import '../content/reader_models.dart';
 import '../content/reader_view.dart' show ReaderMenuGlass, ReaderScreen, ReaderSettingsView;
@@ -81,11 +82,8 @@ class BooruPostView extends StatefulWidget {
     BooruProviding? source,
     ChallengeSessionController? challenge,
   }) => Navigator.of(context, rootNavigator: true).push<void>(
-    PageRouteBuilder<void>(
-      opaque: false,
-      transitionDuration: const Duration(milliseconds: 380),
-      reverseTransitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondary) => BooruPostView(
+    ViewerRoute<void>(
+      builder: (context) => BooruPostView(
         booru: booru,
         post: post,
         posts: posts,
@@ -95,10 +93,6 @@ class BooruPostView extends StatefulWidget {
         source: source,
         challenge: challenge,
       ),
-      transitionsBuilder: (context, animation, secondary, child) => SlideTransition(
-        position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-        child: child,
-      ),
     ),
   );
 
@@ -106,7 +100,7 @@ class BooruPostView extends StatefulWidget {
   State<BooruPostView> createState() => _BooruPostViewState();
 }
 
-class _BooruPostViewState extends State<BooruPostView> {
+class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateMixin {
   late List<BooruPost> _posts = [...widget.posts];
   late BooruPost _post = widget.post;
   late final _access = BooruViewerAccessNavigation(
@@ -134,7 +128,7 @@ class _BooruPostViewState extends State<BooruPostView> {
   String? _toast;
   Timer? _toastTimer;
   Timer? _autoTimer;
-  double _drag = 0;
+  late final _dismiss = ViewerDismiss(vsync: this);
   bool _loadingMore = false;
   late bool _hasMore = widget.loadMore != null;
   String? _requestedFromID;
@@ -180,6 +174,7 @@ class _BooruPostViewState extends State<BooruPostView> {
 
   @override
   void dispose() {
+    _dismiss.dispose();
     widget.challenge?.removeListener(_challengeChanged);
     _loadingTimer?.cancel();
     _toastTimer?.cancel();
@@ -491,10 +486,26 @@ class _BooruPostViewState extends State<BooruPostView> {
     _scheduleAuto();
   }
 
-  void _exitDrag(double offset, {bool? end, double velocity = 0}) {
-    if (_zoomed || _sheetOpen) return;
-    if (end == true) return _close();
-    setState(() => _drag = end == false ? 0 : offset);
+  /// `ReaderExitGesture`: the same pull, motion and thresholds as the comics reader.
+  void _exitDrag(double offset, {bool? end, double velocity = 0, double sideways = 0}) {
+    if (_zoomed || _sheetOpen) {
+      if (_dismiss.isActive) _dismiss.cancel();
+      return;
+    }
+    switch (end) {
+      case null:
+        if (!_dismiss.isActive) _dismiss.begin(context);
+        _dismiss.update(offset);
+      case true:
+        _dismiss.end(
+          delta: Offset(sideways, offset),
+          velocity: Offset(0, velocity),
+          screenHeight: MediaQuery.sizeOf(context).height,
+          exit: _close,
+        );
+      case false:
+        if (_dismiss.isActive) _dismiss.cancel();
+    }
   }
 
   void _toggleFavorite() {
@@ -674,10 +685,10 @@ class _BooruPostViewState extends State<BooruPostView> {
     final server = _server;
     return CupertinoTheme(
       data: tegnalTheme(Brightness.dark),
-      child: ColoredBox(
-        color: Color.fromRGBO(0, 0, 0, (1 - _drag / 600).clamp(0, 1)),
-        child: Transform.translate(
-          offset: Offset(0, _drag),
+      child: ViewerDismissSurface(
+        dismiss: _dismiss,
+        child: ColoredBox(
+          color: const Color(0xFF000000),
           child: Stack(
             children: [
               const Positioned.fill(child: ColoredBox(color: Color(0xFF000000))),
@@ -882,7 +893,7 @@ class _BooruPostViewState extends State<BooruPostView> {
       (L10n.text('Download Work'), symbol(CupertinoIcons.arrow_down_circle), _download),
       (
         WorkSaveResult.actionTitle(saved: favorite, mode: TasteMode.booru),
-        symbol(favorite ? CupertinoIcons.heart_fill : CupertinoIcons.heart),
+        favorite ? Icon(CupertinoIcons.heart_fill, size: 24, color: SystemColors.pink.resolveFrom(context)) : symbol(CupertinoIcons.heart),
         _toggleFavorite,
       ),
       (L10n.text('Save to Folder'), symbol(CupertinoIcons.folder), _openFolders),

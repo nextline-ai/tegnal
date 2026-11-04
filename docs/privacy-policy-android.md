@@ -34,7 +34,7 @@
 
 ## 가져오기, 백업, 다운로드
 
-사용자가 선택한 백업 파일(TEGNAL 백업, 챌린지 백업, Anime Boxes 백업, 다른 만화 뷰어의 데이터베이스)을 기기에서 읽고, 요청한 경우 백업 파일을 내보냅니다. 파일 선택기의 제공자는 클라우드 서비스일 수도 있습니다. 지원되는 만화 뷰어 백업의 원본 읽기·이미지 영역 기록은 로컬에 보존하지만 앱 백업 내보내기에 포함되지 않습니다. 가져온 다운로드 경로나 인증 헤더를 복사하지 않습니다. 다운로드한 작품은 앱 저장소에 보관되어 앱을 삭제하면 함께 삭제되며, 내보낸 파일은 앱 밖에 남으므로 직접 삭제해야 합니다.
+사용자가 선택한 백업 파일(TEGNAL 백업, 챌린지 백업, Violet 북마크 백업, Anime Boxes 백업, 다른 만화 뷰어의 데이터베이스)을 기기에서 읽고, 요청한 경우 백업 파일을 내보냅니다. 파일 선택기의 제공자는 클라우드 서비스일 수도 있습니다. 지원되는 만화 뷰어 백업의 원본 읽기·이미지 영역 기록과 Violet 백업에서 가져온 마지막 읽은 시각은 로컬에 보존하지만 앱 백업 내보내기에 포함되지 않습니다. 가져온 다운로드 경로나 인증 헤더를 복사하지 않습니다. 다운로드한 작품은 앱 저장소에 보관되어 앱을 삭제하면 함께 삭제되며, 내보낸 파일은 앱 밖에 남으므로 직접 삭제해야 합니다.
 
 Google Drive 백업은 준비 중이며 현재 Android 버전에서는 Google 계정 로그인이나 Drive 전송이 이루어지지 않습니다. Android 앱은 Apple iCloud 동기화를 제공하지 않습니다. 다만 라이브러리는 Android 운영체제의 백업·기기 이전 대상이 될 수 있으며 기기 설정과 백업 제공자의 정책이 적용됩니다. 앱 백업 규칙은 웹뷰 데이터와 일부 접속·동기화 자료를 제외하며, 보안 저장소의 인증 정보는 새 기기에서 다시 입력해야 할 수 있습니다. 앱의 백업 내보내기와 운영체제 백업은 서로 다릅니다.
 
@@ -48,7 +48,9 @@ Google Drive 백업은 준비 중이며 현재 Android 버전에서는 Google �
 
 뷰어의 번역은 Google ML Kit로 기기에서 이미지의 글자를 인식하고, 언어를 판별해 번역 언어로 옮깁니다. 이미지, 인식한 글자와 번역 결과는 NextLine이나 번역 서버로 전송되지 않습니다. 번역하는 동안 이미지를 앱 캐시에 잠시 저장하며 번역이 끝나면 삭제합니다. 번역 언어 설정은 기기에 저장합니다.
 
-글자 인식 모듈은 앱 설치 후 또는 처음 번역할 때 Google Play 서비스를 통해, 번역 모델은 언어 쌍마다 처음 사용할 때 한 번 Google에서 내려받아 기기에 보관합니다. 이때 Google은 IP 주소와 요청 정보를 받을 수 있습니다. ML Kit는 기능 진단과 이용 분석을 위해 기기 정보(제조사, 모델, OS 버전), 앱 정보(패키지 이름, 버전), 설치별 식별자, 성능 지표, 오류 코드, 판별한 언어와 번역 언어 쌍을 HTTPS로 Google에 보낼 수 있습니다. 이 정보에는 이미지나 글자 내용이 포함되지 않으며 [Google 개인정보처리방침](https://policies.google.com/privacy)이 적용됩니다. 글자 인식, 언어 판별과 번역은 사용자가 번역을 실행할 때만 동작합니다.
+글자 인식 모듈은 앱 설치 후 또는 처음 번역할 때 Google Play 서비스를 통해, 번역 모델은 언어 쌍마다 처음 사용할 때 한 번 Google에서 내려받아 기기에 보관합니다. 이때 Google은 IP 주소와 요청 정보를 받을 수 있습니다. ML Kit는 기능 진단과 이용 분석을 위해 기기 정보(제조사, 모델, OS 버전), 앱 정보(패키지 이름, 버전), 설치별 식별자, 성능 지표, 오류 코드, 판별한 언어와 번역 언어 쌍을 HTTPS로 Google에 보낼 수 있습니다. 이 정보에는 이미지나 글자 내용이 포함되지 않으며 [Google 개인정보처리방침](https://policies.google.com/privacy)이 적용됩니다. 글자 인식, 언어 판별과 번역은 사용자가 번역을 실행할 때만 동작합니다. 뷰어 설정에서 AI 번역(베타)을 켜면 번역을 켜 둔 동안 넘기는 페이지와 바로 다음 페이지를 차례로 번역합니다.
+
+AI 번역(베타)을 켰고 기기에 Android AICore의 Gemini Nano가 설치되어 있으면, 대화 흐름을 살리기 위해 한 페이지의 말풍선 글자와 앞 페이지의 원문·번역 몇 줄을 함께 기기 안의 모델로 번역합니다. 이 글자는 기기를 벗어나지 않으며 NextLine이나 다른 서버로 전송되지 않습니다. 앱이 모델을 내려받게 하지 않으며, 모델이 없는 기기에서는 위의 ML Kit 번역을 사용합니다. AICore 자체의 진단 정보 처리에는 Google 개인정보처리방침이 적용됩니다.
 
 ## 보관 및 삭제
 
@@ -92,7 +94,7 @@ Clear saved account fields to remove credentials stored by the app. Cookie reset
 
 ## Files, backups and downloads
 
-The app reads backup files you select (TEGNAL backups, challenge backups, Anime Boxes backups and another manga viewer's databases) on the device and exports backup files when requested. The file provider may itself be a cloud service. Original read/crop records from supported imports are kept locally and excluded from backup export. Download paths and authentication headers from those backups are not imported. Downloaded works stay in the app's storage and are removed with the app; exported files remain outside the app until you delete them.
+The app reads backup files you select (TEGNAL backups, challenge backups, Violet bookmark backups, Anime Boxes backups and another manga viewer's databases) on the device and exports backup files when requested. The file provider may itself be a cloud service. Original read/crop records from supported imports, and last-read times from Violet backups, are kept locally and excluded from backup export. Download paths and authentication headers from those backups are not imported. Downloaded works stay in the app's storage and are removed with the app; exported files remain outside the app until you delete them.
 
 Google Drive backup is coming soon; the current Android version does not sign in to a Google account or transfer anything to Drive. Android does not provide Apple iCloud sync. The library can nevertheless be included in Android system backup or device transfer, subject to your settings and provider. App backup rules exclude web view data and some connection and sync material, and credentials in secure storage may need to be entered again on a new device. OS backup and the app's backup export are different mechanisms.
 
@@ -106,7 +108,9 @@ When you leave the app, the app switcher shows the TEGNAL screen instead of your
 
 Translate in the viewer uses Google ML Kit to recognize the text in an image on the device, identify its language and translate it into your translation language. Images, recognized text and translations are not sent to NextLine or to a translation server. The image is kept briefly in the app cache while it is translated and deleted afterward. Your translation language choice is stored on the device.
 
-Text recognition modules arrive through Google Play services after installation or on first use, and each language pair's translation model is downloaded once from Google the first time it is needed and kept on the device; Google can receive your IP address and request information when this happens. For diagnostics and usage analytics, ML Kit may send Google device information (manufacturer, model, OS version), app information (package name, version), a per-installation identifier, performance metrics, error codes, and the identified languages and translation language pair over HTTPS. This does not include image or text content, and the [Google Privacy Policy](https://policies.google.com/privacy) applies. Recognition, language identification and translation run only when you choose Translate.
+Text recognition modules arrive through Google Play services after installation or on first use, and each language pair's translation model is downloaded once from Google the first time it is needed and kept on the device; Google can receive your IP address and request information when this happens. For diagnostics and usage analytics, ML Kit may send Google device information (manufacturer, model, OS version), app information (package name, version), a per-installation identifier, performance metrics, error codes, and the identified languages and translation language pair over HTTPS. This does not include image or text content, and the [Google Privacy Policy](https://policies.google.com/privacy) applies. Recognition, language identification and translation run only when you choose Translate. With AI Translation (Beta) turned on in the viewer settings, translation stays on and translates each page you turn to and the one after it.
+
+With AI Translation (Beta) on, and on devices where Android AICore has Gemini Nano installed, a page's balloon text is translated together with a few original and translated lines from the pages before it by that on-device model, so conversations read naturally. This text stays on the device and is not sent to NextLine or any other server. The app never makes the device download the model; devices without it use ML Kit translation as described above. The Google Privacy Policy applies to AICore's own diagnostics.
 
 ## Retention and deletion
 

@@ -94,7 +94,8 @@ public struct AppRootTabView: View {
                     galleryId: id,
                     folderId: folderId,
                     metadataSource: nil,
-                    catalogMatched: false
+                    catalogMatched: false,
+                    site: ComicSites.active
                 )
             }
             env.startCoverQueue()

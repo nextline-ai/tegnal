@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/booru/anime_boxes_import.dart';
 import '../../core/migration/manga_viewer_import.dart';
+import '../../core/migration/violet_import.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/document_files.dart';
 import '../../core/support/l10n.dart';
@@ -21,10 +22,13 @@ import '../design/alert_dialog.dart';
 /// What the import screens change: both libraries, and the cover queue that fills
 /// imported comics afterwards.
 class ImportContext {
-  const ImportContext({required this.booru, required this.database, this.startCoverQueue});
+  const ImportContext({required this.booru, required this.database, this.startCoverQueue, this.libraryChanged});
   final BooruContext booru;
   final AppDatabase database;
   final VoidCallback? startCoverQueue;
+
+  /// Tells the comics library screens to read their folders and works again.
+  final VoidCallback? libraryChanged;
 }
 
 /// `AnimeBoxesImportView`: reads an Anime Boxes backup, shows what it holds and merges it.
@@ -308,9 +312,10 @@ class _MangaViewerImporter {
 
 /// `MangaLibraryToolsView(importOnly:)`: user.db and data.db from another manga viewer.
 class MangaViewerImportView extends StatefulWidget {
-  const MangaViewerImportView({super.key, required this.database, this.startCoverQueue, this.inSheet = false});
+  const MangaViewerImportView({super.key, required this.database, this.startCoverQueue, this.libraryChanged, this.inSheet = false});
   final AppDatabase database;
   final VoidCallback? startCoverQueue;
+  final VoidCallback? libraryChanged;
 
   /// In a sheet the page ends with Done instead of going back.
   final bool inSheet;
@@ -338,6 +343,7 @@ class _MangaViewerImportViewState extends State<MangaViewerImportView> {
     } on Object catch (error) {
       message = _MangaViewerImporter.failure(error);
     }
+    widget.libraryChanged?.call();
     if (!mounted) return;
     setState(() {
       _importing = false;
@@ -488,7 +494,8 @@ class _MangaViewerImportViewState extends State<MangaViewerImportView> {
   }
 }
 
-/// `OnboardingView(importsOnly:)`: the two importers, each on its own card.
+/// `OnboardingView(importsOnly:)`, on Android with Violet's bookmark backup only. Anime Boxes
+/// and the other manga viewer's databases stay in settings.
 Future<void> showImportData(BuildContext context, ImportContext imports) => showAppSheet<void>(
   context,
   builder: (context, controller) => Navigator(
@@ -507,42 +514,48 @@ class ImportDataView extends StatefulWidget {
 class _ImportDataViewState extends State<ImportDataView> {
   static const _borderedFill = CupertinoDynamicColor.withBrightness(color: Color(0x1F767680), darkColor: Color(0x3D767680));
 
-  late final _importer = _MangaViewerImporter(widget.imports.database);
   bool _importing = false;
+  bool _cancelling = false;
   String _status = '';
   String? _summary;
 
-  /// One file chooser for either database: a user database imports the library, a catalog
-  /// fills it.
+  /// Imports a Violet bookmark backup, then lets the cover queue fill titles and covers.
   Future<void> _choose() async {
-    final file = await _importer.pick();
+    final file = await const DocumentFiles().openDocument();
     if (file == null || !mounted) return;
     setState(() {
       _importing = true;
+      _cancelling = false;
       _summary = null;
       _status = L10n.text('Checking file…');
     });
     await Future<void>.delayed(const Duration(milliseconds: 16));
     try {
-      if (MangaViewerImportService.isUserDatabase(file.path)) {
-        setState(() => _status = L10n.text('Importing library from user.db…'));
-        await Future<void>.delayed(const Duration(milliseconds: 16));
-        final result = _importer.importUser(file);
-        _summary = L10n.text('user.db imported!\n%@ folders, %@ works', ['${result.folders}', '${result.works}']);
-      } else if (MangaViewerImportService.isDataDatabase(file.path)) {
-        setState(() => _status = L10n.text('Matching data.db metadata…'));
-        await Future<void>.delayed(const Duration(milliseconds: 16));
-        final result = _importer.match(file);
-        _summary =
-            '${L10n.text('data.db matched!\nUpdated %2\$@ of %1\$@ works', ['${result.totalWorks}', '${result.matched}'])}\n'
-            '${L10n.text('Missing covers are downloaded separately in the background.')}';
+      if (!VioletImportService.isBackup(file.path)) {
+        _status = L10n.text('This file is not a Violet bookmark backup.');
       } else {
-        _status = L10n.text('Unsupported database format. Select user.db or data.db.');
+        if (mounted) setState(() => _status = L10n.text('Importing bookmarks from Violet…'));
+        final result = await VioletImportService(widget.imports.database).import(
+          file.path,
+          cancelled: () => _cancelling || !mounted,
+          progress: (done, total) {
+            if (mounted && !_cancelling) setState(() => _status = '${L10n.text('Importing bookmarks from Violet…')} ($done/$total)');
+          },
+        );
+        _summary =
+            '${L10n.text('Violet data imported!\n%@ folders, %@ works, %@ artists', ['${result.folders}', '${result.works}', '${result.artists}'])}\n'
+            '${L10n.text('Titles, tags and covers are filled in from the connected website in the background.')}';
+        _status = '';
+        widget.imports.startCoverQueue?.call();
       }
-      if (_summary != null) widget.imports.startCoverQueue?.call();
+    } on ImportCancelled {
+      _status = L10n.text('The task was canceled.');
+      widget.imports.startCoverQueue?.call();
     } on Object catch (error) {
       _status = L10n.text('Import error: %@', ['$error']);
     }
+    // Even a cancelled import may have saved some works.
+    widget.imports.libraryChanged?.call();
     if (mounted) setState(() => _importing = false);
   }
 
@@ -610,43 +623,16 @@ class _ImportDataViewState extends State<ImportDataView> {
                     children: [
                       Row(
                         children: [
-                          Icon(CupertinoIcons.cube_box_fill, size: 22, color: label),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Anime Boxes',
-                            style: TegnalType.style(17, weight: FontWeight.w600, color: label),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text('.abbj', style: TegnalType.style(15, color: secondary)),
-                      const SizedBox(height: 12),
-                      _bordered(
-                        L10n.text('Import'),
-                        () =>
-                            Navigator.of(context)
-                                .push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: widget.imports.booru, inSheet: true))),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _card(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
                           Icon(Symbols.bookFill, size: 22, color: label),
                           const SizedBox(width: 8),
                           Text(
-                            L10n.text('Other Manga Viewer'),
+                            'Violet',
                             style: TegnalType.style(17, weight: FontWeight.w600, color: label),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text('user.db · data.db', style: TegnalType.style(15, color: secondary)),
+                      Text(L10n.text('Export your bookmarks in Violet, then choose the saved file.'), style: TegnalType.style(15, color: secondary)),
                       const SizedBox(height: 12),
                       _bordered(L10n.text('Choose File'), _importing ? null : _choose),
                       if (_importing) ...[
@@ -657,6 +643,14 @@ class _ImportDataViewState extends State<ImportDataView> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(_status, style: TegnalType.style(15, color: secondary)),
+                            ),
+                            GestureDetector(
+                              onTap: _cancelling ? null : () => setState(() => _cancelling = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: ShapeDecoration(color: SystemColors.red.resolveFrom(context).withValues(alpha: 0.15), shape: const StadiumBorder()),
+                                child: Text(L10n.text('Cancel'), style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context))),
+                              ),
                             ),
                           ],
                         ),
@@ -782,11 +776,11 @@ class _ImportReminderBannerState extends State<ImportReminderBanner> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              L10n.text('Import from Other Apps'),
+                              L10n.text('Import from Violet'),
                               style: TegnalType.style(15, weight: FontWeight.w600, color: label),
                             ),
                             const SizedBox(height: 3),
-                            Text('Anime Boxes · Other Manga Viewer', style: TegnalType.style(12, color: secondary)),
+                            Text(L10n.text('Bookmarks, folders and artists'), style: TegnalType.style(12, color: secondary)),
                           ],
                         ),
                       ),
@@ -812,7 +806,7 @@ class _ImportReminderBannerState extends State<ImportReminderBanner> {
   }
 }
 
-/// `WebsiteImportLinks`: the setup screen's ways to bring a library from another app.
+/// `WebsiteImportLinks`: the setup screen's way to bring a library from Violet.
 class WebsiteImportLinks extends StatelessWidget {
   const WebsiteImportLinks({super.key, required this.imports});
   final ImportContext imports;
@@ -836,25 +830,7 @@ class WebsiteImportLinks extends StatelessWidget {
         ),
       ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        link(
-          CupertinoIcons.cube_box,
-          L10n.text('Import from Anime Boxes'),
-          () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: imports.booru))),
-        ),
-        const SizedBox(height: 14),
-        link(
-          CupertinoIcons.square_arrow_down,
-          L10n.text('Import from Another Manga Viewer'),
-          () => showAppSheet<void>(
-            context,
-            builder: (context, controller) => MangaViewerImportView(database: imports.database, startCoverQueue: imports.startCoverQueue, inSheet: true),
-          ),
-        ),
-      ],
-    );
+    return link(CupertinoIcons.square_arrow_down, L10n.text('Import from Violet'), () => showImportData(context, imports));
   }
 }
 

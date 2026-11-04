@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/storage/app_database.dart';
@@ -33,15 +35,23 @@ class _FoldersViewState extends State<FoldersView> {
 
   AppDatabase get _database => widget.routes.database;
 
+  /// Commits from imports and the cover queue, gathered so a fill redraws the folders at most a
+  /// few times a second.
+  StreamSubscription<int>? _libraryChanges;
+  Timer? _pendingReload;
+
   @override
   void initState() {
     super.initState();
     _reload();
     widget.routes.changes.addListener(_reload);
+    _libraryChanges = _database.changes.listen((_) => _pendingReload ??= Timer(const Duration(milliseconds: 300), _reload));
   }
 
   @override
   void dispose() {
+    _libraryChanges?.cancel();
+    _pendingReload?.cancel();
     widget.routes.changes.removeListener(_reload);
     _search.dispose();
     _searchFocus.dispose();
@@ -49,6 +59,8 @@ class _FoldersViewState extends State<FoldersView> {
   }
 
   void _reload() {
+    _pendingReload?.cancel();
+    _pendingReload = null;
     if (!mounted) return;
     setState(() {
       _folders = _database.listFolders();

@@ -312,7 +312,7 @@ class RecapIndex {
       final existing = byID[event.id];
       byID[event.id] = existing == null || TasteEvent.ordered(existing, event) ? event : existing;
     }
-    final ordered = byID.values.toList()..sort(TasteEvent.compare);
+    final ordered = TasteEvent.withoutUndoneSaves(byID.values.toList()..sort(TasteEvent.compare));
     final metadata = <String, Set<String>>{};
     for (final event in ordered) {
       metadata.putIfAbsent(event.item.source, () => {}).addAll(event.item.metadata.map(TasteTagPolicy.normalize));

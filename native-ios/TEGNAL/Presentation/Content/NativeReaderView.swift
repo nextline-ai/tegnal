@@ -24,6 +24,10 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var translationRequest: ReaderTranslationRequest?
+    /// Translation mode, kept while pages turn.
+    @State private var translation = ReaderTranslationSession()
+    /// The translation pill shows for a moment after something changes, then fades away.
+    @State private var translationPillUntil = Date.distantPast
     @State private var zoomed = false
     @State private var zoomedPages: Set<Int> = []
     @State private var exiting = false
@@ -49,6 +53,8 @@ struct NativeReaderView: View {
     @State private var viewports: [Int: CGRect] = [:]
     @State private var toast: String?
     @State private var saveFeedback: WorkSaveFeedback?
+    /// Whether the work is bookmarked, read again each time the quick menu opens.
+    @State private var saved = false
     @State private var showJump = false
     @State private var jumpText = ""
     @State private var previousIdleTimer = false
@@ -85,6 +91,7 @@ struct NativeReaderView: View {
             Color.black.ignoresSafeArea()
             if let gallery, !opening.needsConfirmation || resumeReady {
                 reader(gallery).ignoresSafeArea()
+                    .environment(translation)
                     .overlay(Color.black.opacity(min(0.65, max(0, dimming))).allowsHitTesting(false))
             } else if let error {
                 ContentFailureView(message: error) { retry += 1 }.preferredColorScheme(.dark)
@@ -149,7 +156,12 @@ struct NativeReaderView: View {
                                    menuBounds: bounds, next: advanceGuide, finish: finishGuide)
             }
         }
-        .onChange(of: menuVisible) { _, visible in if visible { guide.openedMenu() } }
+        .onChange(of: menuVisible) { _, visible in
+            if visible { guide.openedMenu(); readSaved() }
+        }
+        // The quick menu may stay pinned at the bottom; the details sheet can also change the bookmark.
+        .onChange(of: sheet) { _, _ in readSaved() }
+        .task(id: galleryID) { readSaved() }
         // Keep VoiceOver in the reader while preserving its page and menu controls.
         // The presenting gallery/navigation stack remains mounted underneath.
         .accessibilityElement(children: .contain)
@@ -227,6 +239,25 @@ struct NativeReaderView: View {
             translationRequest = nil; viewports = [:]; zoomed = false; zoomedPages = []
             if savesProgress && !opening.needsConfirmation { ReaderPreferences.defaults.set(page + 1, forKey: "reader_page_\(galleryID)") }
             showViewingPage()
+            followTranslation()
+        }
+        .onChange(of: translation.message) { _, message in if let message { toast = message; translation.message = nil } }
+        .background {
+            if #available(iOS 18.0, *) { ReaderTranslationHost(broker: translation.broker) }
+        }
+        .overlay(alignment: .topTrailing) {
+            if translation.isOn, let gallery, gallery.pages.indices.contains(currentPage) {
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    let hash = gallery.pages[currentPage].hash
+                    let visible = menuVisible || translation.isWorking(on: hash) || context.date < translationPillUntil
+                    ReaderTranslationToggle(showsOriginal: translation.showsOriginal, working: translation.isWorking(on: hash)) {
+                        translation.showsOriginal.toggle(); showTranslationPill()
+                    }
+                    .opacity(visible ? 1 : 0).allowsHitTesting(visible)
+                    .animation(.easeInOut(duration: 0.25), value: visible)
+                }
+                .padding(.top, 8).padding(.trailing, 16)
+            }
         }
         .onAppear { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled; UIApplication.shared.isIdleTimerDisabled = keepAwake && scenePhase == .active }
         .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value && scenePhase == .active }
@@ -293,18 +324,20 @@ struct NativeReaderView: View {
             menuButton(L10n.text("Download Work"), icon: "arrow.down.circle", id: offline ? "download.offline" : "download", compact: compact) {
                 if let gallery { DownloadStore.shared.enqueue(gallery); sheet = .downloads }
             }.disabled(gallery == nil || offline)
-            menuButton(L10n.text("Bookmark"), icon: "bookmark", id: "bookmark", compact: compact, action: bookmark)
+            menuButton(L10n.text(saved ? "Remove Bookmark" : "Bookmark"), icon: saved ? "bookmark.fill" : "bookmark", id: "bookmark", compact: compact,
+                       color: saved ? WorkSaveResult.added(.comics).color : nil, action: bookmark)
             menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "exit", compact: compact, action: closeReader)
-            menuButton(L10n.text("Translate"), icon: "translate", id: "translate", compact: compact) { translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1)); menuVisible = false }
+            menuButton(L10n.text(translation.isOn ? "Stop Translating" : "Translate"), icon: "translate", id: "translate", compact: compact,
+                       color: translation.isOn ? .accentColor : nil) { translate() }
             menuButton(L10n.text("Work Details"), icon: "info.circle", id: "information", compact: compact) { sheet = .information }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "settings", compact: compact) { sheet = .settings }
         }
     }
 
-    private func menuButton(_ title: String, icon: String, id: String, compact: Bool, action: @escaping () -> Void) -> some View {
+    private func menuButton(_ title: String, icon: String, id: String, compact: Bool, color: Color? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 21))
+                Image(systemName: icon).font(.system(size: 21)).foregroundStyle(color ?? .white)
                 Text(title).font(compact ? .system(size: 9, weight: .medium) : .caption).lineLimit(1).minimumScaleFactor(0.8)
             }.frame(maxWidth: .infinity, minHeight: 44)
         }
@@ -366,7 +399,26 @@ struct NativeReaderView: View {
     }
     private func bookmark() {
         saveFeedback = .perform(galleryID: galleryID) { try ContentBookmarkAction.toggle(id: galleryID, gallery: gallery, env: env, images: images, context: discovery) }
+        readSaved()
     }
+    private func readSaved() { saved = (try? env.database.getWork(galleryId: galleryID)) != nil }
+    /// Translation mode on iOS 18 and later; earlier systems translate one page in Live Text.
+    private func translate() {
+        menuVisible = false
+        guard ReaderTranslationSession.isSupported, ReaderPreferences.continuousTranslation || translation.isOn else {
+            translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1))
+            return
+        }
+        translation.toggle()
+        followTranslation()
+        showTranslationPill()
+    }
+    private func followTranslation() {
+        guard translation.isOn, let gallery else { return }
+        translation.follow(gallery: gallery, index: currentPage, count: ReaderLayout.count(pagesPerSpread), images: images)
+        showTranslationPill()
+    }
+    private func showTranslationPill() { translationPillUntil = Date().addingTimeInterval(2.5) }
     private func resolveOpening(continuing: Bool) {
         let resolved = opening.resolved(continuing: continuing)
         if let gallery {

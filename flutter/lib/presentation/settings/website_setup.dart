@@ -13,6 +13,9 @@ import '../../core/support/l10n.dart';
 import '../design/app_sheet.dart';
 import '../design/grouped_form.dart';
 import '../design/symbols.dart';
+import '../design/system_colors.dart';
+import 'settings_page.dart';
+import 'settings_rows.dart';
 import '../design/tegnal_theme.dart';
 import '../navigation/app_state.dart';
 import '../../core/content/content_transport.dart';
@@ -614,6 +617,92 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// `ComicSitesView`: the connected comics websites. Tap one to use it, swipe to remove it, or
+/// add another.
+class ComicSitesPage extends StatefulWidget {
+  const ComicSitesPage({super.key, required this.content, required this.state});
+  final ContentEnvironment content;
+  final AppState state;
+
+  @override
+  State<ComicSitesPage> createState() => _ComicSitesPageState();
+}
+
+class _ComicSitesPageState extends State<ComicSitesPage> {
+  ContentEnvironment get _content => widget.content;
+
+  @override
+  void initState() {
+    super.initState();
+    _content.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _content.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = TegnalColors.tint.resolveFrom(context);
+    final row = FormColors.listRow.resolveFrom(context);
+    return SettingsPage(
+      title: L10n.text('Website Connection'),
+      children: [
+        FormSection(
+          rowColor: row,
+          footer: Text(
+            L10n.text(
+              'Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too.',
+            ),
+          ),
+          children: [
+            for (final site in _content.comicSites)
+              Dismissible(
+                key: ValueKey(site),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  color: SystemColors.red.resolveFrom(context),
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  child: Text(L10n.text('Delete'), style: TegnalType.style(17, color: const Color(0xFFFFFFFF))),
+                ),
+                onDismissed: (_) => _content.removeComicsSite(site),
+                child: FormRow(
+                  onTap: () => _content.switchComicsSite(site),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      if (site == _content.mangaSiteAddress) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        settingsSectionGap,
+        FormSection(
+          rowColor: row,
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Add Website'),
+              icon: CupertinoIcons.plus,
+              tinted: true,
+              chevron: false,
+              onTap: () => showWebsiteConnectionEditor(context, content: _content, state: widget.state),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

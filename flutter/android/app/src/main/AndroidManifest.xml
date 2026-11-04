@@ -1,4 +1,7 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- The on-device model needs Android 8 or later; it is only called there. -->
+    <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt, com.google.mlkit.genai.common" />
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="TEGNAL"
