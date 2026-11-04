@@ -19,6 +19,15 @@
       "category": "entertainment",
       "versions": [
         {
+          "version": "1.3",
+          "buildVersion": "37",
+          "date": "2026-11-05",
+          "localizedDescription": "1.3 (37): connect several comic sites and switch between them; saved works remember their site and sync it; translation stays on across pages with an optional on-device AI translation; a setting to turn off double-tap zoom; daily-changing Today's Picks.",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.3-37.ipa",
+          "size": 12486070,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0",
           "buildVersion": "26",
           "date": "2026-10-28",
