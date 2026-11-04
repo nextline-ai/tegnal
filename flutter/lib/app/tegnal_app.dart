@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../core/booru/booru_client.dart';
+import '../core/booru/booru_image_cache.dart';
 import '../core/booru/booru_store.dart';
 import '../core/content/content_environment.dart';
 import '../core/content/cover_queue.dart';
@@ -11,6 +13,9 @@ import '../core/sync/library_drive_sync.dart';
 import '../core/storage/app_database.dart';
 import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
+import '../presentation/booru/booru_common.dart';
+import '../presentation/booru/booru_root.dart';
+import '../presentation/booru/booru_settings_views.dart';
 import '../presentation/content/content_bookmark.dart';
 import '../presentation/content/content_routes.dart';
 import '../presentation/content/explore_view.dart';
@@ -40,6 +45,10 @@ class AppServices {
     required this.content,
     required this.downloadsDirectory,
     required this.syncDirectory,
+    required this.booruSource,
+    required this.booruThumbnails,
+    required this.booruViewerImages,
+    this.booruDownloads,
     this.version = '',
     this.isTesting = false,
   }) : images = PageImageStore(source: content.source) {
@@ -53,7 +62,7 @@ class AppServices {
             isSiteVerified: () => content.isSiteVerified,
           );
     bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting, startCoverQueue: coverQueue.start);
-    downloads = DownloadStore(directory: downloadsDirectory, manga: content.source);
+    downloads = DownloadStore(directory: downloadsDirectory, manga: content.source, booru: booruDownloads);
     sync = LibraryDriveSync(
       backend: GoogleDriveBackend(),
       database: database,
@@ -76,6 +85,12 @@ class AppServices {
   final PageImageStore images;
   final bool isTesting;
 
+  /// Image mode's posts, previews and viewer media, and how its downloads fetch files.
+  final BooruProviding booruSource;
+  final BooruImageCache booruThumbnails;
+  final BooruImageCache booruViewerImages;
+  final BooruMediaDownloading? booruDownloads;
+
   /// The installed version name shown in Settings.
   final String version;
   final Directory downloadsDirectory;
@@ -90,16 +105,17 @@ class AppServices {
 }
 
 class TegnalApp extends StatefulWidget {
-  const TegnalApp({super.key, required this.services, this.initialTab = AppTab.folders});
+  const TegnalApp({super.key, required this.services, this.initialTab = AppTab.folders, this.initialMode = AppMode.manga});
   final AppServices services;
   final AppTab initialTab;
+  final AppMode initialMode;
 
   @override
   State<TegnalApp> createState() => _TegnalAppState();
 }
 
 class _TegnalAppState extends State<TegnalApp> {
-  late final AppState _state = AppState(tab: widget.initialTab);
+  late final AppState _state = AppState(mode: widget.initialMode, tab: widget.initialTab);
 
   /// `AppTheme`: each library keeps its own setting, dark unless changed.
   Brightness? _brightness() {
@@ -162,6 +178,7 @@ class _RootState extends State<_Root> {
   @override
   void initState() {
     super.initState();
+    state.keepsImageMode = () => _booru.safeMode;
     if (!services.isTesting) services.coverQueue.start();
     // Sync and the cover queue run only while the app is in front, as on iOS.
     _lifecycle = AppLifecycleListener(
@@ -180,8 +197,38 @@ class _RootState extends State<_Root> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _booruPages.dispose();
     super.dispose();
   }
+
+  late final _booru = BooruContext(
+    state: state,
+    store: services.booru,
+    source: services.booruSource,
+    thumbnails: services.booruThumbnails,
+    viewerImages: services.booruViewerImages,
+    database: services.database,
+    preferences: services.preferences.defaults,
+    booruDefaults: services.preferences.booruDefaults,
+    downloads: _downloads,
+    fixture: services.isTesting,
+  );
+
+  late final _booruPages = BooruRootPages(
+    booru: _booru,
+    content: services.content,
+    library: _library,
+    settings: BooruSettingsDependencies(
+      booru: _booru,
+      content: services.content,
+      version: services.version,
+      openLibraryManagement: (context) =>
+          Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => LibraryManagementView(library: _management, booru: true))),
+      resetSettings: () => ModeSettingsReset.reset(booru: true, content: services.content, preferences: services.preferences),
+      sync: (context) => DriveSyncSection(sync: services.sync),
+      invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),
+    ),
+  );
 
   late final _downloads = DownloadsContext(
     store: services.downloads,
@@ -219,35 +266,50 @@ class _RootState extends State<_Root> {
 
   @override
   Widget build(BuildContext context) {
+    // `RetainedModeContainer`: both libraries stay alive while the other one shows.
     return CupertinoPageScaffold(
       resizeToAvoidBottomInset: false,
       child: ListenableBuilder(
         listenable: state,
-        builder: (context, _) => RootTabView(
-          state: state,
-          pages: {
-            AppTab.folders: TabNavigator(
-              active: state.tab == AppTab.folders,
-              builder: (context) => FoldersView(state: state, routes: _library),
+        builder: (context, _) => IndexedStack(
+          index: state.mode == AppMode.manga ? 0 : 1,
+          children: [
+            _mangaTabs(),
+            RootTabView(
+              state: state,
+              pages: {
+                ..._booruPages.pages(),
+                AppTab.insights: _PendingRoot(title: L10n.text('Smart'), state: state),
+              },
             ),
-            AppTab.works: TabNavigator(
-              active: state.tab == AppTab.works,
-              builder: (context) => _ExploreRoot(state: state, services: services),
-            ),
-            AppTab.artists: TabNavigator(
-              active: state.tab == AppTab.artists,
-              builder: (context) => CollectionsView(state: state, routes: _library, preferences: services.preferences.defaults),
-            ),
-            AppTab.settings: TabNavigator(
-              active: state.tab == AppTab.settings,
-              builder: (context) => SettingsView(dependencies: _settings),
-            ),
-            AppTab.insights: _PendingRoot(title: L10n.text('Smart'), state: state),
-          },
+          ],
         ),
       ),
     );
   }
+
+  Widget _mangaTabs() => RootTabView(
+    state: state,
+    pages: {
+      AppTab.folders: TabNavigator(
+        active: state.mode == AppMode.manga && state.tab == AppTab.folders,
+        builder: (context) => FoldersView(state: state, routes: _library),
+      ),
+      AppTab.works: TabNavigator(
+        active: state.mode == AppMode.manga && state.tab == AppTab.works,
+        builder: (context) => _ExploreRoot(state: state, services: services),
+      ),
+      AppTab.artists: TabNavigator(
+        active: state.mode == AppMode.manga && state.tab == AppTab.artists,
+        builder: (context) => CollectionsView(state: state, routes: _library, preferences: services.preferences.defaults),
+      ),
+      AppTab.settings: TabNavigator(
+        active: state.mode == AppMode.manga && state.tab == AppTab.settings,
+        builder: (context) => SettingsView(dependencies: _settings),
+      ),
+      AppTab.insights: _PendingRoot(title: L10n.text('Smart'), state: state),
+    },
+  );
 }
 
 /// Explore, or the website setup until a comics website is connected.

@@ -197,7 +197,7 @@ class _FoldersViewState extends State<FoldersView> {
                       itemBuilder: (context, index, style) {
                         final folder = _folders[index];
                         return Builder(
-                          builder: (cardContext) => _Pressable(
+                          builder: (cardContext) => PressableCard(
                             onTap: () => widget.routes.openFolder(context, folder),
                             onLongPress: () => _openMenu(cardContext, folder),
                             child: FolderBentoCard(folder: folder, previews: _previews[folder.id] ?? const [], style: style),
@@ -238,17 +238,17 @@ Rect anchorOf(BuildContext context) {
 }
 
 /// A card that dims slightly while touched, opens on tap and shows its menu on a hold.
-class _Pressable extends StatefulWidget {
-  const _Pressable({required this.child, required this.onTap, required this.onLongPress});
+class PressableCard extends StatefulWidget {
+  const PressableCard({super.key, required this.child, required this.onTap, required this.onLongPress});
   final Widget child;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   @override
-  State<_Pressable> createState() => _PressableState();
+  State<PressableCard> createState() => PressableCardState();
 }
 
-class _PressableState extends State<_Pressable> {
+class PressableCardState extends State<PressableCard> {
   bool _pressed = false;
 
   @override

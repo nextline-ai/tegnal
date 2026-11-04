@@ -1,19 +1,21 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
-import '../../domain/models.dart';
 import '../content/gallery_detail_view.dart';
 import '../design/tegnal_theme.dart';
 
 /// `NativeColorPickerSheet` (`UIColorPickerViewController` in its grid style, without opacity):
 /// twelve hues by nine shades under a row of grays. Each tap recolors the folder at once.
 class FolderColorSheet extends StatefulWidget {
-  const FolderColorSheet({super.key, required this.folder, required this.database, required this.onChanged});
-  final Folder folder;
-  final AppDatabase database;
-  final VoidCallback onChanged;
+  const FolderColorSheet({super.key, required this.title, required this.color, required this.onSelected});
+
+  /// The folder's display name.
+  final String title;
+  final int color;
+
+  /// Saves the chosen opaque ARGB color.
+  final ValueChanged<int> onSelected;
 
   /// Hues of the grid's columns, from cyan through green, as the system grid orders them.
   static const hues = [196.0, 214.0, 248.0, 280.0, 325.0, 355.0, 12.0, 28.0, 40.0, 52.0, 62.0, 84.0];
@@ -34,16 +36,13 @@ class FolderColorSheet extends StatefulWidget {
 }
 
 class _FolderColorSheetState extends State<FolderColorSheet> {
-  late int _color = widget.folder.color;
+  late int _color = widget.color;
 
   void _select(Color color) {
     final value = FolderColorSheet.argb(color);
-    final id = widget.folder.id;
-    if (id == null) return;
     HapticFeedback.selectionClick();
-    widget.database.setFolderColor(id, value);
+    widget.onSelected(value);
     setState(() => _color = value);
-    widget.onChanged();
   }
 
   @override
@@ -62,7 +61,7 @@ class _FolderColorSheetState extends State<FolderColorSheet> {
                 alignment: Alignment.center,
                 children: [
                   Text(
-                    L10n.text('%@ color', [widget.folder.displayName]),
+                    L10n.text('%@ color', [widget.title]),
                     style: TegnalType.style(17, weight: FontWeight.w600, color: label),
                   ),
                   Positioned(

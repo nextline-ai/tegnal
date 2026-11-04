@@ -482,7 +482,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
                       ),
                     if (_bottomMenu && !_menuVisible && gallery != null) ...[
                       const SizedBox(height: 8),
-                      _ReaderMenuGlass(
+                      ReaderMenuGlass(
                         child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: _menuActions(compact: true)),
                       ),
                     ],
@@ -574,7 +574,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
         child: SizedBox.square(dimension: 44, child: Icon(icon, size: 22, color: onTap == null ? disabled : white)),
       ),
     );
-    return _ReaderMenuGlass(
+    return ReaderMenuGlass(
       key: _menuKey,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -675,8 +675,8 @@ class _NativeReaderViewState extends State<NativeReaderView> {
 
 /// `ReaderMenuGlass`: dark glass tinted 30% black, 24 pt corners, always in dark appearance.
 /// The fill is measured from the native menu over a light page and over black.
-class _ReaderMenuGlass extends StatelessWidget {
-  const _ReaderMenuGlass({super.key, required this.child});
+class ReaderMenuGlass extends StatelessWidget {
+  const ReaderMenuGlass({super.key, required this.child});
   final Widget child;
 
   @override
@@ -713,10 +713,11 @@ abstract final class ReaderScreen {
   }
 }
 
-/// `ReaderSettingsView` for comics.
+/// `ReaderSettingsView` for comics, or with [booru] for the image viewer's own options.
 class ReaderSettingsView extends StatefulWidget {
-  const ReaderSettingsView({super.key, required this.preferences, this.scrollController, this.onChanged, this.onShowGuide});
+  const ReaderSettingsView({super.key, required this.preferences, this.booru = false, this.scrollController, this.onChanged, this.onShowGuide});
   final Preferences preferences;
+  final bool booru;
   final ScrollController? scrollController;
   final VoidCallback? onChanged;
 
@@ -756,57 +757,61 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
         controller: widget.scrollController,
         padding: EdgeInsets.only(top: 76 + 4, bottom: 32 + MediaQuery.paddingOf(context).bottom),
         children: [
-          FormSection(
-            prominentHeader: true,
-            header: Text(L10n.text('Reading Progress')),
-            children: [
-              _PickerRow<String>(
-                title: L10n.text('When Reopening a Work'),
-                options: [for (final behavior in ReaderResumeBehavior.values) (behavior.rawValue, behavior.title)],
-                selected: resume,
-                onSelected: (value) => _set('reader.resumeBehavior', value),
-              ),
-            ],
-          ),
-          const SizedBox(height: 26),
+          if (!widget.booru) ...[
+            FormSection(
+              prominentHeader: true,
+              header: Text(L10n.text('Reading Progress')),
+              children: [
+                _PickerRow<String>(
+                  title: L10n.text('When Reopening a Work'),
+                  options: [for (final behavior in ReaderResumeBehavior.values) (behavior.rawValue, behavior.title)],
+                  selected: resume,
+                  onSelected: (value) => _set('reader.resumeBehavior', value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 26),
+          ],
           FormSection(
             prominentHeader: true,
             header: Text(L10n.text('Page Navigation')),
             children: [
-              _PickerRow<String>(
-                title: L10n.text('Reading Mode'),
-                options: [for (final value in ReaderMode.values) (value.rawValue, value.title)],
-                selected: mode,
-                onSelected: (value) => _set('reader.mode', value),
-              ),
-              if (continuous) ...[
-                _ToggleRow(
-                  title: L10n.text('Swipe Right to Go Back'),
-                  help: 'In Continuous Scroll, swipe right from the left edge of the safe area to return to the list. Off by default. Swiping elsewhere can still change works if that option is on.',
-                  value: _bool('reader.continuousBackSwipe', false),
-                  onChanged: (value) => _set('reader.continuousBackSwipe', value),
+              if (!widget.booru) ...[
+                _PickerRow<String>(
+                  title: L10n.text('Reading Mode'),
+                  options: [for (final value in ReaderMode.values) (value.rawValue, value.title)],
+                  selected: mode,
+                  onSelected: (value) => _set('reader.mode', value),
                 ),
-                _ToggleRow(
-                  title: L10n.text('Swipe Left or Right to Change Works'),
-                  help: 'Switches between works already loaded in the current list. Turn off to keep horizontal swipes from changing works.',
-                  value: _bool('reader.continuousWorkSwipe', false),
-                  onChanged: (value) => _set('reader.continuousWorkSwipe', value),
-                ),
-                _ToggleRow(
-                  title: L10n.text('Swipe Up for Work Information'),
-                  help: 'Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet.',
-                  value: _bool('reader.continuousPreviewSwipe', false),
-                  onChanged: (value) => _set('reader.continuousPreviewSwipe', value),
+                if (continuous) ...[
+                  _ToggleRow(
+                    title: L10n.text('Swipe Right to Go Back'),
+                    help: 'In Continuous Scroll, swipe right from the left edge of the safe area to return to the list. Off by default. Swiping elsewhere can still change works if that option is on.',
+                    value: _bool('reader.continuousBackSwipe', false),
+                    onChanged: (value) => _set('reader.continuousBackSwipe', value),
+                  ),
+                  _ToggleRow(
+                    title: L10n.text('Swipe Left or Right to Change Works'),
+                    help: 'Switches between works already loaded in the current list. Turn off to keep horizontal swipes from changing works.',
+                    value: _bool('reader.continuousWorkSwipe', false),
+                    onChanged: (value) => _set('reader.continuousWorkSwipe', value),
+                  ),
+                  _ToggleRow(
+                    title: L10n.text('Swipe Up for Work Information'),
+                    help: 'Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet.',
+                    value: _bool('reader.continuousPreviewSwipe', false),
+                    onChanged: (value) => _set('reader.continuousPreviewSwipe', value),
+                  ),
+                ],
+                _PickerRow<int>(
+                  title: L10n.text('Pages per View'),
+                  options: [
+                    for (var count = 1; count <= 4; count++) (count, L10n.text('Pages: %@', ['$count'])),
+                  ],
+                  selected: pagesPerSpread,
+                  onSelected: (value) => _set('reader.pagesPerSpread', value),
                 ),
               ],
-              _PickerRow<int>(
-                title: L10n.text('Pages per View'),
-                options: [
-                  for (var count = 1; count <= 4; count++) (count, L10n.text('Pages: %@', ['$count'])),
-                ],
-                selected: pagesPerSpread,
-                onSelected: (value) => _set('reader.pagesPerSpread', value),
-              ),
               _ToggleRow(title: L10n.text('Read Right to Left'), value: _bool('reader.rtl', false), onChanged: (value) => _set('reader.rtl', value)),
               _ToggleRow(
                 title: L10n.text('Tap the Sides to Turn Pages'),
@@ -816,6 +821,32 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
             ],
           ),
           const SizedBox(height: 26),
+          if (widget.booru) ...[
+            FormSection(
+              prominentHeader: true,
+              header: Text(L10n.text('Media')),
+              children: [
+                _ToggleRow(
+                  title: L10n.text('Show Notes on Images'),
+                  value: _bool('booru.showNotes', true),
+                  onChanged: (value) => _set('booru.showNotes', value),
+                ),
+                _ToggleRow(
+                  title: L10n.text('Load Original Images'),
+                  help: 'Loads the full-size file from the website. This can use more data and take longer to load.',
+                  value: _bool('booru.original', false),
+                  onChanged: (value) => _set('booru.original', value),
+                ),
+                _ToggleRow(
+                  title: L10n.text('Reduce Image Data Further'),
+                  help: 'Uses smaller compressed images when available. Load Original Images takes priority over this setting.',
+                  value: _bool('booru.reducedData', false),
+                  onChanged: _bool('booru.original', false) ? null : (value) => _set('booru.reducedData', value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 26),
+          ],
           FormSection(
             prominentHeader: true,
             header: Text(L10n.text('Display')),
@@ -883,20 +914,22 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
             ],
           ),
           const SizedBox(height: 26),
-          FormSection(
-            prominentHeader: true,
-            header: Text(L10n.text('Loading Options')),
-            children: [
-              _PickerRow<int>(
-                title: L10n.text('Prefetch Pages'),
-                help: 'Loads upcoming pages in advance so they open faster. Uses extra data and keeps the images in memory only.',
-                options: [(0, L10n.text('Off')), (2, L10n.text('2 Pages')), (3, L10n.text('3 Pages')), (5, L10n.text('5 Pages'))],
-                selected: prefetch,
-                onSelected: (value) => _set('reader.prefetch', value),
-              ),
-            ],
-          ),
-          const SizedBox(height: 26),
+          if (!widget.booru) ...[
+            FormSection(
+              prominentHeader: true,
+              header: Text(L10n.text('Loading Options')),
+              children: [
+                _PickerRow<int>(
+                  title: L10n.text('Prefetch Pages'),
+                  help: 'Loads upcoming pages in advance so they open faster. Uses extra data and keeps the images in memory only.',
+                  options: [(0, L10n.text('Off')), (2, L10n.text('2 Pages')), (3, L10n.text('3 Pages')), (5, L10n.text('5 Pages'))],
+                  selected: prefetch,
+                  onSelected: (value) => _set('reader.prefetch', value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 26),
+          ],
           FormSection(
             prominentHeader: true,
             header: Text(L10n.text('Gesture Guide')),
@@ -909,7 +942,9 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
                     FormHelpButton(
                       title: L10n.text('Viewer Gestures'),
                       message: L10n.text(
-                        'Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close.',
+                        widget.booru
+                            ? 'Tap the center for the quick menu, hold to save, and tap the sides or swipe to change images. Double tap or pinch to zoom. Swipe up from the bottom for details, or swipe down at original zoom to close. For videos, tap with two fingers to open the quick menu.'
+                            : 'Tap the center for the quick menu, hold to save, and double tap or pinch to zoom. Open Work Information from the quick menu or swipe up from the bottom. In Continuous Scroll, enable that gesture above; drag down from the top handle to close.',
                       ),
                     ),
                   ],
@@ -963,7 +998,7 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
       ),
     );
     if (reset != true) return;
-    setState(() => ReaderPreferenceReset.reset(booru: false, defaults: _defaults));
+    setState(() => ReaderPreferenceReset.reset(booru: widget.booru, defaults: _defaults));
     widget.onChanged?.call();
   }
 }
@@ -1015,7 +1050,7 @@ class _ToggleRow extends StatelessWidget {
   const _ToggleRow({required this.title, required this.value, required this.onChanged, this.help});
   final String title;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
   final String? help;
 
   @override

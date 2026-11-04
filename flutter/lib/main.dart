@@ -6,6 +6,11 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/localization.dart';
 import 'app/tegnal_app.dart';
+import 'core/booru/booru_browser.dart';
+import 'core/booru/booru_client.dart';
+import 'core/booru/booru_fixture_source.dart';
+import 'core/booru/booru_image_cache.dart';
+import 'core/booru/booru_models.dart';
 import 'core/booru/booru_store.dart';
 import 'core/content/content_environment.dart';
 import 'core/content/fixture_content_source.dart';
@@ -27,7 +32,10 @@ import 'presentation/navigation/app_state.dart';
 /// native app's. `TEGNAL_LANGUAGE` and `TEGNAL_TAB` pick the language and the first tab
 /// for those runs, `TEGNAL_THEME` (`light`, `dark` or `system`) the comics appearance, and
 /// `TEGNAL_DETAILS=true` opens work information before reading, as `-manga.showInformationBeforeReading YES`.
+/// `TEGNAL_MODE=booru` starts in image mode with the fixture servers, as `--booru-ui-test`;
+/// [BooruFixtureOption] names in `TEGNAL_FIXTURE` pick its variants.
 const _fixture = String.fromEnvironment('TEGNAL_FIXTURE');
+const _mode = String.fromEnvironment('TEGNAL_MODE');
 const _language = String.fromEnvironment('TEGNAL_LANGUAGE');
 const _tab = String.fromEnvironment('TEGNAL_TAB');
 const _theme = String.fromEnvironment('TEGNAL_THEME');
@@ -64,7 +72,13 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final services = _fixture.isEmpty ? await _launch() : await _launchFixture();
-  runApp(TegnalApp(services: services, initialTab: AppTab.values.where((tab) => tab.name == _tab).firstOrNull ?? AppTab.folders));
+  runApp(
+    TegnalApp(
+      services: services,
+      initialTab: AppTab.values.where((tab) => tab.name == _tab).firstOrNull ?? AppTab.folders,
+      initialMode: _mode == 'booru' ? AppMode.booru : AppMode.manga,
+    ),
+  );
 }
 
 /// The installed version name, as Settings shows the bundle version.
@@ -84,12 +98,28 @@ Future<AppServices> _launch() async {
   PageImageStore.defaultDiskDirectory = Directory('${(await getApplicationCacheDirectory()).path}/MangaPageCache');
   await loadLocalization(preferences.defaults);
   // Sign-in cookies live in the Android Keystore, never in the database or backups.
-  SiteAccount.store = await SecureSecretStore.load();
+  final secrets = await SecureSecretStore.load();
+  SiteAccount.store = secrets;
+  // Image servers' API keys and validated cookies stay in the same keystore.
+  final credentials = SecretCredentialStore(secrets);
+  BooruClient.defaultCredentials = credentials;
+  BooruBrowserSession.shared = BooruBrowserSession(secrets: secrets);
   final support = await getApplicationSupportDirectory();
+  final caches = await getApplicationCacheDirectory();
+  final booru = BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials);
+  final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
+  booru.warmSavedPreview = (post, server) {
+    final url = post.previewURL ?? post.sampleURL;
+    if (url != null) thumbnails.prefetch([(url, server)]);
+  };
   return AppServices(
     preferences: preferences,
     database: AppDatabase.open(preferences: preferences),
-    booru: BooruStore(path: AppStorage.booruDbPath, preferences: preferences),
+    booru: booru,
+    booruSource: BooruClient.shared,
+    booruThumbnails: thumbnails,
+    booruViewerImages: BooruImageCache.sharedViewer = BooruImageCache.viewer(caches),
+    booruDownloads: BooruMediaDownloader(),
     content: ContentEnvironment(browserPreferences: preferences.defaults, source: MangaContentSource.shared),
     downloadsDirectory: DownloadStore.defaultDirectory,
     syncDirectory: Directory('${support.path}/drive-sync'),
@@ -119,10 +149,24 @@ Future<AppServices> _launchFixture() async {
       : ContentEnvironment.fixture(preferences: preferences.defaults, options: options);
   final database = AppDatabase.inMemory(preferences: preferences);
   _seedLibrary(database, names);
+  final booruOptions = {for (final name in names) ...BooruFixtureOption.values.where((option) => option.name == name)};
+  final booru = BooruStore.inMemory(preferences: preferences);
+  if (_mode == 'booru') {
+    BooruFixtureEnvironment.seed(booru, options: booruOptions);
+    preferences.booruDefaults.set('reader.helpHidden', !names.contains('readerHelp'));
+    if (_theme.isNotEmpty) preferences.defaults.set('booru.app_theme', _theme);
+  }
+  final booruSource = BooruFixtureSource(options: booruOptions);
+  final media = Directory('${Directory.systemTemp.path}/fixture-booru-media');
+  Future<Uint8List> fixtureMedia(String url, BooruServer server) => BooruFixtureMedia.load(url, null);
   return AppServices(
     preferences: preferences,
     database: database,
-    booru: BooruStore.inMemory(preferences: preferences),
+    booru: booru,
+    booruSource: booruSource,
+    booruThumbnails: BooruImageCache(directory: Directory('${media.path}/thumbnails'), loadData: fixtureMedia),
+    booruViewerImages: BooruImageCache(directory: Directory('${media.path}/viewer'), loadData: fixtureMedia, isViewer: true),
+    booruDownloads: BooruMediaDownloader(source: booruSource),
     content: content,
     downloadsDirectory: Directory('${Directory.systemTemp.path}/fixture-downloads'),
     syncDirectory: Directory('${Directory.systemTemp.path}/fixture-drive-sync'),

@@ -1,30 +1,28 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 
 /// `FolderOrderView`: the folders in an editing list, dragged by their handles, saved together.
-class FolderOrderView extends StatefulWidget {
-  const FolderOrderView({super.key, required this.database});
-  final AppDatabase database;
+/// Comics and image folders differ only in their identifiers and store.
+class FolderOrderView<ID extends Object> extends StatefulWidget {
+  const FolderOrderView({super.key, required this.folders, required this.save});
+  final List<({ID id, String name})> folders;
+  final void Function(List<ID> order) save;
 
   @override
-  State<FolderOrderView> createState() => _FolderOrderViewState();
+  State<FolderOrderView<ID>> createState() => _FolderOrderViewState<ID>();
 }
 
-class _FolderOrderViewState extends State<FolderOrderView> {
-  late final List<({int id, String name})> _entries = [
-    for (final folder in widget.database.listFolders())
-      if (folder.id != null) (id: folder.id!, name: folder.displayName),
-  ];
+class _FolderOrderViewState<ID extends Object> extends State<FolderOrderView<ID>> {
+  late final List<({ID id, String name})> _entries = [...widget.folders];
   String? _error;
 
   void _save() {
     try {
-      widget.database.reorderFolders([for (final entry in _entries) entry.id]);
+      widget.save([for (final entry in _entries) entry.id]);
       Navigator.of(context).pop();
     } on Object catch (error) {
       setState(() => _error = '$error');

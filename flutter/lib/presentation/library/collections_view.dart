@@ -4,6 +4,8 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/booru/booru_models.dart';
+import '../../core/booru/booru_store.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
@@ -18,16 +20,20 @@ import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import 'library_routes.dart';
 
-/// `SavedCollectionsModel` for comics: saved tags, artists and searches, and the search history.
-/// Reads and writes stay in the comics database; order lives in preferences.
+/// `SavedCollectionsModel`: saved tags, artists and searches, and the search history, for
+/// comics or for one image server. Order lives in that library's preferences.
 class SavedCollectionsModel extends ChangeNotifier {
-  SavedCollectionsModel({required this.database, required this.preferences}) {
+  SavedCollectionsModel({required this.database, required this.preferences, this.booru, this.server}) {
     refresh();
     _changes = database.changes.listen((_) => refresh());
+    booru?.addListener(refresh);
   }
 
   final AppDatabase database;
   final Preferences preferences;
+  final BooruStore? booru;
+  final BooruServer? server;
+  bool get isManga => server == null;
   StreamSubscription<int>? _changes;
   List<ArtistMemo> _tags = [];
   List<String> _searches = [];
@@ -36,6 +42,7 @@ class SavedCollectionsModel extends ChangeNotifier {
   @override
   void dispose() {
     _changes?.cancel();
+    booru?.removeListener(refresh);
     super.dispose();
   }
 
@@ -54,14 +61,17 @@ class SavedCollectionsModel extends ChangeNotifier {
       .toList();
 
   List<String> names(SavedCollectionKind kind) {
-    final values = switch (kind) {
-      SavedCollectionKind.search => _searches,
-      SavedCollectionKind.history => _history,
-      _ => [
-        for (final tag in _tags)
-          if (tag.kind == kind.mangaKind) tag.name,
-      ],
-    };
+    final server = this.server;
+    final values = server != null
+        ? (kind == SavedCollectionKind.history ? booru!.history(server.id, limit: null) : booru!.savedTags(server.id, kind: kind.rawValue))
+        : switch (kind) {
+            SavedCollectionKind.search => _searches,
+            SavedCollectionKind.history => _history,
+            _ => [
+              for (final tag in _tags)
+                if (tag.kind == kind.mangaKind) tag.name,
+            ],
+          };
     // History follows its last-used time, even where an older install stored an order for it.
     if (kind == SavedCollectionKind.history) return values;
     final preferred = (preferences.object(_orderKey(kind)) as List?)?.whereType<String>().toList() ?? const [];
@@ -77,20 +87,47 @@ class SavedCollectionsModel extends ChangeNotifier {
 
   String? save(String name, SavedCollectionKind kind) => _perform(() {
     final target = kind == SavedCollectionKind.history ? SavedCollectionKind.search : kind;
-    final value = target.normalized(name);
+    // Image queries are literal site tags; namespaces are added only for comics.
+    var value = name.trim();
+    if (isManga) {
+      value = target.normalized(value);
+    } else if (target != SavedCollectionKind.search) {
+      value = value.replaceAll(' ', '_');
+    }
     if (value.isEmpty) return null;
-    database.saveCollectionTag(value, target);
+    final server = this.server;
+    if (server != null) {
+      if (!booru!.savedTags(server.id, kind: target.rawValue).contains(value)) booru!.toggleTag(value, serverID: server.id, kind: target.rawValue);
+    } else {
+      database.saveCollectionTag(value, target);
+    }
     return L10n.text('Saved to Tags');
   });
 
   String? toggle(String name, SavedCollectionKind kind) => _perform(() {
     final target = kind == SavedCollectionKind.history ? SavedCollectionKind.search : kind;
-    final saved = database.toggleCollectionTag(name, target);
+    final server = this.server;
+    final bool saved;
+    if (server != null) {
+      saved = !booru!.savedTags(server.id, kind: target.rawValue).contains(name);
+      booru!.toggleTag(name, serverID: server.id, kind: target.rawValue);
+    } else {
+      saved = database.toggleCollectionTag(name, target);
+    }
     HapticFeedback.mediumImpact();
     return L10n.text(saved ? 'Saved to Tags' : 'Removed from Tags');
   });
 
   void remove(String name, SavedCollectionKind kind) => _perform(() {
+    final server = this.server;
+    if (server != null) {
+      if (kind == SavedCollectionKind.history) {
+        booru!.deleteSearch(name, serverID: server.id);
+      } else if (booru!.savedTags(server.id, kind: kind.rawValue).contains(name)) {
+        booru!.toggleTag(name, serverID: server.id, kind: kind.rawValue);
+      }
+      return null;
+    }
     switch (kind) {
       case SavedCollectionKind.history:
         database.deleteSearch(name);
@@ -107,7 +144,8 @@ class SavedCollectionsModel extends ChangeNotifier {
       names(SavedCollectionKind.search).contains(name) ? remove(name, SavedCollectionKind.search) : save(name, SavedCollectionKind.search);
 
   void clearHistory() => _perform(() {
-    database.clearSearchHistory();
+    final server = this.server;
+    server != null ? booru!.clearHistory(server.id) : database.clearSearchHistory();
     return null;
   });
 
@@ -127,9 +165,9 @@ class SavedCollectionsModel extends ChangeNotifier {
     reorder(kind, index, index + direction);
   }
 
-  String query(SavedCollectionKind kind, String name) => kind.query(name, manga: true);
+  String query(SavedCollectionKind kind, String name) => kind.query(name, manga: isManga);
 
-  String _orderKey(SavedCollectionKind kind) => 'collections.order.manga.${kind.rawValue}';
+  String _orderKey(SavedCollectionKind kind) => 'collections.order.${server == null ? 'manga' : 'booru.${server!.id}'}.${kind.rawValue}';
 
   /// Errors come back as the message to show; a notice is returned the same way.
   String? error;
@@ -162,17 +200,38 @@ IconData savedCollectionSymbol(SavedCollectionKind kind) => switch (kind) {
 
 /// `ArtistsListView`: the Tags tab, each kind's first five entries and a form to save one.
 class CollectionsView extends StatefulWidget {
-  const CollectionsView({super.key, required this.state, required this.routes, required this.preferences});
+  const CollectionsView({
+    super.key,
+    required this.state,
+    required this.routes,
+    required this.preferences,
+    this.booru,
+    this.server,
+    this.openQuery,
+    this.headerActions = const [],
+    this.onBack,
+  });
   final AppState state;
   final LibraryRoutes routes;
   final Preferences preferences;
+
+  /// An image server's tags, in place of the comics library's.
+  final BooruStore? booru;
+  final BooruServer? server;
+
+  /// Opens a saved entry's results; comics open their search by default.
+  final void Function(BuildContext context, String query)? openQuery;
+
+  /// Toolbar items before Edit, such as the image server menu.
+  final List<Widget> headerActions;
+  final VoidCallback? onBack;
 
   @override
   State<CollectionsView> createState() => _CollectionsViewState();
 }
 
 class _CollectionsViewState extends State<CollectionsView> {
-  late final _model = SavedCollectionsModel(database: widget.routes.database, preferences: widget.preferences);
+  late final _model = SavedCollectionsModel(database: widget.routes.database, preferences: widget.preferences, booru: widget.booru, server: widget.server);
   final _name = TextEditingController();
   SavedCollectionKind _kind = SavedCollectionKind.tag;
   bool _editing = false;
@@ -236,7 +295,15 @@ class _CollectionsViewState extends State<CollectionsView> {
               padding: EdgeInsets.only(top: top + 10, bottom: MediaQuery.viewInsetsOf(context).bottom > 0 ? 16 : tabBarClearance(context)),
               children: [
                 for (final kind in _model.sections) ...[
-                  CollectionSection(model: _model, kind: kind, full: false, editing: _editing, routes: widget.routes, preferences: widget.preferences),
+                  CollectionSection(
+                    model: _model,
+                    kind: kind,
+                    full: false,
+                    editing: _editing,
+                    routes: widget.routes,
+                    preferences: widget.preferences,
+                    openQuery: widget.openQuery,
+                  ),
                   const SizedBox(height: 28),
                 ],
                 FormSection(
@@ -302,11 +369,18 @@ class _CollectionsViewState extends State<CollectionsView> {
             child: RootHeader(
               title: L10n.text('Tags'),
               state: widget.state,
-              trailing: GlassTextButton(
-                label: L10n.text(_editing ? 'Done' : 'Edit'),
-                prominent: _editing,
-                elevated: false,
-                onPressed: () => setState(() => _editing = !_editing),
+              onBack: widget.onBack,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final action in widget.headerActions) ...[action, const SizedBox(width: 8)],
+                  GlassTextButton(
+                    label: L10n.text(_editing ? 'Done' : 'Edit'),
+                    prominent: _editing,
+                    elevated: false,
+                    onPressed: () => setState(() => _editing = !_editing),
+                  ),
+                ],
               ),
             ),
           ),
@@ -326,6 +400,7 @@ class CollectionSection extends StatelessWidget {
     required this.editing,
     required this.routes,
     required this.preferences,
+    this.openQuery,
   });
   final SavedCollectionsModel model;
   final SavedCollectionKind kind;
@@ -333,6 +408,7 @@ class CollectionSection extends StatelessWidget {
   final bool editing;
   final LibraryRoutes routes;
   final Preferences preferences;
+  final void Function(BuildContext context, String query)? openQuery;
 
   Future<void> _confirmClear(BuildContext context) async {
     final clear = await showCupertinoDialog<bool>(
@@ -397,13 +473,13 @@ class CollectionSection extends StatelessWidget {
             editing: editing,
             first: index == 0,
             last: index == shown.length - 1,
-            open: () => routes.openQuery(context, model.query(kind, name)),
+            open: () => (openQuery ?? routes.openQuery)(context, model.query(kind, name)),
           ),
         if (!full && SavedCollectionOrdering.showsMore(names.length))
           FormRow(
             onTap: () => Navigator.of(context).push(
               CupertinoPageRoute<void>(
-                builder: (_) => _CollectionFullView(model: model, kind: kind, routes: routes, preferences: preferences),
+                builder: (_) => _CollectionFullView(model: model, kind: kind, routes: routes, preferences: preferences, openQuery: openQuery),
               ),
             ),
             child: Row(
@@ -553,11 +629,12 @@ class _CollectionRow extends StatelessWidget {
 
 /// `SavedCollectionFullView`: every entry of one kind, pushed from Show More.
 class _CollectionFullView extends StatefulWidget {
-  const _CollectionFullView({required this.model, required this.kind, required this.routes, required this.preferences});
+  const _CollectionFullView({required this.model, required this.kind, required this.routes, required this.preferences, this.openQuery});
   final SavedCollectionsModel model;
   final SavedCollectionKind kind;
   final LibraryRoutes routes;
   final Preferences preferences;
+  final void Function(BuildContext context, String query)? openQuery;
 
   @override
   State<_CollectionFullView> createState() => _CollectionFullViewState();
@@ -600,6 +677,7 @@ class _CollectionFullViewState extends State<_CollectionFullView> {
                   editing: _editing,
                   routes: widget.routes,
                   preferences: widget.preferences,
+                  openQuery: widget.openQuery,
                 ),
               ],
             ),

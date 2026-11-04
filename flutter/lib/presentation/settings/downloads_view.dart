@@ -31,10 +31,13 @@ class DownloadsContext {
   final Preferences preferences;
 }
 
-/// `DownloadsView` for comics: a searchable grid of downloads with their progress and actions.
+/// `DownloadsView`: a mode's downloads in a searchable grid with their progress and actions.
 class DownloadsView extends StatefulWidget {
-  const DownloadsView({super.key, required this.downloads, this.inSheet = false});
+  const DownloadsView({super.key, required this.downloads, this.booru = false, this.inSheet = false});
   final DownloadsContext downloads;
+
+  /// Image mode's downloads, in its own grid density, instead of comics'.
+  final bool booru;
 
   /// From the reader the list is a sheet with Done instead of a pushed screen.
   final bool inSheet;
@@ -190,17 +193,25 @@ class _DownloadsViewState extends State<DownloadsView> {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final barBottom = media.padding.top + rootBarHeight;
-    final items = _store.items.where((item) => item.mode == WorkDownloadMode.manga).toList();
+    final items = _store.items.where((item) => item.mode == (widget.booru ? WorkDownloadMode.booru : WorkDownloadMode.manga)).toList();
     final results = items.where((item) => item.matches(_query.text)).toList();
     final bytes = items.fold<int>(0, (sum, item) => sum + item.bytes);
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    final grid = ArtworkGridPreferences(
-      columns: widget.downloads.content.mangaColumns,
-      removesPadding: widget.downloads.content.mangaRemovesGridPadding,
-      showsTitles: widget.downloads.content.showsMangaTitles,
-      showsArtists: widget.downloads.content.showsMangaArtists,
-      showsCategories: widget.downloads.content.showsMangaCategories,
-    );
+    final preferences = widget.downloads.preferences;
+    final grid = widget.booru
+        ? ArtworkGridPreferences(
+            columns: preferences.integer('booru.grid_columns').clamp(0, 5),
+            removesPadding: preferences.boolean('booru.grid.noPadding') ?? false,
+            showsTitles: false,
+            showsArtists: false,
+          )
+        : ArtworkGridPreferences(
+            columns: widget.downloads.content.mangaColumns,
+            removesPadding: widget.downloads.content.mangaRemovesGridPadding,
+            showsTitles: widget.downloads.content.showsMangaTitles,
+            showsArtists: widget.downloads.content.showsMangaArtists,
+            showsCategories: widget.downloads.content.showsMangaCategories,
+          );
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
       child: Stack(

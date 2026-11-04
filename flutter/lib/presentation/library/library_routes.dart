@@ -78,13 +78,31 @@ class LibraryRoutes {
     await showAppSheet<void>(
       context,
       grabber: true,
-      builder: (context, controller) => FolderColorSheet(folder: folder, database: database, onChanged: notifyChanged),
+      builder: (context, controller) => FolderColorSheet(
+        title: folder.displayName,
+        color: folder.color,
+        onSelected: (color) {
+          final id = folder.id;
+          if (id == null) return;
+          database.setFolderColor(id, color);
+          notifyChanged();
+        },
+      ),
     );
     notifyChanged();
   }
 
   Future<void> reorderFolders(BuildContext context) async {
-    await showAppSheet<void>(context, builder: (context, controller) => FolderOrderView(database: database));
+    await showAppSheet<void>(
+      context,
+      builder: (context, controller) => FolderOrderView<int>(
+        folders: [
+          for (final folder in database.listFolders())
+            if (folder.id != null) (id: folder.id!, name: folder.displayName),
+        ],
+        save: database.reorderFolders,
+      ),
+    );
     notifyChanged();
   }
 

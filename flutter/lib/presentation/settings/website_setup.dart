@@ -4,7 +4,9 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_models.dart';
+import '../../core/booru/booru_store.dart';
 import '../../core/content/content_environment.dart';
 import '../../core/content/fixture_content_source.dart';
 import '../../core/content/manga_urls.dart';
@@ -82,9 +84,10 @@ class BooruServerType extends ServerType {
 
 /// `WebsiteSetupContent`: the neutral first step when no website is connected.
 class WebsiteSetupView extends StatelessWidget {
-  const WebsiteSetupView({super.key, required this.content, required this.state, this.topInset = 0, this.bottomInset = 0});
+  const WebsiteSetupView({super.key, required this.content, required this.state, this.booru, this.topInset = 0, this.bottomInset = 0});
   final ContentEnvironment content;
   final AppState state;
+  final BooruStore? booru;
   final double topInset;
   final double bottomInset;
 
@@ -117,7 +120,7 @@ class WebsiteSetupView extends StatelessWidget {
                 _ProminentButton(
                   icon: CupertinoIcons.link,
                   label: L10n.text('Enter Website Address'),
-                  onPressed: () => showWebsiteConnectionEditor(context, content: content, state: state),
+                  onPressed: () => showWebsiteConnectionEditor(context, content: content, state: state, booru: booru),
                 ),
                 const SizedBox(height: 24),
                 const WebsiteModeGuide(),
@@ -201,18 +204,56 @@ class WebsiteModeGuide extends StatelessWidget {
   );
 }
 
-Future<void> showWebsiteConnectionEditor(BuildContext context, {required ContentEnvironment content, required AppState state, String initialAddress = ''}) =>
-    showAppSheet<void>(
-      context,
-      builder: (context, controller) => WebsiteConnectionEditor(content: content, state: state, initialAddress: initialAddress, scrollController: controller),
-    );
+Future<void> showWebsiteConnectionEditor(
+  BuildContext context, {
+  required ContentEnvironment content,
+  required AppState state,
+  BooruStore? booru,
+  BooruServer? server,
+  String initialAddress = '',
+  void Function(BuildContext context, BooruServer server)? validate,
+  void Function(BuildContext context, BooruServer server)? cookies,
+}) => showAppSheet<void>(
+  context,
+  builder: (context, controller) => WebsiteConnectionEditor(
+    content: content,
+    state: state,
+    booru: booru,
+    server: server,
+    initialAddress: initialAddress,
+    validate: validate,
+    cookies: cookies,
+    scrollController: controller,
+  ),
+);
 
-/// `WebsiteConnectionEditor` for a new website: the address, its detected mode, and Save.
+/// `WebsiteConnectionEditor`: a new website's address and detected mode, or an image
+/// server's name and account, with Save.
 class WebsiteConnectionEditor extends StatefulWidget {
-  const WebsiteConnectionEditor({super.key, required this.content, required this.state, this.initialAddress = '', this.scrollController});
+  const WebsiteConnectionEditor({
+    super.key,
+    required this.content,
+    required this.state,
+    this.booru,
+    this.server,
+    this.initialAddress = '',
+    this.validate,
+    this.cookies,
+    this.scrollController,
+  });
   final ContentEnvironment content;
   final AppState state;
+
+  /// Where image servers are saved; without it only comics websites can be connected.
+  final BooruStore? booru;
+
+  /// The image server being edited. Its address and mode stay fixed.
+  final BooruServer? server;
   final String initialAddress;
+
+  /// Opens the server's validation browser and its cookies while editing.
+  final void Function(BuildContext context, BooruServer server)? validate;
+  final void Function(BuildContext context, BooruServer server)? cookies;
   final ScrollController? scrollController;
 
   @override
@@ -222,9 +263,14 @@ class WebsiteConnectionEditor extends StatefulWidget {
 enum _DetectionPhase { idle, checking, recognized, unrecognized, failed }
 
 class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
-  late final _address = TextEditingController(text: widget.initialAddress);
-  ServerType? _choice;
-  bool _automatic = true;
+  late final _address = TextEditingController(text: widget.server?.baseURL ?? widget.initialAddress);
+  late final _name = TextEditingController(text: widget.server?.displayName ?? '');
+  late final _account = TextEditingController();
+  late final _apiKey = TextEditingController();
+  late ServerType? _choice = widget.server == null ? null : BooruServerType(widget.server!.engine);
+  late bool _automatic = widget.server == null;
+  late bool _showOptions = widget.server != null;
+  bool get _allowsComics => widget.server == null;
   _DetectionPhase _phase = _DetectionPhase.idle;
   ServerType? _detected;
   String? _detectedFor;
@@ -245,6 +291,16 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
   @override
   void initState() {
     super.initState();
+    final server = widget.server;
+    if (server != null) {
+      try {
+        final credentials = widget.booru!.credentials.read(server.id);
+        _account.text = credentials.account;
+        _apiKey.text = credentials.apiKey;
+      } on Object catch (error) {
+        _error = '$error';
+      }
+    }
     _address.addListener(_addressChanged);
     _addressChanged();
   }
@@ -253,11 +309,15 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
   void dispose() {
     _debounce?.cancel();
     _address.dispose();
+    _name.dispose();
+    _account.dispose();
+    _apiKey.dispose();
     super.dispose();
   }
 
   void _addressChanged() {
     _debounce?.cancel();
+    if (widget.server != null) return setState(() {});
     final url = _addressURL;
     final generation = ++_generation;
     setState(() {
@@ -291,9 +351,29 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
         } else {
           setState(() => _error = L10n.text('This address is not supported. Check the website address and try again.'));
         }
-      case BooruServerType():
-        // Image servers are saved with image mode (step 6).
-        setState(() => _error = L10n.text('This server does not expose this feature.'));
+      case BooruServerType(:final engine):
+        final store = widget.booru;
+        if (store == null) return setState(() => _error = L10n.text('This server does not expose this feature.'));
+        try {
+          final url = BooruServer.validatedURL(_address.text);
+          final name = _name.text.trim();
+          final value = BooruServer(
+            id: widget.server?.id,
+            name: name.isEmpty ? (Uri.parse(url).host.isEmpty ? url : Uri.parse(url).host) : name,
+            baseURL: url,
+            engine: engine,
+          );
+          if (store.servers.any((server) => server.id != value.id && server.baseURL == url)) throw const BooruError(BooruErrorKind.duplicateServer);
+          final credentials = BooruCredentials(account: _account.text.trim(), apiKey: _apiKey.text.trim());
+          if (credentials.account.isEmpty != credentials.apiKey.isEmpty) throw const BooruError(BooruErrorKind.authentication);
+          store.credentials.save(credentials, value.id);
+          store.saveServer(value);
+          if (widget.server == null) store.setSelectedServers([...store.selectedServerIDs, value.id]);
+          Navigator.of(context).pop();
+          widget.state.mode = AppMode.booru;
+        } on Object catch (error) {
+          setState(() => _error = BooruConnectionMessage.describe(error));
+        }
       case null:
         break;
     }
@@ -302,7 +382,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
   Future<void> _pickMode() async {
     final options = <(ServerType?, String)>[
       (null, L10n.text('Automatic')),
-      (ServerType.comics, L10n.text('Comics Mode')),
+      if (_allowsComics) (ServerType.comics, L10n.text('Comics Mode')),
       for (final engine in BooruEngine.values) (BooruServerType(engine), '${L10n.text('Image Mode')} · ${engine.title}'),
     ];
     final picked = await showCupertinoModalPopup<(ServerType?, String)>(
@@ -320,6 +400,19 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
     });
   }
 
+  Widget _field(TextEditingController controller, String placeholder, {bool secure = false}) => FormRow(
+    child: CupertinoTextField.borderless(
+      controller: controller,
+      padding: EdgeInsets.zero,
+      placeholder: placeholder,
+      obscureText: secure,
+      autocorrect: false,
+      enableSuggestions: false,
+      style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)),
+      placeholderStyle: TegnalType.style(17, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final effective = _effective;
@@ -333,7 +426,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
         child: Column(
           children: [
             SheetNavigationBar(
-              title: L10n.text('Connect a Website'),
+              title: L10n.text(widget.server == null ? 'Connect a Website' : 'Edit Server'),
               leading: GlassTextButton(label: L10n.text('Cancel'), onPressed: () => Navigator.of(context).pop()),
               trailing: GlassTextButton(label: L10n.text('Save'), prominent: true, onPressed: canSave ? _save : null),
             ),
@@ -357,6 +450,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                       FormRow(
                         child: CupertinoTextField.borderless(
                           controller: _address,
+                          enabled: widget.server == null,
                           padding: EdgeInsets.zero,
                           placeholder: 'https://example.com',
                           keyboardType: TextInputType.url,
@@ -419,6 +513,69 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                         FormRow(
                           onTap: _addressChanged,
                           child: Text(L10n.text('Try Again'), style: TegnalType.style(17, color: tint)),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (effective case BooruServerType(:final engine)) ...[
+                    const SizedBox(height: 26),
+                    FormSection(
+                      children: [
+                        FormRow(
+                          onTap: () => setState(() => _showOptions = !_showOptions),
+                          child: Row(
+                            children: [
+                              Text(L10n.text('Additional Options')),
+                              const SizedBox(width: 4),
+                              FormHelpButton(
+                                title: L10n.text('Additional Options'),
+                                message: L10n.text(
+                                  'Optional account details can improve access on some websites. Copy them from that website’s account settings; they are stored securely in Keychain.',
+                                ),
+                              ),
+                              const Spacer(),
+                              AnimatedRotation(
+                                turns: _showOptions ? 0.25 : 0,
+                                duration: const Duration(milliseconds: 200),
+                                child: Icon(CupertinoIcons.chevron_right, size: 15, color: tint),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_showOptions) ...[
+                          _field(_name, L10n.text('Name (Optional)')),
+                          if (engine != BooruEngine.oldGelbooru) ...[
+                            _field(_account, L10n.text(engine == BooruEngine.gelbooru ? 'User ID' : 'Username')),
+                            _field(_apiKey, L10n.text(engine == BooruEngine.moebooru ? 'Password Hash' : 'API Key'), secure: true),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ],
+                  if (widget.server case final server?) ...[
+                    const SizedBox(height: 26),
+                    FormSection(
+                      children: [
+                        FormRow(
+                          onTap: widget.validate == null ? null : () => widget.validate!(context, server),
+                          child: Row(
+                            children: [
+                              Icon(CupertinoIcons.checkmark_shield, size: 22, color: tint),
+                              const SizedBox(width: 12),
+                              Text(L10n.text('Validate Client'), style: TegnalType.style(17, color: tint)),
+                            ],
+                          ),
+                        ),
+                        FormRow(
+                          onTap: widget.cookies == null ? null : () => widget.cookies!(context, server),
+                          child: Row(
+                            children: [
+                              Icon(CupertinoIcons.shield_lefthalf_fill, size: 22, color: tint),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(L10n.text('Cookies'))),
+                              Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                            ],
+                          ),
                         ),
                       ],
                     ),

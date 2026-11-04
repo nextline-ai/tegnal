@@ -32,6 +32,12 @@ class MainActivity : FlutterActivity() {
                 // as the native sign-in uses a private, non-persistent store.
                 "cookies" -> result.success(CookieManager.getInstance().getCookie(call.argument<String>("url")))
                 "clearCookies" -> CookieManager.getInstance().removeAllCookies { result.success(it) }
+                // The image viewer shares a post's page address through the system share sheet.
+                "share" -> {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, call.argument<String>("text"))
+                    startActivity(Intent.createChooser(send, null))
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

@@ -14,8 +14,12 @@ class AppState extends ChangeNotifier {
   AppMode _mode;
   AppTab _tab;
 
+  /// Safe Mode keeps image mode selected, since comics sites cannot filter by rating.
+  bool Function() keepsImageMode = () => false;
+
   AppMode get mode => _mode;
   set mode(AppMode value) {
+    if (keepsImageMode()) value = AppMode.booru;
     if (value == _mode) return;
     _mode = value;
     notifyListeners();

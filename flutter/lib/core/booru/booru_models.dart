@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../storage/folder_rules.dart';
 import '../support/l10n.dart';
 import '../support/swift_json.dart';
@@ -78,6 +80,37 @@ class BooruServer {
     return parts.string;
   }
 
+  /// Decoding legacy server metadata; never generates search tags. The native app also counts
+  /// one named website here. Without names, a server that reports a modern rating word is
+  /// recognized from its responses instead ([BooruClient] passes that to the decoder).
+  bool get usesModernRatings => engine == BooruEngine.danbooru;
+
+  String pageURL(int postID) => switch (engine) {
+    BooruEngine.danbooru => _appending('posts/$postID'),
+    BooruEngine.moebooru => _appending('post/show/$postID'),
+    BooruEngine.gelbooru || BooruEngine.oldGelbooru => '${_appending('index.php')}?${booruQuery([('page', 'post'), ('s', 'view'), ('id', '$postID')])}',
+  };
+
+  String browsingURL(String query, {int? poolID}) {
+    switch (engine) {
+      case BooruEngine.danbooru:
+        return poolID == null ? '$baseURL/posts?${booruQuery([('tags', query)])}' : '$baseURL/pools/$poolID';
+      case BooruEngine.moebooru:
+        return poolID == null ? '$baseURL/post?${booruQuery([('tags', query)])}' : '$baseURL/pool/show/$poolID';
+      case BooruEngine.gelbooru || BooruEngine.oldGelbooru:
+        final items = [('page', poolID == null ? 'post' : 'pool'), ('s', poolID == null ? 'list' : 'show')];
+        if (poolID != null) {
+          items.add(('id', '$poolID'));
+        } else if (query.isNotEmpty) {
+          items.add(('tags', query));
+        }
+        return '$baseURL/index.php?${booruQuery(items)}';
+    }
+  }
+
+  /// `baseURL.appendingPathComponent(path)`.
+  String _appending(String path) => baseURL.endsWith('/') ? '$baseURL$path' : '$baseURL/$path';
+
   factory BooruServer.fromJson(JsonObject json) =>
       BooruServer(id: json.string('id'), name: json.string('name'), baseURL: json.string('baseURL'), engine: BooruEngine.fromRawValue(json.string('engine')));
 
@@ -150,6 +183,26 @@ class BooruPost {
 
   bool get isRemoved => isDeleted == true || isBanned == true;
   String get id => '$serverID:$postID';
+
+  static const videoExtensions = ['mp4', 'webm', 'mov', 'm4v'];
+  bool get isUgoira => fileExtension.toLowerCase() == 'zip';
+  String? get animationPlaybackURL =>
+      animationVideoURL ?? [sampleURL, reducedDataURL].nonNulls.where((url) => videoExtensions.contains(urlPathExtension(url).toLowerCase())).firstOrNull;
+  bool get isVideo => videoExtensions.contains(fileExtension.toLowerCase()) || isUgoira && animationPlaybackURL != null;
+  bool get isAnimated => isUgoira || tags.contains('animated') || (animated ?? ['gif', 'webp', 'apng'].contains(fileExtension.toLowerCase()));
+  String? get displayURL => sampleURL ?? fileURL ?? previewURL;
+
+  /// A preview-only post must resolve its details before entering the viewer.
+  String? viewerURL({required bool original, bool reducedData = false}) {
+    // A ZIP contains animation frames, not a browser-decodable image. Keep
+    // the original for downloads and use the site's video conversion to view.
+    if (isUgoira) return animationPlaybackURL;
+    if (isVideo || isAnimated || original) return fileURL ?? sampleURL;
+    if (reducedData) return reducedDataURL ?? sampleURL ?? fileURL;
+    return sampleURL ?? fileURL;
+  }
+
+  BooruPost copy() => BooruPost.fromJson(toJson());
 
   factory BooruPost.fromJson(JsonObject json) => BooruPost(
     serverID: json.string('serverID'),
@@ -323,4 +376,257 @@ class BooruFolder {
 
   String get plainName => id == 'unsorted' ? L10n.text('Uncategorized') : BooruServer.displayNameOf(name);
   String get displayName => FolderRule.markedName(plainName, isSmart: isSmart);
+}
+
+/// `url.pathExtension`: the last path component's extension, without the dot.
+String urlPathExtension(String? url) {
+  if (url == null) return '';
+  var path = url;
+  final end = path.indexOf(RegExp('[?#]'));
+  if (end >= 0) path = path.substring(0, end);
+  final scheme = path.indexOf('://');
+  if (scheme >= 0) {
+    final slash = path.indexOf('/', scheme + 3);
+    path = slash < 0 ? '' : path.substring(slash);
+  }
+  while (path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+  final name = path.substring(path.lastIndexOf('/') + 1);
+  final dot = name.lastIndexOf('.');
+  return dot <= 0 || dot == name.length - 1 ? '' : name.substring(dot + 1);
+}
+
+/// `URLComponents.queryItems` encoding: query characters stay, separators and spaces are escaped.
+String booruQuery(List<(String, String)> items) => items.map((item) => '${_queryComponent(item.$1)}=${_queryComponent(item.$2)}').join('&');
+
+String _queryComponent(String value) {
+  final buffer = StringBuffer();
+  for (final byte in utf8.encode(value)) {
+    final character = String.fromCharCode(byte);
+    if (byte < 128 && RegExp(r"[A-Za-z0-9\-._~!$'()*,;:@/?\[\]]").hasMatch(character)) {
+      buffer.write(character);
+    } else {
+      buffer.write('%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+    }
+  }
+  return buffer.toString();
+}
+
+/// `URLComponents(string:)?.queryItems` of a link: names and percent-decoded values, or null for a link it cannot read.
+List<(String, String?)>? linkQueryItems(String href) {
+  if (!RegExp(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*$").hasMatch(href)) return null;
+  var rest = href;
+  final hash = rest.indexOf('#');
+  if (hash >= 0) rest = rest.substring(0, hash);
+  final mark = rest.indexOf('?');
+  if (mark < 0) return [];
+  final query = rest.substring(mark + 1);
+  if (query.isEmpty) return [];
+  String decode(String value) {
+    try {
+      return Uri.decodeComponent(value);
+    } on ArgumentError {
+      return value;
+    }
+  }
+
+  return [
+    for (final part in query.split('&'))
+      if (part.contains('=')) (decode(part.substring(0, part.indexOf('='))), decode(part.substring(part.indexOf('=') + 1))) else (decode(part), null),
+  ];
+}
+
+String? linkQueryValue(List<(String, String?)>? items, String name) => items?.where((item) => item.$1 == name).firstOrNull?.$2;
+
+class BooruTag {
+  const BooruTag({required this.name, required this.count, required this.category, this.isMetadata = false});
+  final String name;
+  final int count;
+  final int category;
+  final bool isMetadata;
+  String get id => name;
+  bool get isArtist => category == 1;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BooruTag && other.name == name && other.count == count && other.category == category && other.isMetadata == isMetadata;
+  @override
+  int get hashCode => Object.hash(name, count, category, isMetadata);
+  @override
+  String toString() => 'BooruTag($name, $count, $category)';
+}
+
+class BooruPool {
+  BooruPool({required this.id, required this.name, required this.count, this.description = '', this.hasKnownCount = false});
+  final int id;
+  String name;
+  int count;
+  String description;
+  bool hasKnownCount;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BooruPool &&
+      other.id == id &&
+      other.name == name &&
+      other.count == count &&
+      other.description == description &&
+      other.hasKnownCount == hasKnownCount;
+  @override
+  int get hashCode => Object.hash(id, name, count, description, hasKnownCount);
+  @override
+  String toString() => 'BooruPool($id, $name, $count)';
+}
+
+class BooruNote {
+  const BooruNote({required this.id, required this.x, required this.y, required this.width, required this.height, required this.body});
+  final int id;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final String body;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BooruNote && other.id == id && other.x == x && other.y == y && other.width == width && other.height == height && other.body == body;
+  @override
+  int get hashCode => Object.hash(id, x, y, width, height, body);
+}
+
+class BooruBatch {
+  const BooruBatch({required this.posts, required this.hasMore, this.goldRestrictedIDs = const []});
+  final List<BooruPost> posts;
+  final bool hasMore;
+  final List<int> goldRestrictedIDs;
+  int get sourcePostCount => posts.length + goldRestrictedIDs.length;
+}
+
+enum BooruSort {
+  latest,
+  popular,
+  trending,
+  mostFavorited,
+  mostUpvoted,
+  mostDiscussed,
+  popularWeek,
+  popularMonth;
+
+  String get rawValue => name;
+  String get id => name;
+
+  String get title => switch (this) {
+    latest => L10n.text('Latest'),
+    popular => L10n.text('Popular · Score'),
+    trending => L10n.text('Popular · Trending'),
+    mostFavorited => L10n.text('Popular · Favorites'),
+    mostUpvoted => L10n.text('Popular · Upvotes'),
+    mostDiscussed => L10n.text('Popular · Comments'),
+    popularWeek => L10n.text('Popular · Past 7 Days'),
+    popularMonth => L10n.text('Popular · Past 30 Days'),
+  };
+
+  static List<BooruSort> optionsFor(BooruEngine engine) => switch (engine) {
+    BooruEngine.danbooru => values,
+    BooruEngine.moebooru => const [latest, popular, popularWeek, popularMonth],
+    BooruEngine.gelbooru || BooruEngine.oldGelbooru => const [latest, popular],
+  };
+
+  static List<BooruSort> options(List<BooruServer> servers, {bool local = false}) {
+    if (local || servers.isEmpty) return const [latest, popular];
+    return values.where((option) => servers.every((server) => optionsFor(server.engine).contains(option))).toList();
+  }
+
+  bool get restrictsPeriod => this == trending || this == popularWeek || this == popularMonth;
+
+  int? metric(BooruPost post) => switch (this) {
+    popular || popularWeek || popularMonth => post.score,
+    mostFavorited => post.favoriteCount,
+    mostUpvoted => post.upvoteCount,
+    mostDiscussed => post.commentCount,
+    _ => null,
+  };
+
+  String query(String query, BooruEngine engine, {DateTime? now}) {
+    if (this == latest || !optionsFor(engine).contains(this)) return query;
+    final terms = splitWhitespace(query).where((term) => !term.toLowerCase().startsWith('order:') && !term.toLowerCase().startsWith('sort:')).toList();
+    if (this == popularWeek || this == popularMonth) {
+      // This restriction is explicit in the selected menu label. Preserve
+      // user date constraints instead of silently widening their query.
+      if (!terms.any((term) => term.startsWith('date:') || term.startsWith('age:'))) {
+        final days = this == popularWeek ? 7 : 30;
+        final date = (now ?? DateTime.now()).toUtc().subtract(Duration(days: days));
+        String two(int value) => value.toString().padLeft(2, '0');
+        terms.add('date:>=${date.year.toString().padLeft(4, '0')}-${two(date.month)}-${two(date.day)}');
+      }
+    }
+    final order = switch (this) {
+      trending => 'rank',
+      mostFavorited => 'favcount',
+      mostUpvoted => 'upvotes',
+      mostDiscussed => 'comment_count',
+      _ => 'score',
+    };
+    terms.add(engine == BooruEngine.gelbooru ? 'sort:score:desc' : 'order:$order');
+    return terms.join(' ');
+  }
+}
+
+class BooruCompletion {
+  BooruCompletion._(this.prefix, this.token, this.negative);
+
+  final String prefix;
+  final String token;
+  final bool negative;
+
+  static BooruCompletion? parse(String text) {
+    if (text.isEmpty || isWhitespace(text[text.length - 1])) return null;
+    var start = 0;
+    for (var index = text.length - 1; index >= 0; index--) {
+      if (isWhitespace(text[index])) {
+        start = index + 1;
+        break;
+      }
+    }
+    final word = text.substring(start);
+    final negative = word.startsWith('-');
+    final token = (negative ? word.substring(1) : word).toLowerCase();
+    if (token.isEmpty || token.contains(':')) return null;
+    return BooruCompletion._(text.substring(0, start), token, negative);
+  }
+
+  String inserting(String name) => '$prefix${negative ? '-' : ''}$name ';
+
+  @override
+  bool operator ==(Object other) => other is BooruCompletion && other.prefix == prefix && other.token == token && other.negative == negative;
+  @override
+  int get hashCode => Object.hash(prefix, token, negative);
+}
+
+/// An optional default search condition, not a content restriction.
+enum BooruSafeRating {
+  general('g'),
+  sensitive('s'),
+  questionable('q');
+
+  const BooruSafeRating(this.rawValue);
+  final String rawValue;
+
+  static BooruSafeRating? fromRawValue(String? value) => values.where((rating) => rating.rawValue == value).firstOrNull;
+
+  String get id => rawValue;
+  String get tag => 'rating:$rawValue';
+  String get title => switch (this) {
+    general => L10n.text('All Ages'),
+    sensitive => '12+',
+    questionable => '15+',
+  };
+
+  String applyingDefault(String query) {
+    // An explicitly entered rating overrides this optional default.
+    final hasRating = splitWhitespace(query).any((term) => term.replaceAll(RegExp(r'^[-~]+|[-~]+$'), '').toLowerCase().startsWith('rating:'));
+    if (hasRating) return query;
+    return query.isEmpty ? tag : '$query $tag';
+  }
 }

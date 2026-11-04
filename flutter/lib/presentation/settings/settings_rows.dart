@@ -41,8 +41,12 @@ class SettingsLinkRow extends StatelessWidget {
     this.chevron = true,
     this.value,
     this.destructive = false,
+    this.help,
   });
   final String title;
+
+  /// A help button after the title, as `SettingsInfoButton` beside a button.
+  final String? help;
   final IconData? icon;
   final Widget Function(Color color)? symbol;
   final VoidCallback? onTap;
@@ -58,6 +62,7 @@ class SettingsLinkRow extends StatelessWidget {
     final hasIcon = icon != null || symbol != null;
     final row = FormRow(
       onTap: onTap,
+      minHeight: help == null ? 52 : settingsHelpRowHeight,
       separatorInset: hasIcon ? settingsIconInset : 16,
       child: Opacity(
         opacity: enabled ? 1 : 0.4,
@@ -71,7 +76,13 @@ class SettingsLinkRow extends StatelessWidget {
               const SizedBox(width: 16),
             ],
             Expanded(
-              child: Text(title, style: TegnalType.style(17, color: tinted || destructive ? tint : TegnalColors.label.resolveFrom(context))),
+              child: help == null
+                  ? Text(title, style: TegnalType.style(17, color: tinted || destructive ? tint : TegnalColors.label.resolveFrom(context)))
+                  : SettingsTitle(
+                      title,
+                      help: help,
+                      style: TegnalType.style(17, color: tinted || destructive ? tint : TegnalColors.label.resolveFrom(context)),
+                    ),
             ),
             if (value != null) ...[
               Text(value!, style: TegnalType.style(17, color: TegnalColors.secondaryLabel.resolveFrom(context))),

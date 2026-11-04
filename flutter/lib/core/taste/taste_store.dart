@@ -75,6 +75,23 @@ abstract final class TasteStore {
     insert(event, db, uploaded: false);
   }
 
+  /// Each viewing is its own open event, so existing peers count it as the open it is.
+  static void recordDwell(TasteDwell dwell, TasteItem item, DiscoveryContext context, SqlDatabase db, {DateTime? at}) {
+    final control = TasteStore.control(db);
+    if (!control.enabled) return;
+    final event = TasteEvent(
+      id: 'dwell-${uuidString()}',
+      kind: TasteEventKind.open,
+      item: item,
+      context: context,
+      dwell: dwell,
+      at: unixSeconds(at),
+      epoch: control.epoch,
+      generation: control.generation,
+    )..device = get('device', db) as String? ?? '';
+    insert(event, db, uploaded: false);
+  }
+
   static void insert(TasteEvent event, SqlDatabase db, {required bool uploaded}) => db.execute(
     'INSERT OR IGNORE INTO taste_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [event.id, event.epoch, event.generation, event.at, event.kind.name, event.item.key, encodeSwiftJson(event.toJson()), uploaded],

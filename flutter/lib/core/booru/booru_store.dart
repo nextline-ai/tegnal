@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../challenge/challenge_store.dart';
+import '../content/site_account.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
 import '../support/preferences.dart';
@@ -24,6 +25,30 @@ class FavoriteRecord {
 abstract interface class BooruCredentialStore {
   BooruCredentials read(String serverID);
   void save(BooruCredentials credentials, String serverID);
+}
+
+/// Account details in the device keystore ([SecretStore]), one JSON entry per server.
+class SecretCredentialStore implements BooruCredentialStore {
+  SecretCredentialStore(this.secrets);
+  final SecretStore secrets;
+
+  static String _key(String serverID) => 'booru.credentials.$serverID';
+
+  @override
+  BooruCredentials read(String serverID) {
+    final raw = secrets.read(_key(serverID));
+    if (raw == null) return const BooruCredentials();
+    try {
+      final json = jsonDecode(raw) as Map<String, Object?>;
+      return BooruCredentials(account: json['account'] as String? ?? '', apiKey: json['apiKey'] as String? ?? '');
+    } on Object {
+      throw const BooruError(BooruErrorKind.storage);
+    }
+  }
+
+  @override
+  void save(BooruCredentials credentials, String serverID) =>
+      secrets.write(_key(serverID), credentials.isEmpty ? null : jsonEncode({'account': credentials.account, 'apiKey': credentials.apiKey}));
 }
 
 class MemoryCredentialStore implements BooruCredentialStore {
@@ -54,13 +79,83 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   String selectedServerID = '';
   List<String> selectedServerIDs = [];
   int _revision = 0;
-  String? error;
+  String? _error;
+  final _goldRestrictedIDs = <String>{};
+  int _snapshotGeneration = 0;
+  (int, Set<String>)? _cachedFavoriteIDs;
+  (int, List<FavoriteRecord>)? _cachedFavorites;
+  (int, List<BooruFolder>)? _cachedFolders;
+  int _visibleFavoritesRevision = -1;
+  final _visibleFavoritesCache = <(String?, String), List<BooruPost>>{};
+
+  /// Warms a newly saved post's preview (the native visual fingerprint prefetch). The app
+  /// sets it with the thumbnail cache; the store only reports which post to warm.
+  void Function(BooruPost post, BooruServer server)? warmSavedPreview;
 
   int get revision => _revision;
   set revision(int value) {
     _revision = value;
     notifyListeners();
   }
+
+  String? get error => _error;
+  set error(String? value) {
+    _error = value;
+    notifyListeners();
+  }
+
+  /// Runs a store change and shows its failure in [error], as the native `perform` does.
+  void perform(void Function() operation) {
+    try {
+      operation();
+    } on BooruError catch (failure) {
+      error = failure.errorDescription;
+    } on FolderDeletionError catch (failure) {
+      error = failure.errorDescription;
+    } on Object catch (failure) {
+      error = '$failure';
+    }
+  }
+
+  /// Access restrictions are scoped to this running session, never persisted
+  /// as a blacklist or a deletion from the person's saved library.
+  Set<String> get confirmedGoldRestrictedIDs => Set.unmodifiable(_goldRestrictedIDs);
+
+  bool isVisible(BooruPost post) => !_goldRestrictedIDs.contains(post.id);
+
+  void recordGoldRestriction(BooruPost post) => recordGoldRestrictions(post.serverID, [post.postID]);
+
+  void recordGoldRestrictions(String serverID, List<int> postIDs) {
+    final ids = {for (final id in postIDs.where((id) => id > 0)) '$serverID:$id'};
+    if (ids.isEmpty || _goldRestrictedIDs.containsAll(ids)) return;
+    _goldRestrictedIDs.addAll(ids);
+    notifyListeners();
+  }
+
+  void clearGoldRestrictions({String? serverID}) {
+    bool matches(String id) {
+      if (serverID == null) return true;
+      final separator = id.lastIndexOf(':');
+      return separator >= 0 && id.substring(0, separator) == serverID;
+    }
+
+    if (!_goldRestrictedIDs.any(matches)) return;
+    _goldRestrictedIDs.removeWhere(matches);
+    notifyListeners();
+  }
+
+  /// Sync writes directly to SQLite. Invalidate cached query results at that
+  /// commit, before the later revision notification.
+  void invalidateSnapshots() {
+    _snapshotGeneration += 1;
+    _cachedFavoriteIDs = null;
+    _cachedFavorites = null;
+    _cachedFolders = null;
+    _visibleFavoritesCache.clear();
+    _visibleFavoritesRevision = -1;
+  }
+
+  int get _snapshotVersion => _revision + _snapshotGeneration;
 
   List<BooruServer> get selectedServers => servers.where((server) => selectedServerIDs.contains(server.id)).toList();
   BooruServer? get selectedServer => servers.where((server) => server.id == selectedServerID).firstOrNull;
@@ -166,7 +261,12 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   }
 
   void reload() {
-    servers = database.read(_fetchServers);
+    invalidateSnapshots();
+    final updated = database.read(_fetchServers);
+    for (final server in servers) {
+      if (!updated.contains(server)) clearGoldRestrictions(serverID: server.id);
+    }
+    servers = updated;
     final legacy = setting('selected_server') ?? servers.firstOrNull?.id ?? '';
     final raw = setting('selected_servers');
     final saved = (raw == null ? null : _decodeStrings(raw)) ?? [legacy];
@@ -207,6 +307,9 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     final position = index >= 0 ? index : servers.length;
     database.write((db) => db.execute('INSERT OR REPLACE INTO servers VALUES (?, ?, ?)', [server.id, encodeSwiftJson(server.toJson()), position]));
     reload();
+    // Saving also follows a credentials edit, even when the server address
+    // itself is unchanged. A different account may have Gold access.
+    clearGoldRestrictions(serverID: server.id);
     revision += 1;
   }
 
@@ -228,15 +331,22 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
 
   List<BooruPost> favoritesOn(String serverID) => favorites([serverID]);
 
-  Set<String> get favoriteIDs =>
-      database.read((db) => {for (final row in db.rows('SELECT server_id, post_id FROM favorites')) '${row['server_id']}:${row['post_id']}'});
+  /// Read once by the grid so cells observe imports and restored data.
+  Set<String> get favoriteIDs {
+    final version = _snapshotVersion, cached = _cachedFavoriteIDs;
+    if (cached != null && cached.$1 == version) return cached.$2;
+    final value = database.read((db) => {for (final row in db.rows('SELECT server_id, post_id FROM favorites')) '${row['server_id']}:${row['post_id']}'});
+    _cachedFavoriteIDs = (version, value);
+    return value;
+  }
 
   bool isFavorite(BooruPost post) => favoriteIDs.contains(post.id);
 
   void toggleFavorite(BooruPost post, {DiscoveryContext? context}) {
+    var adding = false;
     database.write((db) {
       db.execute('DELETE FROM favorites WHERE server_id = ? AND post_id = ?', [post.serverID, post.postID]);
-      final adding = db.changesCount == 0;
+      adding = db.changesCount == 0;
       if (adding) {
         final folder = BooruStoreFolderRules.smartDestination(post, defaultFolder(post.serverID, db), db, preferences.defaults);
         db.execute('INSERT INTO favorites (server_id, post_id, payload, saved_at, folder_id) VALUES (?, ?, ?, ?, ?)', [
@@ -250,6 +360,13 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       TasteStore.record(adding ? TasteEventKind.save : TasteEventKind.remove, tasteItem(post, db), db, context: context);
     });
     revision += 1;
+    if (adding) _warmSavedPreview(post);
+  }
+
+  void _warmSavedPreview(BooruPost post) {
+    final server = servers.where((value) => value.id == post.serverID).firstOrNull;
+    if (server == null || (post.previewURL ?? post.sampleURL) == null) return;
+    warmSavedPreview?.call(post, server);
   }
 
   List<BooruPost> favorites(List<String> serverIDs, {String? folderID}) {
@@ -261,31 +378,55 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     ];
   }
 
-  List<FavoriteRecord> favoriteRecords() => database.read(
-    (db) => [
-      for (final row in db.rows('SELECT payload, folder_id, saved_at FROM favorites ORDER BY saved_at DESC'))
-        FavoriteRecord(post: _decodePost(row['payload']), folderID: row['folder_id'] as String, savedAt: (row['saved_at'] as num).toDouble()),
-    ],
-  );
+  List<FavoriteRecord> favoriteRecords() {
+    final version = _snapshotVersion, cached = _cachedFavorites;
+    if (cached != null && cached.$1 == version) return cached.$2;
+    final value = database.read(
+      (db) => [
+        for (final row in db.rows('SELECT payload, folder_id, saved_at FROM favorites ORDER BY saved_at DESC'))
+          FavoriteRecord(post: _decodePost(row['payload']), folderID: row['folder_id'] as String, savedAt: (row['saved_at'] as num).toDouble()),
+      ],
+    );
+    _cachedFavorites = (version, value);
+    return value;
+  }
 
   List<BooruPost> visibleFavorites({String? folderID, String query = ''}) {
+    final version = _snapshotVersion, key = (folderID, query);
+    List<BooruPost> shown(List<BooruPost> value) => _goldRestrictedIDs.isEmpty ? value : value.where((post) => !_goldRestrictedIDs.contains(post.id)).toList();
+    if (_visibleFavoritesRevision == version) {
+      final cached = _visibleFavoritesCache[key];
+      if (cached != null) return shown(cached);
+    }
     final filters = {for (final server in servers) server.id: BooruBlacklist(blacklist(server.id))};
     final lowered = query.toLowerCase();
-    return favorites(servers.map((server) => server.id).toList(), folderID: folderID).where((post) {
+    final value = favorites(servers.map((server) => server.id).toList(), folderID: folderID).where((post) {
       if (filters[post.serverID]?.contains(post) ?? false) return false;
       return query.isEmpty || post.tags.join(' ').toLowerCase().contains(lowered) || '${post.postID}'.contains(query);
     }).toList();
+    if (_visibleFavoritesRevision != version || _visibleFavoritesCache.length >= 32) {
+      _visibleFavoritesCache.clear();
+      _visibleFavoritesRevision = version;
+    }
+    _visibleFavoritesCache[key] = value;
+    return shown(value);
   }
 
   Map<String, double> favoriteSavedDates() => {for (final record in favoriteRecords()) record.post.id: record.savedAt};
 
-  List<BooruFolder> folders() => database.read((db) {
-    final smart = BooruStoreFolderRules.fetchFolderRules(db).where((rule) => rule.isActive).map((rule) => rule.folder).toSet();
-    return [
-      for (final row in db.rows('SELECT * FROM folders ORDER BY position, name'))
-        BooruFolder(id: row['id'] as String, name: row['name'] as String, color: row['color'] as int, isSmart: smart.contains(row['id'])),
-    ];
-  });
+  List<BooruFolder> folders() {
+    final version = _snapshotVersion, cached = _cachedFolders;
+    if (cached != null && cached.$1 == version) return cached.$2;
+    final value = database.read((db) {
+      final smart = BooruStoreFolderRules.fetchFolderRules(db).where((rule) => rule.isActive).map((rule) => rule.folder).toSet();
+      return [
+        for (final row in db.rows('SELECT * FROM folders ORDER BY position, name'))
+          BooruFolder(id: row['id'] as String, name: row['name'] as String, color: row['color'] as int, isSmart: smart.contains(row['id'])),
+      ];
+    });
+    _cachedFolders = (version, value);
+    return value;
+  }
 
   String saveFolder({String? id, required String name, int? color}) {
     final folderID = id ?? uuidString();
@@ -341,6 +482,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       }
     });
     revision += 1;
+    _warmSavedPreview(post);
   }
 
   void organizeLegacyImports() => database.write(organizeLegacyImportsIn);
@@ -425,6 +567,28 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     database.write((db) => db.execute('DELETE FROM settings WHERE key = ?', [key]));
     revision += 1;
   }
+
+  // MARK: - Taste (TasteLibraryIntegration.swift)
+
+  void observeTaste(BooruPost post, DiscoveryContext context) =>
+      database.write((db) => TasteStore.record(TasteEventKind.open, tasteItem(post, db), db, context: context));
+
+  void recordTasteSearch(DiscoveryContext context, List<BooruServer> servers) {
+    if (context.origin != DiscoveryOrigin.search || context.included.isEmpty) return;
+    database.write((db) {
+      for (final server in servers) {
+        TasteStore.record(
+          TasteEventKind.search,
+          TasteItem(source: server.canonicalAddress, id: 0, tags: context.included.toList()),
+          db,
+          context: context,
+        );
+      }
+    });
+  }
+
+  void recordDwell(TasteDwell dwell, BooruPost post, DiscoveryContext context) =>
+      database.write((db) => TasteStore.recordDwell(dwell, tasteItem(post, db), context, db));
 
   // MARK: - Search library (SearchLibrary.swift)
 

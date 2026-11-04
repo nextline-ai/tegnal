@@ -62,7 +62,7 @@ class FormSection extends StatelessWidget {
                     if (index > 0)
                       Container(
                         height: 0.5,
-                        margin: EdgeInsets.only(left: children[index - 1] is FormRow ? (children[index - 1] as FormRow).separatorInset : 16, right: 16),
+                        margin: EdgeInsets.only(left: _separatorInset(children[index - 1]), right: 16),
                         color: separator,
                       ),
                     child,
@@ -84,6 +84,13 @@ class FormSection extends StatelessWidget {
     );
   }
 }
+
+/// The inset of the line under a row, looking through swipe and accessibility wrappers.
+double _separatorInset(Widget row) => switch (row) {
+  FormRow(:final separatorInset) => separatorInset,
+  Dismissible(:final child) || Semantics(:final child?) || KeyedSubtree(:final child) => _separatorInset(child),
+  _ => 16,
+};
 
 /// One 52 pt form row with 16 pt insets, as measured on the native forms.
 class FormRow extends StatelessWidget {

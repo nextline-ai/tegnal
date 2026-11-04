@@ -304,3 +304,43 @@ class _ExternalDrivePainter extends CustomPainter {
   @override
   bool shouldRepaint(_ExternalDrivePainter old) => old.color != color;
 }
+
+/// `server.rack`: a rounded box in three bays, each with a light at its right.
+class ServerRackSymbol extends StatelessWidget {
+  const ServerRackSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _ServerRackPainter(resolved));
+  }
+}
+
+class _ServerRackPainter extends CustomPainter {
+  _ServerRackPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.7 * unit;
+    final box = Rect.fromLTRB(0.9 * unit, 2.6 * unit, 23.1 * unit, 21.4 * unit);
+    canvas.drawRRect(RRect.fromRectAndRadius(box, Radius.circular(3 * unit)), stroke);
+    final bay = box.height / 3;
+    for (var index = 1; index < 3; index++) {
+      canvas.drawLine(Offset(box.left, box.top + bay * index), Offset(box.right, box.top + bay * index), stroke);
+    }
+    final light = Paint()..color = color;
+    for (var index = 0; index < 3; index++) {
+      canvas.drawCircle(Offset(18.6 * unit, box.top + bay * (index + 0.5)), 1.45 * unit, light);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ServerRackPainter old) => old.color != color;
+}
