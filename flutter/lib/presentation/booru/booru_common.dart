@@ -68,6 +68,17 @@ class BooruContext {
 
   bool get remembersHistory => booruDefaults.boolean('booru.rememberHistory') ?? true;
 
+  /// `booru.useEmbeddedBrowser`: Explore shows the website instead of the image grid.
+  static const embeddedBrowserKey = 'booru.useEmbeddedBrowser';
+  bool get useEmbeddedBrowser => booruDefaults.boolean(embeddedBrowserKey) ?? false;
+  set useEmbeddedBrowser(bool value) {
+    booruDefaults.set(embeddedBrowserKey, value);
+    embeddedBrowserChanges.value++;
+  }
+
+  /// Counts changes to [useEmbeddedBrowser], so open feeds switch between the grid and the website.
+  final embeddedBrowserChanges = ValueNotifier<int>(0);
+
   bool get safeMode => preferences.boolean('booru.safeMode') ?? false;
   BooruSafeRating get safeRating => BooruSafeRating.fromRawValue(preferences.string('booru.safeRating')) ?? BooruSafeRating.general;
 

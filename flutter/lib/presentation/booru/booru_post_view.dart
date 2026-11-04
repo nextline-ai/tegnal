@@ -30,6 +30,7 @@ import 'booru_favorites_view.dart';
 import 'booru_media_view.dart';
 import 'booru_post_details.dart';
 import '../design/alert_dialog.dart';
+import '../content/image_translation.dart';
 
 /// The next page of a feed, handed to an open viewer.
 class BooruViewerBatch {
@@ -116,6 +117,9 @@ class _BooruPostViewState extends State<BooruPostView> {
   );
   late bool _original = _defaults.boolean('booru.original') ?? false;
   bool _menuVisible = false;
+
+  /// The post being translated, shown over the viewer until Original closes it.
+  BooruPost? _translating;
   bool _sheetOpen = false;
   bool _zoomed = false;
   bool _exiting = false;
@@ -498,6 +502,11 @@ class _BooruPostViewState extends State<BooruPostView> {
     setState(() {});
   }
 
+  void _translate() => setState(() {
+    _translating = _post;
+    _menuVisible = false;
+  });
+
   void _showToast(String message) {
     _toastTimer?.cancel();
     setState(() => _toast = message);
@@ -733,6 +742,23 @@ class _BooruPostViewState extends State<BooruPostView> {
                   ),
                 ),
               ),
+              if (_translating case final post?)
+                Positioned.fill(
+                  child: ImageTranslationView(
+                    key: ValueKey(post.id),
+                    loadImage: () {
+                      final url = post.viewerURL(original: _original, reducedData: _reducedData)!;
+                      final server = _booru.server(post.serverID) ?? _booru.store.servers.first;
+                      return _booru.viewerImages.load(url, server);
+                    },
+                    preferences: _booru.booruDefaults,
+                    finished: () => setState(() => _translating = null),
+                    failed: (message) {
+                      setState(() => _translating = null);
+                      _showToast(message);
+                    },
+                  ),
+                ),
               if (_toast != null)
                 Positioned(
                   top: 16,
@@ -861,7 +887,7 @@ class _BooruPostViewState extends State<BooruPostView> {
       ),
       (L10n.text('Save to Folder'), symbol(CupertinoIcons.folder), _openFolders),
       // Translation arrives with its own rebuild step.
-      (L10n.text('Translate'), const TranslateSymbol(color: Color(0xFFFFFFFF)), null),
+      (L10n.text('Translate'), const TranslateSymbol(color: Color(0xFFFFFFFF)), _post.isVideo || _viewerURL == null ? null : _translate),
       (L10n.text('Exit'), const ExitSymbol(color: Color(0xFFFFFFFF)), _close),
       (
         L10n.text('Notes'),

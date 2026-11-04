@@ -154,7 +154,11 @@ void main() {
 
   test('a reset epoch drops history and a paused peer cannot upload old activity', () {
     final store = BooruStore.inMemory().tasteStore;
-    store.record(TasteEventKind.save, TasteItem(source: _source, id: 1, tags: const ['sky']), context: DiscoveryContext(origin: DiscoveryOrigin.feed));
+    store.record(
+      TasteEventKind.save,
+      TasteItem(source: _source, id: 1, tags: const ['sky']),
+      context: DiscoveryContext(origin: DiscoveryOrigin.feed),
+    );
     expect(store.events(), hasLength(1));
     final paused = store.control()..generation = 'paused';
     store.setControl(paused, remote: true);
@@ -233,12 +237,20 @@ void main() {
     final booru = BooruStore.inMemory();
     final store = booru.tasteStore;
     final cache = TasteAnalysisCache();
-    store.record(TasteEventKind.save, TasteItem(source: _source, id: 1, tags: const ['sky']), context: DiscoveryContext(origin: DiscoveryOrigin.feed));
+    store.record(
+      TasteEventKind.save,
+      TasteItem(source: _source, id: 1, tags: const ['sky']),
+      context: DiscoveryContext(origin: DiscoveryOrigin.feed),
+    );
     final control = store.control();
     final first = cache.snapshot(store, control);
     expect(identical(cache.snapshot(store, control), first), isTrue);
     expect(cache.analysisCount, 1);
-    store.record(TasteEventKind.save, TasteItem(source: _source, id: 2, tags: const ['sea']), context: DiscoveryContext(origin: DiscoveryOrigin.feed));
+    store.record(
+      TasteEventKind.save,
+      TasteItem(source: _source, id: 2, tags: const ['sea']),
+      context: DiscoveryContext(origin: DiscoveryOrigin.feed),
+    );
     final second = cache.snapshot(store, control);
     expect(second.tags.map((tag) => tag.name).toSet(), {'sky', 'sea'});
     expect(cache.analysisCount, 2);
@@ -290,7 +302,11 @@ void main() {
     expect(decoded.preferences(_source), control.preferences(_source));
     expect(decoded.boost('key'), 1);
     expect(RecommendationSort.week.booruSort, BooruSort.popular);
-    expect(RecommendationSort.options(TasteMode.booru, engine: BooruEngine.gelbooru), [RecommendationSort.recommended, RecommendationSort.latest, RecommendationSort.week]);
+    expect(RecommendationSort.options(TasteMode.booru, engine: BooruEngine.gelbooru), [
+      RecommendationSort.recommended,
+      RecommendationSort.latest,
+      RecommendationSort.week,
+    ]);
   });
 
   test('signals are stored as non-organic opens', () {

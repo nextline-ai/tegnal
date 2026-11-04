@@ -114,6 +114,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Requests to sites a network filters by name, through Android's own network stack with ECH.
+        EncryptedHelloTransport.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        // On-device image translation for the reader and the image viewer.
+        ImageTranslator.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // The reader keeps the screen on while a work is open, as the native app does.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "work.nextline.tegnal/screen").setMethodCallHandler { call, result ->
             when (call.method) {
@@ -134,6 +138,10 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent.createChooser(send, null))
                     result.success(null)
                 }
+                // A Recap card goes to the system share sheet, as the native ShareLink offers it.
+                "shareImage" -> shareImage(call.argument<String>("path"), call.argument<String>("title"), result)
+                // `TimeZone.current.identifier`: taste statistics divide days in this zone.
+                "timeZone" -> result.success(java.util.TimeZone.getDefault().id)
                 else -> result.notImplemented()
             }
         }
@@ -165,6 +173,25 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun shareImage(path: String?, title: String?, result: MethodChannel.Result) {
+        val shared = File(cacheDir, "shared").canonicalFile
+        val file = path?.let { File(it).canonicalFile }
+        if (file == null || !file.isFile || file.parentFile != shared) {
+            result.error("invalid", "Only images in the shared cache folder can be shared.", null)
+            return
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.share", file)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("image/png")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_TITLE, title)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // The preview in the share sheet reads the image through this grant as well.
+        send.clipData = android.content.ClipData.newRawUri(title, uri)
+        startActivity(Intent.createChooser(send, title))
+        result.success(null)
     }
 
     private fun createDocument(name: String?, mimeType: String?, sourcePath: String?, result: MethodChannel.Result) {

@@ -71,3 +71,14 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // On-device image translation (ML Kit). Text recognition models arrive through Google Play
+    // services; translation models download once per language pair. No app server is involved.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-japanese:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-korean:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-language-id:17.0.0")
+    implementation("com.google.mlkit:translate:17.0.3")
+}

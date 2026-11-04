@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
@@ -16,6 +15,8 @@ import '../design/grouped_form.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import '../navigation/app_state.dart';
+import '../../core/content/content_transport.dart';
+import '../../core/content/content_errors.dart';
 import '../../core/support/perf_trace.dart';
 
 /// What an address turned out to be: a comics site or an image board engine.
@@ -45,19 +46,27 @@ sealed class ServerType {
 
   /// A plain, bounded GET of a website's home page.
   static Future<String> inspectWebsite(Uri url, {int limit = 2 * 1024 * 1024}) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
-    try {
-      final request = await client.getUrl(url);
-      request.headers.set(HttpHeaders.acceptHeader, 'text/html,application/xhtml+xml');
-      final response = await request.close().timeout(const Duration(seconds: 20));
+    // The app's own connection, so a site whose name the network filters is reached with ECH.
+    final fetcher = ContentTransport.defaultFetcher();
+    var current = url;
+    for (var redirects = 0; ; redirects++) {
+      final reply = await fetcher.send(
+        HttpExchange(method: 'GET', url: current, headers: const {'accept': 'text/html,application/xhtml+xml'}, timeout: const Duration(seconds: 20)),
+      );
+      final location = reply.headers.entries.where((entry) => entry.key.toLowerCase() == 'location').firstOrNull?.value.firstOrNull;
+      if (reply.statusCode >= 300 && reply.statusCode < 400 && location != null && redirects < 5) {
+        reply.abort?.call();
+        final next = current.resolve(location);
+        if (next.scheme != 'https') throw const NetworkError(NetworkErrorCode.unsupportedURL);
+        current = next;
+        continue;
+      }
       final bytes = <int>[];
-      await for (final chunk in response) {
+      await for (final chunk in reply.body.timeout(const Duration(seconds: 20))) {
         bytes.addAll(chunk);
         if (bytes.length > limit) break;
       }
       return utf8.decode(bytes, allowMalformed: true);
-    } finally {
-      client.close(force: true);
     }
   }
 }

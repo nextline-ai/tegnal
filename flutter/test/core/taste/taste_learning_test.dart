@@ -41,7 +41,11 @@ TasteEvent _event(
 
 TasteLearning _learning(List<TasteEvent> events, {Map<String, RecapWorkInfo> library = const {}, TasteControl? control}) {
   final value = control ?? TasteControl();
-  return TasteLearning(index: RecapIndex(events: events, control: value, mode: TasteMode.booru, library: library), control: value, now: _now);
+  return TasteLearning(
+    index: RecapIndex(events: events, control: value, mode: TasteMode.booru, library: library),
+    control: value,
+    now: _now,
+  );
 }
 
 double _weight(TasteLearning model, String tag) => model.tags[TasteControl.tagKey(source: _source, tag: tag)]?.weight ?? 0;
@@ -130,7 +134,12 @@ void main() {
     test('imported libraries count less than deliberate saves', () {
       final model = _learning([
         _event(TasteEventKind.imported, 1, tags: ['imported']),
-        _event(TasteEventKind.save, 2, tags: ['chosen'], context: DiscoveryContext(origin: DiscoveryOrigin.search, query: 'chosen', session: 's')),
+        _event(
+          TasteEventKind.save,
+          2,
+          tags: ['chosen'],
+          context: DiscoveryContext(origin: DiscoveryOrigin.search, query: 'chosen', session: 's'),
+        ),
       ]);
       expect(_weight(model, 'chosen'), greaterThan(_weight(model, 'imported') * 3));
     });
@@ -258,12 +267,21 @@ void main() {
       double score(int level) => _learning(events, control: TasteControl()..discoveryLevel = level).personalize(_candidate(5, ['strange', 'unseen'])).score;
       expect(score(0), lessThan(score(1)));
       expect(score(1), lessThan(score(2)));
-      expect([for (final level in [0, 1, 2]) _learning(events, control: TasteControl()..discoveryLevel = level).discoverySlots], [1, 3, 5]);
+      expect(
+        [
+          for (final level in [0, 1, 2]) _learning(events, control: TasteControl()..discoveryLevel = level).discoverySlots,
+        ],
+        [1, 3, 5],
+      );
     });
 
     test('novel works take the discovery slots', () {
-      final familiar = [for (var id = 1; id <= 12; id++) _candidate(id, ['a'], score: 1)];
-      final novel = [for (var id = 20; id <= 28; id++) _candidate(id, ['b'], score: 0.1)..novel = true];
+      final familiar = [
+        for (var id = 1; id <= 12; id++) _candidate(id, ['a'], score: 1),
+      ];
+      final novel = [
+        for (var id = 20; id <= 28; id++) _candidate(id, ['b'], score: 0.1)..novel = true,
+      ];
       expect(RecommendationService.mix([...familiar, ...novel], limit: 10, discoverySlots: 5).where((item) => item.novel), hasLength(5));
       expect(RecommendationService.mix([...familiar, ...novel], limit: 10, discoverySlots: 1).where((item) => item.novel), hasLength(1));
     });
@@ -272,20 +290,39 @@ void main() {
   group('explanations', () {
     test('explanations cite what actually happened', () {
       final hidden = TasteTag(source: _source, name: 'quiet', hidden: 5, sessions: {'a', 'b', 'c'});
-      final quiet = TasteRecommendation(item: TasteItem(source: _source, id: 7, tags: const ['quiet']), reason: hidden, score: 0.2, rankingTags: {'quiet'});
+      final quiet = TasteRecommendation(
+        item: TasteItem(source: _source, id: 7, tags: const ['quiet']),
+        reason: hidden,
+        score: 0.2,
+        rankingTags: {'quiet'},
+      );
       final model = _learning([
         _event(TasteEventKind.save, 1, tags: ['quiet'], days: 90),
       ]);
       expect(model.personalize(quiet).why, const WhyHidden('quiet'));
       final sky = _candidate(7, ['sky']);
-      expect(_learning([for (var id = 1; id <= 4; id++) _event(TasteEventKind.save, id, tags: ['sky'], days: 3)]).personalize(sky).why, const WhyRecent('sky'));
-      expect(_learning([for (var id = 1; id <= 4; id++) _event(TasteEventKind.save, id, tags: ['sky'], days: 200)]).personalize(sky).why, const WhyTaste('sky'));
+      expect(
+        _learning([
+          for (var id = 1; id <= 4; id++) _event(TasteEventKind.save, id, tags: ['sky'], days: 3),
+        ]).personalize(sky).why,
+        const WhyRecent('sky'),
+      );
+      expect(
+        _learning([
+          for (var id = 1; id <= 4; id++) _event(TasteEventKind.save, id, tags: ['sky'], days: 200),
+        ]).personalize(sky).why,
+        const WhyTaste('sky'),
+      );
       expect(model.personalize(sky, why: const WhyPopular()).why, const WhyPopular());
     });
 
     test('artists are credited and not counted as their own tag', () {
-      final library = {for (var id = 1; id <= 4; id++) '$_source#$id': const RecapWorkInfo(artists: ['mira'])};
-      final model = _learning([for (var id = 1; id <= 4; id++) _event(TasteEventKind.save, id, tags: ['mira', 'sky'])], library: library);
+      final library = {
+        for (var id = 1; id <= 4; id++) '$_source#$id': const RecapWorkInfo(artists: ['mira']),
+      };
+      final model = _learning([
+        for (var id = 1; id <= 4; id++) _event(TasteEventKind.save, id, tags: ['mira', 'sky']),
+      ], library: library);
       final result = model.personalize(_candidate(9, ['mira', 'sky']));
       expect(result.why, const WhyPerson('mira', RecapRole.artist, 4));
       expect(result.factors.where((factor) => factor.name == 'mira'), hasLength(1));
@@ -320,7 +357,9 @@ void main() {
     });
 
     test('picks still fill when every work shares one reason', () {
-      final deck = [for (var id = 1; id <= 5; id++) _candidate(id, ['a'])];
+      final deck = [
+        for (var id = 1; id <= 5; id++) _candidate(id, ['a']),
+      ];
       expect(TasteRecommendation.picks(deck).map((pick) => pick.id).toSet(), hasLength(3));
       expect(TasteRecommendation.picks(deck.take(2).toList()), hasLength(2));
       expect(TasteRecommendation.picks([]), isEmpty);
@@ -334,7 +373,9 @@ void main() {
         for (var id = 10; id <= 14; id++) _event(TasteEventKind.save, id, tags: ['rain', 'umbrella'], days: 3),
         for (var id = 20; id <= 24; id++) _event(TasteEventKind.save, id, tags: ['snow'], days: 4),
       ];
-      final library = {for (var id = 10; id <= 24; id++) '$_source#$id': const RecapWorkInfo(artists: ['mira'])};
+      final library = {
+        for (var id = 10; id <= 24; id++) '$_source#$id': const RecapWorkInfo(artists: ['mira']),
+      };
       final model = _learning(events, library: library);
       final shelves = model.shelves(sources: [_source], tags: [], offset: 0);
       final kinds = shelves.map((shelf) => shelf.kind).toList();
@@ -356,7 +397,9 @@ void main() {
 
     test('muted tags leave seeds, shelves and threads', () {
       final control = TasteControl()..setBoost(-1, TasteControl.tagKey(source: _source, tag: 'rain'));
-      final model = _learning([for (var id = 1; id <= 5; id++) _event(TasteEventKind.save, id, tags: ['rain'], days: 3)], control: control);
+      final model = _learning([
+        for (var id = 1; id <= 5; id++) _event(TasteEventKind.save, id, tags: ['rain'], days: 3),
+      ], control: control);
       expect(model.isMuted(TasteTag(source: _source, name: 'rain')), isTrue);
       expect(model.recentTags.any((tag) => tag.name == 'rain'), isFalse);
       expect(model.seedWeight(TasteTag(source: _source, name: 'rain')), lessThan(0));

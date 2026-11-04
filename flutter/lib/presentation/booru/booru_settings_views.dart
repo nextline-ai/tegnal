@@ -32,6 +32,7 @@ import 'booru_common.dart';
 import '../challenge/challenge_library_view.dart';
 import 'booru_feed_view.dart';
 import '../design/alert_dialog.dart';
+import '../content/image_translation.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -273,6 +274,23 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       options: [('system', L10n.text('System Language')), ('en', 'English'), ('ko', '한국어'), ('ja', '日本語')],
                       selected: preferences.string('app.language') ?? 'system',
                       onSelected: _setLanguage,
+                    ),
+                    SettingsLinkRow(
+                      title: L10n.text('Translation Language'),
+                      icon: CupertinoIcons.text_bubble,
+                      onTap: () => _push((_) => TranslationLanguagePage(preferences: _booru.booruDefaults)),
+                    ),
+                  ],
+                ),
+                settingsSectionGap,
+                section(
+                  header: L10n.text('Website Connection'),
+                  children: [
+                    SettingsToggleRow(
+                      title: L10n.text('Use Embedded Browser'),
+                      help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
+                      value: _booru.useEmbeddedBrowser,
+                      onChanged: (value) => setState(() => _booru.useEmbeddedBrowser = value),
                     ),
                   ],
                 ),
@@ -687,7 +705,7 @@ class _BooruValidationViewState extends State<BooruValidationView> {
           },
           onWebResourceError: (error) {
             if (error.isForMainFrame == false) return;
-            final delay = _state.failed(_networkError(error));
+            final delay = _state.failed(booruWebNetworkError(error));
             final retry = _state.retryURL;
             if (delay != null && retry != null) Timer(delay, () => _controller?.loadRequest(retry));
           },
@@ -860,7 +878,7 @@ class _BooruValidationViewState extends State<BooruValidationView> {
 }
 
 /// The web view's failure as the connection error the client reports.
-NetworkError _networkError(WebResourceError error) => NetworkError(switch (error.errorType) {
+NetworkError booruWebNetworkError(WebResourceError error) => NetworkError(switch (error.errorType) {
   WebResourceErrorType.hostLookup => NetworkErrorCode.cannotFindHost,
   WebResourceErrorType.timeout => NetworkErrorCode.timedOut,
   WebResourceErrorType.connect => NetworkErrorCode.cannotConnectToHost,

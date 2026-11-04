@@ -207,7 +207,7 @@ class BooruClient implements BooruProviding {
     BooruBrowserSession? session,
     this.poolRequestDelay = const Duration(milliseconds: 150),
   }) : browserFallback = fetcher == null,
-       fetcher = fetcher ?? IoHttpFetcher(),
+       fetcher = fetcher ?? ContentTransport.defaultFetcher(),
        _credentialStore = credentials,
        _sessionOverride = session;
 

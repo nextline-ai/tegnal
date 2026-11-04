@@ -15,7 +15,10 @@ import 'core/booru/booru_image_cache.dart';
 import 'core/booru/booru_models.dart';
 import 'core/booru/booru_store.dart';
 import 'core/taste/taste_fixtures.dart';
+import 'core/taste/taste_models.dart';
 import 'core/content/content_environment.dart';
+import 'core/content/content_transport.dart';
+import 'core/content/encrypted_hello_fetcher.dart';
 import 'core/content/fixture_content_source.dart';
 import 'core/content/manga_content_source.dart';
 import 'core/content/manga_urls.dart';
@@ -27,6 +30,7 @@ import 'core/support/perf_trace.dart';
 import 'core/support/preferences.dart';
 import 'core/support/secure_secret_store.dart';
 import 'presentation/booru/booru_web_page.dart';
+import 'presentation/content/content_browser_transport.dart';
 import 'presentation/content/page_image_store.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
@@ -124,12 +128,23 @@ Future<String> _version() async {
   }
 }
 
+/// `TimeZone.current.identifier`, so taste statistics divide days at the person's midnight.
+Future<void> _loadTimeZone() async {
+  try {
+    final zone = await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<String>('timeZone');
+    if (zone != null && zone.isNotEmpty) TasteControl.currentTimeZone = zone;
+  } on Object {
+    // Without a platform answer the analysis keeps its default zone.
+  }
+}
+
 Future<AppServices> _launch() async {
   // Independent platform calls start together; each is awaited where it is first needed.
   final loadingSecrets = PerfTrace.span('launch keystore', SecureSecretStore.load);
   final loadingSupport = getApplicationSupportDirectory();
   final loadingCaches = getApplicationCacheDirectory();
   final loadingVersion = PerfTrace.span('launch version', _version);
+  final loadingTimeZone = _loadTimeZone();
   final preparingStorage = PerfTrace.span('launch storage', AppStorage.prepare);
   final preferences = await PerfTrace.span('launch preferences', AppPreferences.load);
   ContentPreferences.defaults = preferences.defaults;
@@ -142,6 +157,12 @@ Future<AppServices> _launch() async {
   // Sign-in cookies live in the Android Keystore, never in the database or backups.
   final secrets = await loadingSecrets;
   SiteAccount.store = secrets;
+  // A site whose name a network filters is reached with Encrypted Client Hello after its first
+  // cut connection, and the hidden browser page of the site is the last resort.
+  final network = FilteredNetworkFetcher(primary: IoHttpFetcher(), fallback: EncryptedHelloFetcher(), preferences: preferences.defaults);
+  ContentTransport.defaultFetcher = () => network;
+  ContentTransport.shared = ContentTransport(browserFetch: ContentBrowserTransport.get, browserPost: ContentBrowserTransport.post);
+  SiteAccount.listeners.add(ContentBrowserTransport.reset);
   // Image servers' API keys and validated cookies stay in the same keystore.
   final credentials = SecretCredentialStore(secrets);
   BooruClient.defaultCredentials = credentials;
@@ -150,6 +171,7 @@ Future<AppServices> _launch() async {
   BooruWebTransport.factory = WebViewBooruPage.new;
   BooruWebTransport.preferences = preferences.defaults;
   final support = await loadingSupport;
+  await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
   booru.warmSavedPreview = (post, server) {

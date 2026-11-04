@@ -168,13 +168,13 @@ void main() {
 
   test('weighted draw, group filters, range and literal substitution', () {
     final definition = testGame();
-    definition.reels[0].options = [
-      ChallengeOption(text: 'Excluded', group: 'other'),
-      ChallengeOption(text: '{reel2}', group: 'chosen', weight: 10),
-    ];
+    definition.reels[0].options = [ChallengeOption(text: 'Excluded', group: 'other'), ChallengeOption(text: '{reel2}', group: 'chosen', weight: 10)];
     definition.reels[0].filter = 'chosen';
     definition.groups = [
-      ChallengeGroup(title: 'Extra', options: [ChallengeOption(text: 'Kneeling')]),
+      ChallengeGroup(
+        title: 'Extra',
+        options: [ChallengeOption(text: 'Kneeling')],
+      ),
     ];
     definition.template = '{reel1} / {reel2} / {extra1} / {goal}';
     definition.goal.mode = ChallengeGoalMode.mixed;
@@ -313,7 +313,11 @@ void main() {
     final post = BooruFixtureSource.post(101, BooruFixtureEnvironment.servers.first);
     expect(ChallengeMediaFilter.matches(post, tags: ['scenery'], blacklist: ''), isTrue);
     for (final block in ['scenery', 'id:101', 'artist:sample_artist']) {
-      expect(ChallengeMediaFilter.matches(post, tags: [], blacklist: block), isFalse, reason: block);
+      expect(
+        ChallengeMediaFilter.matches(post, tags: [], blacklist: block),
+        isFalse,
+        reason: block,
+      );
     }
     expect(ChallengeMediaFilter.matches(post, tags: ['missing'], blacklist: ''), isFalse);
   });

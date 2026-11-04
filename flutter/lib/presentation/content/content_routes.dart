@@ -2,9 +2,11 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/content/content_environment.dart';
 import '../../core/content/gallery_content.dart';
+import '../../core/content/manga_urls.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/preferences.dart';
 import '../../core/taste/taste_models.dart';
+import '../browser/in_app_manga_browser_view.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import 'content_bookmark.dart';
@@ -43,14 +45,28 @@ class ContentRoutes {
 
   /// A thumbnail opens the reader, or work information first when that is chosen.
   void openThumbnail(BuildContext context, int id) {
-    if (MangaThumbnailOpening.stored(preferences) == MangaThumbnailOpening.information) {
+    final opening = MangaThumbnailOpening.stored(preferences);
+    // `ContentEntryView`: the embedded browser opens the work's page on the website instead.
+    if (content.useEmbeddedBrowser && content.isSiteVerified) {
+      openInAppMangaBrowser(context, opening.url(id), sheet: opening == MangaThumbnailOpening.information);
+      return;
+    }
+    if (opening == MangaThumbnailOpening.information) {
       openGallery(context, id);
     } else {
       read(context, id, page: 1);
     }
   }
 
-  void openGallery(BuildContext context, int id) => showGalleryDetail(
+  void openGallery(BuildContext context, int id) {
+    if (content.useEmbeddedBrowser && content.isSiteVerified) {
+      openInAppMangaBrowser(context, MangaUrls.galleryUrl(id), sheet: true);
+      return;
+    }
+    _showGallery(context, id);
+  }
+
+  void _showGallery(BuildContext context, int id) => showGalleryDetail(
     context,
     galleryID: id,
     source: source,

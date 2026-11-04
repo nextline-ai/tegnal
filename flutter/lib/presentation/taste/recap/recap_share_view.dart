@@ -2,9 +2,10 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../../core/support/document_files.dart';
 import '../../../core/support/l10n.dart';
 import '../../../core/taste/recap_shelf.dart';
 import '../../../core/taste/taste_models.dart';
@@ -44,7 +45,10 @@ class _RecapShareViewState extends State<RecapShareView> {
   bool _showsTags = false;
   bool _saving = false;
 
-  /// Saves the card as a PNG wherever the person chooses, at three times its size.
+  static const _screen = MethodChannel('work.nextline.tegnal/screen');
+
+  /// Offers the card as a PNG at three times its size through the system share sheet, as
+  /// the native ShareLink does.
   Future<void> _save() async {
     final boundary = _poster.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary == null || _saving) return;
@@ -54,9 +58,12 @@ class _RecapShareViewState extends State<RecapShareView> {
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
       if (data != null) {
-        final file = File('${Directory.systemTemp.path}/tegnal-recap.png');
+        // Only this folder is offered to other apps through the app's file provider.
+        final folder = Directory('${(await getApplicationCacheDirectory()).path}/shared');
+        await folder.create(recursive: true);
+        final file = File('${folder.path}/TEGNAL Recap.png');
         await file.writeAsBytes(data.buffer.asUint8List());
-        await const DocumentFiles().createDocument(name: 'TEGNAL Recap.png', source: file, mimeType: 'image/png');
+        await _screen.invokeMethod<void>('shareImage', {'path': file.path, 'title': L10n.text('My TEGNAL Recap')});
       }
     } on Object catch (error) {
       if (mounted) showTransientMessage(context, '$error');

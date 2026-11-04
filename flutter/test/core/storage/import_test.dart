@@ -36,7 +36,12 @@ Map<String, Object?> _sample() => {
       'preview': {'url': '/preview/7.jpg'},
     },
     {'ppostId': 7, 'ppostUrl': 'https://images-a.invalid/posts/7', 'tags': 'sky'},
-    {'ppostId': 8, 'ppostUrl': 'https://images-b.invalid/index.php?id=8', 'tags': ['sea'], 'rating': 's'},
+    {
+      'ppostId': 8,
+      'ppostUrl': 'https://images-b.invalid/index.php?id=8',
+      'tags': ['sea'],
+      'rating': 's',
+    },
     {'ppostId': 9, 'ppostUrl': 'https://elsewhere.invalid/posts/9'},
     {'ppostId': 0, 'ppostUrl': 'https://images-a.invalid/posts/0'},
   ],
@@ -67,7 +72,9 @@ void _createUserDatabase(String path) {
 void _createDataDatabase(String path) {
   final db = SqlDatabase.open(path);
   db.write((db) {
-    db.execute('CREATE TABLE MangaColumnModel (Id INTEGER, Title TEXT, Type TEXT, Artists TEXT, Characters TEXT, Groups TEXT, Language TEXT, Series TEXT, Tags TEXT, Published)');
+    db.execute(
+      'CREATE TABLE MangaColumnModel (Id INTEGER, Title TEXT, Type TEXT, Artists TEXT, Characters TEXT, Groups TEXT, Language TEXT, Series TEXT, Tags TEXT, Published)',
+    );
     db.execute(
       "INSERT INTO MangaColumnModel VALUES (1001, 'Rain &amp; Sky', 'manga', '|mira|', 'N/A', '', 'english', '|sky atlas|', '|tag:rain|female:umbrella|', 638000000000000000)",
     );
@@ -138,7 +145,10 @@ void main() {
 
     test('favorites can land in an Anime Boxes folder or an existing one', () {
       final store = BooruStore.inMemory();
-      store.importAnimeBoxes(AnimeBoxesBackup.parse(_backup(_sample())), options: const AnimeBoxesImportOptions(folderID: 'anime-boxes', history: false, blacklist: false));
+      store.importAnimeBoxes(
+        AnimeBoxesBackup.parse(_backup(_sample())),
+        options: const AnimeBoxesImportOptions(folderID: 'anime-boxes', history: false, blacklist: false),
+      );
       expect(store.folders().any((folder) => folder.id == 'anime-boxes'), isTrue);
       expect(store.visibleFavorites(folderID: 'anime-boxes'), hasLength(2));
       expect(store.history(store.servers.first.id), isEmpty);

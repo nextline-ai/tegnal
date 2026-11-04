@@ -19,6 +19,7 @@ import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import 'gallery_detail_view.dart';
+import 'image_translation.dart';
 import 'page_image_store.dart';
 import 'reader_guide_overlay.dart';
 import 'reader_models.dart';
@@ -115,6 +116,10 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   bool _sheetOpen = false;
   final _zoomedPages = <int>{};
   String? _toast;
+  Timer? _toastTimer;
+
+  /// The page being translated, shown over the reader until Original closes it.
+  int? _translating;
   Timer? _autoTimer;
   double _drag = 0;
   bool _exiting = false;
@@ -141,7 +146,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   double get _autoSeconds => (_defaults.object('reader.autoSeconds') as num?)?.toDouble() ?? 10;
   int get _count => readerSpreadCount(_pagesPerSpread);
   bool get _zoomed => _zoomedPages.isNotEmpty;
-  bool get _active => !_exiting && !_opening.needsConfirmation && !_sheetOpen;
+  bool get _active => !_exiting && !_opening.needsConfirmation && !_sheetOpen && _translating == null;
   int get _prefetchCount => _defaults.integerOrNull(ReaderSettingKeys.prefetch) ?? 3;
 
   /// Follows the visible page; speculation stops while zoomed, behind a sheet or in the background.
@@ -184,6 +189,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
 
   @override
   void dispose() {
+    _toastTimer?.cancel();
     _lifecycle.dispose();
     _prefetcher.cancel();
     _autoTimer?.cancel();
@@ -538,6 +544,19 @@ class _NativeReaderViewState extends State<NativeReaderView> {
                     finish: _finishGuide,
                   ),
                 ),
+              if (_translating case final index? when gallery != null && index < gallery.pages.length)
+                Positioned.fill(
+                  child: ImageTranslationView(
+                    key: ValueKey(index),
+                    loadImage: () => widget.images.data(gallery.pages[index], galleryID: widget.galleryID),
+                    preferences: _defaults,
+                    finished: () => setState(() => _translating = null),
+                    failed: (message) {
+                      setState(() => _translating = null);
+                      _showToast(message);
+                    },
+                  ),
+                ),
               if (_toast != null)
                 Positioned(
                   top: media.padding.top + 16,
@@ -559,6 +578,22 @@ class _NativeReaderViewState extends State<NativeReaderView> {
         ),
       ),
     );
+  }
+
+  void _translate() {
+    setState(() {
+      _translating = _current;
+      _menuVisible = false;
+    });
+    _scheduleAuto();
+  }
+
+  void _showToast(String message) {
+    _toastTimer?.cancel();
+    setState(() => _toast = message);
+    _toastTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _toast = null);
+    });
   }
 
   Widget _reader(NativeGallery gallery) {
@@ -660,7 +695,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
       ),
       (L10n.text('Bookmark'), (color) => Icon(CupertinoIcons.bookmark, size: 24, color: color), hasGallery ? _bookmark : null),
       (L10n.text('Exit'), (color) => ExitSymbol(color: color), _close),
-      (L10n.text('Translate'), (color) => TranslateSymbol(color: color), null),
+      (L10n.text('Translate'), (color) => TranslateSymbol(color: color), hasGallery ? _translate : null),
       (L10n.text('Work Details'), (color) => Icon(CupertinoIcons.info_circle, size: 24, color: color), hasGallery ? _openInformation : null),
       (L10n.text('More Settings'), (color) => Icon(CupertinoIcons.slider_horizontal_3, size: 24, color: color), _openSettings),
     ];

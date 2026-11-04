@@ -17,6 +17,7 @@ import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
 import '../core/taste/taste_models.dart';
 import '../presentation/booru/booru_common.dart';
+import '../presentation/browser/in_app_manga_browser_view.dart';
 import '../presentation/challenge/challenge_library_view.dart';
 import '../presentation/design/grouped_form.dart';
 import '../presentation/design/symbols.dart';
@@ -498,6 +499,10 @@ class _ExploreRoot extends StatelessWidget {
             ),
           ],
         );
+      }
+      // `ContentEntryView(embedded: true)`: the website itself when the embedded browser is on.
+      if (content.useEmbeddedBrowser) {
+        return InAppMangaBrowserView(key: ValueKey('browser:${content.mangaSiteAddress}'), embedded: true, state: state);
       }
       return ExploreView(
         key: ValueKey(content.mangaSiteAddress),

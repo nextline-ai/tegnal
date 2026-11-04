@@ -49,6 +49,42 @@ SYSTEM = {
 # Android-only wording, where the native app names an Apple service (iCloud) that the
 # Android app replaces with Google Drive. The rest of the sync wording is native.
 ANDROID = {
+    "This image is already in the translation language.": {
+        "en": "This image is already in the translation language.",
+        "ko": "이미 번역 언어로 된 이미지입니다.",
+        "ja": "この画像はすでに翻訳先の言語です。",
+    },
+    "Preparing image translation": {
+        "en": "Preparing image translation",
+        "ko": "이미지 번역 준비 중",
+        "ja": "画像の翻訳を準備中",
+    },
+    "The translation model could not be downloaded. Check your connection and try again.": {
+        "en": "The translation model could not be downloaded. Check your connection and try again.",
+        "ko": "번역 모델을 내려받지 못했습니다. 연결을 확인하고 다시 시도하세요.",
+        "ja": "翻訳モデルをダウンロードできませんでした。接続を確認してもう一度お試しください。",
+    },
+    "This device does not support on-device text recognition.": {
+        "en": "This device does not support on-device text recognition.",
+        "ko": "이 기기는 기기 내 텍스트 인식을 지원하지 않습니다.",
+        "ja": "このデバイスは端末内の文字認識に対応していません。",
+    },
+    "This translation language is not available.": {
+        "en": "This translation language is not available.",
+        "ko": "이 번역 언어는 사용할 수 없습니다.",
+        "ja": "この翻訳言語は利用できません。",
+    },
+    "Unable to translate this image.": {
+        "en": "Unable to translate this image.",
+        "ko": "이 이미지를 번역할 수 없습니다.",
+        "ja": "この画像を翻訳できません。",
+    },
+    # The native code shows this button in English only; Android localizes it.
+    "Open in Browser": {
+        "en": "Open in Browser",
+        "ko": "브라우저에서 열기",
+        "ja": "ブラウザで開く",
+    },
     "Challenge definitions, progress and image sources stay on this device.": {
         "en": "Challenge definitions, progress and image sources stay on this device.",
         "ko": "챌린지 정의, 진행 상태와 이미지 출처는 이 기기에 저장됩니다.",

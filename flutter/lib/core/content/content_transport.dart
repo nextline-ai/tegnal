@@ -71,9 +71,13 @@ typedef BrowserPost = Future<ContentResult> Function(Uri url, Uri origin, List<i
 
 /// Bounded downloads. Redirects to hosts outside the connected site are refused before they are followed.
 class ContentTransport {
-  ContentTransport({HttpFetcher? fetcher, this.browserFetch, this.browserPost}) : fetcher = fetcher ?? IoHttpFetcher();
+  ContentTransport({HttpFetcher? fetcher, this.browserFetch, this.browserPost}) : fetcher = fetcher ?? defaultFetcher();
 
   static ContentTransport shared = ContentTransport();
+
+  /// The connection both libraries use unless a test supplies its own. The app installs one that
+  /// reaches name-filtered sites with Encrypted Client Hello.
+  static HttpFetcher Function() defaultFetcher = IoHttpFetcher.new;
 
   final HttpFetcher fetcher;
   final BrowserFetch? browserFetch;

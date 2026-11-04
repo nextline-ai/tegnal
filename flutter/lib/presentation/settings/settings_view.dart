@@ -24,6 +24,7 @@ import '../navigation/root_tab_view.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
 import 'website_setup.dart';
+import '../content/image_translation.dart';
 
 /// What the Settings screens read and change.
 class SettingsDependencies {
@@ -288,6 +289,11 @@ class _SettingsViewState extends State<SettingsView> {
                       ],
                       selected: _defaults.string(ArtistBrowsing.preferenceKey) ?? 'all',
                       onSelected: (value) => _set(ArtistBrowsing.preferenceKey, value),
+                    ),
+                    SettingsLinkRow(
+                      title: L10n.text('Translation Language'),
+                      icon: CupertinoIcons.text_bubble,
+                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => TranslationLanguagePage(preferences: _defaults))),
                     ),
                   ],
                 ),

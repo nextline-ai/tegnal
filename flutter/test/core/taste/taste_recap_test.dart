@@ -194,7 +194,10 @@ void main() {
       ];
       expect(_september(events).highlights.first.kind, RecapHighlightKind.hidden);
       expect(_september(events).highlights.first.tag.name, 'quiet');
-      final searched = [...events, _event(TasteEventKind.search, 0, tags: ['quiet'], at: _date(8, 1), context: _search('quiet', 'x'))];
+      final searched = [
+        ...events,
+        _event(TasteEventKind.search, 0, tags: ['quiet'], at: _date(8, 1), context: _search('quiet', 'x')),
+      ];
       expect(_september(searched).highlights.firstOrNull?.kind, isNot(RecapHighlightKind.hidden));
     });
 
@@ -272,7 +275,12 @@ void main() {
     });
 
     test('the persona waits for enough activity and a curator is selective', () {
-      expect(_september([for (var id = 1; id <= 2; id++) _event(TasteEventKind.save, id, tags: ['a'], at: _date(9, 2))]).persona, isNull);
+      expect(
+        _september([
+          for (var id = 1; id <= 2; id++) _event(TasteEventKind.save, id, tags: ['a'], at: _date(9, 2)),
+        ]).persona,
+        isNull,
+      );
       final recap = _september([
         for (var id = 1; id <= 20; id++) _event(TasteEventKind.open, id, at: _date(9, 2 + id % 5, hour: 14)),
         for (var id = 1; id <= 2; id++) _event(TasteEventKind.save, id, tags: ['a'], at: _date(9, 5, hour: 14)),
@@ -299,7 +307,9 @@ void main() {
   group('pages and issues', () {
     test('the story only includes pages with something true to say', () {
       expect(RecapPage.pages(_september([])), [RecapPage.cover]);
-      final single = _september([_event(TasteEventKind.save, 1, tags: ['a'], at: _date(9, 2))], library: _info(1, 1));
+      final single = _september([
+        _event(TasteEventKind.save, 1, tags: ['a'], at: _date(9, 2)),
+      ], library: _info(1, 1));
       expect(RecapPage.pages(single), [RecapPage.cover, RecapPage.numbers, RecapPage.chart, RecapPage.palette, RecapPage.next]);
       final week = _index([
         _event(TasteEventKind.save, 1, tags: ['a'], at: _date(10, 13)),
@@ -360,7 +370,10 @@ void main() {
     test('percent sentences format in every language', () {
       for (final language in ['en', 'ko', 'ja']) {
         L10n.language = language;
-        L10n.table = {for (final entry in (jsonDecode(File('assets/l10n/$language.json').readAsStringSync()) as Map<String, Object?>).entries) entry.key: entry.value! as String};
+        L10n.table = {
+          for (final entry in (jsonDecode(File('assets/l10n/$language.json').readAsStringSync()) as Map<String, Object?>).entries)
+            entry.key: entry.value! as String,
+        };
         final share = RecapLine('%@%% of saves came from your searches', ['62']).text;
         expect(share.replaceAll('⁠', ''), contains('62%'), reason: language);
         expect(share, isNot(contains('%%')), reason: language);
@@ -431,7 +444,13 @@ void main() {
     TasteController controller() {
       final booru = BooruStore.inMemory();
       BooruFixtureEnvironment.seed(booru);
-      return TasteController(library: AppDatabase.inMemory(), images: booru, content: ContentEnvironment.fixture(), booruSource: BooruFixtureSource(), comicSource: FixtureContentSource());
+      return TasteController(
+        library: AppDatabase.inMemory(),
+        images: booru,
+        content: ContentEnvironment.fixture(),
+        booruSource: BooruFixtureSource(),
+        comicSource: FixtureContentSource(),
+      );
     }
 
     test('an empty library shows the sample issue', () {

@@ -13,7 +13,9 @@ import '../../core/taste/taste_models.dart';
 import '../content/explore_view.dart' show ContentUnavailable, ScrollSearchVisibility;
 import '../content/work_save_feedback.dart';
 import '../design/app_sheet.dart';
+import '../design/grouped_form.dart' show GlassTextButton, SheetNavigationBar;
 import '../design/symbols.dart';
+import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import '../library/library_routes.dart' show showTransientMessage;
 import '../navigation/app_header.dart';
@@ -21,6 +23,7 @@ import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import '../works/search_controls.dart';
 import 'booru_common.dart';
+import 'booru_embedded_browser_view.dart';
 import 'booru_post_view.dart';
 import 'booru_settings_views.dart';
 
@@ -98,6 +101,13 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   int _suggestionGeneration = 0;
   final _expandedQueries = <String>{};
 
+  /// The server the website opens on, chosen from a failure card.
+  String? _browserServerID;
+  late bool _browsing = _showsBrowser;
+
+  /// `useEmbeddedBrowser && challenge == nil`: the website replaces the grid.
+  bool get _showsBrowser => _booru.useEmbeddedBrowser && widget.challenge == null;
+
   BooruContext get _booru => widget.booru;
   List<BooruServer> get _servers => widget.servers;
   BooruProviding get _source => widget.source ?? _booru.source;
@@ -129,6 +139,9 @@ class _BooruFeedViewState extends State<BooruFeedView> {
     _loader.addListener(_changed);
     _booru.store.addListener(_storeChanged);
     booruClientValidated.addListener(_validated);
+    _booru.embeddedBrowserChanges.addListener(_browserChanged);
+    // Resetting the mode's settings turns the website off and announces it on the app state.
+    _booru.state.addListener(_browserChanged);
     _updateBlacklists();
     if (widget.isActive) _loadIfNeeded();
   }
@@ -148,6 +161,8 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   void dispose() {
     _booru.store.removeListener(_storeChanged);
     booruClientValidated.removeListener(_validated);
+    _booru.embeddedBrowserChanges.removeListener(_browserChanged);
+    _booru.state.removeListener(_browserChanged);
     _loader.removeListener(_changed);
     _loader.cancel();
     _loader.dispose();
@@ -170,6 +185,58 @@ class _BooruFeedViewState extends State<BooruFeedView> {
     _loadIfNeeded();
   }
 
+  void _browserChanged() {
+    if (!mounted) return;
+    final browsing = _showsBrowser;
+    if (browsing == _browsing) {
+      // The website loads only while image mode shows, so a mode switch reaches it too.
+      if (browsing) setState(() {});
+      return;
+    }
+    setState(() => _browsing = browsing);
+    if (!browsing && widget.isActive) _loadIfNeeded();
+  }
+
+  /// `openBrowser`: the website in place of the grid, or over a challenge's feed in a sheet.
+  void _openBrowser([String? serverID]) {
+    _browserServerID = serverID;
+    if (widget.challenge == null) {
+      _booru.useEmbeddedBrowser = true;
+      return;
+    }
+    showAppSheet<void>(
+      context,
+      builder: (context, controller) => ColoredBox(
+        color: TegnalColors.background.resolveFrom(context),
+        child: Column(
+          children: [
+            SheetNavigationBar(
+              title: '',
+              trailing: GlassTextButton(
+                label: L10n.text('Done'),
+                prominent: true,
+                tint: SystemColors.purple.resolveFrom(context),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            Expanded(child: _browser(MediaQuery.paddingOf(context).bottom)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _browser(double bottomInset) => BooruEmbeddedBrowserView(
+    booru: _booru,
+    servers: _servers,
+    query: _effectiveQuery,
+    poolID: widget.pool?.id,
+    sort: _sort,
+    preferredServerID: _browserServerID,
+    isActive: widget.isActive && _booru.state.mode == AppMode.booru,
+    bottomInset: bottomInset,
+  );
+
   void _storeChanged() {
     _updateBlacklists();
     _changed();
@@ -181,6 +248,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   }
 
   Future<void> _loadIfNeeded() async {
+    if (_showsBrowser) return;
     // A server that needed the browser last time starts its hidden page before the first
     // request, once image mode is on screen.
     if (!_booru.fixture) _servers.forEach(BooruWebTransport.warm);
@@ -343,47 +411,50 @@ class _BooruFeedViewState extends State<BooruFeedView> {
       color: TegnalColors.background.resolveFrom(context),
       child: Stack(
         children: [
-          CustomScrollView(
-            controller: _scroll,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              CupertinoSliverRefreshControl(onRefresh: _refresh),
-              if (widget.header case final header?) ...[
+          if (_browsing)
+            Positioned.fill(top: barBottom, child: _browser(tabBarClearance(context) - 16))
+          else
+            CustomScrollView(
+              controller: _scroll,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              slivers: [
+                CupertinoSliverRefreshControl(onRefresh: _refresh),
+                if (widget.header case final header?) ...[
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(16, barBottom + 16, 16, 16),
+                    sliver: SliverToBoxAdapter(child: header),
+                  ),
+                  // The search field scrolls with the header until it reaches the bar.
+                  SliverToBoxAdapter(
+                    child: SizedBox(key: _searchSlot, height: 56, child: _searchSlotPinned || pool != null ? null : _searchArea(media)),
+                  ),
+                ],
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, barBottom + 16, 16, 16),
-                  sliver: SliverToBoxAdapter(child: header),
+                  padding: EdgeInsets.fromLTRB(16, widget.header != null ? 8 : barBottom + (pool == null ? 8 + 56 : 16), 16, 0),
+                  sliver: SliverToBoxAdapter(child: pool == null ? _filters() : const SizedBox.shrink()),
                 ),
-                // The search field scrolls with the header until it reaches the bar.
-                SliverToBoxAdapter(
-                  child: SizedBox(key: _searchSlot, height: 56, child: _searchSlotPinned || pool != null ? null : _searchArea(media)),
+                SliverToBoxAdapter(child: SizedBox(height: pool == null ? 8 : 0)),
+                SliverPadding(
+                  padding: EdgeInsets.zero,
+                  sliver: BooruPostGridSliver(
+                    booru: _booru,
+                    posts: posts,
+                    showsFavorite: true,
+                    topMarginScale: pool == null ? 0.5 : 1,
+                    prefetch: _prefetch,
+                    itemKey: (id) => _keys.putIfAbsent(id, GlobalKey.new),
+                    open: _open,
+                    hold: _hold,
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + tabBarClearance(context)),
+                  sliver: SliverToBoxAdapter(child: _footer(context)),
                 ),
               ],
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, widget.header != null ? 8 : barBottom + (pool == null ? 8 + 56 : 16), 16, 0),
-                sliver: SliverToBoxAdapter(child: pool == null ? _filters() : const SizedBox.shrink()),
-              ),
-              SliverToBoxAdapter(child: SizedBox(height: pool == null ? 8 : 0)),
-              SliverPadding(
-                padding: EdgeInsets.zero,
-                sliver: BooruPostGridSliver(
-                  booru: _booru,
-                  posts: posts,
-                  showsFavorite: true,
-                  topMarginScale: pool == null ? 0.5 : 1,
-                  prefetch: _prefetch,
-                  itemKey: (id) => _keys.putIfAbsent(id, GlobalKey.new),
-                  open: _open,
-                  hold: _hold,
-                ),
-              ),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + tabBarClearance(context)),
-                sliver: SliverToBoxAdapter(child: _footer(context)),
-              ),
-            ],
-          ),
-          if (pool == null && (widget.header == null || _searchSlotPinned))
+            ),
+          if (!_browsing && pool == null && (widget.header == null || _searchSlotPinned))
             Positioned(
               left: 0,
               right: 0,
@@ -541,6 +612,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
                 _retry++;
                 _loadIfNeeded();
               }),
+              openBrowser: () => _openBrowser(server.id),
             ),
           ],
         if (_loader.didLoad && !_loader.loading && _loader.errors.isEmpty && _loader.visiblePosts.isEmpty && (!_loader.hasMore || hasAccessible))
@@ -555,6 +627,13 @@ class _BooruFeedViewState extends State<BooruFeedView> {
                   : 'These posts match your blacklist. You can load the next page.',
             ),
           ),
+        if (pool != null &&
+            _loader.didLoad &&
+            !_loader.loading &&
+            _loader.errors.isEmpty &&
+            _loader.visiblePosts.isEmpty &&
+            (!_loader.hasMore || hasAccessible))
+          _BrowserLinkButton(title: L10n.text('Open in Browser'), onPressed: _openBrowser),
         if (_loader.hasMore)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -575,6 +654,7 @@ class _ServerFailureCard extends StatelessWidget {
     required this.expanded,
     required this.toggleQuery,
     required this.retry,
+    required this.openBrowser,
   });
   final BooruContext booru;
   final BooruServer server;
@@ -583,6 +663,7 @@ class _ServerFailureCard extends StatelessWidget {
   final bool expanded;
   final VoidCallback toggleQuery;
   final VoidCallback retry;
+  final VoidCallback openBrowser;
 
   @override
   Widget build(BuildContext context) {
@@ -648,7 +729,41 @@ class _ServerFailureCard extends StatelessWidget {
               _BorderedButton(title: L10n.text('Try Again'), onPressed: retry),
             ],
           ),
+          const SizedBox(height: 12),
+          _BrowserLinkButton(title: L10n.text('Use Embedded Browser'), onPressed: openBrowser),
         ],
+      ),
+    );
+  }
+}
+
+/// A borderless tinted button with a globe, as a plain `Button` with a `Label` draws.
+class _BrowserLinkButton extends StatelessWidget {
+  const _BrowserLinkButton({required this.title, required this.onPressed});
+  final String title;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = TegnalColors.tint.resolveFrom(context);
+    return Semantics(
+      button: true,
+      label: title,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Symbols.globe, size: 17, color: tint),
+              const SizedBox(width: 6),
+              Text(title, style: TegnalType.style(TegnalType.body, color: tint)),
+            ],
+          ),
+        ),
       ),
     );
   }
