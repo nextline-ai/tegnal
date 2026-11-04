@@ -49,6 +49,7 @@ import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
 import '../presentation/settings/site_account_section.dart';
 import '../presentation/settings/website_setup.dart';
+import 'privacy_cover.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
@@ -163,6 +164,7 @@ class _TegnalAppState extends State<TegnalApp> {
           debugShowCheckedModeBanner: false,
           locale: Locale(L10n.language),
           theme: tegnalTheme(brightness),
+          builder: (context, child) => PrivacyCoverSync(preferences: widget.services.preferences.defaults, child: child!),
           home: _Root(state: _state, services: widget.services),
         );
       },

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app/localization.dart';
+import 'app/privacy_cover.dart';
 import 'app/tegnal_app.dart';
 import 'core/booru/booru_browser.dart';
 import 'core/booru/booru_client.dart';
@@ -76,7 +77,11 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
 Future<void> main() async {
   final launch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
+  // An empty first frame ends the system launch screen at once, so the native splash
+  // artwork shows while the services below load; the app replaces it when they are ready.
+  if (_fixture.isEmpty) runApp(const ColoredBox(color: Color(0xFF000000)));
   final services = _fixture.isEmpty ? await PerfTrace.span('launch services', _launch) : await _launchFixture();
+  if (_fixture.isNotEmpty) PrivacyCover.skipLaunchSplash();
   if (PerfTrace.enabled) {
     PerfTrace.log('launch until first frame scheduled', launch.elapsed);
     // Frames slower than the display's budget, split into the UI thread's build and the raster thread's paint.
