@@ -3,6 +3,8 @@ package work.nextline.tegnal
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.WindowManager
 import android.webkit.CookieManager
@@ -15,6 +17,34 @@ import java.util.UUID
 class MainActivity : FlutterActivity() {
     private var pendingCreate: Pair<File, MethodChannel.Result>? = null
     private var pendingOpen: MethodChannel.Result? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        preferHighestRefreshRate()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Some systems reset the window's preference when the app returns to the front.
+        preferHighestRefreshRate()
+    }
+
+    /// Asks for the display's fastest mode at its current resolution, as iOS gives ProMotion
+    /// to apps that animate. Some Android systems otherwise hold third-party apps at 60 Hz;
+    /// the system still lowers the rate for battery saving or heat.
+    private fun preferHighestRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        @Suppress("DEPRECATION")
+        val display = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else windowManager.defaultDisplay) ?: return
+        val current = display.mode
+        val fastest = display.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return
+        val attributes = window.attributes
+        if (attributes.preferredDisplayModeId == fastest.modeId) return
+        attributes.preferredDisplayModeId = fastest.modeId
+        window.attributes = attributes
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
