@@ -19,7 +19,7 @@
 
 Comics and illustrations, in one app.
 
-A switch at the top of the screen moves you between comic sites like Hitomi and image boards like Danbooru, Gelbooru and Moebooru. No site comes built in. You connect the addresses you already use, and TEGNAL shows their works in its own screens.
+A switch at the top of the screen moves you between comic sites and Booru-style image boards. No site comes built in. You connect the addresses you already use, and TEGNAL shows their works in its own screens.
 
 The Apple version is on TestFlight and the Android version is on Google Play. Both are free.
 
@@ -104,7 +104,7 @@ To back up TEGNAL itself, go to Library Management under Settings or More and ch
 
 - If a Cloudflare-style check blocks you, tap Validate Client on the error screen or in the server settings and complete it.
 - If that doesn't help, turn on Use Embedded Browser in Settings. It opens the site itself instead of the app's screens.
-- Danbooru's free accounts can only search two tags at a time, by site policy. Gelbooru and others don't have this limit.
+- Some image boards let free accounts search only two tags at a time. This is the site's policy, and the app can't change it.
 
 ## Development
 
