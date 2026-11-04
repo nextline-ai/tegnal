@@ -13,6 +13,13 @@ class ThumbnailDiskCache {
   final int capacity;
   final String fileExtension;
   final _entries = <String, _Entry>{};
+
+  /// Bytes written to the index whose files are still being saved; reads serve them from here.
+  final _writing = <String, Uint8List>{};
+  Future<void> _writes = Future.value();
+
+  /// Completes once every write started so far is on disk.
+  Future<void> get idle => _writes;
   int _bytes = 0;
   bool _indexed = false;
 
@@ -48,6 +55,11 @@ class ThumbnailDiskCache {
     final name = _name(key), file = _file(name);
     final entry = _entries[name];
     if (entry == null) return null;
+    final pending = _writing[name];
+    if (pending != null) {
+      entry.accessed = now ?? DateTime.now();
+      return pending;
+    }
     final Uint8List data;
     try {
       data = file.readAsBytesSync();
@@ -73,22 +85,65 @@ class ThumbnailDiskCache {
     _ensureIndex();
     if (data.length > capacity) return;
     final time = now ?? DateTime.now();
+    final name = _name(key);
+    _bytes -= _entries[name]?.size ?? 0;
+    _entries[name] = _Entry(size: data.length, accessed: time, persisted: time);
+    _bytes += data.length;
+    _writing[name] = data;
+    _trim();
+    // Saving happens off the frame: the bytes stay readable from memory until the file lands.
+    _writes = _writes.then((_) => _persist(name, data, time));
+  }
+
+  Future<void> _persist(String name, Uint8List data, DateTime time) async {
+    if (!identical(_writing[name], data)) return;
+    final file = _file(name), temporary = File('${file.path}.tmp');
     try {
-      directory.createSync(recursive: true);
-      final name = _name(key), file = _file(name);
-      final temporary = File('${file.path}.tmp')..writeAsBytesSync(data, flush: true);
-      temporary.renameSync(file.path);
-      try {
-        file.setLastModifiedSync(time);
-      } on FileSystemException {
-        // The index below still records the time.
+      await directory.create(recursive: true);
+      await temporary.writeAsBytes(data);
+      // A removal while saving keeps the file from coming back.
+      if (!identical(_writing[name], data)) {
+        await temporary.delete();
+        return;
       }
-      _bytes -= _entries[name]?.size ?? 0;
-      _entries[name] = _Entry(size: data.length, accessed: time, persisted: time);
-      _bytes += data.length;
-      _trim();
+      await temporary.rename(file.path);
+      try {
+        await file.setLastModified(time);
+      } on FileSystemException {
+        // Recency is a hint.
+      }
     } on FileSystemException {
-      // A full disk must not prevent viewing a downloaded preview.
+      // A full disk must not prevent viewing a downloaded image; the index forgets it.
+      if (identical(_writing[name], data)) {
+        final old = _entries.remove(name);
+        if (old != null) _bytes -= old.size;
+      }
+    } finally {
+      if (identical(_writing[name], data)) _writing.remove(name);
+    }
+  }
+
+  /// [read] without blocking the frame on the file.
+  Future<Uint8List?> readAsync(String key, {DateTime? now}) async {
+    _ensureIndex();
+    final name = _name(key);
+    final entry = _entries[name];
+    if (entry == null) return null;
+    final time = now ?? DateTime.now();
+    entry.accessed = time;
+    final pending = _writing[name];
+    if (pending != null) return pending;
+    final file = _file(name);
+    try {
+      final data = await file.readAsBytes();
+      if (time.difference(entry.persisted) > const Duration(hours: 1)) {
+        entry.persisted = time;
+        file.setLastModified(time).ignore();
+      }
+      return data;
+    } on FileSystemException {
+      if (identical(_entries[name], entry)) remove(key);
+      return null;
     }
   }
 
@@ -98,6 +153,7 @@ class ThumbnailDiskCache {
   }
 
   void _removeName(String name) {
+    _writing.remove(name);
     final old = _entries.remove(name);
     if (old != null) _bytes -= old.size;
     try {

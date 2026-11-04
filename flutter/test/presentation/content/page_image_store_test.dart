@@ -147,6 +147,7 @@ void main() {
     final gallery = await source.gallery(1);
     final firstStore = PageImageStore(source: source, diskDirectory: directory);
     await Future.wait([firstStore.load(gallery.pages[0], galleryID: 1), firstStore.load(gallery.pages[0], galleryID: 1)]);
+    await firstStore.idle;
     final secondStore = PageImageStore(source: source, diskDirectory: directory);
     final restored = await secondStore.load(gallery.pages[0], galleryID: 1);
     expect(restored.width, greaterThan(0));

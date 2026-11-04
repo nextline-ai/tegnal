@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -21,8 +22,10 @@ import 'core/content/site_account.dart';
 import 'core/downloads/download_store.dart';
 import 'core/storage/app_database.dart';
 import 'core/storage/app_storage.dart';
+import 'core/support/perf_trace.dart';
 import 'core/support/preferences.dart';
 import 'core/support/secure_secret_store.dart';
+import 'presentation/booru/booru_web_page.dart';
 import 'presentation/content/page_image_store.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
@@ -71,8 +74,33 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
 }
 
 Future<void> main() async {
+  final launch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
-  final services = _fixture.isEmpty ? await _launch() : await _launchFixture();
+  final services = _fixture.isEmpty ? await PerfTrace.span('launch services', _launch) : await _launchFixture();
+  if (PerfTrace.enabled) {
+    PerfTrace.log('launch until first frame scheduled', launch.elapsed);
+    // Frames slower than the display's budget, split into the UI thread's build and the raster thread's paint.
+    // Each second with frames reports how many missed the display's frame budget on either thread.
+    final window = <FrameTiming>[];
+    var windowStart = DateTime.now();
+    SchedulerBinding.instance.addTimingsCallback((timings) {
+      window.addAll(timings);
+      if (DateTime.now().difference(windowStart) < const Duration(seconds: 1)) return;
+      windowStart = DateTime.now();
+      if (window.length < 5) return window.clear();
+      final raster = window.map((t) => t.rasterDuration.inMicroseconds ~/ 1000).toList()..sort();
+      final build = window.map((t) => t.buildDuration.inMicroseconds ~/ 1000).toList()..sort();
+      final rate = WidgetsBinding.instance.platformDispatcher.displays.firstOrNull?.refreshRate ?? 60;
+      final budget = 1000000 ~/ (rate < 30 ? 60 : rate);
+      final missed = window.where((t) => t.rasterDuration.inMicroseconds > budget || t.buildDuration.inMicroseconds > budget).length;
+      PerfTrace.event(
+        'frames ${window.length} at ${rate.round()} Hz over budget $missed',
+        detail:
+            'raster p50 ${raster[raster.length ~/ 2]} p90 ${raster[raster.length * 9 ~/ 10]} max ${raster.last} build p50 ${build[build.length ~/ 2]} p90 ${build[build.length * 9 ~/ 10]} max ${build.last}',
+      );
+      window.clear();
+    });
+  }
   runApp(
     TegnalApp(
       services: services,
@@ -92,22 +120,32 @@ Future<String> _version() async {
 }
 
 Future<AppServices> _launch() async {
-  final preferences = await AppPreferences.load();
+  // Independent platform calls start together; each is awaited where it is first needed.
+  final loadingSecrets = PerfTrace.span('launch keystore', SecureSecretStore.load);
+  final loadingSupport = getApplicationSupportDirectory();
+  final loadingCaches = getApplicationCacheDirectory();
+  final loadingVersion = PerfTrace.span('launch version', _version);
+  final preparingStorage = PerfTrace.span('launch storage', AppStorage.prepare);
+  final preferences = await PerfTrace.span('launch preferences', AppPreferences.load);
   ContentPreferences.defaults = preferences.defaults;
-  await AppStorage.prepare();
   ReaderPreferences.install(preferences);
-  PageImageStore.defaultDiskDirectory = Directory('${(await getApplicationCacheDirectory()).path}/MangaPageCache');
-  await loadLocalization(preferences.defaults);
+  final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
+  final caches = await loadingCaches;
+  PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
+  await preparingStorage;
+  await localizing;
   // Sign-in cookies live in the Android Keystore, never in the database or backups.
-  final secrets = await SecureSecretStore.load();
+  final secrets = await loadingSecrets;
   SiteAccount.store = secrets;
   // Image servers' API keys and validated cookies stay in the same keystore.
   final credentials = SecretCredentialStore(secrets);
   BooruClient.defaultCredentials = credentials;
   BooruBrowserSession.shared = BooruBrowserSession(secrets: secrets);
-  final support = await getApplicationSupportDirectory();
-  final caches = await getApplicationCacheDirectory();
-  final booru = BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials);
+  // Servers that trust only a real browser connection get their requests through a hidden web view.
+  BooruWebTransport.factory = WebViewBooruPage.new;
+  BooruWebTransport.preferences = preferences.defaults;
+  final support = await loadingSupport;
+  final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
   booru.warmSavedPreview = (post, server) {
     final url = post.previewURL ?? post.sampleURL;
@@ -115,7 +153,7 @@ Future<AppServices> _launch() async {
   };
   return AppServices(
     preferences: preferences,
-    database: AppDatabase.open(preferences: preferences),
+    database: PerfTrace.sync('launch database', () => AppDatabase.open(preferences: preferences)),
     booru: booru,
     booruSource: BooruClient.shared,
     booruThumbnails: thumbnails,
@@ -124,7 +162,7 @@ Future<AppServices> _launch() async {
     content: ContentEnvironment(browserPreferences: preferences.defaults, source: MangaContentSource.shared),
     downloadsDirectory: DownloadStore.defaultDirectory,
     syncDirectory: Directory('${support.path}/drive-sync'),
-    version: await _version(),
+    version: await loadingVersion,
   );
 }
 

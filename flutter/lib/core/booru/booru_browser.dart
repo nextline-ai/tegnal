@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection' show Queue;
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,8 +9,10 @@ import 'package:flutter/foundation.dart';
 import '../content/content_errors.dart';
 import '../content/site_account.dart';
 import '../support/l10n.dart';
+import '../support/preferences.dart';
 import 'booru_html.dart';
 import 'booru_models.dart';
+import '../support/perf_trace.dart';
 
 /// One cookie of a server's browser profile, as `HTTPCookie` keeps it.
 class BooruCookie {
@@ -285,13 +288,55 @@ typedef BooruBrowserFactory = BooruBrowserPage Function(BooruServer server);
 class _Browser {
   _Browser(this.page);
   final BooruBrowserPage page;
-  Future<void> _queue = Future.value();
 
-  /// Runs operations one at a time: navigations and fetches share one page.
-  Future<T> enqueue<T>(Future<T> Function() operation) {
-    final result = _queue.then((_) => operation());
-    _queue = result.then<void>((_) {}, onError: (_) {});
+  /// Navigations replace the page's document, so each waits for the requests already
+  /// running and holds new ones back until it commits.
+  Future<void> _navigation = Future.value();
+  final _running = <Future<void>>{};
+
+  /// Images share at most this many slots; API requests never wait for them.
+  static const imageSlots = 6;
+  var _images = 0;
+  final _waitingImages = Queue<Completer<void>>();
+
+  /// Script requests run side by side: each is its own `fetch` in the page.
+  Future<T> shared<T>(Future<T> Function() operation, {bool image = false}) async {
+    await _navigation;
+    if (image) await _imageSlot();
+    try {
+      final result = operation();
+      final tracked = result.then<void>((_) {}, onError: (_) {});
+      _running.add(tracked);
+      tracked.whenComplete(() => _running.remove(tracked));
+      return await result;
+    } finally {
+      if (image) _releaseImageSlot();
+    }
+  }
+
+  Future<T> exclusive<T>(Future<T> Function() operation) {
+    final running = [..._running];
+    final result = _navigation.then((_) => Future.wait(running)).then((_) => operation());
+    _navigation = result.then<void>((_) {}, onError: (_) {});
     return result;
+  }
+
+  Future<void> _imageSlot() async {
+    if (_images < imageSlots) {
+      _images += 1;
+      return;
+    }
+    final waiter = Completer<void>();
+    _waitingImages.add(waiter);
+    await waiter.future;
+  }
+
+  void _releaseImageSlot() {
+    if (_waitingImages.isNotEmpty) {
+      _waitingImages.removeFirst().complete();
+    } else {
+      _images -= 1;
+    }
   }
 }
 
@@ -305,6 +350,36 @@ abstract final class BooruWebTransport {
 
   static bool get isAvailable => factory != null;
   static bool hasSession(BooruServer server) => _sessions.containsKey(server.id);
+
+  /// Where it is remembered which servers' direct connections met a browser check, so a
+  /// later launch starts their hidden page right away. Null keeps it in memory only.
+  static Preferences? preferences;
+  static final _directChallenged = <String, DateTime>{};
+  static const _challengeMemory = Duration(minutes: 30);
+  static String _challengeKey(BooruServer server) => 'booru.directChallengedUntil.${server.id}';
+
+  /// Whether requests for [server] should skip the direct attempt: it met a browser check
+  /// recently, and every direct try would only add a round trip before the browser.
+  static bool prefersBrowser(BooruServer server, {DateTime? now}) {
+    if (!isAvailable) return false;
+    var until = _directChallenged[server.id];
+    if (until == null) {
+      final stored = preferences?.integerOrNull(_challengeKey(server));
+      if (stored != null) until = _directChallenged[server.id] = DateTime.fromMillisecondsSinceEpoch(stored);
+    }
+    return until != null && until.isAfter(now ?? DateTime.now());
+  }
+
+  static void directChallenged(BooruServer server, {DateTime? now}) {
+    final until = (now ?? DateTime.now()).add(_challengeMemory);
+    _directChallenged[server.id] = until;
+    preferences?.set(_challengeKey(server), until.millisecondsSinceEpoch);
+  }
+
+  /// Starts loading the hidden page of a server that needs it, before its first request.
+  static void warm(BooruServer server) {
+    if (prefersBrowser(server)) _browser(server);
+  }
 
   /// Keeps the validated page itself, even while it still loads ads or subresources.
   static void adopt(BooruBrowserPage page, BooruServer server) {
@@ -348,7 +423,11 @@ abstract final class BooruWebTransport {
   static Future<BooruResponse> data(BooruRequest request, BooruServer server, {Uri? publicURL}) {
     if (!sameOrigin(request.url.toString(), server.baseURL)) throw const BooruError(BooruErrorKind.invalidServer);
     final browser = _browser(server);
-    return browser.enqueue(() => retryConnection(() => _fetch(request, browser.page, publicURL: publicURL)));
+    return PerfTrace.span(
+      'booru browser fetch',
+      () => browser.shared(() => retryConnection(() => _fetch(request, browser.page, publicURL: publicURL))),
+      detail: request.url.path,
+    );
   }
 
   static Future<BooruResponse> _fetch(BooruRequest request, BooruBrowserPage page, {Uri? publicURL}) async {
@@ -371,7 +450,7 @@ abstract final class BooruWebTransport {
   static Future<BooruResponse> document(BooruRequest request, BooruServer server) {
     if (!sameOrigin(request.url.toString(), server.baseURL)) throw const BooruError(BooruErrorKind.invalidServer);
     final browser = _browser(server);
-    return browser.enqueue(() => retryConnection(() => _document(request.url, browser.page, server)));
+    return browser.exclusive(() => retryConnection(() => _document(request.url, browser.page, server)));
   }
 
   static Future<BooruResponse> _document(Uri url, BooruBrowserPage page, BooruServer server) async {
@@ -401,10 +480,13 @@ abstract final class BooruWebTransport {
     final target = Uri.tryParse(url);
     if (target == null || target.scheme != 'https' || target.userInfo.isNotEmpty) throw const BooruError(BooruErrorKind.invalidServer);
     final browser = _browser(server);
-    return browser.enqueue(() async {
-      await browser.page.ready();
-      return BooruBrowserScripts.imageResult(await browser.page.evaluate(BooruBrowserScripts.image, {'address': url}));
-    });
+    return PerfTrace.span(
+      'booru browser image',
+      () => browser.shared(image: true, () async {
+        await browser.page.ready();
+        return BooruBrowserScripts.imageResult(await browser.page.evaluate(BooruBrowserScripts.image, {'address': url}));
+      }),
+    );
   }
 }
 

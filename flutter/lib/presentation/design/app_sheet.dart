@@ -126,10 +126,13 @@ class _SheetBodyState extends State<_SheetBody> {
                         // The keyboard shortens the sheet's content, so a focused field scrolls above it.
                         Positioned.fill(
                           bottom: medium ? 0 : media.viewInsets.bottom,
-                          child: MediaQuery.removeViewInsets(
-                            context: context,
-                            removeBottom: true,
-                            child: Builder(builder: (context) => widget.route.builder(context, _controller)),
+                          // Read from the inner context: the outer one still carries the status bar's inset.
+                          child: Builder(
+                            builder: (inner) => MediaQuery.removeViewInsets(
+                              context: inner,
+                              removeBottom: true,
+                              child: Builder(builder: (context) => widget.route.builder(context, _controller)),
+                            ),
                           ),
                         ),
                         if (widget.route.grabber)

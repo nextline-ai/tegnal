@@ -122,6 +122,12 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   bool _pendingGuide = false;
   final _menuKey = GlobalKey();
 
+  /// Loads the pages after the visible spread while reading, as the native reader does.
+  final _prefetcher = ReaderPagePrefetcher();
+  String? _prefetchKey;
+  late final AppLifecycleListener _lifecycle;
+  bool _foreground = true;
+
   Preferences get _defaults => widget.preferences;
   String get _mode => _defaults.string('reader.mode') ?? ReaderMode.horizontal.rawValue;
   bool get _rtl => _defaults.boolean('reader.rtl') ?? false;
@@ -136,6 +142,29 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   int get _count => readerSpreadCount(_pagesPerSpread);
   bool get _zoomed => _zoomedPages.isNotEmpty;
   bool get _active => !_exiting && !_opening.needsConfirmation && !_sheetOpen;
+  int get _prefetchCount => _defaults.integerOrNull(ReaderSettingKeys.prefetch) ?? 3;
+
+  /// Follows the visible page; speculation stops while zoomed, behind a sheet or in the background.
+  void _syncPrefetch() {
+    final gallery = _gallery;
+    final allowed =
+        gallery != null &&
+        _active &&
+        _foreground &&
+        !_zoomed &&
+        _prefetchCount > 0 &&
+        _current >= 0 &&
+        _current < gallery.pages.length &&
+        widget.images.canPrefetch;
+    final key = allowed ? '${gallery.id}:$_current:$_pagesPerSpread:$_prefetchCount' : null;
+    if (key == _prefetchKey) return;
+    _prefetchKey = key;
+    if (allowed) {
+      _prefetcher.update(gallery: gallery, images: widget.images, current: _current, count: _prefetchCount, visibleCount: _pagesPerSpread);
+    } else {
+      _prefetcher.cancel();
+    }
+  }
 
   @override
   void initState() {
@@ -144,11 +173,19 @@ class _NativeReaderViewState extends State<NativeReaderView> {
     _opening = ReaderResumeBehavior.stored(_defaults).opening(initial: widget.initialPage, saved: saved, resumesProgress: widget.resumesProgress);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     ReaderScreen.keepAwake(_keepAwake);
+    _lifecycle = AppLifecycleListener(
+      onStateChange: (state) {
+        _foreground = state == AppLifecycleState.resumed;
+        _syncPrefetch();
+      },
+    );
     _load();
   }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
+    _prefetcher.cancel();
     _autoTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     ReaderScreen.keepAwake(false);
@@ -396,6 +433,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
 
   @override
   Widget build(BuildContext context) {
+    _syncPrefetch();
     final gallery = _gallery;
     final media = MediaQuery.of(context);
     return CupertinoTheme(

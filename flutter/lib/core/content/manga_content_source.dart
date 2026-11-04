@@ -13,6 +13,7 @@ import 'document_catalog_source.dart';
 import 'gallery_content.dart';
 import 'keyed_catalog_source.dart';
 import 'manga_urls.dart';
+import '../support/perf_trace.dart';
 
 class _IndexPrefix {
   _IndexPrefix({List<int>? ids, this.more = true}) : ids = ids ?? [];
@@ -142,7 +143,9 @@ class MangaContentSource extends ContentProviding {
   }
 
   @override
-  Future<NativeGallery> gallery(int id) async {
+  Future<NativeGallery> gallery(int id) => PerfTrace.span('manga gallery', () => _gallery(id), detail: '#$id');
+
+  Future<NativeGallery> _gallery(int id) async {
     if (id <= 0) throw ContentError.invalidQuery;
     final site = _prepareSite();
     final backend = await _resolve(site);
@@ -204,7 +207,13 @@ class MangaContentSource extends ContentProviding {
   }
 
   @override
-  Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count}) async {
+  Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count}) => PerfTrace.span(
+    'manga list',
+    () => _list(query, offset: offset, count: count),
+    detail: 'offset $offset count $count',
+  );
+
+  Future<GalleryBatch> _list(GalleryQuery query, {required int offset, required int count}) async {
     if (!RegExp(r'^[a-z]{2,24}$').hasMatch(query.language) || offset < 0 || offset >= 10000000 || count < 1 || count > 100) throw ContentError.invalidQuery;
     final site = _prepareSite();
     switch (await _resolve(site)) {
@@ -213,7 +222,9 @@ class MangaContentSource extends ContentProviding {
       case MangaBackend.keyed:
         return keyed.list(query, offset: offset, count: count, site: site);
       case MangaBackend.indexed:
-        break;
+        // Covers need the image routing right after the list arrives; loading it alongside
+        // the list keeps the first covers from waiting another round trip.
+        _currentRouting(force: false).ignore();
     }
     final emptyText = query.text.trim().isEmpty;
     if (query.language != 'all' && query.allowsLanguageExceptions && query.sort == GallerySort.latest && query.artist == null && emptyText) {
@@ -261,7 +272,10 @@ class MangaContentSource extends ContentProviding {
   }
 
   @override
-  Future<Uint8List> image(GalleryPage page, {required int galleryID, required bool thumbnail}) async {
+  Future<Uint8List> image(GalleryPage page, {required int galleryID, required bool thumbnail}) =>
+      PerfTrace.span(thumbnail ? 'manga thumbnail' : 'manga page', () => _image(page, galleryID: galleryID, thumbnail: thumbnail));
+
+  Future<Uint8List> _image(GalleryPage page, {required int galleryID, required bool thumbnail}) async {
     final site = _prepareSite();
     final backend = await _resolve(site);
     final previousSite = page.sourceSite, index = page.index;

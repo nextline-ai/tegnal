@@ -162,18 +162,19 @@ class BooruImageCache {
     if (memory != null) return Future.value(memory);
     final pending = _inFlight[key];
     if (pending != null) return pending;
-    final disk = _disk.read(key);
-    if (disk != null) {
-      if (_valid(disk)) {
-        _memory.put(key, disk);
-        return Future.value(disk);
-      }
-      _disk.remove(key);
-    }
     final captured = _generation;
     // A shared load survives cell reuse and feeds both memory and disk caches.
     final task = () async {
       try {
+        // The file is read off the frame, so scrolling over cached cells never waits on storage.
+        final disk = await _disk.readAsync(key);
+        if (disk != null && captured == _generation) {
+          if (_valid(disk)) {
+            _memory.put(key, disk);
+            return disk;
+          }
+          _disk.remove(key);
+        }
         final downloaded = await _download(url, server);
         final kept = transform == null ? downloaded : await transform!(downloaded);
         if (kept == null || captured != _generation) throw const BooruError(BooruErrorKind.invalidResponse);
@@ -195,6 +196,9 @@ class BooruImageCache {
     final loadData = this.loadData;
     if (loadData != null) {
       data = await loadData(url, server);
+    } else if (BooruWebTransport.prefersBrowser(server)) {
+      // The server answers direct requests with a browser check, so a direct try only adds a round trip.
+      data = await BooruWebTransport.imageData(url, server);
     } else {
       final target = Uri.tryParse(url);
       if (target == null || target.scheme != 'https' || target.userInfo.isNotEmpty) throw const BooruError(BooruErrorKind.invalidServer);
@@ -203,6 +207,7 @@ class BooruImageCache {
         _client.session.prepare(request, server);
         final response = await _client.send(request, publicMedia: true, limit: maximumBytes);
         if (isViewer && server.engine == BooruEngine.danbooru && response.statusCode == 451) throw BooruPostAccessError.removed;
+        if (BooruWebTransport.isAvailable && BooruClient.needsBrowser(response.data, response.statusCode)) BooruWebTransport.directChallenged(server);
         if (response.statusCode < 200 || response.statusCode >= 300 || !_valid(response.data)) {
           final restriction = isViewer ? BooruPostAccessError.detect(response.data, server) : null;
           if (restriction != null) throw restriction;
@@ -259,6 +264,9 @@ class BooruImageCache {
 
   /// Number of lookahead loads running, for tests.
   int get activePrefetches => _activePrefetches;
+
+  /// Completes once downloaded copies started so far are on disk (for tests and relaunch).
+  Future<void> get idle => _disk.idle;
 
   Future<void> clear() async {
     _generation += 1;

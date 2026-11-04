@@ -10,6 +10,7 @@ import '../../core/content/gallery_content.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/storage/thumbnail_disk_cache.dart';
 import 'reader_models.dart';
+import '../../core/support/perf_trace.dart';
 
 /// Limits CPU-heavy decoding across every reader and feed store (`PageImageDecodeQueue`).
 class PageImageDecodeQueue {
@@ -89,6 +90,9 @@ class PageImageStore {
   /// False under the device's low-power or thermal pressure; speculation then stops.
   final bool Function() allowsPrefetch;
   final ThumbnailDiskCache? _disk;
+
+  /// Completes once downloaded pages started so far are on disk (for tests and relaunch).
+  Future<void> get idle => _disk?.idle ?? Future.value();
   final _cache = <String, ui.Image>{};
   final _flights = <String, _Flight>{};
   int _bytes = 0;
@@ -147,7 +151,7 @@ class PageImageStore {
   Future<void> _run(String key, _Flight flight, GalleryPage page, {required int galleryID, required bool thumbnail}) async {
     try {
       final limit = thumbnail ? 480 : 3000;
-      final cachedData = _disk?.read(key);
+      final cachedData = await _disk?.readAsync(key);
       ui.Image? restored;
       if (cachedData != null) {
         try {
@@ -184,7 +188,7 @@ class PageImageStore {
   /// The encoded bytes of a page, from the disk cache or the source, as kept for a saved cover.
   Future<Uint8List> data(GalleryPage page, {required int galleryID, bool thumbnail = false}) async {
     final key = _key(page.hash, thumbnail);
-    final cached = _disk?.read(key);
+    final cached = await _disk?.readAsync(key);
     if (cached != null) return cached;
     final data = await source.image(page, galleryID: galleryID, thumbnail: thumbnail);
     _disk?.write(data, key);
@@ -230,7 +234,10 @@ class PageImageStore {
   }
 
   /// Decodes no larger than `maxPixelSize` on the longer side, keeping the aspect ratio.
-  static Future<ui.Image> decode(Uint8List data, {required int maxPixelSize}) async {
+  static Future<ui.Image> decode(Uint8List data, {required int maxPixelSize}) =>
+      PerfTrace.span('page decode', () => _decode(data, maxPixelSize: maxPixelSize), detail: '${data.length ~/ 1024}KB max $maxPixelSize');
+
+  static Future<ui.Image> _decode(Uint8List data, {required int maxPixelSize}) async {
     final buffer = await ui.ImmutableBuffer.fromUint8List(data);
     ui.ImageDescriptor descriptor;
     try {

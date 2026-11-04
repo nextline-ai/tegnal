@@ -491,13 +491,8 @@ class _MangaViewerImportViewState extends State<MangaViewerImportView> {
 /// `OnboardingView(importsOnly:)`: the two importers, each on its own card.
 Future<void> showImportData(BuildContext context, ImportContext imports) => showAppSheet<void>(
   context,
-  // The sheet sits below the status bar, so its pages lay out from its own top.
-  builder: (context, controller) => MediaQuery.removePadding(
-    context: context,
-    removeTop: true,
-    child: Navigator(
-      onGenerateRoute: (_) => CupertinoPageRoute<void>(builder: (context) => ImportDataView(imports: imports)),
-    ),
+  builder: (context, controller) => Navigator(
+    onGenerateRoute: (_) => CupertinoPageRoute<void>(builder: (context) => ImportDataView(imports: imports)),
   ),
 );
 

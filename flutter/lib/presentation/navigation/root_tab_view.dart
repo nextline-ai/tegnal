@@ -77,49 +77,52 @@ class FloatingTabBar extends StatelessWidget {
     final items = _items;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _tabBarGap),
-      child: Row(
-        children: [
-          Expanded(
-            child: Glass.capsule(
-              child: SizedBox(
-                height: tabBarHeight,
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Row(
-                    children: [
-                      for (final item in items)
-                        Expanded(
-                          child: _TabButton(
-                            title: item.title,
-                            selected: state.tab == item.tab,
-                            selection: selection,
-                            color: state.tab == item.tab ? tint : label,
-                            onTap: () => state.tab = item.tab,
-                            icon: Icon(item.icon, size: 27, color: state.tab == item.tab ? tint : label),
+      // The tab capsule and the Smart circle sit apart, so they share one backdrop.
+      child: BackdropGroup(
+        child: Row(
+          children: [
+            Expanded(
+              child: Glass.capsule(
+                child: SizedBox(
+                  height: tabBarHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Row(
+                      children: [
+                        for (final item in items)
+                          Expanded(
+                            child: _TabButton(
+                              title: item.title,
+                              selected: state.tab == item.tab,
+                              selection: selection,
+                              color: state.tab == item.tab ? tint : label,
+                              onTap: () => state.tab = item.tab,
+                              icon: Icon(item.icon, size: 27, color: state.tab == item.tab ? tint : label),
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Semantics(
-            button: true,
-            selected: state.tab == AppTab.insights,
-            label: L10n.text('Smart'),
-            child: GestureDetector(
-              onTap: () => state.tab = AppTab.insights,
-              child: Glass.circle(
-                child: SizedBox.square(
-                  dimension: tabBarHeight,
-                  child: Center(child: IntelligenceSymbol(size: 27, color: state.tab == AppTab.insights ? tint : label)),
+            const SizedBox(width: 8),
+            Semantics(
+              button: true,
+              selected: state.tab == AppTab.insights,
+              label: L10n.text('Smart'),
+              child: GestureDetector(
+                onTap: () => state.tab = AppTab.insights,
+                child: Glass.circle(
+                  child: SizedBox.square(
+                    dimension: tabBarHeight,
+                    child: Center(child: IntelligenceSymbol(size: 27, color: state.tab == AppTab.insights ? tint : label)),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

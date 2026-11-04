@@ -61,34 +61,41 @@ class RootHeader extends StatelessWidget {
       padding: EdgeInsets.only(top: top),
       child: SizedBox(
         height: rootBarHeight,
-        child: Stack(
+        // The bar's capsules never overlap, so they share one backdrop.
+        child: BackdropGroup(child: _barStack(context)),
+      ),
+    );
+    return _withBanner(context, bar, banner);
+  }
+
+  Widget _barStack(BuildContext context) => Stack(
+    children: [
+      Positioned(
+        left: 16,
+        top: 0,
+        child: Row(
           children: [
-            Positioned(
-              left: 16,
-              top: 0,
-              child: Row(
-                children: [
-                  if (onBack != null && backInTitle)
-                    BackTitleCapsule(title: title, onPressed: onBack!)
-                  else ...[
-                    if (onBack != null) ...[_BackButton(onPressed: onBack!), const SizedBox(width: 8)],
-                    TitleCapsule(title),
-                  ],
-                ],
-              ),
-            ),
-            if (onBack == null && showsModeSwitch)
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: AppModeSwitch(state: state),
-                ),
-              ),
-            if (trailing != null) Positioned(right: 16, top: 0, child: trailing!),
+            if (onBack != null && backInTitle)
+              BackTitleCapsule(title: title, onPressed: onBack!)
+            else ...[
+              if (onBack != null) ...[_BackButton(onPressed: onBack!), const SizedBox(width: 8)],
+              TitleCapsule(title),
+            ],
           ],
         ),
       ),
-    );
+      if (onBack == null && showsModeSwitch)
+        Positioned.fill(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: AppModeSwitch(state: state),
+          ),
+        ),
+      if (trailing != null) Positioned(right: 16, top: 0, child: trailing!),
+    ],
+  );
+
+  static Widget _withBanner(BuildContext context, Widget bar, RootBanner? banner) {
     if (banner == null || banner.height == 0) return bar;
     return Column(mainAxisSize: MainAxisSize.min, children: [bar, banner.banner]);
   }

@@ -722,7 +722,9 @@ class _BooruValidationViewState extends State<BooruValidationView> {
     try {
       final url = await controller.currentUrl();
       if (url == null) return;
-      final result = await controller.runJavaScriptReturningResult(BooruBrowserScripts.challenge);
+      // The script is a function body, as WebKit's `callAsyncJavaScript` takes it; Android
+      // evaluates plain expressions, so it runs wrapped in a function.
+      final result = await controller.runJavaScriptReturningResult('(function(){${BooruBrowserScripts.challenge}})()');
       _state.inspected(Uri.parse(url), result == true || result == 'true' ? true : (result == false || result == 'false' ? false : null));
     } on Object {
       // A page still loading has nothing to inspect yet.

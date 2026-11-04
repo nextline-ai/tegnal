@@ -16,6 +16,7 @@ import '../design/grouped_form.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import '../navigation/app_state.dart';
+import '../../core/support/perf_trace.dart';
 
 /// What an address turned out to be: a comics site or an image board engine.
 sealed class ServerType {
@@ -36,7 +37,11 @@ sealed class ServerType {
   }
 
   /// Loads the home page once and recognizes it. The offline run reads the fixture pages.
-  static Future<ServerType?> detect(Uri url) async => recognizing(ContentPreferences.isIsolated ? await FixtureWebsites.html(url) : await inspectWebsite(url));
+  static Future<ServerType?> detect(Uri url) async {
+    if (ContentPreferences.isIsolated) return recognizing(await FixtureWebsites.html(url));
+    final html = await PerfTrace.span('website inspect', () => inspectWebsite(url), detail: url.host);
+    return recognizing(html);
+  }
 
   /// A plain, bounded GET of a website's home page.
   static Future<String> inspectWebsite(Uri url, {int limit = 2 * 1024 * 1024}) async {

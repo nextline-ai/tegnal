@@ -7,6 +7,7 @@ import 'content_url.dart';
 import 'keyed_catalog_source.dart';
 import 'manga_urls.dart';
 import 'site_account.dart';
+import '../support/perf_trace.dart';
 
 /// A received response. Header names are lower case.
 class ContentResponse {
@@ -323,6 +324,7 @@ class IoHttpFetcher implements HttpFetcher {
 
   @override
   Future<HttpReply> send(HttpExchange request) async {
+    final watch = PerfTrace.enabled ? (Stopwatch()..start()) : null;
     _client.connectionTimeout = request.timeout;
     try {
       final outgoing = await _client.openUrl(request.method, request.url).timeout(request.timeout);
@@ -338,12 +340,36 @@ class IoHttpFetcher implements HttpFetcher {
       final response = await outgoing.close().timeout(request.timeout);
       final headers = <String, List<String>>{};
       response.headers.forEach((name, values) => headers[name] = values);
-      return HttpReply(statusCode: response.statusCode, headers: headers, body: response, abort: () => response.listen(null).cancel());
+      final stream = PerfTrace.enabled ? _traced(response, request, watch!) : response;
+      return HttpReply(statusCode: response.statusCode, headers: headers, body: stream, abort: () => response.listen(null).cancel());
     } on TimeoutException {
       throw const NetworkError(NetworkErrorCode.timedOut);
     } on IOException catch (error) {
       throw networkError(error);
     }
+  }
+
+  /// Logs when the head arrived and when the last byte did, with the body's size.
+  static Stream<List<int>> _traced(Stream<List<int>> body, HttpExchange request, Stopwatch watch) {
+    final head = watch.elapsed;
+    var bytes = 0;
+    final path = request.url.path.length > 60 ? '${request.url.path.substring(0, 60)}…' : request.url.path;
+    return body.transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (chunk, sink) {
+          bytes += chunk.length;
+          sink.add(chunk);
+        },
+        handleDone: (sink) {
+          PerfTrace.log(
+            'http ${request.method} ${request.url.host}$path',
+            watch.elapsed,
+            detail: 'head ${head.inMilliseconds}ms ${(bytes / 1024).toStringAsFixed(0)}KB',
+          );
+          sink.close();
+        },
+      ),
+    );
   }
 
   /// The `URLError` code a `dart:io` failure corresponds to.

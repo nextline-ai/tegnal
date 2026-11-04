@@ -33,7 +33,9 @@ class Glass extends StatelessWidget {
       ),
       child: ClipPath(
         clipper: ShapeBorderClipper(shape: shape),
-        child: BackdropFilter(
+        // Side-by-side surfaces under one [BackdropGroup] blur a single shared copy of the
+        // screen behind them, rather than each reading it again.
+        child: BackdropFilter.grouped(
           filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
           child: DecoratedBox(
             decoration: ShapeDecoration(color: fill, shape: shape),

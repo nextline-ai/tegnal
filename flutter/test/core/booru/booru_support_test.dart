@@ -518,10 +518,42 @@ void main() {
       expect(() => BooruBrowserScripts.fetchResult('{"networkError":"timeout"}'), throwsA(const NetworkError(NetworkErrorCode.timedOut)));
       expect(BooruBrowserScripts.imageResult(jsonEncode('data:image/png;base64,${base64Encode(png)}')), png);
     });
+
+    test('requests share the page side by side while a navigation waits for them', () async {
+      final page = _GatedPage(Uri.parse('https://example.com/booru/'));
+      BooruWebTransport.adopt(page, dan);
+      final first = BooruWebTransport.data(BooruRequest(Uri.parse('https://example.com/booru/posts.json?page=1')), dan);
+      final second = BooruWebTransport.data(BooruRequest(Uri.parse('https://example.com/booru/posts.json?page=2')), dan);
+      await pumpEventQueue();
+      expect(page.running, 2, reason: 'A second request must not wait for the first one to finish');
+      final document = BooruWebTransport.document(BooruRequest(Uri.parse('https://example.com/booru/pools')), dan);
+      await pumpEventQueue();
+      expect(page.navigations, 0, reason: 'A navigation would replace the document under running requests');
+      page.release();
+      await Future.wait([first, second]);
+      await pumpEventQueue();
+      expect(page.navigations, 1);
+      page.release();
+      expect((await document).statusCode, 200);
+    });
+
+    test('a server that challenged direct requests is remembered for a while', () {
+      final preferences = MemoryPreferences();
+      BooruWebTransport.preferences = preferences;
+      addTearDown(() => BooruWebTransport.preferences = null);
+      final now = DateTime(2026, 11, 4, 12);
+      expect(BooruWebTransport.prefersBrowser(dan, now: now), isFalse, reason: 'Without a browser factory the direct route stays');
+      BooruWebTransport.factory = (_) => _FakePage(Uri.parse('https://example.com/booru/'));
+      expect(BooruWebTransport.prefersBrowser(dan, now: now), isFalse);
+      BooruWebTransport.directChallenged(dan, now: now);
+      expect(BooruWebTransport.prefersBrowser(dan, now: now.add(const Duration(minutes: 29))), isTrue);
+      expect(BooruWebTransport.prefersBrowser(dan, now: now.add(const Duration(minutes: 31))), isFalse, reason: 'The direct route is tried again later');
+      expect(preferences.integerOrNull('booru.directChallengedUntil.${dan.id}'), now.add(const Duration(minutes: 30)).millisecondsSinceEpoch);
+    });
   });
 
   group('image caches', () {
-    test('disk cache bounds, recency and clear across relaunch', () {
+    test('disk cache bounds, recency and clear across relaunch', () async {
       final root = Directory('${temporaryDirectory(addTearDown).path}/thumbs');
       final disk = BooruThumbnailDiskCache(directory: root, capacity: 8);
       final start = DateTime.fromMillisecondsSinceEpoch(100000);
@@ -530,6 +562,8 @@ void main() {
       expect(disk.read('https://private.test/a', now: start.add(const Duration(seconds: 2))), isNotNull);
       disk.write(Uint8List.fromList([9, 10, 11, 12]), 'third', now: start.add(const Duration(seconds: 3)));
       expect(disk.read('second'), isNull);
+      // Files are saved in the background; a relaunch reads what landed.
+      await disk.idle;
       final relaunched = BooruThumbnailDiskCache(directory: root, capacity: 8);
       expect(relaunched.read('https://private.test/a'), [1, 2, 3, 4]);
       final names = root.listSync().map((file) => file.uri.pathSegments.last).toList();
@@ -540,11 +574,25 @@ void main() {
       expect(root.listSync(), isEmpty);
     });
 
+    test('a copy still being saved is readable, and removing it keeps it from landing', () async {
+      final root = Directory('${temporaryDirectory(addTearDown).path}/pending');
+      final disk = BooruThumbnailDiskCache(directory: root);
+      disk.write(Uint8List.fromList([1, 2, 3]), 'kept');
+      disk.write(Uint8List.fromList([4, 5, 6]), 'removed');
+      expect(await disk.readAsync('kept'), [1, 2, 3], reason: 'Bytes are served from memory until the file lands');
+      disk.remove('removed');
+      await disk.idle;
+      expect(await BooruThumbnailDiskCache(directory: root).readAsync('kept'), [1, 2, 3]);
+      expect(await BooruThumbnailDiskCache(directory: root).readAsync('removed'), isNull);
+      expect(root.listSync().length, 1);
+    });
+
     test('relaunch uses the disk copy without network and clear removes it', () async {
       final root = Directory('${temporaryDirectory(addTearDown).path}/cache');
       final loader = _Loader(png);
       final first = BooruImageCache(directory: root, loadData: loader.load);
       await first.load('https://example.test/preview.png', a);
+      await first.idle;
       loader.offline = true;
       final relaunched = BooruImageCache(directory: root, loadData: loader.load);
       expect(await relaunched.load('https://example.test/preview.png', a), png);
@@ -696,6 +744,42 @@ class _FakePage implements BooruBrowserPage {
   Future<int> navigate(Uri url) async => 200;
   @override
   void stop() => stopped = true;
+}
+
+/// A page whose scripts finish only when the test releases them.
+class _GatedPage implements BooruBrowserPage {
+  _GatedPage(this.url);
+  @override
+  final Uri? url;
+  var running = 0, navigations = 0;
+  var _gate = Completer<void>();
+
+  void release() {
+    _gate.complete();
+    _gate = Completer<void>();
+  }
+
+  @override
+  bool get isolatesScripts => false;
+  @override
+  Future<void> ready() async {}
+  @override
+  Future<String> evaluate(String script, Map<String, Object?> arguments) async {
+    if (script == BooruBrowserScripts.outerHTML) return jsonEncode('<html><body>pools</body></html>');
+    running += 1;
+    await _gate.future;
+    running -= 1;
+    return jsonEncode({'status': 200, 'body': '[]'});
+  }
+
+  @override
+  Future<int> navigate(Uri url) async {
+    navigations += 1;
+    return 200;
+  }
+
+  @override
+  void stop() {}
 }
 
 class _EmptySource implements BooruProviding {

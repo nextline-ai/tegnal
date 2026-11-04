@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_client.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_support.dart';
@@ -180,6 +181,9 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   }
 
   Future<void> _loadIfNeeded() async {
+    // A server that needed the browser last time starts its hidden page before the first
+    // request, once image mode is on screen.
+    if (!_booru.fixture) _servers.forEach(BooruWebTransport.warm);
     final key = _requestKey;
     if (_loadedRequest == key) return;
     if (_loader.didLoad && _loader.contentID == key) {

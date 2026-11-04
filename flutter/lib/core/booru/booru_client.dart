@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../content/content_errors.dart';
 import '../content/content_transport.dart';
+import '../support/perf_trace.dart';
 import '../support/swift_json.dart';
 import 'booru_browser.dart';
 import 'booru_html.dart';
@@ -352,7 +353,7 @@ class BooruClient implements BooruProviding {
     BooruResponse response;
     if (browser && isDocument) {
       response = await BooruWebTransport.document(request, server);
-    } else if (browser && BooruWebTransport.hasSession(server)) {
+    } else if (browser && (BooruWebTransport.hasSession(server) || BooruWebTransport.prefersBrowser(server))) {
       response = await BooruWebTransport.data(request, server, publicURL: publicRequest.url);
     } else {
       try {
@@ -360,6 +361,7 @@ class BooruClient implements BooruProviding {
         if (needsBrowser(direct.data, direct.statusCode)) {
           final error = BooruPostAccessError.detect(direct.data, server);
           if (error != null) throw error;
+          if (browser) BooruWebTransport.directChallenged(server);
         }
         response = browser && needsBrowser(direct.data, direct.statusCode)
             ? await BooruWebTransport.data(request, server, publicURL: publicRequest.url)
@@ -436,7 +438,7 @@ class BooruClient implements BooruProviding {
       case BooruEngine.moebooru:
         raw = await _data(server, 'post.json', [('tags', query), ('limit', '40'), ('page', '${page + 1}')]);
     }
-    final rows = BooruDecoder.rows(raw, 'post');
+    final rows = PerfTrace.sync('booru decode rows', () => BooruDecoder.rows(raw, 'post'), detail: '${raw.length ~/ 1024}KB');
     _learnRatings(server, rows);
     final modern = _usesModernRatings(server);
     final posts = <BooruPost>[], restricted = <int>[], candidates = <BooruPost>[];
@@ -466,7 +468,8 @@ class BooruClient implements BooruProviding {
       }
     }
 
-    await Future.wait([worker(), worker()]);
+    // The feed waits for these checks, and the browser serves them side by side.
+    await PerfTrace.span('booru access checks', () => Future.wait([for (var slot = 0; slot < 4; slot++) worker()]), detail: '${candidates.length} posts');
     restricted.addAll(posts.where((post) => checked.contains(post.postID)).map((post) => post.postID));
     posts.removeWhere((post) => checked.contains(post.postID));
     return BooruBatch(posts: posts, hasMore: rows.length >= pageSize, goldRestrictedIDs: restricted);
