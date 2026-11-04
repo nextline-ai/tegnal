@@ -5,6 +5,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import '../../core/support/l10n.dart';
 import 'glass.dart';
 import 'tegnal_theme.dart';
+import 'alert_dialog.dart';
 
 /// iOS 26 grouped form colors: the sheet background and its rows.
 abstract final class FormColors {
@@ -85,9 +86,15 @@ class FormSection extends StatelessWidget {
   }
 }
 
+/// A row that builds a [FormRow] and tells its section where the line under it starts.
+abstract interface class FormSeparatorInset {
+  double get separatorInset;
+}
+
 /// The inset of the line under a row, looking through swipe and accessibility wrappers.
 double _separatorInset(Widget row) => switch (row) {
   FormRow(:final separatorInset) => separatorInset,
+  FormSeparatorInset(:final separatorInset) => separatorInset,
   Dismissible(:final child) || Semantics(:final child?) || KeyedSubtree(:final child) => _separatorInset(child),
   _ => 16,
 };
@@ -165,7 +172,7 @@ class FormHelpButton extends StatelessWidget {
       onTap: () => showCupertinoDialog<void>(
         context: context,
         barrierDismissible: true,
-        builder: (context) => CupertinoAlertDialog(
+        builder: (context) => TegnalAlertDialog(
           title: Text(title),
           content: Text(message),
           actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],
@@ -237,10 +244,13 @@ class _ScrollEdgeSheetState extends State<ScrollEdgeSheet> {
 
 /// A toolbar text button in its own glass capsule, 44 pt tall.
 class GlassTextButton extends StatelessWidget {
-  const GlassTextButton({super.key, required this.label, this.onPressed, this.prominent = false, this.elevated = true});
+  const GlassTextButton({super.key, required this.label, this.onPressed, this.prominent = false, this.elevated = true, this.tint});
   final String label;
   final VoidCallback? onPressed;
   final bool prominent;
+
+  /// The label's color when a screen sets its own tint.
+  final Color? tint;
 
   /// In a sheet the glass is lighter; on a screen's toolbar it is the plain glass.
   final bool elevated;
@@ -248,7 +258,7 @@ class GlassTextButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final color = enabled ? TegnalColors.label.resolveFrom(context) : TegnalColors.tertiaryLabel.resolveFrom(context);
+    final color = enabled ? tint ?? TegnalColors.label.resolveFrom(context) : TegnalColors.tertiaryLabel.resolveFrom(context);
     return Semantics(
       button: true,
       enabled: enabled,

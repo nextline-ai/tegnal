@@ -14,6 +14,7 @@ import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import '../library/folders_view.dart' show ContentUnavailable;
 import 'settings_rows.dart';
+import '../design/alert_dialog.dart';
 
 /// Reads and clears the WebView's cookies, which webview_flutter cannot do on Android.
 abstract final class WebCookies {
@@ -76,7 +77,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     setState(() => _importing = false);
     await showCupertinoDialog<void>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Import Account Favorites')),
         content: Text(message),
         actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],

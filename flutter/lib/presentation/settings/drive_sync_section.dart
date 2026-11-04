@@ -6,6 +6,7 @@ import '../../core/sync/library_drive_sync.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import 'settings_rows.dart';
+import '../design/alert_dialog.dart';
 
 /// `CloudSyncSection` on Android: Google Drive in place of iCloud, with the account that holds it.
 class DriveSyncSection extends StatefulWidget {
@@ -54,7 +55,7 @@ class _DriveSyncSectionState extends State<DriveSyncSection> {
     }
     final off = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Turn Off Google Drive Sync?')),
         content: Text(
           L10n.text(
@@ -72,7 +73,7 @@ class _DriveSyncSectionState extends State<DriveSyncSection> {
 
   void _alert(String message) => showCupertinoDialog<void>(
     context: context,
-    builder: (context) => CupertinoAlertDialog(
+    builder: (context) => TegnalAlertDialog(
       title: Text(L10n.text('Google Drive')),
       content: Text(message),
       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],

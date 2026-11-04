@@ -49,6 +49,16 @@ SYSTEM = {
 # Android-only wording, where the native app names an Apple service (iCloud) that the
 # Android app replaces with Google Drive. The rest of the sync wording is native.
 ANDROID = {
+    "Challenge definitions, progress and image sources stay on this device.": {
+        "en": "Challenge definitions, progress and image sources stay on this device.",
+        "ko": "챌린지 정의, 진행 상태와 이미지 출처는 이 기기에 저장됩니다.",
+        "ja": "チャレンジの定義、進行状況、画像の出典はこのデバイスに保存されます。",
+    },
+    "This removes the challenge and its progress from this device.": {
+        "en": "This removes the challenge and its progress from this device.",
+        "ko": "이 기기에서 챌린지와 진행 상태를 삭제합니다.",
+        "ja": "このデバイスからチャレンジと進行状況を削除します。",
+    },
     "Google Drive": {"en": "Google Drive", "ko": "Google 드라이브", "ja": "Google ドライブ"},
     "Google Drive Sync": {"en": "Google Drive Sync", "ko": "Google 드라이브 동기화", "ja": "Google ドライブ同期"},
     "Connect Google Account": {"en": "Connect Google Account", "ko": "Google 계정 연결", "ja": "Google アカウントを接続"},

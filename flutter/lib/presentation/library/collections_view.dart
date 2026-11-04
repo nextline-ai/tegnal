@@ -19,6 +19,7 @@ import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import 'library_routes.dart';
+import '../design/alert_dialog.dart';
 
 /// `SavedCollectionsModel`: saved tags, artists and searches, and the search history, for
 /// comics or for one image server. Order lives in that library's preferences.
@@ -258,7 +259,7 @@ class _CollectionsViewState extends State<CollectionsView> {
       _model.error = null;
       showCupertinoDialog<void>(
         context: context,
-        builder: (context) => CupertinoAlertDialog(
+        builder: (context) => TegnalAlertDialog(
           title: Text(L10n.text('Unable to Save')),
           content: Text(error),
           actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],
@@ -278,7 +279,7 @@ class _CollectionsViewState extends State<CollectionsView> {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+    final top = rootContentTop(context, pushed: widget.onBack != null);
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final tertiary = TegnalColors.tertiaryLabel.resolveFrom(context);
     final row = FormColors.listRow.resolveFrom(context);
@@ -413,7 +414,7 @@ class CollectionSection extends StatelessWidget {
   Future<void> _confirmClear(BuildContext context) async {
     final clear = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Clear History?')),
         content: Text(L10n.text('Search history will be deleted. Saved searches will be kept.')),
         actions: [

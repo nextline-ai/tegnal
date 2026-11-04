@@ -191,6 +191,26 @@ class ChallengeDefinition {
 
   static const exampleID = 'builtin.croquis.v1';
 
+  /// The tabs of How to Play: the challenge's own details first, then its help pages.
+  List<ChallengeHelpPage> get instructionPages {
+    final pages = <ChallengeHelpPage>[
+      if (detail.trim().isNotEmpty) ChallengeHelpPage(id: 'overview', title: L10n.text('How to Play'), body: detail),
+      ...?helpPages,
+    ];
+    if (pages.isEmpty) {
+      pages.add(
+        ChallengeHelpPage(
+          id: 'overview',
+          title: L10n.text('How to Play'),
+          body: L10n.text('Draw a mission, complete its goal, and collect points until the final result.'),
+        ),
+      );
+    }
+    return pages;
+  }
+
+  ChallengeDefinition copy() => ChallengeDefinition.fromJson(decodeJsonObject(encodeSwiftJson(toJson())));
+
   factory ChallengeDefinition.fromJson(JsonObject json) {
     ChallengeGroup group(Object? value) => ChallengeGroup.fromJson(jsonObject(value));
     return ChallengeDefinition(

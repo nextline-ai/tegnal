@@ -13,6 +13,7 @@ import '../works/artwork_grid.dart';
 import 'folder_name_prompt.dart';
 import 'library_routes.dart';
 import 'local_thumbnail.dart';
+import '../design/alert_dialog.dart';
 
 /// `FoldersView`: the comics library's folders as bento cards, with the saved-works search.
 class FoldersView extends StatefulWidget {
@@ -123,7 +124,7 @@ class _FoldersViewState extends State<FoldersView> {
   Future<void> _confirmDelete(Folder folder) async {
     final delete = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text("Delete the folder '%@'?", [folder.displayName])),
         content: Text(L10n.text('Works in this folder will be moved to Unfiled.')),
         actions: [
@@ -146,7 +147,7 @@ class _FoldersViewState extends State<FoldersView> {
 
   void _showError(String message) => showCupertinoDialog<void>(
     context: context,
-    builder: (context) => CupertinoAlertDialog(
+    builder: (context) => TegnalAlertDialog(
       title: Text(L10n.text('Error')),
       content: Text(message),
       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
@@ -155,7 +156,7 @@ class _FoldersViewState extends State<FoldersView> {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+    final top = rootContentTop(context);
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
       child: Stack(

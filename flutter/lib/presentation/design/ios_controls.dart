@@ -13,9 +13,12 @@ abstract final class ControlColors {
 /// The iOS 26 `Toggle`: a 63 × 28 pt track with a 37 pt capsule knob, green when on.
 /// The Cupertino switch still draws the older round knob, so it is drawn here.
 class TegnalSwitch extends StatelessWidget {
-  const TegnalSwitch({super.key, required this.value, required this.onChanged});
+  const TegnalSwitch({super.key, required this.value, required this.onChanged, this.tint});
   final bool value;
   final ValueChanged<bool>? onChanged;
+
+  /// The on track's color when a screen sets its own tint; system green otherwise.
+  final Color? tint;
 
   static const Size size = Size(63, 28);
   static const Size knob = Size(37, 23);
@@ -23,7 +26,7 @@ class TegnalSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onChanged != null;
-    final track = value ? SystemColors.green.resolveFrom(context) : ControlColors.switchOffTrack.resolveFrom(context);
+    final track = value ? tint ?? SystemColors.green.resolveFrom(context) : ControlColors.switchOffTrack.resolveFrom(context);
     return Semantics(
       toggled: value,
       enabled: enabled,

@@ -12,17 +12,20 @@ abstract final class L10n {
     _ => 'english',
   };
 
-  /// `String(format:)` with `%@` and positional `%1$@` arguments.
+  /// `String(format:)` with `%@`, positional `%1$@` arguments and `%%` for a percent sign.
   static String text(String key, [List<String> arguments = const []]) {
     var value = table[key] ?? key;
     if (language == 'ko') value = keepingWords(value);
     if (arguments.isEmpty) return value;
-    value = value.replaceAllMapped(RegExp(r'%(\d+)\$@'), (match) {
-      final index = int.parse(match[1]!) - 1;
-      return index < arguments.length ? arguments[index] : match[0]!;
-    });
     var next = 0;
-    return value.replaceAllMapped(RegExp('%@'), (match) => next < arguments.length ? arguments[next++] : match[0]!);
+    return value.replaceAllMapped(RegExp(r'%%|%(\d+)\$@|%@'), (match) {
+      if (match[0] == '%%') return '%';
+      if (match[1] case final position?) {
+        final index = int.parse(position) - 1;
+        return index < arguments.length ? arguments[index] : match[0]!;
+      }
+      return next < arguments.length ? arguments[next++] : match[0]!;
+    });
   }
 
   /// iOS wraps Korean between words. Joining the letters of each word with
@@ -31,10 +34,14 @@ abstract final class L10n {
     if (!_hangul.hasMatch(value)) return value;
     final buffer = StringBuffer();
     final characters = value.runes.toList();
+    // `{name}` placeholders stay untouched so templates still match their variables.
+    var inPlaceholder = false;
     for (var index = 0; index < characters.length; index++) {
       final current = characters[index];
       buffer.writeCharCode(current);
-      if (index + 1 < characters.length && _joins(current) && _joins(characters[index + 1])) buffer.write('\u2060');
+      if (current == 0x7B) inPlaceholder = true;
+      if (current == 0x7D) inPlaceholder = false;
+      if (!inPlaceholder && index + 1 < characters.length && _joins(current) && _joins(characters[index + 1])) buffer.write('\u2060');
     }
     return buffer.toString();
   }

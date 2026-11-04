@@ -18,7 +18,7 @@ import 'booru_settings_views.dart';
 /// `BooruRootView`: image mode's four tabs. Until a server is connected, Saved, Explore
 /// and Tags show the website setup.
 class BooruRootPages {
-  BooruRootPages({required this.booru, required this.content, required this.library, required this.settings}) {
+  BooruRootPages({required this.booru, required this.content, required this.library, required this.settings, this.importLinks}) {
     _serverCount = booru.store.servers.length;
     booru.store.addListener(_serversChanged);
   }
@@ -27,6 +27,9 @@ class BooruRootPages {
   final ContentEnvironment content;
   final LibraryRoutes library;
   final BooruSettingsDependencies settings;
+
+  /// `WebsiteImportLinks` on the setup screen.
+  final Widget Function()? importLinks;
   int _serverCount = 0;
 
   AppState get _state => booru.state;
@@ -49,6 +52,7 @@ class BooruRootPages {
       active: _active(AppTab.folders),
       builder: (context) => _SetupGate(
         booru: booru,
+        importLinks: importLinks,
         content: content,
         title: L10n.text('Saved'),
         child: BooruFavoritesView(booru: booru),
@@ -58,6 +62,7 @@ class BooruRootPages {
       active: _active(AppTab.works),
       builder: (context) => _SetupGate(
         booru: booru,
+        importLinks: importLinks,
         content: content,
         title: L10n.text('Explore'),
         child: ListenableBuilder(
@@ -70,6 +75,7 @@ class BooruRootPages {
       active: _active(AppTab.artists),
       builder: (context) => _SetupGate(
         booru: booru,
+        importLinks: importLinks,
         content: content,
         title: L10n.text('Tags'),
         child: BooruSavedServersView(
@@ -97,7 +103,8 @@ class BooruRootPages {
 
 /// The setup screen under the root header while no server is connected.
 class _SetupGate extends StatelessWidget {
-  const _SetupGate({required this.booru, required this.content, required this.title, required this.child});
+  const _SetupGate({required this.booru, required this.content, required this.title, required this.child, this.importLinks});
+  final Widget Function()? importLinks;
   final BooruContext booru;
   final ContentEnvironment content;
   final String title;
@@ -108,13 +115,20 @@ class _SetupGate extends StatelessWidget {
     listenable: booru.store,
     builder: (context, _) {
       if (booru.store.servers.isNotEmpty) return child;
-      final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+      final top = rootContentTop(context);
       return ColoredBox(
         color: TegnalColors.background.resolveFrom(context),
         child: Stack(
           children: [
             Positioned.fill(
-              child: WebsiteSetupView(content: content, state: booru.state, booru: booru.store, topInset: top, bottomInset: tabBarClearance(context)),
+              child: WebsiteSetupView(
+                content: content,
+                state: booru.state,
+                booru: booru.store,
+                importLinks: importLinks?.call(),
+                topInset: top,
+                bottomInset: tabBarClearance(context),
+              ),
             ),
             Positioned(
               left: 0,

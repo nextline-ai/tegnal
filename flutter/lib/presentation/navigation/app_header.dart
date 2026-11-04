@@ -9,10 +9,36 @@ import 'app_state.dart';
 /// Height of the root navigation bar below the status bar.
 const double rootBarHeight = 54;
 
+/// A notice every root tab shows under its bar, such as the import reminder, as the native
+/// root header's top safe-area inset. Pushed screens never show it.
+class RootBanner extends InheritedWidget {
+  const RootBanner({super.key, required this.banner, required this.height, required super.child});
+  final Widget banner;
+  final double height;
+
+  static RootBanner? _of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<RootBanner>();
+
+  @override
+  bool updateShouldNotify(RootBanner old) => old.height != height || old.banner != banner;
+}
+
+/// Where a screen's content starts below the bar, and below a root banner for root tabs.
+double rootContentTop(BuildContext context, {bool pushed = false}) =>
+    MediaQuery.paddingOf(context).top + rootBarHeight + (pushed ? 0 : RootBanner._of(context)?.height ?? 0);
+
 /// The top of every root screen: a title capsule on the leading side and the
 /// mode switch in the title position, floating above content without a bar background.
 class RootHeader extends StatelessWidget {
-  const RootHeader({super.key, required this.title, required this.state, this.trailing, this.onBack, this.backInTitle = false, this.showsModeSwitch = true});
+  const RootHeader({
+    super.key,
+    required this.title,
+    required this.state,
+    this.trailing,
+    this.onBack,
+    this.backInTitle = false,
+    this.showsModeSwitch = true,
+    this.showsBanner = true,
+  });
   final String title;
   final AppState state;
   final Widget? trailing;
@@ -24,10 +50,14 @@ class RootHeader extends StatelessWidget {
   final bool backInTitle;
   final bool showsModeSwitch;
 
+  /// The Smart tab's root shows no [RootBanner], as its native header has no inset.
+  final bool showsBanner;
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
-    return Padding(
+    final banner = onBack == null && showsBanner ? RootBanner._of(context) : null;
+    final bar = Padding(
       padding: EdgeInsets.only(top: top),
       child: SizedBox(
         height: rootBarHeight,
@@ -59,6 +89,8 @@ class RootHeader extends StatelessWidget {
         ),
       ),
     );
+    if (banner == null || banner.height == 0) return bar;
+    return Column(mainAxisSize: MainAxisSize.min, children: [bar, banner.banner]);
   }
 }
 

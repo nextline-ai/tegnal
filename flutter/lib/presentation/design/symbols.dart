@@ -344,3 +344,168 @@ class _ServerRackPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ServerRackPainter old) => old.color != color;
 }
+
+/// `dice`: a die with five pips in front of a second die behind it, up and to the left.
+class DiceSymbol extends StatelessWidget {
+  const DiceSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _DicePainter(resolved));
+  }
+}
+
+class _DicePainter extends CustomPainter {
+  _DicePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * unit;
+    final fill = Paint()..color = color;
+    final back = RRect.fromLTRBR(2 * unit, 2 * unit, 15.5 * unit, 15.5 * unit, Radius.circular(3.2 * unit));
+    final front = RRect.fromLTRBR(7.5 * unit, 7.5 * unit, 22 * unit, 22 * unit, Radius.circular(3.4 * unit));
+    canvas.saveLayer(Offset.zero & size, Paint());
+    canvas.drawRRect(back, stroke);
+    canvas.drawCircle(Offset(5.6 * unit, 5.6 * unit), 1.15 * unit, fill);
+    // The front die hides the back one where they overlap.
+    canvas.drawRRect(front.inflate(1.6 * unit), Paint()..blendMode = BlendMode.clear);
+    canvas.drawRRect(front, stroke);
+    for (final (x, y) in [(11.3, 11.3), (18.2, 11.3), (14.75, 14.75), (11.3, 18.2), (18.2, 18.2)]) {
+      canvas.drawCircle(Offset(x * unit, y * unit), 1.15 * unit, fill);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_DicePainter old) => old.color != color;
+}
+
+/// `flag.checkered`: a pole with a checkered flag waving from its top.
+class CheckeredFlagSymbol extends StatelessWidget {
+  const CheckeredFlagSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _CheckeredFlagPainter(resolved));
+  }
+}
+
+class _CheckeredFlagPainter extends CustomPainter {
+  _CheckeredFlagPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.7 * unit
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    const left = 4.0, right = 21.0, top = 3.5, bottom = 14.5;
+    canvas.drawLine(Offset(left * unit, top * unit), Offset(left * unit, 22 * unit), stroke);
+    final flag = Rect.fromLTRB(left * unit, top * unit, right * unit, bottom * unit);
+    final cellWidth = flag.width / 4, cellHeight = flag.height / 3;
+    final fill = Paint()..color = color;
+    for (var row = 0; row < 3; row++) {
+      for (var column = 0; column < 4; column++) {
+        if ((row + column).isEven) {
+          canvas.drawRect(Rect.fromLTWH(flag.left + column * cellWidth, flag.top + row * cellHeight, cellWidth, cellHeight), fill);
+        }
+      }
+    }
+    canvas.drawRRect(RRect.fromRectAndRadius(flag, Radius.circular(1.2 * unit)), stroke);
+  }
+
+  @override
+  bool shouldRepaint(_CheckeredFlagPainter old) => old.color != color;
+}
+
+/// `chart.bar.xaxis`: four rising and falling bars standing on a baseline.
+class BarChartAxisSymbol extends StatelessWidget {
+  const BarChartAxisSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _BarChartAxisPainter(resolved));
+  }
+}
+
+class _BarChartAxisPainter extends CustomPainter {
+  _BarChartAxisPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final fill = Paint()..color = color;
+    const bars = [(2.0, 8.0), (7.5, 4.0), (13.0, 6.5), (18.5, 10.5)];
+    for (final (left, top) in bars) {
+      canvas.drawRRect(RRect.fromLTRBR(left * unit, top * unit, (left + 3.6) * unit, 18.5 * unit, Radius.circular(0.9 * unit)), fill);
+    }
+    canvas.drawRRect(RRect.fromLTRBR(1 * unit, 20.2 * unit, 23 * unit, 21.8 * unit, Radius.circular(0.8 * unit)), fill);
+  }
+
+  @override
+  bool shouldRepaint(_BarChartAxisPainter old) => old.color != color;
+}
+
+/// `book.pages`: a page of text lines with a second page edge behind it.
+class BookPagesSymbol extends StatelessWidget {
+  const BookPagesSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _BookPagesPainter(resolved));
+  }
+}
+
+class _BookPagesPainter extends CustomPainter {
+  _BookPagesPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * unit
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    // The page behind shows along the right and bottom edges.
+    final back = Path()
+      ..moveTo(18.5 * unit, 3.5 * unit)
+      ..lineTo(19.5 * unit, 3.5 * unit)
+      ..arcToPoint(Offset(21.5 * unit, 5.5 * unit), radius: Radius.circular(2 * unit))
+      ..lineTo(21.5 * unit, 20 * unit)
+      ..arcToPoint(Offset(19 * unit, 22.5 * unit), radius: Radius.circular(2.5 * unit))
+      ..lineTo(7 * unit, 22.5 * unit);
+    canvas.drawPath(back, stroke);
+    canvas.drawRRect(RRect.fromLTRBR(3 * unit, 1.5 * unit, 18 * unit, 20 * unit, Radius.circular(2.5 * unit)), stroke);
+    for (final y in [6.0, 9.5, 13.0, 16.5]) {
+      canvas.drawLine(Offset(6.5 * unit, y * unit), Offset((y == 16.5 ? 11.5 : 14.5) * unit, y * unit), stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BookPagesPainter old) => old.color != color;
+}

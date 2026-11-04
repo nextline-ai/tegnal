@@ -9,11 +9,25 @@ import '../core/content/content_environment.dart';
 import '../core/content/cover_queue.dart';
 import '../core/downloads/download_store.dart';
 import '../core/support/mode_settings.dart';
+import '../core/booru/booru_models.dart' show BooruSafeRating;
+import '../core/taste/taste_controller.dart';
 import '../core/sync/library_drive_sync.dart';
 import '../core/storage/app_database.dart';
 import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
+import '../core/taste/taste_models.dart';
 import '../presentation/booru/booru_common.dart';
+import '../presentation/challenge/challenge_library_view.dart';
+import '../presentation/design/grouped_form.dart';
+import '../presentation/design/symbols.dart';
+import '../presentation/design/system_colors.dart';
+import '../presentation/imports/import_views.dart';
+import '../presentation/settings/settings_rows.dart';
+import '../presentation/taste/taste_context.dart';
+import '../presentation/taste/taste_dashboard.dart';
+import '../presentation/taste/taste_settings_view.dart';
+import '../presentation/taste/recap/recap_banner.dart';
+import '../presentation/taste/recap/recap_home_view.dart';
 import '../presentation/booru/booru_root.dart';
 import '../presentation/booru/booru_settings_views.dart';
 import '../presentation/content/content_bookmark.dart';
@@ -76,6 +90,14 @@ class AppServices {
       },
     );
     invitation = DiscordInvitation(preferences.defaults);
+    taste = TasteController(library: database, images: booru, content: content, booruSource: booruSource, comicSource: content.source, booruQuery: _booruQuery);
+  }
+
+  /// `booruQuery`: Safe Mode adds its rating tag to recommendation searches too.
+  String _booruQuery(String query) {
+    final defaults = preferences.defaults;
+    if (!(defaults.boolean('booru.safeMode') ?? false)) return query;
+    return (BooruSafeRating.fromRawValue(defaults.string('booru.safeRating')) ?? BooruSafeRating.general).applyingDefault(query);
   }
 
   final AppPreferences preferences;
@@ -102,6 +124,9 @@ class AppServices {
   late final DownloadStore downloads;
   late final LibraryDriveSync sync;
   late final DiscordInvitation invitation;
+
+  /// Taste analysis, recommendations and recaps for both libraries.
+  late final TasteController taste;
 }
 
 class TegnalApp extends StatefulWidget {
@@ -179,6 +204,8 @@ class _RootState extends State<_Root> {
   void initState() {
     super.initState();
     state.keepsImageMode = () => _booru.safeMode;
+    // Finished weeks and months become reports and recaps, as the native app does on launch.
+    if (!services.isTesting) services.taste.prepareCompletedReports();
     if (!services.isTesting) services.coverQueue.start();
     // Sync and the cover queue run only while the app is in front, as on iOS.
     _lifecycle = AppLifecycleListener(
@@ -214,16 +241,70 @@ class _RootState extends State<_Root> {
     fixture: services.isTesting,
   );
 
+  late final _imports = ImportContext(booru: _booru, database: services.database, startCoverQueue: services.coverQueue.start);
+
+  late final _taste = TasteContext(
+    controller: services.taste,
+    booru: _booru,
+    comics: _contentRoutes,
+    images: services.images,
+    explore: () => state.tab = AppTab.works,
+  );
+
+  Widget _tasteSettingsRow(BuildContext context, TasteMode mode) => FormSection(
+    prominentHeader: true,
+    rowColor: FormColors.listRow.resolveFrom(context),
+    children: [
+      SettingsLinkRow(
+        title: L10n.text('Taste Analysis'),
+        icon: CupertinoIcons.sparkles,
+        onTap: () => Navigator.of(context).push(
+          CupertinoPageRoute<void>(
+            builder: (_) => TasteSettingsView(taste: _taste, mode: mode),
+          ),
+        ),
+      ),
+    ],
+  );
+
   late final _booruPages = BooruRootPages(
     booru: _booru,
     content: services.content,
     library: _library,
+    importLinks: () => WebsiteImportLinks(imports: _imports),
     settings: BooruSettingsDependencies(
       booru: _booru,
       content: services.content,
       version: services.version,
-      openLibraryManagement: (context) =>
-          Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => LibraryManagementView(library: _management, booru: true))),
+      tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.booru),
+      openLibraryManagement: (context) => Navigator.of(context).push(
+        CupertinoPageRoute<void>(
+          builder: (_) => LibraryManagementView(
+            library: _management,
+            booru: true,
+            extraSections: [
+              Builder(
+                builder: (context) => FormSection(
+                  prominentHeader: true,
+                  rowColor: FormColors.listRow.resolveFrom(context),
+                  children: [
+                    SettingsLinkRow(
+                      title: L10n.text('Challenge Backup and Import'),
+                      symbol: (_) => DiceSymbol(color: SystemColors.purple.resolveFrom(context)),
+                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => ChallengeBackupView(booru: services.booru))),
+                    ),
+                    SettingsLinkRow(
+                      title: L10n.text('Import from Anime Boxes'),
+                      icon: CupertinoIcons.cube_box,
+                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: _booru))),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       resetSettings: () => ModeSettingsReset.reset(booru: true, content: services.content, preferences: services.preferences),
       sync: (context) => DriveSyncSection(sync: services.sync),
       invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),
@@ -257,7 +338,34 @@ class _RootState extends State<_Root> {
     library: _library,
     version: services.version,
     openDownloads: (context) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => DownloadsView(downloads: _downloads))),
-    openLibraryManagement: (context) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => LibraryManagementView(library: _management))),
+    openLibraryManagement: (context) => Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => LibraryManagementView(
+          library: _management,
+          extraSections: [
+            Builder(
+              builder: (context) => FormSection(
+                prominentHeader: true,
+                rowColor: FormColors.listRow.resolveFrom(context),
+                header: Text(L10n.text('Import Data (Other Manga Viewer)')),
+                children: [
+                  SettingsLinkRow(
+                    title: L10n.text('Import from Another Manga Viewer'),
+                    icon: CupertinoIcons.square_arrow_down,
+                    onTap: () => Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => MangaViewerImportView(database: services.database, startCoverQueue: services.coverQueue.start),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+    tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
     siteAccount: (context) => SiteAccountSection(content: services.content, database: services.database, startCoverQueue: services.coverQueue.start),
     sync: (context) => DriveSyncSection(sync: services.sync),
@@ -271,21 +379,54 @@ class _RootState extends State<_Root> {
       resizeToAvoidBottomInset: false,
       child: ListenableBuilder(
         listenable: state,
-        builder: (context, _) => IndexedStack(
-          index: state.mode == AppMode.manga ? 0 : 1,
-          children: [
-            _mangaTabs(),
-            RootTabView(
-              state: state,
-              pages: {
-                ..._booruPages.pages(),
-                AppTab.insights: _PendingRoot(title: L10n.text('Smart'), state: state),
-              },
+        builder: (context, _) => ListenableBuilder(
+          listenable: services.taste,
+          builder: (context, _) => RootBanner(
+            banner: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ImportReminderBanner(imports: _imports),
+                TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
+              ],
             ),
-          ],
+            height:
+                (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
+                (services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
+            child: IndexedStack(
+              index: state.mode == AppMode.manga ? 0 : 1,
+              children: [
+                _mangaTabs(),
+                RootTabView(
+                  state: state,
+                  pages: {
+                    ..._booruPages.pages(),
+                    AppTab.insights: TabNavigator(
+                      active: state.mode == AppMode.booru && state.tab == AppTab.insights,
+                      builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
+                    ),
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  /// The arrival banner's height: 44 pt row, its padding and margins.
+  static const double _recapBannerHeight = 6 + 12 + 44 + 12 + 6;
+
+  /// Opens the new issue from the arrival banner, over the current tab.
+  void _openRecap(TasteMode mode) {
+    final date = services.taste.pendingRecap(mode);
+    Navigator.of(context)
+        .push(
+          CupertinoPageRoute<void>(
+            builder: (context) => RecapHomeView(taste: _taste, mode: mode, opening: date, onBack: () => Navigator.of(context).pop()),
+          ),
+        )
+        .then((_) => services.taste.dismissRecap(mode));
   }
 
   Widget _mangaTabs() => RootTabView(
@@ -297,7 +438,11 @@ class _RootState extends State<_Root> {
       ),
       AppTab.works: TabNavigator(
         active: state.mode == AppMode.manga && state.tab == AppTab.works,
-        builder: (context) => _ExploreRoot(state: state, services: services),
+        builder: (context) => _ExploreRoot(
+          state: state,
+          services: services,
+          importLinks: WebsiteImportLinks(imports: _imports),
+        ),
       ),
       AppTab.artists: TabNavigator(
         active: state.mode == AppMode.manga && state.tab == AppTab.artists,
@@ -307,16 +452,20 @@ class _RootState extends State<_Root> {
         active: state.mode == AppMode.manga && state.tab == AppTab.settings,
         builder: (context) => SettingsView(dependencies: _settings),
       ),
-      AppTab.insights: _PendingRoot(title: L10n.text('Smart'), state: state),
+      AppTab.insights: TabNavigator(
+        active: state.mode == AppMode.manga && state.tab == AppTab.insights,
+        builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.comics, isRoot: true),
+      ),
     },
   );
 }
 
 /// Explore, or the website setup until a comics website is connected.
 class _ExploreRoot extends StatelessWidget {
-  const _ExploreRoot({required this.state, required this.services});
+  const _ExploreRoot({required this.state, required this.services, this.importLinks});
   final AppState state;
   final AppServices services;
+  final Widget? importLinks;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -333,11 +482,11 @@ class _ExploreRoot extends StatelessWidget {
         downloads: DownloadsContext(store: services.downloads, content: content, database: services.database, preferences: services.preferences.defaults),
       );
       if (!content.isSiteVerified) {
-        final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+        final top = rootContentTop(context);
         return Stack(
           children: [
             Positioned.fill(
-              child: WebsiteSetupView(content: content, state: state, topInset: top, bottomInset: tabBarClearance(context)),
+              child: WebsiteSetupView(content: content, state: state, importLinks: importLinks, topInset: top, bottomInset: tabBarClearance(context)),
             ),
             Positioned(
               left: 0,
@@ -360,21 +509,5 @@ class _ExploreRoot extends StatelessWidget {
         bookmark: (id, gallery) => routes.toggleBookmark(context, id, gallery, aboveTabBar: true),
       );
     },
-  );
-}
-
-/// Root screens of later rebuild steps: the shared header over an empty page.
-class _PendingRoot extends StatelessWidget {
-  const _PendingRoot({required this.title, required this.state});
-  final String title;
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: TegnalColors.background.resolveFrom(context),
-    child: Align(
-      alignment: Alignment.topCenter,
-      child: RootHeader(title: title, state: state),
-    ),
   );
 }

@@ -21,6 +21,7 @@ import 'folder_name_prompt.dart';
 import 'folders_view.dart';
 import 'library_routes.dart';
 import 'local_thumbnail.dart';
+import '../design/alert_dialog.dart';
 
 /// `WorksGridView`: a folder's saved works, every saved work, or a saved-works search,
 /// with the category filter, selection, quick jumps and each work's menu.
@@ -159,7 +160,7 @@ class _WorksGridViewState extends State<WorksGridView> {
   Future<void> _confirmDelete(Work work) async {
     final delete = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Work')),
         content: Text(L10n.text('Delete this work (number: %@)?', ['${work.galleryId}'])),
         actions: [
@@ -174,7 +175,7 @@ class _WorksGridViewState extends State<WorksGridView> {
   Future<void> _confirmDeleteSelection() async {
     final delete = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Selected Items?')),
         actions: [
           CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),

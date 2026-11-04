@@ -21,6 +21,7 @@ import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import '../works/works_models.dart';
 import 'settings_page.dart';
+import '../design/alert_dialog.dart';
 
 /// What opening a download offline needs.
 class DownloadsContext {
@@ -104,7 +105,7 @@ class _DownloadsViewState extends State<DownloadsView> {
   void _showInfo() => showCupertinoDialog<void>(
     context: context,
     barrierDismissible: true,
-    builder: (context) => CupertinoAlertDialog(
+    builder: (context) => TegnalAlertDialog(
       title: Text(L10n.text('Downloads')),
       content: Text(L10n.text('Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here.')),
       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],

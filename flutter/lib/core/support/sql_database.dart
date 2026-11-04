@@ -15,6 +15,9 @@ class SqlDatabase {
   factory SqlDatabase.open(String path) => SqlDatabase._(sqlite.sqlite3.open(path));
   factory SqlDatabase.inMemory() => SqlDatabase._(sqlite.sqlite3.openInMemory());
 
+  /// Another app's database, read without changing it (`Configuration.readonly`).
+  factory SqlDatabase.openReadOnly(String path) => SqlDatabase._(sqlite.sqlite3.open(path, mode: sqlite.OpenMode.readOnly));
+
   final sqlite.Database _db;
   int _depth = 0;
   final _changes = StreamController<int>.broadcast();

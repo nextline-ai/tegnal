@@ -29,7 +29,9 @@ import '../settings/settings_view.dart' show DeveloperSection, GlassIconToolbarB
 import '../settings/site_account_section.dart' show WebCookies;
 import '../settings/website_setup.dart';
 import 'booru_common.dart';
+import '../challenge/challenge_library_view.dart';
 import 'booru_feed_view.dart';
+import '../design/alert_dialog.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -41,9 +43,13 @@ class BooruSettingsDependencies {
     this.resetSettings,
     this.sync,
     this.invitation,
+    this.tasteSettings,
   });
 
   final BooruContext booru;
+
+  /// The Taste Analysis row, between search history and sync.
+  final Widget Function(BuildContext context)? tasteSettings;
   final ContentEnvironment content;
   final String version;
   final void Function(BuildContext context)? openLibraryManagement;
@@ -98,7 +104,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
   Future<void> _clearCache() async {
     final clear = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Clear Image Cache?')),
         content: Text(L10n.text('Saved favorites are kept. Images will be downloaded again when needed.')),
         actions: [
@@ -135,7 +141,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+    final top = rootContentTop(context);
     final row = FormColors.listRow.resolveFrom(context);
     final preferences = _booru.preferences;
     final viewer = _booru.booruDefaults;
@@ -169,6 +175,11 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       title: L10n.text('Servers'),
                       symbol: (color) => ServerRackSymbol(color: color),
                       onTap: () => _push((context) => BooruServersView(booru: _booru, content: _deps.content)),
+                    ),
+                    SettingsLinkRow(
+                      title: L10n.text('Challenge Roulette'),
+                      symbol: (_) => DiceSymbol(color: SystemColors.purple.resolveFrom(context)),
+                      onTap: () => _push((context) => ChallengeLibraryView(booru: _booru)),
                     ),
                     if (store.servers.isNotEmpty)
                       SettingsLinkRow(
@@ -309,6 +320,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                     ),
                   ],
                 ),
+                if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
                 settingsSectionGap,
                 section(
@@ -1254,7 +1266,7 @@ class BooruSavedServersView extends StatelessWidget {
     builder: (context, _) {
       final servers = booru.store.selectedServers;
       if (servers.length == 1) return KeyedSubtree(key: ValueKey(servers.first.id), child: tags(context, servers.first));
-      final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+      final top = rootContentTop(context);
       return ColoredBox(
         color: FormColors.listBackground.resolveFrom(context),
         child: Stack(

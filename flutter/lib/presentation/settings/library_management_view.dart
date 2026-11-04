@@ -14,6 +14,7 @@ import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
+import '../design/alert_dialog.dart';
 
 /// What library management works on.
 class LibraryManagementContext {
@@ -29,8 +30,11 @@ class LibraryManagementContext {
 
 /// `MangaLibraryToolsView`: organizing, backup and restore, library status and automatic fetching.
 class LibraryManagementView extends StatefulWidget {
-  const LibraryManagementView({super.key, required this.library, this.booru = false});
+  const LibraryManagementView({super.key, required this.library, this.booru = false, this.extraSections = const []});
   final LibraryManagementContext library;
+
+  /// Each mode's imports, placed after its backup.
+  final List<Widget> extraSections;
 
   /// `BooruBackupView`: image mode organizes its own favorites and has no comics catalog.
   final bool booru;
@@ -101,7 +105,7 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
     final pending = backup;
     final restore = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Restore Backup?')),
         content: Text(
           '${L10n.text('Comics: %@ · Images: %@ · Challenges: %@', ['${pending.comicWorks}', '${pending.imageFavorites}', '${pending.challengeGames}'])}\n'
@@ -219,6 +223,7 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
             ],
           ),
         ),
+        for (final extra in widget.extraSections) ...[settingsSectionGap, extra],
         if (!widget.booru) ...[
           settingsSectionGap,
           section(
@@ -444,7 +449,7 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
 
   void _showError(String message) => showCupertinoDialog<void>(
     context: context,
-    builder: (context) => CupertinoAlertDialog(
+    builder: (context) => TegnalAlertDialog(
       title: Text(L10n.text('Unable to Save')),
       content: Text(message),
       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],

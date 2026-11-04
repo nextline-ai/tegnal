@@ -10,6 +10,7 @@ import '../design/grouped_form.dart';
 import '../design/ios_controls.dart';
 import '../design/pull_down_menu.dart';
 import '../design/tegnal_theme.dart';
+import '../design/alert_dialog.dart';
 
 /// `FolderRuleEditor`: makes a new folder from a tag, or sets up the smart folder of one that exists.
 class FolderRuleEditor extends StatefulWidget {
@@ -151,7 +152,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
     } on Object catch (error) {
       showCupertinoDialog<void>(
         context: context,
-        builder: (context) => CupertinoAlertDialog(
+        builder: (context) => TegnalAlertDialog(
           title: Text(L10n.text('Error')),
           content: Text('$error'),
           actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],

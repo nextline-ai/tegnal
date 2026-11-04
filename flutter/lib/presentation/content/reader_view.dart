@@ -23,6 +23,7 @@ import 'page_image_store.dart';
 import 'reader_guide_overlay.dart';
 import 'reader_models.dart';
 import 'reader_pager.dart';
+import '../design/alert_dialog.dart';
 
 /// Opens the reader full screen over everything, as `fullScreenCover` does.
 Future<void> openReader(
@@ -199,7 +200,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
   Future<void> _askToResume() async {
     final continuing = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Continue Reading?')),
         content: Text(L10n.text('Continue from page %@?', ['${_opening.page}'])),
         actions: [
@@ -376,7 +377,7 @@ class _NativeReaderViewState extends State<NativeReaderView> {
     final controller = TextEditingController(text: '${_current + 1}');
     final page = await showCupertinoDialog<int>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Go to Page')),
         content: Padding(
           padding: const EdgeInsets.only(top: 12),
@@ -979,7 +980,7 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
     showCupertinoDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Reader Guide')),
         content: Text(L10n.text('The guide will appear over the next work you open.')),
         actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],

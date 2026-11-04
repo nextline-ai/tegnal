@@ -19,6 +19,7 @@ import '../design/tegnal_theme.dart';
 import '../works/artwork_grid.dart';
 import 'gallery_preview_models.dart';
 import 'page_image_store.dart';
+import '../design/alert_dialog.dart';
 
 /// What the detail screen can do besides showing the work.
 class GalleryDetailActions {
@@ -312,7 +313,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
 
   void _alert(String title, String message) => showCupertinoDialog<void>(
     context: context,
-    builder: (context) => CupertinoAlertDialog(
+    builder: (context) => TegnalAlertDialog(
       title: Text(title),
       content: Text(message),
       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],
@@ -763,7 +764,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
                   onTap: () => showCupertinoDialog<void>(
                     context: context,
                     barrierDismissible: true,
-                    builder: (context) => CupertinoAlertDialog(
+                    builder: (context) => TegnalAlertDialog(
                       title: Text(L10n.text('Tags')),
                       content: Text(L10n.text('Hold an artist or tag to add it to your favorites. Hold it again to remove it.')),
                       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],

@@ -243,7 +243,7 @@ class _ExploreViewState extends State<ExploreView> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final barBottom = media.padding.top + rootBarHeight;
+    final barBottom = rootContentTop(context, pushed: widget.onBack != null);
     final hidden = _hidden;
     final entries = [
       for (final id in _loader.ids)

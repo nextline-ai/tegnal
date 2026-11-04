@@ -30,7 +30,7 @@ const double settingsIconInset = 56;
 
 /// `Label` in a settings list: a tinted symbol before the title, with a chevron for links.
 /// Buttons tint their titles; navigation links keep them in the label color.
-class SettingsLinkRow extends StatelessWidget {
+class SettingsLinkRow extends StatelessWidget implements FormSeparatorInset {
   const SettingsLinkRow({
     super.key,
     required this.title,
@@ -55,6 +55,10 @@ class SettingsLinkRow extends StatelessWidget {
   final String? value;
   final bool destructive;
 
+  /// Rows that lead with an icon start their line under the title.
+  @override
+  double get separatorInset => icon != null || symbol != null ? settingsIconInset : 16;
+
   @override
   Widget build(BuildContext context) {
     final tint = destructive ? CupertinoColors.systemRed.resolveFrom(context) : TegnalColors.tint.resolveFrom(context);
@@ -63,7 +67,7 @@ class SettingsLinkRow extends StatelessWidget {
     final row = FormRow(
       onTap: onTap,
       minHeight: help == null ? 52 : settingsHelpRowHeight,
-      separatorInset: hasIcon ? settingsIconInset : 16,
+      separatorInset: separatorInset,
       child: Opacity(
         opacity: enabled ? 1 : 0.4,
         child: Row(

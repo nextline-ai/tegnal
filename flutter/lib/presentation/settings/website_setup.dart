@@ -84,10 +84,13 @@ class BooruServerType extends ServerType {
 
 /// `WebsiteSetupContent`: the neutral first step when no website is connected.
 class WebsiteSetupView extends StatelessWidget {
-  const WebsiteSetupView({super.key, required this.content, required this.state, this.booru, this.topInset = 0, this.bottomInset = 0});
+  const WebsiteSetupView({super.key, required this.content, required this.state, this.booru, this.importLinks, this.topInset = 0, this.bottomInset = 0});
   final ContentEnvironment content;
   final AppState state;
   final BooruStore? booru;
+
+  /// `WebsiteImportLinks`, below the mode guide.
+  final Widget? importLinks;
   final double topInset;
   final double bottomInset;
 
@@ -124,6 +127,7 @@ class WebsiteSetupView extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 const WebsiteModeGuide(),
+                if (importLinks != null) ...[const SizedBox(height: 24), importLinks!],
               ],
             ),
           ),

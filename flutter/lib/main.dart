@@ -12,6 +12,7 @@ import 'core/booru/booru_fixture_source.dart';
 import 'core/booru/booru_image_cache.dart';
 import 'core/booru/booru_models.dart';
 import 'core/booru/booru_store.dart';
+import 'core/taste/taste_fixtures.dart';
 import 'core/content/content_environment.dart';
 import 'core/content/fixture_content_source.dart';
 import 'core/content/manga_content_source.dart';
@@ -151,15 +152,16 @@ Future<AppServices> _launchFixture() async {
   _seedLibrary(database, names);
   final booruOptions = {for (final name in names) ...BooruFixtureOption.values.where((option) => option.name == name)};
   final booru = BooruStore.inMemory(preferences: preferences);
-  if (_mode == 'booru') {
-    BooruFixtureEnvironment.seed(booru, options: booruOptions);
+  if (_mode == 'booru' || names.any(_tasteFixtures.contains)) {
+    // The taste fixtures save their own favorites below; seeding them here too would undo them.
+    BooruFixtureEnvironment.seed(booru, options: booruOptions.difference({BooruFixtureOption.tasteRich}));
     preferences.booruDefaults.set('reader.helpHidden', !names.contains('readerHelp'));
     if (_theme.isNotEmpty) preferences.defaults.set('booru.app_theme', _theme);
   }
   final booruSource = BooruFixtureSource(options: booruOptions);
   final media = Directory('${Directory.systemTemp.path}/fixture-booru-media');
   Future<Uint8List> fixtureMedia(String url, BooruServer server) => BooruFixtureMedia.load(url, null);
-  return AppServices(
+  final services = AppServices(
     preferences: preferences,
     database: database,
     booru: booru,
@@ -173,4 +175,22 @@ Future<AppServices> _launchFixture() async {
     version: await _version(),
     isTesting: true,
   );
+  // The native taste, recap and challenge UI tests' libraries.
+  if (names.contains('tasteRich') || names.contains('tasteRecap') || names.contains('tasteSoleExclusion')) {
+    TasteFixtures.seedRich(
+      database: database,
+      booru: booru,
+      changeControl: services.taste.change,
+      recapTest: names.contains('tasteRecap'),
+      soleExclusion: names.contains('tasteSoleExclusion'),
+    );
+    if (names.contains('tasteRecap')) services.taste.prepareCompletedReports();
+  }
+  if (names.contains('tasteRecapDemo')) TasteFixtures.seedRecapDemo(booru);
+  if (names.contains('challenges')) TasteFixtures.seedChallenges(booru, motion: names.contains('challengeMotion'));
+  return services;
 }
+
+/// `TEGNAL_FIXTURE` names for the taste, recap and challenge tests (`--taste-ui-rich`,
+/// `--taste-recap-test`, `--taste-sole-exclusion-test`, `--taste-recap-demo`, `--challenge-ui-test`).
+const _tasteFixtures = {'tasteRich', 'tasteRecap', 'tasteSoleExclusion', 'tasteRecapDemo', 'challenges'};

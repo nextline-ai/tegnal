@@ -9,6 +9,7 @@ import '../../core/booru/booru_client.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_support.dart';
+import '../../core/challenge/challenge_engine.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import '../../core/taste/taste_models.dart';
@@ -23,10 +24,12 @@ import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import '../settings/downloads_view.dart';
+import '../challenge/challenge_play_view.dart' show ChallengeViewerControls;
 import 'booru_common.dart';
 import 'booru_favorites_view.dart';
 import 'booru_media_view.dart';
 import 'booru_post_details.dart';
+import '../design/alert_dialog.dart';
 
 /// The next page of a feed, handed to an open viewer.
 class BooruViewerBatch {
@@ -39,7 +42,17 @@ class BooruViewerBatch {
 /// `BooruPostView`: one image or video at a time on black, moving through the list it was
 /// opened from and loading the feed's next page at its end.
 class BooruPostView extends StatefulWidget {
-  const BooruPostView({super.key, required this.booru, required this.post, required this.posts, required this.discovery, this.loadMore, this.willClose});
+  const BooruPostView({
+    super.key,
+    required this.booru,
+    required this.post,
+    required this.posts,
+    required this.discovery,
+    this.loadMore,
+    this.willClose,
+    this.source,
+    this.challenge,
+  });
 
   final BooruContext booru;
   final BooruPost post;
@@ -47,6 +60,13 @@ class BooruPostView extends StatefulWidget {
   final DiscoveryContext discovery;
   final Future<BooruViewerBatch> Function()? loadMore;
   final ValueChanged<BooruPost>? willClose;
+
+  /// Where details and notes come from, when not the image servers themselves.
+  final BooruProviding? source;
+
+  /// A challenge being played over its reference: the viewer shows its controls, makes
+  /// the shown image its reference, and closes when the challenge ends.
+  final ChallengeSessionController? challenge;
 
   /// Opens the viewer full screen over everything, as `fullScreenCover` does.
   static Future<void> open(
@@ -57,13 +77,23 @@ class BooruPostView extends StatefulWidget {
     required DiscoveryContext discovery,
     Future<BooruViewerBatch> Function()? loadMore,
     ValueChanged<BooruPost>? willClose,
+    BooruProviding? source,
+    ChallengeSessionController? challenge,
   }) => Navigator.of(context, rootNavigator: true).push<void>(
     PageRouteBuilder<void>(
       opaque: false,
       transitionDuration: const Duration(milliseconds: 380),
       reverseTransitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondary) =>
-          BooruPostView(booru: booru, post: post, posts: posts, discovery: discovery, loadMore: loadMore, willClose: willClose),
+      pageBuilder: (context, animation, secondary) => BooruPostView(
+        booru: booru,
+        post: post,
+        posts: posts,
+        discovery: discovery,
+        loadMore: loadMore,
+        willClose: willClose,
+        source: source,
+        challenge: challenge,
+      ),
       transitionsBuilder: (context, animation, secondary, child) => SlideTransition(
         position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
         child: child,
@@ -136,6 +166,7 @@ class _BooruPostViewState extends State<BooruPostView> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     ReaderScreen.keepAwake(_keepAwake);
+    widget.challenge?.addListener(_challengeChanged);
     _postChanged();
     if (_post.isVideo && !(_defaults.boolean('booru.videoMenuHintSeen') ?? false)) {
       _defaults.set('booru.videoMenuHintSeen', true);
@@ -145,6 +176,7 @@ class _BooruPostViewState extends State<BooruPostView> {
 
   @override
   void dispose() {
+    widget.challenge?.removeListener(_challengeChanged);
     _loadingTimer?.cancel();
     _toastTimer?.cancel();
     _autoTimer?.cancel();
@@ -153,9 +185,22 @@ class _BooruPostViewState extends State<BooruPostView> {
     super.dispose();
   }
 
+  BooruProviding get _source => widget.source ?? _booru.source;
+
+  /// A challenge that resets or ends takes its reference viewer with it.
+  void _challengeChanged() {
+    final phase = widget.challenge?.session.phase;
+    if (phase == ChallengePhase.idle || phase == ChallengePhase.ended) {
+      _close();
+    } else if (mounted) {
+      setState(() {});
+    }
+  }
+
   // MARK: Post changes
 
   void _postChanged() {
+    widget.challenge?.select(_post);
     if (_booru.store.confirmedGoldRestrictedIDs.contains(_post.id)) {
       scheduleMicrotask(() => _skipGoldRestricted(_post.id));
       return;
@@ -200,7 +245,7 @@ class _BooruPostViewState extends State<BooruPostView> {
     if (post.isRemoved) return _removedPost(post.id);
     if (!_resolvesMissingMedia || post.viewerURL(original: _original, reducedData: _reducedData) != null) return;
     try {
-      final resolved = await _booru.source.details(_server, post);
+      final resolved = await _source.details(_server, post);
       if (!mounted || _post.id != post.id) return;
       setState(() {
         _post = resolved;
@@ -224,7 +269,7 @@ class _BooruPostViewState extends State<BooruPostView> {
     if (!_resolvesMissingMedia || _refreshedMediaID == post.id) return;
     _refreshedMediaID = post.id;
     try {
-      final resolved = await _booru.source.details(_server, post);
+      final resolved = await _source.details(_server, post);
       if (!mounted || _post.id != post.id) return;
       if (resolved.fileURL != post.fileURL || resolved.sampleURL != post.sampleURL) {
         setState(() {
@@ -246,7 +291,7 @@ class _BooruPostViewState extends State<BooruPostView> {
     if (!_active || _loadedNotesKey == key || !(_showNotes || _sheetOpen)) return;
     _loadedNotesKey = key;
     try {
-      final notes = await _booru.source.notes(_server, _post.postID);
+      final notes = await _source.notes(_server, _post.postID);
       if (mounted && '${_post.id}:$_retry' == key) setState(() => _notes = notes);
     } on Object catch (error) {
       if (mounted && '${_post.id}:$_retry' == key) setState(() => _notesError = '$error');
@@ -267,7 +312,7 @@ class _BooruPostViewState extends State<BooruPostView> {
     final original = _defaults.boolean('booru.original') ?? false;
     if (item.viewerURL(original: original, reducedData: _reducedData) == null && host.engine.usesGelbooruPages) {
       try {
-        item = await _booru.source.details(host, item);
+        item = await _source.details(host, item);
         if (!mounted) return;
         final index = _posts.indexWhere((post) => post.id == item.id);
         if (index >= 0) _posts[index] = item;
@@ -317,6 +362,7 @@ class _BooruPostViewState extends State<BooruPostView> {
   }
 
   void _recordViewing(BooruPost post) {
+    if (widget.challenge != null) return;
     final dwell = _viewing.finish();
     if (dwell != null) _booru.store.recordDwell(dwell, post, widget.discovery);
   }
@@ -591,7 +637,7 @@ class _BooruPostViewState extends State<BooruPostView> {
     setState(() => _sheetOpen = true);
     final number = await showCupertinoDialog<int>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Go to Page')),
         content: Padding(
           padding: const EdgeInsets.only(top: 12),
@@ -730,6 +776,8 @@ class _BooruPostViewState extends State<BooruPostView> {
                   ],
                 ),
               ),
+              if (widget.challenge case final challenge? when !_sheetOpen)
+                Positioned(left: 0, right: 0, top: 0, child: ChallengeViewerControls(controller: challenge)),
               if (_guide.step case final step? when !_sheetOpen)
                 Positioned.fill(
                   child: ReaderGuideOverlay(

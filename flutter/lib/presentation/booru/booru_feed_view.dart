@@ -5,6 +5,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import '../../core/booru/booru_client.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_support.dart';
+import '../../core/challenge/challenge_engine.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/swift_json.dart' show uuidString;
 import '../../core/taste/taste_models.dart';
@@ -34,6 +35,10 @@ class BooruFeedView extends StatefulWidget {
     this.isActive = true,
     this.onBack,
     this.showsServerMenu = false,
+    this.source,
+    this.challenge,
+    this.header,
+    this.bar,
   });
 
   final BooruContext booru;
@@ -43,6 +48,20 @@ class BooruFeedView extends StatefulWidget {
   final bool isActive;
   final VoidCallback? onBack;
   final bool showsServerMenu;
+
+  /// Where posts come from, when not the image servers themselves (a challenge's saved folder).
+  final BooruProviding? source;
+
+  /// The challenge a reference feed belongs to: its searches are not history or taste
+  /// evidence, and the chosen image becomes the challenge's reference.
+  final ChallengeSessionController? challenge;
+
+  /// Content above the search field that scrolls with the feed; the field pins under the
+  /// bar once it reaches it.
+  final Widget? header;
+
+  /// Replaces the root header, for a feed shown inside another screen.
+  final Widget? bar;
 
   /// Pushes a feed for a tag or pool inside the current tab.
   static Future<void> push(BuildContext context, {required BooruContext booru, required BooruServer server, String query = '', BooruPool? pool}) =>
@@ -80,15 +99,22 @@ class _BooruFeedViewState extends State<BooruFeedView> {
 
   BooruContext get _booru => widget.booru;
   List<BooruServer> get _servers => widget.servers;
+  BooruProviding get _source => widget.source ?? _booru.source;
+  final _searchSlot = GlobalKey();
+  bool _searchSlotPinned = false;
 
-  DiscoveryContext get _discovery => DiscoveryContext(origin: _query.isEmpty ? DiscoveryOrigin.feed : DiscoveryOrigin.search, query: _query, session: _session);
+  DiscoveryContext get _discovery {
+    final challenge = widget.challenge;
+    if (challenge != null) return DiscoveryContext(origin: DiscoveryOrigin.external, session: 'challenge:${challenge.session.definition.id}');
+    return DiscoveryContext(origin: _query.isEmpty ? DiscoveryOrigin.feed : DiscoveryOrigin.search, query: _query, session: _session);
+  }
 
   String get _effectiveQuery => _booru.query(_query);
 
   String get _requestKey =>
       '$_effectiveQuery|${_sort.rawValue}|$_retry|${_servers.map((server) => server.id + server.canonicalAddress + server.engine.rawValue).join(',')}';
 
-  List<BooruSort> get _sortOptions => BooruSort.options(_servers);
+  List<BooruSort> get _sortOptions => BooruSort.options(_servers, local: widget.challenge?.session.sourceKind == 'folder');
 
   @override
   void initState() {
@@ -169,7 +195,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
     final requested = _sort;
     await _loader.load(
       servers: _servers,
-      source: _booru.source,
+      source: _source,
       query: _effectiveQuery,
       poolID: widget.pool?.id,
       sort: requested,
@@ -190,6 +216,12 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   }
 
   void _onScroll() {
+    if (widget.header != null) {
+      final slot = _searchSlot.currentContext?.findRenderObject() as RenderBox?;
+      final barBottom = rootContentTop(context, pushed: widget.onBack != null);
+      final pinned = slot != null && slot.attached && slot.localToGlobal(Offset.zero).dy <= barBottom;
+      if (pinned != _searchSlotPinned) setState(() => _searchSlotPinned = pinned);
+    }
     final offset = _scroll.offset;
     final visible = _visibility.update(_lastOffset, offset, focused: _searchFocus.hasFocus);
     _lastOffset = offset;
@@ -214,7 +246,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
     });
     if (completion == null) return;
     _suggestionTimer = Timer(const Duration(milliseconds: 300), () async {
-      final result = await BooruTagSuggestionSearch.load(servers: _servers, source: _booru.source, token: completion.token);
+      final result = await BooruTagSuggestionSearch.load(servers: _servers, source: _source, token: completion.token);
       if (!mounted || generation != _suggestionGeneration || !_searchFocus.hasFocus) return;
       setState(() {
         _suggestions = result.tags;
@@ -228,7 +260,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
     _searchFocus.unfocus();
     final text = (value ?? _search.text).trim();
     _session = uuidString();
-    if (_booru.remembersHistory) {
+    if (_booru.remembersHistory && widget.challenge == null) {
       for (final server in _servers) {
         _booru.store.recordSearch(text, serverID: server.id);
       }
@@ -269,12 +301,15 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   Future<void> _open(BooruPost post) async {
     final posts = _loader.visiblePosts;
     String? viewed;
+    widget.challenge?.select(post);
     await BooruPostView.open(
       context,
       booru: _booru,
       post: post,
       posts: posts,
       discovery: _discovery,
+      source: widget.source,
+      challenge: widget.challenge,
       loadMore: () async {
         for (var attempt = 0; attempt < 3; attempt++) {
           final count = _loader.visiblePosts.length;
@@ -296,7 +331,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final barBottom = media.padding.top + rootBarHeight;
+    final barBottom = rootContentTop(context, pushed: widget.onBack != null);
     final pool = widget.pool;
     final posts = _loader.visiblePosts;
     final title = pool?.name.replaceAll('_', ' ') ?? L10n.text('Explore');
@@ -310,8 +345,18 @@ class _BooruFeedViewState extends State<BooruFeedView> {
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             slivers: [
               CupertinoSliverRefreshControl(onRefresh: _refresh),
+              if (widget.header case final header?) ...[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, barBottom + 16, 16, 16),
+                  sliver: SliverToBoxAdapter(child: header),
+                ),
+                // The search field scrolls with the header until it reaches the bar.
+                SliverToBoxAdapter(
+                  child: SizedBox(key: _searchSlot, height: 56, child: _searchSlotPinned || pool != null ? null : _searchArea(media)),
+                ),
+              ],
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, barBottom + (pool == null ? 8 + 56 : 16), 16, 0),
+                padding: EdgeInsets.fromLTRB(16, widget.header != null ? 8 : barBottom + (pool == null ? 8 + 56 : 16), 16, 0),
                 sliver: SliverToBoxAdapter(child: pool == null ? _filters() : const SizedBox.shrink()),
               ),
               SliverToBoxAdapter(child: SizedBox(height: pool == null ? 8 : 0)),
@@ -334,7 +379,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
               ),
             ],
           ),
-          if (pool == null)
+          if (pool == null && (widget.header == null || _searchSlotPinned))
             Positioned(
               left: 0,
               right: 0,
@@ -354,12 +399,14 @@ class _BooruFeedViewState extends State<BooruFeedView> {
             left: 0,
             right: 0,
             top: 0,
-            child: RootHeader(
-              title: title,
-              state: _booru.state,
-              onBack: widget.onBack,
-              trailing: widget.showsServerMenu ? BooruServerMenuButton(store: _booru.store) : null,
-            ),
+            child:
+                widget.bar ??
+                RootHeader(
+                  title: title,
+                  state: _booru.state,
+                  onBack: widget.onBack,
+                  trailing: widget.showsServerMenu ? BooruServerMenuButton(store: _booru.store) : null,
+                ),
           ),
         ],
       ),
@@ -693,7 +740,7 @@ class BooruExploreRoot extends StatelessWidget {
     builder: (context, _) {
       final servers = booru.store.selectedServers;
       if (servers.isEmpty) {
-        final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+        final top = rootContentTop(context);
         return ColoredBox(
           color: TegnalColors.background.resolveFrom(context),
           child: Stack(

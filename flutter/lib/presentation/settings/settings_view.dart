@@ -41,7 +41,11 @@ class SettingsDependencies {
     this.siteAccount,
     this.sync,
     this.invitation,
+    this.tasteSettings,
   });
+
+  /// The Taste Analysis row, between search history and sync.
+  final Widget Function(BuildContext context)? tasteSettings;
 
   final AppState state;
   final ContentEnvironment content;
@@ -96,7 +100,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+    final top = rootContentTop(context);
     final row = FormColors.listRow.resolveFrom(context);
     Widget section({String? header, Widget? headerWidget, String? footer, required List<Widget> children}) => FormSection(
       prominentHeader: true,
@@ -324,6 +328,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                   ],
                 ),
+                if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
                 settingsSectionGap,
                 section(

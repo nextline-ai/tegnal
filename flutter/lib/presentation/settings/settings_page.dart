@@ -10,8 +10,11 @@ import '../navigation/root_tab_view.dart';
 /// A screen pushed from Settings: an inline title between a glass back button and
 /// optional trailing controls, over an inset-grouped list on the system background.
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key, required this.title, required this.children, this.trailing, this.controller});
+  const SettingsPage({super.key, required this.title, required this.children, this.trailing, this.controller, this.sheet = false});
   final String title;
+
+  /// A page inside a sheet: the sheet's grouped background, its 76 pt bar and lighter glass.
+  final bool sheet;
   final List<Widget> children;
   final Widget? trailing;
   final ScrollController? controller;
@@ -21,7 +24,7 @@ class SettingsPage extends StatelessWidget {
     final media = MediaQuery.of(context);
     final top = media.padding.top + rootBarHeight;
     return ColoredBox(
-      color: FormColors.listBackground.resolveFrom(context),
+      color: (sheet ? FormColors.background : FormColors.listBackground).resolveFrom(context),
       child: Stack(
         children: [
           Positioned.fill(
@@ -29,7 +32,10 @@ class SettingsPage extends StatelessWidget {
             child: ListView(
               controller: controller,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.only(top: top + 10, bottom: media.viewInsets.bottom > 0 ? 16 : tabBarClearance(context)),
+              padding: EdgeInsets.only(
+                top: sheet ? 69 + 35 : top + 10,
+                bottom: media.viewInsets.bottom > 0 ? 16 : (sheet ? 32 + media.padding.bottom : tabBarClearance(context)),
+              ),
               children: children,
             ),
           ),
@@ -37,7 +43,13 @@ class SettingsPage extends StatelessWidget {
             left: 0,
             right: 0,
             top: 0,
-            child: InlineTitleHeader(title: title, trailing: trailing),
+            child: sheet
+                // The sheet's bar centers its 44 pt buttons 38 pt below the sheet's top edge.
+                ? MediaQuery(
+                    data: media.copyWith(padding: media.padding.copyWith(top: 16)),
+                    child: InlineTitleHeader(title: title, trailing: trailing, elevated: true),
+                  )
+                : InlineTitleHeader(title: title, trailing: trailing),
           ),
         ],
       ),
@@ -47,9 +59,12 @@ class SettingsPage extends StatelessWidget {
 
 /// `.navigationBarTitleDisplayMode(.inline)` on a pushed screen: the back circle, the title centered.
 class InlineTitleHeader extends StatelessWidget {
-  const InlineTitleHeader({super.key, required this.title, this.trailing, this.back = true});
+  const InlineTitleHeader({super.key, required this.title, this.trailing, this.back = true, this.elevated = false});
   final String title;
   final Widget? trailing;
+
+  /// In a sheet the back button uses the lighter glass.
+  final bool elevated;
 
   /// A sheet's root has no back button.
   final bool back;
@@ -75,6 +90,7 @@ class InlineTitleHeader extends StatelessWidget {
                     behavior: HitTestBehavior.opaque,
                     onTap: () => Navigator.of(context).maybePop(),
                     child: Glass.circle(
+                      elevated: elevated,
                       child: SizedBox.square(dimension: 44, child: Icon(CupertinoIcons.chevron_left, size: 22, color: label)),
                     ),
                   ),

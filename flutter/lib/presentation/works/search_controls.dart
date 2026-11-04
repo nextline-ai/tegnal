@@ -5,6 +5,7 @@ import '../design/glass.dart';
 import '../design/pull_down_menu.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
+import '../design/alert_dialog.dart';
 
 /// `ScrollSearchBar`: a 44 pt glass capsule shared by the library and Explore.
 class ScrollSearchBar extends StatelessWidget {
@@ -208,7 +209,7 @@ class SearchHistoryPanel extends StatelessWidget {
 
   void _confirmClear(BuildContext context) => showCupertinoDialog<void>(
     context: context,
-    builder: (context) => CupertinoAlertDialog(
+    builder: (context) => TegnalAlertDialog(
       title: Text(L10n.text('Clear History?')),
       content: Text(L10n.text('Search history will be deleted. Saved searches will be kept.')),
       actions: [

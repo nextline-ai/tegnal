@@ -23,6 +23,7 @@ import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import 'booru_common.dart';
 import 'booru_post_view.dart';
+import '../design/alert_dialog.dart';
 
 /// `BooruFavoritesView`: All Favorites above the folders as bento cards.
 class BooruFavoritesView extends StatefulWidget {
@@ -154,7 +155,7 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top + rootBarHeight;
+    final top = rootContentTop(context);
     final folders = _booru.store.folders();
     final count = _booru.store.visibleFavorites().length;
     return ColoredBox(
@@ -491,7 +492,7 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
   Future<void> _confirmDelete() async {
     final delete = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Selected Items?')),
         actions: [
           CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
