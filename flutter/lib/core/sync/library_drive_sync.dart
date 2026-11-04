@@ -270,7 +270,7 @@ class LibraryDriveSync extends ChangeNotifier {
     }
     _device = _digest(utf8.encode(installation));
     _status = !backend.isConfigured
-        ? L10n.text('Sync is not set up in this build.')
+        ? L10n.text('Google Drive backup is coming soon. For now, back up manually to a local file in Library Management.')
         : _enabled
         ? L10n.text('Waiting for Google Drive')
         : L10n.text('Sync Off');
@@ -355,7 +355,7 @@ class LibraryDriveSync extends ChangeNotifier {
   /// Asks for an account and Drive access, then turns sync on and runs a first pass.
   /// Returns an error to show, or null; a cancelled choice changes nothing.
   Future<String?> connect() async {
-    if (!isConfigured) return L10n.text('Sync is not set up in this build.');
+    if (!isConfigured) return L10n.text('Google Drive backup is coming soon. For now, back up manually to a local file in Library Management.');
     try {
       _account = await backend.connect();
     } on GoogleSignInException catch (error) {

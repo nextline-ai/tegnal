@@ -107,7 +107,7 @@ void main() {
     expect(off.sync.enabled, isFalse);
     expect(off.sync.status, L10n.text('Sync Off'));
     final unconfigured = device(drive, 'unconfigured', configured: false);
-    expect(unconfigured.sync.status, L10n.text('Sync is not set up in this build.'));
+    expect(unconfigured.sync.status, L10n.text('Google Drive backup is coming soon. For now, back up manually to a local file in Library Management.'));
   });
 
   test('two devices merge their libraries through their own documents', () async {

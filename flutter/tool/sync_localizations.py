@@ -54,10 +54,10 @@ ANDROID = {
     "Connect Google Account": {"en": "Connect Google Account", "ko": "Google 계정 연결", "ja": "Google アカウントを接続"},
     "Disconnect Google Account": {"en": "Disconnect Google Account", "ko": "Google 계정 연결 해제", "ja": "Google アカウントの接続を解除"},
     "Google Account": {"en": "Google Account", "ko": "Google 계정", "ja": "Google アカウント"},
-    "Sync is not set up in this build.": {
-        "en": "Sync is not set up in this build.",
-        "ko": "이 빌드에는 동기화가 설정되어 있지 않습니다.",
-        "ja": "このビルドでは同期が設定されていません。",
+    "Google Drive backup is coming soon. For now, back up manually to a local file in Library Management.": {
+        "en": "Google Drive backup is coming soon. For now, back up manually to a local file in Library Management.",
+        "ko": "Google 드라이브 백업은 준비 중입니다. 지금은 라이브러리 관리에서 로컬 파일로 직접 백업하세요.",
+        "ja": "Google ドライブのバックアップは準備中です。現在はライブラリ管理からローカルファイルに手動でバックアップしてください。",
     },
     "Sign in to Google to sync.": {
         "en": "Sign in to Google to sync.",

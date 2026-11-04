@@ -11,7 +11,7 @@ This folder is the Android version of TEGNAL. It is published on Google Play as 
   - The release certificate's SHA-256 is `9b529a92de328fbbfa2da980646a0e933863f8012d353f3d5f4bf3329ead8c59`. Check the release APK with `apksigner verify --print-certs`.
   - Details are in [docs/android-signing.md](docs/android-signing.md).
 - **Version code:** the `+N` at the end of `version:` in `pubspec.yaml`.
-  - It must be greater than the last code uploaded to Google Play. The last value in this repository is 7, but always check the Play Console before uploading.
+  - It must be greater than the last code uploaded to Google Play. The last value in this repository is 8, but always check the Play Console before uploading.
   - Increase it for every upload, and never lower it.
 - **Shared identity:**
   - **App name:** `TEGNAL` (`android:label`).
