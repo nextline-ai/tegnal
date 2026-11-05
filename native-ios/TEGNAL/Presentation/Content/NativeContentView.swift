@@ -106,7 +106,8 @@ public struct NativeContentView: View {
     public var body: some View {
         NavigationStack(path: $path) {
             root
-                .navigationDestination(for: ContentRoute.self) { route in destination(route) }
+                .modifier(EmbeddedQueueClearance(embedded: embedded))
+                .navigationDestination(for: ContentRoute.self) { route in destination(route).modifier(EmbeddedQueueClearance(embedded: embedded)) }
                 .toolbar {
                     if embedded { ToolbarItem(placement: .principal) { AppModeSwitch() } }
                     if !embedded { ToolbarItem(placement: .topBarTrailing) {
@@ -579,11 +580,20 @@ private struct GalleryFeedView: View {
 
 }
 
+/// Only the Explore tab sits over the Up Next bar; a work opened over it in a sheet does not.
+private struct EmbeddedQueueClearance: ViewModifier {
+    let embedded: Bool
+    func body(content: Content) -> some View {
+        if embedded { content.readingQueueClearance() } else { content.environment(\.readingQueueInset, 0) }
+    }
+}
+
 private final class GalleryPaginationViewport {
     var footer: CGRect?
     var height: CGFloat = 0
 }
 private struct GalleryGridCard: View {
+    @Environment(AppEnvironment.self) private var env
     @Environment(\.artworkCellStyle) private var style
     @Environment(\.isDisplayedAppModeActive) private var modeActive
     @Environment(\.scenePhase) private var scenePhase
@@ -596,6 +606,14 @@ private struct GalleryGridCard: View {
     @State private var preview: GalleryFeedPreview
     private var gallery: NativeGallery? { preview.gallery }
     private var image: UIImage? { preview.displayImage }
+    private var isQueued: Bool { env.readingQueue.contains(id) }
+    private var queueItem: ReadingQueueItem {
+        ReadingQueueItem(gallery: gallery, id: id, title: preview.display?.title, artists: preview.display?.artists,
+                         language: preview.display?.language, type: preview.display?.type, site: ComicSites.active.isEmpty ? nil : ComicSites.active)
+    }
+    private func addToQueue() {
+        if env.readingQueue.add(queueItem, cover: image) { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    }
 
     init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
         self.id = id
@@ -618,15 +636,29 @@ private struct GalleryGridCard: View {
                     .padding(style.inset(7)).accessibilityHidden(true).allowsHitTesting(false)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if isQueued {
+                Image(systemName: "text.line.last.and.arrowtriangle.forward").font(.system(size: style.fontSize(12), weight: .semibold))
+                    .foregroundStyle(.white).padding(style.inset(8)).background(.black.opacity(0.72), in: Circle())
+                    .padding(style.inset(7)).accessibilityHidden(true).allowsHitTesting(false)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isQueued)
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
-        .onLongPressGesture(minimumDuration: 0.55) { bookmark(gallery) }
+        // Held and let go, the work is bookmarked as before; moved after the hold, it is carried
+        // down to the Up Next panel.
+        .workHold(env.readingQueue, item: { queueItem }, cover: { image }, bookmark: { bookmark(gallery) })
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("content.gallery.\(id)")
         .accessibilityValue(isBookmarked ? L10n.text("Bookmarked") : L10n.text("Not bookmarked"))
         .accessibilityAction { open() }
         .accessibilityAction(named: WorkSaveResult.actionTitle(saved: isBookmarked, mode: .comics)) { bookmark(gallery) }
+        .accessibilityAction(named: L10n.text(isQueued ? "Remove from Up Next" : "Add to Up Next")) {
+            if isQueued { env.readingQueue.remove(id) } else { addToQueue() }
+        }
         .onAppear { preview.restoreCachedContent() }
         .task(id: LoadKey(preview: suppliedPreview.map(ObjectIdentifier.init), active: modeActive && scenePhase == .active)) {
             guard modeActive, scenePhase == .active else { return }

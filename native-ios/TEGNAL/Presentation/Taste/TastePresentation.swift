@@ -127,6 +127,7 @@ struct TasteArtwork: View {
 }
 
 struct TasteRecommendationCard: View {
+    @Environment(AppEnvironment.self) private var env
     @Environment(\.artworkCellStyle) private var style
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 12
     let item: TasteRecommendation
@@ -140,8 +141,8 @@ struct TasteRecommendationCard: View {
     var isFavorite = false
     var control = TasteControl()
     var body: some View {
-        Button(action: open) {
-            VStack(alignment: .leading, spacing: style.inset(6)) {
+        // A tap gesture rather than a Button, so a hold can bookmark or carry the work.
+        VStack(alignment: .leading, spacing: style.inset(6)) {
                 if let post = item.post, let server {
                     BooruPostThumbnailCard(post: post, server: server, showsFavoriteIndicator: true, isFavorite: isFavorite)
                         .overlay(alignment: .bottom) { imageTags(language: nil) }
@@ -159,9 +160,11 @@ struct TasteRecommendationCard: View {
                     }
                 }
             }.contentShape(Rectangle())
-        }.buttonStyle(.plain).hoverEffect(.highlight)
+            .onTapGesture(perform: open)
+            .hoverEffect(.highlight)
+            .accessibilityAddTraits(.isButton).accessibilityAction { open() }
             .accessibilityIdentifier("taste.work.\(item.item.id)")
-            .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in toggle() })
+            .smartHold(item, queue: env.readingQueue, toggle: toggle)
             .accessibilityElement(children: .combine)
             .accessibilityValue(WorkSaveResult.accessibilityValue(saved: saved, mode: item.post == nil ? .comics : .booru))
             .accessibilityAction(named: WorkSaveResult.actionTitle(saved: saved, mode: item.post == nil ? .comics : .booru), toggle)

@@ -1581,3 +1581,17 @@
 "Bookmarked %@ works from your account favorites." = "アカウントのお気に入りから%@件の作品をブックマークしました。";
 "Open a few works on the website first, then try signing in again." = "先にウェブサイトで作品をいくつか開いてから、もう一度ログインしてください。";
 "Sign In Required" = "ログインが必要です";
+
+/* Up Next */
+"Add to Up Next" = "「次に読む」に追加";
+"Remove from Up Next" = "「次に読む」から外す";
+"Up Next" = "次に読む";
+"Up Next · %@" = "次に読む · %@作品";
+"%@ works" = "%@作品";
+"Read Next" = "次の作品を読む";
+"Drag Here to Read Later" = "ここにドラッグしてあとで読む";
+"Release to Add to Up Next" = "指を離すと「次に読む」に追加";
+"Nothing Up Next" = "「次に読む」は空です";
+"Hold a work in Explore and drag it down to the panel that appears." = "探索で作品を長押ししたまま、下に表示される枠までドラッグしてください。";
+"A work leaves the list once you read it to the last page." = "最後のページまで読んだ作品はリストから外れます。";
+"Delete All" = "すべて削除";

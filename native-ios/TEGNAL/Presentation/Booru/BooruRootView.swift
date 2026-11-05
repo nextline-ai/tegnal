@@ -660,10 +660,12 @@ struct BooruPostGrid: View {
                                 }
                             }.buttonStyle(.plain)
                         } else if showsFavoriteIndicator {
-                            Button { open(post) } label: {
-                                thumbnail(post, server: server, isFavorite: favorites.contains(post.id))
-                            }.buttonStyle(.plain).hoverEffect(.highlight)
-                                .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in save(post) })
+                            // A tap gesture rather than a Button, so a hold can save the image.
+                            thumbnail(post, server: server, isFavorite: favorites.contains(post.id))
+                                .contentShape(Rectangle())
+                                .onTapGesture { open(post) }
+                                .hoverEffect(.highlight)
+                                .holdToSave { save(post) }
                                 .accessibilityAddTraits(.isButton)
                                 .accessibilityAction { open(post) }
                                 .accessibilityAction(named: L10n.text(favorites.contains(post.id) ? "Remove Favorite" : "Add Favorite")) { save(post) }
@@ -713,7 +715,7 @@ struct BooruPostGrid: View {
     }
 
     private func save(_ post: BooruPost) {
-        feedback(.perform { try BooruFavoriteAction.toggle(post, store: store, context: discovery) })
+        feedback(.perform(post: post) { try BooruFavoriteAction.toggle(post, store: store, context: discovery) })
     }
 }
 

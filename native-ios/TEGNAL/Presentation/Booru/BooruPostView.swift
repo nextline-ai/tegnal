@@ -15,6 +15,10 @@ struct BooruMediaFailureView: View {
     let post: BooruPost
     let server: BooruServer
     var removed = false
+    /// Why the server would not answer and what to do about it; shown in place of the general
+    /// explanation, so the one thing to do next stays on screen.
+    var connection: String? = nil
+    var validate: (() -> Void)? = nil
     let onGesture: (BooruMediaGesture) -> Void
     let retry: () -> Void
     private var page: URL { server.pageURL(postID: post.postID) }
@@ -31,6 +35,23 @@ struct BooruMediaFailureView: View {
                     .onTapGesture { point in onGesture(.tap(point.x / max(1, geometry.size.width))) }
                 ScrollView {
                     VStack(spacing: 16) {
+                        if let connection, !removed {
+                            Image(systemName: "wifi.exclamationmark").font(.largeTitle)
+                            Text(L10n.text("Unable to Load")).font(.title2.bold())
+                            Text(connection).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("booru.failure.connection")
+                            if let validate {
+                                Button(action: validate) { Label(L10n.text("Validate Client"), systemImage: "checkmark.shield").frame(maxWidth: .infinity) }
+                                    .buttonStyle(.borderedProminent).controlSize(.large).tint(.blue)
+                                    .accessibilityIdentifier("booru.failure.validate")
+                            }
+                            Button(action: retry) { Text(L10n.text("Try Again")).frame(maxWidth: .infinity) }
+                                .buttonStyle(.bordered).controlSize(.large)
+                                .accessibilityIdentifier("booru.failure.retry")
+                            Link(destination: page) { Label(L10n.text("Open on Website"), systemImage: "safari") }
+                                .font(.callout).padding(.top, 4)
+                                .accessibilityIdentifier("booru.failure.website")
+                        } else {
                         Image(systemName: removed ? "trash" : "photo.badge.exclamationmark").font(.largeTitle)
                         Text(L10n.text(removed ? "Deleted Post" : "Unable to Load")).font(.title2.bold())
                         Text(L10n.text(removed ? "This post was deleted or removed from the website." : "The media could not be loaded or its format is unavailable on this device."))
@@ -46,6 +67,7 @@ struct BooruMediaFailureView: View {
                             Link("contact@nextline.work", destination: email).font(.callout)
                                 .accessibilityIdentifier("booru.failure.email")
                             Button(L10n.text("Try Again"), action: retry).buttonStyle(.bordered)
+                        }
                         }
                     }.multilineTextAlignment(.center).frame(maxWidth: 440).frame(maxWidth: .infinity).padding(.vertical, 24)
                 }
@@ -202,6 +224,9 @@ struct BooruPostView: View {
     @State private var viewport = BooruViewerViewport()
     @State private var zoomed = false
     @State private var toast: String?
+    /// The server's reason for a failed load, shown on the failure screen until the work changes.
+    @State private var connectionFailure: String?
+    @State private var validatingServer: BooruServer?
     @State private var saveFeedback: WorkSaveFeedback?
     @State private var exiting = false
     @State private var showJump = false
@@ -284,20 +309,28 @@ struct BooruPostView: View {
                     }
                     #endif
                     if loadingIndicatorID == post.id && waitingForMedia && isActive { ProgressView().tint(.white).allowsHitTesting(false).accessibilityIdentifier("booru.loading") }
-                    if mediaStatus == "error" {
-                        BooruMediaFailureView(post: post, server: server, onGesture: gesture) { mediaStatus = "loading"; retry += 1 }
-                    }
+                    if mediaStatus == "error" { mediaFailure }
                 } else {
-                    BooruMediaFailureView(post: post, server: server, onGesture: gesture) { mediaStatus = "loading"; retry += 1 }
+                    mediaFailure
                 }
                 Color.black.opacity(min(0.65, max(0, dimming))).ignoresSafeArea().allowsHitTesting(false)
                 VStack {
                     if let toast { Text(toast).font(.subheadline.bold()).padding(12).background(.regularMaterial, in: Capsule()).accessibilityIdentifier("booru.toast") }
                     Spacer()
-                    if menuVisible || post.isRemoved || ["error", "unavailable", "removed"].contains(mediaStatus) || post.viewerURL(original: original, reducedData: reducedData) == nil && !resolvesMissingMedia { quickMenu }
-                    else if pageNumber { Text("\(index + 1) / \(posts.count)").font(.caption).padding(6).background(.black.opacity(0.5), in: Capsule()) }
+                    if !showsQuickMenu, pageNumber { Text("\(index + 1) / \(posts.count)").font(.caption).padding(6).background(.black.opacity(0.5), in: Capsule()) }
                 }.padding(16)
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    if showsQuickMenu {
+                        quickMenu
+                            .padding(.horizontal, 10).padding(.bottom, 10)
+                            .transition(.move(edge: .bottom))
+                    }
+                }
+                .ignoresSafeArea(edges: .bottom)
+                .zIndex(1)
             }
+            .animation(NativeReaderView.menuMotion, value: menuVisible)
             .overlay {
                 if let translation {
                     ReaderTranslationView(loadImage: {
@@ -320,7 +353,7 @@ struct BooruPostView: View {
             .onChange(of: challenge?.session.phase) { _, phase in
                 if phase == .idle || phase == .ended { closeViewer() }
             }
-            .background(VideoMenuGesture(enabled: post.isVideo && sheet == nil && translation == nil && !showJump) { menuVisible.toggle() })
+            .background(VideoMenuGesture(enabled: post.isVideo && sheet == nil && translation == nil && !showJump) { withAnimation(NativeReaderView.menuMotion) { menuVisible.toggle() } })
             .accessibilityAction(named: L10n.text("Open Menu")) { menuVisible = true }
             .background(ReaderKeyboardCommands(enabled: sheet == nil && !showJump, action: shortcut))
             .statusBarHidden(true)
@@ -414,11 +447,16 @@ struct BooruPostView: View {
                     if !Task.isCancelled {
                         if error as? BooruPostAccessError == .removed { removedPost(post.id) }
                         else if error as? BooruPostAccessError == .goldRequired { skipGoldRestricted(post.id) }
-                        else { toast = BooruConnectionMessage.describe(error) }
+                        // Kept for the failure screen rather than flashed: it only matters if the image fails too.
+                        else { connectionFailure = BooruConnectionMessage.describe(error) }
                     }
                 }
             }
             .task(id: post.id + ":\(retry)") { await resolveCurrentPost() }
+            .onChange(of: post.id) { connectionFailure = nil }
+            .appSheet(item: $validatingServer, onDismiss: { retryMedia() }) { server in
+                BooruValidationView(server: server, initialURL: server.pageURL(postID: post.postID))
+            }
             .task(id: "\(post.id):\(retry):\(mayLoadNotes)") {
                 let key = "\(post.id):\(retry)"
                 guard mayLoadNotes, loadedNotesKey != key else { return }
@@ -469,31 +507,42 @@ struct BooruPostView: View {
         switch command {
         case .previous: move(rtl ? 1 : -1)
         case .next: move(rtl ? -1 : 1)
-        case .menu: menuVisible.toggle()
+        case .menu: withAnimation(NativeReaderView.menuMotion) { menuVisible.toggle() }
         case .favorite: gesture(.hold)
         case .details: info = true
         case .exit: break
         }
     }
+    private var mediaFailure: some View {
+        BooruMediaFailureView(post: post, server: server, connection: connectionFailure,
+                              validate: { validatingServer = server }, onGesture: gesture) { retryMedia() }
+    }
+    private func retryMedia() { connectionFailure = nil; mediaStatus = "loading"; retry += 1 }
+    /// A failure screen carries its own actions, so the menu waits for a tap instead of covering
+    /// them; a tap or swipe on the screen still opens it or moves on.
+    private var showsQuickMenu: Bool { menuVisible }
     private var quickMenu: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Button { move(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                    .disabled(index == 0).accessibilityLabel(L10n.text("Previous")).accessibilityIdentifier("booru.previous")
-                Spacer()
-                Button { jumpText = String(index + 1); showJump = true } label: { Text("\(index + 1) / \(posts.count)").font(.headline) }.accessibilityIdentifier("booru.position")
-                Spacer()
-                Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
-                    .disabled(index >= posts.count - 1 && (loadMore == nil || !hasMorePages)).accessibilityLabel(L10n.text("Next")).accessibilityIdentifier("booru.next")
-                Button { menuVisible = false } label: { Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44) }
-                    .accessibilityLabel(L10n.text("Close Menu")).accessibilityIdentifier("booru.menuClose")
+        ViewerQuickMenuPanel(close: { withAnimation(NativeReaderView.menuMotion) { menuVisible = false } }) {
+            HStack(spacing: 12) {
+                ViewerQuickMenuCircle(icon: "chevron.left", label: L10n.text("Previous")) { move(-1) }
+                    .disabled(index == 0).accessibilityIdentifier("booru.previous")
+                Button { jumpText = String(index + 1); showJump = true } label: {
+                    Text("\(index + 1) / \(posts.count)").font(.headline.monospacedDigit())
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(Capsule().fill(.white.opacity(0.12)))
+                }.accessibilityIdentifier("booru.position")
+                ViewerQuickMenuCircle(icon: "chevron.right", label: L10n.text("Next")) { move(1) }
+                    .disabled(index >= posts.count - 1 && (loadMore == nil || !hasMorePages)).accessibilityIdentifier("booru.next")
+                ViewerQuickMenuCircle(icon: "xmark", label: L10n.text("Close Menu")) { withAnimation(NativeReaderView.menuMotion) { menuVisible = false } }
+                    .accessibilityIdentifier("booru.menuClose")
             }
+        } actions: {
             menuActions(compact: false)
-        }.padding(16).buttonStyle(.plain).modifier(ReaderMenuGlass())
+        }
         .anchorPreference(key: ReaderGuideMenuBounds.self, value: .bounds) { $0 }
     }
     private func menuActions(compact: Bool) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: compact ? 4 : 3), spacing: 18) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: compact ? 4 : 3), spacing: compact ? 18 : 20) {
             menuButton(L10n.text("Download Work"), icon: "arrow.down.circle", id: "download", compact: compact) {
                 DownloadStore.shared.enqueue(post, server: server); showDownloads = true
             }
@@ -510,17 +559,21 @@ struct BooruPostView: View {
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "readerSettings", compact: compact) { readerSettings = true }
         }.buttonStyle(.plain).foregroundStyle(.white).tint(.white)
     }
-    private func menuLabel(_ title: String, icon: String, compact: Bool, color: Color? = nil) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon).font(.system(size: 21)).foregroundStyle(color ?? .white)
-            Text(title).font(compact ? .system(size: 9, weight: .medium) : .caption).lineLimit(1).minimumScaleFactor(0.8)
-        }.frame(maxWidth: .infinity, minHeight: 44)
+    @ViewBuilder private func menuLabel(_ title: String, icon: String, compact: Bool, color: Color? = nil) -> some View {
+        if compact {
+            VStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 21)).foregroundStyle(color ?? .white)
+                Text(title).font(.system(size: 9, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
+            }.frame(maxWidth: .infinity, minHeight: 44)
+        } else {
+            ViewerQuickMenuLabel(title: title, icon: icon, color: color)
+        }
     }
     private func menuButton(_ title: String, icon: String, id: String, compact: Bool, color: Color? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) { menuLabel(title, icon: icon, compact: compact, color: color) }.accessibilityLabel(title).accessibilityIdentifier("booru." + id)
     }
     private func toggleFavorite() {
-        saveFeedback = .perform { try BooruFavoriteAction.toggle(post, store: store, context: activeDiscovery) }
+        saveFeedback = .perform(post: post) { try BooruFavoriteAction.toggle(post, store: store, context: activeDiscovery) }
     }
     private func advanceGuide() {
         switch guide.step {
@@ -544,7 +597,7 @@ struct BooruPostView: View {
         switch gesture {
         case .shortcut(let command): shortcut(command)
         case .tap(let x):
-            if (0.3...0.7).contains(x) { menuVisible.toggle() }
+            if (0.3...0.7).contains(x) { withAnimation(NativeReaderView.menuMotion) { menuVisible.toggle() } }
             else if tapNavigation { move((x < 0.3 ? -1 : 1) * (rtl ? -1 : 1)) }
         case .swipe(let delta): if !zoomed { move(delta * (rtl ? -1 : 1)) }
         case .hold:
@@ -569,7 +622,7 @@ struct BooruPostView: View {
                 if !Task.isCancelled {
                     if error as? BooruPostAccessError == .removed { removedPost(post.id) }
                     else if error as? BooruPostAccessError == .goldRequired { skipGoldRestricted(post.id) }
-                    else { mediaStatus = "error"; toast = BooruConnectionMessage.describe(error) }
+                    else { mediaStatus = "error"; connectionFailure = BooruConnectionMessage.describe(error) }
                 }
             }
         }

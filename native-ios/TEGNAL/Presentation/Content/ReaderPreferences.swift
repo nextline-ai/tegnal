@@ -514,13 +514,18 @@ struct WorkSaveFeedback: Identifiable {
     let result: WorkSaveResult
     /// The saved comic, while its folder can still be changed from this notice.
     var galleryID: Int64?
+    /// The saved image, while its folder can still be changed from this notice.
+    var post: BooruPost?
     /// Names the folder a person just chose for the work.
     var folder: String?
+    /// Whether the notice offers to change the saved work's folder.
+    var changesFolder: Bool { galleryID != nil || post != nil }
     var message: String { folder.map { L10n.text("Saved to folder '%@'", $0) } ?? result.message }
-    @MainActor init(_ result: WorkSaveResult, galleryID: Int64? = nil, folder: String? = nil) {
+    @MainActor init(_ result: WorkSaveResult, galleryID: Int64? = nil, folder: String? = nil, post: BooruPost? = nil) {
         self.result = result
         self.folder = folder
         if result == .added(.comics) { self.galleryID = galleryID }
+        if result == .added(.booru) { self.post = post }
         Self.haptic(result)
         if UIAccessibility.isVoiceOverRunning { UIAccessibility.post(notification: .announcement, argument: message) }
     }
@@ -531,8 +536,8 @@ struct WorkSaveFeedback: Identifiable {
         case .failed: UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
-    @MainActor static func perform(galleryID: Int64? = nil, _ action: () throws -> WorkSaveResult) -> Self {
-        do { return Self(try action(), galleryID: galleryID) } catch { return Self(.failed) }
+    @MainActor static func perform(galleryID: Int64? = nil, post: BooruPost? = nil, _ action: () throws -> WorkSaveResult) -> Self {
+        do { return Self(try action(), galleryID: galleryID, post: post) } catch { return Self(.failed) }
     }
 }
 @MainActor enum BooruFavoriteAction {
@@ -547,6 +552,8 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var filing: WorkFolderTarget?
     @State private var filed: (id: Int64, folder: String)?
+    @State private var filingPost: BooruPost?
+    @State private var filedPost: (post: BooruPost, folder: String)?
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
             if let feedback {
@@ -556,15 +563,18 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
                     }
                     .accessibilityElement(children: .ignore).accessibilityLabel(feedback.message)
                     .accessibilityIdentifier(identifier)
-                    if let id = feedback.galleryID {
-                        Button(L10n.text("Change Folder")) { filing = WorkFolderTarget(id: id); self.feedback = nil }
-                            .font(.subheadline.weight(.semibold)).fixedSize().accessibilityIdentifier(identifier + ".folder")
+                    if feedback.changesFolder {
+                        Button(L10n.text("Change Folder")) {
+                            if let id = feedback.galleryID { filing = WorkFolderTarget(id: id) } else { filingPost = feedback.post }
+                            self.feedback = nil
+                        }
+                        .font(.subheadline.weight(.semibold)).fixedSize().accessibilityIdentifier(identifier + ".folder")
                     }
                 }
                 .padding(.horizontal, 18).padding(.vertical, 12)
                 .background(.regularMaterial, in: Capsule())
                 .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-                .padding(16).allowsHitTesting(feedback.galleryID != nil)
+                .padding(16).allowsHitTesting(feedback.changesFolder)
                 .accessibilityElement(children: .contain)
                 .transition(.opacity.combined(with: reduceMotion ? .identity : .scale(scale: 0.96)))
             }
@@ -572,7 +582,7 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: feedback?.id)
         .task(id: feedback?.id) {
             guard let current = feedback else { return }
-            do { try await Task.sleep(for: .seconds(current.galleryID == nil ? 3 : 5)); feedback = nil } catch { }
+            do { try await Task.sleep(for: .seconds(current.changesFolder ? 5 : 3)); feedback = nil } catch { }
         }
         .appSheet(item: $filing, onDismiss: {
             guard let filed else { return }
@@ -580,6 +590,13 @@ private struct WorkSaveFeedbackModifier: ViewModifier {
             self.filed = nil
         }) { target in
             WorkFolderSheet(galleryID: target.id) { filed = (target.id, $0) }
+        }
+        .appSheet(item: $filingPost, onDismiss: {
+            guard let filedPost else { return }
+            feedback = WorkSaveFeedback(.added(.booru), folder: filedPost.folder, post: filedPost.post)
+            self.filedPost = nil
+        }) { post in
+            BooruFolderPicker(post: post) { filedPost = (post, $0) }
         }
     }
 }

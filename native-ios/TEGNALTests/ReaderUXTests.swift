@@ -1519,3 +1519,54 @@ private actor ReaderTurnSource: ContentProviding {
     }
     func releaseAll() { for page in 0..<12 { release(page) } }
 }
+
+@MainActor final class ReadingQueueTests: XCTestCase {
+    private func makeQueue(_ suite: String = UUID().uuidString) -> (ReadingQueue, UserDefaults, URL) {
+        let defaults = UserDefaults(suiteName: suite)!
+        let covers = FileManager.default.temporaryDirectory.appendingPathComponent(suite, isDirectory: true)
+        return (ReadingQueue(defaults: defaults, covers: covers), defaults, covers)
+    }
+    private func item(_ id: Int64) -> ReadingQueueItem { .init(id: id, title: "Work \(id)", artists: "", details: "", site: nil) }
+
+    func testWorksWaitInOrderOnceAndLeaveWhenRead() throws {
+        let (queue, defaults, covers) = makeQueue()
+        let cover = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 900)).image { context in UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 600, height: 900)) }
+        XCTAssertTrue(queue.add(item(1), cover: cover))
+        XCTAssertTrue(queue.add(item(2), cover: nil))
+        XCTAssertFalse(queue.add(item(1), cover: nil), "A waiting work keeps its place")
+        XCTAssertTrue(queue.add(item(3), cover: nil))
+        XCTAssertEqual(queue.items.map(\.id), [1, 2, 3])
+        XCTAssertEqual(queue.sequence(from: 2), [2, 3], "The reader pages on through the rest of the list")
+        XCTAssertLessThanOrEqual(try XCTUnwrap(queue.cover(1)).size.height, 240, "Covers are kept small")
+
+        queue.move(fromOffsets: [2], toOffset: 0)
+        XCTAssertEqual(ReadingQueue(defaults: defaults, covers: covers).items.map(\.id), [3, 1, 2], "The order survives a relaunch")
+
+        queue.finished(1)
+        XCTAssertEqual(queue.items.map(\.id), [3, 2])
+        XCTAssertNil(queue.cover(1))
+        queue.clear()
+        XCTAssertNil(defaults.data(forKey: ReadingQueue.key))
+    }
+
+    func testACarriedWorkJoinsOnlyWhenLetGoOverTheDropPanel() {
+        let (queue, _, _) = makeQueue()
+        let panel = CGRect(x: 16, y: 560, width: 370, height: 190)
+        queue.beginCarry(item(7), cover: nil, at: CGPoint(x: 100, y: 300))
+        queue.dropZone = panel
+        queue.moveCarry(to: CGPoint(x: 120, y: 400))
+        XCTAssertFalse(queue.isOverDropZone)
+        XCTAssertFalse(queue.endCarry(), "Letting go anywhere else adds nothing")
+        XCTAssertNil(queue.carried)
+        XCTAssertTrue(queue.items.isEmpty)
+
+        queue.beginCarry(item(9), cover: nil, at: CGPoint(x: 100, y: 300))
+        queue.dropZone = panel
+        queue.moveCarry(to: CGPoint(x: 200, y: 640))
+        XCTAssertTrue(queue.isOverDropZone)
+        XCTAssertTrue(queue.endCarry())
+        XCTAssertEqual(queue.items.map(\.id), [9])
+        XCTAssertNil(queue.carried)
+        XCTAssertFalse(queue.isOverDropZone)
+    }
+}

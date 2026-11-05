@@ -217,33 +217,27 @@ private struct BooruFolderEdit: Identifiable {
 struct BooruFolderPicker: View {
     @Environment(\.discoveryContext) private var discovery
     let post: BooruPost
+    /// Names the chosen folder, so the notice that offered the change can say where it went.
+    var filed: ((String) -> Void)? = nil
     @Environment(BooruStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    @State private var creating = false
-    @State private var newFolderName = ""
-    @State private var error: String?
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(store.folders()) { folder in
-                    Button {
-                        do { try store.saveFavorite(post, folderID: folder.id, context: discovery); dismiss() }
-                        catch { self.error = error.localizedDescription }
-                    } label: {
-                        HStack {
-                            Image(systemName: "folder.fill").foregroundStyle(Color(argb: folder.color))
-                            Text(folder.displayName).foregroundStyle(.primary)
-                            Spacer()
-                            if store.folderID(for: post) == folder.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                        }
-                    }.accessibilityIdentifier("booru.pickFolder.\(folder.id)")
-                }
-                Button(L10n.text("Create Folder"), systemImage: "folder.badge.plus") { creating = true }
-                if let error { Text(error).foregroundStyle(.red) }
-            }.navigationTitle(L10n.text("Save to Folder")).navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } } }
-                .booruCreateFolderAlert(isPresented: $creating, name: $newFolderName)
-        }.presentationDetents([.medium, .large])
+        let current = store.folderID(for: post)
+        FolderPickerSheet(rows: store.folders().map {
+            FolderPickerRow(id: $0.id, name: $0.displayName, color: $0.color, isCurrent: $0.id == current)
+        }, identifier: "booru.pickFolder", pick: { row in
+            file(in: row.id, name: row.name)
+        }, create: { name in
+            store.perform {
+                let id = try store.saveFolder(name: name)
+                file(in: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        })
+    }
+    private func file(in id: String, name: String) {
+        store.perform {
+            try store.saveFavorite(post, folderID: id, context: discovery)
+            filed?(name)
+        }
     }
 }
 

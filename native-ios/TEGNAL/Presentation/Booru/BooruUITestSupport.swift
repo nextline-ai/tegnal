@@ -57,6 +57,11 @@ actor BooruFixtureSource: BooruProviding {
         if ProcessInfo.processInfo.arguments.contains("--booru-media-test") {
             return .init(posts: [Self.post(104, server: server), Self.post(105, server: server)], hasMore: false)
         }
+        if ProcessInfo.processInfo.arguments.contains("--booru-connection-lost-test") {
+            var unresolved = Self.post(106, server: server)
+            unresolved.previewURL = nil; unresolved.sampleURL = nil; unresolved.fileURL = nil
+            return .init(posts: [unresolved, Self.post(101, server: server)], hasMore: false)
+        }
         if ProcessInfo.processInfo.arguments.contains("--booru-gold-test") {
             var restricted = Self.post(12403879, server: server)
             restricted.previewURL = nil; restricted.sampleURL = nil; restricted.fileURL = nil
@@ -85,6 +90,9 @@ actor BooruFixtureSource: BooruProviding {
         [.init(id: 1, x: 120, y: 90, width: 700, height: 180, body: "A mountain in the morning.")]
     }
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost {
+        if ProcessInfo.processInfo.arguments.contains("--booru-connection-lost-test"), post.postID == 106 {
+            throw URLError(.networkConnectionLost)
+        }
         if ProcessInfo.processInfo.arguments.contains("--booru-gold-test"), post.postID == 12403879 {
             throw BooruPostAccessError.goldRequired
         }

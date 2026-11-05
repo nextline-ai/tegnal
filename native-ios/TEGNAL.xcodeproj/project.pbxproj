@@ -19,6 +19,7 @@
 		0FE5C86A505BC227BE857AEB /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A17926A2AEB2E2D77B90651 /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift */; };
 		11AA337B07F283E7DFA14360 /* ReaderTranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774127F0B67AC919530A3E44 /* ReaderTranslation.swift */; };
 		94EFE8D55D182FF9ABF6D9B0 /* ReaderPageTranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844000E97FB53BF698CC294F /* ReaderPageTranslation.swift */; };
+		5A1E0C7D2B9F4E6A8C3D1F01 /* ReadingQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C7D2B9F4E6A8C3D1F02 /* ReadingQueue.swift */; };
 		1235E4C2F50FAF7CEA917364 /* BooruUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158CA33375FE5A41376A0AA1 /* BooruUITests.swift */; };
 		12D9B1882F790EB5F6CD660E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 46D0EC32888A924E632965F6 /* Localizable.strings */; };
 		14735DB138CD3DB6EE9C4751 /* BooruModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C03DFA3F5213D29C1C638B1 /* BooruModels.swift */; };
@@ -296,6 +297,7 @@
 		7215851B492D0D97A169F9D4 /* LibraryCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCloudSync.swift; sourceTree = "<group>"; };
 		774127F0B67AC919530A3E44 /* ReaderTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTranslation.swift; sourceTree = "<group>"; };
 		844000E97FB53BF698CC294F /* ReaderPageTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPageTranslation.swift; sourceTree = "<group>"; };
+		5A1E0C7D2B9F4E6A8C3D1F02 /* ReadingQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingQueue.swift; sourceTree = "<group>"; };
 		78765B26524FE1CE2081058D /* BooruSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruSettingsView.swift; sourceTree = "<group>"; };
 		78A9E056DB0DE0D518CE58F3 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift; sourceTree = SOURCE_ROOT; };
 		7AA37491F91112958F1F93E2 /* GalleryIDParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryIDParser.swift; sourceTree = "<group>"; };
@@ -613,6 +615,7 @@
 				5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */,
 				774127F0B67AC919530A3E44 /* ReaderTranslation.swift */,
 				844000E97FB53BF698CC294F /* ReaderPageTranslation.swift */,
+				5A1E0C7D2B9F4E6A8C3D1F02 /* ReadingQueue.swift */,
 				681E53F114874A3FE23909EF /* SearchHistorySection.swift */,
 				A2911B6D719B08FEB43BDE39 /* TargetedTranslationCanvas.swift */,
 			);
@@ -1128,6 +1131,7 @@
 				E5CBAA3ADBF94E51181BB966 /* ReaderSurfaces.swift in Sources */,
 				11AA337B07F283E7DFA14360 /* ReaderTranslation.swift in Sources */,
 				94EFE8D55D182FF9ABF6D9B0 /* ReaderPageTranslation.swift in Sources */,
+				5A1E0C7D2B9F4E6A8C3D1F01 /* ReadingQueue.swift in Sources */,
 				65AB85B1EC67E3DC1028602D /* SearchHistorySection.swift in Sources */,
 				522B1CD77F3A9AC3EC37E13A /* SearchLibrary.swift in Sources */,
 				D8819E7F99F42BFA09CA0D7E /* SettingsSections.swift in Sources */,

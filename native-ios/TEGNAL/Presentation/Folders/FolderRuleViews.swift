@@ -276,39 +276,73 @@ struct SavedWorksSettingsSection: View {
 /// Moves a work that was just saved. Tapping a folder is the whole action.
 struct WorkFolderTarget: Identifiable { let id: Int64 }
 
-struct WorkFolderSheet: View {
-    let galleryID: Int64
-    let filed: (String) -> Void
-    @Environment(AppEnvironment.self) private var env
+/// One folder in a picker, from either library.
+struct FolderPickerRow: Identifiable {
+    let id: String
+    let name: String
+    let color: Int64
+    let isCurrent: Bool
+}
+
+/// The folder list both modes show when a saved work changes folder: a new folder first, then
+/// every folder with its color, the current one checked. Tapping a folder is the whole action.
+struct FolderPickerSheet: View {
+    let rows: [FolderPickerRow]
+    let identifier: String
+    let pick: (FolderPickerRow) -> Void
+    /// Makes a folder and files the work in it.
+    let create: (String) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var folders: [Folder] = []
     @State private var creating = false
     @State private var newName = ""
 
     var body: some View {
         NavigationStack {
             List {
-                Button { creating = true } label: { Label(L10n.text("Create New Folder…"), systemImage: "folder.badge.plus") }
-                ForEach(folders) { folder in
-                    Button { file(in: folder) } label: {
+                Button { creating = true } label: {
+                    Label(L10n.text("Create New Folder…"), systemImage: "folder.badge.plus")
+                }
+                .accessibilityIdentifier(identifier + ".create")
+                ForEach(rows) { row in
+                    Button { pick(row); dismiss() } label: {
                         HStack(spacing: 12) {
-                            Circle().fill(Color(argb: folder.color)).frame(width: 12, height: 12)
-                            Text(folder.displayName).foregroundStyle(.primary)
+                            Image(systemName: "folder.fill").foregroundStyle(Color(argb: row.color)).frame(width: 24)
+                            Text(row.name).foregroundStyle(.primary)
                             Spacer()
-                            if folder.id == env.savedFolders[galleryID] { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).font(.subheadline.bold()) }
+                            if row.isCurrent { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).font(.subheadline.bold()) }
                         }.contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityIdentifier("workFolder." + folder.name)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(identifier + "." + row.id)
+                    .accessibilityAddTraits(row.isCurrent ? .isSelected : [])
                 }
             }
             .navigationTitle(L10n.text("Save to Folder")).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } } }
             .background {
                 FolderNameAlert(isPresented: $creating, name: $newName) { name in
-                    if let folder = try? env.database.createFolder(name: name) { file(in: folder) }
+                    create(name); dismiss()
                 }.frame(width: 0, height: 0)
             }
         }
         .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+    }
+}
+
+struct WorkFolderSheet: View {
+    let galleryID: Int64
+    let filed: (String) -> Void
+    @Environment(AppEnvironment.self) private var env
+    @State private var folders: [Folder] = []
+
+    var body: some View {
+        FolderPickerSheet(rows: folders.compactMap { folder in
+            folder.id.map { FolderPickerRow(id: String($0), name: folder.displayName, color: folder.color, isCurrent: $0 == env.savedFolders[galleryID]) }
+        }, identifier: "workFolder", pick: { row in
+            if let folder = folders.first(where: { $0.id.map(String.init) == row.id }) { file(in: folder) }
+        }, create: { name in
+            if let folder = try? env.database.createFolder(name: name) { file(in: folder) }
+        })
         .task { folders = (try? env.database.listFolders()) ?? [] }
     }
 
@@ -320,6 +354,5 @@ struct WorkFolderSheet: View {
             env.savedFolders[galleryID] = id
             filed(folder.displayName)
         } catch {}
-        dismiss()
     }
 }

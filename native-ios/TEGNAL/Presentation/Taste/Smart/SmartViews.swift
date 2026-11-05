@@ -102,14 +102,16 @@ struct SmartPicksView: View {
             HStack(spacing: 8) {
                 ForEach(items) { item in
                     let mode: TasteMode = item.post == nil ? .comics : .booru
-                    Button { open(item) } label: {
-                        Color.clear.aspectRatio(0.74, contentMode: .fit).overlay { SmartArtwork(item: item) }
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(alignment: .topLeading) {
-                                if saved(item) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow).padding(6).accessibilityHidden(true) }
-                            }.contentShape(Rectangle())
-                    }.buttonStyle(RecapPressStyle()).accessibilityIdentifier("taste.work.\(item.item.id)")
-                        .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in toggle(item) })
+                    // A tap gesture rather than a Button, so a hold can bookmark or carry the work.
+                    Color.clear.aspectRatio(0.74, contentMode: .fit).overlay { SmartArtwork(item: item) }
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(alignment: .topLeading) {
+                            if saved(item) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow).padding(6).accessibilityHidden(true) }
+                        }.contentShape(Rectangle())
+                        .onTapGesture { open(item) }
+                        .accessibilityAddTraits(.isButton).accessibilityAction { open(item) }
+                        .accessibilityIdentifier("taste.work.\(item.item.id)")
+                        .smartHold(item, queue: env.readingQueue) { toggle(item) }
                         .accessibilityLabel(item.gallery?.title ?? item.why?.sentence ?? L10n.text("Open"))
                         .accessibilityValue(WorkSaveResult.accessibilityValue(saved: saved(item), mode: mode))
                         .accessibilityAction(named: WorkSaveResult.actionTitle(saved: saved(item), mode: mode)) { toggle(item) }
@@ -122,6 +124,7 @@ struct SmartPicksView: View {
 }
 
 struct SmartShelfView: View {
+    @Environment(AppEnvironment.self) private var env
     let shelf: TasteShelf
     let open: (TasteRecommendation) -> Void
     let toggle: (TasteRecommendation) -> Void
@@ -136,14 +139,15 @@ struct SmartShelfView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 8) {
                     ForEach(shelf.items) { item in
-                        Button { open(item) } label: {
-                            SmartArtwork(item: item).frame(width: 132, height: 176).clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(alignment: .topLeading) {
-                                    if bookmarks.contains(item.item.id) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow).padding(6) }
-                                }.contentShape(Rectangle())
-                        }.buttonStyle(RecapPressStyle()).accessibilityIdentifier("taste.shelf.\(item.item.id)")
+                        SmartArtwork(item: item).frame(width: 132, height: 176).clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(alignment: .topLeading) {
+                                if bookmarks.contains(item.item.id) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.yellow).padding(6) }
+                            }.contentShape(Rectangle())
+                            .onTapGesture { open(item) }
+                            .accessibilityAddTraits(.isButton).accessibilityAction { open(item) }
+                            .accessibilityIdentifier("taste.shelf.\(item.item.id)")
                             .accessibilityLabel(item.gallery?.title ?? item.why?.label ?? L10n.text("Open"))
-                            .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in toggle(item) })
+                            .smartHold(item, queue: env.readingQueue) { toggle(item) }
                             .overlay(alignment: .topTrailing) { RecommendationMenu(item: item, feedback: feedback, compact: true) }
                     }
                 }.padding(.horizontal, 20)
@@ -328,5 +332,21 @@ struct TasteTunerView: View {
             }
         }
         .task { learning = feed.learning; if learning == nil { learning = try? await env.taste.learning(mode, hiddenComics: env.hiddenMangaGalleryIDs) } }
+    }
+}
+
+extension View {
+    /// Holding a recommended work bookmarks it; a comic can also be carried to Up Next.
+    @ViewBuilder func smartHold(_ item: TasteRecommendation, queue: ReadingQueue, toggle: @escaping () -> Void) -> some View {
+        if item.post == nil, let gallery = item.gallery {
+            workHold(queue, item: {
+                ReadingQueueItem(gallery: gallery, id: item.item.id, title: nil, artists: nil, language: nil, type: nil,
+                                 site: ComicSites.active.isEmpty ? nil : ComicSites.active)
+            }, cover: {
+                gallery.pages.first.flatMap { TasteSources.images.cachedImage(hash: $0.hash, thumbnail: true) }
+            }, bookmark: toggle)
+        } else {
+            holdToSave(toggle)
+        }
     }
 }

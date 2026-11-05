@@ -85,12 +85,12 @@ public struct FoldersView: View {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             if !query.isEmpty { searchResults = SavedWorksSearch(query: query) }
         }
-        .navigationDestination(item: $searchResults) { WorksGridView(search: $0.query) }
+        .navigationDestination(item: $searchResults) { WorksGridView(search: $0.query).readingQueueClearance() }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .navigationDestination(for: Folder.self) { folder in
-            WorksGridView(folder: folder)
+            WorksGridView(folder: folder).readingQueueClearance()
         }
         .toolbar {
             ToolbarItem(placement: .principal) { AppModeSwitch() }

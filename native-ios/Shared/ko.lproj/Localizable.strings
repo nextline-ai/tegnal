@@ -1581,3 +1581,17 @@
 "Bookmarked %@ works from your account favorites." = "계정 즐겨찾기에서 작품 %@개를 북마크했습니다.";
 "Open a few works on the website first, then try signing in again." = "먼저 웹사이트에서 작품을 몇 개 연 다음 다시 로그인해 보세요.";
 "Sign In Required" = "로그인 필요";
+
+/* Up Next */
+"Add to Up Next" = "읽을 목록에 추가";
+"Remove from Up Next" = "읽을 목록에서 빼기";
+"Up Next" = "읽을 목록";
+"Up Next · %@" = "읽을 목록 · %@편";
+"%@ works" = "%@편";
+"Read Next" = "다음 작품 읽기";
+"Drag Here to Read Later" = "여기로 끌어 나중에 읽기";
+"Release to Add to Up Next" = "놓으면 읽을 목록에 추가";
+"Nothing Up Next" = "읽을 목록이 비어 있음";
+"Hold a work in Explore and drag it down to the panel that appears." = "탐색에서 작품을 길게 누른 채 아래에 나타나는 영역으로 끌어내리세요.";
+"A work leaves the list once you read it to the last page." = "마지막 페이지까지 읽은 작품은 목록에서 빠집니다.";
+"Delete All" = "전체 삭제";

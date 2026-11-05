@@ -47,6 +47,8 @@ struct NativeReaderView: View {
     @State private var error: String?
     @State private var retry = 0
     @State private var menuVisible = false
+    @State private var showingQueue = false
+    @State private var queueBarDrag: CGFloat = 0
     @State private var sheet: ReaderSheet?
     @State private var guide = ReaderGuideSession()
     @State private var pendingGuide = false
@@ -103,12 +105,32 @@ struct NativeReaderView: View {
                         .accessibilityIdentifier("reader.toast")
                 }
                 Spacer()
-                if menuVisible || gallery == nil { quickMenu }
-                else if pageNumber, let gallery {
+                if !(menuVisible || gallery == nil), pageNumber, let gallery {
                     Text("\(currentPage + 1) / \(gallery.pages.count)")
                         .font(.caption).padding(6).background(.black.opacity(0.5), in: Capsule()).foregroundStyle(.white)
                 }
             }.padding(16)
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if menuVisible || gallery == nil {
+                    // Only the menu moves, by its own height, so it visibly rises and falls.
+                    VStack(spacing: 10) {
+                        queueBar
+                        quickMenu
+                    }
+                    .padding(.horizontal, 10).padding(.bottom, 10)
+                    .transition(.move(edge: .bottom))
+                }
+            }
+            .ignoresSafeArea(edges: .bottom)
+            // A view leaving a ZStack loses its place on top; this keeps it in front while it slides away.
+            .zIndex(1)
+        }
+        .animation(Self.menuMotion, value: menuVisible)
+        .appSheet(isPresented: $showingQueue) {
+            ReadingQueueView(read: { id in showingQueue = false; menuVisible = false; openQueued(id) })
+                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         }
         .overlay(alignment: .top) {
             VStack {
@@ -277,7 +299,10 @@ struct NativeReaderView: View {
     private var viewingActive: Bool { readerActive && gallery != nil && sheet == nil }
     private func showViewingPage() {
         guard let gallery, !gallery.pages.isEmpty else { return }
-        viewing.show(currentPage, isLast: currentPage + ReaderLayout.count(pagesPerSpread) >= gallery.pages.count)
+        let isLast = currentPage + ReaderLayout.count(pagesPerSpread) >= gallery.pages.count
+        viewing.show(currentPage, isLast: isLast)
+        // Read to the end, a work waiting in Up Next has been read.
+        if isLast { env.readingQueue.finished(gallery.id) }
     }
     private func recordViewing() {
         guard let dwell = viewing.finish(), let gallery = viewedGallery else { return }
@@ -297,30 +322,77 @@ struct NativeReaderView: View {
     }
 
     private var quickMenu: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Button { move(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                    .disabled(currentPage == 0).accessibilityLabel(L10n.text("Previous Page")).accessibilityIdentifier("reader.previous")
-                Spacer()
+        ViewerQuickMenuPanel(close: { withAnimation(Self.menuMotion) { menuVisible = false } }) {
+            HStack(spacing: 12) {
+                ViewerQuickMenuCircle(icon: "chevron.left", label: L10n.text("Previous Page")) { move(-1) }
+                    .disabled(currentPage == 0).accessibilityIdentifier("reader.previous")
                 Button { jumpText = String(currentPage + 1); showJump = true } label: {
-                    Text("\(currentPage + 1) / \(gallery?.pages.count ?? 0)").font(.headline)
+                    Text("\(currentPage + 1) / \(gallery?.pages.count ?? 0)").font(.headline.monospacedDigit())
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(Capsule().fill(.white.opacity(0.12)))
                 }.accessibilityLabel(L10n.text("Page %@ / %@", String(describing: currentPage + 1), String(describing: gallery?.pages.count ?? 0))).accessibilityIdentifier("reader.position")
-                Spacer()
-                Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
-                    .disabled(currentPage + ReaderLayout.count(pagesPerSpread) >= (gallery?.pages.count ?? 1)).accessibilityLabel(L10n.text("Next Page")).accessibilityIdentifier("reader.next")
-                Button { menuVisible = false } label: { Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44) }
-                    .accessibilityLabel(L10n.text("Close Menu")).accessibilityIdentifier("reader.menu.close")
+                ViewerQuickMenuCircle(icon: "chevron.right", label: L10n.text("Next Page")) { move(1) }
+                    .disabled(currentPage + ReaderLayout.count(pagesPerSpread) >= (gallery?.pages.count ?? 1)).accessibilityIdentifier("reader.next")
+                ViewerQuickMenuCircle(icon: "xmark", label: L10n.text("Close Menu")) { withAnimation(Self.menuMotion) { menuVisible = false } }
+                    .accessibilityIdentifier("reader.menu.close")
             }
+        } actions: {
             menuActions(compact: false)
         }
-        .padding(16).foregroundStyle(.white).tint(.white).buttonStyle(.plain)
-        .modifier(ReaderMenuGlass())
         .anchorPreference(key: ReaderGuideMenuBounds.self, value: .bounds) { $0 }
+    }
+
+    /// The works around the open one in Up Next. A work opened from elsewhere goes before the list.
+    private var queueNeighbors: (previous: ReadingQueueItem?, next: ReadingQueueItem?) {
+        let items = env.readingQueue.items
+        guard let index = items.firstIndex(where: { $0.id == gallery?.id }) else { return (nil, items.first) }
+        return (index > 0 ? items[index - 1] : nil, index + 1 < items.count ? items[index + 1] : nil)
+    }
+    /// Up Next, one row above the quick menu: the next work waiting, which the reader switches to.
+    /// Swiped like a music app's player, it moves to the next or the previous work in the list.
+    @ViewBuilder private var queueBar: some View {
+        let neighbors = queueNeighbors
+        if let shown = neighbors.next ?? neighbors.previous {
+            ReadingQueueBar(read: { id in menuVisible = false; openQueued(id) }, showList: { showingQueue = true }, next: shown)
+                .frame(height: 72)
+                .modifier(ReadingQueueBarBackground())
+                .environment(\.colorScheme, .dark)
+                .frame(maxWidth: 560)
+                .offset(x: queueBarDrag)
+                // Ahead of the bar's buttons, so a swipe never reads as a tap.
+                .highPriorityGesture(DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        let allowed = value.translation.width < 0 ? neighbors.next != nil : neighbors.previous != nil
+                        // Resists past the ends, where there is no work to move to.
+                        queueBarDrag = allowed ? value.translation.width : value.translation.width / 4
+                    }
+                    .onEnded { value in
+                        let width = value.translation.width, projected = value.predictedEndTranslation.width
+                        let target = width < -60 || projected < -160 ? neighbors.next : width > 60 || projected > 160 ? neighbors.previous : nil
+                        if let target {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            withAnimation(.easeIn(duration: 0.16)) { queueBarDrag = width < 0 ? -420 : 420 }
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(160))
+                                queueBarDrag = 0
+                                openQueued(target.id)
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { queueBarDrag = 0 }
+                        }
+                    })
+                .accessibilityAction(named: L10n.text("Next")) { if let next = neighbors.next { openQueued(next.id) } }
+                .accessibilityAction(named: L10n.text("Previous")) { if let previous = neighbors.previous { openQueued(previous.id) } }
+        }
+    }
+    private func openQueued(_ id: Int64) {
+        if let openWork { openWork(id, 1) } else { toast = L10n.text("No More Works in This List") }
     }
 
     private func menuActions(compact: Bool) -> some View {
         let columns = Array(repeating: GridItem(.flexible()), count: compact ? 6 : 3)
-        return LazyVGrid(columns: columns, spacing: 18) {
+        return LazyVGrid(columns: columns, spacing: compact ? 18 : 20) {
             menuButton(L10n.text("Download Work"), icon: "arrow.down.circle", id: offline ? "download.offline" : "download", compact: compact) {
                 if let gallery { DownloadStore.shared.enqueue(gallery); sheet = .downloads }
             }.disabled(gallery == nil || offline)
@@ -334,16 +406,23 @@ struct NativeReaderView: View {
         }
     }
 
-    private func menuButton(_ title: String, icon: String, id: String, compact: Bool, color: Color? = nil, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 21)).foregroundStyle(color ?? .white)
-                Text(title).font(compact ? .system(size: 9, weight: .medium) : .caption).lineLimit(1).minimumScaleFactor(0.8)
-            }.frame(maxWidth: .infinity, minHeight: 44)
+    @ViewBuilder private func menuButton(_ title: String, icon: String, id: String, compact: Bool, color: Color? = nil, action: @escaping () -> Void) -> some View {
+        Group {
+            if compact {
+                Button(action: action) {
+                    VStack(spacing: 6) {
+                        Image(systemName: icon).font(.system(size: 21)).foregroundStyle(color ?? .white)
+                        Text(title).font(.system(size: 9, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
+                    }.frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .foregroundStyle(.white).tint(.white).buttonStyle(.plain)
+                .accessibilityLabel(title)
+            } else {
+                ViewerQuickMenuButton(title: title, icon: icon, color: color, action: action)
+            }
         }
-        .foregroundStyle(.white).tint(.white).buttonStyle(.plain)
         .disabled(gallery == nil && id != "exit" && id != "settings")
-        .accessibilityLabel(title).accessibilityIdentifier("reader.\(id)")
+        .accessibilityIdentifier("reader.\(id)")
     }
 
     private var autoTaskID: String {
@@ -368,14 +447,16 @@ struct NativeReaderView: View {
         switch command {
         case .previous: move(rtl ? 1 : -1)
         case .next: move(rtl ? -1 : 1)
-        case .menu: menuVisible.toggle()
+        case .menu: withAnimation(Self.menuMotion) { menuVisible.toggle() }
         case .favorite: bookmark()
         case .details: sheet = .information
         case .exit: break
         }
     }
+    /// The quick menu rises and falls with the same spring.
+    static let menuMotion = Animation.spring(response: 0.34, dampingFraction: 0.86)
     private func tapped(_ x: CGFloat) {
-        if (0.3...0.7).contains(x) { menuVisible.toggle() }
+        if (0.3...0.7).contains(x) { withAnimation(Self.menuMotion) { menuVisible.toggle() } }
         else if tapNavigation { move((x < 0.3 ? -1 : 1) * (rtl ? -1 : 1)) }
     }
     private func move(_ delta: Int) {
@@ -472,6 +553,99 @@ struct ReaderMenuGlass: ViewModifier {
             content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
                 .environment(\.colorScheme, .dark)
         }
+    }
+}
+
+/// The viewers' quick menu, laid out as the Camera app lays out its controls: a glass sheet
+/// inset from the screen's edges, its tools as round buttons in three columns with their names
+/// underneath. Pulling it down puts it away.
+struct ViewerQuickMenuPanel<Navigation: View, Actions: View>: View {
+    let close: () -> Void
+    @ViewBuilder let navigation: Navigation
+    @ViewBuilder let actions: Actions
+    @GestureState private var pull: CGFloat = 0
+
+    var body: some View {
+        VStack(spacing: 18) {
+            navigation
+            actions
+        }
+        .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 28)
+        .frame(maxWidth: 560)
+        .foregroundStyle(.white).tint(.white).buttonStyle(.plain)
+        .modifier(ViewerPanelGlass())
+        .offset(y: pull)
+        .gesture(DragGesture(minimumDistance: 10)
+            .updating($pull) { value, state, _ in state = max(0, value.translation.height) }
+            .onEnded { value in if value.translation.height > 70 || value.predictedEndTranslation.height > 180 { close() } })
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: pull == 0)
+        .accessibilityAction(named: L10n.text("Close Menu"), close)
+    }
+}
+
+/// The same clear glass as the Up Next bar, with the device's rounded corners.
+struct ViewerPanelGlass: ViewModifier {
+    var cornerRadius: CGFloat = 44
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+                .environment(\.colorScheme, .dark)
+        } else {
+            content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .environment(\.colorScheme, .dark)
+        }
+    }
+}
+
+/// One tool of the quick menu: a round button with its name underneath.
+struct ViewerQuickMenuButton: View {
+    let title: String
+    let icon: String
+    var color: Color? = nil
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) { ViewerQuickMenuLabel(title: title, icon: icon, color: color) }
+            .buttonStyle(ViewerQuickMenuButtonStyle())
+            .accessibilityLabel(title)
+    }
+}
+struct ViewerQuickMenuLabel: View {
+    @Environment(\.isEnabled) private var isEnabled
+    let title: String
+    let icon: String
+    var color: Color? = nil
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 24, weight: .medium))
+                .foregroundStyle(color ?? .white)
+                .frame(width: 64, height: 64)
+                .background(Circle().fill(.white.opacity(0.12)))
+            Text(title).font(.subheadline).foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .opacity(isEnabled ? 1 : 0.4)
+    }
+}
+private struct ViewerQuickMenuButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+/// A round glass control in the quick menu's top row.
+struct ViewerQuickMenuCircle: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(.white.opacity(0.12)))
+        }
+        .buttonStyle(ViewerQuickMenuButtonStyle())
+        .accessibilityLabel(label)
     }
 }
 

@@ -386,6 +386,8 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     @Binding var selection: AppTab
     @Environment(AppEnvironment.self) private var env
     @State private var showingRecap = false
+    @State private var showingReadingQueue = false
+    @State private var readingQueued: IdentifiableInt64?
     let mode: AppMode
     let saved: Saved
     let explore: Explore
@@ -396,7 +398,7 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     private var settingsTitle: String { L10n.text(mode == .booru ? "More" : "Settings") }
     private var settingsIcon: String { mode == .booru ? "ellipsis" : "gearshape" }
     private var insights: some View {
-        NavigationStack { TasteDashboard(mode: mode == .booru ? .booru : .comics, isRoot: true, explore: { selection = .works }) }
+        NavigationStack { TasteDashboard(mode: mode == .booru ? .booru : .comics, isRoot: true, explore: { selection = .works }).readingQueueClearance() }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -409,6 +411,15 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
                     .fixedSize(horizontal: false, vertical: true)
             }
             tabContent
+                .modifier(ReadingQueueAccessory(enabled: mode == .manga, read: readQueued, showList: { showingReadingQueue = true }))
+        }
+        .appSheet(isPresented: $showingReadingQueue) {
+            ReadingQueueView(read: { id in showingReadingQueue = false; readQueued(id) })
+                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
+        .appFullScreenCover(item: $readingQueued) { item in
+            // The reader pages on through the rest of the list, as a playlist does.
+            ContentEntryView(initialUrl: MangaUrls.readerUrl(for: item.id), siblingIDs: env.readingQueue.sequence(from: item.id))
         }
         .appSheet(isPresented: $showingRecap, onDismiss: { env.taste.dismissRecap(tasteMode) }) {
             NavigationStack {
@@ -421,25 +432,34 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
         Group {
             if #available(iOS 18.0, *) {
                 TabView(selection: $selection) {
-                    Tab(L10n.text("Saved"), systemImage: "folder.fill", value: .folders) { saved }
-                    Tab(L10n.text("Explore"), systemImage: "globe", value: .works) { explore }
-                    Tab(collectionsTitle, systemImage: collectionsIcon, value: .artists) { collections }
-                    Tab(settingsTitle, systemImage: settingsIcon, value: .settings) { settings }
-                    Tab(L10n.text("Smart"), systemImage: "apple.intelligence", value: .insights, role: insightsRole) { insights }
+                    Tab(L10n.text("Saved"), systemImage: "folder.fill", value: .folders) { saved.modifier(queueInset) }
+                    Tab(L10n.text("Explore"), systemImage: "globe", value: .works) { explore.modifier(queueInset) }
+                    Tab(collectionsTitle, systemImage: collectionsIcon, value: .artists) { collections.modifier(queueInset) }
+                    Tab(settingsTitle, systemImage: settingsIcon, value: .settings) { settings.modifier(queueInset) }
+                    Tab(L10n.text("Smart"), systemImage: "apple.intelligence", value: .insights, role: insightsRole) { insights.modifier(queueInset) }
                 }
             } else {
                 TabView(selection: $selection) {
-                    saved.tabItem { Label(L10n.text("Saved"), systemImage: "folder.fill") }.tag(AppTab.folders)
-                    explore.tabItem { Label(L10n.text("Explore"), systemImage: "globe") }.tag(AppTab.works)
-                    collections.tabItem { Label(collectionsTitle, systemImage: collectionsIcon) }.tag(AppTab.artists)
-                    settings.tabItem { Label(settingsTitle, systemImage: settingsIcon) }.tag(AppTab.settings)
-                    insights.tabItem { Label(L10n.text("Smart"), systemImage: "apple.intelligence") }.tag(AppTab.insights)
+                    saved.modifier(queueInset).tabItem { Label(L10n.text("Saved"), systemImage: "folder.fill") }.tag(AppTab.folders)
+                    explore.modifier(queueInset).tabItem { Label(L10n.text("Explore"), systemImage: "globe") }.tag(AppTab.works)
+                    collections.modifier(queueInset).tabItem { Label(collectionsTitle, systemImage: collectionsIcon) }.tag(AppTab.artists)
+                    settings.modifier(queueInset).tabItem { Label(settingsTitle, systemImage: settingsIcon) }.tag(AppTab.settings)
+                    insights.modifier(queueInset).tabItem { Label(L10n.text("Smart"), systemImage: "apple.intelligence") }.tag(AppTab.insights)
                 }
             }
         }.adaptableTabStyleIfAvailable()
     }
 
     private var tasteMode: TasteMode { mode == .booru ? .booru : .comics }
+    private var queueInset: ReadingQueueInset { ReadingQueueInset(enabled: mode == .manga) }
+    /// Opens a waiting work on the site it was found on.
+    private func readQueued(_ id: Int64) {
+        if let site = env.readingQueue.items.first(where: { $0.id == id })?.site, !site.isEmpty, site != env.mangaSiteAddress,
+           env.comicSites.contains(site), !ComicSites.sharesNumbers(site, env.mangaSiteAddress) {
+            env.switchComicsSite(to: site)
+        }
+        readingQueued = IdentifiableInt64(id: id)
+    }
     @available(iOS 18.0, *)
     private var insightsRole: TabRole? {
         #if compiler(>=6.4)
@@ -481,10 +501,11 @@ private struct ComicsRootTabs: View {
             saved: NavigationStack {
                 FoldersView()
                     .safeAreaInset(edge: .top) { if !env.isSiteVerified { ComicsConnectionCard().padding(.horizontal) } }
+                    .readingQueueClearance()
             },
             explore: exploration,
-            collections: NavigationStack { ArtistsListView() },
-            settings: NavigationStack { SettingsView() })
+            collections: NavigationStack { ArtistsListView().readingQueueClearance() },
+            settings: NavigationStack { SettingsView().readingQueueClearance() })
         .environment(\.isDisplayedAppModeActive, env.mode == .manga)
     }
 
@@ -495,9 +516,51 @@ private struct ComicsRootTabs: View {
                 Group {
                     if env.booru.servers.isEmpty { ComicsSetupView() }
                     else { ComicsPoolsView() }
-                }.appRootHeader("Explore")
+                }.appRootHeader("Explore").readingQueueClearance()
             }
         }
     }
 
 }
+
+/// Up Next sits above the tabs, where a music app keeps what plays next, and shows while works
+/// wait. It is drawn here rather than as the tab bar's accessory, which the system keeps at a
+/// fixed height. A carried work is let go on the larger panel drawn over the screen.
+private struct ReadingQueueAccessory: ViewModifier {
+    @Environment(AppEnvironment.self) private var env
+    let enabled: Bool
+    let read: (Int64) -> Void
+    let showList: () -> Void
+    /// Half again the height of the system's accessory bar.
+    static let height: CGFloat = 72
+    private var visible: Bool { enabled && !env.readingQueue.items.isEmpty && env.readingQueue.carried == nil }
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                if visible {
+                    ReadingQueueBar(read: read, showList: showList)
+                        .frame(height: Self.height)
+                        .modifier(ReadingQueueBarBackground())
+                        .padding(.horizontal, 21)
+                        // Just above the tab bar.
+                        .padding(.bottom, 57)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .overlay { if enabled { ReadingQueueCarryOverlay(queue: env.readingQueue) } }
+            .animation(.snappy, value: visible)
+    }
+}
+
+/// Keeps each tab's content, and the notices shown over it, clear of the Up Next bar: lists
+/// end above it and a toast rises above it. It follows the list, not a carried work, so the
+/// screen never shifts under the finger.
+private struct ReadingQueueInset: ViewModifier {
+    @Environment(AppEnvironment.self) private var env
+    let enabled: Bool
+    func body(content: Content) -> some View {
+        content.environment(\.readingQueueInset, enabled && !env.readingQueue.items.isEmpty ? ReadingQueueAccessory.height + 8 : 0)
+    }
+}
+

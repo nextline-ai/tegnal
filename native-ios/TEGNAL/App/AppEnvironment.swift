@@ -447,6 +447,14 @@ public final class AppEnvironment: @unchecked Sendable {
         return controller
     }
     @ObservationIgnored private var tasteStorage: TasteController?
+    /// Up Next for comics.
+    @MainActor var readingQueue: ReadingQueue {
+        if let readingQueueStorage { return readingQueueStorage }
+        let queue = ReadingQueue(defaults: browserPreferences)
+        readingQueueStorage = queue
+        return queue
+    }
+    @ObservationIgnored private var readingQueueStorage: ReadingQueue?
     @ObservationIgnored private var coverQueueTask: Task<Void, Never>?
     @ObservationIgnored private var coverQueueGeneration = UUID()
     @ObservationIgnored private var coverQueueActive = true

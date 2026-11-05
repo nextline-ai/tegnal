@@ -406,8 +406,19 @@ public struct WorksGridView: View {
         loadWorks()
     }
 
+    private static func cover(of work: Work) -> UIImage? {
+        guard work.thumbStatus == "ready", let path = work.thumbPath else { return nil }
+        return LocalThumbnailCache.shared.image(forPath: path) ?? UIImage(contentsOfFile: path)
+    }
     @ViewBuilder
     private func workContextMenu(for work: Work) -> some View {
+        if env.readingQueue.contains(work.galleryId) {
+            Button(L10n.text("Remove from Up Next"), systemImage: "minus.circle") { env.readingQueue.remove(work.galleryId) }
+        } else {
+            Button(L10n.text("Add to Up Next"), systemImage: "text.line.last.and.arrowtriangle.forward") {
+                if env.readingQueue.add(ReadingQueueItem(work: work), cover: Self.cover(of: work)) { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            }
+        }
         Button(L10n.text("Find works with a similar art style"), systemImage: "photo.on.rectangle.angled") { similarity = .init(work: work) }
         Menu {
             Button {

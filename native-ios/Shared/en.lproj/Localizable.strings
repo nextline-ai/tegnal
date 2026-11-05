@@ -1581,3 +1581,17 @@
 "Bookmarked %@ works from your account favorites." = "Bookmarked %@ works from your account favorites.";
 "Open a few works on the website first, then try signing in again." = "Open a few works on the website first, then try signing in again.";
 "Sign In Required" = "Sign In Required";
+
+/* Up Next */
+"Add to Up Next" = "Add to Up Next";
+"Remove from Up Next" = "Remove from Up Next";
+"Up Next" = "Up Next";
+"Up Next · %@" = "Up Next · %@";
+"%@ works" = "%@ works";
+"Read Next" = "Read Next";
+"Drag Here to Read Later" = "Drag Here to Read Later";
+"Release to Add to Up Next" = "Release to Add to Up Next";
+"Nothing Up Next" = "Nothing Up Next";
+"Hold a work in Explore and drag it down to the panel that appears." = "Hold a work in Explore and drag it down to the panel that appears.";
+"A work leaves the list once you read it to the last page." = "A work leaves the list once you read it to the last page.";
+"Delete All" = "Delete All";
