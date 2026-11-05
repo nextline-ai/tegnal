@@ -29,6 +29,8 @@ import 'reader_translation.dart';
 import '../design/alert_dialog.dart';
 import '../../core/taste/taste_models.dart';
 import 'content_bookmark.dart';
+import 'reading_queue_views.dart';
+import 'viewer_quick_menu.dart';
 
 /// Opens the reader full screen over everything, as `fullScreenCover` does.
 Future<void> openReader(
@@ -47,22 +49,44 @@ Future<void> openReader(
   void Function(BuildContext context, NativeGallery gallery)? download,
 }) => Navigator.of(context, rootNavigator: true).push<void>(
   ViewerRoute<void>(
-    builder: (context) => NativeReaderView(
-      galleryID: galleryID,
-      initialPage: initialPage,
-      source: source,
-      images: images,
-      content: content,
-      database: database,
-      preferences: preferences,
-      savesProgress: savesProgress,
-      resumesProgress: resumesProgress,
-      bookmark: bookmark,
-      search: search,
-      download: download,
+    builder: (context) => _ReaderSession(
+      initialID: galleryID,
+      // `MangaReaderSession`: the reader switches to a work from Up Next in place.
+      build: (id, open) => NativeReaderView(
+        key: ValueKey(id),
+        galleryID: id,
+        initialPage: id == galleryID ? initialPage : 1,
+        source: source,
+        images: images,
+        content: content,
+        database: database,
+        preferences: preferences,
+        savesProgress: savesProgress,
+        resumesProgress: id == galleryID && resumesProgress,
+        bookmark: bookmark,
+        search: search,
+        download: download,
+        openWork: open,
+      ),
     ),
   ),
 );
+
+class _ReaderSession extends StatefulWidget {
+  const _ReaderSession({required this.initialID, required this.build});
+  final int initialID;
+  final Widget Function(int id, ValueChanged<int> open) build;
+
+  @override
+  State<_ReaderSession> createState() => _ReaderSessionState();
+}
+
+class _ReaderSessionState extends State<_ReaderSession> {
+  late int _id = widget.initialID;
+
+  @override
+  Widget build(BuildContext context) => widget.build(_id, (id) => setState(() => _id = id));
+}
 
 /// `NativeReaderView`: a work's pages on black, with a quick menu, settings and work information.
 class NativeReaderView extends StatefulWidget {
@@ -80,6 +104,7 @@ class NativeReaderView extends StatefulWidget {
     this.resumesProgress = true,
     this.search,
     this.download,
+    this.openWork,
   });
 
   final int galleryID;
@@ -98,6 +123,9 @@ class NativeReaderView extends StatefulWidget {
 
   /// Queues the work for offline reading and shows the downloads, as the quick menu does.
   final void Function(BuildContext context, NativeGallery gallery)? download;
+
+  /// Switches the reader to another work, as a work from Up Next opens in place.
+  final ValueChanged<int>? openWork;
 
   @override
   State<NativeReaderView> createState() => _NativeReaderViewState();
@@ -282,9 +310,42 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
       _current = start;
       _zoomedPages.clear();
     });
+    _markReadIfLast();
     _saveProgress();
     _scheduleAuto();
     _followTranslation();
+  }
+
+  /// Read to the end, a work waiting in Up Next has been read.
+  void _markReadIfLast() {
+    final gallery = _gallery;
+    if (gallery == null || gallery.pages.isEmpty) return;
+    if (_current + _count >= gallery.pages.length) ReadingQueueScope.read(context)?.finished(gallery.id);
+  }
+
+  void _setMenu(bool visible) {
+    if (_menuVisible == visible) return;
+    setState(() => _menuVisible = visible);
+    if (visible) _guide.openedMenu();
+  }
+
+  void _showQueue() => showAppSheet<void>(
+    context,
+    grabber: true,
+    builder: (sheetContext, controller) => ReadingQueueView(
+      queue: ReadingQueueScope.read(context)!,
+      scrollController: controller,
+      read: (id) {
+        Navigator.of(sheetContext).pop();
+        _openQueued(id);
+      },
+    ),
+  );
+
+  void _openQueued(int id) {
+    setState(() => _menuVisible = false);
+    if (id == widget.galleryID) return;
+    widget.openWork?.call(id);
   }
 
   void _move(int delta) {
@@ -512,6 +573,27 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
                     ),
                   ),
                 ),
+                // Only the menu moves, by its own height, so it visibly rises and falls.
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10 + media.padding.bottom,
+                  child: ViewerMenuReveal(
+                    visible: _menuVisible || gallery == null,
+                    child: Column(
+                      key: const ValueKey('menu'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (ReadingQueueScope.of(context) case final queue?)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: ReaderQueueRow(queue: queue, currentID: widget.galleryID, open: _openQueued, showList: _showQueue),
+                          ),
+                        _quickMenu(gallery),
+                      ],
+                    ),
+                  ),
+                ),
                 Positioned(
                   left: 16,
                   right: 16,
@@ -521,9 +603,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (_menuVisible || gallery == null)
-                        _quickMenu(gallery)
-                      else if (_pageNumber)
+                      if (!(_menuVisible || gallery == null) && _pageNumber)
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
@@ -733,52 +813,26 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
 
   Widget _quickMenu(NativeGallery? gallery) {
     final total = gallery?.pages.length ?? 0;
-    const white = Color(0xFFFFFFFF);
-    final disabled = white.withValues(alpha: 0.3);
-    Widget icon(IconData icon, String label, VoidCallback? onTap) => Semantics(
-      button: true,
-      label: label,
-      enabled: onTap != null,
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox.square(dimension: 44, child: Icon(icon, size: 22, color: onTap == null ? disabled : white)),
-      ),
-    );
-    return ReaderMenuGlass(
+    return ViewerQuickMenuPanel(
       key: _menuKey,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                icon(CupertinoIcons.chevron_left, L10n.text('Previous Page'), _current == 0 ? null : () => _move(-1)),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _jump,
-                    child: Center(
-                      child: Text(
-                        '${_current + 1} / $total',
-                        style: TegnalType.style(17, weight: FontWeight.w600, color: white),
-                      ),
-                    ),
-                  ),
-                ),
-                icon(CupertinoIcons.chevron_right, L10n.text('Next Page'), _current + _count >= math.max(1, total) ? null : () => _move(1)),
-                icon(CupertinoIcons.xmark_circle_fill, L10n.text('Close Menu'), () {
-                  setState(() => _menuVisible = false);
-                  _scheduleAuto();
-                }),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _menuActions(compact: false),
-          ],
-        ),
+      close: () {
+        _setMenu(false);
+        _scheduleAuto();
+      },
+      navigation: ViewerQuickMenuNavigation(
+        position: '${_current + 1} / $total',
+        previousLabel: L10n.text('Previous Page'),
+        nextLabel: L10n.text('Next Page'),
+        closeLabel: L10n.text('Close Menu'),
+        previous: _current == 0 ? null : () => _move(-1),
+        next: _current + _count >= math.max(1, total) ? null : () => _move(1),
+        jump: _jump,
+        close: () {
+          _setMenu(false);
+          _scheduleAuto();
+        },
       ),
+      actions: _menuActions(compact: false),
     );
   }
 
@@ -809,8 +863,20 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
       (L10n.text('Work Details'), (color) => Icon(CupertinoIcons.info_circle, size: 24, color: color), hasGallery ? _openInformation : null),
       (L10n.text('More Settings'), (color) => Icon(CupertinoIcons.slider_horizontal_3, size: 24, color: color), _openSettings),
     ];
-    final columns = compact ? 6 : 3;
     const white = Color(0xFFFFFFFF);
+    if (!compact) {
+      return ViewerQuickMenuGrid(
+        children: [
+          for (final (title, icon, action) in items)
+            ViewerQuickMenuButton(
+              title: title,
+              icon: SizedBox(height: 26, child: Center(child: icon(white))),
+              onTap: action,
+            ),
+        ],
+      );
+    }
+    const columns = 6;
     return Column(
       children: [
         for (var row = 0; row < items.length / columns; row++) ...[
@@ -840,7 +906,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
                                 title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TegnalType.style(compact ? 9 : 12, weight: compact ? FontWeight.w500 : FontWeight.w400, color: white),
+                                style: TegnalType.style(9, weight: FontWeight.w500, color: white),
                               ),
                             ],
                           ),

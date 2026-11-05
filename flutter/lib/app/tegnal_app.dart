@@ -50,6 +50,10 @@ import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
 import '../presentation/settings/site_account_section.dart';
 import '../presentation/settings/website_setup.dart';
+import '../core/content/manga_urls.dart';
+import '../core/content/reading_queue.dart';
+import '../presentation/design/app_sheet.dart';
+import '../presentation/content/reading_queue_views.dart';
 import 'privacy_cover.dart';
 
 /// Everything the root screens share, created once at launch.
@@ -129,6 +133,9 @@ class AppServices {
 
   /// Taste analysis, recommendations and recaps for both libraries.
   late final TasteController taste;
+
+  /// Up Next for comics.
+  late final ReadingQueue readingQueue = ReadingQueue(preferences.defaults);
 }
 
 class TegnalApp extends StatefulWidget {
@@ -165,7 +172,10 @@ class _TegnalAppState extends State<TegnalApp> {
           debugShowCheckedModeBanner: false,
           locale: Locale(L10n.language),
           theme: tegnalTheme(brightness),
-          builder: (context, child) => PrivacyCoverSync(preferences: widget.services.preferences.defaults, child: child!),
+          builder: (context, child) => ReadingQueueScope(
+            queue: widget.services.readingQueue,
+            child: PrivacyCoverSync(preferences: widget.services.preferences.defaults, child: child!),
+          ),
           home: _Root(state: _state, services: widget.services),
         );
       },
@@ -442,8 +452,35 @@ class _RootState extends State<_Root> {
         .then((_) => services.taste.dismissRecap(mode));
   }
 
+  /// Opens a waiting work on the site it was found on; the reader pages on through the list.
+  void _readQueued(BuildContext context, int id) {
+    final queue = services.readingQueue;
+    final site = queue.items.where((item) => item.id == id).firstOrNull?.site;
+    final content = services.content;
+    if (site != null && site != content.mangaSiteAddress && content.comicSites.contains(site) && !ComicSites.sharesNumbers(site, content.mangaSiteAddress)) {
+      content.switchComicsSite(site);
+    }
+    _contentRoutes.read(context, id, page: 1, queue: true);
+  }
+
+  void _showQueue(BuildContext context) => showAppSheet<void>(
+    context,
+    grabber: true,
+    builder: (sheetContext, controller) => ReadingQueueView(
+      queue: services.readingQueue,
+      scrollController: controller,
+      read: (id) {
+        Navigator.of(sheetContext).pop();
+        _readQueued(context, id);
+      },
+    ),
+  );
+
   Widget _mangaTabs() => RootTabView(
     state: state,
+    queue: services.readingQueue,
+    readQueued: _readQueued,
+    showQueue: _showQueue,
     pages: {
       AppTab.folders: TabNavigator(
         active: state.mode == AppMode.manga && state.tab == AppTab.folders,

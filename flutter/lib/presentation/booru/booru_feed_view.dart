@@ -26,6 +26,7 @@ import 'booru_common.dart';
 import 'booru_embedded_browser_view.dart';
 import 'booru_post_view.dart';
 import 'booru_settings_views.dart';
+import 'booru_favorites_view.dart';
 
 /// `BooruFeedView`: the selected servers' posts merged into one grid, with tag search,
 /// suggestions from every server, a sort menu and each server's failure on its own card.
@@ -397,7 +398,12 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   }
 
   void _hold(BuildContext context, BooruPost post) {
-    showWorkSaveFeedback(context, _booru.toggleFavorite(post, context: _discovery), bottom: tabBarClearance(context) + 8);
+    showWorkSaveFeedback(
+      context,
+      _booru.toggleFavorite(post, context: _discovery),
+      bottom: tabBarClearance(context) + 8,
+      pickFolder: (context) => pickBooruFolder(context, booru: _booru, post: post, discovery: _discovery),
+    );
   }
 
   @override
@@ -446,6 +452,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
                     itemKey: (id) => _keys.putIfAbsent(id, GlobalKey.new),
                     open: _open,
                     hold: _hold,
+                    holdSaves: true,
                   ),
                 ),
                 SliverPadding(

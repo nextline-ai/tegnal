@@ -26,6 +26,8 @@ import 'taste_context.dart';
 import 'taste_presentation.dart';
 import 'taste_reports_view.dart' show TasteTagListPage;
 import 'taste_settings_view.dart';
+import '../content/reading_queue_views.dart';
+import '../../core/content/reading_queue.dart';
 
 /// How far the feed reaches, then today's threads with the tuner at their head.
 /// Sections breathe more than the works inside them, which stay close together.
@@ -600,6 +602,39 @@ class SmartArtwork extends StatelessWidget {
       : ColoredBox(color: TegnalColors.secondaryLabel.resolveFrom(context).withValues(alpha: 0.12));
 }
 
+/// `smartHold`: holding a recommended work bookmarks it; a comic can also be carried to Up Next.
+class SmartHold extends StatelessWidget {
+  const SmartHold({super.key, required this.taste, required this.item, required this.onTap, required this.toggle, required this.child});
+  final TasteContext taste;
+  final TasteRecommendation item;
+  final VoidCallback onTap;
+  final VoidCallback toggle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final gallery = item.gallery;
+    if (item.post != null || gallery == null) return WorkHold(onTap: onTap, bookmark: toggle, child: child);
+    final page = gallery.pages.firstOrNull;
+    return WorkHold(
+      onTap: onTap,
+      bookmark: toggle,
+      queue: ReadingQueueScope.of(context),
+      item: () => ReadingQueueItem.fromGallery(id: gallery.id, gallery: gallery, site: ComicSites.active),
+      image: () => page == null ? null : taste.images.cachedImage(page.hash, thumbnail: true),
+      cover: () async {
+        if (page == null) return null;
+        try {
+          return await taste.images.data(page, galleryID: gallery.id, thumbnail: true);
+        } on Object {
+          return null;
+        }
+      },
+      child: child,
+    );
+  }
+}
+
 /// A card that shrinks a little while pressed (`RecapPressStyle`).
 class TastePressable extends StatefulWidget {
   const TastePressable({super.key, required this.child, required this.onTap, this.onLongPress});
@@ -682,9 +717,11 @@ class SmartPicksView extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 190),
                   child: Stack(
                     children: [
-                      TastePressable(
+                      SmartHold(
+                        taste: taste,
+                        item: item,
                         onTap: () => open(item),
-                        onLongPress: () => toggle(item),
+                        toggle: () => toggle(item),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: AspectRatio(
@@ -783,9 +820,11 @@ class SmartShelfView extends StatelessWidget {
               width: 132,
               child: Stack(
                 children: [
-                  TastePressable(
+                  SmartHold(
+                    taste: taste,
+                    item: item,
                     onTap: () => open(item),
-                    onLongPress: () => toggle(item),
+                    toggle: () => toggle(item),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Stack(

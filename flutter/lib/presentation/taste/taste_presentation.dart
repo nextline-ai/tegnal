@@ -23,6 +23,8 @@ import '../library/folders_view.dart' show anchorOf;
 import '../navigation/root_tab_view.dart';
 import '../works/artwork_grid.dart';
 import 'taste_context.dart';
+import 'taste_dashboard.dart';
+import '../booru/booru_favorites_view.dart';
 
 /// Shared presentation values keep raw tags intact for queries and evidence.
 abstract final class TastePresentation {
@@ -423,10 +425,11 @@ class TasteRecommendationCard extends StatelessWidget {
           label: WorkSaveResult.actionTitle(saved: _saved, mode: _mode),
         ): toggle,
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: SmartHold(
+        taste: taste,
+        item: item,
         onTap: open,
-        onLongPress: toggle,
+        toggle: toggle,
         child: Stack(
           children: [
             card,
@@ -456,7 +459,13 @@ void toggleRecommendation(BuildContext context, TasteContext taste, TasteRecomme
       galleryID: item.item.id,
     );
   }
-  showWorkSaveFeedback(context, feedback, session: post == null ? taste.comics.bookmarks : null, bottom: tabBarClearance(context) + 8);
+  showWorkSaveFeedback(
+    context,
+    feedback,
+    session: post == null ? taste.comics.bookmarks : null,
+    bottom: tabBarClearance(context) + 8,
+    pickFolder: post == null ? null : (context) => pickBooruFolder(context, booru: taste.booru, post: post, discovery: discovery),
+  );
 }
 
 /// `TasteWorkPresentation`: an image opens the viewer over the feed's images; a comic

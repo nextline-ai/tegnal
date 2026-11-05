@@ -31,6 +31,7 @@ import 'core/support/preferences.dart';
 import 'core/support/secure_secret_store.dart';
 import 'presentation/booru/booru_web_page.dart';
 import 'presentation/content/content_browser_transport.dart';
+import 'core/content/reading_queue.dart';
 import 'presentation/content/page_image_store.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
@@ -152,6 +153,7 @@ Future<AppServices> _launch() async {
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
+  ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
   await preparingStorage;
   await localizing;
   // Sign-in cookies live in the Android Keystore, never in the database or backups.

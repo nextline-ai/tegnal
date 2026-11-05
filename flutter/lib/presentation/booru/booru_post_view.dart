@@ -32,6 +32,8 @@ import 'booru_media_view.dart';
 import 'booru_post_details.dart';
 import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
+import 'booru_settings_views.dart';
+import '../content/viewer_quick_menu.dart';
 
 /// The next page of a feed, handed to an open viewer.
 class BooruViewerBatch {
@@ -111,6 +113,10 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
   );
   late bool _original = _defaults.boolean('booru.original') ?? false;
   bool _menuVisible = false;
+
+  /// The server's reason for a failed load, shown on the failure screen until the post changes.
+  String? _connectionFailure;
+  String? _connectionFailurePost;
 
   /// The post being translated, shown over the viewer until Original closes it.
   BooruPost? _translating;
@@ -257,8 +263,11 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
       if (!mounted || _post.id != post.id) return;
       if (error == BooruPostAccessError.removed) return _removedPost(post.id);
       if (error == BooruPostAccessError.goldRequired) return _skipGoldRestricted(post.id);
-      setState(() => _mediaStatus = 'error');
-      _showToast(BooruConnectionMessage.describe(error));
+      setState(() {
+        _mediaStatus = 'error';
+        _connectionFailure = BooruConnectionMessage.describe(error);
+        _connectionFailurePost = post.id;
+      });
     }
   }
 
@@ -281,7 +290,11 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
       if (!mounted || _post.id != post.id) return;
       if (error == BooruPostAccessError.removed) return _removedPost(post.id);
       if (error == BooruPostAccessError.goldRequired) return _skipGoldRestricted(post.id);
-      _showToast(BooruConnectionMessage.describe(error));
+      // Kept for the failure screen rather than flashed: it only matters if the image fails too.
+      setState(() {
+        _connectionFailure = BooruConnectionMessage.describe(error);
+        _connectionFailurePost = post.id;
+      });
     }
   }
 
@@ -497,19 +510,20 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
         if (!_dismiss.isActive) _dismiss.begin(context);
         _dismiss.update(offset);
       case true:
-        _dismiss.end(
-          delta: Offset(sideways, offset),
-          velocity: Offset(0, velocity),
-          screenHeight: MediaQuery.sizeOf(context).height,
-          exit: _close,
-        );
+        _dismiss.end(delta: Offset(sideways, offset), velocity: Offset(0, velocity), screenHeight: MediaQuery.sizeOf(context).height, exit: _close);
       case false:
         if (_dismiss.isActive) _dismiss.cancel();
     }
   }
 
   void _toggleFavorite() {
-    showWorkSaveFeedback(context, _booru.toggleFavorite(_post, context: widget.discovery), bottom: 16 + math.max(MediaQuery.paddingOf(context).bottom, 34));
+    final post = _post;
+    showWorkSaveFeedback(
+      context,
+      _booru.toggleFavorite(post, context: widget.discovery),
+      bottom: 16 + math.max(MediaQuery.paddingOf(context).bottom, 34),
+      pickFolder: (context) => pickBooruFolder(context, booru: _booru, post: post, discovery: widget.discovery),
+    );
     setState(() {});
   }
 
@@ -720,11 +734,16 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                   child: BooruMediaFailureView(
                     post: _post,
                     server: server,
+                    connection: _connectionFailurePost == _post.id ? _connectionFailure : null,
+                    validate: () async {
+                      await showAppSheet<void>(
+                        context,
+                        builder: (context, controller) => BooruValidationView(booru: _booru, server: server, initialURL: server.pageURL(_post.postID)),
+                      );
+                      if (mounted) _retryMedia();
+                    },
                     onGesture: _gesture,
-                    retry: () => setState(() {
-                      _mediaStatus = 'loading';
-                      _retry++;
-                    }),
+                    retry: _retryMedia,
                   ),
                 ),
               if (_showsLoading && _active && (_mediaStatus == 'loading' || _loadingMore && _requestedFromID != null))
@@ -789,6 +808,17 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                     ),
                   ),
                 ),
+              // A failure screen carries its own actions, so the menu waits for a tap instead of
+              // covering them. Only the menu moves, by its own height.
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 10 + media.padding.bottom,
+                child: ViewerMenuReveal(
+                  visible: _menuVisible,
+                  child: KeyedSubtree(key: const ValueKey('menu'), child: _quickMenu()),
+                ),
+              ),
               Positioned(
                 left: 16,
                 right: 16,
@@ -796,9 +826,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_menuVisible || failed)
-                      _quickMenu()
-                    else if (_pageNumber)
+                    if (!_menuVisible && _pageNumber)
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
@@ -832,57 +860,33 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
     );
   }
 
+  void _retryMedia() => setState(() {
+    _connectionFailure = null;
+    _mediaStatus = 'loading';
+    _retry++;
+  });
+
   Widget _quickMenu() {
-    const white = Color(0xFFFFFFFF);
-    final disabled = white.withValues(alpha: 0.3);
     final canGoNext = _index < _posts.length - 1 || widget.loadMore != null && _hasMore;
-    Widget icon(IconData icon, String label, VoidCallback? onTap, {double size = 22}) => Semantics(
-      button: true,
-      label: label,
-      enabled: onTap != null,
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox.square(
-          dimension: 44,
-          child: Icon(icon, size: size, color: onTap == null ? disabled : white),
-        ),
-      ),
-    );
-    return ReaderMenuGlass(
+    void close() {
+      setState(() => _menuVisible = false);
+      _scheduleAuto();
+    }
+
+    return ViewerQuickMenuPanel(
       key: _menuKey,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                icon(CupertinoIcons.chevron_left, L10n.text('Previous'), _index == 0 ? null : () => _move(-1)),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _jump,
-                    child: Center(
-                      child: Text(
-                        '${_index + 1} / ${_posts.length}',
-                        style: TegnalType.style(17, weight: FontWeight.w600, color: white),
-                      ),
-                    ),
-                  ),
-                ),
-                icon(CupertinoIcons.chevron_right, L10n.text('Next'), canGoNext ? () => _move(1) : null),
-                icon(CupertinoIcons.xmark_circle_fill, L10n.text('Close Menu'), () {
-                  setState(() => _menuVisible = false);
-                  _scheduleAuto();
-                }),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _menuActions(compact: false),
-          ],
-        ),
+      close: close,
+      navigation: ViewerQuickMenuNavigation(
+        position: '${_index + 1} / ${_posts.length}',
+        previousLabel: L10n.text('Previous'),
+        nextLabel: L10n.text('Next'),
+        closeLabel: L10n.text('Close Menu'),
+        previous: _index == 0 ? null : () => _move(-1),
+        next: canGoNext ? () => _move(1) : null,
+        jump: _jump,
+        close: close,
       ),
+      actions: _menuActions(compact: false),
     );
   }
 
@@ -909,8 +913,20 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
       (L10n.text('Share'), symbol(CupertinoIcons.square_arrow_up), _share),
       (L10n.text('More Settings'), symbol(CupertinoIcons.slider_horizontal_3), _openSettings),
     ];
-    final columns = compact ? 4 : 3;
     const white = Color(0xFFFFFFFF);
+    if (!compact) {
+      return ViewerQuickMenuGrid(
+        children: [
+          for (final (title, icon, action) in items)
+            ViewerQuickMenuButton(
+              title: title,
+              icon: SizedBox(height: 26, child: Center(child: icon)),
+              onTap: action,
+            ),
+        ],
+      );
+    }
+    const columns = 4;
     return Column(
       children: [
         for (var row = 0; row < (items.length / columns).ceil(); row++) ...[
@@ -945,7 +961,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                                           title,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: TegnalType.style(compact ? 9 : 12, weight: compact ? FontWeight.w500 : FontWeight.w400, color: white),
+                                          style: TegnalType.style(9, weight: FontWeight.w500, color: white),
                                         ),
                                       ],
                                     ),
@@ -970,10 +986,24 @@ void openExternalLink(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.
 /// `BooruMediaFailureView`: why the post cannot be shown, with the website link. The edges
 /// still take taps and horizontal swipes so the person can move on.
 class BooruMediaFailureView extends StatelessWidget {
-  const BooruMediaFailureView({super.key, required this.post, required this.server, this.removed = false, required this.onGesture, required this.retry});
+  const BooruMediaFailureView({
+    super.key,
+    required this.post,
+    required this.server,
+    this.removed = false,
+    this.connection,
+    this.validate,
+    required this.onGesture,
+    required this.retry,
+  });
   final BooruPost post;
   final BooruServer server;
   final bool removed;
+
+  /// Why the server would not answer and what to do about it; shown in place of the general
+  /// explanation, so the one thing to do next stays on screen.
+  final String? connection;
+  final VoidCallback? validate;
   final ValueChanged<BooruMediaGesture> onGesture;
   final VoidCallback retry;
 
@@ -1004,94 +1034,156 @@ class BooruMediaFailureView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 440),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(removed ? CupertinoIcons.trash : CupertinoIcons.exclamationmark_triangle, size: 34, color: white),
-                      const SizedBox(height: 16),
-                      Text(
-                        L10n.text(removed ? 'Deleted Post' : 'Unable to Load'),
-                        textAlign: TextAlign.center,
-                        style: TegnalType.style(22, weight: FontWeight.w700, color: white),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        L10n.text(
-                          removed
-                              ? 'This post was deleted or removed from the website.'
-                              : 'The media could not be loaded or its format is unavailable on this device.',
-                        ),
-                        textAlign: TextAlign.center,
-                        style: TegnalType.style(17, color: secondary),
-                      ),
-                      const SizedBox(height: 16),
-                      GestureDetector(
-                        onTap: () => openExternalLink(page),
-                        child: Container(
-                          height: 50,
-                          alignment: Alignment.center,
-                          decoration: ShapeDecoration(color: SystemColors.blue.resolveFrom(context), shape: const StadiumBorder()),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(CupertinoIcons.compass, size: 20, color: white),
-                              const SizedBox(width: 8),
-                              Text(
-                                L10n.text('Open on Website'),
-                                style: TegnalType.style(17, weight: FontWeight.w600, color: white),
+                  child: connection != null && !removed
+                      ? _connectionHelp(context, connection!, page)
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(removed ? CupertinoIcons.trash : CupertinoIcons.exclamationmark_triangle, size: 34, color: white),
+                            const SizedBox(height: 16),
+                            Text(
+                              L10n.text(removed ? 'Deleted Post' : 'Unable to Load'),
+                              textAlign: TextAlign.center,
+                              style: TegnalType.style(22, weight: FontWeight.w700, color: white),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              L10n.text(
+                                removed
+                                    ? 'This post was deleted or removed from the website.'
+                                    : 'The media could not be loaded or its format is unavailable on this device.',
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (!removed) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          L10n.text('If you can view this post on the website, contact the developer so we can fix it. Include the post link.'),
-                          textAlign: TextAlign.center,
-                          style: TegnalType.style(16, color: secondary),
-                        ),
-                        const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: () => openExternalLink('https://discord.gg/DFT9Hm66Gz'),
-                          child: Text(L10n.text('Official Discord'), style: TegnalType.style(17, color: SystemColors.blue.resolveFrom(context))),
-                        ),
-                        const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: () => openExternalLink(
-                            Uri(
-                              scheme: 'mailto',
-                              path: 'contact@nextline.work',
-                              queryParameters: {'subject': 'TEGNAL: ${L10n.text('Unable to Load')}', 'body': page},
-                            ).toString(),
-                          ),
-                          child: Text('contact@nextline.work', style: TegnalType.style(16, color: SystemColors.blue.resolveFrom(context))),
-                        ),
-                        const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: retry,
-                          child: Container(
-                            height: 34,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            decoration: ShapeDecoration(color: white.withValues(alpha: 0.15), shape: const StadiumBorder()),
-                            child: Center(
-                              widthFactor: 1,
-                              child: Text(
-                                L10n.text('Try Again'),
-                                style: TegnalType.style(15, weight: FontWeight.w500, color: white),
+                              textAlign: TextAlign.center,
+                              style: TegnalType.style(17, color: secondary),
+                            ),
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () => openExternalLink(page),
+                              child: Container(
+                                height: 50,
+                                alignment: Alignment.center,
+                                decoration: ShapeDecoration(color: SystemColors.blue.resolveFrom(context), shape: const StadiumBorder()),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(CupertinoIcons.compass, size: 20, color: white),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      L10n.text('Open on Website'),
+                                      style: TegnalType.style(17, weight: FontWeight.w600, color: white),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                            if (!removed) ...[
+                              const SizedBox(height: 16),
+                              Text(
+                                L10n.text('If you can view this post on the website, contact the developer so we can fix it. Include the post link.'),
+                                textAlign: TextAlign.center,
+                                style: TegnalType.style(16, color: secondary),
+                              ),
+                              const SizedBox(height: 16),
+                              GestureDetector(
+                                onTap: () => openExternalLink('https://discord.gg/DFT9Hm66Gz'),
+                                child: Text(L10n.text('Official Discord'), style: TegnalType.style(17, color: SystemColors.blue.resolveFrom(context))),
+                              ),
+                              const SizedBox(height: 16),
+                              GestureDetector(
+                                onTap: () => openExternalLink(
+                                  Uri(
+                                    scheme: 'mailto',
+                                    path: 'contact@nextline.work',
+                                    queryParameters: {'subject': 'TEGNAL: ${L10n.text('Unable to Load')}', 'body': page},
+                                  ).toString(),
+                                ),
+                                child: Text('contact@nextline.work', style: TegnalType.style(16, color: SystemColors.blue.resolveFrom(context))),
+                              ),
+                              const SizedBox(height: 16),
+                              GestureDetector(
+                                onTap: retry,
+                                child: Container(
+                                  height: 34,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                                  decoration: ShapeDecoration(color: white.withValues(alpha: 0.15), shape: const StadiumBorder()),
+                                  child: Center(
+                                    widthFactor: 1,
+                                    child: Text(
+                                      L10n.text('Try Again'),
+                                      style: TegnalType.style(15, weight: FontWeight.w500, color: white),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
-                    ],
-                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _connectionHelp(BuildContext context, String message, String page) {
+    const white = Color(0xFFFFFFFF);
+    const secondary = Color(0x99EBEBF5);
+    final blue = SystemColors.blue.resolveFrom(context);
+    Widget button(String title, {IconData? icon, required bool prominent, VoidCallback? onTap}) => GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 50,
+        alignment: Alignment.center,
+        decoration: ShapeDecoration(color: prominent ? blue : white.withValues(alpha: 0.15), shape: const StadiumBorder()),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[Icon(icon, size: 20, color: white), const SizedBox(width: 8)],
+            Text(
+              title,
+              style: TegnalType.style(17, weight: FontWeight.w600, color: white),
+            ),
+          ],
+        ),
+      ),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(CupertinoIcons.wifi_exclamationmark, size: 34, color: white),
+        const SizedBox(height: 16),
+        Text(
+          L10n.text('Unable to Load'),
+          textAlign: TextAlign.center,
+          style: TegnalType.style(22, weight: FontWeight.w700, color: white),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TegnalType.style(17, color: secondary),
+        ),
+        const SizedBox(height: 16),
+        if (validate != null) ...[
+          button(L10n.text('Validate Client'), icon: CupertinoIcons.checkmark_shield, prominent: true, onTap: validate),
+          const SizedBox(height: 12),
+        ],
+        button(L10n.text('Try Again'), prominent: false, onTap: retry),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTap: () => openExternalLink(page),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.compass, size: 16, color: blue),
+              const SizedBox(width: 6),
+              Text(L10n.text('Open on Website'), style: TegnalType.style(16, color: blue)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

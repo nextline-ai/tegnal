@@ -6,6 +6,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/support/l10n.dart';
+import '../../core/taste/taste_models.dart';
 import '../design/app_sheet.dart';
 import '../design/system_colors.dart';
 import '../library/add_work_sheet.dart';
@@ -18,7 +19,15 @@ Timer? _timer;
 /// `workSaveFeedback`: a capsule notice at the bottom with the result's icon and message,
 /// played with the native haptic and dismissed after its duration. A new comic save offers
 /// Change Folder, which opens the folders and then confirms where the work went.
-void showWorkSaveFeedback(BuildContext context, WorkSaveFeedback feedback, {BookmarkSession? session, double? bottom}) {
+///
+/// [pickFolder] lets a newly saved image change folder the same way.
+void showWorkSaveFeedback(
+  BuildContext context,
+  WorkSaveFeedback feedback, {
+  BookmarkSession? session,
+  double? bottom,
+  Future<String?> Function(BuildContext context)? pickFolder,
+}) {
   switch (feedback.result.haptic) {
     case WorkSaveHaptic.success:
       HapticFeedback.mediumImpact();
@@ -61,12 +70,29 @@ void showWorkSaveFeedback(BuildContext context, WorkSaveFeedback feedback, {Book
       }
     };
   }
+  if (pickFolder != null && feedback.result == const WorkSaveResult.added(TasteMode.booru)) {
+    changeFolder = () async {
+      _timer?.cancel();
+      _current?.remove();
+      _current = null;
+      final filed = await pickFolder(navigator.context);
+      if (filed != null && context.mounted) {
+        showWorkSaveFeedback(
+          context,
+          WorkSaveFeedback(feedback.result, folder: filed),
+          bottom: bottom,
+          pickFolder: pickFolder,
+        );
+      }
+    };
+  }
   final entry = OverlayEntry(
     builder: (context) => _Notice(feedback: feedback, changeFolder: changeFolder, bottom: bottom),
   );
   _current = entry;
   overlay.insert(entry);
-  _timer = Timer(feedback.duration, () {
+  // Longer while it offers Change Folder.
+  _timer = Timer(changeFolder != null ? const Duration(seconds: 5) : feedback.duration, () {
     if (_current == entry) {
       entry.remove();
       _current = null;

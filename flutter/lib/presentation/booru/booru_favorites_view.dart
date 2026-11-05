@@ -24,6 +24,7 @@ import '../works/search_controls.dart';
 import 'booru_common.dart';
 import 'booru_post_view.dart';
 import '../design/alert_dialog.dart';
+import '../library/folder_picker_sheet.dart';
 
 /// `BooruFavoritesView`: All Favorites above the folders as bento cards.
 class BooruFavoritesView extends StatefulWidget {
@@ -647,20 +648,30 @@ void showBooruPostMenu(BuildContext cardContext, {required BooruContext booru, r
 }
 
 Future<void> showBooruFolderPicker(BuildContext context, {required BooruContext booru, required BooruPost post, DiscoveryContext? discovery}) =>
-    showAppSheet<void>(
-      context,
-      grabber: true,
-      medium: true,
-      builder: (context, controller) => BooruFolderPicker(booru: booru, post: post, discovery: discovery, scrollController: controller),
-    );
+    pickBooruFolder(context, booru: booru, post: post, discovery: discovery);
 
-/// `BooruFolderPicker`: saves the image into the chosen folder.
+/// Opens the folders and names the one the image went to, so the notice that offered the change
+/// can say where it went.
+Future<String?> pickBooruFolder(BuildContext context, {required BooruContext booru, required BooruPost post, DiscoveryContext? discovery}) async {
+  String? filed;
+  await showAppSheet<void>(
+    context,
+    grabber: true,
+    medium: true,
+    builder: (context, controller) =>
+        BooruFolderPicker(booru: booru, post: post, discovery: discovery, scrollController: controller, filed: (name) => filed = name),
+  );
+  return filed;
+}
+
+/// `BooruFolderPicker`: saves the image into the chosen folder, in the folder list both modes share.
 class BooruFolderPicker extends StatefulWidget {
-  const BooruFolderPicker({super.key, required this.booru, required this.post, this.discovery, this.scrollController});
+  const BooruFolderPicker({super.key, required this.booru, required this.post, this.discovery, this.scrollController, this.filed});
   final BooruContext booru;
   final BooruPost post;
   final DiscoveryContext? discovery;
   final ScrollController? scrollController;
+  final ValueChanged<String>? filed;
 
   @override
   State<BooruFolderPicker> createState() => _BooruFolderPickerState();
@@ -669,12 +680,11 @@ class BooruFolderPicker extends StatefulWidget {
 class _BooruFolderPickerState extends State<BooruFolderPicker> {
   String? _error;
 
-  Future<void> _create() async {
-    final result = await showFolderNamePrompt(context);
-    if (!mounted || result == null || result.name.isEmpty) return;
+  void _file(String id, String name) {
     try {
-      widget.booru.store.saveFolder(name: result.name);
-      setState(() {});
+      widget.booru.store.saveFavorite(widget.post, folderID: id, context: widget.discovery);
+      widget.filed?.call(name);
+      Navigator.of(context).pop();
     } on Object catch (error) {
       setState(() => _error = '$error');
     }
@@ -684,56 +694,21 @@ class _BooruFolderPickerState extends State<BooruFolderPicker> {
   Widget build(BuildContext context) {
     final store = widget.booru.store;
     final current = store.folderIDFor(widget.post);
-    final tint = TegnalColors.tint.resolveFrom(context);
-    return ScrollEdgeSheet(
-      background: mediumSheetGlass,
-      bar: SheetNavigationBar(
-        title: L10n.text('Save to Folder'),
-        leading: GlassTextButton(label: L10n.text('Cancel'), onPressed: () => Navigator.of(context).pop()),
-      ),
-      child: ListView(
-        controller: widget.scrollController,
-        padding: EdgeInsets.only(top: 69 + 35, bottom: 32 + MediaQuery.paddingOf(context).bottom),
-        children: [
-          FormSection(
-            children: [
-              for (final folder in store.folders())
-                FormRow(
-                  onTap: () {
-                    try {
-                      store.saveFavorite(widget.post, folderID: folder.id, context: widget.discovery);
-                      Navigator.of(context).pop();
-                    } on Object catch (error) {
-                      setState(() => _error = '$error');
-                    }
-                  },
-                  child: Row(
-                    children: [
-                      Icon(CupertinoIcons.folder_fill, size: 22, color: Color(folder.color)),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text(folder.displayName)),
-                      if (current == folder.id) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
-                    ],
-                  ),
-                ),
-              FormRow(
-                onTap: _create,
-                child: Row(
-                  children: [
-                    Icon(CupertinoIcons.folder_badge_plus, size: 22, color: tint),
-                    const SizedBox(width: 12),
-                    Text(L10n.text('Create Folder'), style: TegnalType.style(17, color: tint)),
-                  ],
-                ),
-              ),
-              if (_error != null)
-                FormRow(
-                  child: Text(_error!, style: TegnalType.style(17, color: CupertinoColors.systemRed.resolveFrom(context))),
-                ),
-            ],
-          ),
-        ],
-      ),
+    return FolderPickerSheet(
+      scrollController: widget.scrollController,
+      error: _error,
+      rows: [
+        for (final folder in store.folders()) FolderPickerRow(id: folder.id, name: folder.displayName, color: folder.color, isCurrent: folder.id == current),
+      ],
+      pick: (row) => _file(row.id, row.name),
+      create: (name) {
+        try {
+          final id = store.saveFolder(name: name);
+          _file(id, name.trim());
+        } on Object catch (error) {
+          setState(() => _error = '$error');
+        }
+      },
     );
   }
 }

@@ -2,6 +2,11 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/foundation.dart' show Uint8List;
+
+import '../../core/content/manga_urls.dart';
+import '../../core/content/reading_queue.dart';
+import 'reading_queue_views.dart';
 
 import '../../core/content/gallery_content.dart';
 import '../../core/storage/app_database.dart';
@@ -288,6 +293,7 @@ class _ExploreViewState extends State<ExploreView> {
                     bookmarked: _bookmarked.contains(id),
                     open: () => widget.openGallery(id),
                     hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery),
+                    images: widget.images,
                   );
                 },
               ),
@@ -601,13 +607,25 @@ class ContentUnavailable extends StatelessWidget {
 }
 
 class _GalleryGridCard extends StatefulWidget {
-  const _GalleryGridCard({super.key, required this.id, required this.preview, required this.style, required this.bookmarked, required this.open, this.hold});
+  const _GalleryGridCard({
+    super.key,
+    required this.id,
+    required this.preview,
+    required this.style,
+    required this.bookmarked,
+    required this.open,
+    this.hold,
+    this.images,
+  });
   final int id;
   final GalleryFeedPreview? preview;
   final ArtworkCellStyle style;
   final bool bookmarked;
   final VoidCallback open;
   final VoidCallback? hold;
+
+  /// Where a carried work's cover comes from.
+  final PageImageStore? images;
 
   @override
   State<_GalleryGridCard> createState() => _GalleryGridCardState();
@@ -647,39 +665,81 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
     final display = widget.preview?.display;
     final image = widget.preview?.displayImage;
     final type = display?.type ?? '';
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.open,
-      onLongPress: widget.hold,
-      child: Stack(
-        children: [
-          GalleryCardLayout(
-            style: style,
-            title: display?.title ?? L10n.text('Work %@', ['${widget.id}']),
-            artists: display?.artists ?? '',
-            language: display?.language ?? '',
-            category: type.isEmpty ? '' : GalleryCategory.title(type),
-            categoryColor: galleryCategoryColor(type),
-            cover: image != null
-                ? RawImage(image: image, fit: BoxFit.cover, filterQuality: ui.FilterQuality.medium)
-                : ColoredBox(
-                    color: TegnalColors.coverPlaceholder.resolveFrom(context),
-                    child: Center(child: Icon(Symbols.book, color: TegnalColors.secondaryLabel.resolveFrom(context))),
-                  ),
-          ),
-          if (widget.bookmarked)
-            Positioned(
-              left: style.inset(7),
-              top: style.inset(7),
-              child: Container(
-                padding: EdgeInsets.all(style.inset(8)),
-                decoration: const ShapeDecoration(color: Color(0xB8000000), shape: CircleBorder()),
-                child: Icon(Symbols.bookmarkFill, size: style.fontSize(14), color: CupertinoColors.systemYellow),
-              ),
+    final queue = ReadingQueueScope.of(context);
+    final queued = queue?.contains(widget.id) ?? false;
+    final hold = widget.hold;
+    final card = Stack(
+      children: [
+        GalleryCardLayout(
+          style: style,
+          title: display?.title ?? L10n.text('Work %@', ['${widget.id}']),
+          artists: display?.artists ?? '',
+          language: display?.language ?? '',
+          category: type.isEmpty ? '' : GalleryCategory.title(type),
+          categoryColor: galleryCategoryColor(type),
+          cover: image != null
+              ? RawImage(image: image, fit: BoxFit.cover, filterQuality: ui.FilterQuality.medium)
+              : ColoredBox(
+                  color: TegnalColors.coverPlaceholder.resolveFrom(context),
+                  child: Center(child: Icon(Symbols.book, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+                ),
+        ),
+        if (widget.bookmarked)
+          Positioned(
+            left: style.inset(7),
+            top: style.inset(7),
+            child: Container(
+              padding: EdgeInsets.all(style.inset(8)),
+              decoration: const ShapeDecoration(color: Color(0xB8000000), shape: CircleBorder()),
+              child: Icon(Symbols.bookmarkFill, size: style.fontSize(14), color: CupertinoColors.systemYellow),
             ),
-        ],
-      ),
+          ),
+        Positioned(
+          right: style.inset(7),
+          top: style.inset(7),
+          child: AnimatedScale(
+            scale: queued ? 1 : 0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            child: Container(
+              padding: EdgeInsets.all(style.inset(8)),
+              decoration: const ShapeDecoration(color: Color(0xB8000000), shape: CircleBorder()),
+              child: Icon(CupertinoIcons.text_badge_plus, size: style.fontSize(12), color: const Color(0xFFFFFFFF)),
+            ),
+          ),
+        ),
+      ],
     );
+    if (hold == null) return GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.open, child: card);
+    // Held and let go, the work is bookmarked; moved after the hold, it is carried down to Up Next.
+    return WorkHold(
+      onTap: widget.open,
+      bookmark: hold,
+      queue: queue,
+      item: () => ReadingQueueItem.fromGallery(
+        id: widget.id,
+        gallery: widget.preview?.gallery,
+        title: display?.title,
+        artists: display?.artists,
+        language: display?.language,
+        type: display?.type,
+        site: ComicSites.active,
+      ),
+      image: () => widget.preview?.displayImage,
+      cover: () => _cover(),
+      child: card,
+    );
+  }
+
+  Future<Uint8List?> _cover() async {
+    final page = widget.preview?.gallery?.pages.firstOrNull;
+    final images = widget.images;
+    if (page == null || images == null) return null;
+    try {
+      return await images.data(page, galleryID: widget.id, thumbnail: true);
+    } on Object {
+      return null;
+    }
   }
 }
 

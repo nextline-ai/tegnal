@@ -23,6 +23,10 @@ import 'library_routes.dart';
 import 'local_thumbnail.dart';
 import '../design/alert_dialog.dart';
 import '../../core/content/manga_urls.dart';
+import '../content/reading_queue_views.dart';
+import '../../core/content/reading_queue.dart';
+
+import 'dart:io';
 
 /// `WorksGridView`: a folder's saved works, every saved work, or a saved-works search,
 /// with the category filter, selection, quick jumps and each work's menu.
@@ -143,7 +147,9 @@ class _WorksGridViewState extends State<WorksGridView> {
       context: context,
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Saved from %@', [site])),
-        content: Text(L10n.text('This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work.', [site, current])),
+        content: Text(
+          L10n.text('This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work.', [site, current]),
+        ),
         actions: [
           CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Switch and Open'))),
           CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Open Here'))),
@@ -245,6 +251,28 @@ class _WorksGridViewState extends State<WorksGridView> {
       preview: WorkContextPreview(work: work),
       previewSize: Size(340, WorkContextPreview.height(context, work)),
       actions: [
+        if (ReadingQueueScope.read(context) case final queue?)
+          queue.contains(id)
+              ? ContextMenuAction(title: L10n.text('Remove from Up Next'), icon: CupertinoIcons.minus_circle, onSelected: () => queue.remove(id))
+              : ContextMenuAction(
+                  title: L10n.text('Add to Up Next'),
+                  icon: CupertinoIcons.text_badge_plus,
+                  onSelected: () {
+                    final path = work.thumbStatus == 'ready' ? work.thumbPath : null;
+                    final added = queue.add(
+                      ReadingQueueItem.fromGallery(
+                        id: id,
+                        title: work.hasTitle ? work.title : null,
+                        artists: work.artists,
+                        language: work.language,
+                        type: work.type,
+                        site: work.site,
+                      ),
+                      cover: path == null ? null : File(path).readAsBytes().then<Uint8List?>((data) => data, onError: (_) => null),
+                    );
+                    if (added) HapticFeedback.heavyImpact();
+                  },
+                ),
         ContextMenuAction(
           title: L10n.text('Move to Another Folder'),
           icon: CupertinoIcons.folder,

@@ -98,7 +98,8 @@ class ContentRoutes {
     ),
   );
 
-  void read(BuildContext context, int id, {required int page, bool resumesProgress = true}) => openReader(
+  /// [queue] opens a work from Up Next; any reader can move on to the works waiting there.
+  void read(BuildContext context, int id, {required int page, bool resumesProgress = true, bool queue = false}) => openReader(
     context,
     galleryID: id,
     initialPage: page,
@@ -108,7 +109,8 @@ class ContentRoutes {
     database: database,
     preferences: preferences,
     resumesProgress: resumesProgress,
-    bookmark: (gallery) async => toggleBookmark(context, id, gallery),
+    // The open work, which changes when the reader moves on through Up Next.
+    bookmark: (gallery) async => toggleBookmark(context, gallery.id, gallery),
     search: (text) => search(context, text),
     download: downloads == null
         ? null

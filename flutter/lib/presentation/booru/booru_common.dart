@@ -23,6 +23,7 @@ import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../settings/downloads_view.dart';
 import '../works/artwork_grid.dart';
+import '../content/reading_queue_views.dart';
 
 /// What every image-mode screen shares, created once with the root.
 class BooruContext {
@@ -330,6 +331,7 @@ class BooruPostGridSliver extends StatelessWidget {
     this.selection,
     this.toggleSelection,
     this.hold,
+    this.holdSaves = false,
     this.prefetch,
     this.topMarginScale = 1,
     this.itemKey,
@@ -342,6 +344,9 @@ class BooruPostGridSliver extends StatelessWidget {
   final Set<String>? selection;
   final ValueChanged<BooruPost>? toggleSelection;
   final void Function(BuildContext context, BooruPost post)? hold;
+
+  /// Whether [hold] saves the image, which then presses like a held comic.
+  final bool holdSaves;
 
   /// Asks for the next page as the last rows appear.
   final VoidCallback? prefetch;
@@ -381,19 +386,22 @@ class BooruPostGridSliver extends StatelessWidget {
               ? WorkSaveResult.accessibilityValue(saved: favorites.contains(post.id), mode: TasteMode.booru)
               : '',
           child: Builder(
-            builder: (cardContext) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => selection != null ? toggleSelection?.call(post) : open(post),
-              onLongPress: selection != null || hold == null ? null : () => hold!(cardContext, post),
-              child: selection == null
-                  ? card
-                  : Stack(
-                      children: [
-                        card,
-                        Positioned(right: 10, top: 10, child: _SelectionMark(selected: selection.contains(post.id))),
-                      ],
-                    ),
-            ),
+            // A hold that saves presses the image as comics do; one that opens a menu does not.
+            builder: (cardContext) => selection == null && hold != null && holdSaves
+                ? WorkHold(onTap: () => open(post), bookmark: () => hold!(cardContext, post), child: card)
+                : GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => selection != null ? toggleSelection?.call(post) : open(post),
+                    onLongPress: selection != null || hold == null ? null : () => hold!(cardContext, post),
+                    child: selection == null
+                        ? card
+                        : Stack(
+                            children: [
+                              card,
+                              Positioned(right: 10, top: 10, child: _SelectionMark(selected: selection.contains(post.id))),
+                            ],
+                          ),
+                  ),
           ),
         );
       },

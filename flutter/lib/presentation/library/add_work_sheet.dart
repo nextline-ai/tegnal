@@ -14,6 +14,7 @@ import '../design/tegnal_theme.dart';
 import 'folder_name_prompt.dart';
 import 'library_routes.dart';
 import '../../core/content/manga_urls.dart';
+import 'folder_picker_sheet.dart';
 
 /// `AddWorkSheet`: saves every work number or link in the text into the chosen folder.
 class AddWorkSheet extends StatefulWidget {
@@ -286,45 +287,18 @@ class _WorkFolderSheetState extends State<WorkFolderSheet> {
     Navigator.of(context).pop();
   }
 
-  Future<void> _create() async {
-    final result = await showFolderNamePrompt(context);
-    if (!mounted || result == null || result.name.isEmpty) return;
-    _file(widget.database.createFolder(name: result.name));
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final tint = TegnalColors.tint.resolveFrom(context);
-    return ScrollEdgeSheet(
-      bar: SheetNavigationBar(
-        title: L10n.text('Save to Folder'),
-        leading: GlassTextButton(label: L10n.text('Cancel'), onPressed: () => Navigator.of(context).pop()),
-      ),
-      child: ListView(
-        controller: widget.scrollController,
-        padding: EdgeInsets.only(top: 76 + 4, bottom: 32 + MediaQuery.paddingOf(context).bottom),
-        children: [
-          FormSection(
-            children: [
-              FormRow(
-                onTap: _create,
-                child: Row(
-                  children: [
-                    Icon(CupertinoIcons.folder_badge_plus, size: 22, color: tint),
-                    const SizedBox(width: 8),
-                    Text(L10n.text('Create New Folder…'), style: TegnalType.style(17, color: tint)),
-                  ],
-                ),
-              ),
-              for (final folder in _folders)
-                FormRow(
-                  onTap: () => _file(folder),
-                  child: FolderChoiceRow(folder: folder, selected: folder.id == widget.savedFolders[widget.galleryID]),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => FolderPickerSheet(
+    scrollController: widget.scrollController,
+    rows: [
+      for (final folder in _folders)
+        if (folder.id case final id?)
+          FolderPickerRow(id: '$id', name: folder.displayName, color: folder.color, isCurrent: id == widget.savedFolders[widget.galleryID]),
+    ],
+    pick: (row) {
+      final folder = _folders.where((folder) => '${folder.id}' == row.id).firstOrNull;
+      if (folder != null) _file(folder);
+    },
+    create: (name) => _file(widget.database.createFolder(name: name)),
+  );
 }

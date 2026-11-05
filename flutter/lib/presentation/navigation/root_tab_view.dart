@@ -7,41 +7,84 @@ import '../../core/support/l10n.dart';
 import '../design/glass.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
+import '../../core/content/reading_queue.dart';
+import '../content/reading_queue_views.dart';
 import 'app_state.dart';
 
 /// Height of the floating tab bar, and its distance from the bottom edge on a phone.
 const double tabBarHeight = 62;
 const double _tabBarGap = 21;
 
-/// Space a scrolling root screen leaves under its content for the floating tab bar.
-double tabBarClearance(BuildContext context) => tabBarHeight + _bottomGap(context) + 16;
+/// Space a scrolling root screen leaves under its content for the floating tab bar, and for the
+/// Up Next bar above it while works wait.
+double tabBarClearance(BuildContext context) => tabBarHeight + _bottomGap(context) + 16 + ReadingQueueInset.of(context);
 
 double _bottomGap(BuildContext context) => math.max(_tabBarGap, MediaQuery.paddingOf(context).bottom - 13);
 
 /// The root of each library: five destinations kept alive while switching, under
 /// the iOS 26 floating tab bar with Smart in its own circle.
 class RootTabView extends StatelessWidget {
-  const RootTabView({super.key, required this.state, required this.pages});
+  const RootTabView({super.key, required this.state, required this.pages, this.queue, this.readQueued, this.showQueue});
   final AppState state;
   final Map<AppTab, Widget> pages;
+
+  /// Comics' Up Next, which sits above the tabs where a music app keeps what plays next.
+  final ReadingQueue? queue;
+  final void Function(BuildContext context, int id)? readQueued;
+  final void Function(BuildContext context)? showQueue;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: state,
+      listenable: Listenable.merge([state, ?queue]),
       builder: (context, _) {
         final tabs = AppTab.values;
+        final queue = this.queue;
+        final next = queue?.items.firstOrNull;
+        // The bar steps aside while a work is carried to the larger panel in its place.
+        final showsBar = next != null && queue?.carried == null;
+        final inset = queue == null || queue.isEmpty ? 0.0 : readingQueueBarHeight + 8;
         return Stack(
           children: [
             Positioned.fill(
-              child: IndexedStack(index: tabs.indexOf(state.tab), children: [for (final tab in tabs) pages[tab] ?? const SizedBox.shrink()]),
+              // Lists end above the bar and notices rise above it. The room follows the list, not
+              // a carried work, so the screen never shifts under the finger.
+              child: ReadingQueueInset(
+                height: inset,
+                child: IndexedStack(index: tabs.indexOf(state.tab), children: [for (final tab in tabs) pages[tab] ?? const SizedBox.shrink()]),
+              ),
             ),
+            if (queue != null)
+              Positioned(
+                left: _tabBarGap,
+                right: _tabBarGap,
+                bottom: _bottomGap(context) + tabBarHeight + 8,
+                child: IgnorePointer(
+                  ignoring: !showsBar,
+                  child: AnimatedSlide(
+                    offset: showsBar ? Offset.zero : const Offset(0, 0.4),
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: showsBar ? 1 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: next == null
+                          ? const SizedBox(height: readingQueueBarHeight)
+                          : ReadingQueueBar(queue: queue, next: next, read: (id) => readQueued?.call(context, id), showList: () => showQueue?.call(context)),
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
               left: 0,
               right: 0,
               bottom: _bottomGap(context),
               child: FloatingTabBar(state: state),
             ),
+            if (queue != null)
+              Positioned.fill(
+                child: ReadingQueueCarryOverlay(queue: queue, bottom: _bottomGap(context) + tabBarHeight + 4),
+              ),
           ],
         );
       },
@@ -126,9 +169,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                         final slot = constraints.maxWidth / items.length;
                         final dragX = _dragX;
                         // Following the finger, the selection stays whole inside the capsule.
-                        final left = dragX == null
-                            ? slot * math.max(0, active)
-                            : (dragX - slot / 2).clamp(0.0, constraints.maxWidth - slot);
+                        final left = dragX == null ? slot * math.max(0, active) : (dragX - slot / 2).clamp(0.0, constraints.maxWidth - slot);
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onHorizontalDragStart: (details) => _slide(details.localPosition.dx, slot, items.length),
@@ -152,7 +193,9 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                                     scale: dragX == null ? 1 : 1.06,
                                     duration: const Duration(milliseconds: 180),
                                     curve: Curves.easeOut,
-                                    child: DecoratedBox(decoration: ShapeDecoration(color: selection, shape: const StadiumBorder())),
+                                    child: DecoratedBox(
+                                      decoration: ShapeDecoration(color: selection, shape: const StadiumBorder()),
+                                    ),
                                   ),
                                 ),
                               Row(
