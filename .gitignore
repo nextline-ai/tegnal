@@ -57,6 +57,7 @@ __pycache__/
 
 # Local research and working records; GitHub Pages publishes all of docs/
 /research/
+/docs/app-store/
 /docs/app-store-review.md
 /docs/challenge-example.json
 /docs/challenges/

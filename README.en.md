@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Down_button_en_mobile.svg"><img src="docs/assets/readme/Down_button_en.svg" alt="Download TEGNAL on TestFlight"></picture></a>
-  <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_en_mobile.svg"><img src="docs/assets/readme/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
+  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_en_mobile.svg"><img src="docs/assets/readme/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
 </p>
 
 <p align="center">
@@ -123,7 +123,7 @@ Signing and distributing to devices takes an Apple Developer setup and provision
   <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
 </picture>
 
-Bug reports and ideas are welcome on [Discord](https://discord.gg/vUTGZNMaMB).
+Bug reports and ideas are welcome on [Discord](https://discord.gg/DFT9Hm66Gz).
 
 NextLine · [nextline.work](https://nextline.work) · [contact@nextline.work](mailto:contact@nextline.work)
 

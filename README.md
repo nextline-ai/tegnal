@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Down_button_kr_mobile.svg"><img src="docs/assets/readme/Down_button_kr.svg" alt="TestFlight에서 TEGNAL 다운로드"></picture></a>
-  <a href="https://discord.gg/vUTGZNMaMB"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_kr_mobile.svg"><img src="docs/assets/readme/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
+  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_kr_mobile.svg"><img src="docs/assets/readme/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
 </p>
 
 <p align="center">
@@ -123,7 +123,7 @@ iOS 앱은 `native-ios/TEGNAL`에 있습니다. `native-ios/TEGNAL.xcodeproj`를
   <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
 </picture>
 
-버그 제보와 기능 제안은 [Discord](https://discord.gg/vUTGZNMaMB)에 남겨 주세요.
+버그 제보와 기능 제안은 [Discord](https://discord.gg/DFT9Hm66Gz)에 남겨 주세요.
 
 NextLine · [nextline.work](https://nextline.work) · [contact@nextline.work](mailto:contact@nextline.work)
 
