@@ -55,6 +55,7 @@ struct BooruRootView: View {
                 }.appRootHeader("Tags")
             },
             settings: NavigationStack { BooruMoreView(source: source).appRootHeader("More") })
+        .environment(\.isDisplayedAppModeActive, env.mode == .booru)
         .onChange(of: store.servers.count) { old, new in
             if env.mode == .booru && old == 0 && new > 0 && (selectedTab == .folders || selectedTab == .works) { selectedTab = .works }
         }

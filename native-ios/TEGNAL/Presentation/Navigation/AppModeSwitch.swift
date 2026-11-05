@@ -120,10 +120,18 @@ private final class AppModeThumbView: UIView {
 }
 
 private struct DisplayedAppModeKey: EnvironmentKey { static let defaultValue: AppMode? = nil }
+private struct DisplayedAppModeActiveKey: EnvironmentKey { static let defaultValue = true }
 extension EnvironmentValues {
     var displayedAppMode: AppMode? {
         get { self[DisplayedAppModeKey.self] }
         set { self[DisplayedAppModeKey.self] = newValue }
+    }
+    /// Whether this library is the one on screen. Each library root reads the app mode once and
+    /// hands it down, so grid cells never observe AppEnvironment themselves. An iPad on iOS 18.2
+    /// ran out of memory after observations of one long-lived object piled up past three million.
+    var isDisplayedAppModeActive: Bool {
+        get { self[DisplayedAppModeActiveKey.self] }
+        set { self[DisplayedAppModeActiveKey.self] = newValue }
     }
 }
 

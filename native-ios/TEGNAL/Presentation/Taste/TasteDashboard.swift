@@ -206,12 +206,15 @@ struct TasteDashboard: View {
     }
     private var works: some View {
         let items = feed.visibleItems(in: env.booru), picked = Set(picks.map(\.id))
+        let servers = Dictionary(env.booru.servers.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let favorites = env.booru.favoriteIDs, control = env.taste.control
         return Group {
             if !items.isEmpty {
                 let prefetchThresholdIndex = max(0, items.count - lookahead)
                 ArtworkGrid(mode: mode == .booru ? .booru : .manga, surroundingPadding: 20, topMarginScale: 0.5) { _ in
                     ForEach(Array(items.enumerated()).filter { !picked.contains($0.element.id) }, id: \.element.id) { index, item in
-                        TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id), feedback: feedback)
+                        TasteRecommendationCard(item: item, open: { opened = item }, toggle: { toggle(item) }, isBookmarked: bookmarks.contains(item.item.id), feedback: feedback,
+                                                server: item.post.flatMap { servers[$0.serverID] }, isFavorite: item.post.map { favorites.contains($0.id) } ?? false, control: control)
                             .id(item.id)
                             .onAppear {
                                 guard isActiveMode, scenePhase == .active else { return }

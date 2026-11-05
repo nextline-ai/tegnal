@@ -79,9 +79,12 @@ struct TasteArtwork: View {
     var post: BooruPost? = nil
     var gallery: NativeGallery? = nil
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.isDisplayedAppModeActive) private var modeActive
+    @Environment(\.displayedAppMode) private var displayedMode
     @Environment(\.scenePhase) private var scenePhase
     @State private var cover: UIImage?
     @State private var loadedHash: String?
+    private var loads: Bool { modeActive && displayedMode != .booru && scenePhase == .active }
     @State private var failed = false
 
     init(post: BooruPost? = nil, gallery: NativeGallery? = nil) {
@@ -107,8 +110,8 @@ struct TasteArtwork: View {
             }
         }
         .accessibilityHidden(true)
-        .task(id: "\(gallery?.id ?? 0):\(env.mode):\(scenePhase)") {
-            guard env.mode == .manga, scenePhase == .active, let gallery, let page = gallery.pages.first else { return }
+        .task(id: "\(gallery?.id ?? 0):\(loads)") {
+            guard loads, let gallery, let page = gallery.pages.first else { return }
             guard cover == nil || loadedHash != page.hash else { return }
             if loadedHash != page.hash { cover = nil }
             failed = false
@@ -131,12 +134,16 @@ struct TasteRecommendationCard: View {
     let toggle: () -> Void
     var isBookmarked = false
     var feedback: RecommendationFeedback? = nil
-    @Environment(AppEnvironment.self) private var env
+    /// The grid reads the shared stores once and passes each card its values, so cards
+    /// scrolling in and out do not each observe the long-lived booru and taste stores.
+    var server: BooruServer? = nil
+    var isFavorite = false
+    var control = TasteControl()
     var body: some View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: style.inset(6)) {
-                if let post = item.post, let server = env.booru.servers.first(where: { $0.id == post.serverID }) {
-                    BooruPostThumbnailCard(post: post, server: server, showsFavoriteIndicator: true, isFavorite: env.booru.favoriteIDs.contains(post.id))
+                if let post = item.post, let server {
+                    BooruPostThumbnailCard(post: post, server: server, showsFavoriteIndicator: true, isFavorite: isFavorite)
                         .overlay(alignment: .bottom) { imageTags(language: nil) }
                 } else if item.post != nil {
                     Color.secondary.opacity(0.12).aspectRatio(0.78, contentMode: .fit)
@@ -162,7 +169,7 @@ struct TasteRecommendationCard: View {
     }
     /// The one reason a card has room for. An exclusion removes it at once.
     private var reason: String? {
-        guard feedback != nil, let why = item.why, env.taste.control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru) else { return nil }
+        guard feedback != nil, let why = item.why, control.allows(item.reason.name, source: item.reason.source, mode: item.post == nil ? .comics : .booru) else { return nil }
         // The tag that found this work varies more than the artist behind many saves.
         return item.reason.name.isEmpty ? why.label : RecapText.tag(item.reason.name)
     }
@@ -179,8 +186,7 @@ struct TasteRecommendationCard: View {
             .padding(.horizontal, 7).padding(.vertical, 3).background(.black.opacity(0.58), in: Capsule())
     }
     private var saved: Bool {
-        if let post = item.post { return env.booru.favoriteIDs.contains(post.id) }
-        return isBookmarked
+        item.post == nil ? isBookmarked : isFavorite
     }
 }
 

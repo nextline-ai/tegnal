@@ -356,8 +356,10 @@ private struct GalleryFeedView: View {
                     let prefetchColumns = style.columns
                     let lookahead = prefetchColumns * 6
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
+                    // Read once for the grid: each lazy cell reading the loader would observe it again.
+                    let previews = loader.previews
                     ForEach(visibleEntries, id: \.element) { index, id in
-                        GalleryGridCard(id: id, preview: loader.previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
+                        GalleryGridCard(id: id, preview: previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
                             saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
                         }
                         .id(id)
@@ -583,7 +585,7 @@ private final class GalleryPaginationViewport {
 }
 private struct GalleryGridCard: View {
     @Environment(\.artworkCellStyle) private var style
-    @Environment(AppEnvironment.self) private var env
+    @Environment(\.isDisplayedAppModeActive) private var modeActive
     @Environment(\.scenePhase) private var scenePhase
     private struct LoadKey: Hashable { let preview: ObjectIdentifier?; let active: Bool }
     let id: Int64
@@ -626,8 +628,8 @@ private struct GalleryGridCard: View {
         .accessibilityAction { open() }
         .accessibilityAction(named: WorkSaveResult.actionTitle(saved: isBookmarked, mode: .comics)) { bookmark(gallery) }
         .onAppear { preview.restoreCachedContent() }
-        .task(id: LoadKey(preview: suppliedPreview.map(ObjectIdentifier.init), active: env.mode == .manga && scenePhase == .active)) {
-            guard env.mode == .manga, scenePhase == .active else { return }
+        .task(id: LoadKey(preview: suppliedPreview.map(ObjectIdentifier.init), active: modeActive && scenePhase == .active)) {
+            guard modeActive, scenePhase == .active else { return }
             if let suppliedPreview { preview = suppliedPreview }
             await preview.load()
         }

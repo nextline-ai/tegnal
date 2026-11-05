@@ -485,6 +485,7 @@ private struct ComicsRootTabs: View {
             explore: exploration,
             collections: NavigationStack { ArtistsListView() },
             settings: NavigationStack { SettingsView() })
+        .environment(\.isDisplayedAppModeActive, env.mode == .manga)
     }
 
     @ViewBuilder private var exploration: some View {
