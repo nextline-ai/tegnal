@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_KR_RGB_blk_100317.svg" alt="App Store에서 TEGNAL 다운로드" height="56"></a>
-  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" height="80"></a>
+  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_KR_RGB_blk_100317.svg" alt="App Store에서 TEGNAL 다운로드" width="350"></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" width="364"></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 
 화면 위쪽의 전환 버튼을 누르면 만화 사이트와 Booru 계열 이미지 사이트를 바로 오갈 수 있습니다. 앱에 사이트가 들어 있는 것은 아닙니다. 쓰는 사이트의 주소를 연결하면 그 사이트의 작품을 앱 화면으로 보여 줍니다.
 
-Apple 기기용은 TestFlight로, Android용은 Google Play로 배포합니다. 모두 무료입니다.
+App Store와 Google Play에서 무료로 받을 수 있습니다.
 
 ## 보기
 
@@ -53,17 +53,16 @@ Apple 기기용은 TestFlight로, Android용은 Google Play로 배포합니다. 
 
 iPhone, iPhone Duo, iPad, Mac, Apple Vision Pro에서 쓸 수 있고 한국어, 영어, 일본어를 지원합니다.
 
-1. App Store에서 [TestFlight](https://apps.apple.com/kr/app/testflight/id899247664)를 받습니다.
-2. [TEGNAL TestFlight 페이지](https://testflight.apple.com/join/gnkqu44W)를 열고 설치를 누릅니다.
+[App Store](https://apps.apple.com/app/id6825935560)에서 설치합니다. 업데이트도 App Store로 받습니다.
 
-TestFlight는 Apple이 운영하는 앱 배포 서비스입니다. PC를 연결하거나 인증서를 갱신할 필요가 없고, 업데이트도 TestFlight에서 받습니다. 새 버전은 여기에 가장 먼저 올라옵니다.
+새 버전을 먼저 써 보고 싶다면 [TestFlight 베타](https://testflight.apple.com/join/gnkqu44W)에 참여할 수 있습니다.
 
 iCloud 동기화를 켜면 북마크, 폴더, 작가, 검색 기록이 내 Apple 기기끼리 이어집니다.
 
 <details>
 <summary>AltStore, SideStore, IPA로 설치하기</summary>
 
-IPA는 일부 버전만 올리기 때문에 TestFlight보다 버전이 낮을 수 있습니다.
+IPA는 일부 버전만 올리기 때문에 App Store보다 버전이 낮을 수 있습니다.
 
 | 방법 | 링크 |
 | --- | --- |

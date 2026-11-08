@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download TEGNAL on the App Store" height="56"></a>
-  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" height="80"></a>
+  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download TEGNAL on the App Store" width="323"></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" width="364"></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@ Comics and illustrations, in one app.
 
 A switch at the top of the screen moves you between comic sites and Booru-style image boards. No site comes built in. You connect the addresses you already use, and TEGNAL shows their works in its own screens.
 
-The Apple version is on TestFlight and the Android version is on Google Play. Both are free.
+It's free on the App Store and Google Play.
 
 ## Viewing
 
@@ -53,17 +53,16 @@ Recommendations, Recap, translation and similar-work search all run on your devi
 
 Runs on iPhone, iPhone Duo, iPad, Mac and Apple Vision Pro, in English, Korean and Japanese.
 
-1. Get [TestFlight](https://apps.apple.com/app/testflight/id899247664) from the App Store.
-2. Open the [TEGNAL TestFlight page](https://testflight.apple.com/join/gnkqu44W) and tap Install.
+Install it from the [App Store](https://apps.apple.com/app/id6825935560). Updates arrive through the App Store too.
 
-TestFlight is Apple's own app distribution service. There's no computer to connect and no certificate to renew, and updates arrive there too. New versions land on TestFlight first.
+To try new versions early, join the [TestFlight beta](https://testflight.apple.com/join/gnkqu44W).
 
 Turn on iCloud sync to keep your bookmarks, folders, artists and search history in step across your Apple devices.
 
 <details>
 <summary>Installing with AltStore, SideStore or an IPA</summary>
 
-Only some versions are published as IPAs, so these can lag behind TestFlight.
+Only some versions are published as IPAs, so these can lag behind the App Store.
 
 | Method | Link |
 | --- | --- |
