@@ -64,7 +64,8 @@ jobs:
 
       - name: Read the app version
         shell: bash
-        run: echo "TEGNAL_VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
+        run: |
+          echo "TEGNAL_VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
 
       - name: Resolve packages
         run: flutter pub get
