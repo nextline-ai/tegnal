@@ -85,6 +85,29 @@ jobs:
           flutter build linux --release --dart-define=TEGNAL_VERSION=$TEGNAL_VERSION
           tar -czf "tegnal-$TEGNAL_VERSION-linux-x64.tar.gz" -C build/linux/x64/release bundle
 
+      # A build that compiles can still fail at launch; each one runs for a while to show it starts.
+      - name: Launch the Linux build
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get install -y xvfb dbus-x11
+          set +e
+          xvfb-run -a dbus-run-session -- timeout 25 build/linux/x64/release/bundle/tegnal > launch.log 2>&1
+          code=$?
+          set -e
+          cat launch.log
+          if [ "$code" -ne 124 ]; then echo "The app exited with $code before the timeout"; exit 1; fi
+          if grep -E "Unhandled Exception|Failed to|Segmentation" launch.log; then exit 1; fi
+
+      - name: Launch the Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Start-Process build/windows/x64/runner/Release/tegnal.exe -PassThru
+          Start-Sleep -Seconds 25
+          if ($app.HasExited) { Write-Error "The app exited with $($app.ExitCode) before the timeout"; exit 1 }
+          Stop-Process -Id $app.Id
+
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:
