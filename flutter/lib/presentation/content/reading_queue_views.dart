@@ -166,9 +166,12 @@ class _WorkHoldState extends State<WorkHold> {
     return RawGestureDetector(
       behavior: HitTestBehavior.opaque,
       gestures: {
+        // A right click does what a hold does, for a computer's mouse.
         TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
           TapGestureRecognizer.new,
-          (recognizer) => recognizer.onTap = widget.onTap,
+          (recognizer) => recognizer
+            ..onTap = widget.onTap
+            ..onSecondaryTap = widget.bookmark,
         ),
         if (widget.onDoubleTap != null)
           DoubleTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(

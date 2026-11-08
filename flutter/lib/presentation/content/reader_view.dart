@@ -33,6 +33,8 @@ import 'reading_queue_views.dart';
 import 'viewer_quick_menu.dart';
 import '../../core/content/recent_works.dart';
 import '../../core/content/manga_urls.dart';
+import '../../core/support/app_platform.dart';
+import '../design/desktop_input.dart';
 
 /// Opens the reader full screen over everything, as `fullScreenCover` does.
 Future<void> openReader(
@@ -540,175 +542,180 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
     _syncPrefetch();
     final gallery = _gallery;
     final media = MediaQuery.of(context);
-    return CupertinoTheme(
-      data: tegnalTheme(Brightness.dark),
-      child: RawGestureDetector(
-        behavior: HitTestBehavior.translucent,
-        gestures: _swipes(gallery, media),
-        child: ViewerDismissSurface(
-          dismiss: _dismiss,
-          child: ColoredBox(
-            color: const Color(0xFF000000),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: gallery != null && (!_opening.needsConfirmation || _resumeReady)
-                      ? ReaderTranslationScope(session: _translation, child: _reader(gallery))
-                      : _error != null
-                      ? Center(
-                          child: ContentFailure(message: _error!, retry: _load, content: widget.content),
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CupertinoActivityIndicator(color: Color(0xFFFFFFFF)),
-                              const SizedBox(height: 8),
-                              Text(L10n.text('Loading page'), style: TegnalType.style(15, color: const Color(0xFFFFFFFF))),
-                            ],
-                          ),
-                        ),
-                ),
-                if (_dimming > 0)
+    return ViewerKeys(
+      move: _move,
+      close: _close,
+      rightToLeft: _rtl,
+      child: CupertinoTheme(
+        data: tegnalTheme(Brightness.dark),
+        child: RawGestureDetector(
+          behavior: HitTestBehavior.translucent,
+          gestures: _swipes(gallery, media),
+          child: ViewerDismissSurface(
+            dismiss: _dismiss,
+            child: ColoredBox(
+              color: const Color(0xFF000000),
+              child: Stack(
+                children: [
                   Positioned.fill(
-                    child: IgnorePointer(child: ColoredBox(color: Color.fromRGBO(0, 0, 0, _dimming.clamp(0, 0.65)))),
-                  ),
-                // `ReaderDismissHandle`; the pull itself belongs to the whole reader.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: math.max(44, media.padding.top + 24),
-                  child: IgnorePointer(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Semantics(
-                          button: true,
-                          label: L10n.text('Swipe down to exit the work'),
-                          onTap: _close,
-                          child: Container(
-                            width: 60,
-                            height: 4,
-                            decoration: const ShapeDecoration(color: Color(0xFF636366), shape: StadiumBorder()),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // Only the menu moves, by its own height, so it visibly rises and falls.
-                Positioned(
-                  left: 10,
-                  right: 10,
-                  bottom: 10 + media.padding.bottom,
-                  child: ViewerMenuReveal(
-                    visible: _menuVisible || gallery == null,
-                    child: Column(
-                      key: const ValueKey('menu'),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (ReadingQueueScope.of(context) case final queue?)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: ReaderQueueRow(queue: queue, currentID: widget.galleryID, open: _openQueued, showList: _showQueue),
-                          ),
-                        _quickMenu(gallery),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  // The native menu sits above the home indicator; immersive Android has no inset there,
-                  // so keep the same clearance from the gesture area.
-                  bottom: 16 + math.max(media.padding.bottom, 34),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!(_menuVisible || gallery == null) && _pageNumber)
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
-                          child: Text('${_current + 1} / ${gallery.pages.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
-                        ),
-                      if (_bottomMenu && !_menuVisible && gallery != null) ...[
-                        const SizedBox(height: 8),
-                        ReaderMenuGlass(
-                          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: _menuActions(compact: true)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (_guide.step case final step? when !_sheetOpen)
-                  Positioned.fill(
-                    child: ReaderGuideOverlay(
-                      step: step,
-                      configuration: ReaderGuideConfiguration(booru: false, defaults: _defaults),
-                      menuKey: _menuKey,
-                      next: _advanceGuide,
-                      finish: _finishGuide,
-                    ),
-                  ),
-                if (_translating case final index? when gallery != null && index < gallery.pages.length)
-                  Positioned.fill(
-                    child: ImageTranslationView(
-                      key: ValueKey(index),
-                      loadImage: () => widget.images.data(gallery.pages[index], galleryID: widget.galleryID),
-                      preferences: _defaults,
-                      finished: () => setState(() => _translating = null),
-                      failed: (message) {
-                        setState(() => _translating = null);
-                        _showToast(message);
-                      },
-                    ),
-                  ),
-                if (_translation.isOn && gallery != null && _current < gallery.pages.length)
-                  Positioned(
-                    top: media.padding.top + 8,
-                    right: 16,
-                    child: Builder(
-                      builder: (context) {
-                        final working = _translation.isWorking(gallery.pages[_current].hash);
-                        final visible = _menuVisible || working || _pillShown;
-                        return IgnorePointer(
-                          ignoring: !visible,
-                          child: AnimatedOpacity(
-                            opacity: visible ? 1 : 0,
-                            duration: const Duration(milliseconds: 250),
-                            child: ReaderTranslationToggle(
-                              showsOriginal: _translation.showsOriginal,
-                              working: working,
-                              onPressed: () {
-                                _translation.toggleOriginal();
-                                _showPill();
-                              },
+                    child: gallery != null && (!_opening.needsConfirmation || _resumeReady)
+                        ? ReaderTranslationScope(session: _translation, child: _reader(gallery))
+                        : _error != null
+                        ? Center(
+                            child: ContentFailure(message: _error!, retry: _load, content: widget.content),
+                          )
+                        : Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CupertinoActivityIndicator(color: Color(0xFFFFFFFF)),
+                                const SizedBox(height: 8),
+                                Text(L10n.text('Loading page'), style: TegnalType.style(15, color: const Color(0xFFFFFFFF))),
+                              ],
                             ),
                           ),
-                        );
-                      },
-                    ),
                   ),
-                if (_toast != null)
+                  if (_dimming > 0)
+                    Positioned.fill(
+                      child: IgnorePointer(child: ColoredBox(color: Color.fromRGBO(0, 0, 0, _dimming.clamp(0, 0.65)))),
+                    ),
+                  // `ReaderDismissHandle`; the pull itself belongs to the whole reader.
                   Positioned(
-                    top: media.padding.top + 16,
-                    left: 16,
-                    right: 16,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: const ShapeDecoration(color: Color(0xE6303030), shape: StadiumBorder()),
-                        child: Text(
-                          _toast!,
-                          style: TegnalType.style(15, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: math.max(44, media.padding.top + 24),
+                    child: IgnorePointer(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Semantics(
+                            button: true,
+                            label: L10n.text('Swipe down to exit the work'),
+                            onTap: _close,
+                            child: Container(
+                              width: 60,
+                              height: 4,
+                              decoration: const ShapeDecoration(color: Color(0xFF636366), shape: StadiumBorder()),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-              ],
+                  // Only the menu moves, by its own height, so it visibly rises and falls.
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    bottom: 10 + media.padding.bottom,
+                    child: ViewerMenuReveal(
+                      visible: _menuVisible || gallery == null,
+                      child: Column(
+                        key: const ValueKey('menu'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (ReadingQueueScope.of(context) case final queue?)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: ReaderQueueRow(queue: queue, currentID: widget.galleryID, open: _openQueued, showList: _showQueue),
+                            ),
+                          _quickMenu(gallery),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    // The native menu sits above the home indicator; immersive Android has no inset there,
+                    // so keep the same clearance from the gesture area.
+                    bottom: 16 + math.max(media.padding.bottom, 34),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!(_menuVisible || gallery == null) && _pageNumber)
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
+                            child: Text('${_current + 1} / ${gallery.pages.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
+                          ),
+                        if (_bottomMenu && !_menuVisible && gallery != null) ...[
+                          const SizedBox(height: 8),
+                          ReaderMenuGlass(
+                            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: _menuActions(compact: true)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (_guide.step case final step? when !_sheetOpen)
+                    Positioned.fill(
+                      child: ReaderGuideOverlay(
+                        step: step,
+                        configuration: ReaderGuideConfiguration(booru: false, defaults: _defaults),
+                        menuKey: _menuKey,
+                        next: _advanceGuide,
+                        finish: _finishGuide,
+                      ),
+                    ),
+                  if (_translating case final index? when gallery != null && index < gallery.pages.length)
+                    Positioned.fill(
+                      child: ImageTranslationView(
+                        key: ValueKey(index),
+                        loadImage: () => widget.images.data(gallery.pages[index], galleryID: widget.galleryID),
+                        preferences: _defaults,
+                        finished: () => setState(() => _translating = null),
+                        failed: (message) {
+                          setState(() => _translating = null);
+                          _showToast(message);
+                        },
+                      ),
+                    ),
+                  if (_translation.isOn && gallery != null && _current < gallery.pages.length)
+                    Positioned(
+                      top: media.padding.top + 8,
+                      right: 16,
+                      child: Builder(
+                        builder: (context) {
+                          final working = _translation.isWorking(gallery.pages[_current].hash);
+                          final visible = _menuVisible || working || _pillShown;
+                          return IgnorePointer(
+                            ignoring: !visible,
+                            child: AnimatedOpacity(
+                              opacity: visible ? 1 : 0,
+                              duration: const Duration(milliseconds: 250),
+                              child: ReaderTranslationToggle(
+                                showsOriginal: _translation.showsOriginal,
+                                working: working,
+                                onPressed: () {
+                                  _translation.toggleOriginal();
+                                  _showPill();
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  if (_toast != null)
+                    Positioned(
+                      top: media.padding.top + 16,
+                      left: 16,
+                      right: 16,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const ShapeDecoration(color: Color(0xE6303030), shape: StadiumBorder()),
+                          child: Text(
+                            _toast!,
+                            style: TegnalType.style(15, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -880,11 +887,12 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
         hasGallery ? _bookmark : null,
       ),
       (L10n.text('Exit'), (color) => ExitSymbol(color: color), _close),
-      (
-        L10n.text(_translation.isOn ? 'Stop Translating' : 'Translate'),
-        (color) => TranslateSymbol(color: _translation.isOn ? TegnalColors.tint.resolveFrom(context) : color),
-        hasGallery ? _translate : null,
-      ),
+      if (AppPlatform.hasImageTranslation)
+        (
+          L10n.text(_translation.isOn ? 'Stop Translating' : 'Translate'),
+          (color) => TranslateSymbol(color: _translation.isOn ? TegnalColors.tint.resolveFrom(context) : color),
+          hasGallery ? _translate : null,
+        ),
       (L10n.text('Work Details'), (color) => Icon(CupertinoIcons.info_circle, size: 24, color: color), hasGallery ? _openInformation : null),
       (L10n.text('More Settings'), (color) => Icon(CupertinoIcons.slider_horizontal_3, size: 24, color: color), _openSettings),
     ];

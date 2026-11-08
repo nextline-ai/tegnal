@@ -1,0 +1,117 @@
+name: Flutter desktop builds
+
+on:
+  push:
+    branches: [main, desktop-support]
+    paths:
+      - flutter/**
+      - .github/workflows/flutter-desktop-builds.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.8
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+          - platform: linux
+            runner: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Flutter (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/tegnal-flutter"
+          echo "$RUNNER_TEMP/tegnal-flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned Flutter (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $flutterDirectory = Join-Path $env:RUNNER_TEMP 'tegnal-flutter'
+          git clone --depth 1 --branch $env:FLUTTER_VERSION https://github.com/flutter/flutter.git $flutterDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content $env:GITHUB_PATH (Join-Path $flutterDirectory 'bin')
+
+      - name: Install Linux build and media dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev liblzma-dev libmpv-dev libepoxy-dev libsecret-1-dev
+
+      - name: Read the app version
+        shell: bash
+        run: |
+          echo "TEGNAL_VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)" >> "$GITHUB_ENV"
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      - name: Build Windows release bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          flutter build windows --release --dart-define=TEGNAL_VERSION=$env:TEGNAL_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "tegnal-$env:TEGNAL_VERSION-windows-x64.zip"
+
+      - name: Build Linux release bundle
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          flutter build linux --release --dart-define=TEGNAL_VERSION=$TEGNAL_VERSION
+          tar -czf "tegnal-$TEGNAL_VERSION-linux-x64.tar.gz" -C build/linux/x64/release bundle
+
+      # A build that compiles can still fail at launch; each one runs for a while to show it starts.
+      - name: Launch the Linux build
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get install -y xvfb dbus-x11
+          set +e
+          xvfb-run -a dbus-run-session -- timeout 25 build/linux/x64/release/bundle/tegnal > launch.log 2>&1
+          code=$?
+          set -e
+          cat launch.log
+          if [ "$code" -ne 124 ]; then echo "The app exited with $code before the timeout"; exit 1; fi
+          if grep -E "Unhandled Exception|Failed to|Segmentation" launch.log; then exit 1; fi
+
+      - name: Launch the Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Start-Process build/windows/x64/runner/Release/tegnal.exe -PassThru
+          Start-Sleep -Seconds 25
+          if ($app.HasExited) { Write-Error "The app exited with $($app.ExitCode) before the timeout"; exit 1 }
+          Stop-Process -Id $app.Id
+
+      - name: Upload build
+        uses: actions/upload-artifact@v7
+        with:
+          name: tegnal-${{ matrix.platform }}
+          path: flutter/tegnal-*-${{ matrix.platform }}-x64.*
+          if-no-files-found: error
+          retention-days: 14

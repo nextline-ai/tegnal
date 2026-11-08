@@ -27,6 +27,7 @@ import 'website_setup.dart';
 import '../content/image_translation.dart';
 import '../../core/content/recent_works.dart';
 import 'recent_works_page.dart';
+import '../../core/support/app_platform.dart';
 
 /// What the Settings screens read and change.
 class SettingsDependencies {
@@ -159,12 +160,13 @@ class _SettingsViewState extends State<SettingsView> {
                           ),
                         ),
                       ),
-                    SettingsToggleRow(
-                      title: L10n.text('Use Embedded Browser'),
-                      help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
-                      value: _content.useEmbeddedBrowser,
-                      onChanged: (value) => setState(() => _content.useEmbeddedBrowser = value),
-                    ),
+                    if (AppPlatform.hasWebView)
+                      SettingsToggleRow(
+                        title: L10n.text('Use Embedded Browser'),
+                        help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
+                        value: _content.useEmbeddedBrowser,
+                        onChanged: (value) => setState(() => _content.useEmbeddedBrowser = value),
+                      ),
                     SettingsToggleRow(
                       title: L10n.text('Show Work Information Before Reading'),
                       help: L10n.text('Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.'),
@@ -329,11 +331,12 @@ class _SettingsViewState extends State<SettingsView> {
                       selected: _defaults.string(TagBrowsing.preferenceKey) ?? 'all',
                       onSelected: (value) => _set(TagBrowsing.preferenceKey, value),
                     ),
-                    SettingsLinkRow(
-                      title: L10n.text('Translation Language'),
-                      icon: CupertinoIcons.text_bubble,
-                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => TranslationLanguagePage(preferences: _defaults))),
-                    ),
+                    if (AppPlatform.hasImageTranslation)
+                      SettingsLinkRow(
+                        title: L10n.text('Translation Language'),
+                        icon: CupertinoIcons.text_bubble,
+                        onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => TranslationLanguagePage(preferences: _defaults))),
+                      ),
                   ],
                 ),
                 settingsSectionGap,

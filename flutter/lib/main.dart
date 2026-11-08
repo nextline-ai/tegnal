@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 import 'app/localization.dart';
 import 'app/privacy_cover.dart';
@@ -36,6 +37,7 @@ import 'presentation/content/page_image_store.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
 import 'core/content/recent_works.dart';
+import 'core/support/app_platform.dart';
 
 /// `--dart-define=TEGNAL_FIXTURE=on` (or a comma-separated list of [FixtureOption] names,
 /// plus `setup` to start without a connected website) runs offline with the native UI
@@ -83,6 +85,8 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
 Future<void> main() async {
   final launch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
+  // Windows and Linux have no official video player; media_kit plays videos behind the same API.
+  VideoPlayerMediaKit.ensureInitialized(windows: true, linux: true);
   // An empty first frame ends the system launch screen at once, so the native splash
   // artwork shows while the services below load; the app replaces it when they are ready.
   if (_fixture.isEmpty) runApp(const ColoredBox(color: Color(0xFF000000)));
@@ -123,6 +127,8 @@ Future<void> main() async {
 
 /// The installed version name, as Settings shows the bundle version.
 Future<String> _version() async {
+  // Desktop builds carry the pubspec version, passed in by the build.
+  if (AppPlatform.isDesktop) return const String.fromEnvironment('TEGNAL_VERSION');
   try {
     return await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<String>('version') ?? '';
   } on Object {
@@ -132,6 +138,11 @@ Future<String> _version() async {
 
 /// `TimeZone.current.identifier`, so taste statistics divide days at the person's midnight.
 Future<void> _loadTimeZone() async {
+  if (AppPlatform.isDesktop) {
+    final zone = await desktopTimeZone();
+    if (zone != null) TasteControl.currentTimeZone = zone;
+    return;
+  }
   try {
     final zone = await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<String>('timeZone');
     if (zone != null && zone.isNotEmpty) TasteControl.currentTimeZone = zone;
@@ -165,14 +176,16 @@ Future<AppServices> _launch() async {
   // cut connection, and the hidden browser page of the site is the last resort.
   final network = FilteredNetworkFetcher(primary: IoHttpFetcher(), fallback: EncryptedHelloFetcher(), preferences: preferences.defaults);
   ContentTransport.defaultFetcher = () => network;
-  ContentTransport.shared = ContentTransport(browserFetch: ContentBrowserTransport.get, browserPost: ContentBrowserTransport.post);
-  SiteAccount.listeners.add(ContentBrowserTransport.reset);
+  if (AppPlatform.hasWebView) {
+    ContentTransport.shared = ContentTransport(browserFetch: ContentBrowserTransport.get, browserPost: ContentBrowserTransport.post);
+    SiteAccount.listeners.add(ContentBrowserTransport.reset);
+  }
   // Image servers' API keys and validated cookies stay in the same keystore.
   final credentials = SecretCredentialStore(secrets);
   BooruClient.defaultCredentials = credentials;
   BooruBrowserSession.shared = BooruBrowserSession(secrets: secrets);
   // Servers that trust only a real browser connection get their requests through a hidden web view.
-  BooruWebTransport.factory = WebViewBooruPage.new;
+  if (AppPlatform.hasWebView) BooruWebTransport.factory = WebViewBooruPage.new;
   BooruWebTransport.preferences = preferences.defaults;
   final support = await loadingSupport;
   await loadingTimeZone;

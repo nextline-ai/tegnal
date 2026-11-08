@@ -25,6 +25,7 @@ import '../navigation/app_state.dart';
 import '../settings/downloads_view.dart';
 import '../works/artwork_grid.dart';
 import '../content/reading_queue_views.dart';
+import '../../core/support/app_platform.dart';
 
 /// What every image-mode screen shares, created once with the root.
 class BooruContext {
@@ -73,7 +74,7 @@ class BooruContext {
 
   /// `booru.useEmbeddedBrowser`: Explore shows the website instead of the image grid.
   static const embeddedBrowserKey = 'booru.useEmbeddedBrowser';
-  bool get useEmbeddedBrowser => booruDefaults.boolean(embeddedBrowserKey) ?? false;
+  bool get useEmbeddedBrowser => AppPlatform.hasWebView && (booruDefaults.boolean(embeddedBrowserKey) ?? false);
   set useEmbeddedBrowser(bool value) {
     booruDefaults.set(embeddedBrowserKey, value);
     embeddedBrowserChanges.value++;
