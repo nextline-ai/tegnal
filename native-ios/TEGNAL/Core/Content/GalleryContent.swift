@@ -318,6 +318,23 @@ enum ArtistBrowsing {
     }
 }
 
+/// Opening a single tag, as from a work's tags, starts in the language chosen for tags, the way
+/// an artist's works start in the language chosen for artists.
+enum TagBrowsing {
+    static let preferenceKey = "manga.tagLanguage"
+    static var language: String {
+        get { ReaderPreferences.defaults.string(forKey: preferenceKey) ?? "all" }
+        set { ReaderPreferences.defaults.set(newValue, forKey: preferenceKey) }
+    }
+    /// One namespaced term that names a tag, not an artist, a language or a free word.
+    static func matches(_ query: String) -> Bool {
+        let terms = query.split(whereSeparator: \.isWhitespace)
+        guard terms.count == 1, let colon = terms[0].firstIndex(of: ":") else { return false }
+        let namespace = terms[0][..<colon].lowercased()
+        return !namespace.isEmpty && !["artist", "language"].contains(namespace) && terms[0].index(after: colon) != terms[0].endIndex
+    }
+}
+
 struct GalleryBatch: Sendable {
     let ids: [Int64]
     let hasMore: Bool

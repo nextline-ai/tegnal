@@ -14,6 +14,7 @@ struct RecapHomeView: View {
     @State private var artwork: RecapArtwork?
     @State private var reading: RecapPresentation?
     @State private var openedArrival = false
+    @State private var notReady = false
     private var requestKey: String { "\(mode.rawValue):\(env.taste.control.analysisKey(mode)):\(env.booru.revision)" }
     init(mode: TasteMode, opening: Date? = nil) { _mode = State(initialValue: mode); self.opening = opening }
     var body: some View {
@@ -86,17 +87,31 @@ struct RecapHomeView: View {
             }.buttonStyle(.borderedProminent).tint(palette.deep)
         }
     }
+    /// Before the first issue: a veiled cover that says plainly the recap is not ready, and a tap
+    /// that explains when it will be rather than opening a sample.
     private func first(_ sample: TasteRecap) -> some View {
         let palette = shelf.palette(sample)
         return VStack(alignment: .leading, spacing: 14) {
-            Button { open(sample) } label: {
-                RecapCover(recap: sample, palette: palette).aspectRatio(0.74, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14)).contentShape(Rectangle())
-            }.buttonStyle(RecapPressStyle())
+            Button { notReady = true } label: {
+                RecapCover(recap: sample, palette: palette).aspectRatio(0.74, contentMode: .fit)
+                    .overlay {
+                        ZStack {
+                            Rectangle().fill(.black.opacity(0.45))
+                            VStack(spacing: 10) {
+                                Image(systemName: "hourglass").font(.system(size: 34, weight: .semibold))
+                                Text(L10n.text("Recap is not ready yet")).font(.title3.bold())
+                            }.foregroundStyle(.white).multilineTextAlignment(.center).padding(24)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14)).contentShape(Rectangle())
+            }.buttonStyle(RecapPressStyle()).accessibilityIdentifier("recap.sample")
             Text(L10n.text("Your first issue is on its way")).font(.title3.bold())
-            Text(L10n.text("Save and open a few works. Your cover, colors and persona will come from them, not from this sample.")).font(.subheadline).foregroundStyle(.secondary)
-            Button { open(sample) } label: {
-                Label(L10n.text("Read a sample issue"), systemImage: "book.pages").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
-            }.buttonStyle(.borderedProminent).tint(palette.deep).accessibilityIdentifier("recap.sample")
+            Text(L10n.text("Recap arrives after 30 days of using TEGNAL. Save and open works in the meantime: your cover, colors and persona will come from them.")).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .alert(L10n.text("Recap is not ready yet"), isPresented: $notReady) {
+            Button(L10n.text("OK"), role: .cancel) {}
+        } message: {
+            Text(L10n.text("Your first recap arrives after 30 days of using TEGNAL."))
         }
     }
     private func weekly(_ recap: TasteRecap) -> some View {
@@ -216,6 +231,7 @@ struct RecapEntryCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: "RECAP").font(RecapType.display(16)).foregroundStyle(.primary)
                     if let latest = shelf.latest { Text(RecapFormat.title(latest, timeZone: RecapFormat.zone(env))).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                    else if shelf.sample != nil { Text(L10n.text("Recap is not ready yet")).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)

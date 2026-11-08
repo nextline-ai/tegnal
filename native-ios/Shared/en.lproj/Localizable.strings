@@ -1595,3 +1595,25 @@
 "Hold a work in Explore and drag it down to the panel that appears." = "Hold a work in Explore and drag it down to the panel that appears.";
 "A work leaves the list once you read it to the last page." = "A work leaves the list once you read it to the last page.";
 "Delete All" = "Delete All";
+
+/* Backup reminder, recap, gestures, tag language */
+"Back Up Your Library" = "Back Up Your Library";
+"Save File" = "Save File";
+"Later" = "Later";
+"Save a backup file about once a week, so your bookmarks, folders and challenges are safe if this device is lost or reset. You can turn this reminder off in Settings." = "Save a backup file about once a week, so your bookmarks, folders and challenges are safe if this device is lost or reset. You can turn this reminder off in Settings.";
+"Your library is syncing with iCloud, so it is already backed up across your Apple devices. A backup file you keep yourself still helps if iCloud data is removed or you change accounts." = "Your library is syncing with iCloud, so it is already backed up across your Apple devices. A backup file you keep yourself still helps if iCloud data is removed or you change accounts.";
+"Weekly Backup Reminder" = "Weekly Backup Reminder";
+"Every seven days, opening the app suggests saving a backup file." = "Every seven days, opening the app suggests saving a backup file.";
+"Recap is not ready yet" = "Recap is not ready yet";
+"Recap arrives after 30 days of using TEGNAL. Save and open works in the meantime: your cover, colors and persona will come from them." = "Recap arrives after 30 days of using TEGNAL. Save and open works in the meantime: your cover, colors and persona will come from them.";
+"Your first recap arrives after 30 days of using TEGNAL." = "Your first recap arrives after 30 days of using TEGNAL.";
+"Tag Works Language" = "Tag Works Language";
+"Thumbnail Gestures" = "Thumbnail Gestures";
+"Tap" = "Tap";
+"Double Tap" = "Double Tap";
+"Touch and Hold" = "Touch and Hold";
+"No Action" = "No Action";
+"Reset to Defaults" = "Reset to Defaults";
+"Favorite" = "Favorite";
+"Applies to images in Explore. A double tap action makes single taps wait a moment for a second tap." = "Applies to images in Explore. A double tap action makes single taps wait a moment for a second tap.";
+"Applies to works in Explore and related works. Open follows Show Work Information Before Reading. Holding a work and moving it still carries it to Up Next. A double tap action makes single taps wait a moment for a second tap." = "Applies to works in Explore and related works. Open follows Show Work Information Before Reading. Holding a work and moving it still carries it to Up Next. A double tap action makes single taps wait a moment for a second tap.";

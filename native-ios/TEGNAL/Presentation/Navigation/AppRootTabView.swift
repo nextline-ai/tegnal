@@ -21,6 +21,7 @@ public struct AppRootTabView: View {
             didSetup = true
             setupApp()
         }
+        .modifier(BackupReminderModifier())
         .onChange(of: env.isSiteVerified) { _, verified in
             if verified {
                 #if DEBUG

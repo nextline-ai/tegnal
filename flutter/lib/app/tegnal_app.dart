@@ -43,6 +43,7 @@ import '../presentation/library/library_routes.dart';
 import '../presentation/navigation/app_state.dart';
 import '../presentation/navigation/root_tab_view.dart';
 import '../presentation/navigation/tab_navigator.dart';
+import '../presentation/settings/backup_reminder.dart';
 import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
 import '../presentation/settings/drive_sync_section.dart';
@@ -398,38 +399,43 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     // `RetainedModeContainer`: both libraries stay alive while the other one shows.
-    return CupertinoPageScaffold(
-      resizeToAvoidBottomInset: false,
-      child: ListenableBuilder(
-        listenable: state,
-        builder: (context, _) => ListenableBuilder(
-          listenable: services.taste,
-          builder: (context, _) => RootBanner(
-            banner: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ImportReminderBanner(imports: _imports),
-                TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
-              ],
-            ),
-            height:
-                (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
-                (services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
-            child: IndexedStack(
-              index: state.mode == AppMode.manga ? 0 : 1,
-              children: [
-                _mangaTabs(),
-                RootTabView(
-                  state: state,
-                  pages: {
-                    ..._booruPages.pages(),
-                    AppTab.insights: TabNavigator(
-                      active: state.mode == AppMode.booru && state.tab == AppTab.insights,
-                      builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
-                    ),
-                  },
-                ),
-              ],
+    return BackupReminderGate(
+      database: services.database,
+      images: services.booru,
+      isTesting: services.isTesting,
+      child: CupertinoPageScaffold(
+        resizeToAvoidBottomInset: false,
+        child: ListenableBuilder(
+          listenable: state,
+          builder: (context, _) => ListenableBuilder(
+            listenable: services.taste,
+            builder: (context, _) => RootBanner(
+              banner: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ImportReminderBanner(imports: _imports),
+                  TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
+                ],
+              ),
+              height:
+                  (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
+                  (services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
+              child: IndexedStack(
+                index: state.mode == AppMode.manga ? 0 : 1,
+                children: [
+                  _mangaTabs(),
+                  RootTabView(
+                    state: state,
+                    pages: {
+                      ..._booruPages.pages(),
+                      AppTab.insights: TabNavigator(
+                        active: state.mode == AppMode.booru && state.tab == AppTab.insights,
+                        builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
+                      ),
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -560,6 +566,7 @@ class _ExploreRoot extends StatelessWidget {
         content: content,
         isActive: state.tab == AppTab.works && state.mode == AppMode.manga,
         openGallery: (id) => routes.openThumbnail(context, id),
+        details: (id) => routes.openGallery(context, id),
         bookmark: (id, gallery) => routes.toggleBookmark(context, id, gallery, aboveTabBar: true),
       );
     },

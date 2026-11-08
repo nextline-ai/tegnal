@@ -14,6 +14,7 @@ import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import '../content/content_bookmark.dart';
 import '../content/explore_view.dart' show ContentUnavailable;
+import '../content/reader_models.dart' show ThumbnailAction, ThumbnailGesture;
 import '../design/glass.dart';
 import '../design/pull_down_menu.dart';
 import '../design/symbols.dart';
@@ -332,6 +333,7 @@ class BooruPostGridSliver extends StatelessWidget {
     this.toggleSelection,
     this.hold,
     this.holdSaves = false,
+    this.fileIntoFolder,
     this.prefetch,
     this.topMarginScale = 1,
     this.itemKey,
@@ -345,8 +347,12 @@ class BooruPostGridSliver extends StatelessWidget {
   final ValueChanged<BooruPost>? toggleSelection;
   final void Function(BuildContext context, BooruPost post)? hold;
 
-  /// Whether [hold] saves the image, which then presses like a held comic.
+  /// Whether [hold] saves the image, which then presses like a held comic. Such a grid also
+  /// follows the image-mode thumbnail gestures chosen in Settings.
   final bool holdSaves;
+
+  /// Files the image into a folder, for a gesture set to do that.
+  final void Function(BuildContext context, BooruPost post)? fileIntoFolder;
 
   /// Asks for the next page as the last rows appear.
   final VoidCallback? prefetch;
@@ -388,7 +394,23 @@ class BooruPostGridSliver extends StatelessWidget {
           child: Builder(
             // A hold that saves presses the image as comics do; one that opens a menu does not.
             builder: (cardContext) => selection == null && hold != null && holdSaves
-                ? WorkHold(onTap: () => open(post), bookmark: () => hold!(cardContext, post), child: card)
+                ? ValueListenableBuilder<int>(
+                    valueListenable: ThumbnailGesture.changes,
+                    builder: (_, _, _) {
+                      void perform(ThumbnailGesture gesture) => switch (gesture.action(booru: true)) {
+                        ThumbnailAction.open => open(post),
+                        ThumbnailAction.favorite => hold!(cardContext, post),
+                        ThumbnailAction.folder => fileIntoFolder?.call(cardContext, post),
+                        _ => null,
+                      };
+                      return WorkHold(
+                        onTap: () => perform(ThumbnailGesture.tap),
+                        onDoubleTap: ThumbnailGesture.doubleTap.action(booru: true) == ThumbnailAction.none ? null : () => perform(ThumbnailGesture.doubleTap),
+                        bookmark: () => perform(ThumbnailGesture.hold),
+                        child: card,
+                      );
+                    },
+                  )
                 : GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => selection != null ? toggleSelection?.call(post) : open(post),

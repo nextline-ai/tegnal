@@ -33,6 +33,9 @@ public struct SettingsView: View {
                     SettingsHelpLabel("Show Work Information Before Reading", help: "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.")
                 }
                     .accessibilityIdentifier("settings.mangaInfoBeforeReading")
+                NavigationLink { ThumbnailGestureSettings() } label: {
+                    Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
+                }.accessibilityIdentifier("settings.thumbnailGestures")
             } header: { Text(L10n.text("Browsing")) }
             SiteAccountSection()
             ReaderSettingsSection(booru: false, isPresented: $showReader)
@@ -708,5 +711,46 @@ struct LibraryOrganizationView: View {
             message = L10n.text("Duplicate Copies Removed")
         } catch { self.error = error.localizedDescription }
         busy = false; await load()
+    }
+}
+
+/// Chooses what each gesture on a thumbnail does, for comics or for image mode.
+struct ThumbnailGestureSettings: View {
+    let booru: Bool
+    @SwiftUI.AppStorage private var tap: String
+    @SwiftUI.AppStorage private var doubleTap: String
+    @SwiftUI.AppStorage private var hold: String
+    init(booru: Bool = false) {
+        self.booru = booru
+        let store = ThumbnailGesture.store(booru: booru)
+        _tap = .init(wrappedValue: ThumbnailGesture.tap.standard(booru: booru).rawValue, ThumbnailGesture.tap.key(booru: booru), store: store)
+        _doubleTap = .init(wrappedValue: ThumbnailGesture.doubleTap.standard(booru: booru).rawValue, ThumbnailGesture.doubleTap.key(booru: booru), store: store)
+        _hold = .init(wrappedValue: ThumbnailGesture.hold.standard(booru: booru).rawValue, ThumbnailGesture.hold.key(booru: booru), store: store)
+    }
+    var body: some View {
+        List {
+            Section {
+                picker(.tap, $tap)
+                picker(.doubleTap, $doubleTap)
+                picker(.hold, $hold)
+            } footer: {
+                Text(L10n.text(booru
+                    ? "Applies to images in Explore. A double tap action makes single taps wait a moment for a second tap."
+                    : "Applies to works in Explore and related works. Open follows Show Work Information Before Reading. Holding a work and moving it still carries it to Up Next. A double tap action makes single taps wait a moment for a second tap."))
+            }
+            Section {
+                Button(L10n.text("Reset to Defaults")) {
+                    tap = ThumbnailGesture.tap.standard(booru: booru).rawValue
+                    doubleTap = ThumbnailGesture.doubleTap.standard(booru: booru).rawValue
+                    hold = ThumbnailGesture.hold.standard(booru: booru).rawValue
+                }.accessibilityIdentifier("gestures.reset")
+            }
+        }
+        .navigationTitle(L10n.text("Thumbnail Gestures")).navigationBarTitleDisplayMode(.inline)
+    }
+    private func picker(_ gesture: ThumbnailGesture, _ value: Binding<String>) -> some View {
+        Picker(gesture.title, selection: value) {
+            ForEach(gesture.choices(booru: booru)) { Text($0.title).tag($0.rawValue) }
+        }.accessibilityIdentifier("gestures." + gesture.rawValue)
     }
 }

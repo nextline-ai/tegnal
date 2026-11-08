@@ -623,3 +623,53 @@ struct ReaderDismissHandle: View {
             .accessibilityAddTraits(.isButton).accessibilityAction { dismiss() }
     }
 }
+
+/// What a thumbnail does for each gesture, chosen in Settings for each mode. A comic opens on a
+/// tap, joins Up Next on a double tap and is bookmarked on a hold; an image opens on a tap, does
+/// nothing on a double tap and is added to favorites on a hold, unless changed.
+enum ThumbnailAction: String, CaseIterable, Identifiable {
+    case open, details, bookmark, upNext, favorite, folder, none
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .open: L10n.text("Open")
+        case .details: L10n.text("Work Details")
+        case .bookmark: L10n.text("Bookmark")
+        case .upNext: L10n.text("Add to Up Next")
+        case .favorite: L10n.text("Favorite")
+        case .folder: L10n.text("Save to Folder")
+        case .none: L10n.text("No Action")
+        }
+    }
+}
+
+enum ThumbnailGesture: String, CaseIterable, Identifiable {
+    case tap, doubleTap, hold
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .tap: L10n.text("Tap")
+        case .doubleTap: L10n.text("Double Tap")
+        case .hold: L10n.text("Touch and Hold")
+        }
+    }
+    /// Comics keep theirs with the reader's options; image mode keeps its own.
+    func key(booru: Bool = false) -> String { (booru ? "booru.gesture." : "manga.gesture.") + rawValue }
+    static func store(booru: Bool = false) -> UserDefaults { booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults }
+    func standard(booru: Bool = false) -> ThumbnailAction {
+        switch self {
+        case .tap: .open
+        case .doubleTap: booru ? .none : .upNext
+        case .hold: booru ? .favorite : .bookmark
+        }
+    }
+    /// A tap must always do something, or a work could not be opened at all.
+    func choices(booru: Bool = false) -> [ThumbnailAction] {
+        let all: [ThumbnailAction] = booru ? [.open, .favorite, .folder, .none] : [.open, .details, .bookmark, .upNext, .none]
+        return self == .tap ? all.filter { $0 != .none } : all
+    }
+    func action(booru: Bool = false, in defaults: UserDefaults? = nil) -> ThumbnailAction {
+        let stored = (defaults ?? Self.store(booru: booru)).string(forKey: key(booru: booru)).flatMap(ThumbnailAction.init(rawValue:))
+        return stored.flatMap { choices(booru: booru).contains($0) ? $0 : nil } ?? standard(booru: booru)
+    }
+}

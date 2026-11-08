@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/content/content_environment.dart';
@@ -46,16 +47,82 @@ Future<void> showGalleryDetail(
 }) => showAppSheet<void>(
   context,
   grabber: true,
-  builder: (sheetContext, controller) => RemoteGalleryView(
-    galleryID: galleryID,
-    source: source,
-    images: images,
-    content: content,
-    database: database,
-    actions: actions(sheetContext),
-    scrollController: controller,
+  builder: (sheetContext, controller) => SheetSwipeBack(
+    close: () => Navigator.of(sheetContext).pop(),
+    child: RemoteGalleryView(
+      galleryID: galleryID,
+      source: source,
+      images: images,
+      content: content,
+      database: database,
+      actions: actions(sheetContext),
+      scrollController: controller,
+    ),
   ),
 );
+
+/// Work information closes with a swipe to the right, as a page goes back. The sheet follows
+/// the finger and closes once the swipe goes far or fast enough, from anywhere on it: a swipe
+/// that starts on a title, a tag or a button still goes back, since a tap gives way once the
+/// finger travels. Strips that scroll sideways keep their own swipes.
+class SheetSwipeBack extends StatefulWidget {
+  const SheetSwipeBack({super.key, required this.close, required this.child});
+  final VoidCallback close;
+  final Widget child;
+
+  @override
+  State<SheetSwipeBack> createState() => _SheetSwipeBackState();
+}
+
+class _SheetSwipeBackState extends State<SheetSwipeBack> with SingleTickerProviderStateMixin {
+  late final _offset = AnimationController.unbounded(vsync: this);
+  bool _closing = false;
+
+  @override
+  void dispose() {
+    _offset.dispose();
+    super.dispose();
+  }
+
+  void _update(DragUpdateDetails details) {
+    if (_closing) return;
+    _offset.value = math.max(0, _offset.value + details.delta.dx);
+  }
+
+  void _end(DragEndDetails details) {
+    if (_closing) return;
+    final velocity = details.primaryVelocity ?? 0;
+    if (_offset.value > 110 || (velocity > 700 && _offset.value > 0)) {
+      _closing = true;
+      HapticFeedback.lightImpact();
+      _offset.animateTo(MediaQuery.sizeOf(context).width, duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
+      widget.close();
+    } else {
+      _settle();
+    }
+  }
+
+  void _settle() => _offset.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOutBack);
+
+  @override
+  Widget build(BuildContext context) => RawGestureDetector(
+    behavior: HitTestBehavior.translucent,
+    gestures: {
+      HorizontalDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<HorizontalDragGestureRecognizer>(
+        HorizontalDragGestureRecognizer.new,
+        (recognizer) => recognizer
+          ..onUpdate = _update
+          ..onEnd = _end
+          ..onCancel = _settle,
+      ),
+    },
+    child: AnimatedBuilder(
+      animation: _offset,
+      builder: (context, child) => Transform.translate(offset: Offset(_offset.value, 0), child: child),
+      child: widget.child,
+    ),
+  );
+}
 
 /// Loads one work and shows `GalleryWorkInformation` under the sheet's navigation bar.
 class RemoteGalleryView extends StatefulWidget {
@@ -199,7 +266,13 @@ class ContentFailure extends StatelessWidget {
   String? get _sibling {
     final content = this.content;
     if (content == null || !content.isSiteVerified) return null;
-    const blocked = [ContentError.signInRequired, ContentError.galleryNotFound, ContentError.unavailable(403), ContentError.unavailable(404), ContentError.unavailable(410)];
+    const blocked = [
+      ContentError.signInRequired,
+      ContentError.galleryNotFound,
+      ContentError.unavailable(403),
+      ContentError.unavailable(404),
+      ContentError.unavailable(410),
+    ];
     if (!blocked.any((error) => ContentError.message(error) == message)) return null;
     return ComicSites.siblings(content.mangaSiteAddress).firstOrNull;
   }

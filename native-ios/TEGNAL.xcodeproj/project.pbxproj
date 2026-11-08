@@ -31,6 +31,7 @@
 		2034B4997F3BC0351EF797F4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A43CD02402545179DA392A4 /* Assets.xcassets */; };
 		20E010B24BD47E4A667BA0C3 /* Acknowledgments.txt in Resources */ = {isa = PBXBuildFile; fileRef = DAFB6A5CB9259D10CE5EE14B /* Acknowledgments.txt */; };
 		239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */; };
+		5A1E0C7D2B9F4E6A8C3D1F03 /* BackupReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E0C7D2B9F4E6A8C3D1F04 /* BackupReminder.swift */; };
 		2596329E9AE3000223F509E8 /* PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */; };
 		29D634933AAA5D8400EAFF61 /* TEGNALTests/TasteRecapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */; };
 		29F36067686258194ABE38F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D4058D8DF59DB2ABCD4E32CC /* PrivacyInfo.xcprivacy */; };
@@ -352,6 +353,7 @@
 		C0D758D11EBEE724973FC43F /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10245435081F97BDB212F1F /* BooruRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRootView.swift; sourceTree = "<group>"; };
 		C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupSection.swift; sourceTree = "<group>"; };
+		5A1E0C7D2B9F4E6A8C3D1F04 /* BackupReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupReminder.swift; sourceTree = "<group>"; };
 		C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLegacyHTML.swift; sourceTree = "<group>"; };
 		C3563D5B3248F319CCDA8D86 /* BooruClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruClient.swift; sourceTree = "<group>"; };
 		CA0062A4C5A44F103420CB63 /* CDNRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CDNRouting.swift; sourceTree = "<group>"; };
@@ -548,6 +550,7 @@
 			isa = PBXGroup;
 			children = (
 				C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */,
+				5A1E0C7D2B9F4E6A8C3D1F04 /* BackupReminder.swift */,
 				D4C14F8DB9B15B1EF5094844 /* CloudSyncSection.swift */,
 				8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */,
 				B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */,
@@ -1122,6 +1125,7 @@
 				767EAEE31B2A8121A3534E33 /* NativeReaderView.swift in Sources */,
 				09F96FACC7155FD7B5D16E12 /* TEGNALApp.swift in Sources */,
 				239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */,
+				5A1E0C7D2B9F4E6A8C3D1F03 /* BackupReminder.swift in Sources */,
 				DC27734E34274E7E9EE48548 /* LibraryBackup.swift in Sources */,
 				8566DB33557D57EE38DE08D8 /* OnboardingView.swift in Sources */,
 				56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */,

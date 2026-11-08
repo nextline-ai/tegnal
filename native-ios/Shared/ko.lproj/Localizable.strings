@@ -1595,3 +1595,25 @@
 "Hold a work in Explore and drag it down to the panel that appears." = "탐색에서 작품을 길게 누른 채 아래에 나타나는 영역으로 끌어내리세요.";
 "A work leaves the list once you read it to the last page." = "마지막 페이지까지 읽은 작품은 목록에서 빠집니다.";
 "Delete All" = "전체 삭제";
+
+/* Backup reminder, recap, gestures, tag language */
+"Back Up Your Library" = "보관함 백업";
+"Save File" = "파일 저장";
+"Later" = "나중에";
+"Save a backup file about once a week, so your bookmarks, folders and challenges are safe if this device is lost or reset. You can turn this reminder off in Settings." = "일주일에 한 번쯤 백업 파일을 저장해 두면 기기를 잃어버리거나 초기화해도 북마크와 폴더, 챌린지를 지킬 수 있습니다. 이 알림은 설정에서 끌 수 있습니다.";
+"Your library is syncing with iCloud, so it is already backed up across your Apple devices. A backup file you keep yourself still helps if iCloud data is removed or you change accounts." = "보관함은 iCloud로 동기화되고 있어 내 Apple 기기들에 이미 백업되어 있습니다. 그래도 iCloud 데이터가 지워지거나 계정을 바꿀 때를 대비해 직접 보관하는 백업 파일이 있으면 좋습니다.";
+"Weekly Backup Reminder" = "주간 백업 알림";
+"Every seven days, opening the app suggests saving a backup file." = "7일마다 앱을 열면 백업 파일 저장을 권합니다.";
+"Recap is not ready yet" = "리캡이 아직 준비되지 않았습니다";
+"Recap arrives after 30 days of using TEGNAL. Save and open works in the meantime: your cover, colors and persona will come from them." = "리캡은 TEGNAL을 30일 동안 사용하면 나옵니다. 그동안 작품을 저장하고 열어 보세요. 표지와 색, 페르소나가 그 작품들로 만들어집니다.";
+"Your first recap arrives after 30 days of using TEGNAL." = "첫 리캡은 TEGNAL을 30일 동안 사용하면 나옵니다.";
+"Tag Works Language" = "태그 작품 언어";
+"Thumbnail Gestures" = "썸네일 제스처";
+"Tap" = "탭";
+"Double Tap" = "두 번 탭";
+"Touch and Hold" = "길게 누르기";
+"No Action" = "동작 없음";
+"Reset to Defaults" = "기본값으로 되돌리기";
+"Favorite" = "즐겨찾기";
+"Applies to images in Explore. A double tap action makes single taps wait a moment for a second tap." = "탐색의 이미지 썸네일에 적용됩니다. 두 번 탭에 동작을 정하면 한 번 탭은 두 번째 탭을 잠깐 기다린 뒤 실행됩니다.";
+"Applies to works in Explore and related works. Open follows Show Work Information Before Reading. Holding a work and moving it still carries it to Up Next. A double tap action makes single taps wait a moment for a second tap." = "탐색과 관련 작품의 썸네일에 적용됩니다. 열기는 '읽기 전에 작품 정보 표시' 설정을 따릅니다. 길게 누른 채 움직이면 지금처럼 읽을 목록으로 옮길 수 있습니다. 두 번 탭에 동작을 정하면 한 번 탭은 두 번째 탭을 잠깐 기다린 뒤 실행됩니다.";

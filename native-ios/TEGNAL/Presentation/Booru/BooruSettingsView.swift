@@ -322,6 +322,9 @@ struct BooruMoreView: View {
                     .accessibilityIdentifier("booru.downloadsLink")
                 NavigationLink { FolderRulesView(booru: true) } label: { Label(L10n.text("Smart Folders"), systemImage: "sparkles") }
                     .accessibilityIdentifier("booru.folderRules")
+                NavigationLink { ThumbnailGestureSettings(booru: true) } label: {
+                    Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
+                }.accessibilityIdentifier("booru.thumbnailGestures")
             }
 
             ReaderSettingsSection(booru: true, isPresented: $showReader)

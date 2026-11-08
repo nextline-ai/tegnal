@@ -458,6 +458,23 @@ abstract final class ArtistBrowsing {
   }
 }
 
+/// Opening a single tag, as from a work's tags, starts in the language chosen for tags, the way
+/// artists start in theirs. Every language until a person picks one, and that choice stays.
+abstract final class TagBrowsing {
+  static const preferenceKey = 'manga.tagLanguage';
+  static String get language => ContentPreferences.defaults.string(preferenceKey) ?? 'all';
+  static set language(String value) => ContentPreferences.defaults.set(preferenceKey, value);
+
+  /// One namespaced term that names a tag, not an artist, a language or a free word.
+  static bool matches(String query) {
+    final terms = splitWhitespace(query);
+    if (terms.length != 1) return false;
+    final colon = terms[0].indexOf(':');
+    if (colon <= 0 || colon == terms[0].length - 1) return false;
+    return !const ['artist', 'language'].contains(terms[0].substring(0, colon).toLowerCase());
+  }
+}
+
 class GalleryBatch {
   const GalleryBatch({required this.ids, required this.hasMore});
   final List<int> ids;

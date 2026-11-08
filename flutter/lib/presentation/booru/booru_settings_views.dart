@@ -25,7 +25,7 @@ import '../navigation/root_tab_view.dart';
 import '../settings/downloads_view.dart';
 import '../settings/settings_page.dart';
 import '../settings/settings_rows.dart';
-import '../settings/settings_view.dart' show DeveloperSection, GlassIconToolbarButton, LicensesPage, PrivacyPolicyPage;
+import '../settings/settings_view.dart' show DeveloperSection, GlassIconToolbarButton, LicensesPage, PrivacyPolicyPage, ThumbnailGestureSettings;
 import '../settings/site_account_section.dart' show WebCookies;
 import '../settings/website_setup.dart';
 import 'booru_common.dart';
@@ -201,6 +201,11 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       title: L10n.text('Smart Folders'),
                       icon: CupertinoIcons.sparkles,
                       onTap: () => _push((context) => BooruFolderRulesPage(booru: _booru)),
+                    ),
+                    SettingsLinkRow(
+                      title: L10n.text('Thumbnail Gestures'),
+                      symbol: (color) => HandTapSymbol(size: 22, color: color),
+                      onTap: () => _push((context) => const ThumbnailGestureSettings(booru: true)),
                     ),
                   ],
                 ),

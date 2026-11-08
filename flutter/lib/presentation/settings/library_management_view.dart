@@ -14,6 +14,7 @@ import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
+import 'backup_reminder.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
 import '../design/alert_dialog.dart';
@@ -91,7 +92,7 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
       _message = null;
     });
     try {
-      await _backup.export();
+      if (await _backup.export()) BackupReminder.saved();
     } on Object catch (error) {
       _message = L10n.text('Unable to create backup: %@', ['$error']);
     }
@@ -177,8 +178,8 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
     } else if (queue.remaining > 0) {
       queueCaption = L10n.text('Still missing information: %@ works. Failed downloads can be retried.', ['${queue.remaining}']);
     }
-    Widget section({String? header, Widget? headerWidget, required List<Widget> children}) =>
-        FormSection(prominentHeader: true, rowColor: row, header: headerWidget ?? (header == null ? null : Text(header)), children: children);
+    Widget section({String? header, Widget? headerWidget, Widget? footer, required List<Widget> children}) =>
+        FormSection(prominentHeader: true, rowColor: row, header: headerWidget ?? (header == null ? null : Text(header)), footer: footer, children: children);
     void organize(bool duplicates) => Navigator.of(context).push(
       CupertinoPageRoute<void>(
         builder: (_) => LibraryOrganizationView(library: widget.library, duplicates: duplicates, booru: widget.booru),
@@ -230,7 +231,9 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
                 FormRow(
                   child: Text(_message!, style: TegnalType.style(13, color: secondary)),
                 ),
+              const BackupReminderToggle(),
             ],
+            footer: Text(L10n.text('Every seven days, opening the app suggests saving a backup file.')),
           ),
         ),
         for (final extra in widget.extraSections) ...[settingsSectionGap, extra],

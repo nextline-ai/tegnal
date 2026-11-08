@@ -1595,3 +1595,25 @@
 "Hold a work in Explore and drag it down to the panel that appears." = "探索で作品を長押ししたまま、下に表示される枠までドラッグしてください。";
 "A work leaves the list once you read it to the last page." = "最後のページまで読んだ作品はリストから外れます。";
 "Delete All" = "すべて削除";
+
+/* Backup reminder, recap, gestures, tag language */
+"Back Up Your Library" = "ライブラリをバックアップ";
+"Save File" = "ファイルを保存";
+"Later" = "あとで";
+"Save a backup file about once a week, so your bookmarks, folders and challenges are safe if this device is lost or reset. You can turn this reminder off in Settings." = "週に一度ほどバックアップファイルを保存しておくと、端末をなくしたり初期化したりしてもブックマークやフォルダ、チャレンジを守れます。この通知は設定でオフにできます。";
+"Your library is syncing with iCloud, so it is already backed up across your Apple devices. A backup file you keep yourself still helps if iCloud data is removed or you change accounts." = "ライブラリはiCloudで同期されているため、Appleデバイス間ですでにバックアップされています。それでもiCloudのデータが消えたりアカウントを変えたりしたときのために、自分で保管するバックアップファイルがあると安心です。";
+"Weekly Backup Reminder" = "毎週のバックアップ通知";
+"Every seven days, opening the app suggests saving a backup file." = "7日ごとにアプリを開くと、バックアップファイルの保存をおすすめします。";
+"Recap is not ready yet" = "リキャップはまだ準備中です";
+"Recap arrives after 30 days of using TEGNAL. Save and open works in the meantime: your cover, colors and persona will come from them." = "リキャップはTEGNALを30日間使うと届きます。その間に作品を保存したり開いたりしてください。表紙や色、ペルソナはそこから作られます。";
+"Your first recap arrives after 30 days of using TEGNAL." = "最初のリキャップはTEGNALを30日間使うと届きます。";
+"Tag Works Language" = "タグ作品の言語";
+"Thumbnail Gestures" = "サムネイルのジェスチャー";
+"Tap" = "タップ";
+"Double Tap" = "ダブルタップ";
+"Touch and Hold" = "長押し";
+"No Action" = "操作なし";
+"Reset to Defaults" = "デフォルトに戻す";
+"Favorite" = "お気に入り";
+"Applies to images in Explore. A double tap action makes single taps wait a moment for a second tap." = "探索の画像サムネイルに適用されます。ダブルタップに操作を設定すると、シングルタップは2回目のタップを少し待ってから実行されます。";
+"Applies to works in Explore and related works. Open follows Show Work Information Before Reading. Holding a work and moving it still carries it to Up Next. A double tap action makes single taps wait a moment for a second tap." = "探索と関連作品のサムネイルに適用されます。「開く」は「読む前に作品情報を表示」の設定に従います。長押ししたまま動かすと、これまでどおり「次に読む」に移せます。ダブルタップに操作を割り当てると、タップは2回目のタップを少し待ってから実行されます。";

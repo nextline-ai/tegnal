@@ -6,6 +6,7 @@ import '../../../core/support/l10n.dart';
 import '../../../core/taste/recap_shelf.dart';
 import '../../../core/taste/taste_models.dart';
 import '../../../core/taste/taste_recap.dart';
+import '../../design/alert_dialog.dart';
 import '../../design/glass.dart';
 import '../../design/system_colors.dart';
 import '../../design/tegnal_theme.dart';
@@ -270,10 +271,46 @@ class _RecapHomeViewState extends State<RecapHomeView> {
     ],
   );
 
+  /// Before the first issue: a veiled cover that says plainly the recap is not ready, and a tap
+  /// that explains when it will be rather than opening a sample.
   Widget _first(TasteRecap sample) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      RecapPressable(onTap: () => _open(sample), child: _cover(sample)),
+      Semantics(
+        button: true,
+        label: L10n.text('Recap is not ready yet'),
+        child: RecapPressable(
+          onTap: _explainNotReady,
+          child: Stack(
+            children: [
+              _cover(sample),
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: ColoredBox(
+                    color: const Color(0x73000000),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(CupertinoIcons.hourglass, size: 40, color: Color(0xFFFFFFFF)),
+                          const SizedBox(height: 10),
+                          Text(
+                            L10n.text('Recap is not ready yet'),
+                            textAlign: TextAlign.center,
+                            style: TegnalType.style(20, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       const SizedBox(height: 14),
       Text(
         L10n.text('Your first issue is on its way'),
@@ -281,12 +318,19 @@ class _RecapHomeViewState extends State<RecapHomeView> {
       ),
       const SizedBox(height: 14),
       Text(
-        L10n.text('Save and open a few works. Your cover, colors and persona will come from them, not from this sample.'),
+        L10n.text('Recap arrives after 30 days of using TEGNAL. Save and open works in the meantime: your cover, colors and persona will come from them.'),
         style: TegnalType.style(15, color: TegnalColors.secondaryLabel.resolveFrom(context)),
       ),
-      const SizedBox(height: 14),
-      _readButton(L10n.text('Read a sample issue'), _shelf.palette(sample), () => _open(sample)),
     ],
+  );
+
+  void _explainNotReady() => showCupertinoDialog<void>(
+    context: context,
+    builder: (context) => TegnalAlertDialog(
+      title: Text(L10n.text('Recap is not ready yet')),
+      content: Text(L10n.text('Your first recap arrives after 30 days of using TEGNAL.')),
+      actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+    ),
   );
 
   Widget _surface(Widget child) => Container(
@@ -698,6 +742,15 @@ class _RecapEntryCardState extends State<RecapEntryCard> {
                       const SizedBox(height: 1),
                       Text(
                         RecapFormat.title(latest),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                      ),
+                    ],
+                    if (latest == null && _shelf.sample != null) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        L10n.text('Recap is not ready yet'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context)),

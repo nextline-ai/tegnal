@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' show Offset, Rect;
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
+
 import '../../core/content/gallery_content.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/support/l10n.dart';
@@ -146,6 +148,72 @@ enum MangaThumbnailOpening {
   ContentRoute route(int id, DiscoveryContext context) => this == information ? DiscoveredGalleryRoute(id, context) : DiscoveredReaderRoute(id, 1, context);
 
   String url(int id) => this == information ? MangaUrls.galleryUrl(id) : MangaUrls.readerUrl(id);
+}
+
+/// What a thumbnail does for each gesture, chosen in Settings for each mode. A comic opens on a
+/// tap, joins Up Next on a double tap and is bookmarked on a hold; an image opens on a tap, does
+/// nothing on a double tap and is added to favorites on a hold, unless changed.
+enum ThumbnailAction {
+  open,
+  details,
+  bookmark,
+  upNext,
+  favorite,
+  folder,
+  none;
+
+  String get title => switch (this) {
+    open => L10n.text('Open'),
+    details => L10n.text('Work Details'),
+    bookmark => L10n.text('Bookmark'),
+    upNext => L10n.text('Add to Up Next'),
+    favorite => L10n.text('Favorite'),
+    folder => L10n.text('Save to Folder'),
+    none => L10n.text('No Action'),
+  };
+}
+
+enum ThumbnailGesture {
+  tap,
+  doubleTap,
+  hold;
+
+  String get title => switch (this) {
+    tap => L10n.text('Tap'),
+    doubleTap => L10n.text('Double Tap'),
+    hold => L10n.text('Touch and Hold'),
+  };
+
+  /// Comics keep theirs with the reader's options; image mode keeps its own.
+  String key({bool booru = false}) => '${booru ? 'booru' : 'manga'}.gesture.$name';
+  static Preferences store({bool booru = false}) => booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults;
+
+  /// Ticks when a gesture's action changes, so thumbnails on screen pick it up.
+  static final changes = ValueNotifier<int>(0);
+
+  ThumbnailAction standard({bool booru = false}) => switch (this) {
+    tap => ThumbnailAction.open,
+    doubleTap => booru ? ThumbnailAction.none : ThumbnailAction.upNext,
+    hold => booru ? ThumbnailAction.favorite : ThumbnailAction.bookmark,
+  };
+
+  /// A tap must always do something, or a work could not be opened at all.
+  List<ThumbnailAction> choices({bool booru = false}) {
+    final all = booru
+        ? const [ThumbnailAction.open, ThumbnailAction.favorite, ThumbnailAction.folder, ThumbnailAction.none]
+        : const [ThumbnailAction.open, ThumbnailAction.details, ThumbnailAction.bookmark, ThumbnailAction.upNext, ThumbnailAction.none];
+    return this == tap ? all.where((action) => action != ThumbnailAction.none).toList() : all;
+  }
+
+  ThumbnailAction action({bool booru = false, Preferences? defaults}) {
+    final stored = (defaults ?? store(booru: booru)).string(key(booru: booru));
+    return choices(booru: booru).where((action) => action.name == stored).firstOrNull ?? standard(booru: booru);
+  }
+
+  void choose(ThumbnailAction action, {bool booru = false, Preferences? defaults}) {
+    (defaults ?? store(booru: booru)).set(key(booru: booru), action.name);
+    changes.value++;
+  }
 }
 
 enum ReaderResumeBehavior {

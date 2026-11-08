@@ -161,6 +161,11 @@ class _SettingsViewState extends State<SettingsView> {
                       value: _defaults.boolean(MangaThumbnailOpening.preferenceKey) ?? false,
                       onChanged: (value) => _set(MangaThumbnailOpening.preferenceKey, value),
                     ),
+                    SettingsLinkRow(
+                      title: L10n.text('Thumbnail Gestures'),
+                      symbol: (color) => HandTapSymbol(size: 22, color: color),
+                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const ThumbnailGestureSettings())),
+                    ),
                   ],
                 ),
                 if (_deps.siteAccount != null) _deps.siteAccount!(context),
@@ -296,6 +301,17 @@ class _SettingsViewState extends State<SettingsView> {
                       ],
                       selected: _defaults.string(ArtistBrowsing.preferenceKey) ?? 'all',
                       onSelected: (value) => _set(ArtistBrowsing.preferenceKey, value),
+                    ),
+                    SettingsPickerRow<String>(
+                      title: L10n.text('Tag Works Language'),
+                      options: [
+                        ('all', L10n.text('All')),
+                        ('korean', L10n.text('Korean')),
+                        ('japanese', L10n.text('Japanese')),
+                        ('english', L10n.text('English')),
+                      ],
+                      selected: _defaults.string(TagBrowsing.preferenceKey) ?? 'all',
+                      onSelected: (value) => _set(TagBrowsing.preferenceKey, value),
                     ),
                     SettingsLinkRow(
                       title: L10n.text('Translation Language'),
@@ -753,6 +769,64 @@ class DeveloperSection extends StatelessWidget {
               button('github', source, L10n.text('View on GitHub')),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Chooses what each gesture on a thumbnail does, for comics or for image mode.
+class ThumbnailGestureSettings extends StatefulWidget {
+  const ThumbnailGestureSettings({super.key, this.booru = false});
+  final bool booru;
+
+  @override
+  State<ThumbnailGestureSettings> createState() => _ThumbnailGestureSettingsState();
+}
+
+class _ThumbnailGestureSettingsState extends State<ThumbnailGestureSettings> {
+  bool get _booru => widget.booru;
+
+  void _choose(ThumbnailGesture gesture, ThumbnailAction action) => setState(() => gesture.choose(action, booru: _booru));
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    return SettingsPage(
+      title: L10n.text('Thumbnail Gestures'),
+      children: [
+        FormSection(
+          rowColor: row,
+          footer: Text(
+            L10n.text(
+              _booru ? 'Applies to images in Explore. A double tap action makes single taps wait a moment for a second tap.' : 'Applies to works in Explore and related works. Open follows Show Work Information Before Reading. Holding a work and moving it still carries it to Up Next. A double tap action makes single taps wait a moment for a second tap.',
+            ),
+          ),
+          children: [
+            for (final gesture in ThumbnailGesture.values)
+              SettingsPickerRow<ThumbnailAction>(
+                title: gesture.title,
+                options: [for (final action in gesture.choices(booru: _booru)) (action, action.title)],
+                selected: gesture.action(booru: _booru),
+                onSelected: (action) => _choose(gesture, action),
+              ),
+          ],
+        ),
+        settingsSectionGap,
+        FormSection(
+          rowColor: row,
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Reset to Defaults'),
+              tinted: true,
+              chevron: false,
+              onTap: () => setState(() {
+                for (final gesture in ThumbnailGesture.values) {
+                  gesture.choose(gesture.standard(booru: _booru), booru: _booru);
+                }
+              }),
+            ),
+          ],
         ),
       ],
     );

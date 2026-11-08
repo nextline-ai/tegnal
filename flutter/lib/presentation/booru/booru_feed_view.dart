@@ -453,6 +453,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
                     open: _open,
                     hold: _hold,
                     holdSaves: true,
+                    fileIntoFolder: (context, post) => showBooruFolderPicker(context, booru: _booru, post: post, discovery: _discovery),
                   ),
                 ),
                 SliverPadding(

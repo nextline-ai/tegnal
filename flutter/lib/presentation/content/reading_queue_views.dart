@@ -44,10 +44,25 @@ const double readingQueueBarHeight = 72;
 /// after the hold carries it down to the Up Next panel instead. While it is held the list under
 /// it does not scroll, since the hold has won the gesture.
 class WorkHold extends StatefulWidget {
-  const WorkHold({super.key, required this.child, required this.onTap, required this.bookmark, this.queue, this.item, this.image, this.cover});
+  const WorkHold({
+    super.key,
+    required this.child,
+    required this.onTap,
+    required this.bookmark,
+    this.onDoubleTap,
+    this.queue,
+    this.item,
+    this.image,
+    this.cover,
+  });
   final Widget child;
   final VoidCallback onTap;
+
+  /// What a hold does when the work is not carried; a bookmark unless chosen otherwise.
   final VoidCallback bookmark;
+
+  /// Only when a double tap does something: a single tap then waits a moment for a second.
+  final VoidCallback? onDoubleTap;
 
   /// Up Next and the work to carry there; without them a hold saves at once.
   final ReadingQueue? queue;
@@ -155,6 +170,11 @@ class _WorkHoldState extends State<WorkHold> {
           TapGestureRecognizer.new,
           (recognizer) => recognizer.onTap = widget.onTap,
         ),
+        if (widget.onDoubleTap != null)
+          DoubleTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+            DoubleTapGestureRecognizer.new,
+            (recognizer) => recognizer.onDoubleTap = widget.onDoubleTap,
+          ),
         LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
           () => LongPressGestureRecognizer(duration: WorkHold.holdDuration),
           (recognizer) => recognizer

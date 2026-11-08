@@ -117,6 +117,10 @@ public struct NativeContentView: View {
                     } }
                 }
         }
+        // Work information in a sheet closes with a swipe to the right, as a page goes back. Only
+        // on its first page: once something is pushed, the system's back swipe, which also starts
+        // mid-screen, goes back a page as before.
+        .modifier(SheetSwipeBack(enabled: !embedded && path.isEmpty && opensInformation, close: { dismiss() }))
         .appSheet(item: $presentedGallery) { gallery in
             NativeContentView(initialUrl: MangaUrls.galleryUrl(for: gallery.id), source: source,
                               savesProgress: savesProgress, images: images, readerIDs: readerSequence.ids, sequence: readerSequence, willCloseManga: willCloseManga)
@@ -134,6 +138,13 @@ public struct NativeContentView: View {
         }
         .presentationDragIndicator(.visible)
         .environment(\.mangaReaderSequence, readerSequence)
+    }
+
+    private var opensInformation: Bool {
+        switch initialRoute {
+        case .gallery, .discoveredGallery: true
+        default: false
+        }
     }
 
     @ViewBuilder private var root: some View {
@@ -260,6 +271,9 @@ private struct GalleryFeedView: View {
     @State private var saveFeedback: WorkSaveFeedback?
     let artist: String?
     private let browsesArtist: Bool
+    private let browsesTag: Bool
+    /// The tag the feed opened on; its language is remembered only while it still shows that tag.
+    private let initialText: String
     let source: any ContentProviding
     let images: PageImageStore
     let navigate: (ContentRoute) -> Void
@@ -291,8 +305,12 @@ private struct GalleryFeedView: View {
         self.navigate = navigate
         let browsesArtist = artist != nil || ArtistBrowsing.matches(initialQuery)
         self.browsesArtist = browsesArtist
+        let browsesTag = !browsesArtist && TagBrowsing.matches(initialQuery)
+        self.browsesTag = browsesTag
+        self.initialText = initialQuery
         isMainFeed = artist == nil && initialQuery.isEmpty
-        _query = State(initialValue: GalleryQuery(language: browsesArtist ? ArtistBrowsing.language : initialQuery.isEmpty ? L10n.contentLanguage : "all", artist: artist, text: initialQuery))
+        let language = browsesArtist ? ArtistBrowsing.language : browsesTag ? TagBrowsing.language : initialQuery.isEmpty ? L10n.contentLanguage : "all"
+        _query = State(initialValue: GalleryQuery(language: language, artist: artist, text: initialQuery))
         _searchText = State(initialValue: initialQuery)
     }
 
@@ -360,7 +378,9 @@ private struct GalleryFeedView: View {
                     // Read once for the grid: each lazy cell reading the loader would observe it again.
                     let previews = loader.previews
                     ForEach(visibleEntries, id: \.element) { index, id in
-                        GalleryGridCard(id: id, preview: previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images, open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
+                        GalleryGridCard(id: id, preview: previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images,
+                                        details: { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) },
+                                        open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
                             saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
                         }
                         .id(id)
@@ -458,7 +478,10 @@ private struct GalleryFeedView: View {
         }
         .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
         .onChange(of: isSearchFocused) { _, focused in if focused { isSearchBarVisible = true; reloadSearches() } }
-        .onChange(of: query.language) { _, language in if browsesArtist { ArtistBrowsing.language = language } }
+        .onChange(of: query.language) { _, language in
+            if browsesArtist { ArtistBrowsing.language = language }
+            else if browsesTag && query.text == initialText { TagBrowsing.language = language }
+        }
         .task(id: "\(isSearchFocused):\(searchText)") {
             suggestions = []; suggesting = false
             guard isSearchFocused, let context = TagCompletionContext(searchText) else { return }
@@ -588,6 +611,183 @@ private struct EmbeddedQueueClearance: ViewModifier {
     }
 }
 
+/// Follows a rightward swipe across the sheet and closes it once the swipe goes far or fast enough.
+private struct SheetSwipeBack: ViewModifier {
+    let enabled: Bool
+    let close: () -> Void
+    @State private var offset: CGFloat = 0
+    func body(content: Content) -> some View {
+        content
+            .offset(x: offset)
+            .background(SwipeBackHost(enabled: enabled) { phase, translation, velocity in
+                switch phase {
+                case .changed: offset = max(0, translation)
+                case .ended:
+                    if translation > 110 || velocity > 700 {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        withAnimation(.easeOut(duration: 0.18)) { offset = 420 }
+                        close()
+                    } else { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = 0 } }
+                case .cancelled: withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = 0 }
+                }
+            })
+    }
+}
+
+enum SwipeBackPhase { case changed, ended, cancelled }
+
+/// Puts the swipe on the sheet's own view in UIKit, beside SwiftUI's gestures rather than under
+/// them, so a swipe that starts on a title, a tag or a button still goes back.
+private struct SwipeBackHost: UIViewRepresentable {
+    let enabled: Bool
+    let update: (SwipeBackPhase, CGFloat, CGFloat) -> Void
+    func makeUIView(context: Context) -> HostView { HostView() }
+    func updateUIView(_ view: HostView, context: Context) {
+        view.recognizer.isEnabled = enabled
+        view.update = update
+    }
+    static func dismantleUIView(_ view: HostView, coordinator: ()) {
+        view.recognizer.view?.removeGestureRecognizer(view.recognizer)
+    }
+
+    final class HostView: UIView {
+        let recognizer = RightSwipeRecognizer()
+        var update: (SwipeBackPhase, CGFloat, CGFloat) -> Void = { _, _, _ in }
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = false
+            recognizer.addTarget(self, action: #selector(changed))
+        }
+        required init?(coder: NSCoder) { fatalError() }
+
+        /// Attaches to the presented controller's view, so it covers this sheet and nothing over it.
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            var current = superview
+            while let view = current {
+                if let controller = Self.controller(owning: view), controller.presentingViewController != nil {
+                    if recognizer.view !== view { recognizer.view?.removeGestureRecognizer(recognizer); view.addGestureRecognizer(recognizer) }
+                    return
+                }
+                current = view.superview
+            }
+        }
+
+        /// The controller whose view this is. SwiftUI puts responders of its own between the two.
+        private static func controller(owning view: UIView) -> UIViewController? {
+            var responder = view.next
+            while let current = responder, !(current is UIView) {
+                if let controller = current as? UIViewController { return controller.view === view ? controller : nil }
+                responder = current.next
+            }
+            return nil
+        }
+
+        @objc private func changed() {
+            switch recognizer.state {
+            case .began, .changed: update(.changed, recognizer.translation, recognizer.velocity)
+            case .ended: update(.ended, recognizer.translation, recognizer.velocity)
+            case .cancelled, .failed: update(.cancelled, 0, 0)
+            default: break
+            }
+        }
+    }
+}
+
+/// Recognizes a one-finger swipe that clearly heads right. It gives way to anything under the
+/// finger that can still scroll back to the left, and vertical scrolling waits only the few points
+/// it takes to tell the directions apart.
+final class RightSwipeRecognizer: UIGestureRecognizer {
+    private var start: CGPoint = .zero
+    private var last: (point: CGPoint, time: TimeInterval) = (.zero, 0)
+    private(set) var translation: CGFloat = 0
+    private(set) var velocity: CGFloat = 0
+    private var blocked = false
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard touches.count == 1, (event.allTouches?.count ?? 1) == 1, let touch = touches.first else { state = .failed; return }
+        start = touch.location(in: nil)
+        last = (start, touch.timestamp)
+        translation = 0; velocity = 0
+        blocked = Self.scrollsBack(from: touch.view)
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard let touch = touches.first else { return }
+        let point = touch.location(in: nil)
+        let dx = point.x - start.x, dy = point.y - start.y
+        if state == .possible {
+            guard hypot(dx, dy) >= 10 else { return }
+            state = !blocked && dx > 0 && abs(dx) > abs(dy) * 1.5 ? .began : .failed
+            if state == .failed { return }
+        } else {
+            state = .changed
+        }
+        let elapsed = touch.timestamp - last.time
+        if elapsed > 0 { velocity = (point.x - last.point.x) / elapsed }
+        last = (point, touch.timestamp)
+        translation = dx
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = state == .began || state == .changed ? .ended : .failed
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = state == .began || state == .changed ? .cancelled : .failed
+    }
+
+    /// A button or tag under the finger takes the touch as it lands; a swipe that heads right
+    /// afterwards still goes back.
+    override func canBePrevented(by preventing: UIGestureRecognizer) -> Bool {
+        !(preventing.view?.isDescendant(of: view ?? UIView()) ?? false) || preventing is UIPanGestureRecognizer
+    }
+
+    /// Scrolling views below wait to see whether this is a swipe back.
+    override func shouldBeRequiredToFail(by other: UIGestureRecognizer) -> Bool {
+        other is UIPanGestureRecognizer && other.view is UIScrollView
+    }
+
+    /// Whether a view under the finger scrolls sideways and is not at its leading edge.
+    private static func scrollsBack(from view: UIView?) -> Bool {
+        var current = view
+        while let candidate = current {
+            if let scroll = candidate as? UIScrollView, scroll.contentSize.width > scroll.bounds.width + 1,
+               scroll.contentOffset.x > -scroll.adjustedContentInset.left + 0.5 { return true }
+            current = candidate.superview
+        }
+        return false
+    }
+}
+
+/// A tap, and a double tap only when one is set. Two taps close together are the double tap; a
+/// lone tap acts once the moment for a second one has passed. Timed here: paired tap gestures
+/// on the card let the first tap act at once, so the double tap never arrived.
+struct ThumbnailTaps: ViewModifier {
+    let tap: () -> Void
+    let doubleTap: (() -> Void)?
+    @State private var waiting: Task<Void, Never>?
+    static let interval: Duration = .milliseconds(300)
+
+    func body(content: Content) -> some View {
+        content
+            .onTapGesture {
+                guard let doubleTap else { tap(); return }
+                if let first = waiting {
+                    first.cancel()
+                    waiting = nil
+                    doubleTap()
+                    return
+                }
+                waiting = Task { @MainActor in
+                    try? await Task.sleep(for: Self.interval)
+                    guard !Task.isCancelled else { return }
+                    waiting = nil
+                    tap()
+                }
+            }
+            .onDisappear { waiting?.cancel(); waiting = nil }
+    }
+}
+
 private final class GalleryPaginationViewport {
     var footer: CGRect?
     var height: CGFloat = 0
@@ -601,8 +801,11 @@ private struct GalleryGridCard: View {
     let id: Int64
     let isBookmarked: Bool
     let open: () -> Void
+    /// Work information, for a gesture set to show it; opening is the fallback.
+    let details: () -> Void
     let bookmark: (NativeGallery?) -> Void
     private let suppliedPreview: GalleryFeedPreview?
+    @SwiftUI.AppStorage(ThumbnailGesture.doubleTap.key(), store: ReaderPreferences.defaults) private var doubleTapAction = ThumbnailGesture.doubleTap.standard().rawValue
     @State private var preview: GalleryFeedPreview
     private var gallery: NativeGallery? { preview.gallery }
     private var image: UIImage? { preview.displayImage }
@@ -611,15 +814,28 @@ private struct GalleryGridCard: View {
         ReadingQueueItem(gallery: gallery, id: id, title: preview.display?.title, artists: preview.display?.artists,
                          language: preview.display?.language, type: preview.display?.type, site: ComicSites.active.isEmpty ? nil : ComicSites.active)
     }
+    /// Runs what Settings assigns to the gesture.
+    private func perform(_ gesture: ThumbnailGesture) {
+        switch gesture.action() {
+        case .open: open()
+        case .details: details()
+        case .bookmark: bookmark(gallery)
+        case .upNext:
+            if isQueued { env.readingQueue.remove(id); UISelectionFeedbackGenerator().selectionChanged() } else { addToQueue() }
+        case .favorite, .folder, .none: break
+        }
+    }
     private func addToQueue() {
         if env.readingQueue.add(queueItem, cover: image) { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     }
 
-    init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
+    init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore,
+         details: (() -> Void)? = nil, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
         self.id = id
         self.isBookmarked = isBookmarked
         self.suppliedPreview = preview
         self.open = open
+        self.details = details ?? open
         self.bookmark = bookmark
         _preview = State(initialValue: preview ?? GalleryFeedPreview(id: id, source: source, images: images))
     }
@@ -646,15 +862,15 @@ private struct GalleryGridCard: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isQueued)
         .contentShape(Rectangle())
-        .onTapGesture(perform: open)
-        // Held and let go, the work is bookmarked as before; moved after the hold, it is carried
+        .modifier(ThumbnailTaps(tap: { perform(.tap) }, doubleTap: ThumbnailAction(rawValue: doubleTapAction) == ThumbnailAction.none ? nil : { perform(.doubleTap) }))
+        // Held and let go, the hold's chosen action runs; moved after the hold, the work is carried
         // down to the Up Next panel.
-        .workHold(env.readingQueue, item: { queueItem }, cover: { image }, bookmark: { bookmark(gallery) })
+        .workHold(env.readingQueue, item: { queueItem }, cover: { image }, bookmark: { perform(.hold) })
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("content.gallery.\(id)")
         .accessibilityValue(isBookmarked ? L10n.text("Bookmarked") : L10n.text("Not bookmarked"))
-        .accessibilityAction { open() }
+        .accessibilityAction { perform(.tap) }
         .accessibilityAction(named: WorkSaveResult.actionTitle(saved: isBookmarked, mode: .comics)) { bookmark(gallery) }
         .accessibilityAction(named: L10n.text(isQueued ? "Remove from Up Next" : "Add to Up Next")) {
             if isQueued { env.readingQueue.remove(id) } else { addToQueue() }
@@ -877,6 +1093,8 @@ struct ReaderWorkInformationView: View {
                 .navigationTitle(L10n.text("Work Details")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
         }
+        // Like work information over Explore, a swipe to the right closes it.
+        .modifier(SheetSwipeBack(enabled: true, close: { dismiss() }))
         .presentationDetents([.large]).presentationDragIndicator(.visible)
     }
 }

@@ -1570,3 +1570,56 @@ private actor ReaderTurnSource: ContentProviding {
         XCTAssertFalse(queue.isOverDropZone)
     }
 }
+
+final class WeeklyHabitsTests: XCTestCase {
+    private func defaults() -> UserDefaults { UserDefaults(suiteName: UUID().uuidString)! }
+
+    func testBackupReminderWaitsAWeekFromFirstLaunchAndFromTheLastSave() {
+        let store = defaults(), start = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertFalse(BackupReminder.isDue(now: start, defaults: store), "A new install is not asked at once")
+        XCTAssertFalse(BackupReminder.isDue(now: start.addingTimeInterval(6 * 86400), defaults: store))
+        XCTAssertTrue(BackupReminder.isDue(now: start.addingTimeInterval(7 * 86400), defaults: store))
+        BackupReminder.shown(now: start.addingTimeInterval(7 * 86400), defaults: store)
+        XCTAssertFalse(BackupReminder.isDue(now: start.addingTimeInterval(8 * 86400), defaults: store), "Shown once a week")
+        BackupReminder.saved(now: start.addingTimeInterval(13 * 86400), defaults: store)
+        XCTAssertFalse(BackupReminder.isDue(now: start.addingTimeInterval(15 * 86400), defaults: store), "A saved backup restarts the week")
+        XCTAssertTrue(BackupReminder.isDue(now: start.addingTimeInterval(20 * 86400), defaults: store))
+        store.set(false, forKey: BackupReminder.enabledKey)
+        XCTAssertFalse(BackupReminder.isDue(now: start.addingTimeInterval(40 * 86400), defaults: store), "Settings turns it off")
+    }
+
+    func testOnlyASingleTagOpensInTheTagLanguage() {
+        XCTAssertTrue(TagBrowsing.matches("female:nun"))
+        XCTAssertTrue(TagBrowsing.matches("series:example"))
+        XCTAssertFalse(TagBrowsing.matches("artist:someone"), "Artists keep their own language")
+        XCTAssertFalse(TagBrowsing.matches("language:korean"))
+        XCTAssertFalse(TagBrowsing.matches("female:nun male:priest"))
+        XCTAssertFalse(TagBrowsing.matches("nun"))
+        XCTAssertFalse(TagBrowsing.matches("female:"))
+    }
+
+    func testThumbnailGesturesKeepTheirDefaultsAndATapAlwaysActs() {
+        let store = defaults()
+        XCTAssertEqual(ThumbnailGesture.tap.action(in: store), .open)
+        XCTAssertEqual(ThumbnailGesture.doubleTap.action(in: store), .upNext)
+        XCTAssertEqual(ThumbnailGesture.hold.action(in: store), .bookmark)
+        store.set("details", forKey: ThumbnailGesture.hold.key())
+        store.set("bookmark", forKey: ThumbnailGesture.doubleTap.key())
+        XCTAssertEqual(ThumbnailGesture.hold.action(in: store), .details)
+        XCTAssertEqual(ThumbnailGesture.doubleTap.action(in: store), .bookmark)
+        store.set("none", forKey: ThumbnailGesture.tap.key())
+        XCTAssertEqual(ThumbnailGesture.tap.action(in: store), .open, "A tap cannot be left with nothing to do")
+    }
+
+    func testImageModeGesturesKeepTodaysBehaviorAndTheirOwnChoices() {
+        let store = defaults()
+        XCTAssertEqual(ThumbnailGesture.tap.action(booru: true, in: store), .open)
+        XCTAssertEqual(ThumbnailGesture.doubleTap.action(booru: true, in: store), ThumbnailAction.none)
+        XCTAssertEqual(ThumbnailGesture.hold.action(booru: true, in: store), .favorite)
+        store.set("folder", forKey: ThumbnailGesture.hold.key(booru: true))
+        XCTAssertEqual(ThumbnailGesture.hold.action(booru: true, in: store), .folder)
+        XCTAssertEqual(ThumbnailGesture.hold.action(in: store), .bookmark, "Each mode keeps its own choices")
+        store.set("upNext", forKey: ThumbnailGesture.doubleTap.key(booru: true))
+        XCTAssertEqual(ThumbnailGesture.doubleTap.action(booru: true, in: store), ThumbnailAction.none, "Images have no Up Next")
+    }
+}

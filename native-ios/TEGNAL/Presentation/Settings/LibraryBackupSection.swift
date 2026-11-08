@@ -36,8 +36,11 @@ struct LibraryBackupSection: View {
                     }
                 }
             if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+            BackupReminderToggle()
         } header: {
             SettingsHelpLabel("Backup & Restore", help: "Exports both libraries, folders, saved searches and other library data into one JSON file. Media and sign-in details are not included. Importing merges the file with your library.")
+        } footer: {
+            Text(L10n.text("Every seven days, opening the app suggests saving a backup file."))
         }
         .disabled(busy)
     }
@@ -50,6 +53,7 @@ struct LibraryBackupSection: View {
             do {
                 let url = try await Task.detached(priority: .userInitiated) { try LibraryBackup.export(database: database, images: images) }.value
                 sharing = BackupFile(url: url)
+                BackupReminder.saved()
             } catch { message = L10n.text("Unable to create backup: %@", error.localizedDescription) }
         }
     }

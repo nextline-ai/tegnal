@@ -641,6 +641,7 @@ struct BooruPostGrid: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var filing: BooruPost?
     @State private var similarity: VisualSimilaritySeed?
+    @SwiftUI.AppStorage(ThumbnailGesture.doubleTap.key(booru: true), store: ReaderPreferences.booruDefaults) private var doubleTapAction = ThumbnailGesture.doubleTap.standard(booru: true).rawValue
     var body: some View {
         let favorites = store.favoriteIDs
         let prefetchThresholdIndex = max(0, posts.count - 8)
@@ -660,14 +661,16 @@ struct BooruPostGrid: View {
                                 }
                             }.buttonStyle(.plain)
                         } else if showsFavoriteIndicator {
-                            // A tap gesture rather than a Button, so a hold can save the image.
+                            // Tap gestures rather than a Button, so each gesture does what Settings
+                            // chose for image mode.
                             thumbnail(post, server: server, isFavorite: favorites.contains(post.id))
                                 .contentShape(Rectangle())
-                                .onTapGesture { open(post) }
+                                .modifier(ThumbnailTaps(tap: { perform(.tap, post) },
+                                                        doubleTap: ThumbnailAction(rawValue: doubleTapAction) == ThumbnailAction.none ? nil : { perform(.doubleTap, post) }))
                                 .hoverEffect(.highlight)
-                                .holdToSave { save(post) }
+                                .holdToSave { perform(.hold, post) }
                                 .accessibilityAddTraits(.isButton)
-                                .accessibilityAction { open(post) }
+                                .accessibilityAction { perform(.tap, post) }
                                 .accessibilityAction(named: L10n.text(favorites.contains(post.id) ? "Remove Favorite" : "Add Favorite")) { save(post) }
                                 .accessibilityAction(named: L10n.text("Save to Folder")) { filing = post }
                         } else {
@@ -716,6 +719,15 @@ struct BooruPostGrid: View {
 
     private func save(_ post: BooruPost) {
         feedback(.perform(post: post) { try BooruFavoriteAction.toggle(post, store: store, context: discovery) })
+    }
+    /// Runs what Settings assigns to the gesture in image mode.
+    private func perform(_ gesture: ThumbnailGesture, _ post: BooruPost) {
+        switch gesture.action(booru: true) {
+        case .open: open(post)
+        case .favorite: save(post)
+        case .folder: filing = post
+        case .details, .bookmark, .upNext, .none: break
+        }
     }
 }
 

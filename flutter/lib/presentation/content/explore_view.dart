@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart' show Uint8List;
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
+import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../core/content/manga_urls.dart';
 import '../../core/content/reading_queue.dart';
@@ -21,6 +23,7 @@ import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import 'gallery_feed_loader.dart';
 import 'page_image_store.dart';
+import 'reader_models.dart';
 import '../design/pull_down_menu.dart';
 
 /// Accumulates scroll travel so slow drags behave like fast swipes (`ScrollSearchVisibility`).
@@ -62,6 +65,7 @@ class ExploreView extends StatefulWidget {
     required this.database,
     required this.content,
     required this.openGallery,
+    this.details,
     this.bookmark,
     this.isActive = true,
     this.initialQuery = '',
@@ -74,6 +78,9 @@ class ExploreView extends StatefulWidget {
   final AppDatabase database;
   final ContentEnvironment content;
   final void Function(int id) openGallery;
+
+  /// Work information, for a thumbnail gesture set to show it; opening is the fallback.
+  final void Function(int id)? details;
 
   /// Holding a card toggles its bookmark.
   final void Function(int id, NativeGallery? gallery)? bookmark;
@@ -89,8 +96,14 @@ class ExploreView extends StatefulWidget {
 
 class _ExploreViewState extends State<ExploreView> {
   late final GalleryFeedLoader _loader = GalleryFeedLoader(source: widget.source, images: widget.images);
+  late final bool _browsesArtist = ArtistBrowsing.matches(widget.initialQuery);
+  late final bool _browsesTag = !_browsesArtist && TagBrowsing.matches(widget.initialQuery);
   late GalleryQuery _query = GalleryQuery(
-    language: ArtistBrowsing.matches(widget.initialQuery) ? ArtistBrowsing.language : (widget.initialQuery.isEmpty ? L10n.contentLanguage : 'all'),
+    language: _browsesArtist
+        ? ArtistBrowsing.language
+        : _browsesTag
+        ? TagBrowsing.language
+        : (widget.initialQuery.isEmpty ? L10n.contentLanguage : 'all'),
     text: widget.initialQuery,
   );
   late String _openedCategory = '';
@@ -217,6 +230,15 @@ class _ExploreViewState extends State<ExploreView> {
   void _reloadBookmarks() => _bookmarked = widget.database.savedGalleryIDs().toSet();
 
   void _changeQuery(GalleryQuery query) {
+    // An artist's feed remembers the language picked for it, and a tag's feed does while it
+    // still shows that tag.
+    if (query.language != _query.language) {
+      if (_browsesArtist) {
+        ArtistBrowsing.language = query.language;
+      } else if (_browsesTag && query.text == widget.initialQuery) {
+        TagBrowsing.language = query.language;
+      }
+    }
     setState(() => _query = query);
     _loader.load(_effectiveQuery, reset: true);
   }
@@ -292,6 +314,7 @@ class _ExploreViewState extends State<ExploreView> {
                     style: style,
                     bookmarked: _bookmarked.contains(id),
                     open: () => widget.openGallery(id),
+                    details: widget.details == null ? null : () => widget.details!(id),
                     hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery),
                     images: widget.images,
                   );
@@ -614,6 +637,7 @@ class _GalleryGridCard extends StatefulWidget {
     required this.style,
     required this.bookmarked,
     required this.open,
+    this.details,
     this.hold,
     this.images,
   });
@@ -622,6 +646,9 @@ class _GalleryGridCard extends StatefulWidget {
   final ArtworkCellStyle style;
   final bool bookmarked;
   final VoidCallback open;
+  final VoidCallback? details;
+
+  /// Bookmarks the work.
   final VoidCallback? hold;
 
   /// Where a carried work's cover comes from.
@@ -711,24 +738,59 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
       ],
     );
     if (hold == null) return GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.open, child: card);
-    // Held and let go, the work is bookmarked; moved after the hold, it is carried down to Up Next.
-    return WorkHold(
-      onTap: widget.open,
-      bookmark: hold,
-      queue: queue,
-      item: () => ReadingQueueItem.fromGallery(
-        id: widget.id,
-        gallery: widget.preview?.gallery,
-        title: display?.title,
-        artists: display?.artists,
-        language: display?.language,
-        type: display?.type,
-        site: ComicSites.active,
+    // Each gesture does what Settings chose; moved after the hold, a work is still carried down
+    // to Up Next.
+    return ValueListenableBuilder<int>(
+      valueListenable: ThumbnailGesture.changes,
+      builder: (context, _, _) => Semantics(
+        customSemanticsActions: {CustomSemanticsAction(label: ThumbnailGesture.hold.action().title): () => _perform(ThumbnailGesture.hold)},
+        child: WorkHold(
+          onTap: () => _perform(ThumbnailGesture.tap),
+          onDoubleTap: ThumbnailGesture.doubleTap.action() == ThumbnailAction.none ? null : () => _perform(ThumbnailGesture.doubleTap),
+          bookmark: () => _perform(ThumbnailGesture.hold),
+          queue: queue,
+          item: _item,
+          image: () => widget.preview?.displayImage,
+          cover: () => _cover(),
+          child: card,
+        ),
       ),
-      image: () => widget.preview?.displayImage,
-      cover: () => _cover(),
-      child: card,
     );
+  }
+
+  ReadingQueueItem _item() {
+    final display = widget.preview?.display;
+    return ReadingQueueItem.fromGallery(
+      id: widget.id,
+      gallery: widget.preview?.gallery,
+      title: display?.title,
+      artists: display?.artists,
+      language: display?.language,
+      type: display?.type,
+      site: ComicSites.active,
+    );
+  }
+
+  void _perform(ThumbnailGesture gesture) {
+    switch (gesture.action()) {
+      case ThumbnailAction.open:
+        widget.open();
+      case ThumbnailAction.details:
+        (widget.details ?? widget.open)();
+      case ThumbnailAction.bookmark:
+        widget.hold?.call();
+      case ThumbnailAction.upNext:
+        final queue = ReadingQueueScope.read(context);
+        if (queue == null) return;
+        if (queue.contains(widget.id)) {
+          queue.remove(widget.id);
+          HapticFeedback.selectionClick();
+        } else if (queue.add(_item(), cover: _cover())) {
+          HapticFeedback.mediumImpact();
+        }
+      case ThumbnailAction.favorite || ThumbnailAction.folder || ThumbnailAction.none:
+        break;
+    }
   }
 
   Future<Uint8List?> _cover() async {

@@ -95,6 +95,7 @@ class LibrarySyncAdapter {
     'manga.defaultTags',
     'manga.defaultExcludedTags',
     'manga.artistLanguage',
+    'manga.tagLanguage',
     'search.retentionDays',
     'search.rememberHistory',
     'reader.translationLanguage',

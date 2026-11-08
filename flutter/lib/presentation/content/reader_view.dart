@@ -454,33 +454,37 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
     final gallery = _gallery;
     if (gallery == null) return;
     _sheet(
-      (sheetContext, controller) => ScrollEdgeSheet(
-        bar: SheetNavigationBar(
-          title: L10n.text('Work Details'),
-          trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(sheetContext).pop()),
-        ),
-        child: GalleryWorkInformation(
-          gallery: gallery,
-          images: widget.images,
-          content: widget.content,
-          database: widget.database,
-          showsCover: false,
-          showsRead: false,
-          scrollController: controller,
-          topInset: 76,
-          actions: GalleryDetailActions(
-            read: (page, {required resume}) {
-              Navigator.of(sheetContext).pop();
-              _pageChanged(page);
-            },
-            save: (gallery) => widget.bookmark(gallery),
-            search: widget.search == null
-                ? null
-                : (text) {
-                    Navigator.of(sheetContext).pop();
-                    _close();
-                    widget.search!(text);
-                  },
+      // Like work information over Explore, a swipe to the right closes it.
+      (sheetContext, controller) => SheetSwipeBack(
+        close: () => Navigator.of(sheetContext).pop(),
+        child: ScrollEdgeSheet(
+          bar: SheetNavigationBar(
+            title: L10n.text('Work Details'),
+            trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(sheetContext).pop()),
+          ),
+          child: GalleryWorkInformation(
+            gallery: gallery,
+            images: widget.images,
+            content: widget.content,
+            database: widget.database,
+            showsCover: false,
+            showsRead: false,
+            scrollController: controller,
+            topInset: 76,
+            actions: GalleryDetailActions(
+              read: (page, {required resume}) {
+                Navigator.of(sheetContext).pop();
+                _pageChanged(page);
+              },
+              save: (gallery) => widget.bookmark(gallery),
+              search: widget.search == null
+                  ? null
+                  : (text) {
+                      Navigator.of(sheetContext).pop();
+                      _close();
+                      widget.search!(text);
+                    },
+            ),
           ),
         ),
       ),
