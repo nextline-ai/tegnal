@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=TEGNAL
+Comment=Personal comics and image library
+Comment[ko]=나만의 만화와 이미지 라이브러리
+Comment[ja]=自分だけの漫画と画像ライブラリ
+Exec=tegnal
+Icon=work.nextline.tegnal
+Terminal=false
+Categories=Graphics;Viewer;
+StartupWMClass=work.nextline.tegnal

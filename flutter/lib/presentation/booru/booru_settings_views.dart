@@ -33,6 +33,7 @@ import '../challenge/challenge_library_view.dart';
 import 'booru_feed_view.dart';
 import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
+import '../../core/support/app_platform.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -280,25 +281,28 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       selected: preferences.string('app.language') ?? 'system',
                       onSelected: _setLanguage,
                     ),
-                    SettingsLinkRow(
-                      title: L10n.text('Translation Language'),
-                      icon: CupertinoIcons.text_bubble,
-                      onTap: () => _push((_) => TranslationLanguagePage(preferences: _booru.booruDefaults)),
-                    ),
+                    if (AppPlatform.hasImageTranslation)
+                      SettingsLinkRow(
+                        title: L10n.text('Translation Language'),
+                        icon: CupertinoIcons.text_bubble,
+                        onTap: () => _push((_) => TranslationLanguagePage(preferences: _booru.booruDefaults)),
+                      ),
                   ],
                 ),
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Website Connection'),
-                  children: [
-                    SettingsToggleRow(
-                      title: L10n.text('Use Embedded Browser'),
-                      help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
-                      value: _booru.useEmbeddedBrowser,
-                      onChanged: (value) => setState(() => _booru.useEmbeddedBrowser = value),
-                    ),
-                  ],
-                ),
+                if (AppPlatform.hasWebView) ...[
+                  settingsSectionGap,
+                  section(
+                    header: L10n.text('Website Connection'),
+                    children: [
+                      SettingsToggleRow(
+                        title: L10n.text('Use Embedded Browser'),
+                        help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
+                        value: _booru.useEmbeddedBrowser,
+                        onChanged: (value) => setState(() => _booru.useEmbeddedBrowser = value),
+                      ),
+                    ],
+                  ),
+                ],
                 for (final server in store.selectedServers) ...[
                   settingsSectionGap,
                   section(
@@ -309,14 +313,15 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                         icon: CupertinoIcons.eye_slash,
                         onTap: () => _push((context) => BooruBlacklistView(booru: _booru, server: server)),
                       ),
-                      SettingsLinkRow(
-                        title: L10n.text('Validate Client'),
-                        help: L10n.text('Opens the website’s connection check. Complete it here if the server blocks searches or image loading.'),
-                        icon: CupertinoIcons.checkmark_shield,
-                        tinted: true,
-                        chevron: false,
-                        onTap: () => showBooruValidation(context, booru: _booru, server: server),
-                      ),
+                      if (AppPlatform.hasWebView)
+                        SettingsLinkRow(
+                          title: L10n.text('Validate Client'),
+                          help: L10n.text('Opens the website’s connection check. Complete it here if the server blocks searches or image loading.'),
+                          icon: CupertinoIcons.checkmark_shield,
+                          tinted: true,
+                          chevron: false,
+                          onTap: () => showBooruValidation(context, booru: _booru, server: server),
+                        ),
                       SettingsLinkRow(
                         title: L10n.text('Cookies'),
                         icon: CupertinoIcons.shield_lefthalf_fill,
@@ -1153,10 +1158,11 @@ class _BooruPoolsViewState extends State<BooruPoolsView> {
                 onTap: () => _load(reset: true),
                 child: Text(L10n.text('Try Again'), style: TegnalType.style(17, color: tint)),
               ),
-              FormRow(
-                onTap: () => showBooruValidation(context, booru: widget.booru, server: _server),
-                child: Text(L10n.text('Validate Client'), style: TegnalType.style(17, color: tint)),
-              ),
+              if (AppPlatform.hasWebView)
+                FormRow(
+                  onTap: () => showBooruValidation(context, booru: widget.booru, server: _server),
+                  child: Text(L10n.text('Validate Client'), style: TegnalType.style(17, color: tint)),
+                ),
             ] else if (_pools.isEmpty && !_hasMore)
               FormRow(
                 child: Text(L10n.text('No Results'), style: TegnalType.style(17, color: secondary)),

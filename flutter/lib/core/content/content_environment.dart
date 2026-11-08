@@ -9,6 +9,7 @@ import 'gallery_content.dart';
 import 'manga_content_source.dart';
 import 'manga_urls.dart';
 import 'site_account.dart';
+import '../support/app_platform.dart';
 
 /// The comics connection and explore settings of `AppEnvironment`, with the same
 /// preference keys, so the explore screens and settings read one model.
@@ -109,7 +110,7 @@ class ContentEnvironment extends ChangeNotifier {
 
   /// New opt-in fallback; the old preference selected native UI versus an external browser.
   bool _useEmbeddedBrowser;
-  bool get useEmbeddedBrowser => _useEmbeddedBrowser;
+  bool get useEmbeddedBrowser => _useEmbeddedBrowser && AppPlatform.hasWebView;
   set useEmbeddedBrowser(bool value) => _useEmbeddedBrowser = _store('use_embedded_browser', value);
 
   bool _allowsMangaLanguageExceptions;

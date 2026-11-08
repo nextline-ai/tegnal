@@ -56,6 +56,8 @@ import '../core/content/reading_queue.dart';
 import '../presentation/design/app_sheet.dart';
 import '../presentation/content/reading_queue_views.dart';
 import 'privacy_cover.dart';
+import '../core/support/app_platform.dart';
+import '../presentation/design/desktop_input.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
@@ -85,7 +87,8 @@ class AppServices {
     bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting, startCoverQueue: coverQueue.start);
     downloads = DownloadStore(directory: downloadsDirectory, manga: content.source, booru: booruDownloads);
     sync = LibraryDriveSync(
-      backend: GoogleDriveBackend(),
+      // Without Google's mobile sign-in the backend stays unconfigured and sync never starts.
+      backend: GoogleDriveBackend(serverClientID: AppPlatform.hasDriveSync ? null : ''),
       database: database,
       booru: booru,
       defaults: preferences.defaults,
@@ -171,6 +174,7 @@ class _TegnalAppState extends State<TegnalApp> {
         return CupertinoApp(
           title: 'TEGNAL',
           debugShowCheckedModeBanner: false,
+          scrollBehavior: const TegnalScrollBehavior(),
           locale: Locale(L10n.language),
           theme: tegnalTheme(brightness),
           builder: (context, child) => ReadingQueueScope(
@@ -325,7 +329,7 @@ class _RootState extends State<_Root> {
         ),
       ),
       resetSettings: () => ModeSettingsReset.reset(booru: true, content: services.content, preferences: services.preferences),
-      sync: (context) => DriveSyncSection(sync: services.sync),
+      sync: AppPlatform.hasDriveSync ? (context) => DriveSyncSection(sync: services.sync) : null,
       invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),
     ),
   );
@@ -391,8 +395,10 @@ class _RootState extends State<_Root> {
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
-    siteAccount: (context) => SiteAccountSection(content: services.content, database: services.database, startCoverQueue: services.coverQueue.start),
-    sync: (context) => DriveSyncSection(sync: services.sync),
+    siteAccount: AppPlatform.hasWebView
+        ? (context) => SiteAccountSection(content: services.content, database: services.database, startCoverQueue: services.coverQueue.start)
+        : null,
+    sync: AppPlatform.hasDriveSync ? (context) => DriveSyncSection(sync: services.sync) : null,
     invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),
   );
 

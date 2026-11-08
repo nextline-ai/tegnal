@@ -52,7 +52,11 @@ migrate_working_dir/
 
 # Local tool configuration and generated Python caches
 /.codex/
-/.github/
+/.github/*
+# The desktop builds run on GitHub Actions, so only their workflow is kept.
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/flutter-desktop-builds.yml
 __pycache__/
 
 # Local research and working records; GitHub Pages publishes all of docs/

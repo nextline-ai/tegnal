@@ -27,6 +27,7 @@ import 'booru_embedded_browser_view.dart';
 import 'booru_post_view.dart';
 import 'booru_settings_views.dart';
 import 'booru_favorites_view.dart';
+import '../../core/support/app_platform.dart';
 
 /// `BooruFeedView`: the selected servers' posts merged into one grid, with tag search,
 /// suggestions from every server, a sort menu and each server's failure on its own card.
@@ -725,15 +726,16 @@ class _ServerFailureCard extends StatelessWidget {
             spacing: 12,
             runSpacing: 8,
             children: [
-              _BorderedButton(
-                title: L10n.text('Validate Client'),
-                icon: CupertinoIcons.checkmark_shield,
-                prominent: true,
-                onPressed: () => showAppSheet<void>(
-                  context,
-                  builder: (context, controller) => BooruValidationView(booru: booru, server: server, initialURL: server.browsingURL(query, poolID: null)),
+              if (AppPlatform.hasWebView)
+                _BorderedButton(
+                  title: L10n.text('Validate Client'),
+                  icon: CupertinoIcons.checkmark_shield,
+                  prominent: true,
+                  onPressed: () => showAppSheet<void>(
+                    context,
+                    builder: (context, controller) => BooruValidationView(booru: booru, server: server, initialURL: server.browsingURL(query, poolID: null)),
+                  ),
                 ),
-              ),
               _BorderedButton(title: L10n.text('Try Again'), onPressed: retry),
             ],
           ),

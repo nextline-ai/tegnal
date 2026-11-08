@@ -34,6 +34,8 @@ import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
 import 'booru_settings_views.dart';
 import '../content/viewer_quick_menu.dart';
+import '../../core/support/app_platform.dart';
+import '../design/desktop_input.dart';
 
 /// The next page of a feed, handed to an open viewer.
 class BooruViewerBatch {
@@ -697,163 +699,169 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
     final url = _viewerURL;
     final failed = _removed || const {'error', 'unavailable'}.contains(_mediaStatus) || url == null && !_resolvesMissingMedia;
     final server = _server;
-    return CupertinoTheme(
-      data: tegnalTheme(Brightness.dark),
-      child: ViewerDismissSurface(
-        dismiss: _dismiss,
-        child: ColoredBox(
-          color: const Color(0xFF000000),
-          child: Stack(
-            children: [
-              const Positioned.fill(child: ColoredBox(color: Color(0xFF000000))),
-              if (_removed)
-                Positioned.fill(
-                  child: BooruMediaFailureView(post: _post, server: server, removed: true, onGesture: _gesture, retry: () {}),
-                )
-              else if (url != null)
-                Positioned.fill(
-                  child: BooruMediaView(
-                    key: ValueKey('${server.id}:${_post.id}:$_retry'),
-                    booru: _booru,
-                    post: _post,
-                    server: server,
-                    url: url,
-                    active: _mediaActive && _mediaStatus != 'error',
-                    notes: _notes,
-                    showNotes: _showNotes,
-                    onNote: _openNote,
-                    onStatus: (status) => _status(status, _post.id),
-                    onGesture: _gesture,
-                    onExitDrag: _exitDrag,
-                    onGoldRequired: () => _skipGoldRestricted(_post.id),
-                    onRemoved: () => _removedPost(_post.id),
-                  ),
-                ),
-              if (!_removed && (_mediaStatus == 'error' || url == null && !_resolvesMissingMedia || _mediaStatus == 'unavailable'))
-                Positioned.fill(
-                  child: BooruMediaFailureView(
-                    post: _post,
-                    server: server,
-                    connection: _connectionFailurePost == _post.id ? _connectionFailure : null,
-                    validate: () async {
-                      await showAppSheet<void>(
-                        context,
-                        builder: (context, controller) => BooruValidationView(booru: _booru, server: server, initialURL: server.pageURL(_post.postID)),
-                      );
-                      if (mounted) _retryMedia();
-                    },
-                    onGesture: _gesture,
-                    retry: _retryMedia,
-                  ),
-                ),
-              if (_showsLoading && _active && (_mediaStatus == 'loading' || _loadingMore && _requestedFromID != null))
-                const Positioned.fill(
-                  child: IgnorePointer(child: Center(child: BooruLoadingIndicator())),
-                ),
-              if (_dimming > 0)
-                Positioned.fill(
-                  child: IgnorePointer(child: ColoredBox(color: Color.fromRGBO(0, 0, 0, _dimming.clamp(0, 0.65)))),
-                ),
-              // `ReaderDismissHandle`: the bar that says the viewer closes downward.
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 6,
-                child: IgnorePointer(
-                  child: Center(
-                    child: Semantics(
-                      label: L10n.text('Swipe down to exit the work'),
-                      child: Container(
-                        width: 60,
-                        height: 4,
-                        decoration: const ShapeDecoration(color: Color(0xFF636366), shape: StadiumBorder()),
-                      ),
+    return ViewerKeys(
+      move: _move,
+      close: _close,
+      child: CupertinoTheme(
+        data: tegnalTheme(Brightness.dark),
+        child: ViewerDismissSurface(
+          dismiss: _dismiss,
+          child: ColoredBox(
+            color: const Color(0xFF000000),
+            child: Stack(
+              children: [
+                const Positioned.fill(child: ColoredBox(color: Color(0xFF000000))),
+                if (_removed)
+                  Positioned.fill(
+                    child: BooruMediaFailureView(post: _post, server: server, removed: true, onGesture: _gesture, retry: () {}),
+                  )
+                else if (url != null)
+                  Positioned.fill(
+                    child: BooruMediaView(
+                      key: ValueKey('${server.id}:${_post.id}:$_retry'),
+                      booru: _booru,
+                      post: _post,
+                      server: server,
+                      url: url,
+                      active: _mediaActive && _mediaStatus != 'error',
+                      notes: _notes,
+                      showNotes: _showNotes,
+                      onNote: _openNote,
+                      onStatus: (status) => _status(status, _post.id),
+                      onGesture: _gesture,
+                      onExitDrag: _exitDrag,
+                      onGoldRequired: () => _skipGoldRestricted(_post.id),
+                      onRemoved: () => _removedPost(_post.id),
                     ),
                   ),
-                ),
-              ),
-              if (_translating case final post?)
-                Positioned.fill(
-                  child: ImageTranslationView(
-                    key: ValueKey(post.id),
-                    loadImage: () {
-                      final url = post.viewerURL(original: _original, reducedData: _reducedData)!;
-                      final server = _booru.server(post.serverID) ?? _booru.store.servers.first;
-                      return _booru.viewerImages.load(url, server);
-                    },
-                    preferences: _booru.booruDefaults,
-                    finished: () => setState(() => _translating = null),
-                    failed: (message) {
-                      setState(() => _translating = null);
-                      _showToast(message);
-                    },
+                if (!_removed && (_mediaStatus == 'error' || url == null && !_resolvesMissingMedia || _mediaStatus == 'unavailable'))
+                  Positioned.fill(
+                    child: BooruMediaFailureView(
+                      post: _post,
+                      server: server,
+                      connection: _connectionFailurePost == _post.id ? _connectionFailure : null,
+                      validate: !AppPlatform.hasWebView
+                          ? null
+                          : () async {
+                              await showAppSheet<void>(
+                                context,
+                                builder: (context, controller) => BooruValidationView(booru: _booru, server: server, initialURL: server.pageURL(_post.postID)),
+                              );
+                              if (mounted) _retryMedia();
+                            },
+                      onGesture: _gesture,
+                      retry: _retryMedia,
+                    ),
                   ),
-                ),
-              if (_toast != null)
+                if (_showsLoading && _active && (_mediaStatus == 'loading' || _loadingMore && _requestedFromID != null))
+                  const Positioned.fill(
+                    child: IgnorePointer(child: Center(child: BooruLoadingIndicator())),
+                  ),
+                if (_dimming > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(child: ColoredBox(color: Color.fromRGBO(0, 0, 0, _dimming.clamp(0, 0.65)))),
+                  ),
+                // `ReaderDismissHandle`: the bar that says the viewer closes downward.
                 Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
+                  left: 0,
+                  right: 0,
+                  top: 6,
                   child: IgnorePointer(
                     child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: const ShapeDecoration(color: Color(0xE6303030), shape: StadiumBorder()),
-                        child: Text(
-                          _toast!,
-                          textAlign: TextAlign.center,
-                          style: TegnalType.style(15, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                      child: Semantics(
+                        label: L10n.text('Swipe down to exit the work'),
+                        child: Container(
+                          width: 60,
+                          height: 4,
+                          decoration: const ShapeDecoration(color: Color(0xFF636366), shape: StadiumBorder()),
                         ),
                       ),
                     ),
                   ),
                 ),
-              // A failure screen carries its own actions, so the menu waits for a tap instead of
-              // covering them. Only the menu moves, by its own height.
-              Positioned(
-                left: 10,
-                right: 10,
-                bottom: 10 + media.padding.bottom,
-                child: ViewerMenuReveal(
-                  visible: _menuVisible,
-                  child: KeyedSubtree(key: const ValueKey('menu'), child: _quickMenu()),
-                ),
-              ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 16 + math.max(media.padding.bottom, 34),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!_menuVisible && _pageNumber)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
-                        child: Text('${_index + 1} / ${_posts.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
+                if (_translating case final post?)
+                  Positioned.fill(
+                    child: ImageTranslationView(
+                      key: ValueKey(post.id),
+                      loadImage: () {
+                        final url = post.viewerURL(original: _original, reducedData: _reducedData)!;
+                        final server = _booru.server(post.serverID) ?? _booru.store.servers.first;
+                        return _booru.viewerImages.load(url, server);
+                      },
+                      preferences: _booru.booruDefaults,
+                      finished: () => setState(() => _translating = null),
+                      failed: (message) {
+                        setState(() => _translating = null);
+                        _showToast(message);
+                      },
+                    ),
+                  ),
+                if (_toast != null)
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    right: 16,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const ShapeDecoration(color: Color(0xE6303030), shape: StadiumBorder()),
+                          child: Text(
+                            _toast!,
+                            textAlign: TextAlign.center,
+                            style: TegnalType.style(15, weight: FontWeight.w700, color: const Color(0xFFFFFFFF)),
+                          ),
+                        ),
                       ),
-                    if (_bottomMenu && !_menuVisible && !failed) ...[
-                      const SizedBox(height: 8),
-                      ReaderMenuGlass(
-                        child: Padding(padding: const EdgeInsets.all(12), child: _menuActions(compact: true)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (widget.challenge case final challenge? when !_sheetOpen)
-                Positioned(left: 0, right: 0, top: 0, child: ChallengeViewerControls(controller: challenge)),
-              if (_guide.step case final step? when !_sheetOpen)
-                Positioned.fill(
-                  child: ReaderGuideOverlay(
-                    step: step,
-                    configuration: ReaderGuideConfiguration(booru: true, defaults: _defaults),
-                    menuKey: _menuKey,
-                    next: _advanceGuide,
-                    finish: _finishGuide,
+                    ),
+                  ),
+                // A failure screen carries its own actions, so the menu waits for a tap instead of
+                // covering them. Only the menu moves, by its own height.
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10 + media.padding.bottom,
+                  child: ViewerMenuReveal(
+                    visible: _menuVisible,
+                    child: KeyedSubtree(key: const ValueKey('menu'), child: _quickMenu()),
                   ),
                 ),
-            ],
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16 + math.max(media.padding.bottom, 34),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_menuVisible && _pageNumber)
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
+                          child: Text('${_index + 1} / ${_posts.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
+                        ),
+                      if (_bottomMenu && !_menuVisible && !failed) ...[
+                        const SizedBox(height: 8),
+                        ReaderMenuGlass(
+                          child: Padding(padding: const EdgeInsets.all(12), child: _menuActions(compact: true)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (widget.challenge case final challenge? when !_sheetOpen)
+                  Positioned(left: 0, right: 0, top: 0, child: ChallengeViewerControls(controller: challenge)),
+                if (_guide.step case final step? when !_sheetOpen)
+                  Positioned.fill(
+                    child: ReaderGuideOverlay(
+                      step: step,
+                      configuration: ReaderGuideConfiguration(booru: true, defaults: _defaults),
+                      menuKey: _menuKey,
+                      next: _advanceGuide,
+                      finish: _finishGuide,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -902,7 +910,8 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
       ),
       (L10n.text('Save to Folder'), symbol(CupertinoIcons.folder), _openFolders),
       // Translation arrives with its own rebuild step.
-      (L10n.text('Translate'), const TranslateSymbol(color: Color(0xFFFFFFFF)), _post.isVideo || _viewerURL == null ? null : _translate),
+      if (AppPlatform.hasImageTranslation)
+        (L10n.text('Translate'), const TranslateSymbol(color: Color(0xFFFFFFFF)), _post.isVideo || _viewerURL == null ? null : _translate),
       (L10n.text('Exit'), const ExitSymbol(color: Color(0xFFFFFFFF)), _close),
       (
         L10n.text('Notes'),
