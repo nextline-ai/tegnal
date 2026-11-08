@@ -1595,3 +1595,15 @@
 "Hold a work in Explore and drag it down to the panel that appears." = "Hold a work in Explore and drag it down to the panel that appears.";
 "A work leaves the list once you read it to the last page." = "A work leaves the list once you read it to the last page.";
 "Delete All" = "Delete All";
+"TEGNAL is now on the App Store" = "TEGNAL is now on the App Store";
+"This TestFlight version will no longer be updated and will stop working when it expires. Install the App Store version to keep using TEGNAL. All your data carries over." = "This TestFlight version will no longer be updated and will stop working when it expires. Install the App Store version to keep using TEGNAL. All your data carries over.";
+"Download Release Version" = "Download Release Version";
+"Learn More" = "Learn More";
+"Why is TestFlight ending?" = "Why is TestFlight ending?";
+"TestFlight builds go through their own Apple review, separate from the App Store, and it takes about as long. Keeping a second version that way costs too much, so TestFlight won't be updated from now on. New versions will come out on the App Store." = "TestFlight builds go through their own Apple review, separate from the App Store, and it takes about as long. Keeping a second version that way costs too much, so TestFlight won't be updated from now on. New versions will come out on the App Store.";
+"When does this version stop working?" = "When does this version stop working?";
+"This test version expires 90 days after it was uploaded. After that it won't open." = "This test version expires 90 days after it was uploaded. After that it won't open.";
+"What happens to my data?" = "What happens to my data?";
+"The App Store version installs over this one, so all your data carries over. Important data such as your saved works is also backed up to your private iCloud while iCloud sync is on, so nothing is lost." = "The App Store version installs over this one, so all your data carries over. Important data such as your saved works is also backed up to your private iCloud while iCloud sync is on, so nothing is lost.";
+"How do I switch?" = "How do I switch?";
+"Tap Download Release Version, then install TEGNAL from the App Store. Don't delete this app first. Deleting it also deletes the data stored on this device." = "Tap Download Release Version, then install TEGNAL from the App Store. Don't delete this app first. Deleting it also deletes the data stored on this device.";

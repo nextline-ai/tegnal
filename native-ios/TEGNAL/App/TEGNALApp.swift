@@ -247,6 +247,14 @@ struct TEGNALApp: App {
                              servers: servers, booruQuery: env.booruQuery(""))
     }
     private var splashEnabled: Bool { !isContentUITest || ProcessInfo.processInfo.arguments.contains("--splash-ui-test") }
+    // This branch is the final TestFlight build; every Release build asks testers to move to the App Store.
+    private var showsTestFlightSunset: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--testflight-sunset")
+        #else
+        true
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -268,6 +276,11 @@ struct TEGNALApp: App {
                 #else
                 AppRootTabView()
                 #endif
+
+                // The app keeps running underneath so iCloud sync can finish, but it can't be used.
+                if showsTestFlightSunset {
+                    TestFlightSunsetView().zIndex(9000)
+                }
 
                 // Cold launch holds 1.2 seconds and slides for 1.8 seconds while active.
                 if isSplashScreenVisible && splashEnabled {
@@ -335,7 +348,7 @@ struct TEGNALApp: App {
             .appFullScreenCover(isPresented: Binding(
                 get: {
                     let allowsOnboarding = !isContentUITest || ProcessInfo.processInfo.arguments.contains("--onboarding-test")
-                    return allowsOnboarding && !env.isOnboardingCompleted && (!isSplashScreenVisible || !splashEnabled)
+                    return allowsOnboarding && !showsTestFlightSunset && !env.isOnboardingCompleted && (!isSplashScreenVisible || !splashEnabled)
                 },
                 set: { _ in }
             )) {
@@ -345,6 +358,103 @@ struct TEGNALApp: App {
             // Retained UIKit hosts also inject these same instances at their own roots.
             .environment(env)
             .environment(env.booru)
+        }
+    }
+}
+
+// MARK: - TestFlight sunset
+
+/// Blocks the final TestFlight build and sends testers to the App Store release,
+/// which installs over this build and keeps its data.
+private struct TestFlightSunsetView: View {
+    static let appStore = URL(string: "https://apps.apple.com/app/id6825935560")!
+    @Environment(\.openURL) private var openURL
+    @State private var showsDetails = false
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial).ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image(systemName: "arrow.down.app.fill")
+                        .font(.system(size: 64)).foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+                    Text(L10n.text("TEGNAL is now on the App Store"))
+                        .font(.title2.bold()).multilineTextAlignment(.center)
+                    Text(L10n.text("This TestFlight version will no longer be updated and will stop working when it expires. Install the App Store version to keep using TEGNAL. All your data carries over."))
+                        .font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    VStack(spacing: 12) {
+                        Button { openURL(Self.appStore) } label: {
+                            Text(L10n.text("Download Release Version")).frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        .accessibilityIdentifier("testflightSunset.download")
+                        Button { showsDetails = true } label: {
+                            Text(L10n.text("Learn More")).frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).controlSize(.large)
+                        .accessibilityIdentifier("testflightSunset.learnMore")
+                    }.padding(.top, 8)
+                }
+                .padding(28)
+                .frame(maxWidth: 440)
+                .background(.background, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .shadow(color: .black.opacity(0.15), radius: 24, y: 8)
+                .padding(24)
+                .frame(maxWidth: .infinity)
+                .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .accessibilityIdentifier("testflightSunset")
+        .sheet(isPresented: $showsDetails) { TestFlightSunsetDetails(appStore: Self.appStore) }
+    }
+}
+
+private struct TestFlightSunsetDetails: View {
+    let appStore: URL
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    private let sections: [(String, String)] = [
+        ("Why is TestFlight ending?",
+         "TestFlight builds go through their own Apple review, separate from the App Store, and it takes about as long. Keeping a second version that way costs too much, so TestFlight won't be updated from now on. New versions will come out on the App Store."),
+        ("When does this version stop working?",
+         "This test version expires 90 days after it was uploaded. After that it won't open."),
+        ("What happens to my data?",
+         "The App Store version installs over this one, so all your data carries over. Important data such as your saved works is also backed up to your private iCloud while iCloud sync is on, so nothing is lost."),
+        ("How do I switch?",
+         "Tap Download Release Version, then install TEGNAL from the App Store. Don't delete this app first. Deleting it also deletes the data stored on this device."),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    ForEach(sections, id: \.0) { title, body in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(L10n.text(title)).font(.headline)
+                            Text(L10n.text(body)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Button { openURL(appStore) } label: {
+                        Text(L10n.text("Download Release Version")).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .accessibilityIdentifier("testflightSunset.details.download")
+                }
+                .padding(24)
+                .frame(maxWidth: 600, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle(L10n.text("Learn More"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.text("Done")) { dismiss() }
+                }
+            }
         }
     }
 }

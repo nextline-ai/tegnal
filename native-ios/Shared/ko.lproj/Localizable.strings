@@ -1595,3 +1595,15 @@
 "Hold a work in Explore and drag it down to the panel that appears." = "탐색에서 작품을 길게 누른 채 아래에 나타나는 영역으로 끌어내리세요.";
 "A work leaves the list once you read it to the last page." = "마지막 페이지까지 읽은 작품은 목록에서 빠집니다.";
 "Delete All" = "전체 삭제";
+"TEGNAL is now on the App Store" = "TEGNAL이 App Store에 정식 출시되었습니다";
+"This TestFlight version will no longer be updated and will stop working when it expires. Install the App Store version to keep using TEGNAL. All your data carries over." = "TestFlight 버전은 더 이상 업데이트되지 않으며, 만료되면 열 수 없습니다. App Store에서 정식버전을 받아 계속 사용하세요. 모든 데이터는 그대로 이어집니다.";
+"Download Release Version" = "정식버전 다운로드";
+"Learn More" = "자세히 알아보기";
+"Why is TestFlight ending?" = "TestFlight를 왜 종료하나요?";
+"TestFlight builds go through their own Apple review, separate from the App Store, and it takes about as long. Keeping a second version that way costs too much, so TestFlight won't be updated from now on. New versions will come out on the App Store." = "TestFlight 빌드는 App Store와 별도로 Apple 심사를 받아야 하고, 통과 속도도 거의 같습니다. 이렇게 버전을 따로 관리하는 것은 매우 소모적이어서 앞으로 TestFlight는 업데이트하지 않습니다. 최신 버전은 정식 App Store 버전으로 올라갑니다.";
+"When does this version stop working?" = "지금 버전은 언제까지 쓸 수 있나요?";
+"This test version expires 90 days after it was uploaded. After that it won't open." = "현재 테스트 버전은 업로드 후 90일이 지나면 만료되어 열 수 없습니다.";
+"What happens to my data?" = "데이터는 어떻게 되나요?";
+"The App Store version installs over this one, so all your data carries over. Important data such as your saved works is also backed up to your private iCloud while iCloud sync is on, so nothing is lost." = "정식버전은 지금 앱 위에 설치되므로 모든 데이터가 100% 이전됩니다. 저장한 작품 같은 중요한 데이터는 iCloud 동기화가 켜져 있으면 개인 보안 iCloud에도 이중으로 백업되어 있어 어떠한 데이터 손상도 없습니다.";
+"How do I switch?" = "어떻게 옮기나요?";
+"Tap Download Release Version, then install TEGNAL from the App Store. Don't delete this app first. Deleting it also deletes the data stored on this device." = "'정식버전 다운로드'를 누르고 App Store에서 TEGNAL을 설치하세요. 이 앱을 먼저 삭제하지 마세요. 앱을 삭제하면 이 기기에 저장된 데이터도 함께 지워집니다.";
