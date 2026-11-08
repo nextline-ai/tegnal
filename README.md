@@ -1,18 +1,18 @@
 <p align="right"><a href="README.en.md">English</a></p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="docs/assets/readme/info.webp" alt="TEGNAL TestFlight 다운로드" width="100%">
+  <a href="https://apps.apple.com/app/id6825935560">
+    <img src="docs/assets/readme/info.webp" alt="TEGNAL" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Down_button_kr_mobile.svg"><img src="docs/assets/readme/Down_button_kr.svg" alt="TestFlight에서 TEGNAL 다운로드"></picture></a>
-  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_kr_mobile.svg"><img src="docs/assets/readme/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
+  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_KR_RGB_blk_100317.svg" alt="App Store에서 TEGNAL 다운로드" height="56"></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" height="80"></a>
 </p>
 
 <p align="center">
-  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" height="80"></a>
+  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_kr_mobile.svg"><img src="docs/assets/readme/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
 </p>
 
 # TEGNAL

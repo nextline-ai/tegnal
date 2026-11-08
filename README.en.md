@@ -1,18 +1,18 @@
 <p align="right"><a href="README.md">한국어</a></p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W">
-    <img src="docs/assets/readme/info.webp" alt="Download TEGNAL on TestFlight" width="100%">
+  <a href="https://apps.apple.com/app/id6825935560">
+    <img src="docs/assets/readme/info.webp" alt="TEGNAL" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/gnkqu44W"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Down_button_en_mobile.svg"><img src="docs/assets/readme/Down_button_en.svg" alt="Download TEGNAL on TestFlight"></picture></a>
-  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_en_mobile.svg"><img src="docs/assets/readme/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
+  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download TEGNAL on the App Store" height="56"></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" height="80"></a>
 </p>
 
 <p align="center">
-  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" height="80"></a>
+  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_en_mobile.svg"><img src="docs/assets/readme/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
 </p>
 
 # TEGNAL
