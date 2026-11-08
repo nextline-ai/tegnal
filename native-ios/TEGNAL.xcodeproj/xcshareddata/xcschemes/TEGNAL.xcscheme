@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2700"
-   version = "1.3">
+   LastUpgradeVersion = "2720"
+   version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES">
@@ -26,20 +26,7 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      onlyGenerateCoverageForSpecifiedTargets = "NO">
-      <TestPlans>
-         <TestPlanReference
-            default = "YES"
-            reference = "container:TestPlans/Smoke.xctestplan">
-         </TestPlanReference>
-         <TestPlanReference
-            reference = "container:TestPlans/Unit.xctestplan">
-         </TestPlanReference>
-         <TestPlanReference
-            reference = "container:TestPlans/UI.xctestplan">
-         </TestPlanReference>
-      </TestPlans>
+      shouldUseLaunchSchemeArgsEnv = "YES">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -49,10 +36,18 @@
             ReferencedContainer = "container:TEGNAL.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
-      <Testables>
-      </Testables>
-      <CommandLineArguments>
-      </CommandLineArguments>
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:TestPlans/Smoke.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:TestPlans/Unit.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:TestPlans/UI.xctestplan">
+         </TestPlanReference>
+      </TestPlans>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
