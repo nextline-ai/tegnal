@@ -53,6 +53,28 @@ final class BooruTests: XCTestCase {
         env.booruSafeMode = true
         XCTAssertEqual(env.booruSearchRevision, 1, "An unchanged switch must not schedule another refresh")
         XCTAssertEqual(env.mode, .booru)
+        XCTAssertEqual(store.selectedServers.map(\.isSafebooru), [true], "Safe Mode goes straight to Safebooru")
+        XCTAssertEqual(env.booruQuery("scenery"), "scenery", "Safebooru is searched without a rating tag")
+        env.booruSafeMode = false
+        env.booruSafeMode = true
+        XCTAssertEqual(store.servers.filter(\.isSafebooru).count, 1, "An existing Safebooru is reused")
+        let other = BooruServer(id: "other", name: "Other", baseURL: URL(string: "https://images.example")!, engine: .danbooru)
+        try store.saveServer(other)
+        try store.select(other)
+        // Saved images show only when their rating fits; Safebooru's always do.
+        let safebooruID = try XCTUnwrap(store.servers.first(where: \.isSafebooru)?.id)
+        func post(_ server: String, _ id: Int64, _ rating: String) -> BooruPost {
+            BooruPost(serverID: server, postID: id, width: 1, height: 1, tags: ["scenery"], artists: [], rating: rating, score: 0, fileExtension: "jpg")
+        }
+        for saved in [post("other", 1, "g"), post("other", 2, "explicit"), post("other", 3, "general"), post(safebooruID, 4, "q")] { try store.saveFavorite(saved) }
+        env.booruSafeRating = .general
+        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 3, 4])
+        env.booruSafeRating = .questionable
+        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [4])
+        env.booruSafeMode = false
+        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 2, 3, 4], "Without Safe Mode every saved image shows")
+        env.booruSafeMode = true
+        try store.select(other)
         env.mode = .manga
         XCTAssertEqual(env.mode, .booru)
         for rating in BooruSafeRating.allCases {

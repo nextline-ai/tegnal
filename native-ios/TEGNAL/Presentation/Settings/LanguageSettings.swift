@@ -16,22 +16,28 @@ struct LanguageSettingsSection: View {
                 Text("日本語").tag("ja")
             }.accessibilityIdentifier("settings.appLanguage")
             if !booru {
-                Picker(L10n.text("Artist Works Language"), selection: $artistLanguage) {
-                    Text(L10n.text("All")).tag("all")
-                    Text(L10n.text("Korean")).tag("korean")
-                    Text(L10n.text("Japanese")).tag("japanese")
-                    Text(L10n.text("English")).tag("english")
-                }.accessibilityIdentifier("settings.artistLanguage")
-                Picker(L10n.text("Tag Works Language"), selection: $tagLanguage) {
-                    Text(L10n.text("All")).tag("all")
-                    Text(L10n.text("Korean")).tag("korean")
-                    Text(L10n.text("Japanese")).tag("japanese")
-                    Text(L10n.text("English")).tag("english")
-                }.accessibilityIdentifier("settings.tagLanguage")
+                languagePicker("Artist Works Language", help: Self.artistHelp, selection: $artistLanguage, identifier: "settings.artistLanguage")
+                languagePicker("Tag Works Language", help: Self.tagHelp, selection: $tagLanguage, identifier: "settings.tagLanguage")
             }
             NavigationLink { TranslationLanguageSettings(booru: booru) } label: {
                 Label(L10n.text("Translation Language"), systemImage: "character.bubble")
             }.accessibilityIdentifier("settings.translationLanguage")
+        }
+    }
+
+    static let artistHelp = "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting."
+    static let tagHelp = "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All."
+
+    private func languagePicker(_ title: String, help: String, selection: Binding<String>, identifier: String) -> some View {
+        HStack {
+            SettingsHelpLabel(title, help: help)
+            Spacer()
+            Picker(L10n.text(title), selection: selection) {
+                Text(L10n.text("All")).tag("all")
+                Text(L10n.text("Korean")).tag("korean")
+                Text(L10n.text("Japanese")).tag("japanese")
+                Text(L10n.text("English")).tag("english")
+            }.labelsHidden().pickerStyle(.menu).accessibilityIdentifier(identifier)
         }
     }
 }

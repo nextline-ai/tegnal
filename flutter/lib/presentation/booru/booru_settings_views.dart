@@ -33,6 +33,10 @@ import '../challenge/challenge_library_view.dart';
 import 'booru_feed_view.dart';
 import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
+import '../../core/content/recent_works.dart';
+import '../settings/recent_works_page.dart';
+import 'booru_post_view.dart';
+import '../../core/taste/taste_models.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -341,6 +345,15 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       selected: viewer.integerOrNull('search.retentionDays') ?? 0,
                       onSelected: (value) => _setViewer('search.retentionDays', value),
                     ),
+                    if (RecentImages.shared case final recents?)
+                      ...RecentWorksSettingsRows.images(
+                        context,
+                        recents: recents,
+                        store: _booru.store,
+                        thumbnail: (post, server) => BooruThumbnail(post: post, server: server, booru: _booru),
+                        open: (context, post, posts) =>
+                            BooruPostView.open(context, booru: _booru, post: post, posts: posts, discovery: DiscoveryContext.unknown),
+                      ),
                   ],
                 ),
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
@@ -352,12 +365,17 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                     SettingsToggleRow(
                       title: L10n.text('Safe Mode'),
                       help: L10n.text(
-                        'Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.',
+                        'Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.',
                       ),
                       value: safeMode,
                       onChanged: (value) {
                         _setBrowser('booru.safeMode', value);
-                        if (value) _booru.state.mode = AppMode.booru;
+                        _booru.store.safeModeChanged();
+                        if (value) {
+                          _booru.state.mode = AppMode.booru;
+                          // Turning it on goes straight to Safebooru, whose images are all ages.
+                          _booru.store.selectSafebooru();
+                        }
                       },
                     ),
                     if (safeMode) ...[
@@ -365,9 +383,15 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                         title: L10n.text('Age Guide'),
                         options: [for (final rating in BooruSafeRating.values) (rating, rating.title)],
                         selected: safeRating,
-                        onSelected: (value) => _setBrowser('booru.safeRating', value.rawValue),
+                        onSelected: (value) {
+                          _setBrowser('booru.safeRating', value.rawValue);
+                          _booru.store.safeModeChanged();
+                        },
                       ),
-                      SettingsValueRow(title: L10n.text('Default Search Tag'), value: safeRating.tag),
+                      SettingsValueRow(
+                        title: L10n.text('Default Search Tag'),
+                        value: _booru.store.needsSafeRating ? safeRating.tag : L10n.text('None (Safebooru)'),
+                      ),
                     ],
                   ],
                 ),

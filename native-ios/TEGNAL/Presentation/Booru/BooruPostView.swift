@@ -363,6 +363,7 @@ struct BooruPostView: View {
             .task(id: post.id) {
                 if store.confirmedGoldRestrictedIDs.contains(post.id) { skipGoldRestricted(post.id); return }
                 try? store.observeTaste(post, context: activeDiscovery)
+                if challenge == nil { env.recentImages.opened(post) }
                 positionChanged(post)
             }
             .task(id: "\(post.id):\(waitingForMedia):\(isActive)") {

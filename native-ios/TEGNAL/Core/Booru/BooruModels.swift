@@ -38,6 +38,12 @@ struct BooruServer: Codable, Identifiable, Hashable, Sendable {
         let lowered = host.lowercased()
         return lowered.hasPrefix("www.") ? String(lowered.dropFirst(4)) : lowered
     }
+    /// Safebooru carries only all-ages images, so Safe Mode browses it without a rating tag.
+    static let safebooruHost = "safebooru.org"
+    var isSafebooru: Bool { Self.bareHost(baseURL) == Self.safebooruHost }
+    static func safebooru() -> BooruServer {
+        BooruServer(name: "Safebooru", baseURL: URL(string: "https://" + safebooruHost)!, engine: .gelbooru)
+    }
     var displayName: String { Self.displayName(name) }
     static func displayName(_ name: String) -> String {
         let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -340,7 +346,7 @@ struct BooruBlacklist {
                 let value = negative ? String(term.dropFirst()) : term
                 let matches: Bool
                 if value.hasPrefix("rating:") {
-                    matches = Self.rating(String(value.dropFirst(7))) == Self.rating(post.rating)
+                    matches = BooruSafeRating.normalized(String(value.dropFirst(7))) == BooruSafeRating.normalized(post.rating)
                 } else if value.hasPrefix("artist:") {
                     matches = post.artists.contains { $0.lowercased() == String(value.dropFirst(7)) }
                 } else if value.hasPrefix("id:") {
@@ -351,15 +357,6 @@ struct BooruBlacklist {
                 } else { matches = tags.contains(value) }
                 return negative ? !matches : matches
             }
-        }
-    }
-    private static func rating(_ value: String) -> String {
-        switch value {
-        case "g", "general", "safe": return "g"
-        case "s", "sensitive": return "s"
-        case "q", "questionable": return "q"
-        case "e", "explicit": return "e"
-        default: return value
         }
     }
 }
@@ -431,6 +428,18 @@ enum BooruSafeRating: String, CaseIterable, Identifiable {
     case general = "g", sensitive = "s", questionable = "q"
     var id: String { rawValue }
     var tag: String { "rating:" + rawValue }
+    /// Each server names ratings its own way; this is the one-letter form the rating tag uses.
+    static func normalized(_ value: String) -> String {
+        switch value.lowercased() {
+        case "g", "general", "safe": return "g"
+        case "s", "sensitive": return "s"
+        case "q", "questionable": return "q"
+        case "e", "explicit": return "e"
+        default: return value.lowercased()
+        }
+    }
+    /// A saved image fits when its rating is the one the rating tag searches for.
+    func allows(_ rating: String) -> Bool { Self.normalized(rating) == rawValue }
     var title: String {
         switch self {
         case .general: L10n.text("All Ages")

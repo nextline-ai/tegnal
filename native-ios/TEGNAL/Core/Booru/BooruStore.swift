@@ -9,7 +9,7 @@ final class BooruStore: @unchecked Sendable {
     let database: DatabaseQueue
     private let prefetchSavedPreviews: Bool
     struct FavoriteRecord { let post: BooruPost; let folderID: String; let savedAt: Date }
-    private struct FavoriteQuery: Hashable { let folderID: String?; let query: String }
+    private struct FavoriteQuery: Hashable { let folderID: String?; let query: String; let safeRating: BooruSafeRating? }
     @ObservationIgnored private let snapshotLock = NSLock()
     @ObservationIgnored private var cachedFavoriteIDs: (revision: Int, value: Set<String>)?
     @ObservationIgnored private var cachedFavorites: (revision: Int, value: [FavoriteRecord])?
@@ -23,6 +23,16 @@ final class BooruStore: @unchecked Sendable {
     private(set) var selectedServerIDs: [String] = []
     var selectedServers: [BooruServer] { servers.filter { selectedServerIDs.contains($0.id) } }
     private(set) var revision = 0
+    /// Safe Mode's age guide, set by the app: saved images from servers other than Safebooru show
+    /// only when their rating fits it, and the rest are not shown at all.
+    var safeRating: BooruSafeRating? {
+        didSet { if safeRating != oldValue { invalidateSnapshots(); revision += 1 } }
+    }
+    /// Whether a saved image may be shown under Safe Mode.
+    func isShownInSafeMode(_ post: BooruPost) -> Bool {
+        guard let safeRating else { return true }
+        return servers.first(where: { $0.id == post.serverID })?.isSafebooru == true || safeRating.allows(post.rating)
+    }
     var error: String?
     var selectedServer: BooruServer? { servers.first { $0.id == selectedServerID } }
 
@@ -201,6 +211,17 @@ final class BooruStore: @unchecked Sendable {
         selectedServerID = valid.first ?? ""
     }
 
+    /// Safe Mode browses Safebooru alone, adding it first when it is not among the servers.
+    func selectSafebooru() throws {
+        if let existing = servers.first(where: \.isSafebooru) {
+            try setSelectedServers([existing.id])
+        } else {
+            let server = BooruServer.safebooru()
+            try saveServer(server)
+            try setSelectedServers([server.id])
+        }
+    }
+
     func saveServer(_ server: BooruServer) throws {
         guard !servers.contains(where: { $0.id != server.id && $0.canonicalAddress == server.canonicalAddress }) else { throw BooruError.duplicateServer }
         let position = servers.firstIndex(where: { $0.id == server.id }) ?? servers.count
@@ -289,15 +310,22 @@ final class BooruStore: @unchecked Sendable {
         return value
     }
 
+    /// Favorites search: a post's tags or its number.
+    nonisolated static func matches(_ post: BooruPost, query: String) -> Bool {
+        query.isEmpty || post.tags.joined(separator: " ").localizedCaseInsensitiveContains(query) || String(post.postID).contains(query)
+    }
+
     func visibleFavorites(folderID: String? = nil, query: String = "") -> [BooruPost] {
-        let revision = snapshotVersion, key = FavoriteQuery(folderID: folderID, query: query)
+        let revision = snapshotVersion, safeRating = safeRating, key = FavoriteQuery(folderID: folderID, query: query, safeRating: safeRating)
         let hidden = confirmedGoldRestrictedIDs
         if let value = snapshotLock.withLock({ visibleFavoritesRevision == revision ? visibleFavoritesCache[key] : nil }) {
             return hidden.isEmpty ? value : value.filter { !hidden.contains($0.id) }
         }
         let filters = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, BooruBlacklist(blacklist(serverID: $0.id))) })
+        let safebooru = Set(servers.filter(\.isSafebooru).map(\.id))
         let value = favorites(serverIDs: servers.map(\.id), folderID: folderID).filter {
-            !(filters[$0.serverID]?.contains($0) ?? false) && (query.isEmpty || $0.tags.joined(separator: " ").localizedCaseInsensitiveContains(query) || String($0.postID).contains(query))
+            !(filters[$0.serverID]?.contains($0) ?? false) && Self.matches($0, query: query)
+                && (safeRating == nil || safebooru.contains($0.serverID) || safeRating!.allows($0.rating))
         }
         snapshotLock.withLock {
             if visibleFavoritesRevision != revision || visibleFavoritesCache.count >= 32 {

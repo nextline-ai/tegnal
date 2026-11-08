@@ -560,7 +560,7 @@ class _ReadingQueueBarState extends State<ReadingQueueBar> {
                           scale: _bounce ? 1.18 : 1,
                           duration: const Duration(milliseconds: 180),
                           curve: Curves.easeOut,
-                          child: ReadingQueueCover(queue: widget.queue, id: next.id, width: 50, height: 50, radius: 13),
+                          child: ReadingQueueCover(queue: widget.queue, id: next.id, width: 50, height: 50, radius: 17),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -589,22 +589,58 @@ class _ReadingQueueBarState extends State<ReadingQueueBar> {
               button: true,
               label: L10n.text('Read Next'),
               excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => widget.read(next.id),
-                child: SizedBox(
-                  width: 56,
-                  height: readingQueueBarHeight,
-                  child: Center(child: Icon(Symbols.bookFill, size: 22, color: label)),
-                ),
-              ),
+              // A round button like the quick menu's, so it reads as the play control.
+              child: _PlayButton(onTap: () => widget.read(next.id), color: label),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 10),
           ],
         ),
       ),
     );
   }
+}
+
+/// The bar's play control: a filled circle that presses down as the quick menu's buttons do.
+class _PlayButton extends StatefulWidget {
+  const _PlayButton({required this.onTap, required this.color});
+  final VoidCallback onTap;
+  final Color color;
+
+  @override
+  State<_PlayButton> createState() => _PlayButtonState();
+}
+
+class _PlayButtonState extends State<_PlayButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: widget.onTap,
+    onTapDown: (_) => setState(() => _pressed = true),
+    onTapUp: (_) => setState(() => _pressed = false),
+    onTapCancel: () => setState(() => _pressed = false),
+    child: SizedBox(
+      width: 52,
+      height: readingQueueBarHeight,
+      child: Center(
+        child: AnimatedScale(
+          scale: _pressed ? 0.9 : 1,
+          duration: const Duration(milliseconds: 150),
+          child: AnimatedOpacity(
+            opacity: _pressed ? 0.75 : 1,
+            duration: const Duration(milliseconds: 150),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: ShapeDecoration(color: widget.color.withValues(alpha: 0.15), shape: const CircleBorder()),
+              child: Icon(CupertinoIcons.play_fill, size: 18, color: widget.color),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// `ReadingQueueView`: the whole list. Reorder, swipe away, or tap a work to read from there on.

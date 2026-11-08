@@ -34,6 +34,7 @@ import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
 import 'booru_settings_views.dart';
 import '../content/viewer_quick_menu.dart';
+import '../../core/content/recent_works.dart';
 
 /// The next page of a feed, handed to an open viewer.
 class BooruViewerBatch {
@@ -211,6 +212,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
       return;
     }
     _booru.store.observeTaste(_post, widget.discovery);
+    if (widget.challenge == null) RecentImages.shared?.opened(_post);
     _viewing.resume();
     _scheduleLoadingIndicator();
     _resolveCurrentPost();

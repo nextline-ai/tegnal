@@ -31,6 +31,8 @@ import '../../core/taste/taste_models.dart';
 import 'content_bookmark.dart';
 import 'reading_queue_views.dart';
 import 'viewer_quick_menu.dart';
+import '../../core/content/recent_works.dart';
+import '../../core/content/manga_urls.dart';
 
 /// Opens the reader full screen over everything, as `fullScreenCover` does.
 Future<void> openReader(
@@ -265,7 +267,10 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
       }
       _saveProgress();
       if (!(_defaults.boolean(ReaderSettingKeys.helpHidden) ?? false) && !_guide.hasStarted) setState(_guide.start);
-      if (widget.savesProgress) widget.database.markOpened(gallery.id);
+      if (widget.savesProgress) {
+        widget.database.markOpened(gallery.id);
+        _rememberOpened(gallery);
+      }
       _scheduleAuto();
     } on Object catch (error) {
       if (mounted) {
@@ -346,6 +351,22 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
     setState(() => _menuVisible = false);
     if (id == widget.galleryID) return;
     widget.openWork?.call(id);
+  }
+
+  /// Puts the work at the top of Recently Opened Works, with its cover once it loads.
+  void _rememberOpened(NativeGallery gallery) {
+    final recents = RecentWorks.shared;
+    if (recents == null) return;
+    final first = gallery.pages.firstOrNull;
+    recents.openedGallery(gallery, site: ComicSites.active, cover: first == null || recents.hasCover(gallery.id) ? null : _coverData(first, gallery.id));
+  }
+
+  Future<Uint8List?> _coverData(GalleryPage page, int id) async {
+    try {
+      return await widget.images.data(page, galleryID: id, thumbnail: true);
+    } on Object {
+      return null;
+    }
   }
 
   void _move(int delta) {

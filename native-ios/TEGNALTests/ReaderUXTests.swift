@@ -1623,3 +1623,57 @@ final class WeeklyHabitsTests: XCTestCase {
         XCTAssertEqual(ThumbnailGesture.doubleTap.action(booru: true, in: store), ThumbnailAction.none, "Images have no Up Next")
     }
 }
+
+@MainActor final class RecentWorksTests: XCTestCase {
+    private func work(_ id: Int64, title: String = "", tags: [String] = []) -> RecentWork {
+        RecentWork(item: ReadingQueueItem(id: id, title: title.isEmpty ? "Work \(id)" : title, artists: "", details: "", site: nil),
+                   openedAt: Date(timeIntervalSince1970: Double(id)), language: "korean", type: "manga", tags: tags)
+    }
+
+    func testRecentWorksKeepTheNewestFirstUpToTheChosenCount() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let covers = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let recents = RecentWorks(defaults: defaults, covers: covers)
+        XCTAssertEqual(recents.limit, 50, "Fifty works unless changed")
+        for id in 1...70 { recents.opened(work(Int64(id))) }
+        XCTAssertEqual(recents.entries.count, 50)
+        XCTAssertEqual(recents.entries.first?.id, 70)
+        XCTAssertEqual(recents.entries.last?.id, 21)
+
+        recents.opened(work(30))
+        XCTAssertEqual(recents.entries.first?.id, 30, "Opening a work again moves it to the top")
+        XCTAssertEqual(recents.entries.filter { $0.id == 30 }.count, 1)
+
+        recents.setLimit(20)
+        XCTAssertEqual(recents.entries.count, 20, "A lower count drops the oldest at once")
+        XCTAssertEqual(RecentWorks(defaults: defaults, covers: covers).entries.map(\.id), recents.entries.map(\.id), "The list survives a relaunch")
+
+        recents.setLimit(900)
+        XCTAssertEqual(recents.limit, 500, "Five hundred at most")
+
+        recents.setLimit(0)
+        XCTAssertTrue(recents.entries.isEmpty, "Don't Keep clears the list")
+        recents.opened(work(99))
+        XCTAssertTrue(recents.entries.isEmpty, "and keeps nothing new")
+    }
+
+    func testRecentWorksAreSearchedAsSavedIs() {
+        let entry = work(7, title: "Summer Trip", tags: ["female:glasses", "artist:someone", "tag:school"])
+        XCTAssertTrue(entry.matches(WorkQuery("summer")))
+        XCTAssertTrue(entry.matches(WorkQuery("female:glasses")))
+        XCTAssertTrue(entry.matches(WorkQuery("artist:someone summer")))
+        XCTAssertTrue(entry.matches(WorkQuery("language:korean")))
+        XCTAssertTrue(entry.matches(WorkQuery("7")))
+        XCTAssertFalse(entry.matches(WorkQuery("-female:glasses")))
+        XCTAssertFalse(entry.matches(WorkQuery("female:glass")), "A namespaced term matches a whole tag")
+        XCTAssertFalse(entry.matches(WorkQuery("winter")))
+    }
+
+    func testRecentImagesKeepTheirOwnCount() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let recents = RecentImages(defaults: defaults)
+        XCTAssertEqual(recents.limit, 50)
+        recents.setLimit(0)
+        XCTAssertEqual(RecentImages(defaults: defaults).limit, 0)
+    }
+}

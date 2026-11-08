@@ -25,6 +25,8 @@ import 'settings_page.dart';
 import 'settings_rows.dart';
 import 'website_setup.dart';
 import '../content/image_translation.dart';
+import '../../core/content/recent_works.dart';
+import 'recent_works_page.dart';
 
 /// What the Settings screens read and change.
 class SettingsDependencies {
@@ -43,7 +45,15 @@ class SettingsDependencies {
     this.sync,
     this.invitation,
     this.tasteSettings,
+    this.recentWorks,
+    this.openWork,
   });
+
+  /// Comics opened in the viewer lately, listed under Search History.
+  final RecentWorks? recentWorks;
+
+  /// Opens a work from that list as a thumbnail would.
+  final void Function(BuildContext context, int id)? openWork;
 
   /// The Taste Analysis row, between search history and sync.
   final Widget Function(BuildContext context)? tasteSettings;
@@ -293,6 +303,9 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                     SettingsPickerRow<String>(
                       title: L10n.text('Artist Works Language'),
+                      help: L10n.text(
+                        "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting.",
+                      ),
                       options: [
                         ('all', L10n.text('All')),
                         ('korean', L10n.text('Korean')),
@@ -304,6 +317,9 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                     SettingsPickerRow<String>(
                       title: L10n.text('Tag Works Language'),
+                      help: L10n.text(
+                        "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All.",
+                      ),
                       options: [
                         ('all', L10n.text('All')),
                         ('korean', L10n.text('Korean')),
@@ -355,6 +371,8 @@ class _SettingsViewState extends State<SettingsView> {
                       selected: _defaults.integerOrNull('search.retentionDays') ?? 0,
                       onSelected: (value) => _set('search.retentionDays', value),
                     ),
+                    if (_deps.recentWorks != null && _deps.openWork != null)
+                      ...RecentWorksSettingsRows.comics(context, recents: _deps.recentWorks!, open: _deps.openWork!),
                   ],
                 ),
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],

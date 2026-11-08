@@ -35,6 +35,7 @@ import 'core/content/reading_queue.dart';
 import 'presentation/content/page_image_store.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
+import 'core/content/recent_works.dart';
 
 /// `--dart-define=TEGNAL_FIXTURE=on` (or a comma-separated list of [FixtureOption] names,
 /// plus `setup` to start without a connected website) runs offline with the native UI
@@ -154,6 +155,7 @@ Future<AppServices> _launch() async {
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
   ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
+  RecentWorks.defaultCoverDirectory = Directory('${caches.path}/RecentWorks');
   await preparingStorage;
   await localizing;
   // Sign-in cookies live in the Android Keystore, never in the database or backups.

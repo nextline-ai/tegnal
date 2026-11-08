@@ -1,8 +1,38 @@
 import SwiftUI
 
+/// The recap's type. Headlines are set in the system serif for Latin letters, but the serif has
+/// no Hangul, and where the system picks the fallback differs: iPhone falls back to a gothic,
+/// a Mac to a myeongjo. Korean is always set in the system gothic, so the fallback is named here,
+/// ahead of the Japanese mincho when the app is in Japanese. Nothing in the recap is monospaced.
 enum RecapType {
-    static func display(_ size: CGFloat, weight: Font.Weight = .black) -> Font { .system(size: size, weight: weight, design: .serif) }
-    static func folio(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold, design: .monospaced) }
+    static func display(_ size: CGFloat, weight: Font.Weight = .black) -> Font {
+        let uiWeight = uiWeight(weight)
+        let system = UIFont.systemFont(ofSize: size, weight: uiWeight).fontDescriptor
+        let serif = system.withDesign(.serif) ?? system
+        let traits: [UIFontDescriptor.TraitKey: Any] = [.weight: uiWeight]
+        let cascade = fallbackFamilies.map { UIFontDescriptor(fontAttributes: [.family: $0, .traits: traits]) }
+        return Font(UIFont(descriptor: serif.addingAttributes([.cascadeList: cascade]), size: size))
+    }
+    static func folio(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold) }
+
+    /// Japanese keeps its mincho headlines; Hangul, which that font lacks, goes on to the gothic.
+    private static var fallbackFamilies: [String] {
+        L10n.language == "ja" ? ["Hiragino Mincho ProN", "Apple SD Gothic Neo"] : ["Apple SD Gothic Neo"]
+    }
+
+    private static func uiWeight(_ weight: Font.Weight) -> UIFont.Weight {
+        switch weight {
+        case .ultraLight: .ultraLight
+        case .thin: .thin
+        case .light: .light
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        case .heavy: .heavy
+        case .black: .black
+        default: .regular
+        }
+    }
 }
 
 enum RecapFormat {

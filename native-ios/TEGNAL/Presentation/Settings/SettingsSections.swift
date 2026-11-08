@@ -101,7 +101,7 @@ struct BooruSafeModeSettings: View {
         @Bindable var env = env
         Section {
             Toggle(isOn: $env.booruSafeMode) {
-                SettingsHelpLabel("Safe Mode", help: "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.")
+                SettingsHelpLabel("Safe Mode", help: "Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.")
             }
                 .accessibilityIdentifier("booru.safeMode")
             if env.booruSafeMode {
@@ -110,7 +110,7 @@ struct BooruSafeModeSettings: View {
                         Text(rating.title).tag(rating)
                     }
                 }.accessibilityIdentifier("booru.safeRating")
-                LabeledContent(L10n.text("Default Search Tag"), value: env.booruSafeRating.tag)
+                LabeledContent(L10n.text("Default Search Tag"), value: env.booru.selectedServers.contains(where: { !$0.isSafebooru }) ? env.booruSafeRating.tag : L10n.text("None (Safebooru)"))
             }
         } header: { Text(L10n.text("Safe Mode")) }
     }

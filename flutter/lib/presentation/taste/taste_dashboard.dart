@@ -28,6 +28,7 @@ import 'taste_reports_view.dart' show TasteTagListPage;
 import 'taste_settings_view.dart';
 import '../content/reading_queue_views.dart';
 import '../../core/content/reading_queue.dart';
+import 'smart_loading_view.dart';
 
 /// How far the feed reaches, then today's threads with the tuner at their head.
 /// Sections breathe more than the works inside them, which stay close together.
@@ -112,12 +113,10 @@ class _TasteDashboardState extends State<TasteDashboard> {
     _changed();
   }
 
+  /// Picking works takes a while; it carries on when another tab or mode is shown and is ready
+  /// on return.
   void _stateChanged() {
-    if (_isActiveMode && _visible) {
-      _ensureLoaded();
-    } else {
-      _feed.cancelLoading();
-    }
+    if (_isActiveMode && _visible) _ensureLoaded();
   }
 
   void _ensureLoaded() {
@@ -443,12 +442,7 @@ class _TasteDashboardState extends State<TasteDashboard> {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final children = <Widget>[];
     if (items.isEmpty && feed.loading) {
-      children.add(
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: Center(child: CupertinoActivityIndicator()),
-        ),
-      );
+      children.add(const SmartLoadingView());
     } else if (items.isEmpty && feed.snapshot != null && feed.results.failures.isEmpty && !feed.results.cursor.hasMore) {
       children.add(
         _Message(
@@ -459,12 +453,7 @@ class _TasteDashboardState extends State<TasteDashboard> {
         ),
       );
     } else if (feed.snapshot == null && feed.loading) {
-      children.add(
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: Center(child: CupertinoActivityIndicator()),
-        ),
-      );
+      children.add(const SmartLoadingView());
     }
     if (feed.loading && items.isNotEmpty) children.add(const Center(child: CupertinoActivityIndicator()));
     if (feed.results.cursor.hasMore && !feed.loading && feed.snapshot != null) {

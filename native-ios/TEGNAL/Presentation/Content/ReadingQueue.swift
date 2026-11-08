@@ -457,7 +457,7 @@ struct ReadingQueueBar: View {
         HStack(spacing: 10) {
             Button(action: showList) {
                 HStack(spacing: 10) {
-                    ReadingQueueCover(id: next.id, width: compact ? 26 : 50, height: compact ? 26 : 50, cornerRadius: compact ? 7 : 13)
+                    ReadingQueueCover(id: next.id, width: compact ? 26 : 50, height: compact ? 26 : 50, cornerRadius: compact ? 9 : 17)
                         .phaseAnimator([1.0, 1.18, 1.0], trigger: bounce) { cover, scale in cover.scaleEffect(scale) }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(next.displayTitle).font(compact ? .subheadline.weight(.semibold) : .body.weight(.semibold)).lineLimit(1)
@@ -473,14 +473,28 @@ struct ReadingQueueBar: View {
             .accessibilityLabel(L10n.text("Up Next"))
             .accessibilityValue(L10n.text("%@ works", String(queue.items.count)))
             .accessibilityIdentifier("readingQueue.list")
+            // A round button like the quick menu's, so it reads as the play control.
             Button { read(next.id) } label: {
-                Image(systemName: "book.fill").font(.system(size: compact ? 17 : 22, weight: .semibold)).frame(width: 44, height: 44).contentShape(Rectangle())
+                Image(systemName: "play.fill").font(.system(size: compact ? 14 : 18, weight: .semibold))
+                    .frame(width: compact ? 34 : 44, height: compact ? 34 : 44)
+                    .background(Circle().fill(.primary.opacity(0.15)))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ReadingQueuePlayButtonStyle())
             .accessibilityLabel(L10n.text("Read Next"))
             .accessibilityIdentifier("readingQueue.read")
         }
         .padding(.leading, compact ? 8 : 14).padding(.trailing, 10)
+    }
+}
+
+/// Presses down as the quick menu's round buttons do.
+private struct ReadingQueuePlayButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 

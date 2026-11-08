@@ -7,8 +7,8 @@ import '../../design/tegnal_theme.dart';
 import '../../../core/taste/recap_shelf.dart';
 import '../../../core/taste/taste_recap.dart';
 
-/// `RecapType`: the magazine's display serif and its monospaced folio. Android's
-/// serif stands in for the system serif the native app uses.
+/// `RecapType`: the magazine's display serif and its sans folio. Android's serif stands in
+/// for the system serif the native app uses; Korean always falls back to the gothic sans.
 abstract final class RecapType {
   /// The system serif has no Korean or Japanese; like iOS, those fall back to the app's sans.
   static TextStyle display(double size, {FontWeight weight = FontWeight.w900, Color? color, bool italic = false, double? letterSpacing}) => TextStyle(
@@ -41,8 +41,16 @@ abstract final class RecapType {
     return TextSpan(style: style, children: spans);
   }
 
-  static TextStyle folio(double size, {Color? color, double? letterSpacing}) =>
-      TextStyle(fontFamily: 'monospace', fontSize: size, fontWeight: FontWeight.w600, color: color, letterSpacing: letterSpacing, height: 1.2);
+  /// Small captions in the app's own sans; nothing in the recap is monospaced.
+  static TextStyle folio(double size, {Color? color, double? letterSpacing}) => TextStyle(
+    fontFamily: TegnalType.family,
+    fontFamilyFallback: TegnalType.fallback,
+    fontSize: size,
+    fontWeight: FontWeight.w600,
+    color: color,
+    letterSpacing: letterSpacing,
+    height: 1.2,
+  );
 }
 
 extension RecapColorStyle on RecapColor {

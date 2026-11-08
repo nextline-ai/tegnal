@@ -86,7 +86,25 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   (int, List<FavoriteRecord>)? _cachedFavorites;
   (int, List<BooruFolder>)? _cachedFolders;
   int _visibleFavoritesRevision = -1;
-  final _visibleFavoritesCache = <(String?, String), List<BooruPost>>{};
+  final _visibleFavoritesCache = <(String?, String, BooruSafeRating?), List<BooruPost>>{};
+
+  /// Safe Mode's age guide, read from the app's settings: saved images from servers other than
+  /// Safebooru show only when their rating fits it, and the rest are not shown at all.
+  BooruSafeRating? Function() safeRating = () => null;
+
+  /// Saved screens show the change at once when Safe Mode or its age guide changes.
+  void safeModeChanged() {
+    _visibleFavoritesCache.clear();
+    _visibleFavoritesRevision = -1;
+    notifyListeners();
+  }
+
+  /// Whether a saved image may be shown under Safe Mode.
+  bool isShownInSafeMode(BooruPost post) {
+    final rating = safeRating();
+    if (rating == null) return true;
+    return servers.where((server) => server.id == post.serverID).firstOrNull?.isSafebooru == true || rating.allows(post.rating);
+  }
 
   /// Warms a newly saved post's preview (the native visual fingerprint prefetch). The app
   /// sets it with the thumbnail cache; the store only reports which post to warm.
@@ -299,6 +317,18 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     selectedServerID = valid.firstOrNull ?? '';
   }
 
+  /// Safe Mode browses Safebooru alone, adding it first when it is not among the servers.
+  void selectSafebooru() {
+    final existing = servers.where((server) => server.isSafebooru).firstOrNull;
+    if (existing != null) return setSelectedServers([existing.id]);
+    final server = BooruServer.safebooru();
+    saveServer(server);
+    setSelectedServers([server.id]);
+  }
+
+  /// Safe Mode's rating tag applies only when a server other than Safebooru is chosen.
+  bool get needsSafeRating => selectedServers.any((server) => !server.isSafebooru);
+
   void saveServer(BooruServer server) {
     if (servers.any((other) => other.id != server.id && other.canonicalAddress == server.canonicalAddress)) {
       throw const BooruError(BooruErrorKind.duplicateServer);
@@ -391,18 +421,28 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     return value;
   }
 
+  /// Favorites search: a post's tags or its number.
+  static bool matches(BooruPost post, String query, {String? lowered}) =>
+      query.isEmpty || post.tags.join(' ').toLowerCase().contains(lowered ?? query.toLowerCase()) || '${post.postID}'.contains(query);
+
   List<BooruPost> visibleFavorites({String? folderID, String query = ''}) {
-    final version = _snapshotVersion, key = (folderID, query);
+    final rating = safeRating();
+    final version = _snapshotVersion, key = (folderID, query, rating);
     List<BooruPost> shown(List<BooruPost> value) => _goldRestrictedIDs.isEmpty ? value : value.where((post) => !_goldRestrictedIDs.contains(post.id)).toList();
     if (_visibleFavoritesRevision == version) {
       final cached = _visibleFavoritesCache[key];
       if (cached != null) return shown(cached);
     }
     final filters = {for (final server in servers) server.id: BooruBlacklist(blacklist(server.id))};
+    final safebooru = {
+      for (final server in servers)
+        if (server.isSafebooru) server.id,
+    };
     final lowered = query.toLowerCase();
     final value = favorites(servers.map((server) => server.id).toList(), folderID: folderID).where((post) {
       if (filters[post.serverID]?.contains(post) ?? false) return false;
-      return query.isEmpty || post.tags.join(' ').toLowerCase().contains(lowered) || '${post.postID}'.contains(query);
+      if (rating != null && !safebooru.contains(post.serverID) && !rating.allows(post.rating)) return false;
+      return matches(post, query, lowered: lowered);
     }).toList();
     if (_visibleFavoritesRevision != version || _visibleFavoritesCache.length >= 32) {
       _visibleFavoritesCache.clear();

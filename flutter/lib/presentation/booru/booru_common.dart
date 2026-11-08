@@ -85,8 +85,9 @@ class BooruContext {
   bool get safeMode => preferences.boolean('booru.safeMode') ?? false;
   BooruSafeRating get safeRating => BooruSafeRating.fromRawValue(preferences.string('booru.safeRating')) ?? BooruSafeRating.general;
 
-  /// `booruQuery`: Safe Mode adds its rating tag unless the search names one.
-  String query(String query) => safeMode ? safeRating.applyingDefault(query) : query;
+  /// `booruQuery`: Safe Mode adds its rating tag unless the search names one, and only when a
+  /// server other than Safebooru is chosen; Safebooru has no rating tags and is all ages.
+  String query(String query) => safeMode && store.needsSafeRating ? safeRating.applyingDefault(query) : query;
 
   BooruServer? server(String id) {
     for (final server in store.servers) {

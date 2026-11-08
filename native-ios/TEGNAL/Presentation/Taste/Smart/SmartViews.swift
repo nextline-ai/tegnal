@@ -350,3 +350,54 @@ extension View {
         }
     }
 }
+
+/// What Smart shows while it picks works: a sparkle that keeps working, a line that says what it
+/// is doing now, and cards that fill in as a wave passes over them, so a long first load reads
+/// as progress rather than a stalled spinner.
+struct SmartLoadingView: View {
+    @State private var step = 0
+    @State private var sweep = false
+    private static let steps = ["Reading what you've saved…", "Matching the tags you love…", "Picking works for you…", "Almost there…"]
+
+    var body: some View {
+        VStack(spacing: 22) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .symbolEffect(.variableColor.iterative.reversing, options: .repeating)
+                Text(L10n.text(Self.steps[step]))
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+                    .id(step)
+                    .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity)))
+            }
+            .frame(height: 30)
+            .clipped()
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 14) {
+                ForEach(0..<6, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: 6) {
+                        RoundedRectangle(cornerRadius: 14).fill(.quaternary).aspectRatio(0.72, contentMode: .fit)
+                        RoundedRectangle(cornerRadius: 4).fill(.quaternary).frame(height: 10)
+                        RoundedRectangle(cornerRadius: 4).fill(.quaternary).frame(width: 46, height: 8)
+                    }
+                    .opacity(sweep ? 1 : 0.45)
+                    .animation(.easeInOut(duration: 0.9).repeatForever().delay(Double(index % 3) * 0.18 + Double(index / 3) * 0.12), value: sweep)
+                }
+            }
+        }
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("Loading recommendations"))
+        .accessibilityIdentifier("taste.loading")
+        .onAppear { sweep = true }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2.4))
+                guard !Task.isCancelled else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { step = (step + 1) % Self.steps.count }
+            }
+        }
+    }
+}

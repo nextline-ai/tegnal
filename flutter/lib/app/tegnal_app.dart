@@ -56,6 +56,7 @@ import '../core/content/reading_queue.dart';
 import '../presentation/design/app_sheet.dart';
 import '../presentation/content/reading_queue_views.dart';
 import 'privacy_cover.dart';
+import '../core/content/recent_works.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
@@ -103,7 +104,7 @@ class AppServices {
   /// `booruQuery`: Safe Mode adds its rating tag to recommendation searches too.
   String _booruQuery(String query) {
     final defaults = preferences.defaults;
-    if (!(defaults.boolean('booru.safeMode') ?? false)) return query;
+    if (!(defaults.boolean('booru.safeMode') ?? false) || !booru.needsSafeRating) return query;
     return (BooruSafeRating.fromRawValue(defaults.string('booru.safeRating')) ?? BooruSafeRating.general).applyingDefault(query);
   }
 
@@ -137,6 +138,12 @@ class AppServices {
 
   /// Up Next for comics.
   late final ReadingQueue readingQueue = ReadingQueue(preferences.defaults);
+
+  /// Comics opened in the viewer lately; the reader adds to it wherever it opens.
+  late final RecentWorks recentWorks = RecentWorks.shared = RecentWorks(preferences.defaults);
+
+  /// Images opened in image mode's viewer lately.
+  late final RecentImages recentImages = RecentImages.shared = RecentImages(preferences.booruDefaults);
 }
 
 class TegnalApp extends StatefulWidget {
@@ -218,6 +225,11 @@ class _RootState extends State<_Root> {
   void initState() {
     super.initState();
     state.keepsImageMode = () => _booru.safeMode;
+    // Saved images that do not fit Safe Mode's age guide stay hidden.
+    services.booru.safeRating = () => _booru.safeMode ? _booru.safeRating : null;
+    // The reader adds to Recently Opened Works from the first work it opens.
+    services.recentWorks;
+    services.recentImages;
     // Finished weeks and months become reports and recaps, as the native app does on launch.
     if (!services.isTesting) services.taste.prepareCompletedReports();
     if (!services.isTesting) services.coverQueue.start();
@@ -324,7 +336,10 @@ class _RootState extends State<_Root> {
           ),
         ),
       ),
-      resetSettings: () => ModeSettingsReset.reset(booru: true, content: services.content, preferences: services.preferences),
+      resetSettings: () {
+        ModeSettingsReset.reset(booru: true, content: services.content, preferences: services.preferences);
+        services.booru.safeModeChanged();
+      },
       sync: (context) => DriveSyncSection(sync: services.sync),
       invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),
     ),
@@ -390,6 +405,8 @@ class _RootState extends State<_Root> {
       ),
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
+    recentWorks: services.recentWorks,
+    openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
     siteAccount: (context) => SiteAccountSection(content: services.content, database: services.database, startCoverQueue: services.coverQueue.start),
     sync: (context) => DriveSyncSection(sync: services.sync),

@@ -158,6 +158,7 @@ struct SearchHistorySettings: View {
                 Text(L10n.text("30 Days")).tag(30)
                 Text(L10n.text("Always")).tag(0)
             }.disabled(!remember).accessibilityIdentifier("settings.historyRetention")
+            RecentWorksSettings(booru: booru)
         }
     }
 }

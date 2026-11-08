@@ -44,6 +44,29 @@ class WorkQuery {
     return value.isEmpty ? null : _Term(excluded: negated, field: isField ? parts[0].toLowerCase() : null, value: value);
   }
 
+  /// The same match the SQL conditions make, over a work's fields in memory: every term must
+  /// hit, and an excluded term must miss.
+  bool matches(WorkFields fields) => _terms.every((term) => _hits(term, fields) != term.excluded);
+
+  static bool _hits(_Term term, WorkFields fields) {
+    String normalized(String text) => text.replaceAll('_', ' ').toLowerCase();
+    final value = term.value.toLowerCase();
+    bool contains(String column) => normalized(column).contains(value);
+    bool anyEntry(String column, String entry) => ', ${normalized(column)}, '.contains(', ${entry.toLowerCase()}, ');
+    return switch (term.field) {
+      null =>
+        [fields.title, fields.artists, fields.groups, fields.series, fields.language, fields.type, fields.tags, fields.note].any(contains) ||
+            parseInt64(term.value) == fields.galleryID,
+      'language' => anyEntry(fields.language, term.value) || anyEntry(fields.tags, 'language:${term.value}'),
+      'artist' => anyEntry(fields.artists, term.value) || anyEntry(fields.tags, 'artist:${term.value}'),
+      'group' => anyEntry(fields.groups, term.value) || anyEntry(fields.tags, 'group:${term.value}'),
+      'series' || 'parody' => anyEntry(fields.series, term.value) || anyEntry(fields.tags, '${term.field}:${term.value}'),
+      'type' => anyEntry(fields.type, term.value) || anyEntry(fields.tags, 'type:${term.value}'),
+      'tag' => anyEntry(fields.tags, term.value) || anyEntry(fields.tags, 'tag:${term.value}'),
+      final field => anyEntry(fields.tags, '$field:${term.value}'),
+    };
+  }
+
   static (String, List<Object?>) _condition(_Term term) {
     final clauses = <String>[], arguments = <Object?>[];
     void anyEntry(String column, String value) {
@@ -91,4 +114,21 @@ class WorkQuery {
   }
 
   static String _escaped(String value) => value.replaceAll(r'\', r'\\').replaceAll('%', r'\%');
+}
+
+/// What a work held outside the library shows, for the same search in memory.
+class WorkFields {
+  const WorkFields({
+    required this.galleryID,
+    this.title = '',
+    this.artists = '',
+    this.groups = '',
+    this.series = '',
+    this.language = '',
+    this.type = '',
+    this.tags = '',
+    this.note = '',
+  });
+  final int galleryID;
+  final String title, artists, groups, series, language, type, tags, note;
 }

@@ -290,7 +290,12 @@ public final class AppEnvironment: @unchecked Sendable {
         didSet {
             guard booruSafeMode != oldValue else { return }
             browserPreferences.set(booruSafeMode, forKey: "booru.safeMode")
-            if booruSafeMode { mode = .booru }
+            booru.safeRating = booruSafeMode ? booruSafeRating : nil
+            if booruSafeMode {
+                mode = .booru
+                // Turning it on goes straight to Safebooru, whose images are all ages.
+                booru.perform { try booru.selectSafebooru() }
+            }
             booruSearchRevision += 1
         }
     }
@@ -298,11 +303,14 @@ public final class AppEnvironment: @unchecked Sendable {
         didSet {
             guard booruSafeRating != oldValue else { return }
             browserPreferences.set(booruSafeRating.rawValue, forKey: "booru.safeRating")
+            booru.safeRating = booruSafeMode ? booruSafeRating : nil
             booruSearchRevision += 1
         }
     }
+    /// Safe Mode adds its rating tag only when a server other than Safebooru is chosen; Safebooru
+    /// has no rating tags to search by, and every image there is all ages.
     func booruQuery(_ query: String) -> String {
-        booruSafeMode ? booruSafeRating.applyingDefault(to: query) : query
+        booruSafeMode && booru.selectedServers.contains(where: { !$0.isSafebooru }) ? booruSafeRating.applyingDefault(to: query) : query
     }
     private(set) var discordInvitationVisible = false
     @ObservationIgnored private var discordInvitationRecorded = false
@@ -455,6 +463,22 @@ public final class AppEnvironment: @unchecked Sendable {
         return queue
     }
     @ObservationIgnored private var readingQueueStorage: ReadingQueue?
+    /// Comics opened in the viewer lately.
+    @MainActor var recentWorks: RecentWorks {
+        if let recentWorksStorage { return recentWorksStorage }
+        let recents = RecentWorks(defaults: browserPreferences)
+        recentWorksStorage = recents
+        return recents
+    }
+    @ObservationIgnored private var recentWorksStorage: RecentWorks?
+    /// Images opened in image mode's viewer lately.
+    @MainActor var recentImages: RecentImages {
+        if let recentImagesStorage { return recentImagesStorage }
+        let recents = RecentImages(defaults: ReaderPreferences.booruDefaults)
+        recentImagesStorage = recents
+        return recents
+    }
+    @ObservationIgnored private var recentImagesStorage: RecentImages?
     @ObservationIgnored private var coverQueueTask: Task<Void, Never>?
     @ObservationIgnored private var coverQueueGeneration = UUID()
     @ObservationIgnored private var coverQueueActive = true
@@ -598,7 +622,9 @@ public final class AppEnvironment: @unchecked Sendable {
         self.booru = booru
         let safeMode = browserPreferences.bool(forKey: "booru.safeMode")
         self.booruSafeMode = safeMode
-        self.booruSafeRating = BooruSafeRating(rawValue: browserPreferences.string(forKey: "booru.safeRating") ?? "") ?? .general
+        let safeRating = BooruSafeRating(rawValue: browserPreferences.string(forKey: "booru.safeRating") ?? "") ?? .general
+        self.booruSafeRating = safeRating
+        booru.safeRating = safeMode ? safeRating : nil
         self.selectedMode = safeMode ? .booru : AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
         self.database = database
         self.coverQueueActor = coverQueue ?? CoverQueueActor(database: database)

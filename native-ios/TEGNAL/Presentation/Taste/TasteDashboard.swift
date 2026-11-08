@@ -55,7 +55,7 @@ struct TasteDashboard: View {
                         if let snapshot = feed.snapshot {
                             if !snapshot.tags.isEmpty || !feed.results.items.isEmpty { works }
                         } else if feed.loading {
-                            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
+                            SmartLoadingView()
                         }
                     }
                 }
@@ -106,14 +106,16 @@ struct TasteDashboard: View {
             if mode == .booru { feed.clear(); ensureLoaded() }
         }
         .onAppear { ensureLoaded() }
-        .onDisappear { cancelPrefetch(); feed.cancelLoading() }
+        // Picking works takes a while; it carries on when another tab or mode is shown and is
+        // ready on return. Only covers prefetched for the screen stop.
+        .onDisappear { cancelPrefetch() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { ensureLoaded() }
             else { cancelPrefetch(); feed.cancelLoading() }
         }
         .onChange(of: env.mode) { _, _ in
             if isActiveMode { ensureLoaded() }
-            else { cancelPrefetch(); feed.cancelLoading() }
+            else { cancelPrefetch() }
         }
         .onChange(of: feed.discoverySession) { _, _ in cancelPrefetch() }
         .onChange(of: env.booru.confirmedGoldRestrictedIDs) { _, _ in cancelPrefetch() }
@@ -226,7 +228,7 @@ struct TasteDashboard: View {
                     }
                 }
             } else if feed.loading {
-                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
+                SmartLoadingView()
             } else if feed.results.failures.isEmpty && !feed.results.cursor.hasMore {
                 message(L10n.text("You're all caught up. Explore more works or refresh for new recommendations."), icon: "checkmark.circle", action: explore == nil ? "Try Again" : "Explore works") { if let explore { explore() } else { refresh() } }
             }

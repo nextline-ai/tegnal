@@ -507,6 +507,17 @@ struct NativeReaderView: View {
         }
         opening = resolved
     }
+    /// Puts the work at the top of Recently Opened Works, with its cover once it loads.
+    private func rememberOpened(_ value: NativeGallery) {
+        let recents = env.recentWorks
+        recents.opened(value, site: ComicSites.active.isEmpty ? nil : ComicSites.active)
+        guard recents.entries.first?.id == value.id, !recents.hasCover(value.id), let first = value.pages.first else { return }
+        let images = images, id = value.id
+        Task(priority: .utility) {
+            guard let cover = try? await images.load(first, galleryID: id, thumbnail: true) else { return }
+            recents.storeCover(cover, for: id)
+        }
+    }
     private func loadGallery() async {
         error = nil
         // Even an unavailable gallery must retain a visible way out.
@@ -520,6 +531,7 @@ struct NativeReaderView: View {
                 currentPage = ReaderLayout.initialPage(opening.initialPage, saved: 0, total: value.pages.count, count: pagesPerSpread)
                 gallery = value
             }
+            if savesProgress { rememberOpened(value) }
             if opening.needsConfirmation {
                 if let first = value.pages.first { _ = try? await images.load(first, galleryID: galleryID) }
                 try Task.checkCancellation()

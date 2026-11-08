@@ -68,6 +68,44 @@ struct WorkQuery: Equatable, Sendable {
         return (clauses.joined(separator: " OR "), arguments)
     }
 
+    /// What a work held outside the library shows, for the same search in memory.
+    struct Fields: Sendable {
+        var galleryID: Int64
+        var title = ""
+        var artists = ""
+        var groups = ""
+        var series = ""
+        var language = ""
+        var type = ""
+        var tags = ""
+        var note = ""
+    }
+
+    /// The same match the SQL conditions make, over a work's fields in memory: every term must
+    /// hit, and an excluded term must miss.
+    func matches(_ fields: Fields) -> Bool {
+        terms.allSatisfy { term in Self.hits(term, fields) != term.excluded }
+    }
+
+    private static func hits(_ term: Term, _ fields: Fields) -> Bool {
+        func normalized(_ text: String) -> String { text.replacingOccurrences(of: "_", with: " ").lowercased() }
+        let value = term.value.lowercased()
+        func contains(_ column: String) -> Bool { normalized(column).contains(value) }
+        func anyEntry(_ column: String, _ entry: String) -> Bool { (", " + normalized(column) + ", ").contains(", " + entry.lowercased() + ", ") }
+        switch term.field {
+        case nil:
+            return [fields.title, fields.artists, fields.groups, fields.series, fields.language, fields.type, fields.tags, fields.note].contains(where: contains)
+                || Int64(term.value) == fields.galleryID
+        case "language": return anyEntry(fields.language, term.value) || anyEntry(fields.tags, "language:" + term.value)
+        case "artist": return anyEntry(fields.artists, term.value) || anyEntry(fields.tags, "artist:" + term.value)
+        case "group": return anyEntry(fields.groups, term.value) || anyEntry(fields.tags, "group:" + term.value)
+        case "series", "parody": return anyEntry(fields.series, term.value) || anyEntry(fields.tags, term.field! + ":" + term.value)
+        case "type": return anyEntry(fields.type, term.value) || anyEntry(fields.tags, "type:" + term.value)
+        case "tag": return anyEntry(fields.tags, term.value) || anyEntry(fields.tags, "tag:" + term.value)
+        case let field?: return anyEntry(fields.tags, field + ":" + term.value)
+        }
+    }
+
     private static func escaped(_ value: String) -> String {
         value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%")
     }

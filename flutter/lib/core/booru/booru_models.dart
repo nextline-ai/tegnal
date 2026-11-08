@@ -27,6 +27,11 @@ class BooruServer {
   String baseURL;
   BooruEngine engine;
 
+  /// Safebooru carries only all-ages images, so Safe Mode browses it without a rating tag.
+  static const safebooruHost = 'safebooru.org';
+  bool get isSafebooru => bareHost(Uri.tryParse(baseURL)?.host ?? '') == safebooruHost;
+  static BooruServer safebooru() => BooruServer(name: 'Safebooru', baseURL: 'https://$safebooruHost', engine: BooruEngine.gelbooru);
+
   String get displayName => BooruServer.displayNameOf(name);
   static String displayNameOf(String name) {
     final value = name.trim();
@@ -323,7 +328,7 @@ class BooruBlacklist {
         final value = negative ? term.substring(1) : term;
         final bool matches;
         if (value.startsWith('rating:')) {
-          matches = _rating(value.substring(7)) == _rating(post.rating);
+          matches = BooruSafeRating.normalized(value.substring(7)) == BooruSafeRating.normalized(post.rating);
         } else if (value.startsWith('artist:')) {
           matches = post.artists.any((artist) => artist.toLowerCase() == value.substring(7));
         } else if (value.startsWith('id:')) {
@@ -338,14 +343,6 @@ class BooruBlacklist {
       }),
     );
   }
-
-  static String _rating(String value) => switch (value) {
-    'g' || 'general' || 'safe' => 'g',
-    's' || 'sensitive' => 's',
-    'q' || 'questionable' => 'q',
-    'e' || 'explicit' => 'e',
-    _ => value,
-  };
 }
 
 enum BooruErrorKind { validationRequired, invalidServer, invalidResponse, authentication, rateLimited, unavailable, unsupported, duplicateServer, storage }
@@ -621,6 +618,18 @@ enum BooruSafeRating {
 
   String get id => rawValue;
   String get tag => 'rating:$rawValue';
+
+  /// Each server names ratings its own way; this is the one-letter form the rating tag uses.
+  static String normalized(String value) => switch (value.toLowerCase()) {
+    'g' || 'general' || 'safe' => 'g',
+    's' || 'sensitive' => 's',
+    'q' || 'questionable' => 'q',
+    'e' || 'explicit' => 'e',
+    final other => other,
+  };
+
+  /// A saved image fits when its rating is the one the rating tag searches for.
+  bool allows(String rating) => normalized(rating) == rawValue;
   String get title => switch (this) {
     general => L10n.text('All Ages'),
     sensitive => '12+',
