@@ -664,9 +664,9 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
 
   Future<void> _share() async {
     try {
-      await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('share', {'text': _server.pageURL(_post.postID)});
+      await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('share', {'text': _server.pageURLFor(_post)});
     } on Object {
-      await Clipboard.setData(ClipboardData(text: _server.pageURL(_post.postID)));
+      await Clipboard.setData(ClipboardData(text: _server.pageURLFor(_post)));
     }
   }
 
@@ -1023,7 +1023,7 @@ class BooruMediaFailureView extends StatelessWidget {
     const white = Color(0xFFFFFFFF);
     const secondary = Color(0x99EBEBF5);
     final media = MediaQuery.of(context);
-    final page = server.pageURL(post.postID);
+    final page = server.pageURLFor(post);
     Offset? start;
     return LayoutBuilder(
       builder: (context, constraints) => GestureDetector(

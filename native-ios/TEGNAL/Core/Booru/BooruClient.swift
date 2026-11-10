@@ -582,26 +582,42 @@ enum BooruDecoder {
     }
     static func safeURL(_ value: Any?, base: URL) -> URL? {
         guard let string = value as? String, !string.isEmpty,
-              let url = URL(string: string, relativeTo: base.appendingPathComponent("/"))?.absoluteURL,
-              url.scheme == "https", url.host != nil, url.user == nil, url.password == nil else { return nil }
+              var url = URL(string: string, relativeTo: base.appendingPathComponent("/"))?.absoluteURL,
+              url.host != nil, url.user == nil, url.password == nil else { return nil }
+        // A self-hosted server behind an HTTPS reverse proxy can report its own media as
+        // http:// (some build URLs from the request they see). The app reached that
+        // host over HTTPS, so upgrade it; plain HTTP on any other host stays rejected.
+        if url.scheme?.lowercased() == "http", url.port == nil || url.port == 80,
+           url.host?.lowercased() == base.host?.lowercased(),
+           var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            parts.scheme = "https"; parts.port = base.port
+            guard let upgraded = parts.url else { return nil }
+            url = upgraded
+        }
+        guard url.scheme == "https" else { return nil }
         return url
+    }
+    /// The first candidate that is a usable URL, so a null, empty or unsafe field
+    /// falls through to the next one instead of hiding it.
+    static func firstURL(_ values: [Any?], base: URL) -> URL? {
+        for value in values { if let url = safeURL(value, base: base) { return url } }
+        return nil
     }
     static func post(_ row: [String: Any], server: BooruServer) throws -> BooruPost {
         let id = integer(row["id"])
         guard id > 0 else { throw BooruError.invalidResponse }
-        let file = safeURL(row["file_url"], base: server.baseURL)
-        let preview = safeURL(row["preview_file_url"] ?? row["preview_url"], base: server.baseURL)
+        let variants = (row["media_asset"] as? [String: Any])?["variants"] as? [[String: Any]] ?? []
+        func variant(_ type: String) -> Any? { variants.first { $0["type"] as? String == type }?["url"] }
+        let file = firstURL([row["file_url"], variant("original")], base: server.baseURL)
+        let preview = firstURL([row["preview_file_url"], row["preview_url"], variant("180x180"), variant("360x360"), variant("720x720")], base: server.baseURL)
         let tags = (row["tag_string"] as? String ?? row["tags"] as? String ?? "").split(whereSeparator: \.isWhitespace).map(String.init)
         let artists = (row["tag_string_artist"] as? String ?? "").split(whereSeparator: \.isWhitespace).map(String.init)
         var categories: [String: Int] = [:]
         for (field, category) in [("tag_string_artist", 1), ("tag_string_copyright", 3), ("tag_string_character", 4), ("tag_string_meta", 5)] {
             for tag in (row[field] as? String ?? "").split(whereSeparator: \.isWhitespace) { categories[String(tag)] = category }
         }
-        let variants = (row["media_asset"] as? [String: Any])?["variants"] as? [[String: Any]] ?? []
         // Full-size JPEG or a viewing-size sample, never a grid thumbnail.
-        let viewingVariant = variants.first { $0["type"] as? String == "full" }
-            ?? variants.first { $0["type"] as? String == "sample" }
-        let sample = safeURL(row["jpeg_url"] ?? viewingVariant?["url"] ?? row["sample_url"] ?? row["large_file_url"], base: server.baseURL)
+        let sample = firstURL([row["jpeg_url"], variant("full"), variant("sample"), row["sample_url"], row["large_file_url"]], base: server.baseURL)
         let small = variants.first { $0["type"] as? String == "720x720" }
             ?? variants.first { $0["type"] as? String == "sample" }
         let reduced = small.flatMap { safeURL($0["url"], base: server.baseURL) }

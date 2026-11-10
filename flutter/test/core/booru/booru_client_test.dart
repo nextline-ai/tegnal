@@ -191,6 +191,72 @@ void main() {
     expect(BooruDecoder.post({'id': 111}, dan).displayURL, isNull);
   });
 
+  // A self-hosted Danbooru-compatible server can build media URLs
+  // from the request it sees, so behind an HTTPS reverse proxy they arrive as http://.
+  test('self-hosted media behind an HTTPS proxy decodes and links to its page', () {
+    final server = BooruServer(id: 'self-hosted', name: 'Self-hosted', baseURL: 'https://booru.example.org', engine: BooruEngine.danbooru);
+    const file = 'http://booru.example.org/api/media/1/file', thumb = 'http://booru.example.org/api/media/1/thumbnail';
+    final row = <String, Object?>{
+      'id': 1,
+      'created_at': '2026-11-09T14:39:55.231+00:00',
+      'uploader_id': 1,
+      'score': 0,
+      'source': 'https://example.com/source',
+      'md5': 'da99b7fefc70455414c60e02ba543af8',
+      'last_comment_bumped_at': null,
+      'rating': 's',
+      'image_width': 1200,
+      'image_height': 701,
+      'tag_string': 'art fire_emblem',
+      'fav_count': 0,
+      'file_ext': 'jpg',
+      'last_noted_at': null,
+      'parent_id': null,
+      'has_children': false,
+      'approver_id': null,
+      'tag_string_artist': '',
+      'tag_string_meta': '',
+      'is_deleted': false,
+      'is_banned': false,
+      'has_large': true,
+      'file_url': file,
+      'large_file_url': file,
+      'preview_file_url': thumb,
+      'media_asset': {
+        'id': 1,
+        'md5': 'da99b7fefc70455414c60e02ba543af8',
+        'file_ext': 'jpg',
+        'variants': [
+          {'type': '180x180', 'url': thumb, 'width': 180, 'height': 180, 'file_ext': 'webp'},
+          {'type': 'sample', 'url': file, 'width': 1200, 'height': 701, 'file_ext': 'jpg'},
+          {'type': 'original', 'url': file, 'width': 1200, 'height': 701, 'file_ext': 'jpg'},
+        ],
+      },
+    };
+    final post = BooruDecoder.post(jsonDecode(jsonEncode(row)) as Map<String, Object?>, server);
+    expect(post.previewURL, 'https://booru.example.org/api/media/1/thumbnail');
+    expect(post.viewerURL(original: false), 'https://booru.example.org/api/media/1/file');
+    expect(post.fileURL, 'https://booru.example.org/api/media/1/file');
+    expect(server.pageURLFor(post), 'https://booru.example.org/media/1');
+    expect(dan.pageURLFor(BooruDecoder.post({'id': 5, 'file_url': 'https://cdn.example/a.jpg'}, dan)), dan.pageURL(5));
+    // Relative paths resolve against the server; plain HTTP elsewhere, or on another port, stays rejected.
+    final relative = BooruDecoder.post({
+      'id': 2,
+      'file_url': '/api/media/2/file',
+      'preview_file_url': null,
+      'large_file_url': '',
+      'media_asset': {
+        'variants': [
+          {'type': '180x180', 'url': '/api/media/2/thumbnail'},
+        ],
+      },
+    }, server);
+    expect(relative.previewURL, 'https://booru.example.org/api/media/2/thumbnail');
+    expect(relative.viewerURL(original: false), 'https://booru.example.org/api/media/2/file');
+    expect(BooruDecoder.safeURL('http://cdn.example.com/a.jpg', server.baseURL), isNull);
+    expect(BooruDecoder.safeURL('http://booru.example.org:8000/api/media/1/file', server.baseURL), isNull);
+  });
+
   test('reduced data media preserves original and animation and decodes category metadata', () {
     final post = BooruDecoder.post({
       'id': 42,

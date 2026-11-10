@@ -216,7 +216,7 @@ class _DetailsPageState extends State<_DetailsPage> {
                       ),
                     ),
                   FormRow(
-                    onTap: () => openExternalLink(_server.pageURL(_post.postID)),
+                    onTap: () => openExternalLink(_server.pageURLFor(_post)),
                     child: Text(L10n.text('Open on Website'), style: TegnalType.style(17, color: tint)),
                   ),
                 ],
@@ -288,7 +288,7 @@ class _DetailsPageState extends State<_DetailsPage> {
                 children: [
                   FormRow(
                     onTap: () =>
-                        Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => _ContentReportPage(page: _server.pageURL(_post.postID)))),
+                        Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => _ContentReportPage(page: _server.pageURLFor(_post)))),
                     child: Row(
                       children: [
                         Icon(CupertinoIcons.flag, size: 22, color: tint),

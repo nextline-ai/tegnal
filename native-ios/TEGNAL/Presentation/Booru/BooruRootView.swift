@@ -680,7 +680,7 @@ struct BooruPostGrid: View {
                                     if store.isFavorite(post) { Button(L10n.text("Find works with a similar art style"), systemImage: "photo.on.rectangle.angled") { similarity = .init(post: post) } }
                                     Button(L10n.text(store.isFavorite(post) ? "Remove Favorite" : "Add Favorite"), systemImage: "heart") { save(post) }
                                     Button(L10n.text("Save to Folder"), systemImage: "folder") { filing = post }
-                                    ShareLink(item: server.pageURL(postID: post.postID))
+                                    ShareLink(item: server.pageURL(post: post))
                                 }
                         }
                     }

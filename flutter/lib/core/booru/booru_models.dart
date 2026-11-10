@@ -100,6 +100,17 @@ class BooruServer {
     BooruEngine.gelbooru || BooruEngine.oldGelbooru => '${_appending('index.php')}?${booruQuery([('page', 'post'), ('s', 'view'), ('id', '$postID')])}',
   };
 
+  /// The post's web page. Some self-hosted servers answer `/posts/{id}` with JSON only;
+  /// their page is `/media/{id}`, recognized by an `/api/media/{id}/file` media URL.
+  String pageURLFor(BooruPost post) {
+    final file = post.fileURL == null ? null : Uri.tryParse(post.fileURL!);
+    final server = Uri.tryParse(baseURL);
+    if (engine == BooruEngine.danbooru && file != null && server != null && file.host == server.host && file.path.endsWith('/api/media/${post.postID}/file')) {
+      return _appending('media/${post.postID}');
+    }
+    return pageURL(post.postID);
+  }
+
   String browsingURL(String query, {int? poolID}) {
     switch (engine) {
       case BooruEngine.danbooru:

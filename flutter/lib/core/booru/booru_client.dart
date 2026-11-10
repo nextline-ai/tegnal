@@ -865,6 +865,16 @@ abstract final class BooruDecoder {
 
   static String? safeURL(Object? value, String base) => safeBooruURL(value, base);
 
+  /// The first candidate that is a usable URL, so a null, empty or unsafe field
+  /// falls through to the next one instead of hiding it.
+  static String? _firstURL(List<Object?> values, String base) {
+    for (final value in values) {
+      final url = safeURL(value, base);
+      if (url != null) return url;
+    }
+    return null;
+  }
+
   /// `row[a] ?? row[b]`: the first key the row has, even when its value is null.
   static Object? _first(Map<String, Object?>? row, List<String> keys) {
     if (row == null) return null;
@@ -878,8 +888,18 @@ abstract final class BooruDecoder {
     final id = integer(row['id']);
     if (id <= 0) throw const BooruError(BooruErrorKind.invalidResponse);
     final base = server.baseURL;
-    final file = safeURL(row['file_url'], base);
-    final preview = safeURL(_first(row, ['preview_file_url', 'preview_url']), base);
+    final asset = row['media_asset'];
+    final rawVariants = asset is Map ? asset['variants'] : null;
+    final variants = rawVariants is List && rawVariants.every((variant) => variant is Map)
+        ? [for (final variant in rawVariants) (variant as Map).cast<String, Object?>()]
+        : <Map<String, Object?>>[];
+    Map<String, Object?>? variant(String type) => variants.where((value) => value['type'] == type).firstOrNull;
+    final file = _firstURL([row['file_url'], variant('original')?['url']], base);
+    final preview = _firstURL([
+      row['preview_file_url'],
+      row['preview_url'],
+      for (final type in const ['180x180', '360x360', '720x720']) variant(type)?['url'],
+    ], base);
     String text(Object? value) => value is String ? value : '';
     final tagText = row['tag_string'] is String ? row['tag_string'] as String : text(row['tags']);
     final tags = splitWhitespace(tagText);
@@ -890,20 +910,8 @@ abstract final class BooruDecoder {
         categories[tag] = category;
       }
     }
-    final asset = row['media_asset'];
-    final rawVariants = asset is Map ? asset['variants'] : null;
-    final variants = rawVariants is List && rawVariants.every((variant) => variant is Map)
-        ? [for (final variant in rawVariants) (variant as Map).cast<String, Object?>()]
-        : <Map<String, Object?>>[];
-    Map<String, Object?>? variant(String type) => variants.where((value) => value['type'] == type).firstOrNull;
     // Full-size JPEG or a viewing-size sample, never a grid thumbnail.
-    final viewingVariant = variant('full') ?? variant('sample');
-    final sampleSource = row.containsKey('jpeg_url')
-        ? row['jpeg_url']
-        : viewingVariant != null && viewingVariant.containsKey('url')
-        ? viewingVariant['url']
-        : _first(row, ['sample_url', 'large_file_url']);
-    final sample = safeURL(sampleSource, base);
+    final sample = _firstURL([row['jpeg_url'], variant('full')?['url'], variant('sample')?['url'], row['sample_url'], row['large_file_url']], base);
     final small = variant('720x720') ?? variant('sample');
     final reduced = small == null ? null : safeURL(small['url'], base);
     final fileExtension = (row['file_ext'] is String ? row['file_ext'] as String : urlPathExtension(file)).toLowerCase();

@@ -243,6 +243,37 @@ final class BooruTests: XCTestCase {
         XCTAssertNil(try BooruDecoder.post(["id": 111], server: dan).displayURL)
     }
 
+    /// A self-hosted Danbooru-compatible server can build media URLs
+    /// from the request it sees, so behind an HTTPS reverse proxy they arrive as http://.
+    func testSelfHostedMediaBehindHTTPSProxyDecodesAndLinksToItsPage() throws {
+        let server = BooruServer(name: "Self-hosted", baseURL: URL(string: "https://booru.example.org")!, engine: .danbooru)
+        let file = "http://booru.example.org/api/media/1/file", thumb = "http://booru.example.org/api/media/1/thumbnail"
+        let row: [String: Any] = ["id": 1, "created_at": "2026-11-09T14:39:55.231+00:00", "uploader_id": 1, "score": 0,
+            "source": "https://example.com/source", "md5": "da99b7fefc70455414c60e02ba543af8", "last_comment_bumped_at": NSNull(),
+            "rating": "s", "image_width": 1200, "image_height": 701, "tag_string": "art fire_emblem", "fav_count": 0, "file_ext": "jpg",
+            "last_noted_at": NSNull(), "parent_id": NSNull(), "has_children": false, "approver_id": NSNull(),
+            "tag_string_artist": "", "tag_string_meta": "", "is_deleted": false, "is_banned": false, "has_large": true,
+            "file_url": file, "large_file_url": file, "preview_file_url": thumb,
+            "media_asset": ["id": 1, "md5": "da99b7fefc70455414c60e02ba543af8", "file_ext": "jpg", "variants": [
+                ["type": "180x180", "url": thumb, "width": 180, "height": 180, "file_ext": "webp"],
+                ["type": "sample", "url": file, "width": 1200, "height": 701, "file_ext": "jpg"],
+                ["type": "original", "url": file, "width": 1200, "height": 701, "file_ext": "jpg"]]]]
+        let post = try BooruDecoder.post(row, server: server)
+        XCTAssertEqual(post.previewURL?.absoluteString, "https://booru.example.org/api/media/1/thumbnail")
+        XCTAssertEqual(post.viewerURL(original: false)?.absoluteString, "https://booru.example.org/api/media/1/file")
+        XCTAssertEqual(post.fileURL?.absoluteString, "https://booru.example.org/api/media/1/file")
+        XCTAssertEqual(server.pageURL(post: post).absoluteString, "https://booru.example.org/media/1")
+        XCTAssertEqual(dan.pageURL(post: try BooruDecoder.post(["id": 5, "file_url": "https://cdn.example/a.jpg"], server: dan)),
+                       dan.pageURL(postID: 5))
+        // Relative paths resolve against the server; plain HTTP elsewhere, or on another port, stays rejected.
+        let relative = try BooruDecoder.post(["id": 2, "file_url": "/api/media/2/file", "preview_file_url": NSNull(),
+            "large_file_url": "", "media_asset": ["variants": [["type": "180x180", "url": "/api/media/2/thumbnail"]]]], server: server)
+        XCTAssertEqual(relative.previewURL?.absoluteString, "https://booru.example.org/api/media/2/thumbnail")
+        XCTAssertEqual(relative.viewerURL(original: false)?.absoluteString, "https://booru.example.org/api/media/2/file")
+        XCTAssertNil(BooruDecoder.safeURL("http://cdn.example.com/a.jpg", base: server.baseURL))
+        XCTAssertNil(BooruDecoder.safeURL("http://booru.example.org:8000/api/media/1/file", base: server.baseURL))
+    }
+
     func testReducedDataMediaPreservesOriginalAndAnimationAndDecodesCategoryMetadata() throws {
         let post = try BooruDecoder.post(["id": 42, "file_url": "https://cdn.example/original.png", "file_ext": "png",
             "large_file_url": "https://cdn.example/sample.jpg",

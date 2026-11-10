@@ -413,11 +413,26 @@ abstract final class BooruLegacyHTML {
 String? safeBooruURL(Object? value, String base) {
   if (value is! String || value.isEmpty) return null;
   if (!RegExp(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*$").hasMatch(value)) return null;
-  final Uri url;
+  final Uri server;
+  Uri url;
   try {
-    url = Uri.parse(base.endsWith('/') ? base : '$base/').resolve(value);
+    server = Uri.parse(base.endsWith('/') ? base : '$base/');
+    url = server.resolve(value);
   } on FormatException {
     return null;
+  }
+  // A self-hosted server behind an HTTPS reverse proxy can report its own media as
+  // http:// (some build URLs from the request they see). The app reached that
+  // host over HTTPS, so upgrade it; plain HTTP on any other host stays rejected.
+  if (url.scheme == 'http' && url.port == 80 && url.host.isNotEmpty && url.host == server.host && url.userInfo.isEmpty) {
+    url = Uri(
+      scheme: 'https',
+      host: url.host,
+      port: server.hasPort ? server.port : null,
+      path: url.path,
+      query: url.hasQuery ? url.query : null,
+      fragment: url.hasFragment ? url.fragment : null,
+    );
   }
   if (url.scheme != 'https' || url.host.isEmpty || url.userInfo.isNotEmpty) return null;
   return url.toString();

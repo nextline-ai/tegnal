@@ -102,6 +102,17 @@ struct BooruServer: Codable, Identifiable, Hashable, Sendable {
         }
     }
 
+    /// The post's web page. Some self-hosted servers answer `/posts/{id}` with JSON only;
+    /// their page is `/media/{id}`, recognized by an `/api/media/{id}/file` media URL.
+    func pageURL(post: BooruPost) -> URL {
+        if engine == .danbooru, let file = post.fileURL,
+           file.host?.lowercased() == baseURL.host?.lowercased(),
+           file.path.hasSuffix("/api/media/\(post.postID)/file") {
+            return baseURL.appendingPathComponent("media/\(post.postID)")
+        }
+        return pageURL(postID: post.postID)
+    }
+
     func browsingURL(query: String, poolID: Int64? = nil) -> URL {
         var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         switch engine {

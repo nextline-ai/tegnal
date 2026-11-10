@@ -21,7 +21,7 @@ struct BooruMediaFailureView: View {
     var validate: (() -> Void)? = nil
     let onGesture: (BooruMediaGesture) -> Void
     let retry: () -> Void
-    private var page: URL { server.pageURL(postID: post.postID) }
+    private var page: URL { server.pageURL(post: post) }
     private var email: URL {
         var components = URLComponents(string: "mailto:contact@nextline.work")!
         components.queryItems = [.init(name: "subject", value: "TEGNAL: " + L10n.text("Unable to Load")),
@@ -556,7 +556,7 @@ struct BooruPostView: View {
             menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "close", compact: compact) { closeViewer() }
             menuButton(L10n.text("Notes"), icon: showNotes ? "text.bubble.fill" : "text.bubble", id: "notes", compact: compact) { showNotes.toggle() }
             menuButton(L10n.text("Details"), icon: "info.circle", id: "info", compact: compact) { info = true }
-            ShareLink(item: server.pageURL(postID: post.postID)) { menuLabel(L10n.text("Share"), icon: "square.and.arrow.up", compact: compact) }
+            ShareLink(item: server.pageURL(post: post)) { menuLabel(L10n.text("Share"), icon: "square.and.arrow.up", compact: compact) }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "readerSettings", compact: compact) { readerSettings = true }
         }.buttonStyle(.plain).foregroundStyle(.white).tint(.white)
     }
@@ -647,7 +647,7 @@ struct BooruPostView: View {
                     if !post.isVideo && !post.isAnimated {
                         Toggle(L10n.text("Original Image"), isOn: $original)
                     }
-                    Link(L10n.text("Open on Website"), destination: server.pageURL(postID: post.postID))
+                    Link(L10n.text("Open on Website"), destination: server.pageURL(post: post))
                 }
                 ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:])) { group in
                     Section {
@@ -673,7 +673,7 @@ struct BooruPostView: View {
                     }
                 }
                 Section(L10n.text("Content Controls")) {
-                    NavigationLink { ContentReportView(page: server.pageURL(postID: post.postID)) } label: {
+                    NavigationLink { ContentReportView(page: server.pageURL(post: post)) } label: {
                         Label(L10n.text("Report Content"), systemImage: "flag")
                     }.accessibilityIdentifier("booru.report")
                     Button(L10n.text("Hide This Post"), systemImage: "eye.slash") { hideContent(rule: "id:\(post.postID)") }
