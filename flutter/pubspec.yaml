@@ -1,7 +1,7 @@
 name: tegnal
 description: Android version of the native TEGNAL app.
 publish_to: none
-version: 1.4.2+11
+version: 1.4.3+12
 environment:
   sdk: ^3.13.7
 
