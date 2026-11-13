@@ -239,6 +239,8 @@
 "Translation" = "Translation";
 "AI Translation (Beta)" = "AI Translation (Beta)";
 "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead." = "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead.";
+"AI" = "AI";
+"Standard" = "Standard";
 "Stop Translating" = "Stop Translating";
 "Show Translation" = "Show Translation";
 "Show Original" = "Show Original";

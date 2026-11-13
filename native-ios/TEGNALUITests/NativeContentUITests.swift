@@ -534,11 +534,42 @@ final class NativeContentUITests: XCTestCase {
         capture(app, "Consistent language and categorized tag sizes")
     }
 
-    func testOneTapTranslationOnDevice() throws {
-        let app = launchReader()
+    /// Translate starts AI translation by default; the switch under the page picks the standard one.
+    private func startStandardTranslation(_ app: XCUIApplication) {
         menu(app)
         element(app, "reader.translate").tap()
+        if !element(app, "reader.original").waitForExistence(timeout: 2) {
+            let standard = app.buttons["기본 번역"]
+            XCTAssertTrue(standard.waitForExistence(timeout: 10))
+            standard.tap()
+        }
         XCTAssertTrue(element(app, "reader.original").waitForExistence(timeout: 10))
+    }
+
+    func testTranslateStartsAITranslationWithASwitchUnderThePage() {
+        let app = launchReader(extra: ["--reader-japanese-test"])
+        menu(app)
+        element(app, "reader.translate").tap()
+        let ai = app.buttons["AI 번역"], standard = app.buttons["기본 번역"], off = app.buttons["끄기"]
+        XCTAssertTrue(ai.waitForExistence(timeout: 10), "Translating shows the mode switch under the page")
+        XCTAssertTrue(ai.isSelected, "AI translation is the default")
+        XCTAssertFalse(element(app, "reader.original").exists, "AI translation stays in the reader")
+        capture(app, "AI translation with its mode switch")
+        off.tap()
+        XCTAssertTrue(ai.waitForNonExistence(timeout: 5), "Off stops translating and the switch leaves")
+        menu(app)
+        XCTAssertEqual(element(app, "reader.translate").label, "번역")
+        element(app, "reader.translate").tap()
+        XCTAssertTrue(ai.waitForExistence(timeout: 10))
+        standard.tap()
+        XCTAssertTrue(element(app, "reader.original").waitForExistence(timeout: 10), "Standard opens Apple's translation of the page")
+        XCTAssertTrue(standard.isSelected)
+        capture(app, "Standard translation with the mode switch beside Live Text's buttons")
+    }
+
+    func testOneTapTranslationOnDevice() throws {
+        let app = launchReader()
+        startStandardTranslation(app)
         let progress = element(app, "reader.translation.progress")
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: progress)
         waitForExpectations(timeout: 60)
@@ -590,9 +621,7 @@ final class NativeContentUITests: XCTestCase {
     func testJapaneseTranslationStartsOnRepeatedOpen() throws {
         let app = launchReader(extra: ["--reader-japanese-test"])
         for attempt in 1...3 {
-            menu(app)
-            element(app, "reader.translate").tap()
-            XCTAssertTrue(element(app, "reader.original").waitForExistence(timeout: 10))
+            startStandardTranslation(app)
             expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element(app, "reader.translation.progress"))
             waitForExpectations(timeout: 60)
             sleep(5)

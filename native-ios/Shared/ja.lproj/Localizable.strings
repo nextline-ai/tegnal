@@ -239,6 +239,8 @@
 "Translation" = "翻訳";
 "AI Translation (Beta)" = "AI翻訳（ベータ）";
 "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead." = "ページをめくっても翻訳がオンのままになり、デバイス上のAIが作品の言語で前のページのセリフを参考に翻訳します。このシステムがまだ縦書きを読めない場合は、標準の翻訳を使います。";
+"AI" = "AI翻訳";
+"Standard" = "標準翻訳";
 "Stop Translating" = "翻訳をやめる";
 "Show Translation" = "翻訳を表示";
 "Show Original" = "原文を表示";

@@ -93,6 +93,9 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertFalse(ReaderModelTranslator.accepts(["Wait! We're not done talking yet", "Is that person really your senior?"], sources: sources, target: "ko"),
                        "A reply in another language falls back to Apple Translation")
         XCTAssertTrue(ReaderModelTranslator.accepts(["Wait! We're not done talking yet", "Is that person really your senior?"], sources: sources, target: "en-US"))
+        XCTAssertTrue(ReaderModelTranslator.accepts(["…!?", "가자, 늦겠어!"], sources: ["…!?", "行こう、遅れるよ！"], target: "ko"),
+                      "Lines without words stay as they are and do not count against a reply")
+        XCTAssertTrue(ReaderModelTranslator.accepts(["!!", "3"], sources: ["!!", "3"], target: "ko"), "A page with no words has nothing to judge")
         #else
         throw XCTSkip("This SDK has no on-device model")
         #endif
@@ -148,6 +151,33 @@ final class ReaderUXTests: XCTestCase {
         let moved = LiveTextCanvasView.pinnedInsets(content: CGRect(x: 30, y: 0, width: 402, height: 700), screen: screen)
         XCTAssertEqual(moved.left, 12, "VisionKit hides buttons at negative insets, so they keep just inside the content")
         XCTAssertEqual(moved.bottom, 12)
+    }
+
+    @MainActor func testAITranslationIsTheDefaultUntilTheStandardOneIsChosen() {
+        let defaults = ReaderPreferences.defaults, key = ReaderPreferences.continuousTranslationKey
+        let previous = defaults.object(forKey: key)
+        defer { if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) } }
+        defaults.removeObject(forKey: key)
+        XCTAssertTrue(ReaderPreferences.continuousTranslation, "Translate starts AI translation unless a reader chose otherwise")
+        ReaderPreferences.continuousTranslation = false
+        XCTAssertFalse(ReaderPreferences.continuousTranslation, "Choosing the standard translation is remembered")
+        if #available(iOS 18.0, *) {
+            XCTAssertEqual(ReaderTranslationMode.available, [.ai, .standard, .off])
+        } else {
+            XCTAssertEqual(ReaderTranslationMode.available, [.standard, .off], "AI translation needs iOS 18")
+        }
+    }
+
+    @MainActor func testAITranslationStopsWaitingForASlowModel() async {
+        let slow = Task<[String]?, Never> { try? await Task.sleep(for: .seconds(5)); return ["late"] }
+        let started = Date()
+        let late = await ReaderTranslationSession.value(of: slow, within: .milliseconds(200))
+        XCTAssertNil(late, "Past the limit the reader keeps Apple's translation")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        XCTAssertTrue(slow.isCancelled, "The model's work stops")
+        let quick = Task<[String]?, Never> { ["ready"] }
+        let ready = await ReaderTranslationSession.value(of: quick, within: .seconds(5))
+        XCTAssertEqual(ready, ["ready"])
     }
 
     /// Runs the real on-device model: device validation only (`TEGNAL_LIVE_TESTS=1`).

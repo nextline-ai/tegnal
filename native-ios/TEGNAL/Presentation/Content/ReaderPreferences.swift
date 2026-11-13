@@ -32,9 +32,12 @@ enum ReaderPreferences {
 
     static let doubleTapZoomKey = "reader.doubleTapZoom"
     static let continuousTranslationKey = "reader.continuousTranslation"
-    /// Off by default: Translate shows the system translation of one page. On, translation stays
-    /// on while pages turn and the on-device model reads each page with the ones before it.
-    static var continuousTranslation: Bool { defaults.bool(forKey: continuousTranslationKey) }
+    /// On by default: translation stays on while pages turn and the on-device model reads each page
+    /// with the ones before it. Off, Translate shows Apple's standard translation of one page.
+    static var continuousTranslation: Bool {
+        get { defaults.object(forKey: continuousTranslationKey) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: continuousTranslationKey) }
+    }
     /// Comics pages zoom on a double tap unless a person turned it off.
     static var doubleTapZooms: Bool { defaults.object(forKey: doubleTapZoomKey) as? Bool ?? true }
 }
@@ -124,7 +127,7 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("reader.dimming", store: ReaderPreferences.defaults) private var dimming = 0.0
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
     @SwiftUI.AppStorage(ReaderPreferences.doubleTapZoomKey, store: ReaderPreferences.defaults) private var doubleTapZoom = true
-    @SwiftUI.AppStorage(ReaderPreferences.continuousTranslationKey, store: ReaderPreferences.defaults) private var continuousTranslation = false
+    @SwiftUI.AppStorage(ReaderPreferences.continuousTranslationKey, store: ReaderPreferences.defaults) private var continuousTranslation = true
     @SwiftUI.AppStorage("reader.continuousBackSwipe", store: ReaderPreferences.defaults) private var continuousBackSwipe = false
     @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false

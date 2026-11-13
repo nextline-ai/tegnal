@@ -83,6 +83,12 @@ struct ReaderTranslationContext: Sendable {
 /// and a sentence split across balloons reads as one. Nothing leaves the device.
 @available(iOS 26.0, *)
 enum ReaderModelTranslator {
+    static func prewarm() {
+        let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+        guard model.isAvailable else { return }
+        LanguageModelSession(model: model).prewarm()
+    }
+
     static func translate(_ lines: [String], target: String, context: ReaderTranslationContext) async throws -> [String]? {
         // Translation is a transformation of the reader's own content.
         let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
@@ -108,9 +114,11 @@ enum ReaderModelTranslator {
     /// A reply counts only when it is in the target language: the model sometimes answers by
     /// repeating the original. Most lines must change, and the page as a whole must read as the target.
     static func accepts(_ replies: [String], sources: [String], target: String) -> Bool {
-        func letters(_ text: String) -> String { text.filter { $0.isLetter || $0.isNumber } }
-        let unchanged = zip(replies, sources).filter { letters($0) == letters($1) }.count
-        guard unchanged * 2 <= replies.count else { return false }
+        func letters(_ text: String) -> String { text.filter { $0.isLetter } }
+        // Lines without words, such as "…!?" or a page number, stay as they are in any language.
+        let worded = zip(replies, sources).filter { letters($0.1).count >= 2 }
+        let unchanged = worded.filter { letters($0.0) == letters($0.1) }.count
+        guard unchanged * 2 <= worded.count else { return false }
         let text = replies.joined(separator: "\n")
         // Too little text to tell its language; the count check above still applies.
         guard letters(text).count >= 6 else { return true }
@@ -135,6 +143,24 @@ enum ReaderModelTranslator {
     }
 }
 #endif
+
+/// Apple Translation for a language pair already on the device: no interface, no download, and
+/// an answer in a fraction of a second. Nil when the pair or the source language is unknown.
+@available(iOS 26.0, *)
+enum ReaderInstalledTranslator {
+    static func translate(_ texts: [String], source: String?, target: String) async throws -> [String]? {
+        guard let source else { return nil }
+        let from = Locale.Language(identifier: source), to = Locale.Language(identifier: target)
+        guard await LanguageAvailability().status(from: from, to: to) == .installed else { return nil }
+        let session = TranslationSession(installedSource: from, target: to)
+        let responses = try await session.translations(from: texts.enumerated().map { .init(sourceText: $0.element, clientIdentifier: String($0.offset)) })
+        var translated = texts
+        for response in responses {
+            if let key = response.clientIdentifier, let index = Int(key), translated.indices.contains(index) { translated[index] = response.targetText }
+        }
+        return translated
+    }
+}
 
 /// Apple Translation hands out sessions only to a SwiftUI view. The reader keeps one invisible
 /// host, and pages queue their balloons here; the host translates them one page at a time.
@@ -223,6 +249,10 @@ struct ReaderTranslationHost: View {
         if isOn { stop() } else {
             isOn = true; showsOriginal = false; message = nil
             target = ReaderTranslationLanguage.resolved(ReaderTranslationLanguage.preference(booru: false))
+            #if canImport(FoundationModels)
+            // Loading the model takes seconds; start while the first page is read.
+            if #available(iOS 26.0, *) { ReaderModelTranslator.prewarm() }
+            #endif
         }
     }
 
@@ -286,12 +316,19 @@ struct ReaderTranslationHost: View {
         worker = nil
     }
 
+    /// Shows Apple's quick translation as soon as it is ready, then the on-device model's.
     private func translate(_ page: GalleryPage, index: Int, galleryID: Int64, images: PageImageStore) async throws -> [ReaderTextRegion] {
         let image = try await images.load(page, galleryID: galleryID)
         let foreign = try await foreignBalloons(in: image)
         guard !foreign.isEmpty else { return [] }
-        let texts = try await translate(foreign.map(\.text), index: index, addingTo: false)
-        return zip(foreign, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
+        func regions(_ texts: [String]) -> [ReaderTextRegion] {
+            zip(foreign, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
+        }
+        let texts = try await translate(foreign.map(\.text), index: index, addingTo: false) { [weak self] quick in
+            guard let self, isOn else { return }
+            pages[page.hash] = regions(quick)
+        }
+        return regions(texts)
     }
 
     /// The balloons of an image that are not yet in the target language.
@@ -307,19 +344,90 @@ struct ReaderTranslationHost: View {
 
     /// Translates one page's lines with the lines of the pages before; `addingTo` keeps the page's
     /// earlier lines as context for the next pages, for a zoomed reading of a page already translated.
-    private func translate(_ sources: [String], index: Int, addingTo: Bool) async throws -> [String] {
+    ///
+    /// The on-device model reads the page as a whole but takes seconds, longest on the first page
+    /// while it loads. Apple Translation of a language pair already on the device answers at once
+    /// without any interface, so `preview` gets its lines first; the model's replace them, unless
+    /// the model is unavailable, gives an unusable reply or takes longer than `modelLimit`.
+    private func translate(_ sources: [String], index: Int, addingTo: Bool, preview: (([String]) -> Void)? = nil) async throws -> [String] {
         var context = ReaderTranslationContext()
         for previous in stride(from: index - 1, through: max(0, index - 3), by: -1) { context.pairs.insert(contentsOf: history[previous] ?? [], at: 0) }
         if addingTo { context.pairs += history[index] ?? [] }
         context.pairs = Array(context.pairs.suffix(ReaderTranslationContext.limit))
+        let target = target, sourceCode = ReaderSourceLanguage.code(for: source)
         var translated: [String]?
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) { translated = try? await ReaderModelTranslator.translate(sources, target: target, context: context) }
-        #endif
+        if #available(iOS 26.0, *) {
+            #if canImport(FoundationModels)
+            let model = Task { try? await ReaderModelTranslator.translate(sources, target: target, context: context) }
+            #endif
+            let quick = try? await ReaderInstalledTranslator.translate(sources, source: sourceCode, target: target)
+            #if canImport(FoundationModels)
+            // When the model was quicker still, its lines replace these straight away.
+            if let quick { preview?(quick) }
+            translated = await Self.value(of: model, within: Self.modelLimit) ?? quick
+            #else
+            translated = quick
+            #endif
+        }
+        // Stopped meanwhile: the fallback below can ask to download languages, which nobody wants now.
+        try Task.checkCancellation()
         if translated == nil { translated = try await broker.translate(sources, target: target) }
         let texts = translated ?? sources
         history[index] = (addingTo ? history[index] ?? [] : []) + Array(zip(sources, texts))
         return texts
+    }
+
+    /// Longest the reader waits for the on-device model before keeping Apple's translation.
+    static let modelLimit: Duration = .seconds(25)
+
+    /// The task's value, or nil once `limit` passes; the task is then cancelled.
+    static func value<Value: Sendable>(of task: Task<Value?, Never>, within limit: Duration) async -> Value? {
+        await withTaskGroup(of: Value?.self) { group in
+            group.addTask { await task.value }
+            group.addTask { try? await Task.sleep(for: limit); return nil }
+            let first = await group.next() ?? nil
+            task.cancel()
+            group.cancelAll()
+            return first
+        }
+    }
+}
+
+/// What translation is doing in the reader: the on-device AI over every page as it turns, Apple's
+/// standard translation of the page on screen, or nothing.
+enum ReaderTranslationMode: String, CaseIterable, Identifiable {
+    case ai, standard, off
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .ai: L10n.text("AI")
+        case .standard: L10n.text("Standard")
+        case .off: L10n.text("Off")
+        }
+    }
+    /// AI translation needs iOS 18; the standard one works everywhere.
+    @MainActor static var available: [ReaderTranslationMode] { ReaderTranslationSession.isSupported ? allCases : [.standard, .off] }
+}
+
+/// Shown under the page while translating, so switching between AI and standard translation, or
+/// turning it off, takes one tap. It sits on the same row as Live Text's own buttons, between them.
+struct ReaderTranslationModeBar: View {
+    static let bottomInset: CGFloat = 44
+    let mode: ReaderTranslationMode
+    let select: (ReaderTranslationMode) -> Void
+    var body: some View {
+        Picker(L10n.text("Translation"), selection: Binding(get: { mode }, set: { select($0) })) {
+            ForEach(ReaderTranslationMode.available) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented).labelsHidden()
+        .controlSize(.small)
+        // Narrow enough to fit between Live Text's buttons on the smallest iPhone.
+        .frame(maxWidth: 196)
+        .padding(4)
+        // Interactive glass would take the segments' taps for its own press effect.
+        .modifier(GlassCapsuleModifier())
+        .environment(\.colorScheme, .dark)
+        .accessibilityIdentifier("reader.translation.mode")
     }
 }
 

@@ -239,6 +239,8 @@
 "Translation" = "번역";
 "AI Translation (Beta)" = "AI 번역 (베타)";
 "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead." = "페이지를 넘겨도 번역이 계속 켜져 있고, 기기 안의 AI가 작품의 언어로 앞 페이지 대사를 참고해 번역합니다. 이 시스템이 아직 세로쓰기를 읽지 못하면 기본 번역을 사용합니다.";
+"AI" = "AI 번역";
+"Standard" = "기본 번역";
 "Stop Translating" = "번역 끄기";
 "Show Translation" = "번역 보기";
 "Show Original" = "원문 보기";

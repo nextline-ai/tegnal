@@ -137,7 +137,7 @@ actor FixtureContentSource: ContentProviding {
         let linked = ProcessInfo.processInfo.arguments.contains("--work-links-test")
         let versions = [GalleryVersion(id: 900000001, language: "english", localName: "English"), GalleryVersion(id: 900000002, language: "korean", localName: "한국어"), GalleryVersion(id: 900000003, language: "japanese", localName: "日本語")]
         let version = linked ? versions.first { $0.id == id } : nil
-        return NativeGallery(id: id, title: linked ? "Work \(id)" : "네이티브 읽기 테스트", artists: ["TEGNAL"], language: version?.language ?? "english", type: Self.categories[Int(id % 5)],
+        return NativeGallery(id: id, title: linked ? "Work \(id)" : "네이티브 읽기 테스트", artists: ["TEGNAL"], language: version?.language ?? (ProcessInfo.processInfo.arguments.contains("--reader-japanese-test") ? "japanese" : "english"), type: Self.categories[Int(id % 5)],
                       tags: ["group:sample circle", "female:sample", "tag:example"], pages: (1...3).map { index in
                           GalleryPage(hash: scrolling || linked ? String(format: "%064llx", id * 10 + Int64(index)) : String(repeating: "a", count: 63) + String(index), name: "\(index).png", width: 800, height: 1200, hasAVIF: false)
                       }, versions: version == nil ? nil : versions, relatedIDs: version == nil ? nil : [900000002, 900000011, 900000012])

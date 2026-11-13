@@ -156,6 +156,15 @@ struct NativeReaderView: View {
                 .id(request.id)
             }
         }
+        .overlay(alignment: .bottom) {
+            if translationMode != .off, !menuVisible, sheet == nil, gallery != nil {
+                ReaderTranslationModeBar(mode: translationMode, select: setTranslationMode)
+                    // On the row of Live Text's own buttons, which sit this far above the safe area.
+                    .padding(.bottom, ReaderTranslationModeBar.bottomInset)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: translationMode)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if bottomMenu && !menuVisible && gallery != nil { menuActions(compact: true).padding(.horizontal, 12).padding(.vertical, 8)
                     .modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
@@ -487,28 +496,46 @@ struct NativeReaderView: View {
         readSaved()
     }
     private func readSaved() { saved = (try? env.database.getWork(galleryId: galleryID)) != nil }
-    /// Translation mode on iOS 18 and later; earlier systems translate one page in Live Text.
+    private var translationMode: ReaderTranslationMode {
+        translation.isOn ? .ai : translationRequest != nil ? .standard : .off
+    }
+    /// Translate in the quick menu starts the mode last chosen, AI unless the reader picked the
+    /// standard translation, or stops translating.
     private func translate() {
         menuVisible = false
-        guard ReaderTranslationSession.isSupported, ReaderPreferences.continuousTranslation || translation.isOn else {
+        if translationMode != .off { setTranslationMode(.off); return }
+        setTranslationMode(ReaderTranslationSession.isSupported && ReaderPreferences.continuousTranslation ? .ai : .standard)
+    }
+    /// The switch under the page; AI or standard becomes what Translate starts next time.
+    private func setTranslationMode(_ mode: ReaderTranslationMode) {
+        guard mode != translationMode else { return }
+        if translation.isOn { translation.stop() }
+        translationRequest = nil
+        switch mode {
+        case .off: break
+        case .standard:
+            ReaderPreferences.continuousTranslation = false
             translateCurrentPage()
-            return
+        case .ai:
+            ReaderPreferences.continuousTranslation = true
+            startAITranslation()
         }
-        guard !translation.isOn, ReaderSourceLanguage.writesVertically(gallery?.language) else {
-            translation.toggle()
-            followTranslation()
-            showTranslationPill()
-            return
-        }
-        // AI translation reads the text itself. Where this system cannot read vertical columns,
-        // the standard translation, which can, translates the page instead.
+    }
+    /// AI translation on iOS 18 and later, reading the text itself. Where this system cannot read
+    /// vertical columns, the standard translation, which can, translates the page instead.
+    private func startAITranslation() {
+        guard ReaderSourceLanguage.writesVertically(gallery?.language) else { beginAITranslation(); return }
         Task { @MainActor in
             guard await ReaderVerticalTextSupport.shared.isSupported() else { translateCurrentPage(); return }
-            guard !translation.isOn else { return }
-            translation.toggle()
-            followTranslation()
-            showTranslationPill()
+            guard translationMode == .off else { return }
+            beginAITranslation()
         }
+    }
+    private func beginAITranslation() {
+        guard !translation.isOn else { return }
+        translation.toggle()
+        followTranslation()
+        showTranslationPill()
     }
     private func translateCurrentPage() {
         translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1))
