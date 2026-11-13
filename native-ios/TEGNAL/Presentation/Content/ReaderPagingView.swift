@@ -216,8 +216,7 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
             let frame = CGRect(x: box.minX * size.width, y: (1 - box.maxY) * size.height, width: box.width * size.width, height: box.height * size.height)
             let bounded = frame.insetBy(dx: -3, dy: -3).intersection(CGRect(origin: .zero, size: size))
             translationLabels[index].frame = bounded
-            let basis = (region.vertical ? bounded.width * 0.6 : bounded.height * 0.78) / CGFloat(max(1, region.lines))
-            translationLabels[index].font = .systemFont(ofSize: max(8, min(22, basis)), weight: .medium)
+            translationLabels[index].font = .systemFont(ofSize: ReaderTranslationLabel.fontSize(for: region, in: bounded), weight: .medium)
         }
     }
     private var singleTap: UITapGestureRecognizer?

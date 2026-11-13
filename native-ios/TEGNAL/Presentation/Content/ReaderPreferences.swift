@@ -199,7 +199,7 @@ struct ReaderSettingsView: View {
                 if !booru, ReaderTranslationSession.isSupported {
                     Section(L10n.text("Translation")) {
                         Toggle(isOn: $continuousTranslation) {
-                            SettingsHelpLabel("AI Translation (Beta)", help: "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.")
+                            SettingsHelpLabel("AI Translation (Beta)", help: "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead.")
                         }.accessibilityIdentifier("reader.settings.continuousTranslation")
                     }
                 }

@@ -23,6 +23,133 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertEqual(balloons.first { $0.text.hasPrefix("Who") }?.lines, 1)
     }
 
+    func testWorkLanguageTagsBecomeRecognitionLanguages() {
+        XCTAssertEqual(ReaderSourceLanguage.recognitionLanguages(for: "japanese"), ["ja-JP"])
+        XCTAssertEqual(ReaderSourceLanguage.recognitionLanguages(for: "Korean"), ["ko-KR"])
+        XCTAssertEqual(ReaderSourceLanguage.recognitionLanguages(for: "chinese"), ["zh-Hans", "zh-Hant"])
+        XCTAssertEqual(ReaderSourceLanguage.recognitionLanguages(for: "ja"), ["ja-JP"], "A language code works as well as a name")
+        XCTAssertNil(ReaderSourceLanguage.recognitionLanguages(for: "translated"), "Unknown tags fall back to detection")
+        XCTAssertNil(ReaderSourceLanguage.recognitionLanguages(for: nil))
+        XCTAssertEqual(ReaderSourceLanguage.code(for: "japanese"), "ja")
+        XCTAssertTrue(ReaderSourceLanguage.writesVertically("japanese"))
+        XCTAssertTrue(ReaderSourceLanguage.writesVertically("chinese"))
+        XCTAssertFalse(ReaderSourceLanguage.writesVertically("korean"))
+    }
+
+    func testKnownLanguageJoinsVerticalColumnsRightToLeft() {
+        // Vision's origin is at the bottom left; two columns of one balloon, the right one first.
+        let columns = [
+            ReaderTextRegion(text: "傘を", bounds: CGRect(x: 0.50, y: 0.60, width: 0.04, height: 0.12)),
+            ReaderTextRegion(text: "明日は雨", bounds: CGRect(x: 0.555, y: 0.56, width: 0.04, height: 0.16)),
+            ReaderTextRegion(text: "誰？", bounds: CGRect(x: 0.15, y: 0.60, width: 0.04, height: 0.08)),
+        ]
+        let balloons = ReaderBalloonGrouping.balloons(columns, language: "ja")
+        XCTAssertEqual(balloons.count, 2)
+        let first = balloons.first { $0.text.hasPrefix("明日") }
+        XCTAssertEqual(first?.text, "明日は雨傘を")
+        XCTAssertEqual(first?.vertical, true)
+        XCTAssertEqual(first?.lines, 2)
+        XCTAssertEqual(balloons.first { $0.text == "誰？" }?.vertical, true, "A lone column keeps its direction")
+    }
+
+    func testVerticalProbeCountsCharactersRatherThanOrder() {
+        XCTAssertTrue(ReaderVerticalTextSupport.reads("傘を持ってきた\n今日は雨だって", expected: "今日は雨だって傘を持ってきた"))
+        XCTAssertTrue(ReaderVerticalTextSupport.reads("今日は雨だつて。傘を持つてきた", expected: "今日は雨だって傘を持ってきた"), "A few misread kana still pass")
+        XCTAssertFalse(ReaderVerticalTextSupport.reads("今\n日", expected: "今日は雨だって傘を持ってきた"))
+        XCTAssertFalse(ReaderVerticalTextSupport.reads("", expected: "今日は雨だって"))
+    }
+
+    /// Real text recognition on a vertical sample, the way comic balloons are set.
+    func testVerticalJapaneseIsReadWhereTheSystemCanAndRememberedPerSystem() async throws {
+        guard #available(iOS 18.0, *) else { throw XCTSkip("Text recognition needs iOS 18") }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "vertical-probe-\(UUID().uuidString)"))
+        let support = ReaderVerticalTextSupport(defaults: defaults, system: "test")
+        let supported = await support.isSupported()
+        XCTAssertEqual(defaults.object(forKey: "reader.verticalTextRecognition.test") as? Bool, supported, "The result is kept for this system")
+        if #available(iOS 27.0, *) { XCTAssertTrue(supported, "iOS 27 reads vertical Japanese") }
+        guard supported else { return }
+        let image = try XCTUnwrap(ReaderVerticalTextSupport.sampleImage())
+        let lines = try await ReaderTextRecognizer.recognize(image, languages: ["ja-JP"])
+        let balloons = ReaderBalloonGrouping.balloons(lines, language: "ja")
+        XCTAssertEqual(balloons.count, 1, "Both columns are one balloon")
+        XCTAssertEqual(balloons.first?.vertical, true)
+        XCTAssertTrue(ReaderVerticalTextSupport.reads(balloons.first?.text ?? "", expected: ReaderVerticalTextSupport.sample.joined()))
+        XCTAssertTrue(balloons.first?.text.hasPrefix("今日") == true, "Columns read right to left")
+    }
+
+    @MainActor func testVerticalWorksUseLiveTextWhereTheSystemCannotReadThem() {
+        XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "ko", isMac: false, verticalSource: true, readsVerticalText: true))
+        XCTAssertFalse(ReaderTranslationView.usesTextSession(target: "ko", isMac: false, verticalSource: true, readsVerticalText: false))
+        XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "ko", isMac: false, verticalSource: false, readsVerticalText: false))
+        XCTAssertTrue(ReaderTranslationView.usesTextSession(target: "ko", isMac: true, verticalSource: true, readsVerticalText: false), "The Mac has no Live Text interface")
+    }
+
+    func testModelRepliesMustBeInTheTargetLanguage() throws {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *) else { throw XCTSkip("The on-device model needs iOS 26") }
+        let sources = ["ちょっと待って！まだ話は終わってないよ", "あの人、本当に先輩なの？"]
+        XCTAssertTrue(ReaderModelTranslator.accepts(["잠깐만! 아직 얘기 안 끝났어", "저 사람, 정말 선배야?"], sources: sources, target: "ko"))
+        XCTAssertFalse(ReaderModelTranslator.accepts(sources, sources: sources, target: "ko"), "Repeating the original is not a translation")
+        XCTAssertFalse(ReaderModelTranslator.accepts(["Wait! We're not done talking yet", "Is that person really your senior?"], sources: sources, target: "ko"),
+                       "A reply in another language falls back to Apple Translation")
+        XCTAssertTrue(ReaderModelTranslator.accepts(["Wait! We're not done talking yet", "Is that person really your senior?"], sources: sources, target: "en-US"))
+        #else
+        throw XCTSkip("This SDK has no on-device model")
+        #endif
+    }
+
+    func testZoomedReadingPlacesItsTextOnThePageAndDropsTextCutByTheScreen() {
+        let area = CGRect(x: 0.5, y: 0.25, width: 0.25, height: 0.5)
+        // Vision's origin is at the bottom left of the crop; the second region touches the crop's left edge.
+        let read = [ReaderTextRegion(text: "小さい", bounds: CGRect(x: 0.2, y: 0.5, width: 0.4, height: 0.2)),
+                    ReaderTextRegion(text: "切れ", bounds: CGRect(x: 0.0, y: 0.1, width: 0.2, height: 0.1))]
+        let placed = ReaderZoomedText.place(read, readIn: area)
+        XCTAssertEqual(placed.map(\.text), ["小さい"])
+        let bounds = placed[0].bounds
+        XCTAssertEqual(bounds.minX, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(bounds.minY, 0.5, accuracy: 0.0001, "1 − 0.75 + 0.5 × 0.5 in page coordinates")
+        XCTAssertEqual(bounds.width, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(bounds.height, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(ReaderZoomedText.place(read, readIn: CGRect(x: 0, y: 0.25, width: 0.25, height: 0.5)).count, 2,
+                       "Text at the page's own edge is whole")
+    }
+
+    func testZoomedReadingReplacesOnlyWhereItFoundText() {
+        let page = [ReaderTextRegion(text: "A", bounds: CGRect(x: 0.1, y: 0.1, width: 0.2, height: 0.1)),
+                    ReaderTextRegion(text: "B", bounds: CGRect(x: 0.6, y: 0.6, width: 0.2, height: 0.1))]
+        let closer = [ReaderTextRegion(text: "B whole", bounds: CGRect(x: 0.58, y: 0.58, width: 0.25, height: 0.12)),
+                      ReaderTextRegion(text: "small", bounds: CGRect(x: 0.6, y: 0.8, width: 0.05, height: 0.02))]
+        XCTAssertEqual(ReaderZoomedText.merge(page, with: closer).map(\.text), ["A", "B whole", "small"])
+        let zoomed = CGRect(x: 0.2, y: 0.2, width: 0.4, height: 0.4)
+        XCTAssertTrue(ReaderZoomedText.needsReading(zoomed, after: []))
+        XCTAssertFalse(ReaderZoomedText.needsReading(CGRect(x: 0.25, y: 0.25, width: 0.35, height: 0.35), after: [zoomed]),
+                       "A nearby viewport at about the same zoom was read already")
+        XCTAssertTrue(ReaderZoomedText.needsReading(CGRect(x: 0.3, y: 0.3, width: 0.1, height: 0.1), after: [zoomed]), "Zooming further reads again")
+        XCTAssertTrue(ReaderZoomedText.needsReading(CGRect(x: 0.5, y: 0.5, width: 0.4, height: 0.4), after: [zoomed]), "Moving elsewhere reads again")
+    }
+
+    func testScreenAreaRendersThePageWithBlackAroundIt() throws {
+        let page = try XCTUnwrap(CGContext(data: nil, width: 10, height: 20, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+                                           bitmapInfo: CGImageAlphaInfo.none.rawValue))
+        page.setFillColor(gray: 1, alpha: 1); page.fill(CGRect(x: 0, y: 0, width: 10, height: 20))
+        let image = try XCTUnwrap(ReaderZoomedText.render(try XCTUnwrap(page.makeImage()), area: CGRect(x: -0.5, y: 0, width: 2, height: 1)))
+        XCTAssertEqual(image.width, 20); XCTAssertEqual(image.height, 20)
+        let pixels = try XCTUnwrap(image.dataProvider?.data as Data?)
+        func brightness(x: Int, y: Int) -> UInt8 { pixels[y * image.bytesPerRow + x * image.bitsPerPixel / 8] }
+        XCTAssertEqual(brightness(x: 2, y: 10), 0, "Beside the page is black")
+        XCTAssertEqual(brightness(x: 10, y: 10), 255, "The page keeps its pixels")
+        XCTAssertEqual(brightness(x: 17, y: 10), 0)
+    }
+
+    @MainActor func testLiveTextButtonsStayAtTheScreenCorners() {
+        let screen = CGRect(x: 12, y: 70, width: 378, height: 758)
+        let zoomed = LiveTextCanvasView.pinnedInsets(content: CGRect(x: -200, y: -300, width: 900, height: 1600), screen: screen)
+        XCTAssertEqual(zoomed, UIEdgeInsets(top: 370, left: 212, bottom: 472, right: 310), "Buttons sit at the screen's corners however far the page reaches")
+        let moved = LiveTextCanvasView.pinnedInsets(content: CGRect(x: 30, y: 0, width: 402, height: 700), screen: screen)
+        XCTAssertEqual(moved.left, 12, "VisionKit hides buttons at negative insets, so they keep just inside the content")
+        XCTAssertEqual(moved.bottom, 12)
+    }
+
     /// Runs the real on-device model: device validation only (`TEGNAL_LIVE_TESTS=1`).
     func testOnDeviceModelTranslatesAPageWithItsContext() async throws {
         guard ProcessInfo.processInfo.environment["TEGNAL_LIVE_TESTS"] == "1" else { throw XCTSkip("Device validation only") }
@@ -1045,6 +1172,7 @@ final class ReaderUXTests: XCTestCase {
         let source = FixtureContentSource()
         let gallery = try await source.gallery(1)
         let image = try await PageImageStore(source: source).load(gallery.pages[0], galleryID: 1)
+        guard #available(iOS 18.0, *) else { throw XCTSkip("Text recognition needs iOS 18") }
         let regions = try await ReaderTextRecognizer.shared.recognize(image)
         XCTAssertTrue(regions.map(\.text).joined(separator: " ").contains("Native Reader"))
         XCTAssertTrue(regions.allSatisfy { $0.bounds.width > 0 && $0.bounds.height > 0 })

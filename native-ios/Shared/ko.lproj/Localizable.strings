@@ -238,7 +238,7 @@
 "Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too." = "목록, 검색, 새로 저장하는 작품은 체크한 웹사이트를 사용합니다. 저장한 작품은 어느 웹사이트에서 저장했는지 기억하며, 작품 번호가 같은 웹사이트에서도 열 수 있습니다.";
 "Translation" = "번역";
 "AI Translation (Beta)" = "AI 번역 (베타)";
-"Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation." = "페이지를 넘겨도 번역이 계속 켜져 있고, 기기 안의 AI가 앞 페이지 대사를 참고해 번역합니다. 세로쓰기나 작은 글자는 인식하지 못할 수 있으니, 그럴 때는 끄고 기본 번역을 사용하세요.";
+"Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead." = "페이지를 넘겨도 번역이 계속 켜져 있고, 기기 안의 AI가 작품의 언어로 앞 페이지 대사를 참고해 번역합니다. 이 시스템이 아직 세로쓰기를 읽지 못하면 기본 번역을 사용합니다.";
 "Stop Translating" = "번역 끄기";
 "Show Translation" = "번역 보기";
 "Show Original" = "원문 보기";

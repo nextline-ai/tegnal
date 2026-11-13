@@ -14,9 +14,12 @@ enum ReaderBalloonGrouping {
         ["ja", "zh"].contains(language ?? "") && region.bounds.height > region.bounds.width * 1.6
     }
 
-    static func balloons(_ lines: [ReaderTextRegion]) -> [ReaderTextRegion] {
-        guard lines.count > 1 else { return lines.map { region(from: [$0], language: language(of: $0.text)) } }
-        let languages = lines.map { language(of: $0.text) }
+    /// `language` is the work's own, when known. Otherwise each line's language is guessed from its text.
+    static func balloons(_ lines: [ReaderTextRegion], language known: String? = nil) -> [ReaderTextRegion] {
+        guard lines.count > 1 else {
+            return lines.map { region(from: [$0], language: known ?? language(of: $0.text), vertical: isColumn($0, language: known ?? language(of: $0.text))) }
+        }
+        let languages = lines.map { known ?? language(of: $0.text) }
         let columns = lines.indices.map { isColumn(lines[$0], language: languages[$0]) }
         func unit(_ index: Int) -> CGFloat { columns[index] ? lines[index].bounds.width : lines[index].bounds.height }
         var parent = Array(lines.indices)
@@ -98,7 +101,23 @@ enum ReaderModelTranslator {
         }
         prompt += "Lines on this page:\n" + lines.enumerated().map { "\($0.offset + 1). \($0.element.replacingOccurrences(of: "\n", with: " "))" }.joined(separator: "\n")
         let response = try await session.respond(to: prompt, options: GenerationOptions(temperature: 0.3))
-        return parse(response.content, count: lines.count)
+        guard let translated = parse(response.content, count: lines.count), accepts(translated, sources: lines, target: target) else { return nil }
+        return translated
+    }
+
+    /// A reply counts only when it is in the target language: the model sometimes answers by
+    /// repeating the original. Most lines must change, and the page as a whole must read as the target.
+    static func accepts(_ replies: [String], sources: [String], target: String) -> Bool {
+        func letters(_ text: String) -> String { text.filter { $0.isLetter || $0.isNumber } }
+        let unchanged = zip(replies, sources).filter { letters($0) == letters($1) }.count
+        guard unchanged * 2 <= replies.count else { return false }
+        let text = replies.joined(separator: "\n")
+        // Too little text to tell its language; the count check above still applies.
+        guard letters(text).count >= 6 else { return true }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        guard let found = recognizer.dominantLanguage else { return true }
+        return Locale.Language(identifier: found.rawValue).languageCode == Locale.Language(identifier: target).languageCode
     }
 
     /// One translation for every numbered line, or nothing when the reply misses some.
@@ -184,15 +203,21 @@ struct ReaderTranslationHost: View {
     let broker = ReaderTranslationBroker()
     private var target = "en"
     private var queue: [(index: Int, page: GalleryPage, galleryID: Int64)] = []
+    /// The work's language tag: text is read in it rather than detected, and its balloons grouped by it.
+    private var source: String?
     private var worker: Task<Void, Never>?
     private var history: [Int: [(String, String)]] = [:]
     private var images: PageImageStore?
+    /// Zoomed areas of each page already read again, and the reading in progress.
+    private var readAreas: [String: [CGRect]] = [:]
+    private var zoomWorker: Task<Void, Never>?
+    private var zoomWorking: String?
 
     /// Apple Translation needs iOS 18; the language model, iOS 26.
     static var isSupported: Bool { if #available(iOS 18.0, *) { true } else { false } }
 
     func balloons(for hash: String) -> [ReaderTextRegion]? { isOn && !showsOriginal ? pages[hash] : nil }
-    func isWorking(on hash: String) -> Bool { isOn && working.contains(hash) }
+    func isWorking(on hash: String) -> Bool { isOn && (working.contains(hash) || zoomWorking == hash) }
 
     func toggle() {
         if isOn { stop() } else {
@@ -204,12 +229,40 @@ struct ReaderTranslationHost: View {
     func stop() {
         isOn = false; showsOriginal = false
         worker?.cancel(); worker = nil; queue = []; working = []
+        zoomWorker?.cancel(); zoomWorker = nil; zoomWorking = nil
+    }
+
+    /// Once a zoom settles on a translated page, the part on screen is read again from the original
+    /// pixels, so small text the page-wide reading missed is translated; its balloons replace the
+    /// page-wide ones where it found text. `area` is normalized with a top-left origin.
+    func readZoomed(_ page: GalleryPage, index: Int, galleryID: Int64, area: CGRect, images: PageImageStore) {
+        // A page still being read whole is read first; zooming again after that reads the area.
+        guard isOn, pages[page.hash] != nil, ReaderZoomedText.needsReading(area, after: readAreas[page.hash] ?? []) else { return }
+        zoomWorker?.cancel()
+        zoomWorking = page.hash
+        zoomWorker = Task {
+            defer { if zoomWorking == page.hash, !Task.isCancelled { zoomWorking = nil } }
+            do {
+                let crop = try await images.translationCrop(page, galleryID: galleryID, rect: area)
+                let found = ReaderZoomedText.place(try await foreignBalloons(in: crop), readIn: area)
+                try Task.checkCancellation()
+                readAreas[page.hash, default: []].append(area)
+                guard isOn, !found.isEmpty else { return }
+                let texts = try await translate(found.map(\.text), index: index, addingTo: true)
+                try Task.checkCancellation()
+                guard isOn else { return }
+                let translated = zip(found, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
+                pages[page.hash] = ReaderZoomedText.merge(pages[page.hash] ?? [], with: translated)
+            } catch is CancellationError {
+            } catch { if isOn, message == nil { message = ContentError.message(error) } }
+        }
     }
 
     /// Translates the visible spread first, then the next one.
     func follow(gallery: NativeGallery, index: Int, count: Int, images: PageImageStore) {
         guard isOn else { return }
         self.images = images
+        source = gallery.language
         let wanted = Array(index..<min(gallery.pages.count, index + count * 2))
         queue = wanted.compactMap { position in
             let page = gallery.pages[position]
@@ -235,14 +288,29 @@ struct ReaderTranslationHost: View {
 
     private func translate(_ page: GalleryPage, index: Int, galleryID: Int64, images: PageImageStore) async throws -> [ReaderTextRegion] {
         let image = try await images.load(page, galleryID: galleryID)
-        let lines = try await ReaderTextRecognizer.shared.recognize(image)
-        let targetCode = Locale.Language(identifier: target).languageCode?.identifier ?? target
-        // Text already in the target language stays as drawn.
-        let foreign = ReaderBalloonGrouping.balloons(lines).filter { ReaderBalloonGrouping.language(of: $0.text) != targetCode }
+        let foreign = try await foreignBalloons(in: image)
         guard !foreign.isEmpty else { return [] }
-        let sources = foreign.map(\.text)
+        let texts = try await translate(foreign.map(\.text), index: index, addingTo: false)
+        return zip(foreign, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
+    }
+
+    /// The balloons of an image that are not yet in the target language.
+    private func foreignBalloons(in image: UIImage) async throws -> [ReaderTextRegion] {
+        guard #available(iOS 18.0, *) else { throw ContentError.unsupportedFormat }
+        let lines = try await ReaderTextRecognizer.shared.recognize(image, languages: ReaderSourceLanguage.recognitionLanguages(for: source))
+        let targetCode = Locale.Language(identifier: target).languageCode?.identifier ?? target
+        let sourceCode = ReaderSourceLanguage.code(for: source)
+        // A work already in the target language stays as drawn, and so do balloons already in it.
+        guard sourceCode != targetCode else { return [] }
+        return ReaderBalloonGrouping.balloons(lines, language: sourceCode).filter { ReaderBalloonGrouping.language(of: $0.text) != targetCode }
+    }
+
+    /// Translates one page's lines with the lines of the pages before; `addingTo` keeps the page's
+    /// earlier lines as context for the next pages, for a zoomed reading of a page already translated.
+    private func translate(_ sources: [String], index: Int, addingTo: Bool) async throws -> [String] {
         var context = ReaderTranslationContext()
         for previous in stride(from: index - 1, through: max(0, index - 3), by: -1) { context.pairs.insert(contentsOf: history[previous] ?? [], at: 0) }
+        if addingTo { context.pairs += history[index] ?? [] }
         context.pairs = Array(context.pairs.suffix(ReaderTranslationContext.limit))
         var translated: [String]?
         #if canImport(FoundationModels)
@@ -250,8 +318,8 @@ struct ReaderTranslationHost: View {
         #endif
         if translated == nil { translated = try await broker.translate(sources, target: target) }
         let texts = translated ?? sources
-        history[index] = Array(zip(sources, texts))
-        return zip(foreign, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
+        history[index] = (addingTo ? history[index] ?? [] : []) + Array(zip(sources, texts))
+        return texts
     }
 }
 

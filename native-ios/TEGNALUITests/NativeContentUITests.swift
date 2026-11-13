@@ -550,15 +550,24 @@ final class NativeContentUITests: XCTestCase {
         try VNImageRequestHandler(cgImage: try XCTUnwrap(app.screenshot().image.cgImage)).perform([request])
         let visibleText = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
         XCTAssertTrue(visibleText.contains("확대하려면") && visibleText.contains("탭하세요"), "The actual Apple overlay must display translated page content: \(visibleText)")
+        func translateControlNearBottom() throws -> Bool {
+            try VNImageRequestHandler(cgImage: try XCTUnwrap(app.screenshot().image.cgImage)).perform([request])
+            // Vision's origin is at the bottom left: the control sits in the screen's bottom band.
+            return (request.results ?? []).contains { ($0.topCandidates(1).first?.string.contains("번역") ?? false) && $0.boundingBox.midY < 0.15 }
+        }
+        XCTAssertTrue(try translateControlNearBottom(), "The Translate control sits at the bottom of the screen, below the page")
+        func analyses() -> Int { Int((element(app, "reader.translation.canvas").value as? String ?? "").filter(\.isNumber)) ?? 0 }
+        XCTAssertEqual(analyses(), 1)
         let translatedImage = element(app, "reader.translation.image")
         translatedImage.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
         wait(translatedImage, "value == %@", "250%")
         sleep(5)
-        XCTAssertEqual(translatedImage.value as? String, "250%", "Zoom must preserve the existing translation without starting OCR again")
+        XCTAssertEqual(translatedImage.value as? String, "250%")
         capture(app, "Apple image translation enlarged")
-        XCTAssertFalse(element(app, "reader.translation.progress").exists, "Zoom must not restart analysis")
+        XCTAssertFalse(element(app, "reader.translation.progress").exists, "The enlarged area's analysis has finished")
         XCTAssertFalse(element(app, "reader.translation.retry").exists)
-        XCTAssertEqual(element(app, "reader.translation.canvas").value as? String, "분석 1회")
+        XCTAssertEqual(analyses(), 2, "A settled zoom analyzes the enlarged area again, for small text")
+        XCTAssertTrue(try translateControlNearBottom(), "Zoom leaves the Translate control at the bottom of the screen")
         try VNImageRequestHandler(cgImage: try XCTUnwrap(app.screenshot().image.cgImage)).perform([request])
         let enlargedText = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
         XCTAssertTrue(enlargedText.contains("탭") || enlargedText.contains("확대"), "The enlarged page must still contain translated content: \(enlargedText)")
@@ -568,7 +577,7 @@ final class NativeContentUITests: XCTestCase {
         sleep(1)
         XCTAssertNotEqual(translatedImage.value as? String, "250%", "Pinch must reach the image through the system overlay")
         XCTAssertNotEqual(translatedImage.value as? String, "100%")
-        XCTAssertEqual(element(app, "reader.translation.canvas").value as? String, "분석 1회")
+        XCTAssertGreaterThanOrEqual(analyses(), 2)
         try VNImageRequestHandler(cgImage: try XCTUnwrap(app.screenshot().image.cgImage)).perform([request])
         let controlsText = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         XCTAssertTrue(controlsText.contains { $0.contains("번역") }, "The native translation control must stay on screen after zoom and pan")

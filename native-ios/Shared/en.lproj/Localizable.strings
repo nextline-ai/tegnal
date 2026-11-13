@@ -238,7 +238,7 @@
 "Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too." = "Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too.";
 "Translation" = "Translation";
 "AI Translation (Beta)" = "AI Translation (Beta)";
-"Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation." = "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.";
+"Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead." = "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead.";
 "Stop Translating" = "Stop Translating";
 "Show Translation" = "Show Translation";
 "Show Original" = "Show Original";

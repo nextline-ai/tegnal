@@ -238,7 +238,7 @@
 "Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too." = "一覧、検索、新しく保存する作品はチェックしたウェブサイトを使います。保存した作品はどのウェブサイトで保存したかを覚えており、作品番号が同じウェブサイトでも開けます。";
 "Translation" = "翻訳";
 "AI Translation (Beta)" = "AI翻訳（ベータ）";
-"Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation." = "ページをめくっても翻訳がオンのままになり、デバイス上のAIが前のページのセリフを参考に翻訳します。縦書きや小さな文字は認識できない場合があるため、その場合はオフにして標準の翻訳を使ってください。";
+"Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead." = "ページをめくっても翻訳がオンのままになり、デバイス上のAIが作品の言語で前のページのセリフを参考に翻訳します。このシステムがまだ縦書きを読めない場合は、標準の翻訳を使います。";
 "Stop Translating" = "翻訳をやめる";
 "Show Translation" = "翻訳を表示";
 "Show Original" = "原文を表示";

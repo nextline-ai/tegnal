@@ -146,7 +146,7 @@ struct NativeReaderView: View {
                                          reveal: { sheet = .information }))
         .overlay(alignment: .topTrailing) {
             if let request = translationRequest, let gallery, gallery.pages.indices.contains(request.index) {
-                ReaderTranslationView(page: gallery.pages[request.index], galleryID: galleryID, images: images, rect: request.rect, finished: {
+                ReaderTranslationView(page: gallery.pages[request.index], galleryID: galleryID, language: gallery.language, images: images, rect: request.rect, finished: {
                     guard translationRequest?.id == request.id else { return }
                     translationRequest = nil
                 }, failed: { message in
@@ -435,6 +435,10 @@ struct NativeReaderView: View {
         zoomed = !zoomedPages.isEmpty
         guard rect.width > 0.01, rect.height > 0.01 else { return }
         if scale > 1.01 { viewports[index] = rect } else { viewports.removeValue(forKey: index) }
+        // AI translation reads a zoomed-in area again, for text too small to read on the whole page.
+        if translation.isOn, scale >= ReaderZoomedText.minimumScale, let gallery, gallery.pages.indices.contains(index) {
+            translation.readZoomed(gallery.pages[index], index: index, galleryID: galleryID, area: rect, images: images)
+        }
     }
 
     private func shortcut(_ command: ReaderShortcut) {
@@ -487,12 +491,27 @@ struct NativeReaderView: View {
     private func translate() {
         menuVisible = false
         guard ReaderTranslationSession.isSupported, ReaderPreferences.continuousTranslation || translation.isOn else {
-            translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1))
+            translateCurrentPage()
             return
         }
-        translation.toggle()
-        followTranslation()
-        showTranslationPill()
+        guard !translation.isOn, ReaderSourceLanguage.writesVertically(gallery?.language) else {
+            translation.toggle()
+            followTranslation()
+            showTranslationPill()
+            return
+        }
+        // AI translation reads the text itself. Where this system cannot read vertical columns,
+        // the standard translation, which can, translates the page instead.
+        Task { @MainActor in
+            guard await ReaderVerticalTextSupport.shared.isSupported() else { translateCurrentPage(); return }
+            guard !translation.isOn else { return }
+            translation.toggle()
+            followTranslation()
+            showTranslationPill()
+        }
+    }
+    private func translateCurrentPage() {
+        translationRequest = ReaderTranslationRequest(index: currentPage, rect: viewports[currentPage] ?? CGRect(x: 0, y: 0, width: 1, height: 1))
     }
     private func followTranslation() {
         guard translation.isOn, let gallery else { return }
