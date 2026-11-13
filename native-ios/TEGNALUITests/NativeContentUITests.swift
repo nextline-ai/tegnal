@@ -608,6 +608,29 @@ final class NativeContentUITests: XCTestCase {
         }
     }
 
+    func testZoomedSideTapsTurnPagesAndTheMiddleOpensTheQuickMenu() {
+        let app = launchReader()
+        let image = element(app, "reader.image")
+        image.doubleTap()
+        wait(image, "value == %@", "250%")
+        tap(app, x: 0.9)
+        menu(app)
+        XCTAssertEqual(element(app, "reader.position").label, "페이지 2 / 3", "A right-side tap turns the page while zoomed")
+        element(app, "reader.menu.close").tap()
+        image.doubleTap()
+        wait(image, "value == %@", "250%")
+        tap(app, x: 0.1)
+        menu(app)
+        XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3", "A left-side tap goes back while zoomed")
+        XCTAssertEqual(image.value as? String, "100%", "The page reached by a tap starts fitted")
+        element(app, "reader.menu.close").tap()
+        image.doubleTap()
+        wait(image, "value == %@", "250%")
+        tap(app, x: 0.5)
+        XCTAssertTrue(element(app, "reader.position").waitForExistence(timeout: 5), "The middle opens the quick menu while zoomed")
+        XCTAssertEqual(element(app, "reader.position").label, "페이지 1 / 3")
+    }
+
     func testZoomedShortPagePansVerticallyWithoutExitOrPaging() {
         let app = launchReader(extra: ["--reader-short-page-test"])
         let image = element(app, "reader.image")

@@ -306,7 +306,8 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
     }
     @objc private func tapped(_ gesture: UITapGestureRecognizer) {
         reportViewport()
-        tap(zoomScale > 1.01 ? 0.5 : (gesture.location(in: self).x - bounds.minX) / max(1, bounds.width))
+        // Where the tap lands on screen, zoomed or not: the middle opens the quick menu and the sides turn pages.
+        tap((gesture.location(in: self).x - bounds.minX) / max(1, bounds.width))
     }
     @objc private func held(_ gesture: UILongPressGestureRecognizer) {
         if gesture.state == .began { bookmark() }

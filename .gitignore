@@ -74,3 +74,6 @@ __pycache__/
 
 # Brand originals; published assets live in docs/assets/
 /design-output/
+
+# Local OCR benchmark harness for comic translation (kept out of the repository)
+/native-ios/scripts/ocr-bench/
