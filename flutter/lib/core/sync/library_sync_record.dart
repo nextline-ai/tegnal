@@ -123,6 +123,8 @@ class LibrarySyncRow {
     'booru.settings': ['key'],
     'preferences.manga': ['key'],
     'preferences.booru': ['key'],
+    'recent.works': ['id'],
+    'recent.images': ['server_id', 'post_id'],
   };
 
   LibrarySyncRow copy() => LibrarySyncRow(table: table, values: values);

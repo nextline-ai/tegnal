@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../booru/booru_store.dart';
+import '../content/recent_works.dart';
 import '../support/document_files.dart';
 import 'app_database.dart';
 import 'library_backup.dart';
@@ -15,11 +16,23 @@ extension LibraryBackupPreview on LibraryBackupImport {
 /// `LibraryBackupSection`'s file work: export both libraries to one JSON file the person
 /// saves, read a picked file for confirmation, then merge it into the libraries.
 class LibraryBackupActions {
-  LibraryBackupActions({required this.database, required this.images, this.files = const DocumentFiles(), Directory? temporary})
-    : temporary = temporary ?? Directory.systemTemp;
+  LibraryBackupActions({
+    required this.database,
+    required this.images,
+    this.files = const DocumentFiles(),
+    Directory? temporary,
+    RecentWorks? recentWorks,
+    RecentImages? recentImages,
+  }) : temporary = temporary ?? Directory.systemTemp,
+       recentWorks = recentWorks ?? RecentWorks.shared,
+       recentImages = recentImages ?? RecentImages.shared;
 
   final AppDatabase database;
   final BooruStore images;
+
+  /// The app's recent lists; the backup carries them and a restore merges into them.
+  final RecentWorks? recentWorks;
+  final RecentImages? recentImages;
   final DocumentFiles files;
   final Directory temporary;
 
@@ -27,7 +40,13 @@ class LibraryBackupActions {
   static const importTypes = ['application/json', 'text/json', 'text/plain', 'application/octet-stream'];
 
   /// The backup file under [temporary], named as the native share sheet names it.
-  File exportFile() => LibraryBackup.export(database, images, temporary: temporary);
+  File exportFile() => LibraryBackup.export(
+    database,
+    images,
+    temporary: temporary,
+    recentWorks: recentWorks?.entries ?? const [],
+    recentImages: recentImages?.entries ?? const [],
+  );
 
   /// Writes the backup and asks where to keep it. False when the person cancels.
   Future<bool> export() async {
@@ -53,6 +72,8 @@ class LibraryBackupActions {
   /// Merges the backup. The caller then restarts the cover queue and marks sync for a fresh upload.
   void restore(LibraryBackupImport backup) {
     backup.restore(database, images);
+    recentWorks?.merge([for (final record in backup.comics?.recentWorks ?? const <MangaRecentRecord>[]) record.work]);
+    recentImages?.merge(backup.images?.recentImagesOn(images.servers) ?? const []);
     database.syncFoldersToAppGroup();
   }
 

@@ -7,6 +7,7 @@ import '../../domain/models.dart';
 import '../booru/booru_models.dart';
 import '../booru/booru_store.dart';
 import '../challenge/challenge_models.dart';
+import '../content/recent_works.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
 import '../support/preferences.dart';
@@ -43,8 +44,8 @@ class LibrarySyncSnapshotCache {
     (Object, int, int) version(SqlDatabase db) => (db, db.value<int>('SELECT total_changes()') ?? 0, db.value<int>('PRAGMA data_version') ?? 0);
     final preferences = <String, String>{};
     for (final (mode, defaults, keys) in [
-      ('manga', adapter.mangaDefaults, LibrarySyncAdapter.commonPreferences),
-      ('booru', adapter.booruDefaults, LibrarySyncAdapter.booruPreferences),
+      ('manga', adapter.mangaDefaults, [...LibrarySyncAdapter.commonPreferences, RecentWorks.key]),
+      ('booru', adapter.booruDefaults, [...LibrarySyncAdapter.booruPreferences, RecentImages.key]),
     ]) {
       for (final key in keys) {
         final value = defaults.object(key);
@@ -101,8 +102,9 @@ class LibrarySyncAdapter {
     'reader.translationLanguage',
     LibrarySavePreferences.defaultFolderKey,
     LibrarySavePreferences.rulesEnabledKey,
+    RecentWorks.limitKey,
   ];
-  static const booruPreferences = ['search.retentionDays', 'reader.translationLanguage', 'booru.rememberHistory', 'booru.showNotes'];
+  static const booruPreferences = ['search.retentionDays', 'reader.translationLanguage', 'booru.rememberHistory', 'booru.showNotes', RecentImages.limitKey];
 
   static const columns = <String, List<String>>{
     'manga.library_order': ['key', 'value'],
@@ -210,9 +212,29 @@ class LibrarySyncAdapter {
             result.add(LibrarySyncRow(table: table, values: values));
           }
         }
+        // One row per recently opened image, so opens on two devices merge. A server that
+        // is no longer in the list cannot place its image on another device.
+        for (final entry in RecentImage.stored(booruDefaults)) {
+          final address = addresses[entry.post.serverID];
+          if (address == null) continue;
+          final post = entry.post.onServer(address).cloudMetadata;
+          result.add(
+            LibrarySyncRow(
+              table: 'recent.images',
+              values: {
+                'server_id': SyncValue.text(address),
+                'post_id': SyncValue.integer(post.postID),
+                'payload': SyncValue.blob(_encode(RecentImage(post: post, openedAt: entry.openedAt).toJson())),
+              },
+            ),
+          );
+        }
         return result;
       }),
     );
+    for (final entry in RecentWork.stored(mangaDefaults)) {
+      rows.add(LibrarySyncRow(table: 'recent.works', values: {'id': SyncValue.integer(entry.id), 'payload': SyncValue.blob(_encode(entry.toJson()))}));
+    }
     for (final (mode, defaults, keys) in [('manga', mangaDefaults, commonPreferences), ('booru', booruDefaults, booruPreferences)]) {
       for (final key in keys) {
         final value = defaults.object(key);
@@ -242,8 +264,15 @@ class LibrarySyncAdapter {
       return MapEntry(key, LibrarySyncChange(row: row, timestamp: change.timestamp, device: change.device, deleted: change.deleted));
     }
     final data = change.row.values['payload']?.data;
-    if (change.deleted || change.row.table != 'booru.favorites' || data == null) return MapEntry(key, change);
-    final row = change.row.copy()..values['payload'] = SyncValue.blob(_encode(BooruPost.fromJson(decodeJsonObject(data)).cloudMetadata.toJson()));
+    if (change.deleted || !const {'booru.favorites', 'recent.images'}.contains(change.row.table) || data == null) return MapEntry(key, change);
+    final JsonObject cleaned;
+    if (change.row.table == 'recent.images') {
+      final entry = RecentImage.fromJson(decodeJsonObject(data));
+      cleaned = RecentImage(post: entry.post.cloudMetadata, openedAt: entry.openedAt).toJson();
+    } else {
+      cleaned = BooruPost.fromJson(decodeJsonObject(data)).cloudMetadata.toJson();
+    }
+    final row = change.row.copy()..values['payload'] = SyncValue.blob(_encode(cleaned));
     return MapEntry(key, LibrarySyncChange(row: row, timestamp: change.timestamp, device: change.device, deleted: change.deleted));
   });
 
@@ -413,6 +442,73 @@ class LibrarySyncAdapter {
       final value = plist['value'];
       defaults.set(key, value is List ? value.whereType<String>().toList() : value);
     }
+    _applyRecents(values);
+  }
+
+  /// Recent lists live in each mode's settings, not a database. Rows merge one entry at a
+  /// time; the synced count then keeps the newest ones, as on the device that opened them.
+  void _applyRecents(List<LibrarySyncChange> values) {
+    final works = values.where((change) => change.row.table == 'recent.works').toList();
+    if (works.isNotEmpty) {
+      final entries = {for (final entry in RecentWork.stored(mangaDefaults)) entry.id: entry};
+      for (final change in works) {
+        final id = change.row.values['id']?.integer;
+        if (id == null) continue;
+        if (change.deleted) {
+          entries.remove(id);
+          continue;
+        }
+        final data = change.row.values['payload']?.data;
+        if (data == null) continue;
+        try {
+          final entry = RecentWork.fromJson(decodeJsonObject(data));
+          if (entry.id == id) entries[id] = entry;
+        } on Object {
+          continue;
+        }
+      }
+      _storeRecentWorks(RecentWork.merged(entries.values, RecentLimit.stored(mangaDefaults, RecentWorks.limitKey)));
+    }
+    final images = values.where((change) => change.row.table == 'recent.images').toList();
+    if (images.isNotEmpty) {
+      final mapping = <String, String>{};
+      booru.database.read((db) {
+        for (final payload in db.column<Uint8List>('SELECT payload FROM servers ORDER BY position')) {
+          final server = BooruServer.fromJson(decodeJsonObject(payload));
+          mapping.putIfAbsent(server.canonicalAddress, () => server.id);
+        }
+      });
+      final entries = {for (final entry in RecentImage.stored(booruDefaults)) entry.id: entry};
+      for (final change in images) {
+        final address = change.row.values['server_id']?.string, postID = change.row.values['post_id']?.integer;
+        final server = address == null ? null : mapping[address];
+        if (server == null || postID == null) continue;
+        final id = '$server:$postID';
+        if (change.deleted) {
+          entries.remove(id);
+          continue;
+        }
+        final data = change.row.values['payload']?.data;
+        if (data == null) continue;
+        try {
+          final entry = RecentImage.fromJson(decodeJsonObject(data));
+          if (entry.post.postID == postID) entries[id] = RecentImage(post: entry.post.onServer(server), openedAt: entry.openedAt);
+        } on Object {
+          continue;
+        }
+      }
+      _storeRecentImages(RecentImage.merged(entries.values, RecentLimit.stored(booruDefaults, RecentImages.limitKey)));
+    }
+  }
+
+  void _storeRecentWorks(List<RecentWork> entries) {
+    String encoded(List<RecentWork> list) => jsonEncode([for (final entry in list) entry.toJson()]);
+    if (encoded(RecentWork.stored(mangaDefaults)) != encoded(entries)) RecentWork.store(mangaDefaults, entries);
+  }
+
+  void _storeRecentImages(List<RecentImage> entries) {
+    String encoded(List<RecentImage> list) => jsonEncode([for (final entry in list) entry.toJson()]);
+    if (encoded(RecentImage.stored(booruDefaults)) != encoded(entries)) RecentImage.store(booruDefaults, entries);
   }
 
   static List<String>? _decodeStrings(List<int>? data) {

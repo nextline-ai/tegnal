@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/booru/booru_models.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
+import 'package:tegnal/core/content/reading_queue.dart';
+import 'package:tegnal/core/content/recent_works.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/storage/folder_rules.dart';
 import 'package:tegnal/core/support/preferences.dart';
@@ -34,6 +37,44 @@ void main() {
     la.baseline = a.snapshot();
     lb.baseline = b.snapshot();
   }
+
+  test('recent works and images merge entry by entry through sync rows', () {
+    final a = adapter(), b = adapter(), server = presetServer();
+    final covers = Directory.systemTemp.createTempSync('tegnal-recent-');
+    addTearDown(() => covers.deleteSync(recursive: true));
+    RecentWork work(int id, int seconds) => RecentWork(
+      item: ReadingQueueItem(id: id, title: 'Work $id', artists: '', details: ''),
+      openedAt: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+      tags: const ['tag'],
+    );
+    a.booru.saveServer(server);
+    b.booru.saveServer(BooruServer(id: 'peer-server', name: server.name, baseURL: server.baseURL, engine: server.engine));
+    final worksA = RecentWorks(a.mangaDefaults, covers: covers), worksB = RecentWorks(b.mangaDefaults, covers: covers);
+    worksA.opened(work(1, 100));
+    worksB.opened(work(2, 200));
+    RecentImages(a.booruDefaults).opened(fixturePost(72, server), at: DateTime.fromMillisecondsSinceEpoch(150000));
+    final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
+    exchange(a, b, la, lb);
+    expect(RecentWork.stored(a.mangaDefaults).map((entry) => entry.id), [2, 1], reason: 'Opens on both devices merge, newest first');
+    expect(RecentWork.stored(b.mangaDefaults).map((entry) => entry.id), [2, 1]);
+    final image = RecentImage.stored(b.booruDefaults).single;
+    expect(image.post.serverID, 'peer-server', reason: "An image lands on the peer's own copy of the server");
+    expect(image.post.postID, 72);
+    expect(image.openedAt, DateTime.fromMillisecondsSinceEpoch(150000));
+
+    // Reopening moves a work up everywhere; removing it removes it everywhere.
+    worksB
+      ..reload()
+      ..opened(work(1, 300));
+    exchange(a, b, la, lb);
+    worksA.reload();
+    expect(worksA.entries.map((entry) => entry.id), [1, 2]);
+    expect(worksA.entries.first.openedAt, DateTime.fromMillisecondsSinceEpoch(300000));
+    worksA.remove(2);
+    exchange(a, b, la, lb);
+    expect(RecentWork.stored(b.mangaDefaults).map((entry) => entry.id), [1]);
+    expect(RecentWork.merged([work(1, 1), work(2, 3), work(1, 5), work(3, 4)], 2).map((entry) => entry.id), [1, 3]);
+  });
 
   test('values and rows encode like Swift Codable', () {
     expect(encodeJsonString(const SyncValue.text('a/b').toJson()), r'{"text":{"_0":"a\/b"}}');
@@ -281,7 +322,12 @@ void main() {
     // A peer that never learned the site sends it empty, and a newer version adds a column.
     final known = LibrarySyncRow(
       table: 'manga.works',
-      values: {'gallery_id': const SyncValue.integer(100), 'title': const SyncValue.text('Renamed'), 'bookmarked_at': const SyncValue.real(1), 'site': SyncValue.null_},
+      values: {
+        'gallery_id': const SyncValue.integer(100),
+        'title': const SyncValue.text('Renamed'),
+        'bookmarked_at': const SyncValue.real(1),
+        'site': SyncValue.null_,
+      },
     );
     final later = LibrarySyncRow(
       table: 'manga.works',

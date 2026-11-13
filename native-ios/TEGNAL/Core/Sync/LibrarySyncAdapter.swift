@@ -43,7 +43,8 @@ final class LibrarySyncSnapshotCache {
             }
         }
         var preferences: [String: Data] = [:]
-        for (mode, defaults, keys) in [("manga", adapter.mangaDefaults, LibrarySyncAdapter.commonPreferences), ("booru", adapter.booruDefaults, LibrarySyncAdapter.booruPreferences)] {
+        for (mode, defaults, keys) in [("manga", adapter.mangaDefaults, LibrarySyncAdapter.commonPreferences + [RecentWorks.key]),
+                                       ("booru", adapter.booruDefaults, LibrarySyncAdapter.booruPreferences + [RecentImages.key])] {
             for key in keys {
                 if let value = defaults.object(forKey: key) {
                     preferences[mode + ":" + key] = try PropertyListSerialization.data(fromPropertyList: ["value": value], format: .binary, options: 0)
@@ -60,8 +61,8 @@ struct LibrarySyncAdapter {
     let booru: BooruStore
     let mangaDefaults: UserDefaults
     let booruDefaults: UserDefaults
-    static let commonPreferences = ["site_verified", "app.language", "app_theme", "booru.app_theme", "manga.defaultTags", "manga.defaultExcludedTags", "manga.artistLanguage", "manga.tagLanguage", "search.retentionDays", "search.rememberHistory", "reader.translationLanguage", LibrarySavePreferences.defaultFolderKey, LibrarySavePreferences.rulesEnabledKey]
-    static let booruPreferences = ["search.retentionDays", "reader.translationLanguage", "booru.rememberHistory", "booru.showNotes"]
+    static let commonPreferences = ["site_verified", "app.language", "app_theme", "booru.app_theme", "manga.defaultTags", "manga.defaultExcludedTags", "manga.artistLanguage", "manga.tagLanguage", "search.retentionDays", "search.rememberHistory", "reader.translationLanguage", LibrarySavePreferences.defaultFolderKey, LibrarySavePreferences.rulesEnabledKey, RecentWorks.limitKey]
+    static let booruPreferences = ["search.retentionDays", "reader.translationLanguage", "booru.rememberHistory", "booru.showNotes", RecentImages.limitKey]
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],
         "manga.folders": ["sync_id", "name", "description", "color", "sort_order", "created_at", "source_group_id"],
@@ -134,7 +135,18 @@ struct LibrarySyncAdapter {
                     result.append(.init(table: table, values: values))
                 }
             }
+            // One row per recently opened image, so opens on two devices merge. A server that
+            // is no longer in the list cannot place its image on another device.
+            for entry in RecentImage.stored(in: booruDefaults) {
+                guard let address = addresses[entry.post.serverID] else { continue }
+                let post = entry.post.onServer(address).cloudMetadata
+                result.append(.init(table: "recent.images", values: ["server_id": .text(address), "post_id": .integer(post.postID),
+                                                                     "payload": .blob(try Self.encode(RecentImage(post: post, openedAt: entry.openedAt)))]))
+            }
             return result
+        }
+        for entry in RecentWork.stored(in: mangaDefaults) {
+            rows.append(.init(table: "recent.works", values: ["id": .integer(entry.id), "payload": .blob(try Self.encode(entry))]))
         }
         for (mode, defaults, keys) in [("manga", mangaDefaults, Self.commonPreferences), ("booru", booruDefaults, Self.booruPreferences)] {
             for key in keys {
@@ -155,10 +167,16 @@ struct LibrarySyncAdapter {
                 row.values = MangaImportMetadata.normalized(row.values)
                 return .init(row: row, timestamp: change.timestamp, device: change.device, deleted: change.deleted)
             }
-            guard !change.deleted, change.row.table == "booru.favorites",
+            guard !change.deleted, ["booru.favorites", "recent.images"].contains(change.row.table),
                   let data = change.row.values["payload"]?.data else { return change }
             var row = change.row
-            row.values["payload"] = .blob(try encode(JSONDecoder().decode(BooruPost.self, from: data).cloudMetadata))
+            if change.row.table == "recent.images" {
+                var entry = try JSONDecoder().decode(RecentImage.self, from: data)
+                entry.post = entry.post.cloudMetadata
+                row.values["payload"] = .blob(try encode(entry))
+            } else {
+                row.values["payload"] = .blob(try encode(JSONDecoder().decode(BooruPost.self, from: data).cloudMetadata))
+            }
             return .init(row: row, timestamp: change.timestamp, device: change.device, deleted: change.deleted)
         }
     }
@@ -285,6 +303,51 @@ struct LibrarySyncAdapter {
             if change.deleted { defaults.removeObject(forKey: key) }
             else if let data = change.row.values["value"]?.data, let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] { defaults.set(plist["value"], forKey: key) }
         }
+        try applyRecents(values)
+    }
+
+    /// Recent lists live in each mode's settings, not a database. Rows merge one entry at a
+    /// time; the synced count then keeps the newest ones, as on the device that opened them.
+    private func applyRecents(_ values: [LibrarySyncChange]) throws {
+        let works = values.filter { $0.row.table == "recent.works" }
+        if !works.isEmpty {
+            var entries = Dictionary(RecentWork.stored(in: mangaDefaults).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for change in works {
+                guard let id = change.row.values["id"]?.integer else { continue }
+                if change.deleted { entries[id] = nil; continue }
+                guard let data = change.row.values["payload"]?.data, let entry = try? JSONDecoder().decode(RecentWork.self, from: data), entry.id == id else { continue }
+                entries[id] = entry
+            }
+            Self.storeRecents(RecentWork.merged(Array(entries.values), limit: RecentLimit.stored(RecentWorks.limitKey, in: mangaDefaults)),
+                              key: RecentWorks.key, in: mangaDefaults)
+        }
+        let images = values.filter { $0.row.table == "recent.images" }
+        if !images.isEmpty {
+            let servers = try booru.database.read { db in
+                try Row.fetchAll(db, sql: "SELECT payload FROM servers ORDER BY position").map { try JSONDecoder().decode(BooruServer.self, from: $0["payload"] as Data) }
+            }
+            var mapping: [String: String] = [:]
+            for server in servers where mapping[server.canonicalAddress] == nil { mapping[server.canonicalAddress] = server.id }
+            var entries = Dictionary(RecentImage.stored(in: booruDefaults).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for change in images {
+                guard let address = change.row.values["server_id"]?.string, let postID = change.row.values["post_id"]?.integer,
+                      let server = mapping[address] else { continue }
+                let id = "\(server):\(postID)"
+                if change.deleted { entries[id] = nil; continue }
+                guard let data = change.row.values["payload"]?.data, var entry = try? JSONDecoder().decode(RecentImage.self, from: data),
+                      entry.post.postID == postID else { continue }
+                entry.post = entry.post.onServer(server)
+                entries[id] = entry
+            }
+            Self.storeRecents(RecentImage.merged(Array(entries.values), limit: RecentLimit.stored(RecentImages.limitKey, in: booruDefaults)),
+                              key: RecentImages.key, in: booruDefaults)
+        }
+    }
+    private static func storeRecents<T: Codable & Equatable>(_ entries: [T], key: String, in defaults: UserDefaults) {
+        let current = defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([T].self, from: $0) } ?? []
+        guard current != entries else { return }
+        if entries.isEmpty { defaults.removeObject(forKey: key) }
+        else if let data = try? JSONEncoder().encode(entries) { defaults.set(data, forKey: key) }
     }
     private func localFolder(_ value: SyncValue?, _ db: Database) throws -> Int64? {
         guard let uid = value?.string else { return nil }

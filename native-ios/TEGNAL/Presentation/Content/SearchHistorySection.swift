@@ -42,8 +42,9 @@ struct SearchHistoryPanel: View {
     let open: (String) -> Void
     let star: (String) -> Void
     let remove: (String) -> Void
-    let clear: () -> Void
-    @State private var confirmingClear = false
+    /// Owned by the screen, not this panel: the confirmation takes focus from the search
+    /// field, which removes this panel, and an alert attached here would vanish with it.
+    @Binding var confirmingClear: Bool
     private var recentHistory: [SearchHistoryPanelEntry] {
         history.prefix(5).map { SearchHistoryPanelEntry(query: $0, section: .history) }
     }
@@ -103,10 +104,16 @@ struct SearchHistoryPanel: View {
                 }
             }
         }.buttonStyle(.plain)
-            .alert(L10n.text("Clear History?"), isPresented: $confirmingClear) {
-                Button(L10n.text("Clear History"), role: .destructive, action: clear)
-                Button(L10n.text("Cancel"), role: .cancel) {}
-            } message: { Text(L10n.text("Search history will be deleted. Saved searches will be kept.")) }
+    }
+}
+
+extension View {
+    /// The search overlay's Clear History confirmation, attached to a view that outlives the panel.
+    func searchHistoryClearAlert(isPresented: Binding<Bool>, clear: @escaping () -> Void) -> some View {
+        alert(L10n.text("Clear History?"), isPresented: isPresented) {
+            Button(L10n.text("Clear History"), role: .destructive, action: clear)
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: { Text(L10n.text("Search history will be deleted. Saved searches will be kept.")) }
     }
 }
 

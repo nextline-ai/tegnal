@@ -99,9 +99,10 @@ struct BackupReminderModifier: ViewModifier {
 
     private func save() {
         let database = env.database, images = env.booru
+        let recentWorks = env.recentWorks.entries, recentImages = env.recentImages.entries
         Task {
             do {
-                let url = try await Task.detached(priority: .userInitiated) { try LibraryBackup.export(database: database, images: images) }.value
+                let url = try await Task.detached(priority: .userInitiated) { try LibraryBackup.export(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages) }.value
                 document = BackupJSONDocument(data: try Data(contentsOf: url))
             } catch { failure = error.localizedDescription }
         }

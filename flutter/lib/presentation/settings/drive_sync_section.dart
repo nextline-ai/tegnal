@@ -82,7 +82,6 @@ class _DriveSyncSectionState extends State<DriveSyncSection> {
 
   @override
   Widget build(BuildContext context) {
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
     String bytes(int value) => FileByteCount.format(value, language: L10n.language);
     final account = _sync.account;
@@ -99,13 +98,10 @@ class _DriveSyncSectionState extends State<DriveSyncSection> {
           value: _sync.enabled,
           onChanged: _sync.isConfigured && !_connecting ? _toggle : null,
         ),
-        FormRow(
-          child: Text(_sync.status, style: TegnalType.style(13, color: secondary)),
-        ),
-        if (account != null) SettingsValueRow(title: L10n.text('Google Account'), value: account.email, small: true),
-        if (_sync.documentBytes != null) SettingsValueRow(title: L10n.text('This Device’s Sync Data'), value: bytes(_sync.documentBytes!), small: true),
+        if (account != null) SettingsValueRow(title: L10n.text('Google Account'), value: account.email),
+        if (_sync.documentBytes != null) SettingsValueRow(title: L10n.text('This Device’s Sync Data'), value: bytes(_sync.documentBytes!)),
         if (_sync.cloudBytes != null && _sync.cloudDocumentCount > 0)
-          SettingsValueRow(title: L10n.text('Google Drive Sync Documents'), value: bytes(_sync.cloudBytes!), small: true),
+          SettingsValueRow(title: L10n.text('Google Drive Sync Documents'), value: bytes(_sync.cloudBytes!)),
         if (_sync.enabled && account != null)
           FormRow(
             separatorInset: settingsIconInset,

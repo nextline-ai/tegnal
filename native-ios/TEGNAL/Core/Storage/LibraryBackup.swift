@@ -16,10 +16,17 @@ struct LibraryBackup: Codable, Sendable {
     var challenges: ChallengeBackup
     static let maximumBytes = 128 * 1024 * 1024
 
-    static func capture(database: AppDatabase, images: BooruStore) throws -> Self {
+    static func capture(database: AppDatabase, images: BooruStore, recentWorks: [RecentWork] = [], recentImages: [RecentImage] = []) throws -> Self {
         var imageBackup = try images.exportBackup()
         for index in imageBackup.favorites.indices { imageBackup.favorites[index].post = imageBackup.favorites[index].post.cloudMetadata }
-        let value = try Self(comics: MangaBackup.capture(database), images: imageBackup,
+        let serverIDs = Set(imageBackup.servers.map(\.id))
+        let recents = recentImages.filter { serverIDs.contains($0.post.serverID) }
+            .map { BooruBackup.Recent(post: $0.post.cloudMetadata, openedAt: $0.openedAt.timeIntervalSince1970) }
+        // Left out when empty, so a backup without them reads exactly as before.
+        imageBackup.recentImages = recents.isEmpty ? nil : recents
+        var comics = try MangaBackup.capture(database)
+        comics.recent_works = recentWorks.isEmpty ? nil : recentWorks.map(MangaBackup.RecentRecord.init)
+        let value = try Self(comics: comics, images: imageBackup,
                              challenges: ChallengeBackup(games: ChallengeStore(images).definitions()))
         try value.validate()
         return value
@@ -38,11 +45,11 @@ struct LibraryBackup: Codable, Sendable {
         return data
     }
 
-    static func export(database: AppDatabase, images: BooruStore) throws -> URL {
+    static func export(database: AppDatabase, images: BooruStore, recentWorks: [RecentWork] = [], recentImages: [RecentImage] = []) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("tegnal-backup.json")
-        try capture(database: database, images: images).encoded().write(to: url, options: .atomic)
+        try capture(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages).encoded().write(to: url, options: .atomic)
         return url
     }
 }
@@ -142,6 +149,26 @@ struct MangaBackup: Codable, Sendable {
     struct ArtistRecord: Codable, Sendable { var name: String; var kind: Int?; var note: String? }
     struct SearchRecord: Codable, Sendable { var query: String; var used_at: Double }
     struct RuleRecord: Codable, Sendable { var folder: String; var query: String; var excluded: String?; var includesOtherFolders: Bool?; var isEnabled: Bool?; var sources: [String]? }
+    /// A recently opened work; `opened_at` is seconds since 1970, as both apps write it.
+    struct RecentRecord: Codable, Sendable {
+        var gallery_id: Int64
+        var title: String
+        var artists: String
+        var details: String
+        var site: String?
+        var language: String?
+        var type: String?
+        var tags: [String]?
+        var opened_at: Double
+        init(_ work: RecentWork) {
+            gallery_id = work.id; title = work.item.title; artists = work.item.artists; details = work.item.details; site = work.item.site
+            language = work.language; type = work.type; tags = work.tags; opened_at = work.openedAt.timeIntervalSince1970
+        }
+        var work: RecentWork {
+            RecentWork(item: ReadingQueueItem(id: gallery_id, title: title, artists: artists, details: details, site: site),
+                       openedAt: Date(timeIntervalSince1970: opened_at), language: language, type: type, tags: tags)
+        }
+    }
     var version = 2
     var exported_at: String?
     var folders: [FolderRecord]
@@ -150,6 +177,8 @@ struct MangaBackup: Codable, Sendable {
     var history: [SearchRecord]?
     var saved_searches: [String]?
     var folder_rules: [RuleRecord]?
+    /// Optional so backups from before recent works still read.
+    var recent_works: [RecentRecord]?
 
     static func capture(_ database: AppDatabase) throws -> Self {
         try database.dbWriter.read { db in
@@ -183,7 +212,8 @@ struct MangaBackup: Codable, Sendable {
               Set(artists.map { $0.name + "\u{0}" + String($0.kind ?? 0) }).count == artists.count,
               (history ?? []).allSatisfy({ !$0.query.isEmpty && $0.used_at.isFinite }),
               (saved_searches ?? []).allSatisfy({ !$0.isEmpty }),
-              (folder_rules ?? []).allSatisfy({ names.contains($0.folder) && !$0.query.isEmpty }) else { throw LibraryBackupError.invalid }
+              (folder_rules ?? []).allSatisfy({ names.contains($0.folder) && !$0.query.isEmpty }),
+              (recent_works ?? []).allSatisfy({ $0.gallery_id > 0 && $0.opened_at.isFinite }) else { throw LibraryBackupError.invalid }
     }
 
     func restore(in db: Database) throws {

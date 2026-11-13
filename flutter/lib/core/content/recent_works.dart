@@ -54,27 +54,54 @@ class RecentWork {
     if (type != null) 'type': type,
     if (tags != null) 'tags': tags,
   };
+
+  /// The list as stored, for sync and backups, which read it without the app's list.
+  static List<RecentWork> stored(Preferences preferences) {
+    final stored = preferences.string(RecentWorks.key);
+    if (stored == null) return [];
+    try {
+      return [for (final entry in jsonDecode(stored) as List<Object?>) RecentWork.fromJson((entry as Map).cast<String, Object?>())];
+    } on Object {
+      return [];
+    }
+  }
+
+  static void store(Preferences preferences, List<RecentWork> entries) {
+    if (entries.isEmpty) {
+      preferences.remove(RecentWorks.key);
+    } else {
+      preferences.set(RecentWorks.key, jsonEncode([for (final entry in entries) entry.toJson()]));
+    }
+  }
+
+  /// Newest first, one entry per work and the newest copy of each, at most [limit].
+  static List<RecentWork> merged(Iterable<RecentWork> entries, int limit) {
+    final newest = <int, RecentWork>{};
+    for (final entry in entries) {
+      final current = newest[entry.id];
+      if (current == null || entry.openedAt.isAfter(current.openedAt)) newest[entry.id] = entry;
+    }
+    final sorted = newest.values.toList()..sort((a, b) => a.openedAt == b.openedAt ? b.id.compareTo(a.id) : b.openedAt.compareTo(a.openedAt));
+    return sorted.take(limit < 0 ? 0 : limit).toList();
+  }
 }
 
 /// `RecentWorks`: comics opened in the viewer, newest first. Opening a work again moves it to
-/// the top; the oldest leave once the list passes the count chosen in Settings. Kept on this
-/// device only.
+/// the top; the oldest leave once the list passes the count chosen in Settings. The list travels
+/// with sync and backups; covers stay on this device.
 class RecentWorks extends ChangeNotifier {
   RecentWorks(this._preferences, {Directory? covers}) : _covers = covers ?? defaultCoverDirectory {
     _limit = RecentLimit.stored(_preferences, limitKey);
-    final stored = _preferences.string(key);
-    if (stored != null) {
-      try {
-        _entries = [for (final entry in jsonDecode(stored) as List<Object?>) RecentWork.fromJson((entry as Map).cast<String, Object?>())];
-      } on Object {
-        _entries = [];
-      }
-    }
+    _showsInSaved = _preferences.boolean(savedFolderKey) ?? false;
+    _entries = RecentWork.stored(_preferences);
     _trim();
   }
 
   static const key = 'manga.recentWorks';
   static const limitKey = 'manga.recentWorks.limit';
+
+  /// Saved shows the list as a folder; off unless chosen. A layout choice, kept on this device.
+  static const savedFolderKey = 'manga.recentWorks.showsInSaved';
 
   /// Set at launch to the app's cache folder.
   static Directory defaultCoverDirectory = Directory('${Directory.systemTemp.path}/RecentWorks');
@@ -91,6 +118,32 @@ class RecentWorks extends ChangeNotifier {
 
   /// How many works the list keeps; none turns it off.
   int get limit => _limit;
+
+  late bool _showsInSaved;
+  bool get showsInSaved => _showsInSaved;
+
+  void setShowsInSaved(bool value) {
+    _showsInSaved = value;
+    _preferences.set(savedFolderKey, value);
+    notifyListeners();
+  }
+
+  /// Reads the list again after sync changed it underneath.
+  void reload() {
+    _limit = RecentLimit.stored(_preferences, limitKey);
+    _entries = RecentWork.stored(_preferences);
+    _trim();
+    notifyListeners();
+  }
+
+  /// Works from a backup join the list by when they were opened; the newer copy of a work wins.
+  void merge(List<RecentWork> incoming) {
+    if (incoming.isEmpty) return;
+    _entries = RecentWork.merged([..._entries, ...incoming], RecentLimit.maximum);
+    _trim();
+    _save();
+    notifyListeners();
+  }
 
   /// A lower count drops the oldest works at once; none clears the list.
   void setLimit(int value) {
@@ -188,13 +241,7 @@ class RecentWorks extends ChangeNotifier {
     _entries = _entries.take(_limit).toList();
   }
 
-  void _save() {
-    if (_entries.isEmpty) {
-      _preferences.remove(key);
-    } else {
-      _preferences.set(key, jsonEncode([for (final entry in _entries) entry.toJson()]));
-    }
-  }
+  void _save() => RecentWork.store(_preferences, _entries);
 }
 
 /// An image opened in the viewer lately.
@@ -212,6 +259,35 @@ class RecentImage {
   String get id => post.id;
 
   Map<String, Object?> toJson() => {'post': post.toJson(), 'openedAt': openedAt.millisecondsSinceEpoch};
+
+  static List<RecentImage> stored(Preferences preferences) {
+    final stored = preferences.string(RecentImages.key);
+    if (stored == null) return [];
+    try {
+      return [for (final entry in jsonDecode(stored) as List<Object?>) RecentImage.fromJson((entry as Map).cast<String, Object?>())];
+    } on Object {
+      return [];
+    }
+  }
+
+  static void store(Preferences preferences, List<RecentImage> entries) {
+    if (entries.isEmpty) {
+      preferences.remove(RecentImages.key);
+    } else {
+      preferences.set(RecentImages.key, jsonEncode([for (final entry in entries) entry.toJson()]));
+    }
+  }
+
+  /// Newest first, one entry per image and the newest copy of each, at most [limit].
+  static List<RecentImage> merged(Iterable<RecentImage> entries, int limit) {
+    final newest = <String, RecentImage>{};
+    for (final entry in entries) {
+      final current = newest[entry.id];
+      if (current == null || entry.openedAt.isAfter(current.openedAt)) newest[entry.id] = entry;
+    }
+    final sorted = newest.values.toList()..sort((a, b) => a.openedAt == b.openedAt ? b.id.compareTo(a.id) : b.openedAt.compareTo(a.openedAt));
+    return sorted.take(limit < 0 ? 0 : limit).toList();
+  }
 }
 
 /// `RecentImages`: image mode's recently opened images, kept like comics' recent works, in
@@ -219,19 +295,14 @@ class RecentImage {
 class RecentImages extends ChangeNotifier {
   RecentImages(this._preferences) {
     _limit = RecentLimit.stored(_preferences, limitKey);
-    final stored = _preferences.string(key);
-    if (stored != null) {
-      try {
-        _entries = [for (final entry in jsonDecode(stored) as List<Object?>) RecentImage.fromJson((entry as Map).cast<String, Object?>())];
-      } on Object {
-        _entries = [];
-      }
-    }
+    _showsInSaved = _preferences.boolean(savedFolderKey) ?? false;
+    _entries = RecentImage.stored(_preferences);
     _trim();
   }
 
   static const key = 'booru.recentPosts';
   static const limitKey = 'booru.recentPosts.limit';
+  static const savedFolderKey = 'booru.recentPosts.showsInSaved';
 
   /// The app's list, installed at launch; the image viewer adds to it.
   static RecentImages? shared;
@@ -242,6 +313,30 @@ class RecentImages extends ChangeNotifier {
 
   List<RecentImage> get entries => List.unmodifiable(_entries);
   int get limit => _limit;
+
+  late bool _showsInSaved;
+  bool get showsInSaved => _showsInSaved;
+
+  void setShowsInSaved(bool value) {
+    _showsInSaved = value;
+    _preferences.set(savedFolderKey, value);
+    notifyListeners();
+  }
+
+  void reload() {
+    _limit = RecentLimit.stored(_preferences, limitKey);
+    _entries = RecentImage.stored(_preferences);
+    _trim();
+    notifyListeners();
+  }
+
+  void merge(List<RecentImage> incoming) {
+    if (incoming.isEmpty) return;
+    _entries = RecentImage.merged([..._entries, ...incoming], RecentLimit.maximum);
+    _trim();
+    _save();
+    notifyListeners();
+  }
 
   void setLimit(int value) {
     _limit = RecentLimit.clamped(value);
@@ -275,11 +370,5 @@ class RecentImages extends ChangeNotifier {
     if (_entries.length > _limit) _entries = _entries.take(_limit).toList();
   }
 
-  void _save() {
-    if (_entries.isEmpty) {
-      _preferences.remove(key);
-    } else {
-      _preferences.set(key, jsonEncode([for (final entry in _entries) entry.toJson()]));
-    }
-  }
+  void _save() => RecentImage.store(_preferences, _entries);
 }

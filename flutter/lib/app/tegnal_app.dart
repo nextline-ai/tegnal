@@ -97,6 +97,8 @@ class AppServices {
       directory: syncDirectory,
       onApplied: () {
         content.reloadSyncedPreferences();
+        recentWorks.reload();
+        recentImages.reload();
         coverQueue.start();
       },
     );

@@ -371,6 +371,44 @@ final class LibrarySyncTests: XCTestCase {
         XCTAssertNil(disabled)
     }
 
+    @MainActor func testRecentWorksAndImagesMergeEntryByEntryThroughICloudRows() throws {
+        let a = try adapter(), b = try adapter()
+        let covers = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: covers) }
+        func work(_ id: Int64, _ time: Double) -> RecentWork {
+            RecentWork(item: ReadingQueueItem(id: id, title: "Work \(id)", artists: "", details: "", site: nil),
+                       openedAt: Date(timeIntervalSince1970: time), language: nil, type: nil, tags: ["tag"])
+        }
+        let server = BooruServer.presets[0]
+        try a.booru.saveServer(server)
+        var peerServer = server; peerServer.id = "peer-server"
+        try b.booru.saveServer(peerServer)
+        let worksA = RecentWorks(defaults: a.mangaDefaults, covers: covers), worksB = RecentWorks(defaults: b.mangaDefaults, covers: covers)
+        let imagesA = RecentImages(defaults: a.booruDefaults)
+        worksA.opened(work(1, 100))
+        worksB.opened(work(2, 200))
+        imagesA.opened(BooruFixtureSource.post(72, server: server), at: Date(timeIntervalSince1970: 150))
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        try exchange(a, b, &la, &lb)
+        XCTAssertEqual(RecentWork.stored(in: a.mangaDefaults).map(\.id), [2, 1], "Opens on both devices merge, newest first")
+        XCTAssertEqual(RecentWork.stored(in: b.mangaDefaults).map(\.id), [2, 1])
+        let image = try XCTUnwrap(RecentImage.stored(in: b.booruDefaults).first)
+        XCTAssertEqual(image.post.serverID, "peer-server", "An image lands on the peer's own copy of the server")
+        XCTAssertEqual(image.post.postID, 72)
+        XCTAssertEqual(image.openedAt, Date(timeIntervalSince1970: 150))
+
+        // Reopening moves a work up everywhere; removing it removes it everywhere.
+        worksB.reload(); worksB.opened(work(1, 300))
+        try exchange(a, b, &la, &lb)
+        worksA.reload()
+        XCTAssertEqual(worksA.entries.map(\.id), [1, 2])
+        XCTAssertEqual(worksA.entries.first?.openedAt, Date(timeIntervalSince1970: 300))
+        worksA.remove(2)
+        try exchange(a, b, &la, &lb)
+        XCTAssertEqual(RecentWork.stored(in: b.mangaDefaults).map(\.id), [1])
+        XCTAssertEqual(RecentWork.merged([work(1, 1), work(2, 3), work(1, 5), work(3, 4)], limit: 2).map(\.id), [1, 3])
+    }
+
     private func adapter() throws -> LibrarySyncAdapter {
         func defaults() -> UserDefaults {
             let name = "library-sync-tests-" + UUID().uuidString; suites.append(name)

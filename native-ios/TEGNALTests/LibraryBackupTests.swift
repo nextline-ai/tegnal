@@ -303,6 +303,38 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(try peer.manga.listFolders().first { $0.name == "Reading" }?.color, 0xFF123456)
     }
 
+    func testRecentWorksAndImagesTravelInTheBackupAndOlderBackupsStillRead() throws {
+        let (source, sourceImages, _) = try populated()
+        let server = BooruServer.presets[0]
+        let work = RecentWork(item: ReadingQueueItem(id: 77, title: "Recent", artists: "Artist", details: "korean · manga", site: "comics"),
+                              openedAt: Date(timeIntervalSince1970: 1_700_000_000), language: "korean", type: "manga", tags: ["tag:test"])
+        let image = RecentImage(post: BooruFixtureSource.post(73, server: server), openedAt: Date(timeIntervalSince1970: 1_700_000_100))
+        let stranger = RecentImage(post: BooruFixtureSource.post(74, server: BooruServer(id: "gone", name: "Gone", baseURL: URL(string: "https://gone.example")!, engine: .danbooru)),
+                                   openedAt: Date(timeIntervalSince1970: 1_700_000_200))
+        let data = try LibraryBackup.capture(database: source, images: sourceImages, recentWorks: [work], recentImages: [image, stranger]).encoded()
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let comics = try XCTUnwrap(object["comics"] as? [String: Any]), images = try XCTUnwrap(object["images"] as? [String: Any])
+        // Seconds since 1970 in both apps, so either app restores the other's file.
+        XCTAssertEqual((comics["recent_works"] as? [[String: Any]])?.first?["opened_at"] as? Double, 1_700_000_000)
+        XCTAssertEqual((images["recentImages"] as? [[String: Any]])?.map { $0["openedAt"] as? Double }, [1_700_000_100], "Images from a server outside the backup are left out")
+
+        let backup = try LibraryBackupImport.decode(data)
+        XCTAssertEqual(backup.comics?.recent_works?.map(\.work), [work])
+        let destination = try BooruStore()
+        var copy = server; copy.id = "restored-server"
+        try destination.saveServer(copy)
+        let restored = try XCTUnwrap(backup.images).recentImages(on: destination.servers)
+        XCTAssertEqual(restored.map(\.post.serverID), ["restored-server"])
+        XCTAssertEqual(restored.first?.openedAt, image.openedAt)
+
+        var older = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var olderComics = try XCTUnwrap(older["comics"] as? [String: Any]); olderComics["recent_works"] = nil; older["comics"] = olderComics
+        var olderImages = try XCTUnwrap(older["images"] as? [String: Any]); olderImages["recentImages"] = nil; older["images"] = olderImages
+        let previous = try LibraryBackupImport.decode(JSONSerialization.data(withJSONObject: older))
+        XCTAssertNil(previous.comics?.recent_works)
+        XCTAssertEqual(previous.images?.recentImages(on: destination.servers).count, 0)
+    }
+
     func testRejectsUnsupportedVersionsDuplicateWorksAndUnknownFolders() throws {
         let (source, sourceImages, _) = try populated()
         let original = try LibraryBackup.capture(database: source, images: sourceImages)

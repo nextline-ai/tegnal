@@ -898,6 +898,61 @@ final class NativeContentUITests: XCTestCase {
         capture(app, "Explore completed tag search")
     }
 
+    /// The confirmation takes focus from the search field, which closes the history panel;
+    /// the alert must stay until it is answered.
+    func testExploreSearchHistoryClearConfirmationStaysOpen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let search = element(app, "content.search")
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap(); search.typeText("female:sample\n")
+        XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 20))
+        let entry = element(app, "history.query.female:sample")
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        element(app, "history.clear").tap()
+        let alert = app.alerts["Clear History?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(alert.exists, "The confirmation must not close by itself")
+        capture(app, "Explore clear history confirmation")
+        alert.buttons["Clear History"].tap()
+        XCTAssertFalse(alert.exists)
+        search.tap()
+        XCTAssertTrue(app.staticTexts["Nothing Saved Yet"].waitForExistence(timeout: 5))
+        XCTAssertFalse(entry.exists)
+    }
+
+    func testRecentWorksFolderInSavedFollowsTheSetting() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        app.tabBars.buttons["Saved"].tap()
+        XCTAssertFalse(element(app, "manga.recentFolder").waitForExistence(timeout: 3), "Off until chosen in Settings")
+        app.tabBars.buttons["Settings"].tap()
+        let setting = element(app, "settings.recentWorksInSaved")
+        for _ in 0..<8 where !setting.isHittable { app.swipeUp() }
+        XCTAssertTrue(setting.isHittable)
+        XCTAssertEqual(setting.value as? String, "0")
+        setting.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
+        XCTAssertEqual(setting.value as? String, "1")
+        capture(app, "Recent works folder setting")
+        app.tabBars.buttons["Saved"].tap()
+        let folder = element(app, "manga.recentFolder")
+        XCTAssertTrue(folder.waitForExistence(timeout: 5))
+        capture(app, "Recent works folder in Saved")
+        folder.tap()
+        XCTAssertTrue(app.navigationBars["Recently Opened Works"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(folder.waitForExistence(timeout: 5))
+        folder.press(forDuration: 1.0)
+        app.buttons["Hide from Saved"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: folder)
+        waitForExpectations(timeout: 5)
+    }
+
     func testSlowThumbnailDoesNotHoldFeedLoading() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "--slow-detail-cover-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

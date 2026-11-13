@@ -281,6 +281,7 @@ private struct GalleryFeedView: View {
     @State private var searchText: String
     @State private var isSearchBarVisible = true
     @FocusState private var isSearchFocused: Bool
+    @State private var confirmingHistoryClear = false
     @State private var suggestions: [TagSuggestion] = []
     @State private var suggesting = false
     @State private var searchScroll = ScrollSearchVisibility()
@@ -440,14 +441,12 @@ private struct GalleryFeedView: View {
         }
         VStack(spacing: 0) {
             ScrollSearchBar(text: $searchText, focused: $isSearchFocused, prompt: L10n.text("Search, number, or link"), identifier: "content.search", submit: submitSearch)
-            if isSearchFocused && searchText.isEmpty {
+            if (isSearchFocused || confirmingHistoryClear) && searchText.isEmpty {
                 SearchHistoryPanel(history: history, saved: savedSearches, open: { searchText = $0; submitSearch() }, star: { query in
                     do { try env.database.toggleSavedSearch(query); reloadSearches() } catch { toast = error.localizedDescription }
                 }, remove: { query in
                     do { try env.database.deleteSearch(query); reloadSearches() } catch { toast = error.localizedDescription }
-                }, clear: {
-                    do { try env.database.clearSearchHistory(); reloadSearches() } catch { toast = error.localizedDescription }
-                }).searchResultsPanel(height: SearchHistoryPanel.height(availableHeight: searchViewportHeight))
+                }, confirmingClear: $confirmingHistoryClear).searchResultsPanel(height: SearchHistoryPanel.height(availableHeight: searchViewportHeight))
             } else if isSearchFocused, !suggestions.isEmpty {
                 ScrollView {
                     VStack(spacing: 0) {
@@ -475,6 +474,9 @@ private struct GalleryFeedView: View {
         }
         .offset(y: isSearchBarVisible ? 0 : -60).opacity(isSearchBarVisible ? 1 : 0)
         .allowsHitTesting(isSearchBarVisible).accessibilityHidden(!isSearchBarVisible)
+        .searchHistoryClearAlert(isPresented: $confirmingHistoryClear) {
+            do { try env.database.clearSearchHistory(); reloadSearches() } catch { toast = error.localizedDescription }
+        }
         }
         .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
         .onChange(of: isSearchFocused) { _, focused in if focused { isSearchBarVisible = true; reloadSearches() } }

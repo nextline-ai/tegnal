@@ -48,10 +48,11 @@ struct LibraryBackupSection: View {
     private func export() {
         busy = true; message = nil
         let database = env.database, images = env.booru
+        let recentWorks = env.recentWorks.entries, recentImages = env.recentImages.entries
         Task {
             defer { busy = false }
             do {
-                let url = try await Task.detached(priority: .userInitiated) { try LibraryBackup.export(database: database, images: images) }.value
+                let url = try await Task.detached(priority: .userInitiated) { try LibraryBackup.export(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages) }.value
                 sharing = BackupFile(url: url)
                 BackupReminder.saved()
             } catch { message = L10n.text("Unable to create backup: %@", error.localizedDescription) }
@@ -75,6 +76,8 @@ struct LibraryBackupSection: View {
             do {
                 try await Task.detached(priority: .userInitiated) { try backup.restore(database: database, images: images) }.value
                 try images.refresh()
+                env.recentWorks.merge(backup.comics?.recent_works?.map(\.work) ?? [])
+                env.recentImages.merge(backup.images?.recentImages(on: images.servers) ?? [])
                 database.syncFoldersToAppGroup()
                 env.startCoverQueue()
                 env.sync.libraryRestored()

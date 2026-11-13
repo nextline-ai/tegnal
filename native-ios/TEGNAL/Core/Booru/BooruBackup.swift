@@ -7,6 +7,8 @@ struct BooruBackup: Codable, Sendable {
     struct Favorite: Codable, Sendable { var post: BooruPost; var folderID: String; var savedAt: Double }
     struct Search: Codable, Sendable { var serverID: String; var query: String; var usedAt: Double }
     struct Tag: Codable, Sendable { var serverID: String; var name: String; var kind: String }
+    /// A recently opened image; `openedAt` is seconds since 1970, as both apps write it.
+    struct Recent: Codable, Sendable { var post: BooruPost; var openedAt: Double }
     var format = "tegnal-image-library"
     var version = 1
     var exportedAt = Date()
@@ -19,6 +21,8 @@ struct BooruBackup: Codable, Sendable {
     var selectedServerIDs: [String]
     /// Optional so backups from before smart folders still read.
     var folderRules: [FolderRule]?
+    /// Optional so backups from before recent images still read.
+    var recentImages: [Recent]?
 
     static func read(_ url: URL) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
@@ -49,13 +53,23 @@ struct BooruBackup: Codable, Sendable {
               history.allSatisfy({ serverIDs.contains($0.serverID) && !$0.query.isEmpty && $0.usedAt.isFinite }),
               savedTags.allSatisfy({ serverIDs.contains($0.serverID) && !$0.name.isEmpty && (SavedCollectionKind(rawValue: $0.kind).map { $0 != .history } ?? false) }),
               Set(blacklist.keys).isSubset(of: serverIDs), Set(selectedServerIDs).isSubset(of: serverIDs),
-              (folderRules ?? []).allSatisfy({ folderIDs.contains($0.folder) && !$0.query.isEmpty })
+              (folderRules ?? []).allSatisfy({ folderIDs.contains($0.folder) && !$0.query.isEmpty }),
+              (recentImages ?? []).allSatisfy({ serverIDs.contains($0.post.serverID) && $0.post.postID > 0 && $0.openedAt.isFinite })
         else { throw BooruError.invalidResponse }
         for server in servers { _ = try BooruServer.validatedURL(server.baseURL.absoluteString) }
-        for favorite in favorites {
-            for url in [favorite.post.previewURL, favorite.post.sampleURL, favorite.post.fileURL, favorite.post.animationVideoURL].compactMap({ $0 }) {
+        for post in favorites.map(\.post) + (recentImages ?? []).map(\.post) {
+            for url in [post.previewURL, post.sampleURL, post.fileURL, post.animationVideoURL].compactMap({ $0 }) {
                 guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil, url.user == nil, url.password == nil else { throw BooruError.invalidResponse }
             }
+        }
+    }
+
+    /// Recent images placed on this device's servers, matched by address as a restore matches them.
+    func recentImages(on current: [BooruServer]) -> [RecentImage] {
+        let addresses = Dictionary(servers.map { ($0.id, $0.canonicalAddress) }, uniquingKeysWith: { first, _ in first })
+        return (recentImages ?? []).compactMap { recent in
+            guard let address = addresses[recent.post.serverID], let server = current.first(where: { $0.canonicalAddress == address }) else { return nil }
+            return RecentImage(post: recent.post.onServer(server.id), openedAt: Date(timeIntervalSince1970: recent.openedAt))
         }
     }
 

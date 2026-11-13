@@ -31,25 +31,63 @@ struct RecentWork: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+extension RecentWork {
+    /// The list as stored, for iCloud sync and backups, which read it without the app's list.
+    static func stored(in defaults: UserDefaults) -> [RecentWork] {
+        defaults.data(forKey: RecentWorks.key).flatMap { try? JSONDecoder().decode([RecentWork].self, from: $0) } ?? []
+    }
+    /// Newest first, one entry per work and the newest copy of each, at most `limit`.
+    static func merged(_ entries: [RecentWork], limit: Int) -> [RecentWork] {
+        var newest: [Int64: RecentWork] = [:]
+        for entry in entries where newest[entry.id].map({ entry.openedAt > $0.openedAt }) ?? true { newest[entry.id] = entry }
+        return Array(newest.values.sorted { $0.openedAt == $1.openedAt ? $0.id > $1.id : $0.openedAt > $1.openedAt }.prefix(max(0, limit)))
+    }
+}
+
 /// `RecentWorks`: comics opened in the viewer, newest first. Opening a work again moves it to
-/// the top; the oldest leave once the list passes the count chosen in Settings. Kept on this
-/// device only.
+/// the top; the oldest leave once the list passes the count chosen in Settings. The list travels
+/// with iCloud sync and backups; covers stay on this device.
 @MainActor @Observable final class RecentWorks {
-    static let key = "manga.recentWorks"
-    static let limitKey = "manga.recentWorks.limit"
+    nonisolated static let key = "manga.recentWorks"
+    nonisolated static let limitKey = "manga.recentWorks.limit"
+    /// Saved shows the list as a folder; off unless chosen. A layout choice, kept on this device.
+    nonisolated static let savedFolderKey = "manga.recentWorks.showsInSaved"
 
     private(set) var entries: [RecentWork] = []
     /// How many works the list keeps; none turns it off.
     private(set) var limit: Int
+    private(set) var showsInSaved: Bool
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let covers: URL
 
     init(defaults: UserDefaults, covers: URL? = nil) {
         self.defaults = defaults
         limit = RecentLimit.stored(Self.limitKey, in: defaults)
+        showsInSaved = defaults.bool(forKey: Self.savedFolderKey)
         self.covers = covers ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("RecentWorks", isDirectory: true)
-        if let data = defaults.data(forKey: Self.key), let stored = try? JSONDecoder().decode([RecentWork].self, from: data) { entries = stored }
+        entries = RecentWork.stored(in: defaults)
         trim()
+    }
+
+    func setShowsInSaved(_ value: Bool) {
+        showsInSaved = value
+        defaults.set(value, forKey: Self.savedFolderKey)
+    }
+
+    /// Reads the list again after iCloud sync changed it underneath.
+    func reload() {
+        limit = RecentLimit.stored(Self.limitKey, in: defaults)
+        let stored = RecentWork.stored(in: defaults)
+        if stored != entries { entries = stored }
+        trim()
+    }
+
+    /// Works from a backup join the list by when they were opened; the newer copy of a work wins.
+    func merge(_ incoming: [RecentWork]) {
+        guard !incoming.isEmpty else { return }
+        entries = RecentWork.merged(entries + incoming, limit: Int.max)
+        trim()
+        save()
     }
 
     /// A lower count drops the oldest works at once; none clears the list.
@@ -116,21 +154,55 @@ struct RecentImage: Codable, Equatable, Identifiable, Sendable {
     var id: String { post.id }
 }
 
+extension RecentImage {
+    static func stored(in defaults: UserDefaults) -> [RecentImage] {
+        defaults.data(forKey: RecentImages.key).flatMap { try? JSONDecoder().decode([RecentImage].self, from: $0) } ?? []
+    }
+    /// Newest first, one entry per image and the newest copy of each, at most `limit`.
+    static func merged(_ entries: [RecentImage], limit: Int) -> [RecentImage] {
+        var newest: [String: RecentImage] = [:]
+        for entry in entries where newest[entry.id].map({ entry.openedAt > $0.openedAt }) ?? true { newest[entry.id] = entry }
+        return Array(newest.values.sorted { $0.openedAt == $1.openedAt ? $0.id > $1.id : $0.openedAt > $1.openedAt }.prefix(max(0, limit)))
+    }
+}
+
 /// `RecentImages`: image mode's recently opened images, kept like comics' recent works, in
 /// image mode's own settings.
 @MainActor @Observable final class RecentImages {
-    static let key = "booru.recentPosts"
-    static let limitKey = "booru.recentPosts.limit"
+    nonisolated static let key = "booru.recentPosts"
+    nonisolated static let limitKey = "booru.recentPosts.limit"
+    nonisolated static let savedFolderKey = "booru.recentPosts.showsInSaved"
 
     private(set) var entries: [RecentImage] = []
     private(set) var limit: Int
+    private(set) var showsInSaved: Bool
     @ObservationIgnored private let defaults: UserDefaults
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
         limit = RecentLimit.stored(Self.limitKey, in: defaults)
-        if let data = defaults.data(forKey: Self.key), let stored = try? JSONDecoder().decode([RecentImage].self, from: data) { entries = stored }
+        showsInSaved = defaults.bool(forKey: Self.savedFolderKey)
+        entries = RecentImage.stored(in: defaults)
         trim()
+    }
+
+    func setShowsInSaved(_ value: Bool) {
+        showsInSaved = value
+        defaults.set(value, forKey: Self.savedFolderKey)
+    }
+
+    func reload() {
+        limit = RecentLimit.stored(Self.limitKey, in: defaults)
+        let stored = RecentImage.stored(in: defaults)
+        if stored != entries { entries = stored }
+        trim()
+    }
+
+    func merge(_ incoming: [RecentImage]) {
+        guard !incoming.isEmpty else { return }
+        entries = RecentImage.merged(entries + incoming, limit: Int.max)
+        trim()
+        save()
     }
 
     func setLimit(_ value: Int) {
@@ -166,8 +238,8 @@ struct RecentImage: Codable, Equatable, Identifiable, Sendable {
 
 // MARK: Settings
 
-/// The rows Search History settings gain: the list of recently opened works or images, and a
-/// slider for how many to keep.
+/// The rows Search History settings gain: the list of recently opened works or images, whether
+/// Saved shows it as a folder, and a slider for how many to keep.
 struct RecentWorksSettings: View {
     @Environment(AppEnvironment.self) private var env
     let booru: Bool
@@ -179,6 +251,10 @@ struct RecentWorksSettings: View {
         } label: {
             LabeledContent(L10n.text(booru ? "Recently Opened Images" : "Recently Opened Works"), value: String(booru ? env.recentImages.entries.count : env.recentWorks.entries.count))
         }.accessibilityIdentifier("settings.recentWorks")
+        Toggle(L10n.text("Show as Folder in Saved"), isOn: Binding(
+            get: { booru ? env.recentImages.showsInSaved : env.recentWorks.showsInSaved },
+            set: { if booru { env.recentImages.setShowsInSaved($0) } else { env.recentWorks.setShowsInSaved($0) } }))
+            .accessibilityIdentifier("settings.recentWorksInSaved")
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(L10n.text(booru ? "Keep Recent Images" : "Keep Recent Works"))
@@ -198,6 +274,34 @@ struct RecentWorksSettings: View {
 
     static func title(_ count: Int, booru: Bool) -> String {
         count == 0 ? L10n.text("Don't Keep") : L10n.text(booru ? "%@ items" : "%@ works", String(count))
+    }
+}
+
+// MARK: Saved folder
+
+/// The neutral color the recent folder wears in Saved; it is not a folder the user colors.
+enum RecentFolderStyle { static let color: Int64 = 0xFF636366 }
+
+/// Recently opened works as a folder card in Saved, with the latest covers.
+struct RecentWorksFolderCard: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.artworkCellStyle) private var style
+    var body: some View {
+        let recents = env.recentWorks
+        let entries = Array(recents.entries.prefix(4))
+        let text = FolderBentoFrame<EmptyView>.textColor(RecentFolderStyle.color)
+        FolderBentoFrame(color: RecentFolderStyle.color, title: L10n.text("Recent Works"), count: recents.entries.count) { index in
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).overlay {
+                if entries.indices.contains(index) {
+                    if let cover = recents.cover(entries[index].id) { Image(uiImage: cover).resizable().scaledToFill() }
+                    else { FolderBentoPlaceholder(galleryID: entries[index].id, color: text) }
+                } else {
+                    RoundedRectangle(cornerRadius: style.radius(8), style: .continuous).fill(text.opacity(0.08))
+                }
+            }
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: style.radius(8), style: .continuous))
+        }
     }
 }
 

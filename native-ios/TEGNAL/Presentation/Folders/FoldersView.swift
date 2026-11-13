@@ -35,7 +35,7 @@ public struct FoldersView: View {
 
     public var body: some View {
         ScrollView {
-            if folders.isEmpty {
+            if folders.isEmpty && !env.recentWorks.showsInSaved {
                 ContentUnavailableView(
                     L10n.text("No Folders"),
                     systemImage: "folder",
@@ -44,6 +44,17 @@ public struct FoldersView: View {
                 .padding(.top, 60)
             } else {
                 ArtworkGrid(mode: .manga, kind: .folders) { _ in
+                    if env.recentWorks.showsInSaved {
+                        NavigationLink { RecentWorksView().readingQueueClearance() } label: {
+                            RecentWorksFolderCard()
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .contextMenu {
+                                    Button(L10n.text("Hide from Saved"), systemImage: "eye.slash") { env.recentWorks.setShowsInSaved(false) }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("manga.recentFolder")
+                    }
                     ForEach(folders) { folder in
                         NavigationLink(value: folder) {
                             FolderBentoCardView(

@@ -1642,3 +1642,7 @@
 "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All." = "作品のタグなど、タグを1つ開くとこの言語で作品を表示します。タグの画面で言語を変えると、この設定も変わります。複数の語で検索したときはすべての言語で表示します。";
 "Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "オンにすると、画像モードのサーバーがすべて全年齢の画像のSafebooruにすぐ切り替わります。ほかのサーバーを選ぶと、そのサーバーの検索に年齢タグが1つ追加され、検索語で変更または削除できます。一部のマンガサイトが年齢フィルターに対応していないため、オンの間はマンガモードを使えません。";
 "None (Safebooru)" = "なし (Safebooru)";
+"Show as Folder in Saved" = "保存タブにフォルダとして表示";
+"Recent Works" = "最近開いた作品";
+"Recent Images" = "最近開いた画像";
+"Hide from Saved" = "保存タブから隠す";

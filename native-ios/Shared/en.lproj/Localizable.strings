@@ -1642,3 +1642,7 @@
 "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All." = "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All.";
 "Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.";
 "None (Safebooru)" = "None (Safebooru)";
+"Show as Folder in Saved" = "Show as Folder in Saved";
+"Recent Works" = "Recent Works";
+"Recent Images" = "Recent Images";
+"Hide from Saved" = "Hide from Saved";

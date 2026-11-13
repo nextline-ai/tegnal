@@ -10,7 +10,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/booru/booru_backup.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
+import 'package:tegnal/core/booru/booru_models.dart';
 import 'package:tegnal/core/challenge/challenge_store.dart';
+import 'package:tegnal/core/content/reading_queue.dart';
+import 'package:tegnal/core/content/recent_works.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/storage/library_backup.dart';
 
@@ -113,6 +116,49 @@ void main() {
     expect(destination.listWorks(), isEmpty);
     expect(destination.listFolders().any((folder) => folder.name == 'Reading'), isFalse);
     expect(images.database.value<int>('SELECT COUNT(*) FROM servers'), 0);
+  });
+
+  test('recent works and images travel in the backup and older backups still read', () {
+    final (source, sourceImages, _) = populated();
+    final server = presetServer();
+    final work = RecentWork(
+      item: const ReadingQueueItem(id: 77, title: 'Recent', artists: 'Artist', details: 'korean · manga', site: 'comics'),
+      openedAt: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+      language: 'korean',
+      type: 'manga',
+      tags: const ['tag:test'],
+    );
+    final image = RecentImage(post: fixturePost(73, server), openedAt: DateTime.fromMillisecondsSinceEpoch(1700000100000));
+    final stranger = RecentImage(
+      post: fixturePost(74, BooruServer(id: 'gone', name: 'Gone', baseURL: 'https://gone.example', engine: BooruEngine.danbooru)),
+      openedAt: DateTime.fromMillisecondsSinceEpoch(1700000200000),
+    );
+    final data = LibraryBackup.capture(source, sourceImages, recentWorks: [work], recentImages: [image, stranger]).encoded();
+    final object = jsonDecode(utf8.decode(data)) as Map<String, Object?>;
+    final comics = object['comics']! as Map<String, Object?>, images = object['images']! as Map<String, Object?>;
+    // Seconds since 1970 in both apps, so either app restores the other's file.
+    expect(((comics['recent_works']! as List).first as Map)['opened_at'], 1700000000);
+    expect(
+      [for (final recent in images['recentImages']! as List) (recent as Map)['openedAt']],
+      [1700000100],
+      reason: 'Images from a server outside the backup are left out',
+    );
+
+    final backup = LibraryBackupImport.decode(data);
+    final restoredWork = backup.comics!.recentWorks!.single.work;
+    expect(jsonEncode(restoredWork.toJson()), jsonEncode(work.toJson()));
+    final destination = BooruStore.inMemory();
+    destination.saveServer(BooruServer(id: 'restored-server', name: server.name, baseURL: server.baseURL, engine: server.engine));
+    final restored = backup.images!.recentImagesOn(destination.servers);
+    expect(restored.map((entry) => entry.post.serverID), ['restored-server']);
+    expect(restored.single.openedAt, image.openedAt);
+
+    final older = jsonDecode(utf8.decode(data)) as Map<String, Object?>;
+    (older['comics']! as Map<String, Object?>).remove('recent_works');
+    (older['images']! as Map<String, Object?>).remove('recentImages');
+    final previous = LibraryBackupImport.decode(utf8.encode(jsonEncode(older)));
+    expect(previous.comics!.recentWorks, isNull);
+    expect(previous.images!.recentImagesOn(destination.servers), isEmpty);
   });
 
   test('rejects unsupported versions duplicate works and unknown folders', () {

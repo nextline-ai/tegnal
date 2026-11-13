@@ -6,6 +6,8 @@ import '../booru/booru_backup.dart';
 import '../booru/booru_store.dart';
 import '../challenge/challenge_models.dart';
 import '../challenge/challenge_store.dart';
+import '../content/reading_queue.dart';
+import '../content/recent_works.dart';
 import '../support/l10n.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
@@ -34,13 +36,21 @@ class LibraryBackup {
   ChallengeBackup challenges;
   static const maximumBytes = 128 * 1024 * 1024;
 
-  static LibraryBackup capture(AppDatabase database, BooruStore images) {
+  static LibraryBackup capture(AppDatabase database, BooruStore images, {List<RecentWork> recentWorks = const [], List<RecentImage> recentImages = const []}) {
     final imageBackup = images.exportBackup();
     for (final favorite in imageBackup.favorites) {
       favorite.post = favorite.post.cloudMetadata;
     }
+    final serverIDs = {for (final server in imageBackup.servers) server.id};
+    final recents = [
+      for (final recent in recentImages)
+        if (serverIDs.contains(recent.post.serverID))
+          BooruBackupRecent(post: recent.post.cloudMetadata, openedAt: recent.openedAt.millisecondsSinceEpoch / 1000),
+    ];
+    // Left out when empty, so a backup without them reads exactly as before.
+    if (recents.isNotEmpty) imageBackup.recentImages = recents;
     final value = LibraryBackup(
-      comics: MangaBackup.capture(database),
+      comics: MangaBackup.capture(database)..recentWorks = recentWorks.isEmpty ? null : [for (final work in recentWorks) MangaRecentRecord.fromWork(work)],
       images: imageBackup,
       challenges: ChallengeBackup(games: ChallengeStore(images).definitions()),
     );
@@ -81,9 +91,16 @@ class LibraryBackup {
   }
 
   /// Writes `tegnal-backup.json` into a new folder under `temporary`, ready to share.
-  static File export(AppDatabase database, BooruStore images, {required Directory temporary}) {
+  static File export(
+    AppDatabase database,
+    BooruStore images, {
+    required Directory temporary,
+    List<RecentWork> recentWorks = const [],
+    List<RecentImage> recentImages = const [],
+  }) {
     final directory = Directory('${temporary.path}/${uuidString()}')..createSync(recursive: true);
-    return File('${directory.path}/tegnal-backup.json')..writeAsBytesSync(capture(database, images).encoded(), flush: true);
+    return File('${directory.path}/tegnal-backup.json')
+      ..writeAsBytesSync(capture(database, images, recentWorks: recentWorks, recentImages: recentImages).encoded(), flush: true);
   }
 }
 
@@ -309,6 +326,69 @@ class MangaRuleRecord {
     ..putIfPresent('sources', sources);
 }
 
+/// A recently opened work; `opened_at` is seconds since 1970, as both apps write it.
+class MangaRecentRecord {
+  MangaRecentRecord({
+    required this.galleryId,
+    required this.title,
+    required this.artists,
+    required this.details,
+    this.site,
+    this.language,
+    this.type,
+    this.tags,
+    required this.openedAt,
+  });
+
+  factory MangaRecentRecord.fromWork(RecentWork work) => MangaRecentRecord(
+    galleryId: work.id,
+    title: work.item.title,
+    artists: work.item.artists,
+    details: work.item.details,
+    site: work.item.site,
+    language: work.language,
+    type: work.type,
+    tags: work.tags,
+    openedAt: work.openedAt.millisecondsSinceEpoch / 1000,
+  );
+
+  factory MangaRecentRecord.fromJson(JsonObject json) => MangaRecentRecord(
+    galleryId: json.integer('gallery_id'),
+    title: json.string('title'),
+    artists: json.string('artists'),
+    details: json.string('details'),
+    site: json.stringOrNull('site'),
+    language: json.stringOrNull('language'),
+    type: json.stringOrNull('type'),
+    tags: json.stringsOrNull('tags'),
+    openedAt: json.number('opened_at'),
+  );
+
+  final int galleryId;
+  final String title;
+  final String artists;
+  final String details;
+  final String? site;
+  final String? language;
+  final String? type;
+  final List<String>? tags;
+  final double openedAt;
+
+  RecentWork get work => RecentWork(
+    item: ReadingQueueItem(id: galleryId, title: title, artists: artists, details: details, site: site),
+    openedAt: DateTime.fromMillisecondsSinceEpoch((openedAt * 1000).round()),
+    language: language,
+    type: type,
+    tags: tags,
+  );
+
+  JsonObject toJson() => <String, Object?>{'gallery_id': galleryId, 'title': title, 'artists': artists, 'details': details, 'opened_at': openedAt}
+    ..putIfPresent('site', site)
+    ..putIfPresent('language', language)
+    ..putIfPresent('type', type)
+    ..putIfPresent('tags', tags);
+}
+
 /// The original comics JSON shape remains readable, with portable fields only.
 class MangaBackup {
   MangaBackup({
@@ -320,6 +400,7 @@ class MangaBackup {
     this.history,
     this.savedSearches,
     this.folderRules,
+    this.recentWorks,
   });
 
   int version;
@@ -331,6 +412,9 @@ class MangaBackup {
   List<String>? savedSearches;
   List<MangaRuleRecord>? folderRules;
 
+  /// Optional so backups from before recent works still read.
+  List<MangaRecentRecord>? recentWorks;
+
   factory MangaBackup.fromJson(JsonObject json) => MangaBackup(
     version: json.integer('version'),
     exportedAt: json.stringOrNull('exported_at'),
@@ -340,6 +424,7 @@ class MangaBackup {
     history: json.listOrNull('history', (value) => MangaSearchRecord.fromJson(jsonObject(value))),
     savedSearches: json.stringsOrNull('saved_searches'),
     folderRules: json.listOrNull('folder_rules', (value) => MangaRuleRecord.fromJson(jsonObject(value))),
+    recentWorks: json.listOrNull('recent_works', (value) => MangaRecentRecord.fromJson(jsonObject(value))),
   );
 
   JsonObject toJson() =>
@@ -352,7 +437,8 @@ class MangaBackup {
         ..putIfPresent('exported_at', exportedAt)
         ..putIfPresent('history', history == null ? null : [for (final search in history!) search.toJson()])
         ..putIfPresent('saved_searches', savedSearches)
-        ..putIfPresent('folder_rules', folderRules == null ? null : [for (final rule in folderRules!) rule.toJson()]);
+        ..putIfPresent('folder_rules', folderRules == null ? null : [for (final rule in folderRules!) rule.toJson()])
+        ..putIfPresent('recent_works', recentWorks == null ? null : [for (final recent in recentWorks!) recent.toJson()]);
 
   static MangaBackup capture(AppDatabase database) => database.dbWriter.read((db) {
     final folders = AppDatabase.fetchFolders(db);
@@ -433,7 +519,8 @@ class MangaBackup {
         artists.map((artist) => '${artist.name}\u0000${artist.kind ?? 0}').toSet().length == artists.length &&
         (history ?? []).every((search) => search.query.isNotEmpty && search.usedAt.isFinite) &&
         (savedSearches ?? []).every((query) => query.isNotEmpty) &&
-        (folderRules ?? []).every((rule) => names.contains(rule.folder) && rule.query.isNotEmpty);
+        (folderRules ?? []).every((rule) => names.contains(rule.folder) && rule.query.isNotEmpty) &&
+        (recentWorks ?? []).every((recent) => recent.galleryId > 0 && recent.openedAt.isFinite);
     if (!valid) throw const LibraryBackupError();
   }
 

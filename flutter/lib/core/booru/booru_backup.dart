@@ -5,6 +5,7 @@ import '../../domain/models.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
 import '../support/sql_database.dart';
+import '../content/recent_works.dart';
 import '../support/swift_json.dart';
 import '../support/swift_url.dart';
 import '../taste/taste_models.dart';
@@ -54,6 +55,15 @@ class BooruBackupTag {
   JsonObject toJson() => {'serverID': serverID, 'name': name, 'kind': kind};
 }
 
+/// A recently opened image; `openedAt` is seconds since 1970, as both apps write it.
+class BooruBackupRecent {
+  BooruBackupRecent({required this.post, required this.openedAt});
+  BooruPost post;
+  double openedAt;
+  factory BooruBackupRecent.fromJson(JsonObject json) => BooruBackupRecent(post: BooruPost.fromJson(json.object('post')), openedAt: json.number('openedAt'));
+  JsonObject toJson() => {'post': post.toJson(), 'openedAt': openedAt};
+}
+
 /// Portable library data only. Credentials, cookies, caches and device preferences stay local.
 class BooruBackup {
   BooruBackup({
@@ -68,6 +78,7 @@ class BooruBackup {
     required this.blacklist,
     required this.selectedServerIDs,
     this.folderRules,
+    this.recentImages,
   }) : exportedAt = exportedAt ?? DateTime.now();
 
   String format;
@@ -84,6 +95,9 @@ class BooruBackup {
   /// Optional so backups from before smart folders still read.
   List<FolderRule>? folderRules;
 
+  /// Optional so backups from before recent images still read.
+  List<BooruBackupRecent>? recentImages;
+
   static const maximumBytes = 64 * 1024 * 1024;
 
   factory BooruBackup.fromJson(JsonObject json) => BooruBackup(
@@ -99,20 +113,24 @@ class BooruBackup {
     blacklist: json.dictionary('blacklist', jsonString),
     selectedServerIDs: json.strings('selectedServerIDs'),
     folderRules: json.listOrNull('folderRules', (value) => FolderRule.fromJson(jsonObject(value))),
+    recentImages: json.listOrNull('recentImages', (value) => BooruBackupRecent.fromJson(jsonObject(value))),
   );
 
-  JsonObject toJson() => <String, Object?>{
-    'format': format,
-    'version': version,
-    'exportedAt': swiftReferenceSeconds(exportedAt),
-    'servers': [for (final server in servers) server.toJson()],
-    'folders': [for (final folder in folders) folder.toJson()],
-    'favorites': [for (final favorite in favorites) favorite.toJson()],
-    'history': [for (final search in history) search.toJson()],
-    'savedTags': [for (final tag in savedTags) tag.toJson()],
-    'blacklist': blacklist,
-    'selectedServerIDs': selectedServerIDs,
-  }..putIfPresent('folderRules', folderRules == null ? null : [for (final rule in folderRules!) rule.toJson()]);
+  JsonObject toJson() =>
+      <String, Object?>{
+          'format': format,
+          'version': version,
+          'exportedAt': swiftReferenceSeconds(exportedAt),
+          'servers': [for (final server in servers) server.toJson()],
+          'folders': [for (final folder in folders) folder.toJson()],
+          'favorites': [for (final favorite in favorites) favorite.toJson()],
+          'history': [for (final search in history) search.toJson()],
+          'savedTags': [for (final tag in savedTags) tag.toJson()],
+          'blacklist': blacklist,
+          'selectedServerIDs': selectedServerIDs,
+        }
+        ..putIfPresent('folderRules', folderRules == null ? null : [for (final rule in folderRules!) rule.toJson()])
+        ..putIfPresent('recentImages', recentImages == null ? null : [for (final recent in recentImages!) recent.toJson()]);
 
   static BooruBackup read(File file) {
     if (file.lengthSync() > maximumBytes) throw const BooruError(BooruErrorKind.invalidResponse);
@@ -155,10 +173,10 @@ class BooruBackup {
         }) &&
         serverIDs.containsAll(blacklist.keys) &&
         serverIDs.containsAll(selectedServerIDs) &&
-        (folderRules ?? []).every((rule) => folderIDs.contains(rule.folder) && rule.query.isNotEmpty);
+        (folderRules ?? []).every((rule) => folderIDs.contains(rule.folder) && rule.query.isNotEmpty) &&
+        (recentImages ?? []).every((recent) => serverIDs.contains(recent.post.serverID) && recent.post.postID > 0 && recent.openedAt.isFinite);
     if (!valid) throw const BooruError(BooruErrorKind.invalidResponse);
-    for (final favorite in favorites) {
-      final post = favorite.post;
+    for (final post in [for (final favorite in favorites) favorite.post, for (final recent in recentImages ?? const <BooruBackupRecent>[]) recent.post]) {
       for (final url in [post.previewURL, post.sampleURL, post.fileURL, post.animationVideoURL].nonNulls) {
         if (!isRemoteURL(url, allowCredentials: false)) throw const BooruError(BooruErrorKind.invalidResponse);
       }
@@ -166,6 +184,16 @@ class BooruBackup {
   }
 
   Uint8List encoded() => encodeJson(toJson(), pretty: true);
+
+  /// Recent images placed on this device's servers, matched by address as a restore matches them.
+  List<RecentImage> recentImagesOn(List<BooruServer> current) {
+    final addresses = {for (final server in servers) server.id: server.canonicalAddress};
+    return [
+      for (final recent in recentImages ?? const <BooruBackupRecent>[])
+        if (current.where((server) => server.canonicalAddress == addresses[recent.post.serverID]).firstOrNull case final server?)
+          RecentImage(post: recent.post.onServer(server.id), openedAt: DateTime.fromMillisecondsSinceEpoch((recent.openedAt * 1000).round())),
+    ];
+  }
 }
 
 extension BooruStoreBackup on BooruStore {

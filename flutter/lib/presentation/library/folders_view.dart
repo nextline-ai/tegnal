@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/content/recent_works.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
@@ -11,6 +12,7 @@ import '../design/tegnal_theme.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import '../settings/recent_works_page.dart';
 import '../works/artwork_grid.dart';
 import 'folder_name_prompt.dart';
 import 'library_routes.dart';
@@ -40,10 +42,16 @@ class _FoldersViewState extends State<FoldersView> {
   StreamSubscription<int>? _libraryChanges;
   Timer? _pendingReload;
 
+  /// The app's recent works, which Saved can show as a folder.
+  RecentWorks? get _recents => RecentWorks.shared;
+  bool get _showsRecents => _recents?.showsInSaved ?? false;
+  void _recentsChanged() => setState(() {});
+
   @override
   void initState() {
     super.initState();
     _reload();
+    _recents?.addListener(_recentsChanged);
     widget.routes.changes.addListener(_reload);
     _libraryChanges = _database.changes.listen((_) => _pendingReload ??= Timer(const Duration(milliseconds: 300), _reload));
   }
@@ -52,6 +60,7 @@ class _FoldersViewState extends State<FoldersView> {
   void dispose() {
     _libraryChanges?.cancel();
     _pendingReload?.cancel();
+    _recents?.removeListener(_recentsChanged);
     widget.routes.changes.removeListener(_reload);
     _search.dispose();
     _searchFocus.dispose();
@@ -116,6 +125,19 @@ class _FoldersViewState extends State<FoldersView> {
       ],
     );
   }
+
+  void _openRecents(BuildContext context, RecentWorks recents) => Navigator.of(context).push(
+    CupertinoPageRoute<void>(
+      builder: (_) => RecentWorksPage(recents: recents, open: (context, id) => widget.routes.contentRoutes.openThumbnail(context, id)),
+    ),
+  );
+
+  void _openRecentsMenu(BuildContext cardContext, RecentWorks recents) => showContextMenu(
+    cardContext,
+    anchor: anchorOf(cardContext),
+    child: RecentWorksFolderCard(recents: recents, style: _style(cardContext)),
+    actions: [ContextMenuAction(title: L10n.text('Hide from Saved'), icon: CupertinoIcons.eye_slash, onSelected: () => recents.setShowsInSaved(false))],
+  );
 
   ArtworkCellStyle _style(BuildContext context) {
     final box = context.findRenderObject() as RenderBox?;
@@ -191,7 +213,7 @@ class _FoldersViewState extends State<FoldersView> {
                       ),
                     ),
                   ),
-                  if (_folders.isEmpty)
+                  if (_folders.isEmpty && !_showsRecents)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.only(top: 60),
@@ -204,10 +226,24 @@ class _FoldersViewState extends State<FoldersView> {
                     )
                   else
                     ArtworkGridSliver(
-                      itemCount: _folders.length,
+                      itemCount: _folders.length + (_showsRecents ? 1 : 0),
                       preferences: widget.routes.folderGrid,
                       topMarginScale: 26 / 16,
                       itemBuilder: (context, index, style) {
+                        final recents = _recents;
+                        if (_showsRecents && recents != null) {
+                          if (index == 0) {
+                            return Builder(
+                              builder: (cardContext) => PressableCard(
+                                key: const ValueKey('manga.recentFolder'),
+                                onTap: () => _openRecents(context, recents),
+                                onLongPress: () => _openRecentsMenu(cardContext, recents),
+                                child: RecentWorksFolderCard(recents: recents, style: style),
+                              ),
+                            );
+                          }
+                          index -= 1;
+                        }
                         final folder = _folders[index];
                         return Builder(
                           builder: (cardContext) => PressableCard(
@@ -286,13 +322,114 @@ class FolderBentoCard extends StatelessWidget {
   final List<Work> previews;
   final ArtworkCellStyle style;
 
-  Color get _color => Color(folder.color);
+  @override
+  Widget build(BuildContext context) => FolderBentoFrame(
+    color: folder.color,
+    title: folder.plainName,
+    isSmart: folder.isSmart,
+    count: folder.workCount,
+    style: style,
+    cell: (index, text) {
+      if (index >= previews.length) return FolderBentoFrame.emptyCell(style, text);
+      final work = previews[index];
+      final path = work.thumbStatus == 'ready' ? work.thumbPath : null;
+      final placeholder = FolderBentoFrame.placeholder(style, text, work.galleryId);
+      return FolderBentoFrame.clip(
+        style,
+        path == null ? placeholder : LocalThumbnail(path: path, revision: '${work.thumbPage ?? 1}', placeholder: placeholder),
+      );
+    },
+  );
+}
+
+/// The neutral color the recent folder wears in Saved; it is not a folder the user colors.
+const recentFolderColor = 0xFF636366;
+
+/// Recently opened works as a folder card in Saved, with the latest covers.
+class RecentWorksFolderCard extends StatelessWidget {
+  const RecentWorksFolderCard({super.key, required this.recents, required this.style});
+  final RecentWorks recents;
+  final ArtworkCellStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = recents.entries.take(4).toList();
+    return FolderBentoFrame(
+      color: recentFolderColor,
+      title: L10n.text('Recent Works'),
+      count: recents.entries.length,
+      style: style,
+      cell: (index, text) {
+        if (index >= entries.length) return FolderBentoFrame.emptyCell(style, text);
+        final id = entries[index].id;
+        final cover = recents.cover(id);
+        final placeholder = FolderBentoFrame.placeholder(style, text, id);
+        return FolderBentoFrame.clip(style, cover == null ? placeholder : Image.memory(cover, fit: BoxFit.cover, gaplessPlayback: true));
+      },
+    );
+  }
+}
+
+/// The comics folder card's frame: a 2×2 preview above the caption, on the folder's color.
+class FolderBentoFrame extends StatelessWidget {
+  const FolderBentoFrame({
+    super.key,
+    required this.color,
+    required this.title,
+    this.isSmart = false,
+    required this.count,
+    required this.style,
+    required this.cell,
+  });
+  final int color;
+  final String title;
+  final bool isSmart;
+  final int count;
+  final ArtworkCellStyle style;
+
+  /// The preview at `index`, drawn with the caption's text color.
+  final Widget Function(int index, Color text) cell;
 
   /// White or black text by the background's luminance, as the native card decides.
-  Color get _textColor {
-    final r = ((folder.color >> 16) & 0xFF) / 255, g = ((folder.color >> 8) & 0xFF) / 255, b = (folder.color & 0xFF) / 255;
+  static Color textColor(int color) {
+    final r = ((color >> 16) & 0xFF) / 255, g = ((color >> 8) & 0xFF) / 255, b = (color & 0xFF) / 255;
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.48 ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
   }
+
+  /// An empty slot when there are fewer than four covers.
+  static Widget emptyCell(ArtworkCellStyle style, Color text) => DecoratedBox(
+    decoration: ShapeDecoration(
+      color: text.withValues(alpha: 0.08),
+      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(style.radius(8))),
+    ),
+    child: const SizedBox.expand(),
+  );
+
+  /// A cover not available yet: the work's number on a tinted tile.
+  static Widget placeholder(ArtworkCellStyle style, Color text, int galleryID) => DecoratedBox(
+    decoration: ShapeDecoration(
+      color: text.withValues(alpha: 0.14),
+      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(style.radius(8))),
+    ),
+    child: Center(
+      child: Padding(
+        padding: EdgeInsets.all(style.inset(2)),
+        child: Text(
+          '$galleryID',
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          softWrap: false,
+          style: TegnalType.style(style.fontSize(10), weight: FontWeight.w600, color: text.withValues(alpha: 0.85)),
+          textScaler: TextScaler.noScaling,
+        ),
+      ),
+    ),
+  );
+
+  static Widget clip(ArtworkCellStyle style, Widget child) => ClipRSuperellipse(
+    borderRadius: BorderRadius.circular(style.radius(8)),
+    child: SizedBox.expand(child: child),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -302,13 +439,14 @@ class FolderBentoCard extends StatelessWidget {
       side: style.removesPadding ? BorderSide.none : const BorderSide(color: Color(0x26FFFFFF), width: 0.5),
     );
     final inset = style.inset(4);
+    final text = textColor(color);
     return Semantics(
       button: true,
-      label: '${folder.plainName}${folder.isSmart ? ' ${L10n.text('Smart Folder')}' : ''}, ${folder.workCount}',
+      label: '$title${isSmart ? ' ${L10n.text('Smart Folder')}' : ''}, $count',
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: ShapeDecoration(
-          color: _color,
+          color: Color(color),
           shape: shape,
           shadows: [BoxShadow(color: const Color(0x1A000000), blurRadius: style.inset(8) * 2, offset: Offset(0, style.inset(3)))],
         ),
@@ -328,7 +466,7 @@ class FolderBentoCard extends StatelessWidget {
                         Expanded(
                           child: Row(
                             children: [
-                              for (final index in [row, row + 1]) ...[if (index > row) SizedBox(width: inset), Expanded(child: _thumb(index))],
+                              for (final index in [row, row + 1]) ...[if (index > row) SizedBox(width: inset), Expanded(child: cell(index, text))],
                             ],
                           ),
                         ),
@@ -337,50 +475,10 @@ class FolderBentoCard extends StatelessWidget {
                   ),
                 ),
               ),
-              FolderCardCaption(title: folder.plainName, isSmart: folder.isSmart, count: folder.workCount, color: _textColor, style: style),
+              FolderCardCaption(title: title, isSmart: isSmart, count: count, color: text, style: style),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _thumb(int index) {
-    final radius = BorderRadius.circular(style.radius(8));
-    if (index >= previews.length) {
-      return DecoratedBox(
-        decoration: ShapeDecoration(
-          color: _textColor.withValues(alpha: 0.08),
-          shape: RoundedSuperellipseBorder(borderRadius: radius),
-        ),
-        child: const SizedBox.expand(),
-      );
-    }
-    final work = previews[index];
-    final path = work.thumbStatus == 'ready' ? work.thumbPath : null;
-    final placeholder = DecoratedBox(
-      decoration: ShapeDecoration(
-        color: _textColor.withValues(alpha: 0.14),
-        shape: RoundedSuperellipseBorder(borderRadius: radius),
-      ),
-      child: Center(
-        child: Padding(
-          padding: EdgeInsets.all(style.inset(2)),
-          child: Text(
-            '${work.galleryId}',
-            maxLines: 1,
-            overflow: TextOverflow.clip,
-            softWrap: false,
-            style: TegnalType.style(style.fontSize(10), weight: FontWeight.w600, color: _textColor.withValues(alpha: 0.85)),
-            textScaler: TextScaler.noScaling,
-          ),
-        ),
-      ),
-    );
-    return ClipRSuperellipse(
-      borderRadius: radius,
-      child: SizedBox.expand(
-        child: path == null ? placeholder : LocalThumbnail(path: path, revision: '${work.thumbPage ?? 1}', placeholder: placeholder),
       ),
     );
   }

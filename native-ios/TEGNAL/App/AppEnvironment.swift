@@ -529,7 +529,7 @@ public final class AppEnvironment: @unchecked Sendable {
     @MainActor private func makeSync() -> LibraryCloudSync {
         let value = LibraryCloudSync(defaults: browserPreferences); syncStorage = value; return value
     }
-    func reloadSyncedPreferences() {
+    @MainActor func reloadSyncedPreferences() {
         // Assign only changed values: materializing absent defaults would upload them
         // as fresh edits and overwrite another device's preferences on the next pass.
         let language = browserPreferences.string(forKey: "app.language") ?? "system"
@@ -546,6 +546,8 @@ public final class AppEnvironment: @unchecked Sendable {
         if hiddenMangaGalleryIDs != hidden { hiddenMangaGalleryIDs = hidden }
         let verified = browserPreferences.bool(forKey: "site_verified") && Self.supportsComicsAddress(browserPreferences.string(forKey: "manga.site_address") ?? "")
         if isSiteVerified != verified { isSiteVerified = verified }
+        recentWorksStorage?.reload()
+        recentImagesStorage?.reload()
         let siteAddress = browserPreferences.string(forKey: "manga.site_address") ?? ""
         if mangaSiteAddress != siteAddress { mangaSiteAddress = siteAddress }
     }

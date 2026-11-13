@@ -308,6 +308,7 @@ struct BooruFeedView: View {
     @State private var viewerReturn: ((String?, BooruPost) -> Void)?
     @State private var saveFeedback: WorkSaveFeedback?
     @FocusState private var searchFocused: Bool
+    @State private var confirmingHistoryClear = false
     @SwiftUI.AppStorage("booru.rememberHistory", store: ReaderPreferences.booruDefaults) private var rememberHistory = true
 
     init(server: BooruServer, source: any BooruProviding, initialQuery: String = "", pool: BooruPool? = nil) {
@@ -522,9 +523,12 @@ struct BooruFeedView: View {
     private var searchControls: some View {
         VStack(spacing: 0) {
             ScrollSearchBar(text: $searchText, focused: $searchFocused, prompt: L10n.text("Search tags"), identifier: "booru.search") { submit(searchText) }
-            if searchFocused && (searchText.isEmpty && (!searchHistory.isEmpty || !savedSearches.isEmpty) || !suggestions.isEmpty || suggestionError != nil || suggesting) {
+            if (searchFocused || confirmingHistoryClear) && (searchText.isEmpty && (!searchHistory.isEmpty || !savedSearches.isEmpty) || !suggestions.isEmpty || suggestionError != nil || suggesting) {
                 searchSuggestions.searchResultsPanel(height: searchText.isEmpty ? SearchHistoryPanel.height(availableHeight: searchViewportHeight) : max(60, min(280, CGFloat(suggestions.count) * 47)))
             }
+        }
+        .searchHistoryClearAlert(isPresented: $confirmingHistoryClear) {
+            store.perform { for server in servers { try store.clearHistory(serverID: server.id) } }
         }
     }
     private var effectiveQuery: String { env.booruQuery(query) }
@@ -545,9 +549,7 @@ struct BooruFeedView: View {
                 SearchHistoryPanel(history: searchHistory, saved: savedSearches, open: { searchText = $0; submit($0) }, star: { query in
                     let allSaved = servers.allSatisfy { store.savedTags(serverID: $0.id, kind: "search").contains(query) }
                     store.perform { for server in servers where allSaved || !store.savedTags(serverID: server.id, kind: "search").contains(query) { try store.toggleTag(query, serverID: server.id, kind: "search") } }
-                }, remove: { query in store.perform { for server in servers { try store.deleteSearch(query, serverID: server.id) } } }, clear: {
-                    store.perform { for server in servers { try store.clearHistory(serverID: server.id) } }
-                })
+                }, remove: { query in store.perform { for server in servers { try store.deleteSearch(query, serverID: server.id) } } }, confirmingClear: $confirmingHistoryClear)
 
             } else {
                 ScrollView {

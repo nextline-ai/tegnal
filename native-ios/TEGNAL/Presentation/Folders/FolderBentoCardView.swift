@@ -12,48 +12,10 @@ public struct FolderBentoCardView: View {
         self.onChangeColor = onChangeColor
     }
 
-    private var folderColor: Color {
-        Color(argb: folder.color)
-    }
-
-    /// Determines white or black text depending on background luminance
-    private var textColor: Color {
-        let r = Double((folder.color >> 16) & 0xFF) / 255.0
-        let g = Double((folder.color >> 8) & 0xFF) / 255.0
-        let b = Double(folder.color & 0xFF) / 255.0
-        let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        return luminance > 0.48 ? Color.black : Color.white
-    }
+    private var textColor: Color { FolderBentoFrame<EmptyView>.textColor(folder.color) }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Top: 2x2 thumbnails preview
-            Color.clear.aspectRatio(1.25, contentMode: .fit).overlay {
-                VStack(spacing: style.inset(4)) {
-                    HStack(spacing: style.inset(4)) {
-                        thumbCell(index: 0)
-                        thumbCell(index: 1)
-                    }
-                    HStack(spacing: style.inset(4)) {
-                        thumbCell(index: 2)
-                        thumbCell(index: 3)
-                    }
-                }
-                .padding(style.inset(6))
-                .frame(maxWidth: .infinity)
-            }
-            .clipped()
-
-            // Bottom: Folder title & count
-            FolderCardCaption(title: folder.plainName, isSmart: folder.isSmart, count: folder.workCount, color: textColor)
-        }
-        .background(folderColor)
-        .clipShape(RoundedRectangle(cornerRadius: style.radius(16), style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: style.radius(16), style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5)
-        )
-        .shadow(color: .black.opacity(0.1), radius: style.inset(8), y: style.inset(3))
+        FolderBentoFrame(color: folder.color, title: folder.plainName, isSmart: folder.isSmart, count: folder.workCount) { thumbCell(index: $0) }
     }
 
     @ViewBuilder
@@ -68,15 +30,7 @@ public struct FolderBentoCardView: View {
                             if let image {
                                 Image(uiImage: image).resizable().scaledToFill()
                             } else {
-                                RoundedRectangle(cornerRadius: style.radius(8), style: .continuous)
-                                    .fill(textColor.opacity(0.14))
-                                    .overlay(
-                                        Text(verbatim: String(work.galleryId))
-                                            .font(.system(size: style.fontSize(10), weight: .semibold))
-                                            .foregroundColor(textColor.opacity(0.85))
-                                            .lineLimit(1)
-                                            .padding(style.inset(2))
-                                    )
+                                FolderBentoPlaceholder(galleryID: work.galleryId, color: textColor)
                             }
                         }
                     } else {
@@ -87,6 +41,74 @@ public struct FolderBentoCardView: View {
             )
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: style.radius(8), style: .continuous))
+    }
+}
+
+/// A cover not available yet: the work's number on a tinted tile.
+struct FolderBentoPlaceholder: View {
+    @Environment(\.artworkCellStyle) private var style
+    let galleryID: Int64
+    let color: Color
+    var body: some View {
+        RoundedRectangle(cornerRadius: style.radius(8), style: .continuous)
+            .fill(color.opacity(0.14))
+            .overlay(
+                Text(verbatim: String(galleryID))
+                    .font(.system(size: style.fontSize(10), weight: .semibold))
+                    .foregroundColor(color.opacity(0.85))
+                    .lineLimit(1)
+                    .padding(style.inset(2))
+            )
+    }
+}
+
+/// The comics folder card: a 2×2 preview above the caption, on the folder's color.
+struct FolderBentoFrame<Cell: View>: View {
+    @Environment(\.artworkCellStyle) private var style
+    let color: Int64
+    let title: String
+    var isSmart = false
+    let count: Int
+    @ViewBuilder let cell: (Int) -> Cell
+
+    /// Determines white or black text depending on background luminance
+    static func textColor(_ argb: Int64) -> Color {
+        let r = Double((argb >> 16) & 0xFF) / 255.0
+        let g = Double((argb >> 8) & 0xFF) / 255.0
+        let b = Double(argb & 0xFF) / 255.0
+        let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return luminance > 0.48 ? Color.black : Color.white
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Top: 2x2 thumbnails preview
+            Color.clear.aspectRatio(1.25, contentMode: .fit).overlay {
+                VStack(spacing: style.inset(4)) {
+                    HStack(spacing: style.inset(4)) {
+                        cell(0)
+                        cell(1)
+                    }
+                    HStack(spacing: style.inset(4)) {
+                        cell(2)
+                        cell(3)
+                    }
+                }
+                .padding(style.inset(6))
+                .frame(maxWidth: .infinity)
+            }
+            .clipped()
+
+            // Bottom: Folder title & count
+            FolderCardCaption(title: title, isSmart: isSmart, count: count, color: Self.textColor(color))
+        }
+        .background(Color(argb: color))
+        .clipShape(RoundedRectangle(cornerRadius: style.radius(16), style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: style.radius(16), style: .continuous)
+                .stroke(Color.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5)
+        )
+        .shadow(color: .black.opacity(0.1), radius: style.inset(8), y: style.inset(3))
     }
 }
 

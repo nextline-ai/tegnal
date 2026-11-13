@@ -1,6 +1,7 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/booru/booru_models.dart';
+import '../../core/content/recent_works.dart';
 import '../../core/support/l10n.dart';
 import '../../core/taste/taste_models.dart';
 import '../content/content_bookmark.dart';
@@ -15,10 +16,11 @@ import '../library/folder_color_sheet.dart';
 import '../library/folder_name_prompt.dart';
 import '../library/folder_order_view.dart';
 import '../library/folder_rule_editor.dart';
-import '../library/folders_view.dart' show ContentUnavailable, FolderCardCaption, PressableCard, anchorOf;
+import '../library/folders_view.dart' show ContentUnavailable, FolderCardCaption, PressableCard, anchorOf, recentFolderColor;
 import '../library/library_routes.dart' show showTransientMessage;
 import '../navigation/app_header.dart';
 import '../navigation/root_tab_view.dart';
+import '../settings/recent_works_page.dart';
 import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import 'booru_common.dart';
@@ -38,17 +40,49 @@ class BooruFavoritesView extends StatefulWidget {
 class _BooruFavoritesViewState extends State<BooruFavoritesView> {
   BooruContext get _booru => widget.booru;
 
+  /// The app's recent images, which Saved can show as a folder.
+  RecentImages? get _recents => RecentImages.shared;
+
   @override
   void initState() {
     super.initState();
     _booru.store.addListener(_changed);
+    _recents?.addListener(_changed);
   }
 
   @override
   void dispose() {
     _booru.store.removeListener(_changed);
+    _recents?.removeListener(_changed);
     super.dispose();
   }
+
+  List<BooruPost> _recentPosts(RecentImages recents) => [
+    for (final entry in recents.entries)
+      if (_booru.store.isShownInSafeMode(entry.post)) entry.post,
+  ];
+
+  void _openRecents(RecentImages recents) => Navigator.of(context).push(
+    CupertinoPageRoute<void>(
+      builder: (context) => RecentImagesPage(
+        recents: recents,
+        store: _booru.store,
+        thumbnail: (post, server) => BooruThumbnail(post: post, server: server, booru: _booru),
+        open: (context, post, posts) => BooruPostView.open(context, booru: _booru, post: post, posts: posts, discovery: DiscoveryContext.unknown),
+      ),
+    ),
+  );
+
+  void _openRecentsMenu(BuildContext cardContext, RecentImages recents) => showContextMenu(
+    cardContext,
+    anchor: anchorOf(cardContext),
+    child: BooruFolderCard.recent(
+      booru: _booru,
+      posts: _recentPosts(recents),
+      style: ArtworkCellStyle(width: anchorOf(cardContext).width),
+    ),
+    actions: [ContextMenuAction(title: L10n.text('Hide from Saved'), icon: CupertinoIcons.eye_slash, onSelected: () => recents.setShowsInSaved(false))],
+  );
 
   void _changed() {
     if (mounted) setState(() {});
@@ -159,6 +193,7 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
     final top = rootContentTop(context);
     final folders = _booru.store.folders();
     final count = _booru.store.visibleFavorites().length;
+    final recents = _recents?.showsInSaved ?? false ? _recents : null;
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
       child: Stack(
@@ -173,9 +208,22 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
                   ),
                 ),
                 ArtworkGridSliver(
-                  itemCount: folders.length,
+                  itemCount: folders.length + (recents != null ? 1 : 0),
                   preferences: ArtworkGridPreferences(columns: _booru.folderColumns, removesPadding: _booru.gridPreferences.removesPadding),
                   itemBuilder: (context, index, style) {
+                    if (recents != null) {
+                      if (index == 0) {
+                        return Builder(
+                          builder: (cardContext) => PressableCard(
+                            key: const ValueKey('booru.recentFolder'),
+                            onTap: () => _openRecents(recents),
+                            onLongPress: () => _openRecentsMenu(cardContext, recents),
+                            child: BooruFolderCard.recent(booru: _booru, posts: _recentPosts(recents), style: style),
+                          ),
+                        );
+                      }
+                      index -= 1;
+                    }
                     final folder = folders[index];
                     return Builder(
                       builder: (cardContext) => PressableCard(
@@ -263,9 +311,21 @@ class _AllFavoritesRow extends StatelessWidget {
 
 /// `BooruFolderCard`: the folder's color with four favorites on white cells and its caption.
 class BooruFolderCard extends StatelessWidget {
-  const BooruFolderCard({super.key, required this.booru, required this.folder, required this.posts, required this.style});
+  BooruFolderCard({super.key, required this.booru, required BooruFolder folder, required this.posts, required this.style})
+    : title = folder.plainName,
+      isSmart = folder.isSmart,
+      color = folder.color;
+
+  /// Recently opened images as a folder card in Saved.
+  BooruFolderCard.recent({super.key, required this.booru, required this.posts, required this.style})
+    : title = L10n.text('Recent Images'),
+      isSmart = false,
+      color = recentFolderColor;
+
   final BooruContext booru;
-  final BooruFolder folder;
+  final String title;
+  final bool isSmart;
+  final int color;
   final List<BooruPost> posts;
   final ArtworkCellStyle style;
 
@@ -276,11 +336,11 @@ class BooruFolderCard extends StatelessWidget {
     final inset = style.inset(4);
     return Semantics(
       button: true,
-      label: '${folder.plainName}${folder.isSmart ? ' ${L10n.text('Smart Folder')}' : ''}, ${posts.length}',
+      label: '$title${isSmart ? ' ${L10n.text('Smart Folder')}' : ''}, ${posts.length}',
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: ShapeDecoration(
-          color: Color(folder.color),
+          color: Color(color),
           shape: RoundedSuperellipseBorder(
             borderRadius: radius,
             side: style.removesPadding ? BorderSide.none : const BorderSide(color: Color(0x26FFFFFF), width: 0.5),
@@ -311,7 +371,7 @@ class BooruFolderCard extends StatelessWidget {
                   ),
                 ),
               ),
-              FolderCardCaption(title: folder.plainName, isSmart: folder.isSmart, count: posts.length, color: white, style: style),
+              FolderCardCaption(title: title, isSmart: isSmart, count: posts.length, color: white, style: style),
             ],
           ),
         ),

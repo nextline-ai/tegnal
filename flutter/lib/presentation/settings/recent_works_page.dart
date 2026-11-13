@@ -14,8 +14,8 @@ import '../works/search_controls.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
 
-/// The rows Search History settings gain: the list of recently opened works or images, and a
-/// slider for how many to keep.
+/// The rows Search History settings gain: the list of recently opened works or images, whether
+/// Saved shows it as a folder, and a slider for how many to keep.
 abstract final class RecentWorksSettingsRows {
   static List<Widget> comics(BuildContext context, {required RecentWorks recents, required void Function(BuildContext context, int id) open}) => [
     ListenableBuilder(
@@ -29,6 +29,10 @@ abstract final class RecentWorksSettingsRows {
           ),
         ),
       ),
+    ),
+    ListenableBuilder(
+      listenable: recents,
+      builder: (context, _) => SettingsToggleRow(title: L10n.text('Show as Folder in Saved'), value: recents.showsInSaved, onChanged: recents.setShowsInSaved),
     ),
     _LimitRow(title: L10n.text('Keep Recent Works'), unit: '%@ works', limit: () => recents.limit, setLimit: recents.setLimit),
   ];
@@ -51,6 +55,10 @@ abstract final class RecentWorksSettingsRows {
           ),
         ),
       ),
+    ),
+    ListenableBuilder(
+      listenable: recents,
+      builder: (context, _) => SettingsToggleRow(title: L10n.text('Show as Folder in Saved'), value: recents.showsInSaved, onChanged: recents.setShowsInSaved),
     ),
     _LimitRow(title: L10n.text('Keep Recent Images'), unit: '%@ items', limit: () => recents.limit, setLimit: recents.setLimit),
   ];

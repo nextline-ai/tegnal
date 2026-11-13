@@ -35,9 +35,19 @@ struct BooruFavoritesView: View {
                     }.padding(18).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
                 }.accessibilityIdentifier("booru.allFavorites").padding(.bottom, geometry.spacing)
                 ArtworkGrid(mode: .booru, kind: .folders, surroundingPadding: 16) { _ in
+                    if env.recentImages.showsInSaved {
+                        let recents = env.recentImages.entries.filter { env.booru.isShownInSafeMode($0.post) }
+                        NavigationLink { RecentImagesView() } label: {
+                            BooruFolderCard(title: L10n.text("Recent Images"), color: RecentFolderStyle.color, posts: Array(recents.prefix(4).map(\.post)), count: recents.count)
+                                .contextMenu {
+                                    Button(L10n.text("Hide from Saved"), systemImage: "eye.slash") { env.recentImages.setShowsInSaved(false) }
+                                }
+                        }.buttonStyle(.plain).accessibilityIdentifier("booru.recentFolder")
+                    }
                     ForEach(store.folders()) { folder in
                         NavigationLink { BooruFolderContentsView(source: source, folderID: folder.id) } label: {
-                            BooruFolderCard(folder: folder, posts: store.visibleFavorites(folderID: folder.id))
+                            let posts = store.visibleFavorites(folderID: folder.id)
+                            BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: folder.color, posts: posts, count: posts.count)
                         }.buttonStyle(.plain).accessibilityIdentifier("booru.folder.\(folder.id)")
                             .contextMenu {
                                 Button(L10n.text("Change Color"), systemImage: "paintpalette") { editing = .init(folder: folder) }
@@ -90,8 +100,11 @@ struct BooruFavoritesView: View {
 
 private struct BooruFolderCard: View {
     @Environment(\.artworkCellStyle) private var style
-    let folder: BooruFolder
+    let title: String
+    var isSmart = false
+    let color: Int64
     let posts: [BooruPost]
+    let count: Int
     @Environment(BooruStore.self) private var store
     var body: some View {
         VStack(spacing: 0) {
@@ -111,8 +124,8 @@ private struct BooruFolderCard: View {
                     }
                 }.padding(style.inset(6))
             }.clipped()
-            FolderCardCaption(title: folder.plainName, isSmart: folder.isSmart, count: posts.count, color: .white)
-        }.foregroundStyle(.white).background(Color(argb: folder.color))
+            FolderCardCaption(title: title, isSmart: isSmart, count: count, color: .white)
+        }.foregroundStyle(.white).background(Color(argb: color))
             .clipShape(RoundedRectangle(cornerRadius: style.radius(16))).overlay(RoundedRectangle(cornerRadius: style.radius(16)).stroke(.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5))
     }
 }
