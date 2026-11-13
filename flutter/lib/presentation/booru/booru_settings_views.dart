@@ -35,8 +35,6 @@ import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
 import '../../core/content/recent_works.dart';
 import '../settings/recent_works_page.dart';
-import 'booru_post_view.dart';
-import '../../core/taste/taste_models.dart';
 import '../../core/support/app_platform.dart';
 
 /// What the More tab shares with comics Settings.
@@ -350,15 +348,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       selected: viewer.integerOrNull('search.retentionDays') ?? 0,
                       onSelected: (value) => _setViewer('search.retentionDays', value),
                     ),
-                    if (RecentImages.shared case final recents?)
-                      ...RecentWorksSettingsRows.images(
-                        context,
-                        recents: recents,
-                        store: _booru.store,
-                        thumbnail: (post, server) => BooruThumbnail(post: post, server: server, booru: _booru),
-                        open: (context, post, posts) =>
-                            BooruPostView.open(context, booru: _booru, post: post, posts: posts, discovery: DiscoveryContext.unknown),
-                      ),
+                    if (RecentImages.shared case final recents?) ...RecentWorksSettingsRows.images(context, recents: recents, booru: _booru),
                   ],
                 ),
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
@@ -1263,7 +1253,9 @@ class _BooruFolderRulesPageState extends State<BooruFolderRulesPage> {
       children: [
         FormSection(
           rowColor: row,
-          footer: Text(L10n.text('Hold a folder to make it a smart folder. Smart folders show %@ after their name.', ['✦'])),
+          footer: Text(
+            L10n.text('A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name.', ['✦']),
+          ),
           children: [
             SettingsToggleRow(
               title: L10n.text('Use Smart Folders'),
@@ -1296,6 +1288,7 @@ class _BooruFolderRulesPageState extends State<BooruFolderRulesPage> {
                         Text(names[rule.folder] ?? '', style: TegnalType.style(12, color: secondary)),
                       ],
                     ),
+                    SmartFolderSummaryRow(rule: rule, booru: true, names: names, defaultSources: store.defaultRuleSources()),
                     if (!rule.isActive) Text(L10n.text('Off'), style: TegnalType.style(12, color: secondary)),
                   ],
                 ),

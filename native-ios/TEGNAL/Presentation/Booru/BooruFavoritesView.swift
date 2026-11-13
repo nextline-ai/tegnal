@@ -133,6 +133,9 @@ private struct BooruFolderCard: View {
 struct BooruFolderContentsView: View {
     let source: any BooruProviding
     var folderID: String?
+    /// Recently opened images, shown the way a folder shows its favorites.
+    var recents = false
+    @Environment(AppEnvironment.self) private var env
     @Environment(BooruStore.self) private var store
     @State private var query = ""
     @State private var selectedPost: BooruPost?
@@ -146,13 +149,21 @@ struct BooruFolderContentsView: View {
     @State private var isSearchBarVisible = true
     @State private var searchScroll = ScrollSearchVisibility()
     @FocusState private var searchFocused: Bool
-    private var posts: [BooruPost] { store.visibleFavorites(folderID: folderID, query: query) }
+    private var posts: [BooruPost] {
+        guard recents else { return store.visibleFavorites(folderID: folderID, query: query) }
+        let servers = Set(store.servers.map(\.id))
+        return env.recentImages.entries.map(\.post).filter { servers.contains($0.serverID) && BooruStore.matches($0, query: query) && store.isShownInSafeMode($0) }
+    }
     var body: some View {
         ScrollViewReader { proxy in
         ZStack(alignment: .top) {
             ScrollView {
                 Group {
-                    if posts.isEmpty {
+                    if recents && env.recentImages.entries.isEmpty {
+                        ContentUnavailableView(L10n.text("No Recent Images"), systemImage: "clock", description: Text(L10n.text("Images you open in the viewer appear here."))).padding(.top, 48)
+                    } else if recents && posts.isEmpty {
+                        ContentUnavailableView.search(text: query).padding(.top, 48)
+                    } else if posts.isEmpty {
                         ContentUnavailableView(L10n.text("No Favorites"), systemImage: "heart", description: Text(L10n.text("Hold an image to save it, or choose Save to Folder from its menu."))).padding(.top, 48)
                     } else { BooruPostGrid(posts: posts, selection: selecting ? $selection : nil, feedback: { saveFeedback = $0 }) { viewerPosition = $0; selectedPost = $0 } }
                 }.padding(.top, 56)
@@ -161,40 +172,48 @@ struct BooruFolderContentsView: View {
             .trackScrollGeometry { oldY, newY in
                 if let visible = searchScroll.update(oldY: oldY, newY: newY, focused: searchFocused) { isSearchBarVisible = visible }
             }
-            ScrollSearchBar(text: $query, focused: $searchFocused, prompt: L10n.text("Search Favorites"), identifier: "booru.favoritesSearch")
+            ScrollSearchBar(text: $query, focused: $searchFocused, prompt: L10n.text(recents ? "Search tags" : "Search Favorites"), identifier: "booru.favoritesSearch")
                 .offset(y: isSearchBarVisible ? 0 : -60).opacity(isSearchBarVisible ? 1 : 0)
                 .allowsHitTesting(isSearchBarVisible).accessibilityHidden(!isSearchBarVisible)
         }
         .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
         .onChange(of: searchFocused) { _, focused in if focused { isSearchBarVisible = true } }
         .workSaveFeedback($saveFeedback, identifier: "booru.saveStatus")
-        .navigationTitle(store.folders().first(where: { $0.id == folderID })?.displayName ?? L10n.text("All Favorites"))
+        .navigationTitle(recents ? L10n.text("Recently Opened Images") : store.folders().first(where: { $0.id == folderID })?.displayName ?? L10n.text("All Favorites"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             HStack(spacing: 2) {
                 BooruServerMenu()
                 if selecting {
                     Button { selection = Set(posts.map(\.id)) } label: { Image(systemName: "checkmark.circle.fill") }.accessibilityLabel(L10n.text("Select All"))
-                    Menu {
-                        ForEach(store.folders()) { folder in
-                            Button(folder.displayName) { store.perform { try store.moveFavorites(posts.filter { selection.contains($0.id) }, folderID: folder.id); selection.removeAll(); selecting = false } }
-                        }
-                    } label: { Image(systemName: "folder") }.disabled(selection.isEmpty).accessibilityLabel(L10n.text("Move to Another Folder"))
+                    if !recents {
+                        Menu {
+                            ForEach(store.folders()) { folder in
+                                Button(folder.displayName) { store.perform { try store.moveFavorites(posts.filter { selection.contains($0.id) }, folderID: folder.id); selection.removeAll(); selecting = false } }
+                            }
+                        } label: { Image(systemName: "folder") }.disabled(selection.isEmpty).accessibilityLabel(L10n.text("Move to Another Folder"))
+                    }
                     Button(role: .destructive) { confirmingDelete = true } label: { Image(systemName: "trash") }.disabled(selection.isEmpty).accessibilityLabel(L10n.text("Delete")).accessibilityIdentifier("booru.deleteSelected")
                 } else {
                     Menu {
                         Button(L10n.text("Jump to Top"), systemImage: "arrow.up.to.line") { if let first = posts.first { proxy.scrollTo(first.id, anchor: .top) } }
                         Button(L10n.text("Jump to Bottom"), systemImage: "arrow.down.to.line") { if let last = posts.last { proxy.scrollTo(last.id, anchor: .bottom) } }
-                        Button(L10n.text("Jump to Saved Month"), systemImage: "calendar") { showJump = true }
-                    } label: { Image(systemName: "arrow.up.arrow.down") }.accessibilityLabel(L10n.text("Quick Jump"))
+                        if !recents { Button(L10n.text("Jump to Saved Month"), systemImage: "calendar") { showJump = true } }
+                    } label: { Image(systemName: "arrow.up.arrow.down") }.disabled(posts.isEmpty).accessibilityLabel(L10n.text("Quick Jump"))
                 }
                 Button { selecting.toggle(); selection.removeAll() } label: { Image(systemName: selecting ? "xmark" : "checkmark.circle") }
                     .accessibilityLabel(L10n.text(selecting ? "Done" : "Select")).accessibilityIdentifier("booru.select")
             }
         } }
         .alert(L10n.text("Delete Selected Items?"), isPresented: $confirmingDelete) {
-            Button(L10n.text("Delete"), role: .destructive) { store.perform { try store.removeFavorites(posts.filter { selection.contains($0.id) }); selection.removeAll(); selecting = false } }
+            Button(L10n.text("Delete"), role: .destructive) {
+                if recents { for id in selection { env.recentImages.remove(id) } }
+                else { store.perform { try store.removeFavorites(posts.filter { selection.contains($0.id) }) } }
+                selection.removeAll(); selecting = false
+            }
             Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: {
+            if recents { Text(L10n.text("They leave Recently Opened Images. Favorites stay saved.")) }
         }
         .appSheet(isPresented: $showJump, onDismiss: { if let pendingJump { proxy.scrollTo(pendingJump, anchor: .top); self.pendingJump = nil } }) {
             NavigationStack {

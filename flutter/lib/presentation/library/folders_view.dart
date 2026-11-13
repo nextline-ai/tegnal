@@ -128,7 +128,7 @@ class _FoldersViewState extends State<FoldersView> {
 
   void _openRecents(BuildContext context, RecentWorks recents) => Navigator.of(context).push(
     CupertinoPageRoute<void>(
-      builder: (_) => RecentWorksPage(recents: recents, open: (context, id) => widget.routes.contentRoutes.openThumbnail(context, id)),
+      builder: (_) => RecentWorksPage(recents: recents, routes: widget.routes),
     ),
   );
 

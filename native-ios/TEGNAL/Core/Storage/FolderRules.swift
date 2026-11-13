@@ -14,8 +14,13 @@ struct FolderRule: Identifiable, Codable, Hashable, Sendable {
     var sources: [String]?
     /// Reads every folder, including ones made later.
     var includesOtherFolders: Bool?
+    /// Comics only: a matching work also stays in the folder it came from. Rules saved before
+    /// this choice existed copied, so absent reads as true; the editor always writes it.
+    /// Images are in one folder at a time and always move.
+    var keepsOriginal: Bool?
     var id: String { folder }
     var isActive: Bool { isEnabled != false }
+    var copies: Bool { keepsOriginal ?? true }
     var workQuery: WorkQuery { WorkQuery(query, excluding: excluded) }
 
     /// The mark stays with the name, so every list of folders shows it.
@@ -44,6 +49,8 @@ protocol SmartFolderLibrary {
     func rule(forFolder id: String) throws -> FolderRule?
     func smartRules() throws -> [FolderRule]
     func matchingCount(_ rule: FolderRule) throws -> Int
+    /// Saved works that match the tags but sit in folders the rule does not look in.
+    func matchingCountElsewhere(_ rule: FolderRule) throws -> Int
     func createRuleFolder(named name: String) throws -> String
     func saveRule(_ rule: FolderRule) throws
     func deleteRule(forFolder id: String) throws
@@ -132,12 +139,22 @@ extension AppDatabase {
     private static func sourceCondition(_ rule: FolderRule, db: Database) throws -> String? {
         if rule.includesOtherFolders == true { return nil }
         func list(_ ids: [Int64]) -> String { ids.map(String.init).joined(separator: ",") }
-        guard let sources = rule.sources else {
+        guard rule.sources != nil else {
             return "NOT EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id NOT IN (\(list(try landingFolderIDs(db)))))"
         }
-        let marks = sources.map { _ in "?" }.joined(separator: ",")
-        let ids = try Int64.fetchAll(db, sql: "SELECT id FROM folders WHERE sync_id IN (\(marks))", arguments: StatementArguments(sources))
-        return "EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id IN (\(list(ids))))"
+        return "EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id IN (\(list(try sourceFolderIDs(rule, db: db)))))"
+    }
+
+    /// The folders a rule looks in, never its own: where a moving rule takes works from.
+    private static func sourceFolderIDs(_ rule: FolderRule, db: Database) throws -> [Int64] {
+        let own = try folderID(ofRule: rule, db: db)
+        let ids: [Int64]
+        if rule.includesOtherFolders == true { ids = try Int64.fetchAll(db, sql: "SELECT id FROM folders") }
+        else if let sources = rule.sources {
+            let marks = sources.map { _ in "?" }.joined(separator: ",")
+            ids = sources.isEmpty ? [] : try Int64.fetchAll(db, sql: "SELECT id FROM folders WHERE sync_id IN (\(marks))", arguments: StatementArguments(sources))
+        } else { ids = try landingFolderIDs(db) }
+        return ids.filter { $0 != own }
     }
 
     private static func matching(_ rule: FolderRule, db: Database) throws -> (sql: String, arguments: [DatabaseValueConvertible]) {
@@ -153,14 +170,36 @@ extension AppDatabase {
         }
     }
 
-    /// Adds saved works to a folder. Works keep their other folders, apart from Unfiled.
+    func matchingWorkCountElsewhere(_ rule: FolderRule) throws -> Int {
+        guard !rule.workQuery.isEmpty, rule.includesOtherFolders != true else { return 0 }
+        return try dbWriter.read { db in
+            let (conditions, arguments) = rule.workQuery.conditions
+            guard let source = try Self.sourceCondition(rule, db: db) else { return 0 }
+            let own = try Self.folderID(ofRule: rule, db: db) ?? -1
+            let sql = "SELECT COUNT(*) FROM works w WHERE \(conditions) AND NOT (\(source)) AND NOT EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id = ?)"
+            return try Int.fetchOne(db, sql: sql, arguments: StatementArguments(arguments + [own])) ?? 0
+        }
+    }
+
+    /// Files saved works in a folder. A copying rule leaves them where they were too; a moving
+    /// rule takes them out of the folders it looked in. Either way they leave Unfiled.
     func addMatchingWorks(_ rule: FolderRule, toFolder folderID: Int64) throws {
         guard !rule.workQuery.isEmpty else { return }
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
             let (conditions, arguments) = try Self.matching(rule, db: db)
-            let values: [DatabaseValueConvertible] = [folderID, now] + arguments
-            try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) SELECT ?, w.id, ? FROM works w WHERE \(conditions)", arguments: StatementArguments(values))
+            let matched = try Int64.fetchAll(db, sql: "SELECT w.id FROM works w WHERE \(conditions)", arguments: StatementArguments(arguments))
+            for workID in matched {
+                try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
+            }
+            if !rule.copies {
+                let sources = try Self.sourceFolderIDs(rule, db: db).filter { $0 != folderID }
+                if !sources.isEmpty {
+                    for workID in matched {
+                        try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ? AND folder_id IN (\(sources.map(String.init).joined(separator: ",")))", arguments: [workID])
+                    }
+                }
+            }
             try Self.leaveUnfiled(whenIn: folderID, db: db)
         }
     }
@@ -172,20 +211,32 @@ extension AppDatabase {
 
     /// Runs once for a new save and once when its tags first arrive, so a work a person
     /// moves stays where they put it, whether or not it fits the folder's tags.
+    /// Every copying rule that matches adds the work; the first moving rule in folder order
+    /// takes it out of where it was, and later moving rules leave it alone.
     static func applyFolderRules(toWork workID: Int64, now: String, db: Database) throws {
         guard LibrarySavePreferences.rulesEnabled else { return }
+        let order = try String.fetchAll(db, sql: "SELECT sync_id FROM folders WHERE sync_id IS NOT NULL ORDER BY sort_order, id")
         // Read once, or the first match would hide the work from every later rule.
         let rules = try fetchFolderRules(db).filter { rule in
             guard rule.isActive, !rule.workQuery.isEmpty else { return false }
             guard let source = try sourceCondition(rule, db: db) else { return true }
             return try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM works w WHERE w.id = ? AND \(source))", arguments: [workID]) == true
-        }
-        for rule in rules {
+        }.sorted { (order.firstIndex(of: $0.folder) ?? .max) < (order.firstIndex(of: $1.folder) ?? .max) }
+        let before = Set(try Int64.fetchAll(db, sql: "SELECT folder_id FROM folder_works WHERE work_id = ?", arguments: [workID]))
+        var moved = false
+        for rule in rules where rule.copies || !moved {
             guard let folderID = try folderID(ofRule: rule, db: db) else { continue }
             let (conditions, arguments) = rule.workQuery.conditions
             let values: [DatabaseValueConvertible] = [workID] + arguments
             guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM works w WHERE w.id = ? AND \(conditions))", arguments: StatementArguments(values)) == true else { continue }
             try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
+            if !rule.copies {
+                moved = true
+                // Only folders it was in before, so a copy another smart folder just made stays.
+                for source in try sourceFolderIDs(rule, db: db) where source != folderID && before.contains(source) {
+                    try db.execute(sql: "DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?", arguments: [source, workID])
+                }
+            }
             guard let unfiled = try Int64.fetchOne(db, sql: "SELECT id FROM folders WHERE name = '미분류' ORDER BY sort_order ASC, id ASC LIMIT 1"), unfiled != folderID else { continue }
             try db.execute(sql: "DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?", arguments: [unfiled, workID])
         }
@@ -244,6 +295,7 @@ extension AppDatabase: SmartFolderLibrary {
 
     func smartRules() throws -> [FolderRule] { try folderRules().map(\.rule) }
     func matchingCount(_ rule: FolderRule) throws -> Int { try matchingWorkCount(rule) }
+    func matchingCountElsewhere(_ rule: FolderRule) throws -> Int { try matchingWorkCountElsewhere(rule) }
 
     func createRuleFolder(named name: String) throws -> String {
         guard let id = try createFolder(name: name).id else { throw BooruError.storage }
@@ -316,6 +368,10 @@ extension BooruStore: SmartFolderLibrary {
     }
 
     func matchingCount(_ rule: FolderRule) throws -> Int { matches(rule).count }
+    func matchingCountElsewhere(_ rule: FolderRule) throws -> Int {
+        let matcher = rule.postMatcher
+        return favoriteRecords().filter { $0.folderID != rule.folder && !Self.rule(rule, reads: $0.folderID) && matcher($0.post) }.count
+    }
     func createRuleFolder(named name: String) throws -> String { try saveFolder(name: name) }
 
     func saveRule(_ rule: FolderRule) throws {

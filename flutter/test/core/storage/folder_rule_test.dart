@@ -58,17 +58,25 @@ void main() {
     return database.folderIDs(id).map((folder) => folders.where((value) => value.id == folder).firstOrNull?.name).nonNulls.toSet();
   }
 
-  void saveFolderRule(int folderID, {required String query, required String excluded, bool? includesOtherFolders, List<String>? sources, bool? isEnabled}) =>
-      database.saveRule(
-        FolderRule(
-          folder: database.identityOfFolder(folderID),
-          query: query,
-          excluded: excluded,
-          isEnabled: isEnabled,
-          sources: sources,
-          includesOtherFolders: includesOtherFolders,
-        ),
-      );
+  void saveFolderRule(
+    int folderID, {
+    required String query,
+    required String excluded,
+    bool? includesOtherFolders,
+    List<String>? sources,
+    bool? isEnabled,
+    bool? keepsOriginal,
+  }) => database.saveRule(
+    FolderRule(
+      folder: database.identityOfFolder(folderID),
+      query: query,
+      excluded: excluded,
+      isEnabled: isEnabled,
+      sources: sources,
+      includesOtherFolders: includesOtherFolders,
+      keepsOriginal: keepsOriginal,
+    ),
+  );
 
   Folder unfiled() => database.listFolders().firstWhere((folder) => folder.name == '미분류');
 
@@ -163,6 +171,67 @@ void main() {
     database.addMatchingWorks(rule('language:korean'), korean.id!);
     expect(folderNames(1), {'Inbox', 'Korean'});
     expect(folderNames(2), {'Inbox', 'Kept'}, reason: 'A work also placed in another folder was already sorted');
+  });
+
+  test('moving rule takes a new save out of the default save folder', () {
+    final inbox = database.createFolder(name: 'Inbox');
+    setDefaultFolder(inbox);
+    final korean = database.createFolder(name: 'Korean');
+    saveFolderRule(korean.id!, query: 'language:korean', excluded: '', keepsOriginal: false);
+    save(1);
+    expect(folderNames(1), {'Korean'}, reason: 'A moving rule leaves no copy in the folder the work landed in');
+    save(2, language: 'japanese');
+    expect(folderNames(2), {'Inbox'});
+  });
+
+  test('copying rule keeps a new save where it landed', () {
+    final inbox = database.createFolder(name: 'Inbox');
+    setDefaultFolder(inbox);
+    final korean = database.createFolder(name: 'Korean');
+    saveFolderRule(korean.id!, query: 'language:korean', excluded: '', keepsOriginal: true);
+    save(1);
+    expect(folderNames(1), {'Inbox', 'Korean'});
+    expect(
+      FolderRule(folder: '', query: 'x').copies,
+      isTrue,
+      reason: 'Rules saved before the choice keep copying',
+    );
+  });
+
+  test('first moving rule in folder order takes the work and copies still apply', () {
+    final korean = database.createFolder(name: 'Korean'), color = database.createFolder(name: 'Color'), all = database.createFolder(name: 'Everything');
+    saveFolderRule(color.id!, query: 'tag:full_color', excluded: '', keepsOriginal: false);
+    saveFolderRule(korean.id!, query: 'language:korean', excluded: '', keepsOriginal: false);
+    saveFolderRule(all.id!, query: 'language:korean', excluded: '', keepsOriginal: true);
+    save(1);
+    expect(folderNames(1), {'Korean', 'Everything'}, reason: 'Korean comes before Color in folder order; a copying rule adds too');
+  });
+
+  test('filling with a moving rule takes works out of the folders it looks in', () {
+    final favorites = database.createFolder(name: 'Favorites'), kept = database.createFolder(name: 'Kept');
+    save(1);
+    database.addWork(1, favorites.id!);
+    save(2);
+    database.addWork(2, kept.id!);
+    save(3);
+    final korean = database.createFolder(name: 'Korean');
+    final moving = FolderRule(
+      folder: database.identityOfFolder(korean.id!),
+      query: 'language:korean',
+      sources: [database.identityOfFolder(favorites.id!)],
+      keepsOriginal: false,
+    );
+    expect(database.matchingWorkCount(moving), 1);
+    expect(database.matchingWorkCountElsewhere(moving), 2, reason: 'Kept and Unfiled match but are not looked in');
+    database.addMatchingWorks(moving, korean.id!);
+    expect(folderNames(1), {'Korean'});
+    expect(folderNames(2), {'Kept'});
+    expect(folderNames(3), {'미분류'});
+    moving.includesOtherFolders = true;
+    expect(database.matchingWorkCountElsewhere(moving), 0);
+    database.addMatchingWorks(moving, korean.id!);
+    expect(folderNames(2), {'Korean'});
+    expect(folderNames(3), {'Korean'});
   });
 
   test('every rule sees a work arriving in unfiled', () {

@@ -1,6 +1,7 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/booru/booru_models.dart';
+import '../../core/booru/booru_store.dart';
 import '../../core/content/recent_works.dart';
 import '../../core/support/l10n.dart';
 import '../../core/taste/taste_models.dart';
@@ -20,7 +21,6 @@ import '../library/folders_view.dart' show ContentUnavailable, FolderCardCaption
 import '../library/library_routes.dart' show showTransientMessage;
 import '../navigation/app_header.dart';
 import '../navigation/root_tab_view.dart';
-import '../settings/recent_works_page.dart';
 import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import 'booru_common.dart';
@@ -62,16 +62,8 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
       if (_booru.store.isShownInSafeMode(entry.post)) entry.post,
   ];
 
-  void _openRecents(RecentImages recents) => Navigator.of(context).push(
-    CupertinoPageRoute<void>(
-      builder: (context) => RecentImagesPage(
-        recents: recents,
-        store: _booru.store,
-        thumbnail: (post, server) => BooruThumbnail(post: post, server: server, booru: _booru),
-        open: (context, post, posts) => BooruPostView.open(context, booru: _booru, post: post, posts: posts, discovery: DiscoveryContext.unknown),
-      ),
-    ),
-  );
+  void _openRecents(RecentImages recents) =>
+      Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => BooruFolderContentsView(booru: _booru, recents: true)));
 
   void _openRecentsMenu(BuildContext cardContext, RecentImages recents) => showContextMenu(
     cardContext,
@@ -398,9 +390,12 @@ class BooruFolderCard extends StatelessWidget {
 /// `BooruFolderContentsView`: a folder's favorites, or all of them, with search,
 /// selection to move or delete, and quick jumps.
 class BooruFolderContentsView extends StatefulWidget {
-  const BooruFolderContentsView({super.key, required this.booru, this.folderID});
+  const BooruFolderContentsView({super.key, required this.booru, this.folderID, this.recents = false});
   final BooruContext booru;
   final String? folderID;
+
+  /// Recently opened images, shown the way a folder shows its favorites.
+  final bool recents;
 
   @override
   State<BooruFolderContentsView> createState() => _BooruFolderContentsViewState();
@@ -418,12 +413,22 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
   Set<String> _selection = {};
 
   BooruContext get _booru => widget.booru;
-  List<BooruPost> get _posts => _booru.store.visibleFavorites(folderID: widget.folderID, query: _search.text);
+  RecentImages? get _recents => widget.recents ? RecentImages.shared : null;
+  List<BooruPost> get _posts {
+    final recents = _recents;
+    if (!widget.recents) return _booru.store.visibleFavorites(folderID: widget.folderID, query: _search.text);
+    final servers = {for (final server in _booru.store.servers) server.id};
+    return [
+      for (final entry in recents?.entries ?? const <RecentImage>[])
+        if (servers.contains(entry.post.serverID) && BooruStore.matches(entry.post, _search.text) && _booru.store.isShownInSafeMode(entry.post)) entry.post,
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
     _booru.store.addListener(_changed);
+    _recents?.addListener(_changed);
     _search.addListener(_changed);
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) setState(() => _searchVisible = true);
@@ -438,6 +443,7 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
   @override
   void dispose() {
     _booru.store.removeListener(_changed);
+    _recents?.removeListener(_changed);
     _search.dispose();
     _searchFocus.dispose();
     _scroll.dispose();
@@ -477,7 +483,7 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
           icon: CupertinoIcons.arrow_down_to_line,
           onSelected: () => _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut),
         ),
-        ContextMenuAction(title: L10n.text('Jump to Saved Month'), icon: CupertinoIcons.calendar, onSelected: _showMonths),
+        if (!widget.recents) ContextMenuAction(title: L10n.text('Jump to Saved Month'), icon: CupertinoIcons.calendar, onSelected: _showMonths),
       ],
     );
   }
@@ -555,6 +561,7 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
       context: context,
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Selected Items?')),
+        content: widget.recents ? Text(L10n.text('They leave Recently Opened Images. Favorites stay saved.')) : null,
         actions: [
           CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
           CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
@@ -562,7 +569,14 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
       ),
     );
     if (delete != true) return;
-    _booru.store.removeFavorites(_posts.where((post) => _selection.contains(post.id)).toList());
+    final recents = _recents;
+    if (recents != null) {
+      for (final id in _selection) {
+        recents.remove(id);
+      }
+    } else {
+      _booru.store.removeFavorites(_posts.where((post) => _selection.contains(post.id)).toList());
+    }
     setState(() {
       _selection = {};
       _selecting = false;
@@ -578,18 +592,22 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
           icon: CupertinoIcons.checkmark_circle_fill,
           onPressed: () => setState(() => _selection = {for (final post in posts) post.id}),
         ),
-        Builder(
-          builder: (context) => ToolbarIconButton(
-            label: L10n.text('Move to Another Folder'),
-            icon: CupertinoIcons.folder,
-            onPressed: _selection.isEmpty ? null : () => _moveMenu(context),
+        if (!widget.recents)
+          Builder(
+            builder: (context) => ToolbarIconButton(
+              label: L10n.text('Move to Another Folder'),
+              icon: CupertinoIcons.folder,
+              onPressed: _selection.isEmpty ? null : () => _moveMenu(context),
+            ),
           ),
-        ),
         ToolbarIconButton(label: L10n.text('Delete'), icon: CupertinoIcons.trash, onPressed: _selection.isEmpty ? null : _confirmDelete),
       ] else
         Builder(
-          builder: (context) =>
-              ToolbarIconButton(label: L10n.text('Quick Jump'), icon: CupertinoIcons.arrow_up_arrow_down, onPressed: () => _jumpMenu(context)),
+          builder: (context) => ToolbarIconButton(
+            label: L10n.text('Quick Jump'),
+            icon: CupertinoIcons.arrow_up_arrow_down,
+            onPressed: posts.isEmpty ? null : () => _jumpMenu(context),
+          ),
         ),
       ToolbarIconButton(
         label: L10n.text(_selecting ? 'Done' : 'Select'),
@@ -621,11 +639,19 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 48),
-                      child: ContentUnavailable(
-                        icon: CupertinoIcons.heart,
-                        title: L10n.text('No Favorites'),
-                        description: L10n.text('Hold an image to save it, or choose Save to Folder from its menu.'),
-                      ),
+                      child: widget.recents
+                          ? ContentUnavailable(
+                              icon: (_recents?.entries.isEmpty ?? true) ? CupertinoIcons.clock : CupertinoIcons.search,
+                              title: L10n.text((_recents?.entries.isEmpty ?? true) ? 'No Recent Images' : 'No Results'),
+                              description: (_recents?.entries.isEmpty ?? true)
+                                  ? L10n.text('Images you open in the viewer appear here.')
+                                  : L10n.text("No results for '%@'", [_search.text]),
+                            )
+                          : ContentUnavailable(
+                              icon: CupertinoIcons.heart,
+                              title: L10n.text('No Favorites'),
+                              description: L10n.text('Hold an image to save it, or choose Save to Folder from its menu.'),
+                            ),
                     ),
                   )
                 else
@@ -655,7 +681,7 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
                 duration: const Duration(milliseconds: 250),
                 child: IgnorePointer(
                   ignoring: !_searchVisible,
-                  child: ScrollSearchBar(controller: _search, focusNode: _searchFocus, prompt: L10n.text('Search Favorites')),
+                  child: ScrollSearchBar(controller: _search, focusNode: _searchFocus, prompt: L10n.text(widget.recents ? 'Search tags' : 'Search Favorites')),
                 ),
               ),
             ),
@@ -665,7 +691,7 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
             right: 0,
             top: 0,
             child: RootHeader(
-              title: folder?.displayName ?? L10n.text('All Favorites'),
+              title: widget.recents ? L10n.text('Recently Opened Images') : folder?.displayName ?? L10n.text('All Favorites'),
               state: _booru.state,
               onBack: () => Navigator.of(context).pop(),
               trailing: _toolbar(posts),

@@ -982,6 +982,8 @@ class AppDatabase implements SmartFolderLibrary {
   @override
   int matchingCount(FolderRule rule) => matchingWorkCount(rule);
   @override
+  int matchingCountElsewhere(FolderRule rule) => matchingWorkCountElsewhere(rule);
+  @override
   String createRuleFolder(String named) => createRuleFolderNamed(named);
   @override
   void saveRule(FolderRule rule) => saveFolderRule(rule);

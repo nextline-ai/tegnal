@@ -495,7 +495,7 @@ extension View {
 }
 
 #if os(iOS)
-private final class PopGestureController: UIViewController, UIGestureRecognizerDelegate {
+final class PopGestureController: UIViewController, UIGestureRecognizerDelegate {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         navigationController?.interactivePopGestureRecognizer?.delegate = self
@@ -507,7 +507,7 @@ private final class PopGestureController: UIViewController, UIGestureRecognizerD
     }
 }
 
-private struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
+struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> PopGestureController {
         PopGestureController()
     }

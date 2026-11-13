@@ -487,7 +487,7 @@ class _WorksGridViewState extends State<WorksGridView> {
                                 Positioned(
                                   top: style.inset(10),
                                   right: style.inset(10),
-                                  child: _SelectionMark(selected: _selection.contains(work.galleryId), size: style.fontSize(22, minimum: 12)),
+                                  child: SelectionMark(selected: _selection.contains(work.galleryId), size: style.fontSize(22, minimum: 12)),
                                 ),
                             ],
                           ),
@@ -536,8 +536,8 @@ class _WorksGridViewState extends State<WorksGridView> {
   }
 }
 
-class _SelectionMark extends StatelessWidget {
-  const _SelectionMark({required this.selected, required this.size});
+class SelectionMark extends StatelessWidget {
+  const SelectionMark({super.key, required this.selected, required this.size});
   final bool selected;
   final double size;
 

@@ -702,6 +702,8 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   @override
   int matchingCount(FolderRule rule) => matchingRuleCount(rule);
   @override
+  int matchingCountElsewhere(FolderRule rule) => matchingRuleCountElsewhere(rule);
+  @override
   String createRuleFolder(String named) => saveFolder(name: named);
   @override
   void saveRule(FolderRule rule) => saveFolderRule(rule);

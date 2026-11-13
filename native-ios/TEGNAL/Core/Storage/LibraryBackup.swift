@@ -148,7 +148,7 @@ struct MangaBackup: Codable, Sendable {
     }
     struct ArtistRecord: Codable, Sendable { var name: String; var kind: Int?; var note: String? }
     struct SearchRecord: Codable, Sendable { var query: String; var used_at: Double }
-    struct RuleRecord: Codable, Sendable { var folder: String; var query: String; var excluded: String?; var includesOtherFolders: Bool?; var isEnabled: Bool?; var sources: [String]? }
+    struct RuleRecord: Codable, Sendable { var folder: String; var query: String; var excluded: String?; var includesOtherFolders: Bool?; var isEnabled: Bool?; var sources: [String]?; var keepsOriginal: Bool? = nil }
     /// A recently opened work; `opened_at` is seconds since 1970, as both apps write it.
     struct RecentRecord: Codable, Sendable {
         var gallery_id: Int64
@@ -197,7 +197,7 @@ struct MangaBackup: Codable, Sendable {
                         folder_rules: try AppDatabase.fetchFolderRules(db).compactMap { rule in
                             guard let id = try AppDatabase.folderID(ofRule: rule, db: db), let folder = folders.first(where: { $0.id == id }) else { return nil }
                             let sources = try rule.sources?.compactMap { try String.fetchOne(db, sql: "SELECT name FROM folders WHERE sync_id = ?", arguments: [$0]) }
-                            return .init(folder: folder.name, query: rule.query, excluded: rule.excluded, includesOtherFolders: rule.includesOtherFolders, isEnabled: rule.isEnabled, sources: sources)
+                            return .init(folder: folder.name, query: rule.query, excluded: rule.excluded, includesOtherFolders: rule.includesOtherFolders, isEnabled: rule.isEnabled, sources: sources, keepsOriginal: rule.keepsOriginal)
                         })
         }
     }
@@ -270,7 +270,7 @@ struct MangaBackup: Codable, Sendable {
         for record in folder_rules ?? [] {
             guard let id = mapping[record.folder] else { continue }
             let sources = try record.sources?.compactMap { name in try mapping[name].map { try AppDatabase.folderIdentity($0, db: db) } }
-            try AppDatabase.storeFolderRule(FolderRule(folder: try AppDatabase.folderIdentity(id, db: db), query: record.query, excluded: record.excluded ?? "", isEnabled: record.isEnabled, sources: sources, includesOtherFolders: record.includesOtherFolders), db: db)
+            try AppDatabase.storeFolderRule(FolderRule(folder: try AppDatabase.folderIdentity(id, db: db), query: record.query, excluded: record.excluded ?? "", isEnabled: record.isEnabled, sources: sources, includesOtherFolders: record.includesOtherFolders, keepsOriginal: record.keepsOriginal), db: db)
         }
     }
 }

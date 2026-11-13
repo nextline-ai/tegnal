@@ -126,7 +126,7 @@ extension RecentWork {
     func hasCover(_ id: Int64) -> Bool { FileManager.default.fileExists(atPath: coverURL(id).path) }
     func storeCover(_ image: UIImage, for id: Int64) {
         guard entries.contains(where: { $0.id == id }) else { return }
-        let scale = min(1, 180 / max(image.size.width, image.size.height, 1))
+        let scale = min(1, 360 / max(image.size.width, image.size.height, 1))
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
         let small = UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
@@ -307,12 +307,20 @@ struct RecentWorksFolderCard: View {
 
 // MARK: Lists
 
-/// Recently opened works, newest first, searched as Saved is; a tap opens the work again.
+/// Recently opened works, newest first, laid out as a Saved folder is: the search bar, the same
+/// cards, Select and Quick Jump. A tap opens the work again.
 struct RecentWorksView: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.dismiss) private var dismiss
     @State private var opened: RecentWork?
-    @State private var confirmingClear = false
     @State private var query = ""
+    @State private var selecting = false
+    @State private var selection = Set<Int64>()
+    @State private var confirmingDelete = false
+    @State private var saved: [Int64: Work] = [:]
+    @State private var isSearchBarVisible = true
+    @State private var searchScroll = ScrollSearchVisibility()
+    @FocusState private var isSearchFocused: Bool
     @SwiftUI.AppStorage(MangaThumbnailOpening.preferenceKey, store: ReaderPreferences.defaults) private var showsInformationBeforeReading = false
 
     private var shown: [RecentWork] {
@@ -323,141 +331,147 @@ struct RecentWorksView: View {
     var body: some View {
         let recents = env.recentWorks
         let shown = shown
-        List {
-            ForEach(shown) { entry in
-                Button { opened = entry } label: { RecentWorkRow(entry: entry, cover: recents.cover(entry.id)) }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("recentWorks.\(entry.id)")
+        ScrollViewReader { proxy in
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: 56).id("recentWorks.top")
+                    if recents.entries.isEmpty {
+                        ContentUnavailableView(L10n.text("No Recent Works"), systemImage: "clock", description: Text(L10n.text("Works you open in the viewer appear here."))).padding(.top, 40)
+                    } else if shown.isEmpty {
+                        ContentUnavailableView.search(text: query).padding(.top, 40)
+                    } else {
+                        ArtworkGrid(mode: .manga) { style in
+                            ForEach(shown) { entry in
+                                RecentWorkCard(entry: entry, saved: saved[entry.id], cover: recents.cover(entry.id))
+                                    .id(entry.id)
+                                    .accessibilityIdentifier("recentWorks.\(entry.id)")
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        if selecting {
+                                            if selection.contains(entry.id) { selection.remove(entry.id) } else { selection.insert(entry.id) }
+                                        } else { opened = entry }
+                                    }
+                                    .overlay(alignment: .topTrailing) {
+                                        if selecting { Image(systemName: selection.contains(entry.id) ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
+                                    }
+                                    .contextMenu {
+                                        Button(L10n.text("Remove"), systemImage: "trash", role: .destructive) { recents.remove(entry.id) }
+                                    }
+                            }
+                        }
+                    }
+                }
             }
-            .onDelete { offsets in for index in offsets { recents.remove(shown[index].id) } }
-        }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: L10n.text("Search works"))
-        .overlay {
-            if recents.entries.isEmpty {
-                ContentUnavailableView(L10n.text("No Recent Works"), systemImage: "clock", description: Text(L10n.text("Works you open in the viewer appear here.")))
-            } else if shown.isEmpty {
-                ContentUnavailableView.search(text: query)
+            .scrollDismissesKeyboard(.interactively)
+            .trackScrollGeometry { oldY, newY in
+                if let visible = searchScroll.update(oldY: oldY, newY: newY, focused: isSearchFocused) { isSearchBarVisible = visible }
             }
+            ScrollSearchBar(text: $query, focused: $isSearchFocused, prompt: L10n.text("Search works"), identifier: "recentWorks.search")
+                .offset(y: isSearchBarVisible ? 0 : -60).opacity(isSearchBarVisible ? 1 : 0)
+                .allowsHitTesting(isSearchBarVisible).accessibilityHidden(!isSearchBarVisible)
         }
-        .navigationTitle(L10n.text("Recently Opened Works")).navigationBarTitleDisplayMode(.inline)
+        .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
+        .onChange(of: isSearchFocused) { _, focused in if focused { isSearchBarVisible = true } }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.backward").font(.system(size: 14, weight: .bold))
+                        Text(L10n.text("Recently Opened Works")).font(.system(size: 15, weight: .bold))
+                    }
+                    .foregroundColor(.primary).padding(.horizontal, 10).padding(.vertical, 5).fixedSize()
+                }.buttonStyle(.plain).accessibilityIdentifier("recentWorks.back")
+            }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(L10n.text("Clear All"), role: .destructive) { confirmingClear = true }
-                    .disabled(recents.entries.isEmpty)
-                    .accessibilityIdentifier("recentWorks.clear")
+                AppToolbarActions {
+                    Button { selecting.toggle(); selection.removeAll() } label: { Image(systemName: selecting ? "xmark" : "checkmark.circle") }
+                        .frame(height: 32).disabled(recents.entries.isEmpty).accessibilityLabel(L10n.text(selecting ? "Done" : "Select")).accessibilityIdentifier("recentWorks.select")
+                    if selecting {
+                        Button { selection = Set(shown.map(\.id)) } label: { Image(systemName: "checkmark.circle.fill") }
+                            .frame(height: 32).accessibilityLabel(L10n.text("Select All")).accessibilityIdentifier("recentWorks.selectAll")
+                        Button(role: .destructive) { confirmingDelete = true } label: { Image(systemName: "trash") }
+                            .frame(height: 32).disabled(selection.isEmpty).accessibilityLabel(L10n.text("Delete")).accessibilityIdentifier("recentWorks.delete")
+                    } else {
+                        Menu {
+                            Button(L10n.text("Jump to Top"), systemImage: "arrow.up.to.line") { isSearchFocused = false; proxy.scrollTo("recentWorks.top", anchor: .top) }
+                            Button(L10n.text("Jump to Bottom"), systemImage: "arrow.down.to.line") {
+                                isSearchFocused = false
+                                if let id = shown.last?.id { proxy.scrollTo(id, anchor: .bottom) }
+                            }
+                        } label: { Image(systemName: "arrow.up.arrow.down") }
+                        .frame(height: 32).disabled(shown.isEmpty).accessibilityLabel(L10n.text("Quick Jump"))
+                    }
+                }
             }
         }
-        .confirmationDialog(L10n.text("Clear recently opened works?"), isPresented: $confirmingClear, titleVisibility: .visible) {
-            Button(L10n.text("Clear All"), role: .destructive) { recents.clear() }
-        }
+        .alert(L10n.text("Delete Selected Items?"), isPresented: $confirmingDelete) {
+            Button(L10n.text("Delete"), role: .destructive) {
+                for id in selection { recents.remove(id) }
+                selection.removeAll(); selecting = false
+            }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: { Text(L10n.text("They leave Recently Opened Works. Saved works stay saved.")) }
         .appSheet(item: Binding(get: { showsInformationBeforeReading ? opened : nil }, set: { opened = $0 })) { entry in
-            ContentEntryView(initialUrl: MangaThumbnailOpening.information.url(for: entry.id), siblingIDs: [entry.id])
+            ContentEntryView(initialUrl: MangaThumbnailOpening.information.url(for: entry.id), siblingIDs: shown.map(\.id))
                 .presentationDetents([.large]).presentationDragIndicator(.visible)
         }
         .appFullScreenCover(item: Binding(get: { showsInformationBeforeReading ? nil : opened }, set: { opened = $0 })) { entry in
-            ContentEntryView(initialUrl: MangaThumbnailOpening.viewer.url(for: entry.id), siblingIDs: [entry.id])
+            ContentEntryView(initialUrl: MangaThumbnailOpening.viewer.url(for: entry.id), siblingIDs: shown.map(\.id))
         }
+        .background {
+            #if os(iOS)
+            NavigationPopGestureEnabler().frame(width: 0, height: 0)
+            #endif
+        }
+        .task(id: recents.entries.map(\.id)) { loadSaved(recents.entries.map(\.id)) }
+        }
+    }
+
+    /// Saved works show their library cover, as they do in their folder.
+    private func loadSaved(_ ids: [Int64]) {
+        guard !ids.isEmpty else { saved = [:]; return }
+        let works = (try? env.database.dbWriter.read { db in try Work.filter(ids.contains(Work.Columns.galleryId)).fetchAll(db) }) ?? []
+        saved = Dictionary(works.map { ($0.galleryId, $0) }, uniquingKeysWith: { first, _ in first })
     }
 }
 
-private struct RecentWorkRow: View {
+/// A recently opened work drawn as a folder's work card.
+private struct RecentWorkCard: View {
+    @Environment(\.artworkCellStyle) private var style
     let entry: RecentWork
+    let saved: Work?
     let cover: UIImage?
     var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let cover { Image(uiImage: cover).resizable().scaledToFill() }
-                else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: AppMode.manga.icon).foregroundStyle(.secondary) } }
-            }
-            .frame(width: 48, height: 68).clipShape(RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.item.displayTitle).font(.subheadline.weight(.semibold)).lineLimit(2)
-                if !entry.item.artists.isEmpty || !entry.item.details.isEmpty {
-                    Text([entry.item.artists, entry.item.details].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        GalleryCardLayout(title: entry.item.title.isEmpty ? String(entry.id) : entry.item.title, artists: entry.item.artists,
+                          language: entry.language ?? "", type: entry.type ?? "") {
+            if let saved, saved.thumbStatus == "ready" {
+                LocalThumbnailView(path: saved.thumbPath, revision: String(saved.thumbPage ?? 1)) { image in
+                    if let image { Image(uiImage: image).resizable().scaledToFill() } else { placeholder }
                 }
-                Text(entry.openedAt, format: .relative(presentation: .named)).font(.caption2).foregroundStyle(.tertiary)
-            }
-            Spacer(minLength: 0)
+            } else if let cover {
+                Image(uiImage: cover).resizable().scaledToFill()
+            } else { placeholder }
         }
-        .contentShape(Rectangle())
-        .padding(.vertical, 2)
+    }
+    private var placeholder: some View {
+        Rectangle().fill(Color.secondary.opacity(0.12)).overlay {
+            VStack(spacing: style.inset(6)) {
+                Image(systemName: "photo").font(.system(size: style.fontSize(22)))
+                if style.showsTitle { Text(String(entry.id)).font(.system(size: style.fontSize(11))) }
+            }.foregroundStyle(.secondary)
+        }
     }
 }
 
-/// Recently opened images, newest first, searched as favorites are; a tap opens the image again.
+/// Recently opened images, newest first, laid out as a Saved folder is; a tap opens the image again.
 struct RecentImagesView: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var opened: RecentImage?
-    @State private var confirmingClear = false
-    @State private var query = ""
-
-    private var shown: [RecentImage] {
-        env.recentImages.entries.filter { BooruStore.matches($0.post, query: query) && env.booru.isShownInSafeMode($0.post) }
-    }
-
     var body: some View {
-        let recents = env.recentImages
-        let shown = shown
-        let servers = Dictionary(uniqueKeysWithValues: env.booru.servers.map { ($0.id, $0) })
-        List {
-            ForEach(shown) { entry in
-                Button { opened = entry } label: { RecentImageRow(entry: entry, server: servers[entry.post.serverID]) }
-                    .buttonStyle(.plain)
-                    .disabled(servers[entry.post.serverID] == nil)
-                    .accessibilityIdentifier("recentImages.\(entry.post.postID)")
-            }
-            .onDelete { offsets in for index in offsets { recents.remove(shown[index].id) } }
-        }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: L10n.text("Search tags"))
-        .overlay {
-            if recents.entries.isEmpty {
-                ContentUnavailableView(L10n.text("No Recent Images"), systemImage: "clock", description: Text(L10n.text("Images you open in the viewer appear here.")))
-            } else if shown.isEmpty {
-                ContentUnavailableView.search(text: query)
-            }
-        }
-        .navigationTitle(L10n.text("Recently Opened Images")).navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(L10n.text("Clear All"), role: .destructive) { confirmingClear = true }
-                    .disabled(recents.entries.isEmpty)
-                    .accessibilityIdentifier("recentImages.clear")
-            }
-        }
-        .confirmationDialog(L10n.text("Clear recently opened images?"), isPresented: $confirmingClear, titleVisibility: .visible) {
-            Button(L10n.text("Clear All"), role: .destructive) { recents.clear() }
-        }
-        .appFullScreenCover(item: $opened) { entry in
-            if let server = servers[entry.post.serverID] {
-                BooruPostView(post: entry.post, posts: shown.map(\.post).filter { servers[$0.serverID] != nil }, server: server, source: TasteSources.booru)
-                    .environment(env.booru)
-            }
-        }
-    }
-}
-
-private struct RecentImageRow: View {
-    let entry: RecentImage
-    let server: BooruServer?
-    var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let server { BooruThumbnail(post: entry.post, server: server) }
-                else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: "photo").foregroundStyle(.secondary) } }
-            }
-            .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: "\(server?.displayName ?? entry.post.serverID) · \(entry.post.postID)").font(.subheadline.weight(.semibold)).lineLimit(1)
-                if !entry.post.tags.isEmpty {
-                    Text(entry.post.tags.prefix(8).joined(separator: " ").replacingOccurrences(of: "_", with: " "))
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
-                Text(entry.openedAt, format: .relative(presentation: .named)).font(.caption2).foregroundStyle(.tertiary)
-            }
-            Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-        .padding(.vertical, 2)
+        BooruFolderContentsView(source: TasteSources.booru, recents: true).environment(env.booru)
     }
 }

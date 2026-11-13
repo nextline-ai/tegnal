@@ -303,8 +303,9 @@ class MangaSearchRecord {
 }
 
 class MangaRuleRecord {
-  MangaRuleRecord({required this.folder, required this.query, this.excluded, this.includesOtherFolders, this.isEnabled, this.sources});
+  MangaRuleRecord({required this.folder, required this.query, this.excluded, this.includesOtherFolders, this.isEnabled, this.sources, this.keepsOriginal});
   final String folder;
+  final bool? keepsOriginal;
   final String query;
   final String? excluded;
   final bool? includesOtherFolders;
@@ -318,12 +319,14 @@ class MangaRuleRecord {
     includesOtherFolders: json.booleanOrNull('includesOtherFolders'),
     isEnabled: json.booleanOrNull('isEnabled'),
     sources: json.stringsOrNull('sources'),
+    keepsOriginal: json.booleanOrNull('keepsOriginal'),
   );
   JsonObject toJson() => <String, Object?>{'folder': folder, 'query': query}
     ..putIfPresent('excluded', excluded)
     ..putIfPresent('includesOtherFolders', includesOtherFolders)
     ..putIfPresent('isEnabled', isEnabled)
-    ..putIfPresent('sources', sources);
+    ..putIfPresent('sources', sources)
+    ..putIfPresent('keepsOriginal', keepsOriginal);
 }
 
 /// A recently opened work; `opened_at` is seconds since 1970, as both apps write it.
@@ -458,6 +461,7 @@ class MangaBackup {
           includesOtherFolders: rule.includesOtherFolders,
           isEnabled: rule.isEnabled,
           sources: sources,
+          keepsOriginal: rule.keepsOriginal,
         ),
       );
     }
@@ -604,6 +608,7 @@ class MangaBackup {
           isEnabled: record.isEnabled,
           sources: sources,
           includesOtherFolders: record.includesOtherFolders,
+          keepsOriginal: record.keepsOriginal,
         ),
         db,
       );

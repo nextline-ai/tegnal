@@ -375,7 +375,7 @@ class _SettingsViewState extends State<SettingsView> {
                       onSelected: (value) => _set('search.retentionDays', value),
                     ),
                     if (_deps.recentWorks != null && _deps.openWork != null)
-                      ...RecentWorksSettingsRows.comics(context, recents: _deps.recentWorks!, open: _deps.openWork!),
+                      ...RecentWorksSettingsRows.comics(context, recents: _deps.recentWorks!, routes: _deps.library),
                   ],
                 ),
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
@@ -528,6 +528,7 @@ class _FolderRulesPageState extends State<FolderRulesPage> {
   AppDatabase get _database => widget.dependencies.database;
   List<FolderRule> _rules = [];
   Map<String, String> _names = {};
+  Set<String> _defaultSources = {};
 
   @override
   void initState() {
@@ -538,6 +539,7 @@ class _FolderRulesPageState extends State<FolderRulesPage> {
   void _reload() => setState(() {
     _rules = _database.smartRules();
     _names = {for (final choice in _database.folderChoices()) choice.id: choice.name};
+    _defaultSources = _database.defaultRuleSources();
   });
 
   Future<void> _edit(String? folder) async {
@@ -560,7 +562,9 @@ class _FolderRulesPageState extends State<FolderRulesPage> {
       children: [
         FormSection(
           rowColor: row,
-          footer: Text(L10n.text('Hold a folder to make it a smart folder. Smart folders show %@ after their name.', ['✦'])),
+          footer: Text(
+            L10n.text('A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name.', ['✦']),
+          ),
           children: [
             SettingsToggleRow(
               title: L10n.text('Use Smart Folders'),
@@ -606,6 +610,7 @@ class _FolderRulesPageState extends State<FolderRulesPage> {
                           Text(_names[rule.folder] ?? '', style: TegnalType.style(12, color: secondary)),
                         ],
                       ),
+                      SmartFolderSummaryRow(rule: rule, booru: false, names: _names, defaultSources: _defaultSources),
                       if (!rule.isActive) Text(L10n.text('Off'), style: TegnalType.style(12, color: secondary)),
                     ],
                   ),

@@ -476,6 +476,10 @@ final class BooruUITests: XCTestCase {
             let tag = element(app, "folderRule.tag")
             tag.tap(); tag.typeText("sample")
             capture(app, mode + " smart folder editor")
+            app.swipeUp()
+            // Comics choose to move or copy; an image is in one folder, so it always moves.
+            XCTAssertEqual(element(app, "folderRule.copies").waitForExistence(timeout: 2), mode == "manga")
+            capture(app, mode + " smart folder editor, lower half")
             element(app, "folderRule.save").tap()
             let marked = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Smart Folder")).firstMatch
             XCTAssertTrue(marked.waitForExistence(timeout: 5), "A smart folder shows its mark")
@@ -516,6 +520,8 @@ final class BooruUITests: XCTestCase {
         let sources = element(app, "folderRule.sources")
         XCTAssertTrue(sources.waitForExistence(timeout: 5))
         XCTAssertTrue(sources.label.contains("Unfiled"), "Only Unfiled works are included by default")
+        // The row sits in its own section below the tags, under the keyboard on a phone.
+        for _ in 0..<3 where !sources.isHittable { app.swipeUp() }
         sources.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "All Folders")).firstMatch.waitForExistence(timeout: 5))
         capture(app, "smart folder sources menu")

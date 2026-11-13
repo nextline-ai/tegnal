@@ -13,7 +13,7 @@ import 'work_query.dart';
 /// A smart folder's rule. A folder has at most one, kept in its own row so sync merges
 /// edits folder by folder, and folders are named by their sync identity.
 class FolderRule {
-  FolderRule({required this.folder, required this.query, this.excluded = '', this.isEnabled, this.sources, this.includesOtherFolders});
+  FolderRule({required this.folder, required this.query, this.excluded = '', this.isEnabled, this.sources, this.includesOtherFolders, this.keepsOriginal});
 
   static const keyPrefix = 'folder_rule.';
   String folder;
@@ -29,8 +29,14 @@ class FolderRule {
   /// Reads every folder, including ones made later.
   bool? includesOtherFolders;
 
+  /// Comics only: a matching work also stays in the folder it came from. Rules saved before
+  /// this choice existed copied, so absent reads as true; the editor always writes it.
+  /// Images are in one folder at a time and always move.
+  bool? keepsOriginal;
+
   String get id => folder;
   bool get isActive => isEnabled != false;
+  bool get copies => keepsOriginal ?? true;
   WorkQuery get workQuery => WorkQuery(query, excluding: excluded);
 
   /// The mark stays with the name, so every list of folders shows it.
@@ -51,12 +57,14 @@ class FolderRule {
     isEnabled: json.booleanOrNull('isEnabled'),
     sources: json.stringsOrNull('sources'),
     includesOtherFolders: json.booleanOrNull('includesOtherFolders'),
+    keepsOriginal: json.booleanOrNull('keepsOriginal'),
   );
 
   JsonObject toJson() => <String, Object?>{'folder': folder, 'query': query, 'excluded': excluded}
     ..putIfPresent('isEnabled', isEnabled)
     ..putIfPresent('sources', sources)
-    ..putIfPresent('includesOtherFolders', includesOtherFolders);
+    ..putIfPresent('includesOtherFolders', includesOtherFolders)
+    ..putIfPresent('keepsOriginal', keepsOriginal);
 
   /// A row that cannot be read, say from a newer version, is skipped.
   static FolderRule? tryDecode(List<int> data) {
@@ -95,6 +103,9 @@ abstract interface class SmartFolderLibrary {
   FolderRule? rule(String forFolder);
   List<FolderRule> smartRules();
   int matchingCount(FolderRule rule);
+
+  /// Saved works that match the tags but sit in folders the rule does not look in.
+  int matchingCountElsewhere(FolderRule rule);
   String createRuleFolder(String named);
   void saveRule(FolderRule rule);
   void deleteRule(String forFolder);
@@ -192,13 +203,25 @@ extension AppDatabaseFolderRules on AppDatabase {
   String? _sourceCondition(FolderRule rule, SqlDatabase db) {
     if (rule.includesOtherFolders == true) return null;
     String list(List<int> ids) => ids.join(',');
-    final sources = rule.sources;
-    if (sources == null) {
+    if (rule.sources == null) {
       return 'NOT EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id NOT IN (${list(_landingFolderIDs(db))}))';
     }
-    final marks = List.filled(sources.length, '?').join(',');
-    final ids = db.column<int>('SELECT id FROM folders WHERE sync_id IN ($marks)', sources);
-    return 'EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id IN (${list(ids)}))';
+    return 'EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id IN (${list(_sourceFolderIDs(rule, db))}))';
+  }
+
+  /// The folders a rule looks in, never its own: where a moving rule takes works from.
+  List<int> _sourceFolderIDs(FolderRule rule, SqlDatabase db) {
+    final own = folderIDOfRule(rule, db);
+    final List<int> ids;
+    final sources = rule.sources;
+    if (rule.includesOtherFolders == true) {
+      ids = db.column<int>('SELECT id FROM folders');
+    } else if (sources != null) {
+      ids = sources.isEmpty ? [] : db.column<int>('SELECT id FROM folders WHERE sync_id IN (${List.filled(sources.length, '?').join(',')})', sources);
+    } else {
+      ids = _landingFolderIDs(db);
+    }
+    return ids.where((id) => id != own).toList();
   }
 
   (String, List<Object?>) _matching(FolderRule rule, SqlDatabase db) {
@@ -215,17 +238,40 @@ extension AppDatabaseFolderRules on AppDatabase {
     });
   }
 
-  /// Adds saved works to a folder. Works keep their other folders, apart from Unfiled.
+  int matchingWorkCountElsewhere(FolderRule rule) {
+    if (rule.workQuery.isEmpty || rule.includesOtherFolders == true) return 0;
+    return dbWriter.read((db) {
+      final (conditions, arguments) = rule.workQuery.conditions;
+      final source = _sourceCondition(rule, db);
+      if (source == null) return 0;
+      final own = folderIDOfRule(rule, db) ?? -1;
+      return db.value<int>(
+            'SELECT COUNT(*) FROM works w WHERE $conditions AND NOT ($source) AND NOT EXISTS (SELECT 1 FROM folder_works fw WHERE fw.work_id = w.id AND fw.folder_id = ?)',
+            [...arguments, own],
+          ) ??
+          0;
+    });
+  }
+
+  /// Files saved works in a folder. A copying rule leaves them where they were too; a moving
+  /// rule takes them out of the folders it looked in. Either way they leave Unfiled.
   void addMatchingWorks(FolderRule rule, int toFolder) {
     if (rule.workQuery.isEmpty) return;
     final now = iso8601();
     dbWriter.write((db) {
       final (conditions, arguments) = _matching(rule, db);
-      db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) SELECT ?, w.id, ? FROM works w WHERE $conditions', [
-        toFolder,
-        now,
-        ...arguments,
-      ]);
+      final matched = db.column<int>('SELECT w.id FROM works w WHERE $conditions', arguments);
+      for (final workID in matched) {
+        db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [toFolder, workID, now]);
+      }
+      if (!rule.copies) {
+        final sources = _sourceFolderIDs(rule, db).where((id) => id != toFolder).toList();
+        if (sources.isNotEmpty) {
+          for (final workID in matched) {
+            db.execute('DELETE FROM folder_works WHERE work_id = ? AND folder_id IN (${sources.join(',')})', [workID]);
+          }
+        }
+      }
       _leaveUnfiledWhenIn(toFolder, db);
     });
   }
@@ -238,21 +284,39 @@ extension AppDatabaseFolderRules on AppDatabase {
 
   /// Runs once for a new save and once when its tags first arrive, so a work a person
   /// moves stays where they put it, whether or not it fits the folder's tags.
+  /// Every copying rule that matches adds the work; the first moving rule in folder order
+  /// takes it out of where it was, and later moving rules leave it alone.
   void applyFolderRules(int toWork, String now, SqlDatabase db) {
     if (!LibrarySavePreferences.rulesEnabled(preferences.defaults)) return;
+    final order = db.column<String>('SELECT sync_id FROM folders WHERE sync_id IS NOT NULL ORDER BY sort_order, id');
+    int position(FolderRule rule) {
+      final index = order.indexOf(rule.folder);
+      return index < 0 ? order.length : index;
+    }
+
     // Read once, or the first match would hide the work from every later rule.
     final rules = fetchFolderRules(db).where((rule) {
       if (!rule.isActive || rule.workQuery.isEmpty) return false;
       final source = _sourceCondition(rule, db);
       if (source == null) return true;
       return db.exists('SELECT EXISTS(SELECT 1 FROM works w WHERE w.id = ? AND $source)', [toWork]);
-    }).toList();
+    }).toList()..sort((a, b) => position(a).compareTo(position(b)));
+    final before = db.column<int>('SELECT folder_id FROM folder_works WHERE work_id = ?', [toWork]).toSet();
+    var moved = false;
     for (final rule in rules) {
+      if (!rule.copies && moved) continue;
       final folderID = folderIDOfRule(rule, db);
       if (folderID == null) continue;
       final (conditions, arguments) = rule.workQuery.conditions;
       if (!db.exists('SELECT EXISTS(SELECT 1 FROM works w WHERE w.id = ? AND $conditions)', [toWork, ...arguments])) continue;
       db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [folderID, toWork, now]);
+      if (!rule.copies) {
+        moved = true;
+        // Only folders it was in before, so a copy another smart folder just made stays.
+        for (final source in _sourceFolderIDs(rule, db)) {
+          if (source != folderID && before.contains(source)) db.execute('DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?', [source, toWork]);
+        }
+      }
       final unfiled = db.value<int>("SELECT id FROM folders WHERE name = '미분류' ORDER BY sort_order ASC, id ASC LIMIT 1");
       if (unfiled == null || unfiled == folderID) continue;
       db.execute('DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?', [unfiled, toWork]);
@@ -381,6 +445,11 @@ extension BooruStoreFolderRules on BooruStore {
   }
 
   int matchingRuleCount(FolderRule rule) => _matches(rule).length;
+
+  int matchingRuleCountElsewhere(FolderRule rule) {
+    final matcher = rule.postMatcher;
+    return favoriteRecords().where((record) => record.folderID != rule.folder && !_reads(rule, record.folderID) && matcher(record.post)).length;
+  }
 
   void saveFolderRule(FolderRule rule) => setSetting(FolderRule.keyPrefix + rule.folder, encodeSwiftJsonString(rule.toJson()));
 

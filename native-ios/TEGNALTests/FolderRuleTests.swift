@@ -143,6 +143,59 @@ import GRDB
         XCTAssertEqual(try folderNames(2), ["Inbox", "Kept"], "A work also placed in another folder was already sorted")
     }
 
+    func testMovingRuleTakesANewSaveOutOfTheDefaultSaveFolder() throws {
+        let inbox = try database.createFolder(name: "Inbox")
+        try setDefaultFolder(inbox)
+        let korean = try database.createFolder(name: "Korean")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "", keepsOriginal: false)
+        try save(1)
+        XCTAssertEqual(try folderNames(1), ["Korean"], "A moving rule leaves no copy in the folder the work landed in")
+        try save(2, language: "japanese")
+        XCTAssertEqual(try folderNames(2), ["Inbox"])
+    }
+
+    func testCopyingRuleKeepsANewSaveWhereItLanded() throws {
+        let inbox = try database.createFolder(name: "Inbox")
+        try setDefaultFolder(inbox)
+        let korean = try database.createFolder(name: "Korean")
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "", keepsOriginal: true)
+        try save(1)
+        XCTAssertEqual(try folderNames(1), ["Inbox", "Korean"])
+        XCTAssertTrue(FolderRule(folder: "", query: "x").copies, "Rules saved before the choice keep copying")
+    }
+
+    func testFirstMovingRuleInFolderOrderTakesTheWorkAndCopiesStillApply() throws {
+        let korean = try database.createFolder(name: "Korean"), color = try database.createFolder(name: "Color"), all = try database.createFolder(name: "Everything")
+        try database.saveFolderRule(folderID: color.id!, query: "tag:full_color", excluded: "", keepsOriginal: false)
+        try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "", keepsOriginal: false)
+        try database.saveFolderRule(folderID: all.id!, query: "language:korean", excluded: "", keepsOriginal: true)
+        try save(1)
+        XCTAssertEqual(try folderNames(1), ["Korean", "Everything"], "Korean comes before Color in folder order; a copying rule adds too")
+    }
+
+    func testFillingWithAMovingRuleTakesWorksOutOfTheFoldersItLooksIn() throws {
+        let favorites = try database.createFolder(name: "Favorites"), kept = try database.createFolder(name: "Kept")
+        try save(1)
+        try database.addWork(galleryId: 1, folderID: favorites.id!)
+        try save(2)
+        try database.addWork(galleryId: 2, folderID: kept.id!)
+        try save(3)
+        let korean = try database.createFolder(name: "Korean")
+        let favoritesID = try database.identity(ofFolder: favorites.id!)
+        var moving = FolderRule(folder: try database.identity(ofFolder: korean.id!), query: "language:korean", sources: [favoritesID], keepsOriginal: false)
+        XCTAssertEqual(try database.matchingWorkCount(moving), 1)
+        XCTAssertEqual(try database.matchingWorkCountElsewhere(moving), 2, "Kept and Unfiled match but are not looked in")
+        try database.addMatchingWorks(moving, toFolder: korean.id!)
+        XCTAssertEqual(try folderNames(1), ["Korean"])
+        XCTAssertEqual(try folderNames(2), ["Kept"])
+        XCTAssertEqual(try folderNames(3), ["미분류"])
+        moving.includesOtherFolders = true
+        XCTAssertEqual(try database.matchingWorkCountElsewhere(moving), 0)
+        try database.addMatchingWorks(moving, toFolder: korean.id!)
+        XCTAssertEqual(try folderNames(2), ["Korean"])
+        XCTAssertEqual(try folderNames(3), ["Korean"])
+    }
+
     func testEveryRuleSeesAWorkArrivingInUnfiled() throws {
         let korean = try database.createFolder(name: "Korean"), color = try database.createFolder(name: "Color")
         try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "")
@@ -487,8 +540,8 @@ import GRDB
 }
 
 private extension AppDatabase {
-    func saveFolderRule(folderID: Int64, query: String, excluded: String, includesOtherFolders: Bool? = nil, sources: [String]? = nil, isEnabled: Bool? = nil) throws {
-        try saveRule(FolderRule(folder: identity(ofFolder: folderID), query: query, excluded: excluded, isEnabled: isEnabled, sources: sources, includesOtherFolders: includesOtherFolders))
+    func saveFolderRule(folderID: Int64, query: String, excluded: String, includesOtherFolders: Bool? = nil, sources: [String]? = nil, isEnabled: Bool? = nil, keepsOriginal: Bool? = nil) throws {
+        try saveRule(FolderRule(folder: identity(ofFolder: folderID), query: query, excluded: excluded, isEnabled: isEnabled, sources: sources, includesOtherFolders: includesOtherFolders, keepsOriginal: keepsOriginal))
     }
 }
 
