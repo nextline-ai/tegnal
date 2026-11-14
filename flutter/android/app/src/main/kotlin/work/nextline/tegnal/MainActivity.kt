@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.WindowManager
 import android.webkit.CookieManager
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -31,6 +32,9 @@ class MainActivity : FlutterActivity() {
     private var pendingOpen: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Edge to edge on every Android version, as Android 15 and later draw an app targeting
+        // SDK 35 or above: the Flutter UI already keeps clear of the system bars by their insets.
+        WindowCompat.enableEdgeToEdge(window)
         super.onCreate(savedInstanceState)
         preferHighestRefreshRate()
         privacyCover.protectTaskSnapshot()

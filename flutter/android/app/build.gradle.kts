@@ -84,4 +84,6 @@ dependencies {
     // Gemini Nano through Android AICore, on the devices that have it: a whole page translated on
     // the device with the lines before it as context. Older devices keep ML Kit Translate.
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    // `WindowCompat.enableEdgeToEdge`, so older Android versions draw edge to edge like Android 15.
+    implementation("androidx.core:core:1.17.0")
 }
