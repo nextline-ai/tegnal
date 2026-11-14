@@ -18,6 +18,63 @@ abstract final class ContentPreferences {
   static Preferences defaults = MemoryPreferences();
 }
 
+/// `SiteScope`: the connected website a request is for. Lists that show every connected
+/// website at once read the other websites inside their scope, so the checked website never
+/// has to change: what was learned about a website that is not checked lives in its saved
+/// snapshot. The scope follows the request through every `await`.
+abstract final class SiteScope {
+  static const _key = #tegnalSiteScope;
+
+  static String? get site => Zone.current[_key] as String?;
+
+  /// Runs [body], and everything it waits for, for [site].
+  static T run<T>(String? site, T Function() body) => runZoned(body, zoneValues: {_key: site});
+
+  /// The website a scope names when it is not the checked one.
+  static String? get other {
+    final scoped = site;
+    if (scoped == null || scoped.isEmpty || scoped == (ContentPreferences.defaults.string('manga.site_address') ?? '')) return null;
+    return scoped;
+  }
+}
+
+/// `ScopedPreferences`: connection settings as a request sees them: those of the checked
+/// website, or inside a [SiteScope] for another website, that website's saved snapshot.
+class ScopedPreferences extends Preferences {
+  static final shared = ScopedPreferences();
+  static final _scopedKeys = {...MangaUrls.resolvedKeys, 'manga.account_site', 'manga.account_host'};
+  Preferences get _base => ContentPreferences.defaults;
+
+  String? _scoped(String key) {
+    final site = SiteScope.other;
+    return site != null && (key == 'manga.site_address' || _scopedKeys.contains(key)) ? site : null;
+  }
+
+  @override
+  Object? object(String key) {
+    final site = _scoped(key);
+    if (site == null) return _base.object(key);
+    if (key == 'manga.site_address') return site;
+    final value = ComicSites._snapshots()[site]?[key];
+    // JSON brings lists back untyped; settings want a list of text.
+    return value is List ? value.whereType<String>().toList() : value;
+  }
+
+  @override
+  void set(String key, Object? value) {
+    final site = _scoped(key);
+    if (site == null || key == 'manga.site_address') return _base.set(key, value);
+    final snapshots = ComicSites._snapshots();
+    final saved = snapshots.putIfAbsent(site, () => {});
+    if (value == null) {
+      saved.remove(key);
+    } else {
+      saved[key] = value;
+    }
+    ComicSites._save(snapshots);
+  }
+}
+
 enum MangaBackend {
   indexed,
   document,
@@ -27,7 +84,7 @@ enum MangaBackend {
 }
 
 abstract final class MangaUrls {
-  static Preferences get preferences => ContentPreferences.defaults;
+  static Preferences get preferences => ScopedPreferences.shared;
 
   static MangaBackend get backend {
     if (preferences.string('manga.resolved_backend_site') != home) return MangaBackend.indexed;
@@ -423,7 +480,7 @@ abstract final class MangaUrls {
 /// what was learned about it, so switching back never repeats the check. Sites that number their
 /// works the same way can open each other's saved works.
 abstract final class ComicSites {
-  static Preferences get _preferences => MangaUrls.preferences;
+  static Preferences get _preferences => ContentPreferences.defaults;
   static const _listKey = 'manga.sites';
 
   /// Kept as JSON text, since stored preferences hold only plain values.
@@ -502,7 +559,7 @@ abstract final class ComicSites {
 
   /// How a site's works are reached, once learned.
   static MangaBackend? backendOf(String site) {
-    if (site == active) return MangaUrls.hasResolvedBackend ? MangaUrls.backend : null;
+    if (site == active) return SiteScope.run(null, () => MangaUrls.hasResolvedBackend ? MangaUrls.backend : null);
     final saved = _snapshots()[site];
     if (saved == null || saved['manga.resolved_backend_site'] != MangaUrls.homeForSite(site)) return null;
     return MangaBackend.fromRawValue(saved['manga.resolved_protocol'] as String?);

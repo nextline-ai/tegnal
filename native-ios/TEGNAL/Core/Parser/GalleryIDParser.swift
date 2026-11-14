@@ -17,8 +17,67 @@ enum ContentPreferences {
     static var defaults: UserDefaults { isIsolated ? isolated : .standard }
 }
 
+/// The connected website a request is for. Lists that show every connected website at once
+/// read the other websites inside their scope, so the checked website never has to change:
+/// what was learned about a website that is not checked lives in its saved snapshot.
+enum SiteScope {
+    @TaskLocal static var site: String?
+
+    /// The website a scope names when it is not the checked one.
+    static var other: String? {
+        guard let site, !site.isEmpty, site != (ContentPreferences.defaults.string(forKey: "manga.site_address") ?? "") else { return nil }
+        return site
+    }
+}
+
+/// Connection settings as a request sees them: those of the checked website, or inside a
+/// `SiteScope` for another website, that website's saved snapshot.
+final class ScopedPreferences: @unchecked Sendable {
+    static let shared = ScopedPreferences()
+    /// Snapshots change from several requests at once.
+    static let lock = NSRecursiveLock()
+    static let snapshotsKey = "manga.siteSnapshots"
+    private static var scopedKeys: Set<String> { Set(MangaUrls.resolvedKeys + ["manga.account_site", "manga.account_host"]) }
+    private var base: UserDefaults { ContentPreferences.defaults }
+
+    private func snapshotValue(_ key: String, site: String) -> Any? {
+        Self.lock.withLock { ((base.dictionary(forKey: Self.snapshotsKey) ?? [:])[site] as? [String: Any])?[key] }
+    }
+    private func updateSnapshot(site: String, _ change: (inout [String: Any]) -> Void) {
+        Self.lock.withLock {
+            var snapshots = base.dictionary(forKey: Self.snapshotsKey) ?? [:]
+            var saved = snapshots[site] as? [String: Any] ?? [:]
+            change(&saved)
+            snapshots[site] = saved
+            base.set(snapshots, forKey: Self.snapshotsKey)
+        }
+    }
+    private func scoped(_ key: String) -> String? {
+        guard let site = SiteScope.other, key == "manga.site_address" || Self.scopedKeys.contains(key) else { return nil }
+        return site
+    }
+
+    func object(forKey key: String) -> Any? {
+        guard let site = scoped(key) else { return base.object(forKey: key) }
+        return key == "manga.site_address" ? site : snapshotValue(key, site: site)
+    }
+    func string(forKey key: String) -> String? { scoped(key) == nil ? base.string(forKey: key) : object(forKey: key) as? String }
+    func stringArray(forKey key: String) -> [String]? { scoped(key) == nil ? base.stringArray(forKey: key) : object(forKey: key) as? [String] }
+    func bool(forKey key: String) -> Bool { scoped(key) == nil ? base.bool(forKey: key) : object(forKey: key) as? Bool ?? false }
+    func integer(forKey key: String) -> Int { scoped(key) == nil ? base.integer(forKey: key) : object(forKey: key) as? Int ?? 0 }
+    func dictionary(forKey key: String) -> [String: Any]? { base.dictionary(forKey: key) }
+    func set(_ value: Any?, forKey key: String) {
+        guard let site = scoped(key), key != "manga.site_address" else { base.set(value, forKey: key); return }
+        updateSnapshot(site: site) { $0[key] = value }
+    }
+    func removeObject(forKey key: String) {
+        guard let site = scoped(key), key != "manga.site_address" else { base.removeObject(forKey: key); return }
+        updateSnapshot(site: site) { $0.removeValue(forKey: key) }
+    }
+}
+
 public enum MangaUrls {
-    static var preferences: UserDefaults { ContentPreferences.defaults }
+    static var preferences: ScopedPreferences { .shared }
     enum Backend: String { case indexed, document, keyed }
     static var backend: Backend {
         guard preferences.string(forKey: "manga.resolved_backend_site") == home else { return .indexed }
@@ -384,7 +443,7 @@ public enum MangaUrls {
 /// about it, so switching back never repeats the check. Sites that number their works the same
 /// way can open each other's saved works.
 enum ComicSites {
-    private static var preferences: UserDefaults { MangaUrls.preferences }
+    private static var preferences: UserDefaults { ContentPreferences.defaults }
     private static let listKey = "manga.sites"
     private static let snapshotsKey = "manga.siteSnapshots"
     /// Account details that belong to one site, kept with what was learned about it.
@@ -409,6 +468,7 @@ enum ComicSites {
 
     /// Forgets a site and what was learned about it.
     static func remove(_ site: String) {
+        ScopedPreferences.lock.lock(); defer { ScopedPreferences.lock.unlock() }
         preferences.set(all.filter { $0 != site }, forKey: listKey)
         var snapshots = preferences.dictionary(forKey: snapshotsKey) ?? [:]
         snapshots.removeValue(forKey: site)
@@ -418,6 +478,7 @@ enum ComicSites {
     /// Keeps what was learned about [old] and brings back what was learned about [new].
     static func switchSite(from old: String, to new: String) {
         guard old != new else { MangaUrls.resetResolvedBackend(); return }
+        ScopedPreferences.lock.lock(); defer { ScopedPreferences.lock.unlock() }
         var snapshots = preferences.dictionary(forKey: snapshotsKey) ?? [:]
         if !old.isEmpty {
             let home = MangaUrls.home(forSite: old)
@@ -439,7 +500,7 @@ enum ComicSites {
     /// How a site's works are reached, once learned.
     static func backend(of site: String) -> MangaUrls.Backend? {
         let home = MangaUrls.home(forSite: site)
-        if site == active { return MangaUrls.hasResolvedBackend ? MangaUrls.backend : nil }
+        if site == active { return SiteScope.$site.withValue(nil) { MangaUrls.hasResolvedBackend ? MangaUrls.backend : nil } }
         guard let saved = (preferences.dictionary(forKey: snapshotsKey) ?? [:])[site] as? [String: Any],
               saved["manga.resolved_backend_site"] as? String == home else { return nil }
         return MangaUrls.Backend(rawValue: saved["manga.resolved_protocol"] as? String ?? "")

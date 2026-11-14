@@ -183,9 +183,16 @@ public struct NativeContentView: View {
 /// Switches between the connected comics websites; lists reload for the chosen one.
 struct ComicSiteMenu: View {
     @Environment(AppEnvironment.self) private var env
+    private static let allSites = "*"
     var body: some View {
         Menu {
-            Picker(L10n.text("Website"), selection: Binding(get: { env.mangaSiteAddress }, set: { env.switchComicsSite(to: $0) })) {
+            // Every connected website at once, or one of them.
+            Picker(L10n.text("Website"), selection: Binding(get: { env.listsAllComicSites ? Self.allSites : env.mangaSiteAddress }, set: { site in
+                if site == Self.allSites { env.combinesComicSites = true; return }
+                env.combinesComicSites = false
+                env.switchComicsSite(to: site)
+            })) {
+                Text(L10n.text("All Websites")).tag(Self.allSites)
                 ForEach(env.comicSites, id: \.self) { site in Text(site).tag(site) }
             }
         } label: {
@@ -288,7 +295,7 @@ private struct GalleryFeedView: View {
     @State private var paginationViewport = GalleryPaginationViewport()
     @State private var searchViewportHeight: CGFloat = 0
     @State private var footerVisible = false
-    @State private var bookmarkedIDs = Set<Int64>()
+    @State private var savedWorks = SavedWorkKeys()
     @State private var history: [String] = []
     @State private var savedSearches: [String] = []
     @State private var loadedQuery: GalleryQuery?
@@ -360,7 +367,8 @@ private struct GalleryFeedView: View {
     private var isActive: Bool { env.mode == .manga && scenePhase == .active }
 
     var body: some View {
-        let visibleEntries = loader.ids.enumerated().filter { !env.hiddenMangaGalleryIDs.contains($0.element) }
+        let visibleEntries = loader.items.enumerated().filter { !env.hiddenMangaGalleryIDs.contains($0.element.id) }
+        let saved = Dictionary(uniqueKeysWithValues: Set(loader.items.map(\.site)).map { ($0, savedWorks.ids(on: $0)) })
         ScrollViewReader { scrollProxy in
         ZStack(alignment: .top) {
         ScrollView {
@@ -378,11 +386,17 @@ private struct GalleryFeedView: View {
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
                     // Read once for the grid: each lazy cell reading the loader would observe it again.
                     let previews = loader.previews
-                    ForEach(visibleEntries, id: \.element) { index, id in
-                        GalleryGridCard(id: id, preview: previews[id], isBookmarked: bookmarkedIDs.contains(id), source: source, images: images,
-                                        details: { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) },
-                                        open: { readerSequence?.ids = visibleEntries.map(\.element); navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery)) }) { gallery in
-                            saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: images, context: discovery) }
+                    ForEach(visibleEntries, id: \.element) { index, item in
+                        let id = item.id
+                        let itemImages = loader.images(for: item) ?? images
+                        GalleryGridCard(id: id, preview: previews[item], isBookmarked: saved[item.site]?.contains(id) == true, source: loader.source(for: item), images: itemImages, site: item.site,
+                                        details: { showing(item) { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) } },
+                                        open: { showing(item) {
+                                            // The reader steps through works of the website it reads.
+                                            readerSequence?.ids = visibleEntries.map(\.element).filter { $0.site == item.site }.map(\.id)
+                                            navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery))
+                                        } }) { gallery in
+                            saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: itemImages, context: discovery, site: item.site) }
                         }
                         .id(id)
                         .onAppear {
@@ -517,20 +531,18 @@ private struct GalleryFeedView: View {
         .task(id: isActive) {
             guard isActive else { return }
             do {
-                let observation = ValueObservation.tracking { db in
-                    Set(try Int64.fetchAll(db, sql: "SELECT gallery_id FROM works"))
-                }
-                for try await ids in observation.values(in: env.database.dbWriter) { bookmarkedIDs = ids }
+                let observation = ValueObservation.tracking { db in try SavedWorkKeys.fetch(db) }
+                for try await keys in observation.values(in: env.database.dbWriter) { savedWorks = keys }
             } catch { /* Preserve the last known bookmark state if observation is interrupted. */ }
         }
-        .task(id: InitialRequest(query: effectiveQuery, site: env.mangaSiteAddress)) {
+        .task(id: InitialRequest(query: effectiveQuery, site: feedSite)) {
             guard isActive else { return }
             loader.resume()
-            guard loadedQuery != effectiveQuery || loadedSite != env.mangaSiteAddress || (!loader.didLoad && !loader.loading) else { return }
-            let initial = !loader.didLoad && (loadedQuery == nil || loadedQuery == effectiveQuery) && (loadedSite == nil || loadedSite == env.mangaSiteAddress)
+            guard loadedQuery != effectiveQuery || loadedSite != feedSite || (!loader.didLoad && !loader.loading) else { return }
+            let initial = !loader.didLoad && (loadedQuery == nil || loadedQuery == effectiveQuery) && (loadedSite == nil || loadedSite == feedSite)
             loadedQuery = effectiveQuery
-            loadedSite = env.mangaSiteAddress
-            await loader.load(effectiveQuery, reset: true, useLaunchPage: initial, site: env.mangaSiteAddress).value
+            loadedSite = feedSite
+            await reload(useLaunchPage: initial).value
         }
         .task(id: "\(footerVisible):\(loader.loading):\(loader.ids.count):\(isActive):\(isVisible)") {
             guard footerVisible, isActive, isVisible, !loader.loading, loader.hasMore, loader.error == nil else { return }
@@ -552,7 +564,7 @@ private struct GalleryFeedView: View {
         .modifier(FeedRefresh(enabled: !closesOnPull) {
             let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             if query.text != text { query.text = text }
-            else { await loader.load(effectiveQuery, reset: true).value }
+            else { await reload().value }
         })
         .onAppear {
             let loader = loader, environment = env
@@ -568,12 +580,27 @@ private struct GalleryFeedView: View {
 
     private func resumeFeed() {
         loader.resume()
-        if (loadedQuery != effectiveQuery || loadedSite != env.mangaSiteAddress || !loader.didLoad) && !loader.loading {
-            let initial = !loader.didLoad && (loadedQuery == nil || loadedQuery == effectiveQuery) && (loadedSite == nil || loadedSite == env.mangaSiteAddress)
+        if (loadedQuery != effectiveQuery || loadedSite != feedSite || !loader.didLoad) && !loader.loading {
+            let initial = !loader.didLoad && (loadedQuery == nil || loadedQuery == effectiveQuery) && (loadedSite == nil || loadedSite == feedSite)
             loadedQuery = effectiveQuery
-            loadedSite = env.mangaSiteAddress
-            loader.load(effectiveQuery, reset: true, useLaunchPage: initial, site: env.mangaSiteAddress)
+            loadedSite = feedSite
+            reload(useLaunchPage: initial)
         }
+    }
+
+    /// What the list shows: the checked website, or every connected one together.
+    private var feedSite: String { env.listsAllComicSites ? "*" + env.comicSites.joined(separator: ",") : env.mangaSiteAddress }
+
+    @discardableResult private func reload(useLaunchPage: Bool = false) -> Task<Void, Never> {
+        if env.listsAllComicSites { return loader.load(effectiveQuery, reset: true, combinedSites: env.comicSites) }
+        return loader.load(effectiveQuery, reset: true, useLaunchPage: useLaunchPage, site: env.mangaSiteAddress)
+    }
+
+    /// A work from another website in a combined list opens with that website checked, which
+    /// leaves the combined list as it is.
+    private func showing(_ item: FeedItem, _ action: () -> Void) {
+        if env.listsAllComicSites, item.site != env.mangaSiteAddress { env.switchComicsSite(to: item.site) }
+        action()
     }
 
     private func updateFooterVisibility() {
@@ -594,7 +621,7 @@ private struct GalleryFeedView: View {
         if let route = ContentRoute.initial(text) { navigate(route) }
         else if !text.isEmpty, text.allSatisfy({ $0.isASCII && $0.isNumber }), let id = Int64(text), id > 0 { navigate(.gallery(id)) }
         else {
-            if query.text == text { loader.load(effectiveQuery, reset: true) }
+            if query.text == text { reload() }
             else { query.text = text }
         }
     }
@@ -802,6 +829,8 @@ private struct GalleryGridCard: View {
     private struct LoadKey: Hashable { let preview: ObjectIdentifier?; let active: Bool }
     let id: Int64
     let isBookmarked: Bool
+    /// The website the work is listed from, when a list shows several.
+    let site: String?
     let open: () -> Void
     /// Work information, for a gesture set to show it; opening is the fallback.
     let details: () -> Void
@@ -814,7 +843,7 @@ private struct GalleryGridCard: View {
     private var isQueued: Bool { env.readingQueue.contains(id) }
     private var queueItem: ReadingQueueItem {
         ReadingQueueItem(gallery: gallery, id: id, title: preview.display?.title, artists: preview.display?.artists,
-                         language: preview.display?.language, type: preview.display?.type, site: ComicSites.active.isEmpty ? nil : ComicSites.active)
+                         language: preview.display?.language, type: preview.display?.type, site: site ?? (ComicSites.active.isEmpty ? nil : ComicSites.active))
     }
     /// Runs what Settings assigns to the gesture.
     private func perform(_ gesture: ThumbnailGesture) {
@@ -831,9 +860,10 @@ private struct GalleryGridCard: View {
         if env.readingQueue.add(queueItem, cover: image) { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     }
 
-    init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore,
+    init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore, site: String? = nil,
          details: (() -> Void)? = nil, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
         self.id = id
+        self.site = site
         self.isBookmarked = isBookmarked
         self.suppliedPreview = preview
         self.open = open
@@ -1000,10 +1030,9 @@ struct GalleryWorkInformation: View {
         .task {
             guard links != nil else { return }
             do {
-                let observation = ValueObservation.tracking { db in
-                    Set(try Int64.fetchAll(db, sql: "SELECT gallery_id FROM works"))
-                }
-                for try await ids in observation.values(in: env.database.dbWriter) { savedIDs = ids }
+                let site = env.mangaSiteAddress
+                let observation = ValueObservation.tracking { db in try SavedWorkKeys.fetch(db) }
+                for try await keys in observation.values(in: env.database.dbWriter) { savedIDs = keys.ids(on: site) }
             } catch { /* Saved marks are a hint, so a dropped observation keeps the last ones. */ }
         }
     }
@@ -1579,41 +1608,62 @@ final class GalleryFeedLoader {
     private let images: PageImageStore?
     private let startup: LaunchFeedWarmup?
     private var task: Task<Void, Never>?
-    private(set) var previews: [Int64: GalleryFeedPreview] = [:]
+    private(set) var previews: [FeedItem: GalleryFeedPreview] = [:]
     private struct CoverFlight { let token: UUID; let task: Task<Void, Never> }
-    @ObservationIgnored private var prefetchTasks: [Int64: CoverFlight] = [:]
-    @ObservationIgnored private var prefetchQueue: [Int64] = []
-    @ObservationIgnored private var prefetchWindow: [Int64] = []
+    @ObservationIgnored private var prefetchTasks: [FeedItem: CoverFlight] = [:]
+    @ObservationIgnored private var prefetchQueue: [FeedItem] = []
+    @ObservationIgnored private var prefetchWindow: [FeedItem] = []
     @ObservationIgnored private var previousCoverIndex: Int?
-    @ObservationIgnored private var retainedCoverIDs = Set<Int64>()
+    @ObservationIgnored private var retainedCoverIDs = Set<FeedItem>()
     @ObservationIgnored private var suspended = false
+    /// The websites a combined list shows; nil while it shows the checked one.
+    @ObservationIgnored private(set) var combinedSites: [String]?
+    @ObservationIgnored private let combined: CombinedCatalog
     private var generation = UUID()
     private var nextOffset = 0
     private var currentQuery: GalleryQuery?
     private var currentSite: String?
     private var lastReset = true
-    private(set) var ids: [Int64] = []
+    private(set) var items: [FeedItem] = []
+    var ids: [Int64] { items.map(\.id) }
     private(set) var didLoad = false
     private(set) var loading = false
     private(set) var hasMore = false
     private(set) var error: String?
 
-    init(source: any ContentProviding, images: PageImageStore? = nil, startup: LaunchFeedWarmup? = nil) {
+    init(source: any ContentProviding, images: PageImageStore? = nil, startup: LaunchFeedWarmup? = nil, combined: CombinedCatalog = CombinedCatalog()) {
         self.source = source
         self.images = images
         self.startup = startup
+        self.combined = combined
+    }
+
+    private static var siteImages: [String: PageImageStore] = [:]
+
+    /// The preview of a number in a list of one website, where a number names one work.
+    func preview(_ id: Int64) -> GalleryFeedPreview? { previews.first { $0.key.id == id }?.value }
+
+    /// The reader of a work's website: in a combined list, that website's own.
+    func source(for item: FeedItem) -> any ContentProviding { combinedSites == nil ? source : SiteContent.for(item.site) }
+
+    func images(for item: FeedItem) -> PageImageStore? {
+        guard combinedSites != nil, images != nil else { return images }
+        if let store = Self.siteImages[item.site] { return store }
+        let store = PageImageStore(source: SiteContent.for(item.site))
+        Self.siteImages[item.site] = store
+        return store
     }
 
     /// Only the rows near the viewport merit speculation. Never drain a whole
     /// page of full gallery documents and covers just because its IDs arrived.
     func prioritizeCovers(startingAt index: Int, count: Int, columns: Int = 1) {
-        guard !suspended, ids.indices.contains(index), count > 0 else { return }
+        guard !suspended, items.indices.contains(index), count > 0 else { return }
         let returning = previousCoverIndex.map { index < $0 } ?? false
         previousCoverIndex = index
-        retainCovers(around: index, in: ids)
-        let end = index + min(returning ? max(1, min(columns, count)) : count, ids.count - index)
+        retainCovers(around: index, in: items)
+        let end = index + min(returning ? max(1, min(columns, count)) : count, items.count - index)
         let start = returning ? max(0, end - count) : index
-        prefetchWindow = returning ? Array(ids[start..<end].reversed()) : Array(ids[start..<end])
+        prefetchWindow = returning ? Array(items[start..<end].reversed()) : Array(items[start..<end])
         for id in prefetchWindow { previews[id]?.restoreCachedContent() }
         let priority = Set(prefetchWindow)
         for (id, flight) in prefetchTasks where !priority.contains(id) { flight.task.cancel() }
@@ -1621,12 +1671,12 @@ final class GalleryFeedLoader {
         startPrefetch()
     }
 
-    private func retainCovers(around index: Int, in ids: [Int64]) {
+    private func retainCovers(around index: Int, in items: [FeedItem]) {
         // Keep a bounded neighborhood above and below the viewport, independent
         // of the pagination cursor or current scroll direction.
-        let start = min(max(0, index - 36), max(0, ids.count - 72))
-        let end = min(ids.count, start + 72)
-        let retained = Set(ids[start..<end])
+        let start = min(max(0, index - 36), max(0, items.count - 72))
+        let end = min(items.count, start + 72)
+        let retained = Set(items[start..<end])
         for id in retainedCoverIDs.subtracting(retained) { previews[id]?.discardDisplayContent() }
         retainedCoverIDs = retained
     }
@@ -1655,9 +1705,12 @@ final class GalleryFeedLoader {
         if cancelCovers { for preview in previews.values { preview.cancel() } }
     }
 
-    @discardableResult func load(_ query: GalleryQuery, reset: Bool, useLaunchPage: Bool = false, site: String? = nil) -> Task<Void, Never> {
+    /// `combinedSites` lists those websites together instead of the checked one. Without
+    /// either it or `site`, the list goes on as it is.
+    @discardableResult func load(_ query: GalleryQuery, reset: Bool, useLaunchPage: Bool = false, site: String? = nil, combinedSites: [String]? = nil) -> Task<Void, Never> {
         guard !suspended else { return Task {} }
-        let site = site ?? currentSite ?? MangaUrls.configuredHost
+        let combinedSites = (combinedSites == nil && site == nil ? self.combinedSites : combinedSites).flatMap { $0.count > 1 ? $0 : nil }
+        let site = combinedSites.map { "*" + $0.joined(separator: ",") } ?? site ?? currentSite ?? MangaUrls.configuredHost
         if !reset, loading, currentQuery == query, let task { return task }
         task?.cancel()
         let changedQuery = currentQuery != query || currentSite != site
@@ -1666,10 +1719,11 @@ final class GalleryFeedLoader {
             prefetchWindow.removeAll()
             previousCoverIndex = nil
             retainedCoverIDs.removeAll()
-            ids = []; nextOffset = 0; hasMore = false; previews.removeAll(); didLoad = false
+            items = []; nextOffset = 0; hasMore = false; previews.removeAll(); didLoad = false
         }
         currentQuery = query
         currentSite = site
+        self.combinedSites = combinedSites
         let reset = reset || changedQuery
         lastReset = reset
         let token = UUID()
@@ -1678,35 +1732,44 @@ final class GalleryFeedLoader {
         error = nil
         let offset = reset ? 0 : nextOffset
         let source = source
-        let startup = startup
+        let startup = combinedSites == nil ? startup : nil
+        let combined = combined
         let request = Task { [weak self] in
             do {
-                let batch: GalleryBatch
-                if reset, useLaunchPage, let startup {
-                    batch = try await startup.mangaPage(query: query, site: site, initialConsumer: true)
+                let batch: CombinedBatch
+                if let combinedSites {
+                    batch = try await combined.list(query, sites: combinedSites, offset: offset, count: 24)
                 } else {
-                    if reset, let startup { await startup.invalidateManga(query: query, site: site) }
-                    try Task.checkCancellation()
-                    batch = try await source.list(query, offset: offset, count: 24)
+                    let single: GalleryBatch
+                    if reset, useLaunchPage, let startup {
+                        single = try await startup.mangaPage(query: query, site: site, initialConsumer: true)
+                    } else {
+                        if reset, let startup { await startup.invalidateManga(query: query, site: site) }
+                        try Task.checkCancellation()
+                        single = try await source.list(query, offset: offset, count: 24)
+                    }
+                    batch = CombinedBatch(items: single.ids.map { FeedItem(id: $0, site: site) }, hasMore: single.hasMore)
                 }
                 try Task.checkCancellation()
                 guard let self, self.generation == token else { return }
-                var seen = Set(reset ? [] : self.ids)
-                let incoming = batch.ids.filter { seen.insert($0).inserted }
-                let updatedIDs = (reset ? [] : self.ids) + incoming
+                var seen = Set(reset ? [] : self.items)
+                let incoming = batch.items.filter { seen.insert($0).inserted }
+                let updated = (reset ? [] : self.items) + incoming
                 if reset { self.stopPrefetch(cancelCovers: false) }
                 // Keep identities/text for loaded rows and decoded covers near
                 // the viewport, rather than only near the pagination cursor.
                 if reset { self.previews = [:]; self.retainedCoverIDs.removeAll(); self.previousCoverIndex = nil }
-                self.retainCovers(around: self.previousCoverIndex ?? max(0, updatedIDs.count - 1), in: updatedIDs)
-                if let images = self.images {
-                    for id in incoming { self.previews[id] = GalleryFeedPreview(id: id, source: source, images: images) }
+                self.retainCovers(around: self.previousCoverIndex ?? max(0, updated.count - 1), in: updated)
+                if self.images != nil {
+                    for item in incoming {
+                        if let images = self.images(for: item) { self.previews[item] = GalleryFeedPreview(id: item.id, source: self.source(for: item), images: images) }
+                    }
                 }
-                self.ids = updatedIDs
+                self.items = updated
                 self.didLoad = true
                 if reset && useLaunchPage { startup?.didPublishManga(query: query, site: site) }
-                self.nextOffset = offset + batch.ids.count
-                self.hasMore = batch.hasMore && !batch.ids.isEmpty && (reset || !incoming.isEmpty)
+                self.nextOffset = offset + batch.items.count
+                self.hasMore = batch.hasMore && !batch.items.isEmpty && (reset || !incoming.isEmpty)
                 self.prefetchQueue = self.prefetchQueue.filter { self.retainedCoverIDs.contains($0) }
                 self.startPrefetch()
             } catch {
@@ -1718,7 +1781,7 @@ final class GalleryFeedLoader {
         return request
     }
 
-    @discardableResult func retry(_ query: GalleryQuery) -> Task<Void, Never> { load(query, reset: lastReset) }
+    @discardableResult func retry(_ query: GalleryQuery) -> Task<Void, Never> { load(query, reset: lastReset, combinedSites: combinedSites) }
 
     /// Hidden tabs keep their results, but stop downloading and decoding covers.
     func suspend() {

@@ -746,7 +746,7 @@ final class ReaderUXTests: XCTestCase {
     }
 
     @MainActor private func loadCovers(_ loader: GalleryFeedLoader) async {
-        for id in loader.ids { await loader.previews[id]?.load() }
+        for id in loader.ids { await loader.preview(id)?.load() }
     }
 
     @MainActor func testPaginationDoesNotDownloadOffscreenCovers() async {
@@ -757,7 +757,7 @@ final class ReaderUXTests: XCTestCase {
         let idleRequests = await source.imageRequests
         XCTAssertTrue(idleRequests.isEmpty, "Loading IDs must not eagerly download all 48 covers")
         loader.prioritizeCovers(startingAt: 20, count: 4)
-        for id: Int64 in 21...24 { await loader.previews[id]?.load() }
+        for id: Int64 in 21...24 { await loader.preview(id)?.load() }
         let requests = await source.imageRequests
         XCTAssertEqual(Set(requests), Set((21...24).map(Int64.init)))
     }
@@ -813,17 +813,17 @@ final class ReaderUXTests: XCTestCase {
         let loader = GalleryFeedLoader(source: source, images: images)
         await loader.load(GalleryQuery(), reset: true).value
         await loadCovers(loader)
-        let prepared = loader.previews[1]?.image
+        let prepared = loader.preview(1)?.image
         loader.prioritizeCovers(startingAt: 0, count: 12, columns: 2)
         for _ in 0..<4 { await loader.load(GalleryQuery(), reset: false).value }
-        XCTAssertTrue(loader.previews[1]?.image === prepared, "Appending IDs must not evict covers near the viewport")
+        XCTAssertTrue(loader.preview(1)?.image === prepared, "Appending IDs must not evict covers near the viewport")
         loader.prioritizeCovers(startingAt: 84, count: 12, columns: 2)
-        XCTAssertNil(loader.previews[1]?.image, "Distant rows must release their pinned pixels")
+        XCTAssertNil(loader.preview(1)?.image, "Distant rows must release their pinned pixels")
         loader.prioritizeCovers(startingAt: 0, count: 12, columns: 2)
-        XCTAssertTrue(loader.previews[1]?.image === prepared, "Reverse scrolling must restore the approaching window synchronously")
+        XCTAssertTrue(loader.preview(1)?.image === prepared, "Reverse scrolling must restore the approaching window synchronously")
         for index in stride(from: 0, to: loader.ids.count, by: 2) {
             loader.prioritizeCovers(startingAt: index, count: 12, columns: 2)
-            for id in loader.ids[index..<min(index + 2, loader.ids.count)] { await loader.previews[id]?.load() }
+            for id in loader.ids[index..<min(index + 2, loader.ids.count)] { await loader.preview(id)?.load() }
         }
         XCTAssertLessThanOrEqual(loader.previews.values.filter { $0.image != nil }.count, 72)
         loader.cancel()
@@ -857,14 +857,14 @@ final class ReaderUXTests: XCTestCase {
         await source.waitForImage(1)
         XCTAssertEqual(loader.ids, Array(1...24).map(Int64.init))
         XCTAssertFalse(loader.loading, "A blocked cover must never keep pagination loading")
-        XCTAssertNotNil(loader.previews[1]?.gallery, "Metadata should appear before its slow cover")
-        XCTAssertNil(loader.previews[1]?.image)
-        await loader.previews[2]?.load()
-        XCTAssertNotNil(loader.previews[2]?.image, "Other cards must complete independently")
+        XCTAssertNotNil(loader.preview(1)?.gallery, "Metadata should appear before its slow cover")
+        XCTAssertNil(loader.preview(1)?.image)
+        await loader.preview(2)?.load()
+        XCTAssertNotNil(loader.preview(2)?.image, "Other cards must complete independently")
         await source.release(1)
         await loadCovers(loader)
         for id in loader.ids {
-            let preview = try XCTUnwrap(loader.previews[id])
+            let preview = try XCTUnwrap(loader.preview(id))
             let gallery = try XCTUnwrap(preview.gallery)
             let image = try XCTUnwrap(preview.image)
             XCTAssertEqual(gallery.id, id)
@@ -899,7 +899,7 @@ final class ReaderUXTests: XCTestCase {
         let loader = GalleryFeedLoader(source: source, images: PageImageStore(source: source))
         await loader.load(GalleryQuery(), reset: true).value
         await loadCovers(loader)
-        let firstImage = loader.previews[1]?.image
+        let firstImage = loader.preview(1)?.image
         let request = loader.load(GalleryQuery(), reset: false)
         let duplicate = loader.load(GalleryQuery(), reset: false)
         await request.value
@@ -908,10 +908,10 @@ final class ReaderUXTests: XCTestCase {
         await source.waitForImage(25)
         XCTAssertEqual(loader.ids, Array(1...48).map(Int64.init))
         XCTAssertFalse(loader.loading)
-        XCTAssertTrue(loader.previews[1]?.image === firstImage)
-        XCTAssertNil(loader.previews[25]?.image)
-        await loader.previews[26]?.load()
-        XCTAssertNotNil(loader.previews[26]?.image)
+        XCTAssertTrue(loader.preview(1)?.image === firstImage)
+        XCTAssertNil(loader.preview(25)?.image)
+        await loader.preview(26)?.load()
+        XCTAssertNotNil(loader.preview(26)?.image)
         await source.release(25)
         await loadCovers(loader)
         let offsets = await source.offsets
@@ -935,8 +935,8 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertEqual(loader.ids, Array(1...48).map(Int64.init))
         XCTAssertFalse(loader.loading)
         // A visible cell can bypass the blocked speculative queue.
-        await loader.previews[25]?.load()
-        XCTAssertNotNil(loader.previews[25]?.image)
+        await loader.preview(25)?.load()
+        XCTAssertNotNil(loader.preview(25)?.image)
         for id: Int64 in 1...2 { await source.release(id) }
         await loadCovers(loader)
     }
@@ -979,16 +979,16 @@ final class ReaderUXTests: XCTestCase {
         await loader.load(GalleryQuery(), reset: true).value
         loader.prioritizeCovers(startingAt: 0, count: 4)
         await source.waitForImage(1)
-        let previous = loader.previews[1]
+        let previous = loader.preview(1)
         await loader.load(GalleryQuery(language: "english"), reset: true).value
         XCTAssertEqual(loader.ids, Array(1001...1024).map(Int64.init))
-        XCTAssertEqual(Set(loader.previews.keys), Set(loader.ids))
+        XCTAssertEqual(Set(loader.previews.keys.map(\.id)), Set(loader.ids))
         XCTAssertFalse(loader.loading)
         await loadCovers(loader)
         await source.release(1)
         await previous?.load()
         XCTAssertNil(previous?.image)
-        XCTAssertTrue(loader.ids.allSatisfy { loader.previews[$0]?.image != nil })
+        XCTAssertTrue(loader.ids.allSatisfy { loader.preview($0)?.image != nil })
         XCTAssertNil(loader.error)
     }
 
@@ -998,10 +998,10 @@ final class ReaderUXTests: XCTestCase {
         await loader.load(GalleryQuery(), reset: true).value
         await loadCovers(loader)
         XCTAssertEqual(loader.ids, Array(1...24).map(Int64.init))
-        XCTAssertNil(loader.previews[3]?.gallery)
-        XCTAssertNotNil(loader.previews[5]?.gallery)
-        XCTAssertNil(loader.previews[5]?.image)
-        XCTAssertTrue(loader.ids.filter { $0 != 3 && $0 != 5 }.allSatisfy { loader.previews[$0]?.image != nil })
+        XCTAssertNil(loader.preview(3)?.gallery)
+        XCTAssertNotNil(loader.preview(5)?.gallery)
+        XCTAssertNil(loader.preview(5)?.image)
+        XCTAssertTrue(loader.ids.filter { $0 != 3 && $0 != 5 }.allSatisfy { loader.preview($0)?.image != nil })
         XCTAssertFalse(loader.loading)
         XCTAssertNil(loader.error)
     }
@@ -1011,20 +1011,20 @@ final class ReaderUXTests: XCTestCase {
         let loader = GalleryFeedLoader(source: source, images: PageImageStore(source: source))
         await loader.load(GalleryQuery(), reset: true).value
         await loadCovers(loader)
-        let first = loader.previews[1]
+        let first = loader.preview(1)
         let firstDisplay = first?.display
         while loader.hasMore {
             let previousCount = loader.ids.count
             await loader.load(GalleryQuery(), reset: false).value
-            for id in loader.ids.dropFirst(previousCount) { await loader.previews[id]?.load() }
+            for id in loader.ids.dropFirst(previousCount) { await loader.preview(id)?.load() }
         }
         XCTAssertEqual(loader.ids, Array(1...108).map(Int64.init))
-        XCTAssertEqual(Set(loader.previews.keys), Set(loader.ids))
-        XCTAssertTrue(loader.previews[1] === first, "An earlier row must keep its identity after multiple page appends")
+        XCTAssertEqual(Set(loader.previews.keys.map(\.id)), Set(loader.ids))
+        XCTAssertTrue(loader.preview(1) === first, "An earlier row must keep its identity after multiple page appends")
         XCTAssertEqual(first?.display, firstDisplay)
         let retained = Set(loader.ids.suffix(72))
-        for (id, preview) in loader.previews {
-            if retained.contains(id) { XCTAssertNotNil(preview.image) }
+        for (item, preview) in loader.previews {
+            if retained.contains(item.id) { XCTAssertNotNil(preview.image) }
             else {
                 XCTAssertNil(preview.image)
                 XCTAssertNil(preview.gallery)
@@ -1088,7 +1088,7 @@ final class ReaderUXTests: XCTestCase {
         await loader.load(GalleryQuery(), reset: true).value
         loader.prioritizeCovers(startingAt: 0, count: 4)
         for id: Int64 in 1...2 { await source.waitForImage(id) }
-        let first = try XCTUnwrap(loader.previews[1])
+        let first = try XCTUnwrap(loader.preview(1))
         await loader.load(GalleryQuery(), reset: false).value
         await loader.load(GalleryQuery(), reset: false).value
         let pending = Task { await first.load() }
@@ -1108,9 +1108,9 @@ final class ReaderUXTests: XCTestCase {
         await fulfillment(of: [restarted], timeout: 3)
         observer.cancel()
         await loadCovers(loader)
-        XCTAssertTrue(loader.previews[1] === first)
+        XCTAssertTrue(loader.preview(1) === first)
         XCTAssertNotNil(first.image, "A canceled cover must remain retryable on return")
-        XCTAssertTrue(loader.ids.allSatisfy { loader.previews[$0]?.image != nil })
+        XCTAssertTrue(loader.ids.allSatisfy { loader.preview($0)?.image != nil })
     }
 
     func testDiskPageCacheSurvivesStoreRecreationWithoutDownload() async throws {

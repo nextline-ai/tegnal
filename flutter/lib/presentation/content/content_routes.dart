@@ -123,10 +123,11 @@ class ContentRoutes {
   void _showDownloads(BuildContext context) =>
       showAppSheet<void>(context, builder: (context, controller) => DownloadsView(downloads: downloads!, inSheet: true));
 
-  void toggleBookmark(BuildContext context, int id, NativeGallery? gallery, {bool aboveTabBar = false}) => showWorkSaveFeedback(
+  /// [site] is the website the work is listed from, when it is not the checked one.
+  void toggleBookmark(BuildContext context, int id, NativeGallery? gallery, {bool aboveTabBar = false, String? site, PageImageStore? images}) => showWorkSaveFeedback(
     context,
     WorkSaveFeedback.perform(
-      () => ContentBookmarkAction.toggle(id, gallery: gallery, session: bookmarks, images: images),
+      () => ContentBookmarkAction.toggle(id, gallery: gallery, session: bookmarks, images: images ?? this.images, site: site),
       galleryID: id,
     ),
     session: bookmarks,
@@ -146,7 +147,7 @@ class ContentRoutes {
         onBack: () => Navigator.of(context).pop(),
         openGallery: (id) => openThumbnail(context, id),
         details: (id) => openGallery(context, id),
-        bookmark: (id, gallery) => toggleBookmark(context, id, gallery, aboveTabBar: true),
+        bookmark: (id, gallery, {site, images}) => toggleBookmark(context, id, gallery, aboveTabBar: true, site: site, images: images),
       ),
     ),
   );

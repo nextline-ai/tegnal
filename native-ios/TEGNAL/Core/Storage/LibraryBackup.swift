@@ -206,7 +206,7 @@ struct MangaBackup: Codable, Sendable {
         let names = Set(folders.map(\.name))
         guard [1, 2].contains(version), names.count == folders.count,
               folders.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (0...0xFFFFFFFF).contains($0.color ?? 0xFF2563EB) }),
-              Set(works.map(\.gallery_id)).count == works.count,
+              Set(works.map { "\($0.gallery_id)@\($0.site ?? "")" }).count == works.count,
               works.allSatisfy({ $0.gallery_id > 0 && ($0.thumb_page ?? 1) > 0 && Set($0.folders ?? []).isSubset(of: names) }),
               artists.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && SavedCollectionKind.allCases.compactMap(\.mangaKind).contains($0.kind ?? 0) }),
               Set(artists.map { $0.name + "\u{0}" + String($0.kind ?? 0) }).count == artists.count,
@@ -240,7 +240,11 @@ struct MangaBackup: Codable, Sendable {
         let order = try String.fetchAll(db, sql: "SELECT sync_id FROM folders WHERE sync_id IS NOT NULL ORDER BY sort_order, id")
         try db.execute(sql: "INSERT OR REPLACE INTO library_order VALUES ('folders', ?)", arguments: [try JSONEncoder().encode(order)])
         for record in works {
-            let existing = try Work.filter(Work.Columns.galleryId == record.gallery_id).fetchOne(db)
+            // A work saved from a website lands on that website's; one that does not say lands
+            // on a saved one that is the same work, else becomes its own.
+            let rows = try WorkIdentity.rows(db, galleryId: record.gallery_id)
+            let existing = record.site?.isEmpty == false ? WorkIdentity.pick(rows, site: record.site)
+                : WorkIdentity.importMatch(rows, title: record.title, artists: record.artists)
             var work = existing ?? Work(galleryId: record.gallery_id)
             work.title = record.title ?? work.title; work.artists = record.artists ?? work.artists
             work.note = record.note ?? work.note; work.language = record.language ?? work.language

@@ -10,7 +10,9 @@ import '../../core/content/manga_urls.dart';
 import '../../core/content/reading_queue.dart';
 import 'reading_queue_views.dart';
 
+import '../../core/content/combined_catalog.dart';
 import '../../core/content/gallery_content.dart';
+import '../../core/storage/work_identity.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../core/content/content_environment.dart';
@@ -83,7 +85,7 @@ class ExploreView extends StatefulWidget {
   final void Function(int id)? details;
 
   /// Holding a card toggles its bookmark.
-  final void Function(int id, NativeGallery? gallery)? bookmark;
+  final void Function(int id, NativeGallery? gallery, {String? site, PageImageStore? images})? bookmark;
   final bool isActive;
 
   /// A feed opened from a tag or search starts with that query and offers a way back.
@@ -115,7 +117,7 @@ class _ExploreViewState extends State<ExploreView> {
   bool _searchBarVisible = true;
   List<String> _history = [];
   List<String> _saved = [];
-  Set<int> _bookmarked = {};
+  SavedWorkKeys _bookmarked = SavedWorkKeys();
   List<TagSuggestion> _suggestions = [];
   bool _suggesting = false;
   Timer? _suggestionTimer;
@@ -178,15 +180,39 @@ class _ExploreViewState extends State<ExploreView> {
     });
     _search.addListener(_textChanged);
     _loader.addListener(() => setState(() {}));
+    widget.content.addListener(_contentChanged);
     _reloadBookmarks();
     // Saved marks follow the works table, as the native view observes it.
     _libraryChanges = widget.database.changes.listen((_) {
       if (mounted) setState(_reloadBookmarks);
     });
-    if (widget.isActive) _loader.load(_effectiveQuery, reset: true);
+    if (widget.isActive) _reload();
   }
 
   StreamSubscription<int>? _libraryChanges;
+
+  /// What the list shows: the checked website, or every connected one together.
+  String get _feedSite => widget.content.listsAllComicSites ? '*${widget.content.comicSites.join(',')}' : widget.content.mangaSiteAddress;
+  String? _loadedSite;
+
+  Future<void> _reload() {
+    _loadedSite = _feedSite;
+    final content = widget.content;
+    if (content.listsAllComicSites) return _loader.load(_effectiveQuery, reset: true, combinedSites: content.comicSites);
+    return _loader.load(_effectiveQuery, reset: true, site: content.mangaSiteAddress);
+  }
+
+  /// Choosing every website, or one, lists again; opening a work from another website in a
+  /// combined list checks that website and leaves the list as it is.
+  void _contentChanged() {
+    if (!mounted || !widget.isActive || _loadedSite == null || _loadedSite == _feedSite) return;
+    _reload();
+  }
+
+  /// A work from another website in a combined list opens with that website checked.
+  void _showing(FeedItem item) {
+    if (widget.content.listsAllComicSites && item.site != widget.content.mangaSiteAddress) widget.content.switchComicsSite(item.site);
+  }
 
   @override
   void didUpdateWidget(ExploreView old) {
@@ -194,7 +220,7 @@ class _ExploreViewState extends State<ExploreView> {
     if (widget.isActive && !old.isActive) {
       _loader.resume();
       _reloadBookmarks();
-      if (!_loader.didLoad || _loader.currentQuery != _effectiveQuery) _loader.load(_effectiveQuery, reset: true);
+      if (!_loader.didLoad || _loader.currentQuery != _effectiveQuery || _loadedSite != _feedSite) _reload();
     } else if (!widget.isActive && old.isActive) {
       _loader.suspend();
     }
@@ -203,6 +229,7 @@ class _ExploreViewState extends State<ExploreView> {
   @override
   void dispose() {
     _libraryChanges?.cancel();
+    widget.content.removeListener(_contentChanged);
     _loader.dispose();
     _suggestionTimer?.cancel();
     _search.dispose();
@@ -227,7 +254,7 @@ class _ExploreViewState extends State<ExploreView> {
     _saved = widget.database.savedSearches();
   }
 
-  void _reloadBookmarks() => _bookmarked = widget.database.savedGalleryIDs().toSet();
+  void _reloadBookmarks() => _bookmarked = widget.database.dbWriter.read(SavedWorkKeys.fetch);
 
   void _changeQuery(GalleryQuery query) {
     // An artist's feed remembers the language picked for it, and a tag's feed does while it
@@ -240,7 +267,7 @@ class _ExploreViewState extends State<ExploreView> {
       }
     }
     setState(() => _query = query);
-    _loader.load(_effectiveQuery, reset: true);
+    _reload();
   }
 
   void _submitSearch([String? value]) {
@@ -253,7 +280,7 @@ class _ExploreViewState extends State<ExploreView> {
     final number = RegExp(r'^[0-9]+$').hasMatch(text) ? int.tryParse(text) : null;
     if (number != null && number > 0) return widget.openGallery(number);
     if (_query.text == text) {
-      _loader.load(_effectiveQuery, reset: true);
+      _reload();
     } else {
       _changeQuery(_query.copyWith(text: text));
     }
@@ -264,7 +291,7 @@ class _ExploreViewState extends State<ExploreView> {
     if (_query.text != text) {
       _changeQuery(_query.copyWith(text: text));
     } else {
-      await _loader.load(_effectiveQuery, reset: true);
+      await _reload();
     }
   }
 
@@ -274,9 +301,10 @@ class _ExploreViewState extends State<ExploreView> {
     final barBottom = rootContentTop(context, pushed: widget.onBack != null);
     final hidden = _hidden;
     final entries = [
-      for (final id in _loader.ids)
-        if (!hidden.contains(id)) id,
+      for (final item in _loader.items)
+        if (!hidden.contains(item.id)) item,
     ];
+    final saved = {for (final site in {for (final item in entries) item.site}) site: _bookmarked.idsOn(site)};
     final title = _query.text.isEmpty ? L10n.text('Explore') : L10n.text('Search Results');
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
@@ -305,18 +333,29 @@ class _ExploreViewState extends State<ExploreView> {
                 ),
                 itemBuilder: (context, index, style) {
                   _loader.retainCovers(index);
-                  final id = entries[index];
-                  final preview = _loader.previews[id];
+                  final item = entries[index];
+                  final id = item.id;
+                  final preview = _loader.previews[item];
+                  final images = _loader.imagesFor(item);
                   return _GalleryGridCard(
-                    key: ValueKey(id),
+                    key: ValueKey(item),
                     id: id,
+                    site: _loader.combinedSites == null ? null : item.site,
                     preview: preview,
                     style: style,
-                    bookmarked: _bookmarked.contains(id),
-                    open: () => widget.openGallery(id),
-                    details: widget.details == null ? null : () => widget.details!(id),
-                    hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery),
-                    images: widget.images,
+                    bookmarked: saved[item.site]?.contains(id) ?? false,
+                    open: () {
+                      _showing(item);
+                      widget.openGallery(id);
+                    },
+                    details: widget.details == null
+                        ? null
+                        : () {
+                            _showing(item);
+                            widget.details!(id);
+                          },
+                    hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery, site: item.site, images: images),
+                    images: images,
                   );
                 },
               ),
@@ -434,7 +473,7 @@ class _ExploreViewState extends State<ExploreView> {
       selected: selectedCategory,
       onSelected: (value) {
         _category = value;
-        _loader.load(_effectiveQuery, reset: true);
+        _reload();
       },
     );
     final sort = BrowseFilterMenu<GallerySort>(
@@ -493,7 +532,7 @@ class _ExploreViewState extends State<ExploreView> {
             L10n.text('Show All Categories'),
             () {
               _category = '';
-              _loader.load(_effectiveQuery, reset: true);
+              _reload();
             },
           ),
         );
@@ -559,6 +598,7 @@ abstract final class _MeasuredWidth {
 class ComicSiteMenu extends StatelessWidget {
   const ComicSiteMenu({super.key, required this.content});
   final ContentEnvironment content;
+  static const _allSites = '*';
 
   @override
   Widget build(BuildContext context) => ToolbarGroup(
@@ -568,12 +608,23 @@ class ComicSiteMenu extends StatelessWidget {
           label: L10n.text('Website'),
           icon: Symbols.globe,
           onPressed: () async {
+            // Every connected website at once, or one of them.
+            final all = content.listsAllComicSites;
             final site = await showPullDownMenu<String>(
               context,
               anchor: anchorRectOf(context),
-              items: [for (final site in content.comicSites) PullDownMenuItem(value: site, title: site, checked: site == content.mangaSiteAddress)],
+              items: [
+                PullDownMenuItem(value: _allSites, title: L10n.text('All Websites'), checked: all),
+                for (final site in content.comicSites) PullDownMenuItem(value: site, title: site, checked: !all && site == content.mangaSiteAddress),
+              ],
             );
-            if (site != null) content.switchComicsSite(site);
+            if (site == null) return;
+            if (site == _allSites) {
+              content.combinesComicSites = true;
+              return;
+            }
+            content.combinesComicSites = false;
+            content.switchComicsSite(site);
           },
         ),
       ),
@@ -633,6 +684,7 @@ class _GalleryGridCard extends StatefulWidget {
   const _GalleryGridCard({
     super.key,
     required this.id,
+    this.site,
     required this.preview,
     required this.style,
     required this.bookmarked,
@@ -642,6 +694,9 @@ class _GalleryGridCard extends StatefulWidget {
     this.images,
   });
   final int id;
+
+  /// The website the work is listed from, when a list shows several.
+  final String? site;
   final GalleryFeedPreview? preview;
   final ArtworkCellStyle style;
   final bool bookmarked;
@@ -767,7 +822,7 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
       artists: display?.artists,
       language: display?.language,
       type: display?.type,
-      site: ComicSites.active,
+      site: widget.site ?? ComicSites.active,
     );
   }
 

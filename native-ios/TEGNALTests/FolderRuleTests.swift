@@ -255,7 +255,7 @@ import GRDB
         _ = try database.upsertWork(galleryId: 1, folderId: try database.defaultSaveFolder().id, title: "Same", artists: "Author", language: "korean", type: "manga")
         _ = try database.upsertWork(galleryId: 2, folderId: kept.id, title: "Same", artists: "Author", language: "korean", type: "manga")
         let group = try XCTUnwrap(LibraryMaintenance.duplicates(works: database.listWorks(), posts: []).first)
-        try LibraryMaintenance.mergeComics(group, keeping: 1, database: database)
+        try LibraryMaintenance.mergeComics(group, keeping: try XCTUnwrap(database.getWork(galleryId: 1)?.id), database: database)
         XCTAssertEqual(try folderNames(1), ["Kept"])
     }
 

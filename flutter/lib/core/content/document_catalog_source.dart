@@ -469,12 +469,19 @@ class DocumentCatalogSource {
           if (pair[0] != 'language' && pair[0] != 'artist') '${_localNamespace(pair[0])}:${pair[1]}',
       ],
       pages: pages,
+      listedTitles: listedTitles(object),
+      listedPageCount: object['files'] is List ? (object['files'] as List).length : null,
     );
   }
 
   static const _languageQualifiers = {'translated', 'rewrite'};
 
   /// The original-script title is kept even on translations, so it only leads for works still in Japanese.
+  static List<String> listedTitles(Map<String, Object?> object) => [
+    for (final key in ['title', 'title_jpn'])
+      if (object[key] case final String value when value.isNotEmpty) NativeGallery.decodeEntities(value),
+  ];
+
   static String title(Map<String, Object?> object, int id, {required String language, required bool translated}) {
     final main = (object['title'] is String ? object['title'] as String : '').trim();
     final original = (object['title_jpn'] is String ? object['title_jpn'] as String : '').trim();

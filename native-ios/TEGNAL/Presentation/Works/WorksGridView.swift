@@ -90,11 +90,11 @@ public struct WorksGridView: View {
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         if selecting {
-                                            if selection.contains(work.galleryId) { selection.remove(work.galleryId) } else { selection.insert(work.galleryId) }
+                                            if let id = work.id { if selection.contains(id) { selection.remove(id) } else { selection.insert(id) } }
                                         } else { open(work) }
                                     }
                                     .overlay(alignment: .topTrailing) {
-                                        if selecting { Image(systemName: selection.contains(work.galleryId) ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
+                                        if selecting { Image(systemName: work.id.map(selection.contains) == true ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
                                     }
                                     .contextMenu {
                                         workContextMenu(for: work)
@@ -173,7 +173,7 @@ public struct WorksGridView: View {
                         .frame(height: 32).accessibilityLabel(L10n.text(selecting ? "Done" : "Select")).accessibilityIdentifier("works.select")
                     if selecting {
                         Menu {
-                            Button(L10n.text("Select All")) { selection = Set(works.map(\.galleryId)) }
+                            Button(L10n.text("Select All")) { selection = Set(works.compactMap(\.id)) }
                             ForEach(allFolders) { target in
                                 Button(target.displayName) {
                                     do {
@@ -244,7 +244,7 @@ public struct WorksGridView: View {
         )) {
             Button(L10n.text("Delete"), role: .destructive) {
                 if let work = workPendingDelete {
-                    deleteWork(work.galleryId)
+                    deleteWork(work)
                     workPendingDelete = nil
                 }
             }
@@ -381,6 +381,7 @@ public struct WorksGridView: View {
         do {
             try env.database.moveWorkToFolder(
                 galleryId: work.galleryId,
+                site: work.site,
                 targetFolderId: targetId,
                 currentFolderId: folder?.id
             )
@@ -401,8 +402,8 @@ public struct WorksGridView: View {
         }
     }
 
-    private func deleteWork(_ galleryId: Int64) {
-        try? env.database.deleteWork(galleryId: galleryId)
+    private func deleteWork(_ work: Work) {
+        try? env.database.deleteWork(galleryId: work.galleryId, site: work.site)
         loadWorks()
     }
 

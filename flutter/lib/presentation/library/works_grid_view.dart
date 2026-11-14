@@ -128,7 +128,10 @@ class _WorksGridViewState extends State<WorksGridView> {
 
   void _open(Work work) {
     if (_selecting) {
-      setState(() => _selection.contains(work.galleryId) ? _selection.remove(work.galleryId) : _selection.add(work.galleryId));
+      setState(() {
+        final id = work.id;
+        if (id != null) _selection.contains(id) ? _selection.remove(id) : _selection.add(id);
+      });
     } else {
       _openOnItsSite(work);
     }
@@ -168,7 +171,7 @@ class _WorksGridViewState extends State<WorksGridView> {
     final id = target.id;
     if (id == null) return;
     try {
-      widget.routes.database.moveWorkToFolder(work.galleryId, id, currentFolderId: widget.folder?.id);
+      widget.routes.database.moveWorkToFolder(work.galleryId, id, currentFolderId: widget.folder?.id, site: work.site);
       _toast(L10n.text("Moved to folder '%@'", [target.displayName]));
     } on Object catch (error) {
       _toast('$error');
@@ -202,7 +205,7 @@ class _WorksGridViewState extends State<WorksGridView> {
         ],
       ),
     );
-    if (delete == true) widget.routes.database.deleteWork(work.galleryId);
+    if (delete == true) widget.routes.database.deleteWork(work.galleryId, site: work.site);
   }
 
   Future<void> _confirmDeleteSelection() async {
@@ -348,7 +351,7 @@ class _WorksGridViewState extends State<WorksGridView> {
     buttonContext,
     anchor: anchorOf(buttonContext),
     actions: [
-      ContextMenuAction(title: L10n.text('Select All'), onSelected: () => setState(() => _selection = {for (final work in _works) work.galleryId})),
+      ContextMenuAction(title: L10n.text('Select All'), onSelected: () => setState(() => _selection = {for (final work in _works) ?work.id})),
       for (final target in _folders) ContextMenuAction(title: target.displayName, onSelected: () => _moveSelection(target)),
     ],
   );
@@ -487,7 +490,7 @@ class _WorksGridViewState extends State<WorksGridView> {
                                 Positioned(
                                   top: style.inset(10),
                                   right: style.inset(10),
-                                  child: SelectionMark(selected: _selection.contains(work.galleryId), size: style.fontSize(22, minimum: 12)),
+                                  child: SelectionMark(selected: _selection.contains(work.id), size: style.fontSize(22, minimum: 12)),
                                 ),
                             ],
                           ),

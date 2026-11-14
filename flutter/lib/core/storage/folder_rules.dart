@@ -323,10 +323,10 @@ extension AppDatabaseFolderRules on AppDatabase {
     }
   }
 
-  List<int> folderIDs(int galleryId) => dbWriter.read(
-    (db) =>
-        db.column<int>('SELECT fw.folder_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE w.gallery_id = ? ORDER BY fw.added_at', [galleryId]),
-  );
+  List<int> folderIDs(int galleryId, {String? site}) => dbWriter.read((db) {
+    final id = AppDatabase.workRow(db, galleryId, site: site)?.id;
+    return id == null ? const <int>[] : db.column<int>('SELECT folder_id FROM folder_works WHERE work_id = ? ORDER BY added_at', [id]);
+  });
 
   /// Holds and quick saves land here; a folder deleted since falls back to Unfiled.
   Folder defaultSaveFolder() {
@@ -342,10 +342,10 @@ extension AppDatabaseFolderRules on AppDatabase {
   }
 
   /// Adding a work to a real folder takes it out of Unfiled.
-  void addWork(int galleryId, int folderID) {
+  void addWork(int galleryId, int folderID, {String? site}) {
     final now = iso8601();
     dbWriter.write((db) {
-      final workID = db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [galleryId]);
+      final workID = AppDatabase.workRow(db, galleryId, site: site)?.id;
       if (workID == null) return;
       db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [folderID, workID, now]);
       _leaveUnfiledWhenIn(folderID, db);

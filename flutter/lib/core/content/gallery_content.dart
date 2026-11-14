@@ -5,6 +5,7 @@ import 'package:characters/characters.dart';
 import 'package:collection/collection.dart';
 
 import '../support/l10n.dart';
+import '../storage/work_identity.dart';
 import '../support/swift_json.dart';
 import 'content_errors.dart';
 import 'content_url.dart';
@@ -109,6 +110,8 @@ class NativeGallery {
     required this.pages,
     this.versions,
     this.relatedIDs,
+    this.listedTitles,
+    this.listedPageCount,
   });
 
   final int id;
@@ -122,6 +125,17 @@ class NativeGallery {
   /// Optional so works downloaded before these were read still decode.
   final List<GalleryVersion>? versions;
   final List<int>? relatedIDs;
+
+  /// Every title the website lists, and the page count when the pages themselves are not
+  /// listed yet: what tells one work listed by two websites apart.
+  final List<String>? listedTitles;
+  final int? listedPageCount;
+
+  WorkFingerprint get matchFingerprint => WorkMatcher.fingerprint(
+    titles: [...?listedTitles, title],
+    artists: artists,
+    pages: listedPageCount ?? (pages.length > 1 ? pages.length : 0),
+  );
 
   /// The other languages of this work, with the given language first.
   List<GalleryVersion> otherVersions(String preferring) {
@@ -198,6 +212,10 @@ class NativeGallery {
       type: json['type'] is String ? json['type'] as String : '',
       tags: [...parseCredits(json), ...parseTags(json['tags'])],
       pages: pages,
+      listedTitles: [
+        if (json['title'] case final String value) decodeEntities(value),
+        if (japanese case final String value when value.isNotEmpty) decodeEntities(value),
+      ],
       versions: parseVersions(json['languages']),
       relatedIDs: parseRelatedIDs(json['related']),
     );
@@ -306,6 +324,8 @@ class NativeGallery {
     pages: pages ?? this.pages,
     versions: versions,
     relatedIDs: relatedIDs,
+    listedTitles: listedTitles,
+    listedPageCount: listedPageCount,
   );
 }
 

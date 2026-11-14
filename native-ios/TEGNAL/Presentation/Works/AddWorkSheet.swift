@@ -159,7 +159,7 @@ public struct AddWorkSheet: View {
         Task {
             var createdCount = 0
             for id in detectedIds {
-                let existing = try? env.database.getWork(galleryId: id)
+                let existing = try? env.database.getWork(galleryId: id, site: ComicSites.active)
                 let catalog = try? env.database.getCatalog(galleryId: id)
 
                 _ = try? env.database.upsertWork(

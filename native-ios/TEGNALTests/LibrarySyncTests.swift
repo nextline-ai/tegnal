@@ -319,11 +319,12 @@ final class LibrarySyncTests: XCTestCase {
             _ = try db.upsertWork(galleryId: id, title: "Imported together", bookmarkedAt: "2026-10-01T00:00:00Z")
         }
         _ = try db.upsertWork(galleryId: 1000, title: "Newest save", bookmarkedAt: "2026-10-23T00:00:00Z")
-        let first = try db.worksNeedingFill(limit: 2).map(\.galleryId)
-        XCTAssertEqual(first, [1000, 6000])
-        let second = try db.worksNeedingFill(limit: 2, exclude: Set(first)).map(\.galleryId)
-        XCTAssertEqual(second, [2000, 4000])
-        XCTAssertEqual(try db.worksNeedingFill(exclude: Set(first + second)).map(\.galleryId), [9000])
+        // Exclusions name saved rows.
+        let first = try db.worksNeedingFill(limit: 2)
+        XCTAssertEqual(first.map(\.galleryId), [1000, 6000])
+        let second = try db.worksNeedingFill(limit: 2, exclude: Set(first.compactMap(\.id)))
+        XCTAssertEqual(second.map(\.galleryId), [2000, 4000])
+        XCTAssertEqual(try db.worksNeedingFill(exclude: Set((first + second).compactMap(\.id))).map(\.galleryId), [9000])
         // Retrying a failed cover must keep its original save priority.
         try db.setThumb(galleryId: 9000, status: "failed")
         XCTAssertEqual(try db.worksNeedingFill().map(\.galleryId), [1000, 6000, 2000, 4000, 9000])
@@ -882,11 +883,11 @@ final class LibrarySyncTests: XCTestCase {
 
     func testPreviouslyFailedCoversAreRetriedWithoutRepeatingTheSameBatch() throws {
         let db = try AppDatabase.inMemory()
-        _ = try db.upsertWork(galleryId: 17, title: "Existing item", tags: "sky")
+        let saved = try db.upsertWork(galleryId: 17, title: "Existing item", tags: "sky")
         try db.setThumb(galleryId: 17, status: "failed")
         XCTAssertEqual(try db.worksNeedingFill().map(\.galleryId), [17])
         XCTAssertEqual(try db.countNeedingFill(), 1)
-        XCTAssertTrue(try db.worksNeedingFill(exclude: [17]).isEmpty)
+        XCTAssertTrue(try db.worksNeedingFill(exclude: [saved.id!]).isEmpty)
     }
 
     func testOriginalTagIsNotMistakenForTheOriginalImage() throws {

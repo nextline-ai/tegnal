@@ -138,8 +138,8 @@ actor MangaContentSource: ContentProviding {
                     galleryFlights[id] = flight
                     return
                 }
-                let token = UUID(), transport = transport, documents = documents, keyed = keyed
-                let task = Task.detached(priority: Task.currentPriority) {
+                let token = UUID(), transport = transport, documents = documents, keyed = keyed, scope = SiteScope.site
+                let task = Task.detached(priority: Task.currentPriority) { await SiteScope.$site.withValue(scope) {
                     do {
                         if backend != .indexed {
                             let document = backend == .keyed ? try await keyed.gallery(id, site: site) : try await documents.gallery(id, site: site)
@@ -156,7 +156,7 @@ actor MangaContentSource: ContentProviding {
                         let cost = max(1024, max(data.count * 2, document.pages.count * 192))
                         await self.finishGallery(id, token: token, result: .success(document), cost: cost)
                     } catch { await self.finishGallery(id, token: token, result: .failure(error)) }
-                }
+                } }
                 galleryFlights[id] = GalleryFlight(id: token, task: task, waiters: [waiter: continuation])
             }
             try Task.checkCancellation()

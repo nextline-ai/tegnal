@@ -11,6 +11,7 @@ import '../taste/taste_store.dart';
 import 'app_storage.dart';
 import 'local_thumbnail_cache.dart';
 import 'folder_rules.dart';
+import 'work_identity.dart';
 import 'work_query.dart';
 
 class FolderDeletionError implements Exception {
@@ -21,7 +22,7 @@ class FolderDeletionError implements Exception {
 /// The comics library. Same tables, columns and migration names as the native `memo.sqlite`.
 class AppDatabase implements SmartFolderLibrary {
   AppDatabase(this.dbWriter, {required this.preferences}) {
-    _migrator.migrate(dbWriter);
+    migrator.migrate(dbWriter);
   }
 
   final SqlDatabase dbWriter;
@@ -50,7 +51,7 @@ class AppDatabase implements SmartFolderLibrary {
   String get comicSource => MangaUrls.sourceIn(preferences.defaults);
   TasteItem comicItem(int galleryId, [String? tags]) => TasteItem.comic(galleryId, tags: tags, source: comicSource);
 
-  SqlMigrator get _migrator {
+  static SqlMigrator get migrator {
     final migrator = SqlMigrator();
 
     migrator.registerMigration('v1_create_schema', (db) {
@@ -108,7 +109,44 @@ class AppDatabase implements SmartFolderLibrary {
     migrator.registerMigration('v13_work_site', (db) {
       if (!db.columns('works').contains('site')) db.execute('ALTER TABLE works ADD COLUMN site TEXT');
     });
+    // One number may name a different work on each website: a work is its number and website.
+    migrator.registerMigration('v14_work_identity_per_site', migrateWorkIdentity, rebuildsTables: true);
     return migrator;
+  }
+
+  static const workColumns = [
+    'id', 'gallery_id', 'title', 'artists', 'language', 'type', 'series', 'groups', 'tags', 'note', 'bookmarked_at', //
+    'published_at', 'last_opened_at', 'updated_at', 'metadata_source', 'catalog_matched', 'thumb_status', 'thumb_path',
+    'thumb_failed_at', 'thumb_page', 'site',
+  ];
+
+  static void migrateWorkIdentity(SqlDatabase db) {
+    db.execute('''
+      CREATE TABLE "works_identity" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "gallery_id" INTEGER NOT NULL, "title" TEXT, "artists" TEXT,
+        "language" TEXT, "type" TEXT, "series" TEXT, "groups" TEXT, "tags" TEXT, "note" TEXT, "bookmarked_at" TEXT NOT NULL, "published_at" TEXT,
+        "last_opened_at" TEXT, "updated_at" TEXT, "metadata_source" TEXT, "catalog_matched" BOOLEAN NOT NULL DEFAULT 0,
+        "thumb_status" TEXT NOT NULL DEFAULT 'missing', "thumb_path" TEXT, "thumb_failed_at" TEXT, "thumb_page" INTEGER DEFAULT 1, "site" TEXT)
+      ''');
+    final columns = workColumns.map((column) => '"$column"').join(', ');
+    db.execute('INSERT INTO works_identity ($columns) SELECT $columns FROM works');
+    db.execute('DROP TABLE works');
+    db.execute('ALTER TABLE works_identity RENAME TO works');
+    db.execute('CREATE INDEX "idx_works_bookmarked" ON "works"("bookmarked_at")');
+    db.execute('CREATE INDEX "idx_works_gallery_id" ON "works"("gallery_id")');
+    db.execute("CREATE UNIQUE INDEX idx_works_identity ON works(gallery_id, COALESCE(site, ''))");
+    // A cover's fingerprint stays while another work still has its number.
+    db.execute('''
+      CREATE TRIGGER remove_visual_fingerprint AFTER DELETE ON works
+      WHEN NOT EXISTS (SELECT 1 FROM works WHERE gallery_id = OLD.gallery_id)
+      BEGIN DELETE FROM visual_fingerprints WHERE scope = 'comics' AND item_id = OLD.gallery_id; END;
+      ''');
+    // The refresh queue names saved works, not numbers.
+    db.execute('CREATE TABLE refresh_queue_works (work_id INTEGER PRIMARY KEY NOT NULL)');
+    if (db.tableExists('refresh_queue')) {
+      db.execute('INSERT OR IGNORE INTO refresh_queue_works (work_id) SELECT w.id FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id');
+      db.execute('DROP TABLE refresh_queue');
+    }
+    db.execute('ALTER TABLE refresh_queue_works RENAME TO refresh_queue');
   }
 
   // MARK: - Folders & Color Generation
@@ -449,13 +487,15 @@ class AppDatabase implements SmartFolderLibrary {
     return works;
   }
 
-  static Work? _workRow(SqlDatabase db, int galleryId) {
-    final row = db.row('SELECT * FROM works WHERE gallery_id = ?', [galleryId]);
-    return row == null ? null : Work.fromRow(row);
-  }
+  /// The saved work a number from [site] names; see `WorkIdentity.pick`.
+  static Work? workRow(SqlDatabase db, int galleryId, {String? site}) => WorkIdentity.pick(WorkIdentity.rows(db, galleryId), site);
 
-  Work? getWork(int galleryId) => dbWriter.read((db) {
-    final work = _workRow(db, galleryId);
+  static int? _workRowID(SqlDatabase db, int galleryId, String? site) => workRow(db, galleryId, site: site)?.id;
+
+  /// The saved work this number names on [site]; without a website, the one whose website
+  /// is unknown, else the first saved.
+  Work? getWork(int galleryId, {String? site}) => dbWriter.read((db) {
+    final work = workRow(db, galleryId, site: site);
     if (work?.id != null) {
       work!.folders = db
           .rows('SELECT f.* FROM folders f INNER JOIN folder_works fw ON fw.folder_id = f.id WHERE fw.work_id = ? ORDER BY f.sort_order ASC', [work.id])
@@ -484,8 +524,13 @@ class AppDatabase implements SmartFolderLibrary {
     }
   }
 
+  /// Saves or updates a work. With [site], the work saved from that website (or one whose
+  /// website is unknown, which then takes it); [workId] names a saved row directly. With
+  /// neither, as an import that does not know its website: the one whose website is
+  /// unknown, else a saved one that is the same work (see `WorkIdentity.importMatch`).
   Work upsertWork({
     required int galleryId,
+    int? workId,
     int? folderId,
     String? title,
     String? artists,
@@ -503,7 +548,13 @@ class AppDatabase implements SmartFolderLibrary {
     DiscoveryContext? discoveryContext,
   }) => dbWriter.write((db) {
     final now = iso8601();
-    var work = _workRow(db, galleryId);
+    final rows = WorkIdentity.rows(db, galleryId);
+    final website = site == null || site.isEmpty ? null : site;
+    var work = workId != null
+        ? rows.where((row) => row.id == workId).firstOrNull
+        : website != null
+        ? WorkIdentity.pick(rows, website)
+        : WorkIdentity.importMatch(rows, title: title, artists: artists);
     final wasNew = work == null;
     final lackedTags = (work?.tags ?? '').isEmpty;
 
@@ -521,8 +572,8 @@ class AppDatabase implements SmartFolderLibrary {
         if (metadataSource != null) existing.metadataSource = metadataSource;
         existing.catalogMatched = catalogMatched || existing.catalogMatched;
       }
-      // The first site a work is known from stays its site.
-      if (existing.site == null && site != null && site.isNotEmpty) existing.site = site;
+      // A work whose website was unknown takes the first website it is saved from.
+      if (existing.site == null && website != null && workId == null) existing.site = website;
       existing.updatedAt = now;
       updateWork(existing, db);
     } else {
@@ -540,7 +591,7 @@ class AppDatabase implements SmartFolderLibrary {
         updatedAt: now,
         metadataSource: metadataSource,
         catalogMatched: catalogMatched,
-        site: site == null || site.isEmpty ? null : site,
+        site: website,
       );
       insertWork(work, db);
     }
@@ -549,13 +600,13 @@ class AppDatabase implements SmartFolderLibrary {
     var effectiveFolderId = folderId;
     if (effectiveFolderId == null && db.value<int>('SELECT COUNT(*) FROM folders') == 0) effectiveFolderId = unfiledFolder(db).id;
     if (effectiveFolderId != null) {
-      final workId = work.id ?? db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [galleryId]);
-      if (workId != null) {
-        db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [effectiveFolderId, workId, now]);
+      final savedId = work.id;
+      if (savedId != null) {
+        db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [effectiveFolderId, savedId, now]);
         // If assigned to a non-default folder, remove from default folder (미분류)
         final defaultId = db.value<int>("SELECT id FROM folders WHERE name = '미분류' ORDER BY sort_order ASC, id ASC LIMIT 1");
         if (defaultId != null && defaultId != effectiveFolderId) {
-          db.execute('DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?', [defaultId, workId]);
+          db.execute('DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?', [defaultId, savedId]);
         }
       }
     }
@@ -577,25 +628,34 @@ class AppDatabase implements SmartFolderLibrary {
     dbWriter.write((db) => db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [folderId, workId, now]));
   }
 
-  void setManualTitle(int galleryId, String title) {
-    final now = iso8601();
-    dbWriter.write((db) => db.execute("UPDATE works SET title = ?, metadata_source = 'manual', updated_at = ? WHERE gallery_id = ?", [title, now, galleryId]));
-  }
-
-  void setNote(int galleryId, String note) {
-    final now = iso8601();
-    dbWriter.write((db) => db.execute('UPDATE works SET note = ?, updated_at = ? WHERE gallery_id = ?', [note, now, galleryId]));
-  }
-
-  void markOpened(int galleryId) {
-    final now = iso8601();
-    dbWriter.write((db) => db.execute('UPDATE works SET last_opened_at = ? WHERE gallery_id = ?', [now, galleryId]));
-  }
-
-  void moveWorkToFolder(int galleryId, int targetFolderId, {int? currentFolderId}) {
+  void setManualTitle(int galleryId, String title, {String? site}) {
     final now = iso8601();
     dbWriter.write((db) {
-      final workId = _workRow(db, galleryId)?.id;
+      final id = _workRowID(db, galleryId, site);
+      if (id != null) db.execute("UPDATE works SET title = ?, metadata_source = 'manual', updated_at = ? WHERE id = ?", [title, now, id]);
+    });
+  }
+
+  void setNote(int galleryId, String note, {String? site}) {
+    final now = iso8601();
+    dbWriter.write((db) {
+      final id = _workRowID(db, galleryId, site);
+      if (id != null) db.execute('UPDATE works SET note = ?, updated_at = ? WHERE id = ?', [note, now, id]);
+    });
+  }
+
+  void markOpened(int galleryId, {String? site}) {
+    final now = iso8601();
+    dbWriter.write((db) {
+      final id = _workRowID(db, galleryId, site);
+      if (id != null) db.execute('UPDATE works SET last_opened_at = ? WHERE id = ?', [now, id]);
+    });
+  }
+
+  void moveWorkToFolder(int galleryId, int targetFolderId, {int? currentFolderId, String? site}) {
+    final now = iso8601();
+    dbWriter.write((db) {
+      final workId = _workRowID(db, galleryId, site);
       if (workId == null) return;
       if (currentFolderId != null) {
         db.execute('DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?', [currentFolderId, workId]);
@@ -606,10 +666,10 @@ class AppDatabase implements SmartFolderLibrary {
     });
   }
 
-  void deleteWork(int galleryId) => dbWriter.write((db) {
-    TasteStore.record(TasteEventKind.remove, comicItem(galleryId), db);
-    final workId = _workRow(db, galleryId)?.id;
+  void deleteWork(int galleryId, {String? site}) => dbWriter.write((db) {
+    final workId = _workRowID(db, galleryId, site);
     if (workId != null) {
+      TasteStore.record(TasteEventKind.remove, comicItem(galleryId), db);
       db.execute('DELETE FROM folder_works WHERE work_id = ?', [workId]);
       db.execute('DELETE FROM works WHERE id = ?', [workId]);
     }
@@ -618,42 +678,54 @@ class AppDatabase implements SmartFolderLibrary {
   /// Called after a cover changes, for caches and visual fingerprints added by later screens.
   void Function(int galleryId, String path)? onThumbnailReady;
 
-  void setThumb(int galleryId, String status, {String? path, int? page}) {
+  void setThumb(int galleryId, String status, {String? path, int? page, String? site}) {
     final now = iso8601();
     // Invalidate before observers receive the updated thumbnail record.
     if (path != null) LocalThumbnailCache.shared.invalidate(path);
     dbWriter.write((db) {
+      final id = _workRowID(db, galleryId, site);
+      if (id == null) return;
       if (status == 'failed' || status == 'gone') {
-        db.execute('UPDATE works SET thumb_status = ?, thumb_failed_at = ? WHERE gallery_id = ?', [status, now, galleryId]);
+        db.execute('UPDATE works SET thumb_status = ?, thumb_failed_at = ? WHERE id = ?', [status, now, id]);
       } else if (status == 'ready') {
         if (page != null) {
-          db.execute('UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_page = ?, thumb_failed_at = NULL WHERE gallery_id = ?', [
-            status,
-            path,
-            page,
-            galleryId,
-          ]);
+          db.execute('UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_page = ?, thumb_failed_at = NULL WHERE id = ?', [status, path, page, id]);
         } else {
-          db.execute('UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE gallery_id = ?', [status, path, galleryId]);
+          db.execute('UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE id = ?', [status, path, id]);
         }
       } else {
-        db.execute('UPDATE works SET thumb_status = ?, thumb_path = NULL WHERE gallery_id = ?', [status, galleryId]);
+        db.execute('UPDATE works SET thumb_status = ?, thumb_path = NULL WHERE id = ?', [status, id]);
       }
     });
     if (status == 'ready' && path != null) onThumbnailReady?.call(galleryId, path);
   }
 
-  void setThumbPage(int galleryId, int page) => dbWriter.write((db) => db.execute('UPDATE works SET thumb_page = ? WHERE gallery_id = ?', [page, galleryId]));
+  /// Where a saved work's cover goes: its number and website, or for a work whose website is
+  /// unknown its number alone, unless another work under that number already uses that file.
+  String thumbnailPath(int galleryId, String? site, {Directory? directory}) {
+    final folder = (directory ?? AppStorage.thumbsDir).path;
+    final name = WorkIdentity.thumbnailName(galleryId, site);
+    if (site != null) return '$folder/$name';
+    final taken = dbWriter
+        .read((db) => db.column<String>('SELECT thumb_path FROM works WHERE gallery_id = ? AND site IS NOT NULL AND thumb_path IS NOT NULL', [galleryId]))
+        .any((path) => path.split('/').last == name);
+    return '$folder/${taken ? 'native_${galleryId}_unknown.jpg' : name}';
+  }
+
+  void setThumbPage(int galleryId, int page, {String? site}) => dbWriter.write((db) {
+    final id = _workRowID(db, galleryId, site);
+    if (id != null) db.execute('UPDATE works SET thumb_page = ? WHERE id = ?', [page, id]);
+  });
 
   /// Ready is a local-file promise, not a property that survives moving an
   /// app container. Repair old absolute paths before choosing backfill work.
   void repairThumbnailReferences(Directory directory) {
-    final records = dbWriter.read((db) => db.rows("SELECT gallery_id, thumb_path FROM works WHERE thumb_status = 'ready'"));
+    final records = dbWriter.read((db) => db.rows("SELECT id, gallery_id, site, thumb_path FROM works WHERE thumb_status = 'ready'"));
     final changes = <({int id, String? old, String? recovered})>[];
     for (final row in records) {
-      final id = row['gallery_id'] as int, old = row['thumb_path'] as String?;
+      final id = row['id'] as int, old = row['thumb_path'] as String?;
       if (old != null && AppStorage.isReadableThumbnail(File(old))) continue;
-      final candidates = [File('${directory.path}/native_$id.jpg')];
+      final candidates = [File('${directory.path}/${WorkIdentity.thumbnailName(row['gallery_id'] as int, row['site'] as String?)}')];
       if (old != null && old.isNotEmpty) candidates.insert(0, File('${directory.path}/${old.split('/').last}'));
       changes.add((id: id, old: old, recovered: candidates.where(AppStorage.isReadableThumbnail).firstOrNull?.path));
     }
@@ -661,7 +733,7 @@ class AppDatabase implements SmartFolderLibrary {
     dbWriter.write((db) {
       for (final change in changes) {
         db.execute(
-          "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE gallery_id = ? AND thumb_status = 'ready' AND COALESCE(thumb_path, '') = ?",
+          "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE id = ? AND thumb_status = 'ready' AND COALESCE(thumb_path, '') = ?",
           [change.recovered == null ? 'missing' : 'ready', change.recovered, change.id, change.old ?? ''],
         );
       }
@@ -682,12 +754,13 @@ class AppDatabase implements SmartFolderLibrary {
     ''';
 
   List<Work> worksNeedingFill({int limit = 8, Set<int> exclude = const {}}) => dbWriter.read((db) {
-    final placeholders = exclude.isEmpty ? '' : 'AND gallery_id NOT IN (${exclude.join(',')})';
+    final placeholders = exclude.isEmpty ? '' : 'AND id NOT IN (${exclude.join(',')})';
     return db.rows('SELECT * FROM works WHERE $_needsFill\n$placeholders\nORDER BY bookmarked_at DESC, id DESC\nLIMIT ?', [limit]).map(Work.fromRow).toList();
   });
 
+  /// [exclude] holds saved rows.
   int countNeedingFill({Set<int> exclude = const {}}) {
-    final exclusions = exclude.isEmpty ? '' : ' AND gallery_id NOT IN (${exclude.join(',')})';
+    final exclusions = exclude.isEmpty ? '' : ' AND id NOT IN (${exclude.join(',')})';
     return dbWriter.read((db) => db.value<int>('SELECT COUNT(*) FROM works WHERE $_needsFill$exclusions') ?? 0);
   }
 
@@ -697,30 +770,31 @@ class AppDatabase implements SmartFolderLibrary {
   /// database, so a refresh picks up where it stopped after the app closes, and a work
   /// that could not be fetched stays queued for the next run instead of being skipped.
   int queueRefresh() => dbWriter.write((db) {
-    db.execute('DELETE FROM refresh_queue WHERE gallery_id NOT IN (SELECT gallery_id FROM works)');
-    db.execute('INSERT OR IGNORE INTO refresh_queue (gallery_id) SELECT gallery_id FROM works');
+    db.execute('DELETE FROM refresh_queue WHERE work_id NOT IN (SELECT id FROM works)');
+    db.execute('INSERT OR IGNORE INTO refresh_queue (work_id) SELECT id FROM works');
     return db.value<int>('SELECT COUNT(*) FROM refresh_queue') ?? 0;
   });
 
-  /// Queued works, newest saves first, like the fill queue.
-  List<int> worksAwaitingRefresh({int limit = 8, Set<int> exclude = const {}}) => dbWriter.read((db) {
-    final exclusions = exclude.isEmpty ? '' : 'WHERE w.gallery_id NOT IN (${exclude.join(',')})';
-    return db.column<int>(
-      'SELECT w.gallery_id FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id\n$exclusions\nORDER BY w.bookmarked_at DESC, w.id DESC\nLIMIT ?',
-      [limit],
-    );
+  /// Queued works, newest saves first, like the fill queue. [exclude] holds saved rows.
+  List<Work> worksAwaitingRefresh({int limit = 8, Set<int> exclude = const {}}) => dbWriter.read((db) {
+    final exclusions = exclude.isEmpty ? '' : 'WHERE w.id NOT IN (${exclude.join(',')})';
+    return db
+        .rows('SELECT w.* FROM refresh_queue q JOIN works w ON w.id = q.work_id\n$exclusions\nORDER BY w.bookmarked_at DESC, w.id DESC\nLIMIT ?', [limit])
+        .map(Work.fromRow)
+        .toList();
   });
 
-  int countAwaitingRefresh() => dbWriter.read((db) => db.value<int>('SELECT COUNT(*) FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id') ?? 0);
+  int countAwaitingRefresh() => dbWriter.read((db) => db.value<int>('SELECT COUNT(*) FROM refresh_queue q JOIN works w ON w.id = q.work_id') ?? 0);
 
-  /// Takes a work off the refresh queue once the site has answered for it.
-  void finishRefresh(int galleryId) => dbWriter.write((db) => db.execute('DELETE FROM refresh_queue WHERE gallery_id = ?', [galleryId]));
+  /// Takes a saved work off the refresh queue once the site has answered for it.
+  void finishRefresh(int workId) => dbWriter.write((db) => db.execute('DELETE FROM refresh_queue WHERE work_id = ?', [workId]));
 
   /// Works the queue still has to visit: missing information, or waiting for a refresh.
+  /// [exclude] holds saved rows.
   int countPendingFill({Set<int> exclude = const {}}) {
-    final exclusions = exclude.isEmpty ? '' : ' AND gallery_id NOT IN (${exclude.join(',')})';
+    final exclusions = exclude.isEmpty ? '' : ' AND id NOT IN (${exclude.join(',')})';
     return dbWriter.read(
-      (db) => db.value<int>('SELECT COUNT(*) FROM works WHERE ($_needsFill OR gallery_id IN (SELECT gallery_id FROM refresh_queue))$exclusions') ?? 0,
+      (db) => db.value<int>('SELECT COUNT(*) FROM works WHERE ($_needsFill OR id IN (SELECT work_id FROM refresh_queue))$exclusions') ?? 0,
     );
   }
 
@@ -779,11 +853,11 @@ class AppDatabase implements SmartFolderLibrary {
             catalog_matched = 1,
             metadata_source = CASE WHEN metadata_source = 'manual' THEN 'manual' ELSE 'catalog' END,
             updated_at = ?
-        WHERE gallery_id = ?
+        WHERE gallery_id = ? AND site IS NULL
         ''';
       var updatedCount = 0;
       for (final item in items) {
-        final untagged = db.value<int>("SELECT id FROM works WHERE gallery_id = ? AND COALESCE(tags, '') = ''", [item.id]);
+        final untagged = db.value<int>("SELECT id FROM works WHERE gallery_id = ? AND site IS NULL AND COALESCE(tags, '') = ''", [item.id]);
         db.execute(updateSql, [item.title, item.artists, item.language, item.type, item.series, item.groups, item.tags, item.published, now, item.id]);
         if (db.changesCount > 0) updatedCount += 1;
         if (untagged != null && (item.tags ?? '').isNotEmpty) applyFolderRules(untagged, now, db);
@@ -804,7 +878,7 @@ class AppDatabase implements SmartFolderLibrary {
     dbWriter.write((db) {
       final untagged = db.column<int>('''
         SELECT w.id FROM works w JOIN catalog_works c ON c.id = w.gallery_id
-        WHERE COALESCE(w.tags, '') = '' AND COALESCE(c.tags, '') != ''
+        WHERE COALESCE(w.tags, '') = '' AND COALESCE(c.tags, '') != '' AND w.site IS NULL
           AND (w.title IS NULL OR w.metadata_source != 'manual')
         ''');
       db.execute('''
@@ -819,7 +893,7 @@ class AppDatabase implements SmartFolderLibrary {
             published_at = (SELECT c.published FROM catalog_works c WHERE c.id = works.gallery_id),
             catalog_matched = 1,
             metadata_source = CASE WHEN metadata_source = 'manual' THEN 'manual' ELSE 'catalog' END
-        WHERE EXISTS (SELECT 1 FROM catalog_works c WHERE c.id = works.gallery_id)
+        WHERE EXISTS (SELECT 1 FROM catalog_works c WHERE c.id = works.gallery_id) AND site IS NULL
           AND (title IS NULL OR metadata_source != 'manual')
         ''');
       for (final id in untagged) {
@@ -940,18 +1014,21 @@ class AppDatabase implements SmartFolderLibrary {
     syncFoldersToAppGroup();
   }
 
+  /// [ids] are saved rows, so two works under one number are told apart.
   void deleteSelectedWorks(Set<int> ids) => dbWriter.write((db) {
     for (final id in ids) {
-      TasteStore.record(TasteEventKind.remove, comicItem(id), db);
-      db.execute('DELETE FROM folder_works WHERE work_id IN (SELECT id FROM works WHERE gallery_id = ?)', [id]);
-      db.execute('DELETE FROM works WHERE gallery_id = ?', [id]);
+      final galleryId = db.value<int>('SELECT gallery_id FROM works WHERE id = ?', [id]);
+      if (galleryId == null) continue;
+      TasteStore.record(TasteEventKind.remove, comicItem(galleryId), db);
+      db.execute('DELETE FROM folder_works WHERE work_id = ?', [id]);
+      db.execute('DELETE FROM works WHERE id = ?', [id]);
     }
   });
 
+  /// [ids] are saved rows.
   void moveSelectedWorks(Set<int> ids, int toFolderID, {int? from}) => dbWriter.write((db) {
-    for (final id in ids) {
-      final work = db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [id]);
-      if (work == null) continue;
+    for (final work in ids) {
+      if (!db.exists('SELECT EXISTS(SELECT 1 FROM works WHERE id = ?)', [work])) continue;
       if (from != null) {
         db.execute('DELETE FROM folder_works WHERE work_id = ? AND folder_id = ?', [work, from]);
       } else {

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/content/combined_catalog.dart';
 import '../../core/content/content_errors.dart';
 import '../../core/content/gallery_content.dart';
 import 'page_image_store.dart';
@@ -107,14 +108,17 @@ class GalleryFeedPreview extends ChangeNotifier {
 
 /// Pagination completes as soon as IDs arrive; covers load around what is visible.
 class GalleryFeedLoader extends ChangeNotifier {
-  GalleryFeedLoader({required this.source, required this.images, this.pageSize = 24});
+  GalleryFeedLoader({required this.source, required this.images, this.pageSize = 24, CombinedCatalog? combined})
+    : _combined = combined ?? CombinedCatalog(pageSize: pageSize);
 
   final ContentProviding source;
   final PageImageStore images;
   final int pageSize;
+  final CombinedCatalog _combined;
 
-  final Map<int, GalleryFeedPreview> previews = {};
-  List<int> ids = [];
+  final Map<FeedItem, GalleryFeedPreview> previews = {};
+  List<FeedItem> items = [];
+  List<int> get ids => [for (final item in items) item.id];
   bool didLoad = false;
   bool loading = false;
   bool hasMore = false;
@@ -123,29 +127,51 @@ class GalleryFeedLoader extends ChangeNotifier {
   Object _generation = Object();
   int _nextOffset = 0;
   GalleryQuery? _currentQuery;
+  String? _currentSite;
   bool _lastReset = true;
   bool _suspended = false;
   Future<void>? _task;
-  Set<int> _retained = {};
+  Set<FeedItem> _retained = {};
+
+  /// The websites a combined list shows; null while it shows the checked one.
+  List<String>? combinedSites;
 
   GalleryQuery? get currentQuery => _currentQuery;
 
-  Future<void> load(GalleryQuery query, {required bool reset}) {
+  static final _siteImages = <String, PageImageStore>{};
+
+  /// The reader of a work's website: in a combined list, that website's own.
+  ContentProviding sourceFor(FeedItem item) => combinedSites == null ? source : SiteContent.of(item.site);
+
+  PageImageStore imagesFor(FeedItem item) =>
+      combinedSites == null ? images : _siteImages.putIfAbsent(item.site, () => PageImageStore(source: SiteContent.of(item.site)));
+
+  /// The preview of a number in a list of one website, where a number names one work.
+  GalleryFeedPreview? preview(int id) => previews.entries.where((entry) => entry.key.id == id).firstOrNull?.value;
+
+  /// [combinedSites] lists those websites together instead of the checked one, whose
+  /// address is [site]. Without either, the list goes on as it is.
+  Future<void> load(GalleryQuery query, {required bool reset, String? site, List<String>? combinedSites}) {
     if (_suspended) return Future.value();
+    final chosen = combinedSites == null && site == null ? this.combinedSites : combinedSites;
+    final combined = chosen != null && chosen.length > 1 ? List<String>.of(chosen) : null;
+    final listSite = combined != null ? '*${combined.join(',')}' : site ?? _currentSite ?? '';
     if (!reset && loading && _currentQuery == query && _task != null) return _task!;
-    final changedQuery = _currentQuery != query;
+    final changedQuery = _currentQuery != query || _currentSite != listSite;
     if (changedQuery) {
       for (final preview in previews.values) {
         preview.cancel();
       }
       previews.clear();
       _retained = {};
-      ids = [];
+      items = [];
       _nextOffset = 0;
       hasMore = false;
       didLoad = false;
     }
     _currentQuery = query;
+    _currentSite = listSite;
+    this.combinedSites = combined;
     final resetting = reset || changedQuery;
     _lastReset = resetting;
     final token = Object();
@@ -156,19 +182,25 @@ class GalleryFeedLoader extends ChangeNotifier {
     final offset = resetting ? 0 : _nextOffset;
     return _task = () async {
       try {
-        final batch = await source.list(query, offset: offset, count: pageSize);
-        if (!identical(_generation, token)) return;
-        final seen = resetting ? <int>{} : ids.toSet();
-        final incoming = batch.ids.where(seen.add).toList();
-        final updated = [...(resetting ? const <int>[] : ids), ...incoming];
-        if (resetting) previews.clear();
-        for (final id in incoming) {
-          previews[id] = GalleryFeedPreview(id: id, source: source, images: images);
+        final CombinedBatch batch;
+        if (combined != null) {
+          batch = await _combined.list(query, sites: combined, offset: offset, count: pageSize);
+        } else {
+          final single = await source.list(query, offset: offset, count: pageSize);
+          batch = CombinedBatch(items: [for (final id in single.ids) FeedItem(id, listSite)], hasMore: single.hasMore);
         }
-        ids = updated;
+        if (!identical(_generation, token)) return;
+        final seen = resetting ? <FeedItem>{} : items.toSet();
+        final incoming = batch.items.where(seen.add).toList();
+        final updated = [...(resetting ? const <FeedItem>[] : items), ...incoming];
+        if (resetting) previews.clear();
+        for (final item in incoming) {
+          previews[item] = GalleryFeedPreview(id: item.id, source: sourceFor(item), images: imagesFor(item));
+        }
+        items = updated;
         didLoad = true;
-        _nextOffset = offset + batch.ids.length;
-        hasMore = batch.hasMore && batch.ids.isNotEmpty && (resetting || incoming.isNotEmpty);
+        _nextOffset = offset + batch.items.length;
+        hasMore = batch.hasMore && batch.items.isNotEmpty && (resetting || incoming.isNotEmpty);
       } on Object catch (caught) {
         if (identical(_generation, token)) error = ContentError.message(caught);
       }
@@ -179,16 +211,16 @@ class GalleryFeedLoader extends ChangeNotifier {
     }();
   }
 
-  Future<void> retry(GalleryQuery query) => load(query, reset: _lastReset);
+  Future<void> retry(GalleryQuery query) => load(query, reset: _lastReset, combinedSites: combinedSites);
 
   /// Keeps covers for a bounded neighborhood of the viewport and releases the rest.
   void retainCovers(int index) {
-    if (ids.isEmpty) return;
-    final start = (index - 36).clamp(0, (ids.length - 72).clamp(0, ids.length));
-    final end = (start + 72).clamp(0, ids.length);
-    final retained = ids.sublist(start, end).toSet();
-    for (final id in _retained.difference(retained)) {
-      previews[id]?.discardDisplayContent();
+    if (items.isEmpty) return;
+    final start = (index - 36).clamp(0, (items.length - 72).clamp(0, items.length));
+    final end = (start + 72).clamp(0, items.length);
+    final retained = items.sublist(start, end).toSet();
+    for (final item in _retained.difference(retained)) {
+      previews[item]?.discardDisplayContent();
     }
     _retained = retained;
   }

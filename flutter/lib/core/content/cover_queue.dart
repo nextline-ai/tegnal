@@ -6,8 +6,10 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models.dart';
 import '../storage/app_database.dart';
 import '../storage/app_storage.dart';
+import 'combined_catalog.dart';
 import 'content_errors.dart';
 import 'gallery_content.dart';
+import 'manga_urls.dart';
 
 /// The device's thermal pressure, as `ProcessInfo.ThermalState` reports it.
 enum DeviceThermalState { nominal, fair, serious, critical }
@@ -62,16 +64,27 @@ class CoverQueueActor {
     required this.thumbsDir,
     required this.source,
     CoverThumbnailData? thumbnailData,
+    ContentProviding? Function(String site)? siteSource,
     bool Function()? allowsBackfill,
     this.delay = const Duration(milliseconds: 150),
   }) : _thumbnailData = thumbnailData ?? ((page, galleryID) => source.image(page, galleryID: galleryID, thumbnail: true)),
+       _siteSource = siteSource ?? _connectedSite,
        _allowsBackfill = allowsBackfill ?? (() => CoverQueuePolicy.allowsBackfill);
+
+  /// Another connected website's reader for works saved from it; null reads them from the
+  /// checked one.
+  static ContentProviding? _connectedSite(String site) {
+    final active = ComicSites.active;
+    if (site == active || !ComicSites.all.contains(site) || ComicSites.sharesNumbers(site, active)) return null;
+    return SiteContent.of(site);
+  }
 
   final AppDatabase database;
   final Directory thumbsDir;
   final ContentProviding source;
   final Duration delay;
   final CoverThumbnailData _thumbnailData;
+  final ContentProviding? Function(String site) _siteSource;
   final bool Function() _allowsBackfill;
 
   bool _checkedThumbnailFiles = false;
@@ -132,46 +145,49 @@ class CoverQueueActor {
         _kickAgain = false;
         while (downloadsEnabled && !_isPaused && !_cancelled && _allowsBackfill()) {
           final refresh = database.worksAwaitingRefresh(limit: 6, exclude: attempted);
-          final batch = refresh.isEmpty ? database.worksNeedingFill(limit: 6, exclude: attempted).map((work) => work.galleryId).toList() : refresh;
+          final batch = refresh.isEmpty ? database.worksNeedingFill(limit: 6, exclude: attempted) : refresh;
           if (batch.isEmpty) break;
           final planned = attempted.length + database.countPendingFill(exclude: attempted);
           state.update((state) => state.total = state.total > planned ? state.total : planned);
 
           var stopped = false;
-          for (final galleryId in batch) {
+          for (final work in batch) {
             if (_isPaused || _cancelled || !_allowsBackfill()) break;
+            final workId = work.id;
+            if (workId == null) continue;
+            final galleryId = work.galleryId, site = work.site;
             final refreshes = refresh.isNotEmpty;
-            attempted.add(galleryId);
+            attempted.add(workId);
 
             try {
-              await fetchOne(galleryId, refresh: refreshes);
+              await _fetch(work, refresh: refreshes);
               // A removed bookmark is not a successfully filled work. Tags may stay empty
               // only when the site itself lists none.
-              final saved = database.getWork(galleryId);
-              if (saved != null) {
+              final saved = database.getWork(galleryId, site: site);
+              if (saved != null && saved.id == workId) {
                 final tagged = (saved.tags ?? '').trim().isNotEmpty || saved.metadataSource == 'manga';
                 if (!saved.hasThumb || !saved.hasTitle || !tagged) throw ContentError.invalidResponse;
                 state.update((state) => state.processed += 1);
               }
-              if (refreshes) database.finishRefresh(galleryId);
+              if (refreshes) database.finishRefresh(workId);
             } on CancellationError {
               stopped = true;
             } on NetworkError catch (error) {
               if (error.code == NetworkErrorCode.cancelled) {
                 stopped = true;
               } else {
-                _recordFailure(galleryId, state);
+                _recordFailure(galleryId, site, state);
               }
             } on ContentError catch (error) {
               if (error.kind == ContentErrorKind.galleryNotFound) {
                 // Gone, or a different work under the same number: nothing more to read.
-                if (refreshes) database.finishRefresh(galleryId);
+                if (refreshes) database.finishRefresh(workId);
                 state.update((state) => state.gone += 1);
               } else {
-                _recordFailure(galleryId, state);
+                _recordFailure(galleryId, site, state);
               }
             } on Object {
-              _recordFailure(galleryId, state);
+              _recordFailure(galleryId, site, state);
             }
             if (stopped) break;
 
@@ -191,25 +207,35 @@ class CoverQueueActor {
     state.update((state) => state.isRunning = false);
   }
 
-  void _recordFailure(int galleryId, CoverQueueState state) {
+  void _recordFailure(int galleryId, String? site, CoverQueueState state) {
     state.update((state) => state.failed += 1);
     try {
-      if (database.getWork(galleryId)?.hasThumb != true) database.setThumb(galleryId, 'failed');
+      if (database.getWork(galleryId, site: site)?.hasThumb != true) database.setThumb(galleryId, 'failed', site: site);
     } on Object {
       // The count already reports the failure.
     }
   }
 
-  Future<void> fetchOne(int galleryId, {bool refresh = false}) async {
-    _checkCancellation();
-    var existing = database.getWork(galleryId);
+  /// Fills the saved work this number names on [site] (see `AppDatabase.getWork`).
+  Future<void> fetchOne(int galleryId, {bool refresh = false, String? site}) async {
+    final work = database.getWork(galleryId, site: site);
+    if (work == null) return;
+    await _fetch(work, refresh: refresh);
+  }
 
-    // If title or tags are missing, check the offline catalog first.
-    if (existing == null || !existing.hasTitle || (existing.tags ?? '').isEmpty) {
+  Future<void> _fetch(Work work, {required bool refresh}) async {
+    _checkCancellation();
+    final galleryId = work.galleryId, site = work.site, workId = work.id;
+    var existing = database.getWork(galleryId, site: site);
+    if (existing == null || existing.id != workId) return;
+
+    // The offline catalog describes numbers whose website is unknown.
+    if (site == null && (!existing.hasTitle || (existing.tags ?? '').isEmpty)) {
       final catalog = database.getCatalog(galleryId);
       if (catalog != null) {
         database.upsertWork(
           galleryId: galleryId,
+          workId: workId,
           title: catalog.title,
           artists: catalog.artists,
           language: catalog.language,
@@ -222,7 +248,7 @@ class CoverQueueActor {
           catalogMatched: true,
           overwriteMetadata: false,
         );
-        existing = database.getWork(galleryId);
+        existing = database.getWork(galleryId, site: site);
       }
     }
 
@@ -231,27 +257,31 @@ class CoverQueueActor {
     final needTags = (existing?.tags ?? '').trim().isEmpty;
 
     if (!refresh && !needTitle && !needCover && !needTags) {
-      if (existing.thumbStatus != 'ready') database.setThumb(galleryId, 'ready', path: existing.thumbPath);
+      if (existing.thumbStatus != 'ready') database.setThumb(galleryId, 'ready', path: existing.thumbPath, site: site);
       return;
     }
 
+    // A work saved from another connected website is read there.
+    final other = site == null ? null : _siteSource(site);
+    final reader = other ?? source;
     final NativeGallery gallery;
     try {
-      gallery = await source.gallery(galleryId);
+      gallery = await reader.gallery(galleryId);
     } on ContentError catch (error) {
       if (!error.isUnavailable(404) && !error.isUnavailable(410)) rethrow;
       _checkCancellation();
       // Only a missing gallery document means the work is gone. A 404 from an image
       // request below remains a retryable failure. A refresh keeps the cover it has.
-      if (!refresh) database.setThumb(galleryId, 'gone');
+      if (!refresh) database.setThumb(galleryId, 'gone', site: site);
       throw ContentError.galleryNotFound;
     }
     _checkCancellation();
-    final saved = database.getWork(galleryId);
-    if (saved == null) return;
+    final saved = database.getWork(galleryId, site: site);
+    if (saved == null || saved.id != workId) return;
     if (refresh && !isSameWork(saved, gallery)) throw ContentError.galleryNotFound;
     database.upsertWork(
       galleryId: galleryId,
+      workId: workId,
       title: needTitle || refresh ? gallery.title : null,
       artists: gallery.artists.join(', '),
       language: gallery.language,
@@ -262,12 +292,13 @@ class CoverQueueActor {
     if (needCover) {
       if (gallery.pages.isEmpty) throw ContentError.invalidResponse;
       final page = (existing?.thumbPage ?? 1).clamp(1, gallery.pages.length);
-      final data = await _thumbnailData(gallery.pages[page - 1], galleryId);
+      final cover = gallery.pages[page - 1];
+      final data = other == null ? await _thumbnailData(cover, galleryId) : await other.image(cover, galleryID: galleryId, thumbnail: true);
       _checkCancellation();
-      if (database.getWork(galleryId) == null) return;
+      if (database.getWork(galleryId, site: site)?.id != workId) return;
       thumbsDir.createSync(recursive: true);
       // The site's bytes are kept as they are; the name matches the native library's.
-      final file = File('${thumbsDir.path}/native_$galleryId.jpg');
+      final file = File(database.thumbnailPath(galleryId, site, directory: thumbsDir));
       final temporary = File('${file.path}.tmp');
       temporary.writeAsBytesSync(data, flush: true);
       if (!AppStorage.isReadableThumbnail(temporary)) {
@@ -275,7 +306,7 @@ class CoverQueueActor {
         throw ContentError.unsupportedFormat;
       }
       temporary.renameSync(file.path);
-      database.setThumb(galleryId, 'ready', path: file.path, page: page);
+      database.setThumb(galleryId, 'ready', path: file.path, page: page, site: site);
     }
   }
 
