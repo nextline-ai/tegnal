@@ -6,7 +6,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content/fixture_content_source.dart';
+import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/support/preferences.dart';
+import 'package:tegnal/presentation/content/image_translation.dart';
 import 'package:tegnal/presentation/content/page_image_store.dart';
 import 'package:tegnal/presentation/content/reader_translation.dart';
 
@@ -86,5 +88,25 @@ void main() {
     await settle(session);
     expect(session.balloons(gallery.pages[0].hash), isEmpty);
     expect(session.message, isNotNull);
+  });
+
+  test('AI translation style keeps text readable and opacity in range', () {
+    const plain = TranslationStyle();
+    expect(plain.fill, const Color(0xFFFFFFFF));
+    expect(plain.text, const Color(0xFF000000));
+    final preferences = MemoryPreferences({TranslationStyle.backgroundKey: 'black', TranslationStyle.opacityKey: 0.1});
+    final dark = TranslationStyle.stored(preferences);
+    expect(dark.opacity, TranslationStyle.minimumOpacity, reason: 'Too clear to read is raised to the lowest allowed');
+    expect(dark.text, const Color(0xFFFFFFFF), reason: 'Text turns white on black');
+    final unknown = TranslationStyle.stored(MemoryPreferences({TranslationStyle.backgroundKey: 'unknown', TranslationStyle.opacityKey: 2}));
+    expect(unknown.background, TranslationBackground.white);
+    expect(unknown.opacity, 1);
+  });
+
+  test('preferred language follows the system among work languages', () {
+    expect(PreferredWorkLanguage.systemLanguage('ko-KR'), 'korean');
+    expect(PreferredWorkLanguage.systemLanguage('ja'), 'japanese');
+    expect(PreferredWorkLanguage.systemLanguage('en-US'), 'english');
+    expect(PreferredWorkLanguage.systemLanguage('fr_FR'), 'english', reason: 'Other system languages fall back to English');
   });
 }

@@ -219,6 +219,59 @@ struct ReaderTranslationHost: View {
 
 /// Translation mode: once on, every page shows its translation over the original as it comes
 /// into view, the next page is prepared ahead, and a tap on the pill shows the original again.
+/// How AI translation's balloons look, set in each mode's viewer settings: the background
+/// behind the translated text and how see-through it is. The text takes whichever of black or
+/// white reads on that background.
+struct ReaderTranslationStyle: Equatable, Sendable {
+    enum Background: String, CaseIterable, Identifiable, Sendable {
+        case white, black, yellow
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .white: L10n.text("White")
+            case .black: L10n.text("Black")
+            case .yellow: L10n.text("Yellow")
+            }
+        }
+        /// Red, green and blue from 0 to 255.
+        var rgb: (Int, Int, Int) {
+            switch self {
+            case .white: (255, 255, 255)
+            case .black: (28, 28, 30)
+            case .yellow: (255, 236, 153)
+            }
+        }
+    }
+    static let backgroundKey = "reader.translationBackground"
+    static let opacityKey = "reader.translationOpacity"
+    static let opacityRange: ClosedRange<Double> = 0.3...1
+
+    var background: Background = .white
+    var opacity: Double = 1
+
+    init(background: Background = .white, opacity: Double = 1) {
+        self.background = background
+        self.opacity = min(Self.opacityRange.upperBound, max(Self.opacityRange.lowerBound, opacity))
+    }
+    init(background: String, opacity: Double) {
+        self.init(background: Background(rawValue: background) ?? .white, opacity: opacity)
+    }
+    static func stored(booru: Bool) -> Self {
+        let defaults = booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults
+        return Self(background: defaults.string(forKey: backgroundKey) ?? Background.white.rawValue,
+                    opacity: defaults.object(forKey: opacityKey) as? Double ?? 1)
+    }
+
+    var fill: UIColor {
+        let (r, g, b) = background.rgb
+        return UIColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: opacity)
+    }
+    var textColor: UIColor { background == .black ? .white : .black }
+    /// The same colors for a web page.
+    var cssFill: String { let (r, g, b) = background.rgb; return "rgba(\(r),\(g),\(b),\(opacity))" }
+    var cssText: String { background == .black ? "#fff" : "#000" }
+}
+
 /// One image to translate: where it sits in the reading order, the key its balloons are kept
 /// under, and how its pixels are read.
 struct ReaderTranslationJob {
@@ -230,6 +283,8 @@ struct ReaderTranslationJob {
 @MainActor @Observable final class ReaderTranslationSession {
     private(set) var isOn = false
     var showsOriginal = false
+    /// How balloons look; the viewer keeps it in step with its settings.
+    var style = ReaderTranslationStyle()
     private(set) var pages: [String: [ReaderTextRegion]] = [:]
     private(set) var working: Set<String> = []
     /// The last failure worth telling the reader about.
@@ -469,5 +524,34 @@ struct ReaderTranslationToggle: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("reader.translation.toggle")
+    }
+}
+
+/// Opens this work in the preferred language from the viewer: a clear glass bar along the
+/// bottom that the X closes until the viewer is opened again.
+struct ReaderVersionBanner: View {
+    let version: GalleryVersion
+    let open: () -> Void
+    let close: () -> Void
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: open) {
+                HStack(spacing: 8) {
+                    Image(systemName: "globe").font(.system(size: 15, weight: .semibold))
+                    Text(L10n.text("View in %@", version.displayName)).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                .padding(.leading, 18).frame(height: 48).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).accessibilityIdentifier("reader.versionBanner")
+            Button(action: close) {
+                Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                    .frame(width: 48, height: 48).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).accessibilityLabel(L10n.text("Close")).accessibilityIdentifier("reader.versionBanner.close")
+        }
+        .foregroundStyle(.white)
+        .modifier(GlassCapsuleModifier())
+        .environment(\.colorScheme, .dark)
     }
 }

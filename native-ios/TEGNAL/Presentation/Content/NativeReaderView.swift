@@ -65,6 +65,11 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.mode", store: ReaderPreferences.defaults) private var mode = ReaderMode.horizontal.rawValue
     @SwiftUI.AppStorage("reader.rtl", store: ReaderPreferences.defaults) private var rtl = false
     @SwiftUI.AppStorage("reader.bottomMenu", store: ReaderPreferences.defaults) private var bottomMenu = false
+    @SwiftUI.AppStorage(ReaderPreferences.versionBannerKey, store: ReaderPreferences.defaults) private var versionBanner = true
+    @SwiftUI.AppStorage(ReaderTranslationStyle.backgroundKey, store: ReaderPreferences.defaults) private var translationBackground = ReaderTranslationStyle.Background.white.rawValue
+    @SwiftUI.AppStorage(ReaderTranslationStyle.opacityKey, store: ReaderPreferences.defaults) private var translationOpacity = 1.0
+    /// The work whose version banner was closed; opening the viewer again shows it again.
+    @State private var closedVersionBanner: Int64?
     @SwiftUI.AppStorage("reader.pageNumber", store: ReaderPreferences.defaults) private var pageNumber = false
     @SwiftUI.AppStorage("reader.keepAwake", store: ReaderPreferences.defaults) private var keepAwake = true
     @SwiftUI.AppStorage("reader.prefetch", store: ReaderPreferences.defaults) private var prefetch = 3
@@ -168,8 +173,22 @@ struct NativeReaderView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: showsTranslationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if bottomMenu && !menuVisible && gallery != nil { menuActions(compact: true).padding(.horizontal, 12).padding(.vertical, 8)
-                    .modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
+            // The banner sits above the quick menu kept at the bottom, so neither covers the other,
+            // and the page number and translation switch rise above both.
+            VStack(spacing: 8) {
+                if let suggestion = versionSuggestion, !menuVisible, sheet == nil, translationRequest == nil {
+                    ReaderVersionBanner(version: suggestion, open: { openWork?(suggestion.id, currentPage + 1) },
+                                        close: { closedVersionBanner = gallery?.id })
+                        .padding(.horizontal, 16).padding(.bottom, bottomMenu ? 0 : 6)
+                        .transition(.opacity)
+                }
+                if bottomMenu && !menuVisible && gallery != nil { menuActions(compact: true).padding(.horizontal, 12).padding(.vertical, 8)
+                        .modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
+            }
+            .animation(.easeInOut(duration: 0.2), value: versionSuggestion?.id)
+        }
+        .onChange(of: "\(translationBackground):\(translationOpacity)", initial: true) { _, _ in
+            translation.style = ReaderTranslationStyle(background: translationBackground, opacity: translationOpacity)
         }
         .background(ReaderWorkSwipeGesture(enabled: continuousWorkSwipe && mode == ReaderMode.continuous.rawValue && readerActive && sheet == nil && !zoomed && !menuVisible && !showJump, excludesLeadingEdge: continuousBackSwipe) { delta in
             if changeWork?(delta) != true { toast = L10n.text("No More Works in This List") }
@@ -498,6 +517,11 @@ struct NativeReaderView: View {
         readSaved()
     }
     private func readSaved() { saved = (try? env.database.getWork(galleryId: galleryID)) != nil }
+    /// This work in the preferred language, when the site has it and the banner is on.
+    private var versionSuggestion: GalleryVersion? {
+        guard versionBanner, openWork != nil, let gallery, closedVersionBanner != gallery.id else { return nil }
+        return gallery.suggestedVersion(for: PreferredWorkLanguage.resolved).flatMap { env.hiddenMangaGalleryIDs.contains($0.id) ? nil : $0 }
+    }
     private var translationMode: ReaderTranslationMode {
         translation.isOn ? .ai : translationRequest != nil ? .standard : .off
     }

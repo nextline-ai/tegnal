@@ -32,6 +32,8 @@ enum ReaderPreferences {
 
     static let doubleTapZoomKey = "reader.doubleTapZoom"
     static let continuousTranslationKey = "reader.continuousTranslation"
+    /// On by default: a work with a version in the preferred language shows a banner in the viewer.
+    static let versionBannerKey = "reader.versionBanner"
     /// On by default: translation stays on while pages turn and the on-device model reads each page
     /// with the ones before it. Off, Translate shows Apple's standard translation of one page.
     static var continuousTranslation: Bool {
@@ -128,6 +130,9 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("reader.tapNavigation", store: ReaderPreferences.defaults) private var tapNavigation = true
     @SwiftUI.AppStorage(ReaderPreferences.doubleTapZoomKey, store: ReaderPreferences.defaults) private var doubleTapZoom = true
     @SwiftUI.AppStorage(ReaderPreferences.continuousTranslationKey, store: ReaderPreferences.defaults) private var continuousTranslation = true
+    @SwiftUI.AppStorage(ReaderPreferences.versionBannerKey, store: ReaderPreferences.defaults) private var versionBanner = true
+    @SwiftUI.AppStorage(ReaderTranslationStyle.backgroundKey, store: ReaderPreferences.defaults) private var translationBackground = ReaderTranslationStyle.Background.white.rawValue
+    @SwiftUI.AppStorage(ReaderTranslationStyle.opacityKey, store: ReaderPreferences.defaults) private var translationOpacity = 1.0
     @SwiftUI.AppStorage("reader.continuousBackSwipe", store: ReaderPreferences.defaults) private var continuousBackSwipe = false
     @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @SwiftUI.AppStorage("reader.continuousPreviewSwipe", store: ReaderPreferences.defaults) private var continuousInformationSwipe = false
@@ -148,6 +153,8 @@ struct ReaderSettingsView: View {
         _dimming = SwiftUI.AppStorage(wrappedValue: 0.0, "reader.dimming", store: preferences)
         _tapNavigation = SwiftUI.AppStorage(wrappedValue: true, "reader.tapNavigation", store: preferences)
         _doubleTapZoom = SwiftUI.AppStorage(wrappedValue: true, ReaderPreferences.doubleTapZoomKey, store: preferences)
+        _translationBackground = SwiftUI.AppStorage(wrappedValue: ReaderTranslationStyle.Background.white.rawValue, ReaderTranslationStyle.backgroundKey, store: preferences)
+        _translationOpacity = SwiftUI.AppStorage(wrappedValue: 1.0, ReaderTranslationStyle.opacityKey, store: preferences)
     }
 
     var body: some View {
@@ -199,11 +206,30 @@ struct ReaderSettingsView: View {
                         }.disabled(original).accessibilityIdentifier("reader.settings.reducedData")
                     }
                 }
-                if !booru, ReaderTranslationSession.isSupported {
+                if ReaderTranslationSession.isSupported {
                     Section(L10n.text("Translation")) {
-                        Toggle(isOn: $continuousTranslation) {
-                            SettingsHelpLabel("AI Translation (Beta)", help: "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead.")
-                        }.accessibilityIdentifier("reader.settings.continuousTranslation")
+                        if !booru {
+                            Toggle(isOn: $continuousTranslation) {
+                                SettingsHelpLabel("AI Translation (Beta)", help: "Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it, in the work’s own language. Where this system can’t read vertical text yet, the standard translation is used instead.")
+                            }.accessibilityIdentifier("reader.settings.continuousTranslation")
+                        }
+                        HStack {
+                            SettingsHelpLabel("AI Translation Background", help: "The color behind AI translation’s text. The text turns white on black and black on the others.")
+                            Spacer()
+                            Picker(L10n.text("AI Translation Background"), selection: $translationBackground) {
+                                ForEach(ReaderTranslationStyle.Background.allCases) { Text($0.title).tag($0.rawValue) }
+                            }.labelsHidden().pickerStyle(.menu).accessibilityIdentifier("reader.settings.translationBackground")
+                        }
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text(L10n.text("AI Translation Background Opacity"))
+                                Spacer()
+                                Text(Int((translationOpacity * 100).rounded()).formatted(.percent)).foregroundStyle(.secondary).monospacedDigit()
+                            }
+                            Slider(value: $translationOpacity, in: ReaderTranslationStyle.opacityRange, step: 0.05)
+                                .accessibilityLabel(L10n.text("AI Translation Background Opacity"))
+                                .accessibilityIdentifier("reader.settings.translationOpacity")
+                        }
                     }
                 }
                 Section(L10n.text("Display")) {
@@ -211,6 +237,11 @@ struct ReaderSettingsView: View {
                         SettingsHelpLabel("Show Quick Menu at Bottom", help: "Keeps the viewer’s quick actions visible along the bottom of the screen.")
                     }.accessibilityIdentifier("reader.settings.bottomMenu")
                     Toggle(L10n.text("Show Page Number"), isOn: $pageNumber)
+                    if !booru {
+                        Toggle(isOn: $versionBanner) {
+                            SettingsHelpLabel("Preferred Language Version Banner", help: "When a work also comes in your preferred language, a banner at the bottom of the viewer opens that version. Close it with X; it returns the next time you open the viewer. The preferred language is set in Language settings.")
+                        }.accessibilityIdentifier("reader.settings.versionBanner")
+                    }
                     Toggle(L10n.text("Keep Screen Awake While Reading"), isOn: $keepAwake)
                     VStack(alignment: .leading) {
                         Text(L10n.text("Dim Screen"))

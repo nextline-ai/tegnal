@@ -1679,3 +1679,13 @@
 "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name." = "스마트 폴더는 새로 저장하는 항목 중 태그가 일치하는 것을 자동으로 정리합니다. 폴더를 길게 눌러 스마트 폴더로 만들 수 있으며, 스마트 폴더는 이름 뒤에 %@ 표시가 붙습니다.";
 "No websites selected" = "선택한 웹사이트가 없습니다";
 "Choose websites using the website button above. Your saved works are kept." = "상단 웹사이트 버튼에서 웹사이트를 선택해주세요. 저장한 작품은 그대로 유지됩니다.";
+"White" = "흰색";
+"Black" = "검은색";
+"Yellow" = "노란색";
+"AI Translation Background" = "AI 번역 배경";
+"The color behind AI translation’s text. The text turns white on black and black on the others." = "AI 번역 글자 뒤의 배경색입니다. 검은색 배경에서는 흰 글자로, 나머지 배경에서는 검은 글자로 표시됩니다.";
+"AI Translation Background Opacity" = "AI 번역 배경 불투명도";
+"Preferred Language Version Banner" = "선호 언어 작품 배너";
+"When a work also comes in your preferred language, a banner at the bottom of the viewer opens that version. Close it with X; it returns the next time you open the viewer. The preferred language is set in Language settings." = "작품이 선호 언어로도 있으면 뷰어 하단의 배너로 그 작품을 열 수 있습니다. X로 닫으면 다음에 뷰어를 다시 열 때 다시 나타납니다. 선호 언어는 언어 설정에서 정합니다.";
+"Preferred Language" = "선호 언어";
+"When a work also comes in this language, work information and the viewer offer that version." = "작품이 이 언어로도 있으면 작품 정보와 뷰어에서 그 작품을 보여 줍니다.";

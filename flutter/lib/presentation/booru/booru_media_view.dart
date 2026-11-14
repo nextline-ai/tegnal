@@ -71,6 +71,7 @@ class BooruMediaView extends StatefulWidget {
     required this.onGoldRequired,
     required this.onRemoved,
     this.translation = const [],
+    this.translationStyle = const TranslationStyle(),
   });
 
   final BooruContext booru;
@@ -94,6 +95,7 @@ class BooruMediaView extends StatefulWidget {
 
   /// Translated balloons over the image, as the comics reader draws them.
   final List<TranslatedRegion> translation;
+  final TranslationStyle translationStyle;
 
   @override
   State<BooruMediaView> createState() => _BooruMediaViewState();
@@ -465,7 +467,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
                             fit: StackFit.expand,
                             children: [
                               media,
-                              if (widget.translation.isNotEmpty && !_isVideo) TranslatedRegionsLayer(regions: widget.translation),
+                              if (widget.translation.isNotEmpty && !_isVideo) TranslatedRegionsLayer(regions: widget.translation, style: widget.translationStyle),
                               if (widget.showNotes && !_isVideo) ..._notes(rect.size),
                             ],
                           ),

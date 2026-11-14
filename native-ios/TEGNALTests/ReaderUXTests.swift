@@ -144,6 +144,25 @@ final class ReaderUXTests: XCTestCase {
         XCTAssertEqual(brightness(x: 17, y: 10), 0)
     }
 
+    func testAITranslationStyleKeepsTextReadableAndOpacityInRange() {
+        let plain = ReaderTranslationStyle()
+        XCTAssertEqual(plain.cssFill, "rgba(255,255,255,1.0)")
+        XCTAssertEqual(plain.textColor, .black)
+        let dark = ReaderTranslationStyle(background: "black", opacity: 0.1)
+        XCTAssertEqual(dark.opacity, ReaderTranslationStyle.opacityRange.lowerBound, "Too clear to read is raised to the lowest allowed")
+        XCTAssertEqual(dark.textColor, .white, "Text turns white on black")
+        XCTAssertEqual(dark.cssText, "#fff")
+        XCTAssertEqual(ReaderTranslationStyle(background: "unknown", opacity: 2).background, .white)
+        XCTAssertEqual(ReaderTranslationStyle(background: "unknown", opacity: 2).opacity, 1)
+    }
+
+    func testPreferredLanguageFollowsTheSystemAmongWorkLanguages() {
+        XCTAssertEqual(PreferredWorkLanguage.systemLanguage("ko-KR"), "korean")
+        XCTAssertEqual(PreferredWorkLanguage.systemLanguage("ja"), "japanese")
+        XCTAssertEqual(PreferredWorkLanguage.systemLanguage("en-US"), "english")
+        XCTAssertEqual(PreferredWorkLanguage.systemLanguage("fr-FR"), "english", "Other system languages fall back to English")
+    }
+
     @MainActor func testLiveTextButtonsStayAtTheScreenCorners() {
         let screen = CGRect(x: 12, y: 70, width: 378, height: 758)
         let zoomed = LiveTextCanvasView.pinnedInsets(content: CGRect(x: -200, y: -300, width: 900, height: 1600), screen: screen)

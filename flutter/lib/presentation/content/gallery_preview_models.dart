@@ -245,7 +245,7 @@ abstract final class GalleryDetailMetadata {
 
   /// The version suggested above the metadata, unless hidden.
   static GalleryVersion? suggestion(NativeGallery gallery, {required Set<int> hidden}) {
-    final version = gallery.suggestedVersion(L10n.contentLanguage);
+    final version = gallery.suggestedVersion(PreferredWorkLanguage.resolved);
     return version == null || hidden.contains(version.id) ? null : version;
   }
 

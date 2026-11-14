@@ -787,6 +787,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                       onGoldRequired: () => _skipGoldRestricted(_post.id),
                       onRemoved: () => _removedPost(_post.id),
                       translation: _translation.balloons(_post.id) ?? const [],
+                      translationStyle: _translation.style,
                     ),
                   ),
                 if (!_removed && (_mediaStatus == 'error' || url == null && !_resolvesMissingMedia || _mediaStatus == 'unavailable'))

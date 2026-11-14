@@ -500,7 +500,7 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
                   if (widget.translation.isNotEmpty)
                     Positioned.fromRect(
                       rect: _imageRect(size),
-                      child: TranslatedRegionsLayer(regions: widget.translation),
+                      child: TranslatedRegionsLayer(regions: widget.translation, style: ReaderTranslationScope.of(context)?.style ?? const TranslationStyle()),
                     ),
                 ],
               ),

@@ -367,6 +367,7 @@ struct BooruMediaView: UIViewRepresentable {
     var doubleTapZoom = true
     /// Translated balloons over the image, as the comics reader draws them.
     var translation: [ReaderTextRegion] = []
+    var translationStyle = ReaderTranslationStyle()
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> WKWebView {
@@ -398,6 +399,7 @@ struct BooruMediaView: UIViewRepresentable {
         coordinator.onNote = onNote; coordinator.onStatus = onStatus; coordinator.notes = notes
         coordinator.showNotes = showNotes
         coordinator.translation = translation
+        coordinator.translationStyle = translationStyle
         coordinator.onGesture = onGesture
         if coordinator.doubleTapZoom != doubleTapZoom {
             coordinator.doubleTapZoom = doubleTapZoom
@@ -672,7 +674,8 @@ struct BooruMediaView: UIViewRepresentable {
           const W=canvas.clientWidth,H=canvas.clientHeight;
           regions.forEach(r=>{const b=document.createElement('div');b.className='balloon';
             const pad=3,left=Math.max(0,r.x*W/100-pad),top=Math.max(0,r.y*H/100-pad),w=Math.min(W-left,r.w*W/100+pad*2),h=Math.min(H-top,r.h*H/100+pad*2);
-            b.style.left=left+'px';b.style.top=top+'px';b.style.width=w+'px';b.style.height=h+'px';b.textContent=r.text;layer.appendChild(b);
+            b.style.left=left+'px';b.style.top=top+'px';b.style.width=w+'px';b.style.height=h+'px';b.textContent=r.text;
+            const style=window.translationStyle;if(style){b.style.background=style.fill;b.style.color=style.text;}layer.appendChild(b);
             let size=Math.max(8,Math.min(22,(r.vertical?w*0.6:h*0.78)/Math.max(1,r.lines)));b.style.fontSize=size+'px';
             while(size>4&&(b.scrollHeight>b.clientHeight+1||b.scrollWidth>b.clientWidth+1)){size-=0.5;b.style.fontSize=size+'px';}});};
         window.renderNotes=(notes,visible)=>{const layer=document.getElementById('notes');layer.replaceChildren();layer.hidden=!visible;
@@ -757,7 +760,9 @@ struct BooruMediaView: UIViewRepresentable {
         var renderedNotes: [BooruNote]?
         private var renderedShowNotes = false
         var translation: [ReaderTextRegion] = []
+        var translationStyle = ReaderTranslationStyle()
         var renderedTranslation: [ReaderTextRegion]?
+        private var renderedStyle: ReaderTranslationStyle?
         var onNote: ((BooruNote) -> Void)?
         var onStatus: ((String) -> Void)?
         var onGesture: ((BooruMediaGesture) -> Void)?
@@ -787,7 +792,7 @@ struct BooruMediaView: UIViewRepresentable {
             view.evaluateJavaScript("window.renderNotes(\(json), \(showNotes ? "true" : "false"));", completionHandler: nil)
         }
         func updateTranslation(_ view: WKWebView) {
-            guard ready, renderedTranslation != translation else { return }
+            guard ready, renderedTranslation != translation || renderedStyle != translationStyle else { return }
             // Vision's boxes have their origin at the bottom left; the page's at the top left.
             let values = translation.map { region -> [String: Any] in
                 let box = region.bounds
@@ -795,8 +800,8 @@ struct BooruMediaView: UIViewRepresentable {
                         "text": region.text, "lines": region.lines, "vertical": region.vertical]
             }
             guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
-            renderedTranslation = translation
-            view.evaluateJavaScript("window.renderTranslation?.(\(json));", completionHandler: nil)
+            renderedTranslation = translation; renderedStyle = translationStyle
+            view.evaluateJavaScript("window.translationStyle={fill:'\(translationStyle.cssFill)',text:'\(translationStyle.cssText)'};window.renderTranslation?.(\(json));", completionHandler: nil)
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard restrictedDocumentID != documentID, message.frameInfo.isMainFrame,

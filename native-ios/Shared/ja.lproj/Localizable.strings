@@ -1679,3 +1679,13 @@
 "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name." = "スマートフォルダは、新しく保存したもののうちタグが一致するものを自動で整理します。フォルダを長押しするとスマートフォルダにでき、名前のあとに%@が付きます。";
 "No websites selected" = "ウェブサイトが選択されていません";
 "Choose websites using the website button above. Your saved works are kept." = "上部のウェブサイトボタンから選んでください。保存した作品は保持されています。";
+"White" = "白";
+"Black" = "黒";
+"Yellow" = "黄色";
+"AI Translation Background" = "AI翻訳の背景";
+"The color behind AI translation’s text. The text turns white on black and black on the others." = "AI翻訳の文字の背景色です。黒の背景では白い文字、それ以外では黒い文字で表示されます。";
+"AI Translation Background Opacity" = "AI翻訳の背景の不透明度";
+"Preferred Language Version Banner" = "優先言語の作品バナー";
+"When a work also comes in your preferred language, a banner at the bottom of the viewer opens that version. Close it with X; it returns the next time you open the viewer. The preferred language is set in Language settings." = "作品が優先言語でもある場合、ビューアの下部のバナーからその作品を開けます。Xで閉じても、次にビューアを開くと再び表示されます。優先言語は言語設定で選びます。";
+"Preferred Language" = "優先言語";
+"When a work also comes in this language, work information and the viewer offer that version." = "作品がこの言語でもある場合、作品情報とビューアでその作品を案内します。";

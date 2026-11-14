@@ -1679,3 +1679,13 @@
 "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name." = "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name.";
 "No websites selected" = "No websites selected";
 "Choose websites using the website button above. Your saved works are kept." = "Choose websites using the website button above. Your saved works are kept.";
+"White" = "White";
+"Black" = "Black";
+"Yellow" = "Yellow";
+"AI Translation Background" = "AI Translation Background";
+"The color behind AI translation’s text. The text turns white on black and black on the others." = "The color behind AI translation’s text. The text turns white on black and black on the others.";
+"AI Translation Background Opacity" = "AI Translation Background Opacity";
+"Preferred Language Version Banner" = "Preferred Language Version Banner";
+"When a work also comes in your preferred language, a banner at the bottom of the viewer opens that version. Close it with X; it returns the next time you open the viewer. The preferred language is set in Language settings." = "When a work also comes in your preferred language, a banner at the bottom of the viewer opens that version. Close it with X; it returns the next time you open the viewer. The preferred language is set in Language settings.";
+"Preferred Language" = "Preferred Language";
+"When a work also comes in this language, work information and the viewer offer that version." = "When a work also comes in this language, work information and the viewer offer that version.";

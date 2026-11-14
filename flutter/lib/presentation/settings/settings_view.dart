@@ -304,6 +304,18 @@ class _SettingsViewState extends State<SettingsView> {
                       onSelected: _setLanguage,
                     ),
                     SettingsPickerRow<String>(
+                      title: L10n.text('Preferred Language'),
+                      help: L10n.text('When a work also comes in this language, work information and the viewer offer that version.'),
+                      options: [
+                        ('system', L10n.text('System Language')),
+                        ('korean', L10n.text('Korean')),
+                        ('japanese', L10n.text('Japanese')),
+                        ('english', L10n.text('English')),
+                      ],
+                      selected: _defaults.string(PreferredWorkLanguage.key) ?? 'system',
+                      onSelected: (value) => _set(PreferredWorkLanguage.key, value),
+                    ),
+                    SettingsPickerRow<String>(
                       title: L10n.text('Artist Works Language'),
                       help: L10n.text(
                         "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting.",

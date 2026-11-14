@@ -422,7 +422,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
   @override
   Widget build(BuildContext context) {
     final gallery = widget.gallery;
-    final candidate = widget.actions.openVersion == null ? null : gallery.suggestedVersion(L10n.contentLanguage);
+    final candidate = widget.actions.openVersion == null ? null : gallery.suggestedVersion(PreferredWorkLanguage.resolved);
     final suggestion = candidate != null && !widget.content.hiddenMangaGalleryIDs.contains(candidate.id) ? candidate : null;
     return LayoutBuilder(
       builder: (context, constraints) => ListView(

@@ -36,6 +36,9 @@ class ReaderTranslationSession extends ChangeNotifier {
   /// The last failure worth telling the reader about.
   String? message;
 
+  /// How balloons look, as this mode's viewer settings say.
+  TranslationStyle get style => TranslationStyle.stored(preferences);
+
   /// Enough for a conversation to carry over, small enough for an on-device model.
   static const contextLimit = 12;
 

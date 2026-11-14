@@ -15,6 +15,7 @@ import '../design/app_sheet.dart';
 import '../design/grouped_form.dart';
 import '../design/ios_controls.dart';
 import '../design/pull_down_menu.dart';
+import '../design/glass.dart';
 import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
@@ -143,6 +144,16 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
   String? _error;
   bool _menuVisible = false;
   bool _sheetOpen = false;
+
+  /// The work whose version banner was closed; opening the viewer again shows it again.
+  int? _closedVersionBanner;
+
+  /// This work in the preferred language, when the site has it and the banner is on.
+  GalleryVersion? _versionSuggestion(NativeGallery gallery) {
+    if (!(_defaults.boolean(ReaderPreferences.versionBannerKey) ?? true) || widget.openWork == null || _closedVersionBanner == gallery.id) return null;
+    return gallery.suggestedVersion(PreferredWorkLanguage.resolved);
+  }
+
   final _zoomedPages = <int>{};
   String? _toast;
   Timer? _toastTimer;
@@ -640,6 +651,16 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
                             decoration: const ShapeDecoration(color: Color(0x80000000), shape: StadiumBorder()),
                             child: Text('${_current + 1} / ${gallery.pages.length}', style: TegnalType.style(12, color: const Color(0xFFFFFFFF))),
                           ),
+                        // Above the quick menu kept at the bottom, so neither covers the other.
+                        if (!_menuVisible && !_sheetOpen && _translating == null && gallery != null)
+                          if (_versionSuggestion(gallery) case final version?) ...[
+                            const SizedBox(height: 8),
+                            ReaderVersionBanner(
+                              version: version,
+                              open: () => widget.openWork?.call(version.id),
+                              close: () => setState(() => _closedVersionBanner = gallery.id),
+                            ),
+                          ],
                         if (_bottomMenu && !_menuVisible && gallery != null) ...[
                           const SizedBox(height: 8),
                           ReaderMenuGlass(
@@ -958,6 +979,68 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
 
 /// `ReaderMenuGlass`: dark glass tinted 30% black, 24 pt corners, always in dark appearance.
 /// The fill is measured from the native menu over a light page and over black.
+/// `ReaderVersionBanner`: opens this work in the preferred language from the viewer: a clear
+/// glass bar along the bottom that the X closes until the viewer is opened again.
+class ReaderVersionBanner extends StatelessWidget {
+  const ReaderVersionBanner({super.key, required this.version, required this.open, required this.close});
+  final GalleryVersion version;
+  final VoidCallback open;
+  final VoidCallback close;
+
+  @override
+  Widget build(BuildContext context) {
+    const white = Color(0xFFFFFFFF);
+    return CupertinoTheme(
+      data: CupertinoTheme.of(context).copyWith(brightness: Brightness.dark),
+      child: Glass.capsule(
+        child: SizedBox(
+          height: 48,
+          child: Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: open,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 18),
+                      child: Row(
+                        children: [
+                          Icon(Symbols.globe, size: 17, color: white),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              L10n.text('View in %@', [version.displayName]),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TegnalType.style(15, weight: FontWeight.w600, color: white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Semantics(
+                button: true,
+                label: L10n.text('Close'),
+                excludeSemantics: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: close,
+                  child: const SizedBox(width: 48, height: 48, child: Icon(CupertinoIcons.xmark, size: 14, color: white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ReaderMenuGlass extends StatelessWidget {
   const ReaderMenuGlass({super.key, required this.child});
   final Widget child;
@@ -1138,16 +1221,50 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
             ),
             const SizedBox(height: 26),
           ],
-          if (!widget.booru) ...[
+          if (!widget.booru || AppPlatform.hasImageTranslation) ...[
             FormSection(
               prominentHeader: true,
               header: Text(L10n.text('Translation')),
               children: [
-                _ToggleRow(
-                  title: L10n.text('AI Translation (Beta)'),
-                  help: 'Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.',
-                  value: _bool(ReaderPreferences.continuousTranslationKey, false),
-                  onChanged: (value) => _set(ReaderPreferences.continuousTranslationKey, value),
+                if (!widget.booru)
+                  _ToggleRow(
+                    title: L10n.text('AI Translation (Beta)'),
+                    help: 'Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.',
+                    value: _bool(ReaderPreferences.continuousTranslationKey, false),
+                    onChanged: (value) => _set(ReaderPreferences.continuousTranslationKey, value),
+                  ),
+                _PickerRow<TranslationBackground>(
+                  title: L10n.text('AI Translation Background'),
+                  help: 'The color behind AI translation’s text. The text turns white on black and black on the others.',
+                  options: [for (final background in TranslationBackground.values) (background, L10n.text(background.title))],
+                  selected: TranslationStyle.stored(_defaults).background,
+                  onSelected: (value) => _set(TranslationStyle.backgroundKey, value.name),
+                ),
+                FormRow(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(L10n.text('AI Translation Background Opacity'))),
+                          Text(
+                            '${(TranslationStyle.stored(_defaults).opacity * 100).round()}%',
+                            style: TegnalType.style(17, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TegnalSlider(
+                          value: TranslationStyle.stored(_defaults).opacity,
+                          min: TranslationStyle.minimumOpacity,
+                          label: L10n.text('AI Translation Background Opacity'),
+                          onChanged: (value) => _set(TranslationStyle.opacityKey, (value * 20).round() / 20),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1168,6 +1285,13 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
                 value: _bool('reader.pageNumber', false),
                 onChanged: (value) => _set('reader.pageNumber', value),
               ),
+              if (!widget.booru)
+                _ToggleRow(
+                  title: L10n.text('Preferred Language Version Banner'),
+                  help: 'When a work also comes in your preferred language, a banner at the bottom of the viewer opens that version. Close it with X; it returns the next time you open the viewer. The preferred language is set in Language settings.',
+                  value: _bool(ReaderPreferences.versionBannerKey, true),
+                  onChanged: (value) => _set(ReaderPreferences.versionBannerKey, value),
+                ),
               _ToggleRow(
                 title: L10n.text('Keep Screen Awake While Reading'),
                 value: _bool('reader.keepAwake', true),

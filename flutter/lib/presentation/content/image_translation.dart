@@ -266,7 +266,9 @@ class _ImageTranslationViewState extends State<ImageTranslationView> {
                       builder: (context, box) => Stack(
                         children: [
                           Positioned.fill(child: Image.memory(image, fit: BoxFit.fill, gaplessPlayback: true)),
-                          Positioned.fill(child: TranslatedRegionsLayer(regions: _regions)),
+                          Positioned.fill(
+                            child: TranslatedRegionsLayer(regions: _regions, style: TranslationStyle.stored(widget.preferences)),
+                          ),
                         ],
                       ),
                     ),
@@ -324,9 +326,47 @@ class _ImageTranslationViewState extends State<ImageTranslationView> {
 
 /// White labels over each balloon, three points larger than it, as the native labels are. Lay it
 /// over the image's own rectangle so the labels zoom and pan with the page.
+/// `ReaderTranslationStyle`: how translated balloons look, set in each mode's viewer settings:
+/// the background behind the text and how see-through it is. The text takes whichever of black
+/// or white reads on that background.
+class TranslationStyle {
+  const TranslationStyle({this.background = TranslationBackground.white, double opacity = 1}) : opacity = opacity < 0.3 ? 0.3 : (opacity > 1 ? 1 : opacity);
+
+  static const backgroundKey = 'reader.translationBackground';
+  static const opacityKey = 'reader.translationOpacity';
+  static const minimumOpacity = 0.3;
+
+  factory TranslationStyle.stored(Preferences preferences) => TranslationStyle(
+    background: TranslationBackground.values.where((value) => value.name == preferences.string(backgroundKey)).firstOrNull ?? TranslationBackground.white,
+    opacity: (preferences.object(opacityKey) as num?)?.toDouble() ?? 1,
+  );
+
+  final TranslationBackground background;
+  final double opacity;
+
+  Color get fill => background.color.withValues(alpha: opacity);
+  Color get text => background == TranslationBackground.black ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
+
+  @override
+  bool operator ==(Object other) => other is TranslationStyle && other.background == background && other.opacity == opacity;
+  @override
+  int get hashCode => Object.hash(background, opacity);
+}
+
+enum TranslationBackground {
+  white(Color(0xFFFFFFFF), 'White'),
+  black(Color(0xFF1C1C1E), 'Black'),
+  yellow(Color(0xFFFFEC99), 'Yellow');
+
+  const TranslationBackground(this.color, this.title);
+  final Color color;
+  final String title;
+}
+
 class TranslatedRegionsLayer extends StatelessWidget {
-  const TranslatedRegionsLayer({super.key, required this.regions});
+  const TranslatedRegionsLayer({super.key, required this.regions, this.style = const TranslationStyle()});
   final List<TranslatedRegion> regions;
+  final TranslationStyle style;
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
@@ -342,7 +382,7 @@ class TranslatedRegionsLayer extends StatelessWidget {
     return Positioned.fromRect(
       rect: bounded,
       child: DecoratedBox(
-        decoration: BoxDecoration(color: const Color(0xFFFFFFFF), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: style.fill, borderRadius: BorderRadius.circular(3)),
         child: Center(
           child: FittedBox(
             fit: BoxFit.scaleDown,
@@ -351,7 +391,7 @@ class TranslatedRegionsLayer extends StatelessWidget {
               child: Text(
                 region.text,
                 textAlign: TextAlign.center,
-                style: TegnalType.style(fontSize, weight: FontWeight.w500, color: const Color(0xFF000000)).copyWith(height: 1.1),
+                style: TegnalType.style(fontSize, weight: FontWeight.w500, color: style.text).copyWith(height: 1.1),
               ),
             ),
           ),

@@ -226,6 +226,8 @@ struct BooruPostView: View {
     /// The switch under the image stays after it turns translation off, until Translate closes it.
     @State private var showsTranslationBar = false
     @State private var translationPillUntil = Date.distantPast
+    @SwiftUI.AppStorage(ReaderTranslationStyle.backgroundKey, store: ReaderPreferences.booruDefaults) private var translationBackground = ReaderTranslationStyle.Background.white.rawValue
+    @SwiftUI.AppStorage(ReaderTranslationStyle.opacityKey, store: ReaderPreferences.booruDefaults) private var translationOpacity = 1.0
     @State private var viewport = BooruViewerViewport()
     @State private var zoomed = false
     @State private var toast: String?
@@ -303,7 +305,8 @@ struct BooruPostView: View {
                                        if post.id == postID, !accessNavigation.restrictedIDs.contains(postID) { mediaStatus = status }
                                    }, onGesture: gesture, onGoldRequired: { [postID = post.id] in skipGoldRestricted(postID) },
                                    onRemoved: { [postID = post.id] in removedPost(postID) }, doubleTapZoom: doubleTapZoom,
-                                   translation: translation.balloons(for: post.id) ?? [])
+                                   translation: translation.balloons(for: post.id) ?? [],
+                                   translationStyle: ReaderTranslationStyle(background: translationBackground, opacity: translationOpacity))
                         .ignoresSafeArea().id("\(server.id)-\(retry)")
                     #if DEBUG
                     if BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled {

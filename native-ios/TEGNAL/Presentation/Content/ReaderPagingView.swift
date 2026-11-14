@@ -42,7 +42,7 @@ struct ReaderPageView: View {
         Group {
             if let shown = loadedImage, shown.hash == page.hash {
                 ZoomablePageView(image: shown.image, tap: tap, bookmark: bookmark, viewport: viewport, contentID: page.hash,
-                                 translation: translation?.balloons(for: page.hash) ?? [])
+                                 translation: translation?.balloons(for: page.hash) ?? [], translationStyle: translation?.style ?? ReaderTranslationStyle())
                     .overlay(alignment: .bottom) {
                         if let error {
                             Button { retry += 1 } label: {
@@ -89,6 +89,7 @@ struct ZoomablePageView: UIViewRepresentable {
     var contentID: String?
     /// Translated balloons laid over the page, zooming and panning with it.
     var translation: [ReaderTextRegion] = []
+    var translationStyle = ReaderTranslationStyle()
     /// Observed so a change in the viewer settings reaches pages already open.
     @SwiftUI.AppStorage(ReaderPreferences.doubleTapZoomKey, store: ReaderPreferences.defaults) private var doubleTapZoom = true
     func makeUIView(context: Context) -> PageScrollView { PageScrollView() }
@@ -98,7 +99,7 @@ struct ZoomablePageView: UIViewRepresentable {
         view.viewport = viewport
         view.setDoubleTapZoom(doubleTapZoom)
         view.update(image: image, contentID: contentID)
-        view.setTranslation(translation)
+        view.setTranslation(translation, style: translationStyle)
     }
 }
 
@@ -182,18 +183,19 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     private lazy var longPress = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
     private var translation: [ReaderTextRegion] = []
+    private var translationStyle = ReaderTranslationStyle()
     private var translationLabels: [UILabel] = []
     private var translationLayoutSize = CGSize.zero
     /// White labels over each balloon, children of the image so they zoom and pan with it.
-    func setTranslation(_ regions: [ReaderTextRegion]) {
-        guard regions != translation else { return }
-        translation = regions
+    func setTranslation(_ regions: [ReaderTextRegion], style: ReaderTranslationStyle = ReaderTranslationStyle()) {
+        guard regions != translation || style != translationStyle else { return }
+        translation = regions; translationStyle = style
         translationLabels.forEach { $0.removeFromSuperview() }
         translationLabels = regions.enumerated().map { index, region in
             let label = UILabel()
             label.text = region.text
-            label.textColor = .black
-            label.backgroundColor = .white
+            label.textColor = style.textColor
+            label.backgroundColor = style.fill
             label.numberOfLines = 0
             label.textAlignment = .center
             label.adjustsFontSizeToFitWidth = true

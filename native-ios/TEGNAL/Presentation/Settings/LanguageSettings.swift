@@ -6,6 +6,7 @@ struct LanguageSettingsSection: View {
     @Environment(AppEnvironment.self) private var env
     @SwiftUI.AppStorage(ArtistBrowsing.preferenceKey, store: ReaderPreferences.defaults) private var artistLanguage = "all"
     @SwiftUI.AppStorage(TagBrowsing.preferenceKey, store: ReaderPreferences.defaults) private var tagLanguage = "all"
+    @SwiftUI.AppStorage(PreferredWorkLanguage.key, store: ReaderPreferences.defaults) private var preferredLanguage = "system"
     var body: some View {
         @Bindable var env = env
         Section(L10n.text("Language")) {
@@ -16,6 +17,16 @@ struct LanguageSettingsSection: View {
                 Text("日本語").tag("ja")
             }.accessibilityIdentifier("settings.appLanguage")
             if !booru {
+                HStack {
+                    SettingsHelpLabel("Preferred Language", help: Self.preferredHelp)
+                    Spacer()
+                    Picker(L10n.text("Preferred Language"), selection: $preferredLanguage) {
+                        Text(L10n.text("System Language")).tag("system")
+                        Text(L10n.text("Korean")).tag("korean")
+                        Text(L10n.text("Japanese")).tag("japanese")
+                        Text(L10n.text("English")).tag("english")
+                    }.labelsHidden().pickerStyle(.menu).accessibilityIdentifier("settings.preferredLanguage")
+                }
                 languagePicker("Artist Works Language", help: Self.artistHelp, selection: $artistLanguage, identifier: "settings.artistLanguage")
                 languagePicker("Tag Works Language", help: Self.tagHelp, selection: $tagLanguage, identifier: "settings.tagLanguage")
             }
@@ -25,6 +36,7 @@ struct LanguageSettingsSection: View {
         }
     }
 
+    static let preferredHelp = "When a work also comes in this language, work information and the viewer offer that version."
     static let artistHelp = "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting."
     static let tagHelp = "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All."
 
@@ -88,5 +100,23 @@ struct TranslationLanguageSettings: View {
                 if language == value { Image(systemName: "checkmark").foregroundStyle(.tint) }
             }.contentShape(Rectangle())
         }.accessibilityIdentifier("translation.language." + value).accessibilityAddTraits(language == value ? [.isSelected] : [])
+    }
+}
+
+/// The language whose version of a work is offered, in work information and the viewer.
+enum PreferredWorkLanguage {
+    static let key = "content.preferredLanguage"
+    /// A work language: the chosen one, or the system's when it is one works come in, else English.
+    static var resolved: String {
+        let chosen = ReaderPreferences.defaults.string(forKey: key) ?? "system"
+        if chosen != "system" { return chosen }
+        return systemLanguage(Locale.preferredLanguages.first ?? "en")
+    }
+    static func systemLanguage(_ identifier: String) -> String {
+        switch Locale(identifier: identifier).language.languageCode?.identifier {
+        case "ko": "korean"
+        case "ja": "japanese"
+        default: "english"
+        }
     }
 }

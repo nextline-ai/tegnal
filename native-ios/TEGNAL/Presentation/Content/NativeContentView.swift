@@ -1160,7 +1160,7 @@ private struct GalleryInformation: View {
     let savedIDs: Set<Int64>
     @Environment(AppEnvironment.self) private var env
     private var suggestion: GalleryVersion? {
-        gallery.suggestedVersion(for: L10n.contentLanguage).flatMap { env.hiddenMangaGalleryIDs.contains($0.id) ? nil : $0 }
+        gallery.suggestedVersion(for: PreferredWorkLanguage.resolved).flatMap { env.hiddenMangaGalleryIDs.contains($0.id) ? nil : $0 }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {

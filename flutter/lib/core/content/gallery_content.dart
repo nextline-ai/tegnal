@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:characters/characters.dart';
 import 'package:collection/collection.dart';
@@ -447,6 +448,25 @@ abstract final class RelatedWorks {
 }
 
 /// Artists open in every language until a person picks one, and that choice stays.
+/// `PreferredWorkLanguage`: the language whose version of a work is offered, in work
+/// information and the viewer.
+abstract final class PreferredWorkLanguage {
+  static const key = 'content.preferredLanguage';
+
+  /// A work language: the chosen one, or the system's when it is one works come in, else English.
+  static String get resolved {
+    final chosen = ContentPreferences.defaults.string(key) ?? 'system';
+    if (chosen != 'system') return chosen;
+    return systemLanguage(ui.PlatformDispatcher.instance.locale.toLanguageTag());
+  }
+
+  static String systemLanguage(String identifier) => switch (identifier.split(RegExp('[-_]')).first.toLowerCase()) {
+    'ko' => 'korean',
+    'ja' => 'japanese',
+    _ => 'english',
+  };
+}
+
 abstract final class ArtistBrowsing {
   static const preferenceKey = 'manga.artistLanguage';
   static String get language => ContentPreferences.defaults.string(preferenceKey) ?? 'all';

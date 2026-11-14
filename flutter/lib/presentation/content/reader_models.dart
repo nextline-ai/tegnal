@@ -26,6 +26,9 @@ abstract final class ReaderPreferences {
   /// turn and the on-device model reads each page with the ones before it.
   static bool get continuousTranslation => defaults.boolean(continuousTranslationKey) ?? false;
 
+  /// On by default: a work with a version in the preferred language shows a banner in the viewer.
+  static const versionBannerKey = 'reader.versionBanner';
+
   /// Image-mode viewer options, installed at launch from `AppPreferences.booruDefaults`.
   static Preferences booruDefaults = MemoryPreferences();
 
@@ -100,6 +103,9 @@ abstract final class ReaderPreferenceReset {
     'reader.continuousBackSwipe',
     'reader.helpHidden', //
     'reader.translationLanguage',
+    'reader.translationBackground',
+    'reader.translationOpacity',
+    'reader.versionBanner',
   ];
 
   static void reset({required bool booru, Preferences? defaults}) {
