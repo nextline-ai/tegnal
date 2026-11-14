@@ -552,16 +552,15 @@ enum LibraryMaintenance {
         for post in posts { if let key = duplicateKey(post) { groups[key, default: .init(name: key)].posts.append(post) } }
         return groups.values.filter { $0.count > 1 }.sorted { $0.name < $1.name }
     }
-    /// `id` is the saved row to keep, so two works under one number are told apart.
     static func mergeComics(_ group: LibraryClassificationGroup, keeping id: Int64, database: AppDatabase) throws {
-        guard group.works.contains(where: { $0.id == id }) else { return }
+        guard group.works.contains(where: { $0.galleryId == id }) else { return }
         try database.dbWriter.write { db in
-            guard let keeper = try Work.fetchOne(db, key: id), let keeperID = keeper.id else { return }
+            guard let keeper = try Work.filter(Work.Columns.galleryId == id).fetchOne(db), let keeperID = keeper.id else { return }
             var notes = [keeper.note].compactMap { $0 }.filter { !$0.isEmpty }
-            for candidate in group.works where candidate.id != id {
-                guard let candidateID = candidate.id, let work = try Work.fetchOne(db, key: candidateID), let oldID = work.id,
+            for candidate in group.works where candidate.galleryId != id {
+                guard let work = try Work.filter(Work.Columns.galleryId == candidate.galleryId).fetchOne(db), let oldID = work.id,
                       duplicateKey(work) == group.name, duplicateKey(keeper) == group.name else { continue }
-                try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) SELECT folder_id, ?, added_at FROM folder_works WHERE work_id = ?", arguments: [keeperID, oldID])
+                try db.execute(sql: "INSERT INTO folder_works (folder_id, work_id, added_at) SELECT folder_id, ?, added_at FROM folder_works WHERE work_id = ? ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)", arguments: [keeperID, oldID])
                 if let note = work.note, !note.isEmpty, !notes.contains(note) { notes.append(note) }
                 try db.execute(sql: "DELETE FROM works WHERE id = ?", arguments: [oldID])
             }
@@ -622,7 +621,7 @@ struct LibraryOrganizationView: View {
                             HStack {
                                 Button { inspectedComic = .init(id: MangaUrls.galleryUrl(for: work.galleryId)) } label: { Text((work.title ?? "") + " · " + String(work.galleryId)) }
                                 Spacer()
-                                Button(L10n.text("Keep This Copy")) { pendingGroup = group; keeper = String(work.id ?? 0) }.buttonStyle(.bordered)
+                                Button(L10n.text("Keep This Copy")) { pendingGroup = group; keeper = String(work.galleryId) }.buttonStyle(.bordered)
                             }.buttonStyle(.borderless)
                         }
                         ForEach(group.posts) { post in

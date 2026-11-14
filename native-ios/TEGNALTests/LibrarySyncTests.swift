@@ -82,16 +82,15 @@ final class LibrarySyncTests: XCTestCase {
         XCTAssertEqual(queued, 2)
         await queue.start(state: state)
         XCTAssertEqual(state.total, 2)
-        XCTAssertEqual(state.processed, 1)
-        XCTAssertEqual(state.gone, 1, "A different work under the same number is left alone")
+        XCTAssertEqual(state.processed, 2, "A number is one work on every website, so both are read again")
+        XCTAssertEqual(state.gone, 0)
         let refreshed = try XCTUnwrap(db.getWork(galleryId: 1001))
         XCTAssertEqual(refreshed.title, "네이티브 읽기 테스트")
         XCTAssertTrue(refreshed.tags?.contains("female:sample") == true)
         XCTAssertEqual(refreshed.note, "kept")
         XCTAssertEqual(refreshed.thumbPath, root.appendingPathComponent("native_1001.jpg").path)
         let other = try XCTUnwrap(db.getWork(galleryId: 1002))
-        XCTAssertEqual(other.title, "原題")
-        XCTAssertEqual(other.tags, "tag:old")
+        XCTAssertEqual(other.title, "네이티브 읽기 테스트")
 
         await source.setFailure(.missingGallery)
         try await queue.queueRefresh()
@@ -319,12 +318,11 @@ final class LibrarySyncTests: XCTestCase {
             _ = try db.upsertWork(galleryId: id, title: "Imported together", bookmarkedAt: "2026-10-01T00:00:00Z")
         }
         _ = try db.upsertWork(galleryId: 1000, title: "Newest save", bookmarkedAt: "2026-10-23T00:00:00Z")
-        // Exclusions name saved rows.
-        let first = try db.worksNeedingFill(limit: 2)
-        XCTAssertEqual(first.map(\.galleryId), [1000, 6000])
-        let second = try db.worksNeedingFill(limit: 2, exclude: Set(first.compactMap(\.id)))
-        XCTAssertEqual(second.map(\.galleryId), [2000, 4000])
-        XCTAssertEqual(try db.worksNeedingFill(exclude: Set((first + second).compactMap(\.id))).map(\.galleryId), [9000])
+        let first = try db.worksNeedingFill(limit: 2).map(\.galleryId)
+        XCTAssertEqual(first, [1000, 6000])
+        let second = try db.worksNeedingFill(limit: 2, exclude: Set(first)).map(\.galleryId)
+        XCTAssertEqual(second, [2000, 4000])
+        XCTAssertEqual(try db.worksNeedingFill(exclude: Set(first + second)).map(\.galleryId), [9000])
         // Retrying a failed cover must keep its original save priority.
         try db.setThumb(galleryId: 9000, status: "failed")
         XCTAssertEqual(try db.worksNeedingFill().map(\.galleryId), [1000, 6000, 2000, 4000, 9000])
@@ -883,11 +881,11 @@ final class LibrarySyncTests: XCTestCase {
 
     func testPreviouslyFailedCoversAreRetriedWithoutRepeatingTheSameBatch() throws {
         let db = try AppDatabase.inMemory()
-        let saved = try db.upsertWork(galleryId: 17, title: "Existing item", tags: "sky")
+        _ = try db.upsertWork(galleryId: 17, title: "Existing item", tags: "sky")
         try db.setThumb(galleryId: 17, status: "failed")
         XCTAssertEqual(try db.worksNeedingFill().map(\.galleryId), [17])
         XCTAssertEqual(try db.countNeedingFill(), 1)
-        XCTAssertTrue(try db.worksNeedingFill(exclude: [saved.id!]).isEmpty)
+        XCTAssertTrue(try db.worksNeedingFill(exclude: [17]).isEmpty)
     }
 
     func testOriginalTagIsNotMistakenForTheOriginalImage() throws {

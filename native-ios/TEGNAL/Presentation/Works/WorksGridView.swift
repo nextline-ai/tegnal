@@ -36,8 +36,6 @@ public struct WorksGridView: View {
     @State private var showJumpSheet = false
     @State private var pendingJump: Int64?
     @State private var composingFolder = false
-    /// A work saved from another website that numbers its works differently.
-    @State private var siteChoice: Work?
     @FocusState private var isSearchFocused: Bool
 
     public init(folder: Folder? = nil, artist: String? = nil) {
@@ -90,11 +88,11 @@ public struct WorksGridView: View {
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         if selecting {
-                                            if let id = work.id { if selection.contains(id) { selection.remove(id) } else { selection.insert(id) } }
+                                            if selection.contains(work.galleryId) { selection.remove(work.galleryId) } else { selection.insert(work.galleryId) }
                                         } else { open(work) }
                                     }
                                     .overlay(alignment: .topTrailing) {
-                                        if selecting { Image(systemName: work.id.map(selection.contains) == true ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
+                                        if selecting { Image(systemName: selection.contains(work.galleryId) ? "checkmark.circle.fill" : "circle").font(.system(size: style.fontSize(22, minimum: 12))).foregroundStyle(.white, .blue).padding(style.inset(10)).allowsHitTesting(false) }
                                     }
                                     .contextMenu {
                                         workContextMenu(for: work)
@@ -173,7 +171,7 @@ public struct WorksGridView: View {
                         .frame(height: 32).accessibilityLabel(L10n.text(selecting ? "Done" : "Select")).accessibilityIdentifier("works.select")
                     if selecting {
                         Menu {
-                            Button(L10n.text("Select All")) { selection = Set(works.compactMap(\.id)) }
+                            Button(L10n.text("Select All")) { selection = Set(works.map(\.galleryId)) }
                             ForEach(allFolders) { target in
                                 Button(target.displayName) {
                                     do {
@@ -210,16 +208,6 @@ public struct WorksGridView: View {
                 }
             }
         }
-        .alert(L10n.text("Saved from %@", siteChoice?.site ?? ""), isPresented: Binding(get: { siteChoice != nil }, set: { if !$0 { siteChoice = nil } }), presenting: siteChoice) { work in
-            Button(L10n.text("Switch and Open")) {
-                if let site = work.site { env.switchComicsSite(to: site) }
-                openManga(for: work.galleryId)
-            }
-            Button(L10n.text("Open Here")) { openManga(for: work.galleryId) }
-            Button(L10n.text("Cancel"), role: .cancel) {}
-        } message: { work in
-            Text(L10n.text("This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work.", work.site ?? "", env.mangaSiteAddress))
-        }
         .alert(L10n.text("Delete Selected Items?"), isPresented: $confirmingDelete) {
             Button(L10n.text("Delete"), role: .destructive) {
                 do { try env.database.deleteSelectedWorks(selection); selection.removeAll(); selecting = false; loadWorks() }
@@ -244,7 +232,7 @@ public struct WorksGridView: View {
         )) {
             Button(L10n.text("Delete"), role: .destructive) {
                 if let work = workPendingDelete {
-                    deleteWork(work)
+                    deleteWork(work.galleryId)
                     workPendingDelete = nil
                 }
             }
@@ -349,12 +337,8 @@ public struct WorksGridView: View {
             if activeBrowserShowsInformation == information { activeBrowserUrl = item?.id }
         })
     }
-    /// A work from another connected website whose numbers mean other works opens there.
-    private func open(_ work: Work) {
-        if let site = work.site, site != env.mangaSiteAddress, env.comicSites.contains(site), !ComicSites.sharesNumbers(site, env.mangaSiteAddress) {
-            siteChoice = work
-        } else { openManga(for: work.galleryId) }
-    }
+    /// A saved number names the same work on every connected website.
+    private func open(_ work: Work) { openManga(for: work.galleryId) }
     private func openManga(for galleryId: Int64) {
         let opening = MangaThumbnailOpening.stored()
         activeBrowserShowsInformation = opening == .information
@@ -381,7 +365,6 @@ public struct WorksGridView: View {
         do {
             try env.database.moveWorkToFolder(
                 galleryId: work.galleryId,
-                site: work.site,
                 targetFolderId: targetId,
                 currentFolderId: folder?.id
             )
@@ -402,8 +385,8 @@ public struct WorksGridView: View {
         }
     }
 
-    private func deleteWork(_ work: Work) {
-        try? env.database.deleteWork(galleryId: work.galleryId, site: work.site)
+    private func deleteWork(_ galleryId: Int64) {
+        try? env.database.deleteWork(galleryId: galleryId)
         loadWorks()
     }
 

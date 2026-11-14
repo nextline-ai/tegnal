@@ -229,10 +229,6 @@
 "Tap either side to turn pages. Tap the center for the quick menu, or hold anywhere to bookmark." = "左右をタップしてページを送り、中央をタップしてクイックメニューを開きます。画面のどこでも長押しするとブックマークできます。";
 "Tap the Sides to Turn Pages" = "左右をタップしてページを送る";
 "Double Tap to Zoom" = "ダブルタップで拡大";
-"Saved from %@" = "%@で保存した作品";
-"Switch and Open" = "切り替えて開く";
-"Open Here" = "ここで開く";
-"This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work." = "この作品は%1$@で保存しました。今使っている%2$@とは作品番号が異なるため、同じ作品を開くにはウェブサイトを切り替える必要があります。";
 "Open on %@" = "%@で開く";
 "Add Website" = "ウェブサイトを追加";
 "Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too." = "一覧、検索、新しく保存する作品はチェックしたウェブサイトを使います。保存した作品はどのウェブサイトで保存したかを覚えており、作品番号が同じウェブサイトでも開けます。";

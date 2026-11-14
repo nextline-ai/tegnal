@@ -10,7 +10,6 @@ import '../challenge/challenge_models.dart';
 import '../content/recent_works.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
-import '../storage/work_identity.dart';
 import '../support/preferences.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
@@ -110,11 +109,24 @@ class LibrarySyncAdapter {
   static const columns = <String, List<String>>{
     'manga.library_order': ['key', 'value'],
     'manga.folders': ['sync_id', 'name', 'description', 'color', 'sort_order', 'created_at', 'source_group_id'],
-    'manga.works': workColumns,
-    // Further works under a number already saved from another website. Older versions,
-    // which keep one work per number, leave this table alone.
-    'manga.work_variants': workColumns,
-    'manga.folder_works': ['folder_id', 'work_id', 'added_at', 'work_site'],
+    'manga.works': [
+      'gallery_id',
+      'title',
+      'artists',
+      'language',
+      'type',
+      'series',
+      'groups',
+      'tags',
+      'note',
+      'bookmarked_at',
+      'published_at',
+      'metadata_source',
+      'catalog_matched',
+      'thumb_page',
+      'site',
+    ],
+    'manga.folder_works': ['folder_id', 'work_id', 'added_at'],
     'manga.artists': ['name', 'kind', 'note', 'bookmarked_at'],
     'manga.search_history': ['query', 'used_at'],
     'manga.saved_searches': ['query'],
@@ -126,24 +138,6 @@ class LibrarySyncAdapter {
     'booru.saved_tags': ['server_id', 'name', 'kind'],
     'booru.settings': ['key', 'value'],
   };
-
-  static const workColumns = [
-    'gallery_id',
-    'title',
-    'artists',
-    'language',
-    'type',
-    'series',
-    'groups',
-    'tags',
-    'note',
-    'bookmarked_at',
-    'published_at',
-    'metadata_source',
-    'catalog_matched',
-    'thumb_page',
-    'site',
-  ];
 
   /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
   static const keepsKnownValue = {'site'};
@@ -170,21 +164,11 @@ class LibrarySyncAdapter {
       for (final MapEntry(key: table, value: names) in columns.entries) {
         if (!table.startsWith('manga.')) continue;
         final local = table.substring(6);
-        const primary = WorkIdentity.primaryCondition;
-        final sql = switch (local) {
-          // A link names its work by number, as older versions read it, and by website.
-          'folder_works' =>
-            "SELECT f.sync_id AS folder_id, CASE WHEN $primary THEN w.gallery_id ELSE w.gallery_id || '@' || w.site END AS work_id, "
-                'fw.added_at, w.site AS work_site FROM folder_works fw JOIN folders f ON f.id = fw.folder_id JOIN works w ON w.id = fw.work_id',
-          'works' => 'SELECT ${names.map((name) => 'w.$name').join(',')} FROM works w WHERE $primary',
-          'work_variants' => 'SELECT ${names.map((name) => 'w.$name').join(',')} FROM works w WHERE NOT ($primary)',
-          _ => 'SELECT ${names.join(',')} FROM $local',
-        };
+        final sql = local == 'folder_works'
+            ? 'SELECT f.sync_id AS folder_id, w.gallery_id AS work_id, fw.added_at FROM folder_works fw JOIN folders f ON f.id = fw.folder_id JOIN works w ON w.id = fw.work_id'
+            : 'SELECT ${names.join(',')} FROM $local';
         for (final row in db.rows(sql)) {
-          final values = {for (final name in names) name: SyncValue.fromDatabase(row[name])};
-          // Links to a work whose website is unknown stay as older versions wrote them.
-          if (local == 'folder_works' && values['work_site'] == SyncValue.null_) values.remove('work_site');
-          result.add(LibrarySyncRow(table: table, values: values));
+          result.add(LibrarySyncRow(table: table, values: {for (final name in names) name: SyncValue.fromDatabase(row[name])}));
         }
       }
       return result;
@@ -297,39 +281,29 @@ class LibrarySyncAdapter {
     final values = changes.values.toList();
     manga.dbWriter.write((db) {
       // Remove dependent links before parents; never replace a whole database.
-      for (final table in ['folder_works', 'artists', 'work_variants', 'works', 'folders', 'search_history', 'saved_searches', 'library_order']) {
+      for (final table in ['folder_works', 'artists', 'works', 'folders', 'search_history', 'saved_searches', 'library_order']) {
         for (final change in values) {
           if (!change.deleted || change.row.table != 'manga.$table') continue;
           final row = change.row.copy();
-          if (table == 'works' || table == 'work_variants') {
-            final work = _localWorkRow(row.values, variant: table == 'work_variants', db);
-            if (work?.id case final id?) db.execute('DELETE FROM works WHERE id = ?', [id]);
-            continue;
-          }
           if (table == 'folders' &&
               row.values['sync_id']?.string == 'unsorted' &&
               db.exists("SELECT EXISTS(SELECT 1 FROM folder_works JOIN folders ON folders.id = folder_works.folder_id WHERE folders.sync_id = 'unsorted')")) {
             continue;
           }
           if (table == 'folder_works') {
-            final folder = _localFolder(row.values['folder_id'], db), work = _localWork(row.values['work_id'], row.values['work_site'], db);
+            final folder = _localFolder(row.values['folder_id'], db), work = _localWork(row.values['work_id'], db);
             if (folder == null || work == null) continue;
             row.values['folder_id'] = SyncValue.integer(folder);
             row.values['work_id'] = SyncValue.integer(work);
-            row.values.remove('work_site');
           }
           _delete(row, db);
         }
       }
       final sorted = [...values]..sort((a, b) => a.row.key.compareTo(b.row.key));
-      for (final table in ['folders', 'works', 'work_variants', 'artists', 'folder_works', 'search_history', 'saved_searches', 'library_order']) {
+      for (final table in ['folders', 'works', 'artists', 'folder_works', 'search_history', 'saved_searches', 'library_order']) {
         for (final change in sorted) {
           if (change.deleted || change.row.table != 'manga.$table') continue;
           final row = change.row.copy();
-          if (table == 'works' || table == 'work_variants') {
-            _applyWork(row.values, variant: table == 'work_variants', db);
-            continue;
-          }
           if (table == 'folders') {
             final uid = row.values['sync_id']?.string, name = row.values['name']?.string;
             if (uid != null && name != null) {
@@ -338,11 +312,10 @@ class LibrarySyncAdapter {
             }
           }
           if (table == 'folder_works') {
-            final folder = _localFolder(row.values['folder_id'], db), work = _localWork(row.values['work_id'], row.values['work_site'], db);
+            final folder = _localFolder(row.values['folder_id'], db), work = _localWork(row.values['work_id'], db);
             if (folder == null || work == null) continue;
             row.values['folder_id'] = SyncValue.integer(folder);
             row.values['work_id'] = SyncValue.integer(work);
-            row.values.remove('work_site');
           }
           _upsert(row, db);
         }
@@ -358,7 +331,10 @@ class LibrarySyncAdapter {
       // Concurrent folder deletion cannot orphan an independently saved work.
       if (db.exists('SELECT EXISTS(SELECT 1 FROM works WHERE id NOT IN (SELECT work_id FROM folder_works))')) {
         final unfiled = AppDatabase.unfiledFolder(db).id!;
-        db.execute('INSERT OR IGNORE INTO folder_works SELECT ?, id, bookmarked_at FROM works WHERE id NOT IN (SELECT work_id FROM folder_works)', [unfiled]);
+        db.execute(
+          'INSERT INTO folder_works (folder_id, work_id, added_at) SELECT ?, id, bookmarked_at FROM works WHERE id NOT IN (SELECT work_id FROM folder_works) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)',
+          [unfiled],
+        );
       }
     });
     booru.database.write((db) {
@@ -553,52 +529,9 @@ class LibrarySyncAdapter {
     return uid == null ? null : db.value<int>('SELECT id FROM folders WHERE sync_id = ?', [uid]);
   }
 
-  /// A link's work: its number (as text with its website, for further works under one
-  /// number) and the website, which older versions leave out.
-  int? _localWork(SyncValue? value, SyncValue? site, SqlDatabase db) {
-    var number = value?.integer;
-    var website = site?.string;
-    final text = value?.string;
-    if (number == null && text != null && text.contains('@')) {
-      final separator = text.indexOf('@');
-      number = int.tryParse(text.substring(0, separator));
-      website ??= text.substring(separator + 1);
-    }
-    if (number == null) return null;
-    final rows = WorkIdentity.rows(db, number);
-    if (website != null && website.isNotEmpty) return WorkIdentity.pick(rows, website)?.id;
-    // A link without a website: to the work whose website is unknown, as newer versions send
-    // it, else to the one the number alone names, as older versions do.
-    return (rows.where((work) => work.site == null).firstOrNull ?? WorkIdentity.primary(rows))?.id;
-  }
-
-  /// The saved work a synced work row names: the one from its website (one whose website is
-  /// unknown takes it). Without a website, a number row names the one whose website is
-  /// unknown, else the one the number alone names, as older versions mean it; a further
-  /// work row only the one whose website is unknown.
-  static Work? _localWorkRow(Map<String, SyncValue> values, SqlDatabase db, {required bool variant}) {
-    final number = values['gallery_id']?.integer;
-    if (number == null) return null;
-    final rows = WorkIdentity.rows(db, number);
-    final site = values['site']?.string;
-    if (site != null && site.isNotEmpty) return WorkIdentity.pick(rows, site);
-    return rows.where((work) => work.site == null).firstOrNull ?? (variant ? null : WorkIdentity.primary(rows));
-  }
-
-  static void _applyWork(Map<String, SyncValue> values, SqlDatabase db, {required bool variant}) {
-    if (values['gallery_id']?.integer == null) throw const BooruError(BooruErrorKind.invalidResponse);
-    final fields = workColumns.where(values.containsKey).toList();
-    final id = _localWorkRow(values, db, variant: variant)?.id;
-    if (id != null) {
-      final updates = fields.where((field) => field != 'gallery_id').toList();
-      if (updates.isEmpty) return;
-      db.execute(
-        'UPDATE works SET ${updates.map((field) => keepsKnownValue.contains(field) ? '$field = COALESCE(?, $field)' : '$field = ?').join(',')} WHERE id = ?',
-        [for (final field in updates) values[field]!.databaseValue, id],
-      );
-    } else {
-      db.execute('INSERT INTO works (${fields.join(',')}) VALUES (${fields.map((_) => '?').join(',')})', [for (final field in fields) values[field]!.databaseValue]);
-    }
+  int? _localWork(SyncValue? value, SqlDatabase db) {
+    final id = value?.integer;
+    return id == null ? null : db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [id]);
   }
 
   static void _upsert(LibrarySyncRow incoming, SqlDatabase db) {
@@ -612,7 +545,14 @@ class LibrarySyncAdapter {
     final fields = allowed.where(row.values.containsKey).toList();
     final updates = fields
         .where((field) => !keys.contains(field))
-        .map((field) => keepsKnownValue.contains(field) ? '$field = COALESCE(excluded.$field, $field)' : '$field = excluded.$field')
+        // A folder holds a work once, saved when it was last saved there.
+        .map(
+          (field) => row.table == 'manga.folder_works' && field == 'added_at'
+              ? 'added_at = MAX(added_at, excluded.added_at)'
+              : keepsKnownValue.contains(field)
+              ? '$field = COALESCE(excluded.$field, $field)'
+              : '$field = excluded.$field',
+        )
         .join(',');
     final local = row.table.split('.')[1];
     final sql =

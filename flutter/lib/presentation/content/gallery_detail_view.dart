@@ -10,7 +10,6 @@ import '../../core/content/content_errors.dart';
 import '../../core/content/gallery_content.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/storage/app_database.dart';
-import '../../core/storage/work_identity.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
 import '../design/app_sheet.dart';
@@ -376,7 +375,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
   }
 
   void _reload() {
-    _savedIDs = widget.database.dbWriter.read(SavedWorkKeys.fetch).idsOn(ComicSites.active);
+    _savedIDs = widget.database.savedGalleryIDs().toSet();
     _savedTags = widget.database.listArtists();
   }
 

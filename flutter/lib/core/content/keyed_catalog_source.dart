@@ -294,8 +294,6 @@ class KeyedCatalogSource {
       type: preview.type,
       tags: preview.tags,
       pages: pages,
-      listedTitles: preview.listedTitles,
-      listedPageCount: preview.listedPageCount,
     );
   }
 
@@ -756,8 +754,6 @@ class KeyedCatalogSource {
           if (namespace != 'language' && namespace != 'artist') '${_localNamespace(namespace)}:$value',
       ],
       pages: pages,
-      listedTitles: DocumentCatalogSource.listedTitles(item),
-      listedPageCount: _number(item['filecount']),
     );
     final files = _number(item['filecount']) ?? 0;
     return (work, files.clamp(0, 10000));

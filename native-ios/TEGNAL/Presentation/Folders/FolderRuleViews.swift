@@ -414,7 +414,7 @@ struct WorkFolderSheet: View {
         guard let id = folder.id else { return }
         do {
             let current = env.savedFolders[galleryID]
-            if id != current { try env.database.moveWorkToFolder(galleryId: galleryID, site: ComicSites.active, targetFolderId: id, currentFolderId: current) }
+            if id != current { try env.database.moveWorkToFolder(galleryId: galleryID, targetFolderId: id, currentFolderId: current) }
             env.savedFolders[galleryID] = id
             filed(folder.displayName)
         } catch {}

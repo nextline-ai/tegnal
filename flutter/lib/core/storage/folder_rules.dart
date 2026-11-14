@@ -262,6 +262,7 @@ extension AppDatabaseFolderRules on AppDatabase {
       final (conditions, arguments) = _matching(rule, db);
       final matched = db.column<int>('SELECT w.id FROM works w WHERE $conditions', arguments);
       for (final workID in matched) {
+        // Filing by a rule is not a new save, so a work already there keeps its date.
         db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [toFolder, workID, now]);
       }
       if (!rule.copies) {
@@ -323,10 +324,10 @@ extension AppDatabaseFolderRules on AppDatabase {
     }
   }
 
-  List<int> folderIDs(int galleryId, {String? site}) => dbWriter.read((db) {
-    final id = AppDatabase.workRow(db, galleryId, site: site)?.id;
-    return id == null ? const <int>[] : db.column<int>('SELECT folder_id FROM folder_works WHERE work_id = ? ORDER BY added_at', [id]);
-  });
+  List<int> folderIDs(int galleryId) => dbWriter.read(
+    (db) =>
+        db.column<int>('SELECT fw.folder_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE w.gallery_id = ? ORDER BY fw.added_at', [galleryId]),
+  );
 
   /// Holds and quick saves land here; a folder deleted since falls back to Unfiled.
   Folder defaultSaveFolder() {
@@ -342,12 +343,15 @@ extension AppDatabaseFolderRules on AppDatabase {
   }
 
   /// Adding a work to a real folder takes it out of Unfiled.
-  void addWork(int galleryId, int folderID, {String? site}) {
+  void addWork(int galleryId, int folderID) {
     final now = iso8601();
     dbWriter.write((db) {
-      final workID = AppDatabase.workRow(db, galleryId, site: site)?.id;
+      final workID = db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [galleryId]);
       if (workID == null) return;
-      db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [folderID, workID, now]);
+      db.execute(
+        'INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)',
+        [folderID, workID, now],
+      );
       _leaveUnfiledWhenIn(folderID, db);
     });
   }

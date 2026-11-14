@@ -114,13 +114,12 @@ abstract final class LibraryMaintenance {
   }
 
   /// Keeps one comic: the others' folders and notes move onto it, then they are deleted.
-  /// A copy whose metadata changed since the review is left alone. [keeping] is the saved
-  /// row to keep, so two works under one number are told apart.
+  /// A copy whose metadata changed since the review is left alone.
   static void mergeComics(LibraryClassificationGroup group, {required int keeping, required AppDatabase database}) {
-    if (!group.works.any((work) => work.id == keeping)) return;
+    if (!group.works.any((work) => work.galleryId == keeping)) return;
     database.dbWriter.write((db) {
-      Work? fetch(int? id) {
-        final row = id == null ? null : db.row('SELECT * FROM works WHERE id = ?', [id]);
+      Work? fetch(int galleryId) {
+        final row = db.rows('SELECT * FROM works WHERE gallery_id = ?', [galleryId]).firstOrNull;
         return row == null ? null : Work.fromRow(row);
       }
 
@@ -129,11 +128,11 @@ abstract final class LibraryMaintenance {
       if (keeper == null || keeperID == null) return;
       final notes = [keeper.note].whereType<String>().where((note) => note.isNotEmpty).toList();
       for (final candidate in group.works) {
-        if (candidate.id == keeping) continue;
-        final work = fetch(candidate.id);
+        if (candidate.galleryId == keeping) continue;
+        final work = fetch(candidate.galleryId);
         final oldID = work?.id;
         if (work == null || oldID == null || duplicateKey(work) != group.name || duplicateKey(keeper) != group.name) continue;
-        db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) SELECT folder_id, ?, added_at FROM folder_works WHERE work_id = ?', [
+        db.execute('INSERT INTO folder_works (folder_id, work_id, added_at) SELECT folder_id, ?, added_at FROM folder_works WHERE work_id = ? ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)', [
           keeperID,
           oldID,
         ]);

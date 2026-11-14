@@ -229,10 +229,6 @@
 "Tap either side to turn pages. Tap the center for the quick menu, or hold anywhere to bookmark." = "좌우를 탭해 넘기고, 가운데를 탭해 퀵 메뉴를 여세요. 화면 아무 곳이나 길게 누르면 북마크합니다.";
 "Tap the Sides to Turn Pages" = "화면 좌우 탭으로 넘기기";
 "Double Tap to Zoom" = "두 번 탭하여 확대";
-"Saved from %@" = "%@에서 저장한 작품";
-"Switch and Open" = "전환해서 열기";
-"Open Here" = "여기서 열기";
-"This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work." = "이 작품은 %1$@에서 저장했습니다. 지금 사용하는 %2$@와는 작품 번호가 달라서, 같은 작품을 열려면 웹사이트를 전환해야 합니다.";
 "Open on %@" = "%@에서 열기";
 "Add Website" = "웹사이트 추가";
 "Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too." = "목록, 검색, 새로 저장하는 작품은 체크한 웹사이트를 사용합니다. 저장한 작품은 어느 웹사이트에서 저장했는지 기억하며, 작품 번호가 같은 웹사이트에서도 열 수 있습니다.";

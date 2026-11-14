@@ -51,12 +51,11 @@ void main() {
       db.upsertWork(galleryId: id, title: 'Imported together', bookmarkedAt: '2026-10-01T00:00:00Z');
     }
     db.upsertWork(galleryId: 1000, title: 'Newest save', bookmarkedAt: '2026-10-23T00:00:00Z');
-    // Exclusions name saved rows.
-    final first = db.worksNeedingFill(limit: 2);
-    expect(first.map((work) => work.galleryId), [1000, 6000]);
-    final second = db.worksNeedingFill(limit: 2, exclude: {for (final work in first) work.id!});
-    expect(second.map((work) => work.galleryId), [2000, 4000]);
-    expect(db.worksNeedingFill(exclude: {for (final work in [...first, ...second]) work.id!}).map((work) => work.galleryId), [9000]);
+    final first = db.worksNeedingFill(limit: 2).map((work) => work.galleryId).toList();
+    expect(first, [1000, 6000]);
+    final second = db.worksNeedingFill(limit: 2, exclude: first.toSet()).map((work) => work.galleryId).toList();
+    expect(second, [2000, 4000]);
+    expect(db.worksNeedingFill(exclude: {...first, ...second}).map((work) => work.galleryId), [9000]);
     // Retrying a failed cover must keep its original save priority.
     db.setThumb(9000, 'failed');
     expect(db.worksNeedingFill().map((work) => work.galleryId), [1000, 6000, 2000, 4000, 9000]);

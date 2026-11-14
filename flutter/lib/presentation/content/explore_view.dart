@@ -12,7 +12,6 @@ import 'reading_queue_views.dart';
 
 import '../../core/content/combined_catalog.dart';
 import '../../core/content/gallery_content.dart';
-import '../../core/storage/work_identity.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../core/content/content_environment.dart';
@@ -117,7 +116,7 @@ class _ExploreViewState extends State<ExploreView> {
   bool _searchBarVisible = true;
   List<String> _history = [];
   List<String> _saved = [];
-  SavedWorkKeys _bookmarked = SavedWorkKeys();
+  Set<int> _bookmarked = {};
   List<TagSuggestion> _suggestions = [];
   bool _suggesting = false;
   Timer? _suggestionTimer;
@@ -259,7 +258,7 @@ class _ExploreViewState extends State<ExploreView> {
     _saved = widget.database.savedSearches();
   }
 
-  void _reloadBookmarks() => _bookmarked = widget.database.dbWriter.read(SavedWorkKeys.fetch);
+  void _reloadBookmarks() => _bookmarked = widget.database.savedGalleryIDs().toSet();
 
   void _changeQuery(GalleryQuery query) {
     // An artist's feed remembers the language picked for it, and a tag's feed does while it
@@ -310,9 +309,6 @@ class _ExploreViewState extends State<ExploreView> {
         for (final item in _loader.items)
           if (!hidden.contains(item.id)) item,
     ];
-    final saved = {
-      for (final site in {for (final item in entries) item.site}) site: _bookmarked.idsOn(site),
-    };
     final title = _query.text.isEmpty ? L10n.text('Explore') : L10n.text('Search Results');
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
@@ -351,7 +347,7 @@ class _ExploreViewState extends State<ExploreView> {
                     site: _loader.combinedSites == null ? null : item.site,
                     preview: preview,
                     style: style,
-                    bookmarked: saved[item.site]?.contains(id) ?? false,
+                    bookmarked: _bookmarked.contains(id),
                     open: () {
                       _showing(item);
                       widget.openGallery(id);

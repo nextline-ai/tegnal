@@ -41,7 +41,7 @@ struct LibrarySyncRow: Codable, Equatable, Sendable {
         return false
     }
     static let keys: [String: [String]] = [
-        "manga.library_order": ["key"], "manga.folders": ["sync_id"], "manga.works": ["gallery_id"], "manga.work_variants": ["gallery_id", "site"], "manga.folder_works": ["folder_id", "work_id"],
+        "manga.library_order": ["key"], "manga.folders": ["sync_id"], "manga.works": ["gallery_id"], "manga.folder_works": ["folder_id", "work_id"],
         "manga.artists": ["name", "kind"], "manga.search_history": ["query"], "manga.saved_searches": ["query"],
         "booru.challenges": ["id"], "booru.servers": ["id"], "booru.folders": ["id"], "booru.favorites": ["server_id", "post_id"],
         "booru.saved_tags": ["server_id", "name", "kind"], "booru.history": ["server_id", "query"],

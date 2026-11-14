@@ -72,7 +72,7 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(groups.first { $0.name == "japanese" }?.count, 2)
         let candidates = LibraryMaintenance.duplicates(works: works, posts: [])
         XCTAssertEqual(candidates.count, 1); XCTAssertEqual(candidates[0].count, 2)
-        try LibraryMaintenance.mergeComics(candidates[0], keeping: try XCTUnwrap(database.getWork(galleryId: 101)?.id), database: database)
+        try LibraryMaintenance.mergeComics(candidates[0], keeping: 101, database: database)
         let kept = try XCTUnwrap(database.getWork(galleryId: 101))
         XCTAssertEqual(Set(kept.folders.map(\.name)), ["A", "B"])
         XCTAssertTrue(kept.note?.contains("First note") == true); XCTAssertTrue(kept.note?.contains("Second note") == true)

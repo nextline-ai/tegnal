@@ -162,55 +162,68 @@ public final class AppDatabase: Sendable {
         migrator.registerMigration("v13_work_site") { db in
             if try !db.columns(in: "works").map(\.name).contains("site") { try db.execute(sql: "ALTER TABLE works ADD COLUMN site TEXT") }
         }
-        // One number may name a different work on each website: a work is its number and website.
-        migrator.registerMigration("v14_work_identity_per_site") { db in try Self.migrateWorkIdentity(db) }
+        migrator.registerMigration("v14_one_work_per_number") { try Self.restoreOneWorkPerNumber($0) }
         return migrator
     }
 
-    static let workColumns = ["id", "gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at",
-                              "published_at", "last_opened_at", "updated_at", "metadata_source", "catalog_matched", "thumb_status", "thumb_path",
-                              "thumb_failed_at", "thumb_page", "site"]
-
-    static func migrateWorkIdentity(_ db: Database) throws {
+    /// Every supported website numbers its works the same way, so a number is one work. Test builds
+    /// briefly saved a number once per website; this folds those copies into one, keeping the latest
+    /// saved, and puts the tables back as they were. Other libraries are left untouched.
+    static func restoreOneWorkPerNumber(_ db: Database) throws {
+        let perSite = try Row.fetchOne(db, sql: "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_works_identity'") != nil
+        guard perSite else { return }
+        let duplicated = try Int64.fetchAll(db, sql: "SELECT gallery_id FROM works GROUP BY gallery_id HAVING COUNT(*) > 1")
+        for galleryId in duplicated {
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM works WHERE gallery_id = ? ORDER BY bookmarked_at DESC, id DESC", arguments: [galleryId])
+            guard let keeper = rows.first, let keeperId: Int64 = keeper["id"] else { continue }
+            for row in rows.dropFirst() {
+                guard let id: Int64 = row["id"] else { continue }
+                // The latest saved copy stays; what it lacks comes from the older ones.
+                for column in ["title", "artists", "language", "type", "series", "groups", "tags", "note", "published_at", "metadata_source", "site"] {
+                    try db.execute(sql: "UPDATE works SET \(column) = (SELECT \(column) FROM works WHERE id = ?) WHERE id = ? AND (\(column) IS NULL OR \(column) = '')", arguments: [id, keeperId])
+                }
+                try db.execute(sql: """
+                UPDATE works SET last_opened_at = (SELECT NULLIF(MAX(COALESCE(last_opened_at, '')), '') FROM works WHERE id IN (?, ?)) WHERE id = ?
+                """, arguments: [id, keeperId, keeperId])
+                try db.execute(sql: """
+                UPDATE works SET thumb_status = o.thumb_status, thumb_path = o.thumb_path, thumb_page = o.thumb_page, thumb_failed_at = o.thumb_failed_at
+                FROM (SELECT * FROM works WHERE id = ?) o WHERE works.id = ? AND works.thumb_status != 'ready' AND o.thumb_status = 'ready'
+                """, arguments: [id, keeperId])
+                // A folder holds the work once, saved when it was last saved there.
+                try db.execute(sql: """
+                INSERT INTO folder_works (folder_id, work_id, added_at) SELECT folder_id, ?, added_at FROM folder_works WHERE work_id = ?
+                ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)
+                """, arguments: [keeperId, id])
+                try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ?", arguments: [id])
+                try db.execute(sql: "INSERT OR IGNORE INTO refresh_queue (work_id) SELECT ? FROM refresh_queue WHERE work_id = ?", arguments: [keeperId, id])
+                try db.execute(sql: "DELETE FROM works WHERE id = ?", arguments: [id])
+            }
+        }
+        try db.execute(sql: "DROP TRIGGER IF EXISTS remove_visual_fingerprint")
         try db.execute(sql: """
-        CREATE TABLE works_identity (
+        CREATE TABLE works_restored (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            gallery_id INTEGER NOT NULL,
+            gallery_id INTEGER NOT NULL UNIQUE,
             title TEXT, artists TEXT, language TEXT, type TEXT, series TEXT, groups TEXT, tags TEXT, note TEXT,
             bookmarked_at TEXT NOT NULL, published_at TEXT, last_opened_at TEXT, updated_at TEXT, metadata_source TEXT,
             catalog_matched BOOLEAN NOT NULL DEFAULT 0, thumb_status TEXT NOT NULL DEFAULT 'missing', thumb_path TEXT,
             thumb_failed_at TEXT, thumb_page INTEGER DEFAULT 1, site TEXT
         )
         """)
-        let columns = workColumns.joined(separator: ", ")
-        try db.execute(sql: "INSERT INTO works_identity (\(columns)) SELECT \(columns) FROM works")
+        let columns = "id, gallery_id, title, artists, language, type, series, groups, tags, note, bookmarked_at, published_at, last_opened_at, updated_at, metadata_source, catalog_matched, thumb_status, thumb_path, thumb_failed_at, thumb_page, site"
+        try db.execute(sql: "INSERT INTO works_restored (\(columns)) SELECT \(columns) FROM works")
         try db.execute(sql: "DROP TABLE works")
-        try db.execute(sql: "ALTER TABLE works_identity RENAME TO works")
+        try db.execute(sql: "ALTER TABLE works_restored RENAME TO works")
         try db.execute(sql: "CREATE INDEX idx_works_bookmarked ON works(bookmarked_at)")
         try db.execute(sql: "CREATE INDEX idx_works_gallery_id ON works(gallery_id)")
-        try db.execute(sql: "CREATE UNIQUE INDEX idx_works_identity ON works(gallery_id, COALESCE(site, ''))")
-        // A cover's fingerprint stays while another work still has its number.
-        try db.execute(sql: """
-        CREATE TRIGGER remove_visual_fingerprint AFTER DELETE ON works
-        WHEN NOT EXISTS (SELECT 1 FROM works WHERE gallery_id = OLD.gallery_id)
-        BEGIN DELETE FROM visual_fingerprints WHERE scope = 'comics' AND item_id = OLD.gallery_id; END;
-        """)
-        // The refresh queue names saved works, not numbers.
-        try db.execute(sql: "CREATE TABLE refresh_queue_works (work_id INTEGER PRIMARY KEY NOT NULL)")
-        if try db.tableExists("refresh_queue") {
-            try db.execute(sql: "INSERT OR IGNORE INTO refresh_queue_works (work_id) SELECT w.id FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id")
-            try db.execute(sql: "DROP TABLE refresh_queue")
+        try VisualFingerprintStore.installDeletionTrigger(db)
+        // The refresh queue names numbers again.
+        try db.execute(sql: "CREATE TABLE refresh_queue_numbers (gallery_id INTEGER PRIMARY KEY NOT NULL)")
+        if try db.columns(in: "refresh_queue").map(\.name).contains("work_id") {
+            try db.execute(sql: "INSERT OR IGNORE INTO refresh_queue_numbers (gallery_id) SELECT w.gallery_id FROM refresh_queue q JOIN works w ON w.id = q.work_id")
         }
-        try db.execute(sql: "ALTER TABLE refresh_queue_works RENAME TO refresh_queue")
-    }
-
-    /// The saved work a number from `site` names; see `WorkIdentity.pick`.
-    static func workRow(_ db: Database, galleryId: Int64, site: String?) throws -> Work? {
-        WorkIdentity.pick(try WorkIdentity.rows(db, galleryId: galleryId), site: site)
-    }
-
-    private static func workRowID(_ db: Database, galleryId: Int64, site: String?) throws -> Int64? {
-        try workRow(db, galleryId: galleryId, site: site)?.id
+        try db.execute(sql: "DROP TABLE refresh_queue")
+        try db.execute(sql: "ALTER TABLE refresh_queue_numbers RENAME TO refresh_queue")
     }
 
     // MARK: - Folders & Color Generation
@@ -324,9 +337,9 @@ public final class AppDatabase: Sendable {
             // Link any orphan works to the default folder
             if let defaultId = folder.id {
                 try db.execute(sql: """
-                INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at)
+                INSERT INTO folder_works (folder_id, work_id, added_at)
                 SELECT ?, id, bookmarked_at FROM works
-                WHERE id NOT IN (SELECT work_id FROM folder_works)
+                WHERE id NOT IN (SELECT work_id FROM folder_works) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)
                 """, arguments: [defaultId])
 
                 // Prune works from defaultFolder if they belong to other folders
@@ -477,8 +490,8 @@ public final class AppDatabase: Sendable {
             // Move works to default folder
             try db.execute(
                 sql: """
-                INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at)
-                SELECT ?, work_id, added_at FROM folder_works WHERE folder_id = ?
+                INSERT INTO folder_works (folder_id, work_id, added_at)
+                SELECT ?, work_id, added_at FROM folder_works WHERE folder_id = ? ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)
                 """,
                 arguments: [defaultFolder.id, id]
             )
@@ -577,11 +590,9 @@ public final class AppDatabase: Sendable {
         return works
     }
 
-    /// The saved work this number names on `site`; without a website, the one whose website
-    /// is unknown, else the first saved.
-    public func getWork(galleryId: Int64, site: String? = nil) throws -> Work? {
+    public func getWork(galleryId: Int64) throws -> Work? {
         try dbWriter.read { db in
-            guard var work = try Self.workRow(db, galleryId: galleryId, site: site) else {
+            guard var work = try Work.filter(Work.Columns.galleryId == galleryId).fetchOne(db) else {
                 return nil
             }
             if let workId = work.id {
@@ -597,13 +608,8 @@ public final class AppDatabase: Sendable {
         }
     }
 
-    /// Saves or updates a work. With `site`, the work saved from that website (or one whose
-    /// website is unknown, which then takes it); `workId` names a saved row directly. With
-    /// neither, as an import that does not know its website: the one whose website is
-    /// unknown, else a saved one that is the same work (see `WorkIdentity.importMatch`).
     public func upsertWork(
         galleryId: Int64,
-        workId: Int64? = nil,
         folderId: Int64? = nil,
         title: String? = nil,
         artists: String? = nil,
@@ -622,12 +628,7 @@ public final class AppDatabase: Sendable {
     ) throws -> Work {
         try dbWriter.write { db in
             let now = ISO8601DateFormatter().string(from: Date())
-            let rows = try WorkIdentity.rows(db, galleryId: galleryId)
-            let site = site?.isEmpty == true ? nil : site
-            var work: Work?
-            if let workId { work = rows.first { $0.id == workId } }
-            else if let site { work = WorkIdentity.pick(rows, site: site) }
-            else { work = WorkIdentity.importMatch(rows, title: title, artists: artists) }
+            var work = try Work.filter(Work.Columns.galleryId == galleryId).fetchOne(db)
             let wasNew = work == nil
             let lackedTags = (work?.tags ?? "").isEmpty
 
@@ -644,8 +645,8 @@ public final class AppDatabase: Sendable {
                     if let metadataSource { existing.metadataSource = metadataSource }
                     existing.catalogMatched = catalogMatched || existing.catalogMatched
                 }
-                // A work whose website was unknown takes the first website it is saved from.
-                if existing.site == nil, let site, workId == nil { existing.site = site }
+                // The first site a work is known from stays its site.
+                if existing.site == nil, let site, !site.isEmpty { existing.site = site }
                 existing.updatedAt = now
                 try existing.update(db)
                 work = existing
@@ -664,7 +665,7 @@ public final class AppDatabase: Sendable {
                     updatedAt: now,
                     metadataSource: metadataSource,
                     catalogMatched: catalogMatched,
-                    site: site
+                    site: site?.isEmpty == true ? nil : site
                 )
                 try newWork.insert(db)
                 if newWork.id == nil {
@@ -679,9 +680,10 @@ public final class AppDatabase: Sendable {
                 effectiveFolderId = try Self.unfiledFolder(in: db).id
             }
             if let folderId = effectiveFolderId {
-                if let workId = work?.id {
+                let resolvedWorkId = work?.id ?? (try? Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [galleryId]))
+                if let workId = resolvedWorkId {
                     try db.execute(
-                        sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)",
+                        sql: "INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)",
                         arguments: [folderId, workId, now]
                     )
                     // If assigned to a non-default folder, remove from default folder (미분류)
@@ -708,49 +710,46 @@ public final class AppDatabase: Sendable {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
             try db.execute(
-                sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)",
+                sql: "INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)",
                 arguments: [folderId, workId, now]
             )
         }
     }
 
-    public func setManualTitle(galleryId: Int64, site: String? = nil, title: String) throws {
+    public func setManualTitle(galleryId: Int64, title: String) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
-            guard let id = try Self.workRowID(db, galleryId: galleryId, site: site) else { return }
             try db.execute(
-                sql: "UPDATE works SET title = ?, metadata_source = 'manual', updated_at = ? WHERE id = ?",
-                arguments: [title, now, id]
+                sql: "UPDATE works SET title = ?, metadata_source = 'manual', updated_at = ? WHERE gallery_id = ?",
+                arguments: [title, now, galleryId]
             )
         }
     }
 
-    public func setNote(galleryId: Int64, site: String? = nil, note: String) throws {
+    public func setNote(galleryId: Int64, note: String) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
-            guard let id = try Self.workRowID(db, galleryId: galleryId, site: site) else { return }
             try db.execute(
-                sql: "UPDATE works SET note = ?, updated_at = ? WHERE id = ?",
-                arguments: [note, now, id]
+                sql: "UPDATE works SET note = ?, updated_at = ? WHERE gallery_id = ?",
+                arguments: [note, now, galleryId]
             )
         }
     }
 
-    public func markOpened(galleryId: Int64, site: String? = nil) throws {
+    public func markOpened(galleryId: Int64) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
-            guard let id = try Self.workRowID(db, galleryId: galleryId, site: site) else { return }
             try db.execute(
-                sql: "UPDATE works SET last_opened_at = ? WHERE id = ?",
-                arguments: [now, id]
+                sql: "UPDATE works SET last_opened_at = ? WHERE gallery_id = ?",
+                arguments: [now, galleryId]
             )
         }
     }
 
-    public func moveWorkToFolder(galleryId: Int64, site: String? = nil, targetFolderId: Int64, currentFolderId: Int64? = nil) throws {
+    public func moveWorkToFolder(galleryId: Int64, targetFolderId: Int64, currentFolderId: Int64? = nil) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
-            guard let work = try Self.workRow(db, galleryId: galleryId, site: site),
+            guard let work = try Work.filter(Work.Columns.galleryId == galleryId).fetchOne(db),
                   let workId = work.id else { return }
 
             if let currentFolderId {
@@ -766,51 +765,50 @@ public final class AppDatabase: Sendable {
             }
 
             try db.execute(
-                sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)",
+                sql: "INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)",
                 arguments: [targetFolderId, workId, now]
             )
         }
     }
 
-    public func deleteWork(galleryId: Int64, site: String? = nil) throws {
+    public func deleteWork(galleryId: Int64) throws {
         try dbWriter.write { db in
-            if let work = try Self.workRow(db, galleryId: galleryId, site: site), let workId = work.id {
-                try TasteStore.record(.remove, item: .comic(galleryId), db: db)
+            try TasteStore.record(.remove, item: .comic(galleryId), db: db)
+            if let work = try Work.filter(Work.Columns.galleryId == galleryId).fetchOne(db), let workId = work.id {
                 try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ?", arguments: [workId])
                 try db.execute(sql: "DELETE FROM works WHERE id = ?", arguments: [workId])
             }
         }
     }
 
-    public func setThumb(galleryId: Int64, site: String? = nil, status: String, path: String? = nil, page: Int? = nil) throws {
+    public func setThumb(galleryId: Int64, status: String, path: String? = nil, page: Int? = nil) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         // Invalidate before observers receive the updated thumbnail record.
         if let path {
             LocalThumbnailCache.shared.invalidate(path: path)
         }
         try dbWriter.write { db in
-            guard let id = try Self.workRowID(db, galleryId: galleryId, site: site) else { return }
             if status == "failed" || status == "gone" {
                 try db.execute(
-                    sql: "UPDATE works SET thumb_status = ?, thumb_failed_at = ? WHERE id = ?",
-                    arguments: [status, now, id]
+                    sql: "UPDATE works SET thumb_status = ?, thumb_failed_at = ? WHERE gallery_id = ?",
+                    arguments: [status, now, galleryId]
                 )
             } else if status == "ready" {
                 if let page = page {
                     try db.execute(
-                        sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_page = ?, thumb_failed_at = NULL WHERE id = ?",
-                        arguments: [status, path, page, id]
+                        sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_page = ?, thumb_failed_at = NULL WHERE gallery_id = ?",
+                        arguments: [status, path, page, galleryId]
                     )
                 } else {
                     try db.execute(
-                        sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE id = ?",
-                        arguments: [status, path, id]
+                        sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE gallery_id = ?",
+                        arguments: [status, path, galleryId]
                     )
                 }
             } else {
                 try db.execute(
-                    sql: "UPDATE works SET thumb_status = ?, thumb_path = NULL WHERE id = ?",
-                    arguments: [status, id]
+                    sql: "UPDATE works SET thumb_status = ?, thumb_path = NULL WHERE gallery_id = ?",
+                    arguments: [status, galleryId]
                 )
             }
         }
@@ -823,23 +821,11 @@ public final class AppDatabase: Sendable {
         }
     }
 
-    /// Where a saved work's cover goes: its number and website, or for a work whose website is
-    /// unknown its number alone, unless another work under that number already uses that file.
-    public func thumbnailURL(galleryId: Int64, site: String?, in directory: URL = AppStorage.thumbsDirURL) throws -> URL {
-        let name = WorkIdentity.thumbnailName(galleryId: galleryId, site: site)
-        guard site == nil else { return directory.appendingPathComponent(name) }
-        let taken = try dbWriter.read {
-            try String.fetchAll($0, sql: "SELECT thumb_path FROM works WHERE gallery_id = ? AND site IS NOT NULL AND thumb_path IS NOT NULL", arguments: [galleryId])
-        }.contains { URL(fileURLWithPath: $0).lastPathComponent == name }
-        return directory.appendingPathComponent(taken ? "native_\(galleryId)_unknown.jpg" : name)
-    }
-
-    public func setThumbPage(galleryId: Int64, site: String? = nil, page: Int) throws {
+    public func setThumbPage(galleryId: Int64, page: Int) throws {
         try dbWriter.write { db in
-            guard let id = try Self.workRowID(db, galleryId: galleryId, site: site) else { return }
             try db.execute(
-                sql: "UPDATE works SET thumb_page = ? WHERE id = ?",
-                arguments: [page, id]
+                sql: "UPDATE works SET thumb_page = ? WHERE gallery_id = ?",
+                arguments: [page, galleryId]
             )
         }
     }
@@ -847,19 +833,19 @@ public final class AppDatabase: Sendable {
     /// Ready is a local-file promise, not a property that survives moving an
     /// app container. Repair old absolute paths before choosing backfill work.
     func repairThumbnailReferences(in directory: URL) throws {
-        let records = try dbWriter.read { try Row.fetchAll($0, sql: "SELECT id, gallery_id, site, thumb_path FROM works WHERE thumb_status = 'ready'") }
+        let records = try dbWriter.read { try Row.fetchAll($0, sql: "SELECT gallery_id, thumb_path FROM works WHERE thumb_status = 'ready'") }
         var changes: [(id: Int64, old: String?, recovered: String?)] = []
         for row in records {
-            let id: Int64 = row["id"], old: String? = row["thumb_path"]
+            let id: Int64 = row["gallery_id"], old: String? = row["thumb_path"]
             if let old, AppStorage.isReadableThumbnail(URL(fileURLWithPath: old)) { continue }
-            var candidates = [directory.appendingPathComponent(WorkIdentity.thumbnailName(galleryId: row["gallery_id"], site: row["site"]))]
+            var candidates = [directory.appendingPathComponent("native_\(id).jpg")]
             if let old, !old.isEmpty { candidates.insert(directory.appendingPathComponent(URL(fileURLWithPath: old).lastPathComponent), at: 0) }
             changes.append((id, old, candidates.first(where: AppStorage.isReadableThumbnail)?.path))
         }
         guard !changes.isEmpty else { return }
         try dbWriter.write { db in
             for change in changes {
-                try db.execute(sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE id = ? AND thumb_status = 'ready' AND COALESCE(thumb_path, '') = ?",
+                try db.execute(sql: "UPDATE works SET thumb_status = ?, thumb_path = ?, thumb_failed_at = NULL WHERE gallery_id = ? AND thumb_status = 'ready' AND COALESCE(thumb_path, '') = ?",
                                arguments: [change.recovered == nil ? "missing" : "ready", change.recovered, change.id, change.old ?? ""])
             }
         }
@@ -880,7 +866,7 @@ public final class AppDatabase: Sendable {
 
     public func worksNeedingFill(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Work] {
         try dbWriter.read { db in
-            let placeholders = exclude.isEmpty ? "" : "AND id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+            let placeholders = exclude.isEmpty ? "" : "AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
             let sql = """
             SELECT * FROM works WHERE \(Self.needsFill)
             \(placeholders)
@@ -892,7 +878,7 @@ public final class AppDatabase: Sendable {
     }
 
     public func countNeedingFill(exclude: Set<Int64> = []) throws -> Int {
-        let exclusions = exclude.isEmpty ? "" : " AND id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+        let exclusions = exclude.isEmpty ? "" : " AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
         return try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE " + Self.needsFill + exclusions) ?? 0 }
     }
 
@@ -903,18 +889,18 @@ public final class AppDatabase: Sendable {
     /// that could not be fetched stays queued for the next run instead of being skipped.
     @discardableResult public func queueRefresh() throws -> Int {
         try dbWriter.write { db in
-            try db.execute(sql: "DELETE FROM refresh_queue WHERE work_id NOT IN (SELECT id FROM works)")
-            try db.execute(sql: "INSERT OR IGNORE INTO refresh_queue (work_id) SELECT id FROM works")
+            try db.execute(sql: "DELETE FROM refresh_queue WHERE gallery_id NOT IN (SELECT gallery_id FROM works)")
+            try db.execute(sql: "INSERT OR IGNORE INTO refresh_queue (gallery_id) SELECT gallery_id FROM works")
             return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM refresh_queue") ?? 0
         }
     }
 
-    /// Queued works, newest saves first, like the fill queue. `exclude` holds saved rows.
-    public func worksAwaitingRefresh(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Work] {
-        let exclusions = exclude.isEmpty ? "" : "WHERE w.id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+    /// Queued works, newest saves first, like the fill queue.
+    public func worksAwaitingRefresh(limit: Int = 8, exclude: Set<Int64> = []) throws -> [Int64] {
+        let exclusions = exclude.isEmpty ? "" : "WHERE w.gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
         return try dbWriter.read {
-            try Work.fetchAll($0, sql: """
-            SELECT w.* FROM refresh_queue q JOIN works w ON w.id = q.work_id
+            try Int64.fetchAll($0, sql: """
+            SELECT w.gallery_id FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id
             \(exclusions)
             ORDER BY w.bookmarked_at DESC, w.id DESC
             LIMIT ?
@@ -923,20 +909,19 @@ public final class AppDatabase: Sendable {
     }
 
     public func countAwaitingRefresh() throws -> Int {
-        try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM refresh_queue q JOIN works w ON w.id = q.work_id") ?? 0 }
+        try dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM refresh_queue q JOIN works w ON w.gallery_id = q.gallery_id") ?? 0 }
     }
 
-    /// Takes a saved work off the refresh queue once the site has answered for it.
-    public func finishRefresh(workId: Int64) throws {
-        try dbWriter.write { try $0.execute(sql: "DELETE FROM refresh_queue WHERE work_id = ?", arguments: [workId]) }
+    /// Takes a work off the refresh queue once the site has answered for it.
+    public func finishRefresh(galleryId: Int64) throws {
+        try dbWriter.write { try $0.execute(sql: "DELETE FROM refresh_queue WHERE gallery_id = ?", arguments: [galleryId]) }
     }
 
     /// Works the queue still has to visit: missing information, or waiting for a refresh.
-    /// `exclude` holds saved rows.
     public func countPendingFill(exclude: Set<Int64> = []) throws -> Int {
-        let exclusions = exclude.isEmpty ? "" : " AND id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
+        let exclusions = exclude.isEmpty ? "" : " AND gallery_id NOT IN (\(exclude.map(String.init).joined(separator: ",")))"
         return try dbWriter.read {
-            try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE (" + Self.needsFill + " OR id IN (SELECT work_id FROM refresh_queue))" + exclusions) ?? 0
+            try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM works WHERE (" + Self.needsFill + " OR gallery_id IN (SELECT gallery_id FROM refresh_queue))" + exclusions) ?? 0
         }
     }
 
@@ -999,7 +984,7 @@ public final class AppDatabase: Sendable {
                 catalog_matched = 1,
                 metadata_source = CASE WHEN metadata_source = 'manual' THEN 'manual' ELSE 'catalog' END,
                 updated_at = ?
-            WHERE gallery_id = ? AND site IS NULL
+            WHERE gallery_id = ?
             """
             let updateStmt = try db.makeStatement(sql: updateSql)
 
@@ -1011,7 +996,7 @@ public final class AppDatabase: Sendable {
 
             var updatedCount = 0
             for item in items {
-                let untagged = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ? AND site IS NULL AND COALESCE(tags, '') = ''", arguments: [item.id])
+                let untagged = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ? AND COALESCE(tags, '') = ''", arguments: [item.id])
                 try updateStmt.execute(arguments: [
                     item.title,
                     item.artists,
@@ -1075,7 +1060,7 @@ public final class AppDatabase: Sendable {
         try dbWriter.write { db in
             let untagged = try Int64.fetchAll(db, sql: """
             SELECT w.id FROM works w JOIN catalog_works c ON c.id = w.gallery_id
-            WHERE COALESCE(w.tags, '') = '' AND COALESCE(c.tags, '') != '' AND w.site IS NULL
+            WHERE COALESCE(w.tags, '') = '' AND COALESCE(c.tags, '') != ''
               AND (w.title IS NULL OR w.metadata_source != 'manual')
             """)
             let sql = """
@@ -1090,7 +1075,7 @@ public final class AppDatabase: Sendable {
                 published_at = (SELECT c.published FROM catalog_works c WHERE c.id = works.gallery_id),
                 catalog_matched = 1,
                 metadata_source = CASE WHEN metadata_source = 'manual' THEN 'manual' ELSE 'catalog' END
-            WHERE EXISTS (SELECT 1 FROM catalog_works c WHERE c.id = works.gallery_id) AND site IS NULL
+            WHERE EXISTS (SELECT 1 FROM catalog_works c WHERE c.id = works.gallery_id)
               AND (title IS NULL OR metadata_source != 'manual')
             """
             try db.execute(sql: sql)

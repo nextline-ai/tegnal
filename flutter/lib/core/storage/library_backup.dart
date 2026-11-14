@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../domain/models.dart';
-import 'work_identity.dart';
 import '../booru/booru_backup.dart';
 import '../booru/booru_store.dart';
 import '../challenge/challenge_models.dart';
@@ -518,7 +517,7 @@ class MangaBackup {
           final color = folder.color ?? 0xFF2563EB;
           return folder.name.trim().isNotEmpty && color >= 0 && color <= 0xFFFFFFFF;
         }) &&
-        works.map((work) => '${work.galleryId}@${work.site ?? ''}').toSet().length == works.length &&
+        works.map((work) => work.galleryId).toSet().length == works.length &&
         works.every((work) => work.galleryId > 0 && (work.thumbPage ?? 1) > 0 && names.containsAll(work.folders ?? const [])) &&
         artists.every((artist) => artist.name.trim().isNotEmpty && mangaKinds.contains(artist.kind ?? 0)) &&
         artists.map((artist) => '${artist.name}\u0000${artist.kind ?? 0}').toSet().length == artists.length &&
@@ -556,12 +555,8 @@ class MangaBackup {
     final order = db.column<String>('SELECT sync_id FROM folders WHERE sync_id IS NOT NULL ORDER BY sort_order, id');
     db.execute("INSERT OR REPLACE INTO library_order VALUES ('folders', ?)", [encodeSwiftJson(order)]);
     for (final record in works) {
-      // A work saved from a website lands on that website's; one that does not say lands on
-      // a saved one that is the same work, else becomes its own.
-      final rows = WorkIdentity.rows(db, record.galleryId);
-      final existing = (record.site ?? '').isNotEmpty
-          ? WorkIdentity.pick(rows, record.site)
-          : WorkIdentity.importMatch(rows, title: record.title, artists: record.artists);
+      final existingRow = db.row('SELECT * FROM works WHERE gallery_id = ?', [record.galleryId]);
+      final existing = existingRow == null ? null : Work.fromRow(existingRow);
       final work = existing ?? Work(galleryId: record.galleryId);
       work
         ..title = record.title ?? work.title
@@ -582,7 +577,7 @@ class MangaBackup {
         destinations = [AppDatabase.unfiledFolder(db).id!];
       }
       for (final id in destinations) {
-        db.execute('INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)', [id, work.id, work.bookmarkedAt]);
+        db.execute('INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)', [id, work.id, work.bookmarkedAt]);
       }
       TasteStore.record(existing == null ? TasteEventKind.imported : TasteEventKind.metadata, library.comicItem(work.galleryId, work.tags), db);
     }

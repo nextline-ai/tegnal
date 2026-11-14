@@ -36,7 +36,8 @@ public actor CoverQueueActor {
     private let thumbsDir: URL
     private let source: any ContentProviding
     private let images: PageImageStore
-    /// Another connected website's reader for works saved from it; nil reads them from the checked one.
+    /// Another connected website's reader, for a work saved from it: it may carry works the
+    /// checked website lacks. Nil reads the work from the checked website.
     private let siteSource: @Sendable (String) -> (any ContentProviding)?
     private var siteImages: [String: PageImageStore] = [:]
     private let allowsBackfill: @Sendable () -> Bool
@@ -52,8 +53,7 @@ public actor CoverQueueActor {
         self.source = MangaContentSource.shared
         self.images = PageImageStore(source: MangaContentSource.shared)
         self.siteSource = { site in
-            let active = ComicSites.active
-            guard site != active, ComicSites.all.contains(site), !ComicSites.sharesNumbers(site, active) else { return nil }
+            guard site != ComicSites.active, ComicSites.all.contains(site) else { return nil }
             return SiteContent.for(site)
         }
         self.allowsBackfill = { CoverQueuePolicy.allowsBackfill }
@@ -114,41 +114,39 @@ public actor CoverQueueActor {
                 kickAgain = false
                 while downloadsEnabled && !isPaused && !Task.isCancelled && allowsBackfill() {
                     let refresh = try database.worksAwaitingRefresh(limit: 6, exclude: attempted)
-                    let batch = refresh.isEmpty ? try database.worksNeedingFill(limit: 6, exclude: attempted) : refresh
+                    let batch = refresh.isEmpty ? try database.worksNeedingFill(limit: 6, exclude: attempted).map(\.galleryId) : refresh
                     if batch.isEmpty { break }
                     let planned = attempted.count + (try database.countPendingFill(exclude: attempted))
                     await MainActor.run { state.total = max(state.total, planned) }
 
-                    for work in batch {
+                    for galleryId in batch {
                         if isPaused || Task.isCancelled || !allowsBackfill() { break }
-                        guard let workId = work.id else { continue }
-                        let galleryId = work.galleryId, site = work.site
                         let refreshes = !refresh.isEmpty
-                        attempted.insert(workId)
+                        attempted.insert(galleryId)
 
                         do {
-                            try await fetch(work, refresh: refreshes)
+                            try await fetchOne(galleryId, refresh: refreshes)
                             // A removed bookmark is not a successfully filled work. Tags may stay
                             // empty only when the site itself lists none.
-                            if let saved = try database.getWork(galleryId: galleryId, site: site), saved.id == workId {
+                            if let saved = try database.getWork(galleryId: galleryId) {
                                 guard saved.hasThumb, saved.hasTitle,
                                       !(saved.tags ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                         || saved.metadataSource == "manga" else { throw ContentError.invalidResponse }
                                 await MainActor.run { state.processed += 1 }
                             }
-                            if refreshes { try database.finishRefresh(workId: workId) }
+                            if refreshes { try database.finishRefresh(galleryId: galleryId) }
                         } catch is CancellationError {
                             break
                         } catch let error as URLError where error.code == .cancelled {
                             break
                         } catch ContentError.galleryNotFound {
-                            // Gone, or a different work under the same number: nothing more to read.
-                            if refreshes { try? database.finishRefresh(workId: workId) }
+                            // The website no longer has the work: nothing more to read.
+                            if refreshes { try? database.finishRefresh(galleryId: galleryId) }
                             await MainActor.run { state.gone += 1 }
                         } catch {
                             await MainActor.run { state.failed += 1 }
-                            if (try? database.getWork(galleryId: galleryId, site: site)?.hasThumb) != true {
-                                try? database.setThumb(galleryId: galleryId, site: site, status: "failed")
+                            if (try? database.getWork(galleryId: galleryId)?.hasThumb) != true {
+                                try? database.setThumb(galleryId: galleryId, status: "failed")
                             }
                         }
 
@@ -168,34 +166,15 @@ public actor CoverQueueActor {
         await MainActor.run { state.isRunning = false }
     }
 
-    /// Fills the saved work this number names on `site` (see `AppDatabase.getWork`).
-    public func fetchOne(_ galleryId: Int64, site: String? = nil, refresh: Bool = false) async throws {
-        guard let work = try database.getWork(galleryId: galleryId, site: site) else { return }
-        try await fetch(work, refresh: refresh)
-    }
-
-    /// A work saved from another connected website is read there; one saved from the checked
-    /// website, or whose website is unknown, from the checked one.
-    private func reader(for work: Work) -> (any ContentProviding, PageImageStore) {
-        guard let site = work.site, let other = siteSource(site) else { return (source, images) }
-        if let store = siteImages[site] { return (other, store) }
-        let store = PageImageStore(source: other)
-        siteImages[site] = store
-        return (other, store)
-    }
-
-    private func fetch(_ work: Work, refresh: Bool) async throws {
+    public func fetchOne(_ galleryId: Int64, refresh: Bool = false) async throws {
         try Task.checkCancellation()
-        let galleryId = work.galleryId, site = work.site, workId = work.id
-        var existing = try database.getWork(galleryId: galleryId, site: site)
-        guard existing?.id == workId else { return }
+        var existing = try database.getWork(galleryId: galleryId)
 
-        // The offline catalog describes numbers whose website is unknown.
-        if site == nil, !existing!.hasTitle || (existing?.tags ?? "").isEmpty {
+        // If title or tags are missing, check offline catalog first
+        if existing == nil || !existing!.hasTitle || (existing?.tags ?? "").isEmpty {
             if let catalog = try database.getCatalog(galleryId: galleryId) {
                 _ = try database.upsertWork(
                     galleryId: galleryId,
-                    workId: workId,
                     title: catalog.title,
                     artists: catalog.artists,
                     language: catalog.language,
@@ -208,7 +187,7 @@ public actor CoverQueueActor {
                     catalogMatched: true,
                     overwriteMetadata: false
                 )
-                existing = try database.getWork(galleryId: galleryId, site: site)
+                existing = try database.getWork(galleryId: galleryId)
             }
         }
 
@@ -218,12 +197,12 @@ public actor CoverQueueActor {
 
         if !refresh && !needTitle && !needCover && !needTags {
             if existing?.thumbStatus != "ready" {
-                try database.setThumb(galleryId: galleryId, site: site, status: "ready", path: existing?.thumbPath)
+                try database.setThumb(galleryId: galleryId, status: "ready", path: existing?.thumbPath)
             }
             return
         }
 
-        let (source, images) = reader(for: work)
+        let (source, images) = reader(for: existing?.site)
         let gallery: NativeGallery
         do {
             gallery = try await source.gallery(galleryId)
@@ -232,14 +211,13 @@ public actor CoverQueueActor {
             // Only a missing gallery document means the work is gone. A 404
             // from an image/CDN request below remains a retryable failure.
             // A refresh keeps the cover the work already has.
-            if !refresh { try database.setThumb(galleryId: galleryId, site: site, status: "gone") }
+            if !refresh { try database.setThumb(galleryId: galleryId, status: "gone") }
             throw ContentError.galleryNotFound
         }
         try Task.checkCancellation()
-        guard let saved = try database.getWork(galleryId: galleryId, site: site), saved.id == workId else { return }
-        if refresh, !Self.isSameWork(saved, gallery) { throw ContentError.galleryNotFound }
+        guard try database.getWork(galleryId: galleryId) != nil else { return }
         _ = try database.upsertWork(
-            galleryId: galleryId, workId: workId, title: needTitle || refresh ? gallery.title : nil,
+            galleryId: galleryId, title: needTitle || refresh ? gallery.title : nil,
             artists: gallery.artists.joined(separator: ", "), language: gallery.language,
             type: gallery.type, tags: gallery.tags.joined(separator: ", "), metadataSource: "manga"
         )
@@ -248,25 +226,23 @@ public actor CoverQueueActor {
             let page = min(max(1, existing?.thumbPage ?? 1), gallery.pages.count)
             let image = try await images.load(gallery.pages[page - 1], galleryID: galleryId, thumbnail: true)
             try Task.checkCancellation()
-            guard try database.getWork(galleryId: galleryId, site: site)?.id == workId else { return }
+            guard try database.getWork(galleryId: galleryId) != nil else { return }
             guard let data = image.jpegData(compressionQuality: 0.9) else { throw ContentError.unsupportedFormat }
             try FileManager.default.createDirectory(at: thumbsDir, withIntermediateDirectories: true)
-            let file = try database.thumbnailURL(galleryId: galleryId, site: site, in: thumbsDir)
+            let file = thumbsDir.appendingPathComponent("native_\(galleryId).jpg")
             try data.write(to: file, options: .atomic)
             guard AppStorage.isReadableThumbnail(file) else { throw ContentError.unsupportedFormat }
-            try database.setThumb(galleryId: galleryId, site: site, status: "ready", path: file.path, page: page)
+            try database.setThumb(galleryId: galleryId, status: "ready", path: file.path, page: page)
         }
     }
 
-    /// Saved numbers do not record their site, so a refresh leaves a work alone
-    /// when the current site has a different work under the same number.
-    static func isSameWork(_ saved: Work, _ gallery: NativeGallery) -> Bool {
-        func names(_ values: [String]) -> Set<String> {
-            Set(values.map { $0.lowercased().replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
-        }
-        let savedArtists = names((saved.artists ?? "").split(separator: ",").map(String.init)), artists = names(gallery.artists)
-        if !savedArtists.isEmpty && !artists.isEmpty { return !savedArtists.isDisjoint(with: artists) }
-        let language = (saved.language ?? "").lowercased()
-        return ["", "translated", "rewrite"].contains(language) || gallery.language.isEmpty || language == gallery.language.lowercased()
+    /// A work saved from another connected website is read there; one saved from the checked
+    /// website, or from an unknown one, from the checked one.
+    private func reader(for site: String?) -> (any ContentProviding, PageImageStore) {
+        guard let site, let other = siteSource(site) else { return (source, images) }
+        if let store = siteImages[site] { return (other, store) }
+        let store = PageImageStore(source: other)
+        siteImages[site] = store
+        return (other, store)
     }
 }

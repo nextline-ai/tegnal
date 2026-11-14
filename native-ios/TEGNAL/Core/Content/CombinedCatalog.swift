@@ -53,14 +53,12 @@ struct CombinedBatch: Sendable {
 }
 
 /// Lists every connected website at once. Each website keeps its own page position; their
-/// works are taken in turn, the checked website first. A work another website already showed
-/// (the same number on a website that numbers works the same way, or the same cleaned title,
-/// artists and page count) is left out before it is shown, so nothing disappears on screen.
+/// works are taken in turn, the checked website first. Every website numbers its works the same
+/// way, so a number another website already showed is left out before it is shown, and nothing
+/// disappears on screen.
 actor CombinedCatalog {
     typealias SourceFor = @Sendable (String) -> any ContentProviding
-    typealias SharesNumbers = @Sendable (String, String) -> Bool
     private let sourceFor: SourceFor
-    private let sharesNumbers: SharesNumbers
     private let pageSize: Int
 
     private struct Lane {
@@ -74,18 +72,13 @@ actor CombinedCatalog {
     private var sites: [String] = []
     private var lanes: [String: Lane] = [:]
     private var emitted: [FeedItem] = []
-    private var shownBySite: [String: Set<Int64>] = [:]
-    private var shownTitles: [String: [(site: String, fingerprint: WorkMatcher.Fingerprint)]] = [:]
-    private var fingerprints: [FeedItem: WorkMatcher.Fingerprint] = [:]
+    private var shown = Set<Int64>()
     /// Works left out because another website already showed them.
     private(set) var leftOut = 0
 
-    init(pageSize: Int = 24,
-         sourceFor: @escaping SourceFor = { SiteContent.for($0) },
-         sharesNumbers: @escaping SharesNumbers = { ComicSites.sharesNumbers($0, $1) }) {
+    init(pageSize: Int = 24, sourceFor: @escaping SourceFor = { SiteContent.for($0) }) {
         self.pageSize = pageSize
         self.sourceFor = sourceFor
-        self.sharesNumbers = sharesNumbers
     }
 
     /// `offset` 0 starts over; later offsets continue, and one already answered is answered
@@ -110,11 +103,10 @@ actor CombinedCatalog {
         self.query = query
         self.sites = sites
         lanes = Dictionary(uniqueKeysWithValues: sites.map { ($0, Lane()) })
-        emitted = []; shownBySite = [:]; shownTitles = [:]; fingerprints = [:]; leftOut = 0
+        emitted = []; shown = []; leftOut = 0
     }
 
-    /// Reads the next page of every website that has run out of works to give, with what
-    /// tells their works apart.
+    /// Reads the next page of every website that has run out of works to give.
     private func fill() async throws {
         guard let query else { return }
         let needed = sites.filter { lanes[$0]?.pending.isEmpty == true && lanes[$0]?.more == true }
@@ -130,14 +122,13 @@ actor CombinedCatalog {
             return result
         }
         try Task.checkCancellation()
-        var fresh: [FeedItem] = []
         for (site, page) in pages {
             guard var lane = lanes[site] else { continue }
             switch page {
             case .success(let batch):
                 lane.offset += batch.ids.count
                 lane.more = batch.hasMore && !batch.ids.isEmpty
-                for id in batch.ids where lane.seen.insert(id).inserted { lane.pending.append(id); fresh.append(FeedItem(id: id, site: site)) }
+                for id in batch.ids where lane.seen.insert(id).inserted { lane.pending.append(id) }
             case .failure(let error):
                 // One website failing leaves the others showing.
                 if error is CancellationError { throw error }
@@ -145,22 +136,6 @@ actor CombinedCatalog {
             }
             lanes[site] = lane
         }
-        guard sites.count > 1 else { return }
-        let found = await withTaskGroup(of: (FeedItem, WorkMatcher.Fingerprint?).self) { group in
-            var running = 0, result: [FeedItem: WorkMatcher.Fingerprint] = [:]
-            for item in fresh {
-                if running >= 6, let (done, print) = await group.next() { running -= 1; if let print { result[done] = print } }
-                group.addTask {
-                    let source = sourceFor(item.site)
-                    let gallery: NativeGallery? = if let cached = source.cachedPreview(item.id) { cached } else { try? await source.gallery(item.id) }
-                    return (item, gallery?.matchFingerprint)
-                }
-                running += 1
-            }
-            for await (done, print) in group { if let print { result[done] = print } }
-            return result
-        }
-        fingerprints.merge(found) { _, new in new }
     }
 
     /// Takes one work from each website in turn. Returns whether any was taken.
@@ -170,31 +145,14 @@ actor CombinedCatalog {
             guard var lane = lanes[site] else { continue }
             while !lane.pending.isEmpty {
                 let item = FeedItem(id: lane.pending.removeFirst(), site: site)
-                if isShown(item) { leftOut += 1; continue }
-                record(item)
+                guard shown.insert(item.id).inserted else { leftOut += 1; continue }
+                emitted.append(item)
                 took = true
                 break
             }
             lanes[site] = lane
         }
         return took
-    }
-
-    private func isShown(_ item: FeedItem) -> Bool {
-        for (site, ids) in shownBySite where site != item.site && ids.contains(item.id) && sharesNumbers(site, item.site) { return true }
-        guard let print = fingerprints[item] else { return false }
-        for title in print.titles {
-            for shown in shownTitles[title] ?? [] where shown.site != item.site && WorkMatcher.isSameWork(shown.fingerprint, print) { return true }
-        }
-        return false
-    }
-
-    private func record(_ item: FeedItem) {
-        emitted.append(item)
-        shownBySite[item.site, default: []].insert(item.id)
-        if let print = fingerprints[item] {
-            for title in print.titles { shownTitles[title, default: []].append((item.site, print)) }
-        }
     }
 }
 

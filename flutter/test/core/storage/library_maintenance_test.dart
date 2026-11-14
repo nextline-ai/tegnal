@@ -28,7 +28,7 @@ void main() {
     final candidates = LibraryMaintenance.duplicates(works: works, posts: const []);
     expect(candidates, hasLength(1));
     expect(candidates[0].count, 2);
-    LibraryMaintenance.mergeComics(candidates[0], keeping: database.getWork(101)!.id!, database: database);
+    LibraryMaintenance.mergeComics(candidates[0], keeping: 101, database: database);
     final kept = database.getWork(101)!;
     expect(kept.folders.map((folder) => folder.name).toSet(), {'A', 'B'});
     expect(kept.note, contains('First note'));
@@ -48,7 +48,7 @@ void main() {
     database.upsertWork(galleryId: 1, folderId: database.defaultSaveFolder().id, title: 'Same', artists: 'Author', language: 'korean', type: 'manga');
     database.upsertWork(galleryId: 2, folderId: kept.id, title: 'Same', artists: 'Author', language: 'korean', type: 'manga');
     final group = LibraryMaintenance.duplicates(works: database.listWorks(), posts: const []).first;
-    LibraryMaintenance.mergeComics(group, keeping: database.getWork(1)!.id!, database: database);
+    LibraryMaintenance.mergeComics(group, keeping: 1, database: database);
     expect(folderNames(1), ['Kept']);
   });
 

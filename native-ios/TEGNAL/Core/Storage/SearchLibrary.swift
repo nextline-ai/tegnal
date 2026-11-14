@@ -94,25 +94,22 @@ extension BooruStore {
 }
 
 extension AppDatabase {
-    /// `ids` are saved rows, so two works under one number are told apart.
     func deleteSelectedWorks(_ ids: Set<Int64>) throws {
         try dbWriter.write { db in
             for id in ids {
-                guard let galleryId = try Int64.fetchOne(db, sql: "SELECT gallery_id FROM works WHERE id = ?", arguments: [id]) else { continue }
-                try TasteStore.record(.remove, item: .comic(galleryId), db: db)
-                try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ?", arguments: [id])
-                try db.execute(sql: "DELETE FROM works WHERE id = ?", arguments: [id])
+                try TasteStore.record(.remove, item: .comic(id), db: db)
+                try db.execute(sql: "DELETE FROM folder_works WHERE work_id IN (SELECT id FROM works WHERE gallery_id = ?)", arguments: [id])
+                try db.execute(sql: "DELETE FROM works WHERE gallery_id = ?", arguments: [id])
             }
         }
     }
-    /// `ids` are saved rows.
     func moveSelectedWorks(_ ids: Set<Int64>, to folderID: Int64, from source: Int64?) throws {
         try dbWriter.write { db in
-            for work in ids {
-                guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM works WHERE id = ?)", arguments: [work]) == true else { continue }
+            for id in ids {
+                guard let work = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [id]) else { continue }
                 if let source { try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ? AND folder_id = ?", arguments: [work, source]) }
                 else { try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ?", arguments: [work]) }
-                try db.execute(sql: "INSERT OR IGNORE INTO folder_works VALUES (?, ?, ?)", arguments: [folderID, work, ISO8601DateFormatter().string(from: Date())])
+                try db.execute(sql: "INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)", arguments: [folderID, work, ISO8601DateFormatter().string(from: Date())])
             }
         }
     }

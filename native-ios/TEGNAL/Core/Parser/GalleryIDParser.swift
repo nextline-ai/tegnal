@@ -506,15 +506,9 @@ enum ComicSites {
         return MangaUrls.Backend(rawValue: saved["manga.resolved_protocol"] as? String ?? "")
     }
 
-    /// Two sites read their works the same way, so a saved number names the same work on both.
-    static func sharesNumbers(_ a: String, _ b: String) -> Bool {
-        if a == b { return true }
-        guard let first = backend(of: a), let second = backend(of: b) else { return false }
-        return first == second
-    }
-
-    /// Other connected sites that can open this site's works.
-    static func siblings(of site: String) -> [String] { all.filter { $0 != site && sharesNumbers($0, site) } }
+    /// Other connected sites. Every supported site numbers its works the same way, so a number
+    /// names the same work on each; they differ only in which works they carry.
+    static func siblings(of site: String) -> [String] { all.filter { $0 != site } }
 }
 
 /// Coalesce discovery for concurrent covers and lists. Failed discovery has a

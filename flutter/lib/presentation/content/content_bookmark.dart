@@ -50,15 +50,15 @@ class BookmarkSession {
 
 /// Bookmarking a comic from Explore, work information or the reader.
 abstract final class ContentBookmarkAction {
-  /// [site] is the website the work is shown from, the checked one unless given; a saved work
-  /// from another website that numbers its works differently is a different work.
+  /// [site] is the website the work is shown from, the checked one unless given, kept as where
+  /// it was saved from: the work has the same number everywhere, but not every website carries it.
   static WorkSaveResult toggle(int id, {NativeGallery? gallery, required BookmarkSession session, PageImageStore? images, DiscoveryContext? context, String? site}) {
-    final database = session.database;
     final website = site ?? ComicSites.active;
-    final work = database.getWork(id, site: website);
+    final database = session.database;
+    final work = database.getWork(id);
     if (work != null) {
-      final folders = database.folderIDs(id, site: work.site);
-      database.deleteWork(id, site: work.site);
+      final folders = database.folderIDs(id);
+      database.deleteWork(id);
       session.removedBookmarks[id] = RemovedBookmark(folders: folders, note: work.note);
       if (website == ComicSites.active) session.syncAccountFavorite(id, saved: false);
       return const WorkSaveResult.removed(TasteMode.comics);
@@ -67,15 +67,15 @@ abstract final class ContentBookmarkAction {
   }
 
   static WorkSaveResult save(int id, {NativeGallery? gallery, required BookmarkSession session, PageImageStore? images, DiscoveryContext? context, String? site}) {
-    final database = session.database;
     final website = site ?? ComicSites.active;
-    if (database.getWork(id, site: website) != null) return const WorkSaveResult.unchanged(TasteMode.comics);
+    final database = session.database;
+    if (database.getWork(id) != null) return const WorkSaveResult.unchanged(TasteMode.comics);
     final removed = session.removedBookmarks.remove(id);
     final existing = {for (final folder in database.listFolders()) ?folder.id};
     final restored = (removed?.folders ?? const <int>[]).where(existing.contains).toList();
     final folder = restored.firstOrNull ?? database.defaultSaveFolder().id;
     if (folder != null) session.savedFolders[id] = folder;
-    final saved = database.upsertWork(
+    database.upsertWork(
       galleryId: id,
       folderId: folder,
       title: gallery?.title,
@@ -88,25 +88,25 @@ abstract final class ContentBookmarkAction {
       discoveryContext: context ?? DiscoveryContext.unknown,
     );
     for (final other in restored.skip(1)) {
-      database.addWork(id, other, site: saved.site);
+      database.addWork(id, other);
     }
     final note = removed?.note;
-    if (note != null) database.setNote(id, note, site: saved.site);
+    if (note != null) database.setNote(id, note);
     if (website == ComicSites.active) session.syncAccountFavorite(id, saved: true);
     final page = gallery?.pages.firstOrNull;
-    if (page != null && images != null) unawaited(_storeCover(id, page, session: session, images: images, site: saved.site));
+    if (page != null && images != null) unawaited(_storeCover(id, page, session: session, images: images));
     if (!session.isTesting) session.startCoverQueue?.call();
     return const WorkSaveResult.added(TasteMode.comics);
   }
 
   /// Keeps the cover the person just saw as the saved work's thumbnail.
-  static Future<void> _storeCover(int id, GalleryPage page, {required BookmarkSession session, required PageImageStore images, String? site}) async {
+  static Future<void> _storeCover(int id, GalleryPage page, {required BookmarkSession session, required PageImageStore images}) async {
     try {
       final data = await images.data(page, galleryID: id, thumbnail: true);
-      if (session.database.getWork(id, site: site) == null) return;
-      final file = File(session.database.thumbnailPath(id, site, directory: AppStorage.thumbsDir));
+      if (session.database.getWork(id) == null) return;
+      final file = File('${AppStorage.thumbsDir.path}/native_$id.jpg');
       await file.writeAsBytes(data, flush: true);
-      session.database.setThumb(id, 'ready', path: file.path, page: 1, site: site);
+      session.database.setThumb(id, 'ready', path: file.path, page: 1);
     } on Object {
       if (!session.isTesting) session.startCoverQueue?.call();
     }

@@ -134,7 +134,7 @@ void main() {
     }
   });
 
-  test('refresh replaces saved information but keeps notes, covers and other works', () async {
+  test('refresh replaces saved information but keeps notes and covers', () async {
     final db = AppDatabase.inMemory();
     final root = temporaryDirectory(addTearDown);
     final data = await cover();
@@ -153,16 +153,14 @@ void main() {
     expect(queue.queueRefresh(), 2);
     await queue.start(state);
     expect(state.total, 2);
-    expect(state.processed, 1);
-    expect(state.gone, 1, reason: 'A different work under the same number is left alone');
+    expect(state.processed, 2, reason: 'A number is one work on every website, so both are read again');
+    expect(state.gone, 0);
     final refreshed = db.getWork(1001)!;
     expect(refreshed.title, '네이티브 읽기 테스트');
     expect(refreshed.tags?.contains('female:sample'), isTrue);
     expect(refreshed.note, 'kept');
     expect(refreshed.thumbPath, '${root.path}/native_1001.jpg');
-    final other = db.getWork(1002)!;
-    expect(other.title, '原題');
-    expect(other.tags, 'tag:old');
+    expect(db.getWork(1002)!.title, '네이티브 읽기 테스트');
 
     source.failure = Failure.missingGallery;
     queue.queueRefresh();

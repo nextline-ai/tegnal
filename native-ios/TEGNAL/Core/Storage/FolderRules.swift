@@ -190,6 +190,7 @@ extension AppDatabase {
             let (conditions, arguments) = try Self.matching(rule, db: db)
             let matched = try Int64.fetchAll(db, sql: "SELECT w.id FROM works w WHERE \(conditions)", arguments: StatementArguments(arguments))
             for workID in matched {
+                // Filing by a rule is not a new save, so a work already there keeps its date.
                 try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
             }
             if !rule.copies {
@@ -242,11 +243,8 @@ extension AppDatabase {
         }
     }
 
-    func folderIDs(galleryId: Int64, site: String? = nil) throws -> [Int64] {
-        try dbWriter.read { db in
-            guard let id = try Self.workRow(db, galleryId: galleryId, site: site)?.id else { return [] }
-            return try Int64.fetchAll(db, sql: "SELECT folder_id FROM folder_works WHERE work_id = ? ORDER BY added_at", arguments: [id])
-        }
+    func folderIDs(galleryId: Int64) throws -> [Int64] {
+        try dbWriter.read { try Int64.fetchAll($0, sql: "SELECT fw.folder_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE w.gallery_id = ? ORDER BY fw.added_at", arguments: [galleryId]) }
     }
 
     /// Holds and quick saves land here; a folder deleted since falls back to Unfiled.
@@ -259,11 +257,11 @@ extension AppDatabase {
     }
 
     /// Adding a work to a real folder takes it out of Unfiled.
-    func addWork(galleryId: Int64, site: String? = nil, folderID: Int64) throws {
+    func addWork(galleryId: Int64, folderID: Int64) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try dbWriter.write { db in
-            guard let workID = try Self.workRow(db, galleryId: galleryId, site: site)?.id else { return }
-            try db.execute(sql: "INSERT OR IGNORE INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?)", arguments: [folderID, workID, now])
+            guard let workID = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [galleryId]) else { return }
+            try db.execute(sql: "INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)", arguments: [folderID, workID, now])
             try Self.leaveUnfiled(whenIn: folderID, db: db)
         }
     }

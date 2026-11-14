@@ -422,7 +422,7 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
     );
     if (keep != true) return;
     try {
-      LibraryMaintenance.mergeComics(group, keeping: work.id ?? 0, database: widget.library.database);
+      LibraryMaintenance.mergeComics(group, keeping: work.galleryId, database: widget.library.database);
       _message = L10n.text('Duplicate Copies Removed');
     } on Object catch (error) {
       _showError('$error');

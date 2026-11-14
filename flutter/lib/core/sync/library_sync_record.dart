@@ -110,7 +110,6 @@ class LibrarySyncRow {
     'manga.library_order': ['key'],
     'manga.folders': ['sync_id'],
     'manga.works': ['gallery_id'],
-    'manga.work_variants': ['gallery_id', 'site'],
     'manga.folder_works': ['folder_id', 'work_id'],
     'manga.artists': ['name', 'kind'],
     'manga.search_history': ['query'],

@@ -17,11 +17,8 @@ class VioletImportResult {
 /// Reads the bookmark backup Violet exports on Android: its groups become folders, its
 /// bookmarked works are saved into them, bookmarked artists, groups, series and characters
 /// become saved collections, and the reading log sets when each saved work was last opened.
-/// The backup holds no work information; an imported catalog describes the numbers it lists,
-/// and the cover queue fills titles, tags and covers from the connected website afterwards.
-/// The backup does not say which website a bookmark came from: what the catalog says about a
-/// number tells whether a saved work under it is the same one, so importing again brings back
-/// works an earlier version merged into another under the same number. The file is only read.
+/// The backup holds no work information; the cover queue fills titles, tags and covers from
+/// the connected website afterwards. The file is only read.
 class VioletImportService {
   VioletImportService(this.database);
   final AppDatabase database;
@@ -135,8 +132,7 @@ class VioletImportService {
     }
 
     final total = articles.length;
-    // Saved rows by number, so the reading log reaches the works this backup brought in.
-    final saved = <int, int>{};
+    final saved = <int>{};
     // A few dozen works per transaction, with a frame between them for progress and Cancel.
     for (var start = 0; start < total; start += _chunk) {
       progress?.call(start, total);
@@ -147,23 +143,12 @@ class VioletImportService {
           final galleryId = _int(article['Article']);
           if (galleryId == null || galleryId <= 0) continue;
           final groupId = _int(article['GroupId']);
-          final catalog = database.getCatalog(galleryId);
-          final work = database.upsertWork(
+          database.upsertWork(
             galleryId: galleryId,
             folderId: (groupId == null ? null : folderIds[groupId]) ?? defaultFolderId,
-            title: catalog?.title,
-            artists: catalog?.artists,
-            language: catalog?.language,
-            type: catalog?.type,
-            series: catalog?.series,
-            groups: catalog?.groups,
-            tags: catalog?.tags,
-            publishedAt: catalog?.published,
             bookmarkedAt: date(article['DateTime']),
-            metadataSource: catalog == null ? null : 'catalog',
-            catalogMatched: catalog != null,
           );
-          if (work.id case final id?) saved[galleryId] = id;
+          saved.add(galleryId);
         }
       });
     }
@@ -185,12 +170,12 @@ class VioletImportService {
     var opened = 0;
     final openedAt = <(String, int)>[
       for (final row in reads)
-        if ((_int(row['Article']), date(row['Opened'])) case (final int number, final String at) when saved.containsKey(number)) (at, saved[number]!),
+        if ((_int(row['Article']), date(row['Opened'])) case (final int id, final String at) when saved.contains(id)) (at, id),
     ];
     if (openedAt.isNotEmpty) {
       database.dbWriter.write((db) {
         for (final (at, id) in openedAt) {
-          db.execute('UPDATE works SET last_opened_at = ? WHERE id = ? AND (last_opened_at IS NULL OR last_opened_at < ?)', [at, id, at]);
+          db.execute('UPDATE works SET last_opened_at = ? WHERE gallery_id = ? AND (last_opened_at IS NULL OR last_opened_at < ?)', [at, id, at]);
           opened += db.changesCount;
         }
       });

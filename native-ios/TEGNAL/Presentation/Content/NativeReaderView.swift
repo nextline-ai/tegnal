@@ -497,7 +497,7 @@ struct NativeReaderView: View {
         saveFeedback = .perform(galleryID: galleryID) { try ContentBookmarkAction.toggle(id: galleryID, gallery: gallery, env: env, images: images, context: discovery) }
         readSaved()
     }
-    private func readSaved() { saved = (try? env.database.getWork(galleryId: galleryID, site: ComicSites.active)) != nil }
+    private func readSaved() { saved = (try? env.database.getWork(galleryId: galleryID)) != nil }
     private var translationMode: ReaderTranslationMode {
         translation.isOn ? .ai : translationRequest != nil ? .standard : .off
     }
@@ -596,12 +596,12 @@ struct NativeReaderView: View {
             // A cached initial page is already in @State and does not trigger onChange.
             if savesProgress { ReaderPreferences.defaults.set(currentPage + 1, forKey: "reader_page_\(galleryID)") }
             if !helpHidden, !guide.hasStarted { guide.start() }
-            let database = env.database, context = discovery, recordProgress = savesProgress, site = ComicSites.active
+            let database = env.database, context = discovery, recordProgress = savesProgress
             let record = Task.detached(priority: .utility) {
                 try Task.checkCancellation()
                 try? database.observeTaste(value, context: context)
                 try Task.checkCancellation()
-                if recordProgress { try? database.markOpened(galleryId: value.id, site: site) }
+                if recordProgress { try? database.markOpened(galleryId: value.id) }
             }
             _ = await withTaskCancellationHandler { await record.result } onCancel: { record.cancel() }
         } catch {

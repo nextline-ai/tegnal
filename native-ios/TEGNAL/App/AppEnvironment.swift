@@ -797,7 +797,7 @@ public final class AppEnvironment: @unchecked Sendable {
         repeat {
             let page = try await MangaContentSource.shared.accountFavorites(after: next)
             try Task.checkCancellation()
-            for id in page.ids where try database.getWork(galleryId: id, site: ComicSites.active) == nil {
+            for id in page.ids where try database.getWork(galleryId: id) == nil {
                 let work = MangaContentSource.shared.cachedPreview(id)
                 _ = try database.upsertWork(galleryId: id, folderId: folder, title: work?.title, artists: work?.artists.joined(separator: ", "),
                                             language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active)

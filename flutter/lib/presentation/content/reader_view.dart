@@ -270,7 +270,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
       _saveProgress();
       if (!(_defaults.boolean(ReaderSettingKeys.helpHidden) ?? false) && !_guide.hasStarted) setState(_guide.start);
       if (widget.savesProgress) {
-        widget.database.markOpened(gallery.id, site: ComicSites.active);
+        widget.database.markOpened(gallery.id);
         _rememberOpened(gallery);
       }
       _scheduleAuto();
@@ -872,7 +872,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
     final gallery = _gallery;
     final hasGallery = gallery != null;
     // Read each time the menu draws, so a change from the details sheet shows too.
-    final saved = gallery != null && widget.database.getWork(gallery.id, site: ComicSites.active) != null;
+    final saved = gallery != null && widget.database.getWork(gallery.id) != null;
     final savedColor = SystemColors.yellow.resolveFrom(context);
     final items = <(String, Widget Function(Color), VoidCallback?)>[
       // Translation arrives with its own rebuild step.

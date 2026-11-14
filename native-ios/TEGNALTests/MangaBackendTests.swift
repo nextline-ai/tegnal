@@ -198,7 +198,7 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertNil(MangaUrls.preferences.object(forKey: "manga.resolved_backend_site"))
     }
 
-    func testConnectedSitesKeepWhatWasLearnedAndKnowWhichShareNumbers() {
+    func testConnectedSitesKeepWhatWasLearnedAndAllShareNumbers() {
         let preferences = MangaUrls.preferences
         let kept = ["manga.sites", "manga.siteSnapshots", "manga.account_site", "manga.account_host"].map { ($0, preferences.object(forKey: $0)) }
         defer { for (key, value) in kept { preferences.set(value, forKey: key) } }
@@ -221,12 +221,11 @@ final class MangaBackendTests: XCTestCase {
         preferences.set("keyed-one.example", forKey: "manga.site_address")
         XCTAssertTrue(MangaUrls.hasResolvedBackend, "Switching back needs no new check")
         XCTAssertEqual(MangaUrls.backend, .keyed)
-        XCTAssertTrue(ComicSites.sharesNumbers("keyed-one.example", "keyed-two.example"))
-        XCTAssertFalse(ComicSites.sharesNumbers("keyed-one.example", "indexed.example"))
-        XCTAssertEqual(ComicSites.siblings(of: "keyed-one.example"), ["keyed-two.example"])
+        XCTAssertEqual(ComicSites.siblings(of: "keyed-one.example"), ["keyed-two.example", "indexed.example"],
+                       "Every website numbers works the same way, however it is read")
 
         ComicSites.remove("keyed-two.example")
-        XCTAssertEqual(ComicSites.siblings(of: "keyed-one.example"), [])
+        XCTAssertEqual(ComicSites.siblings(of: "keyed-one.example"), ["indexed.example"])
         XCTAssertNil(ComicSites.backend(of: "keyed-two.example"), "A removed site forgets what was learned")
     }
 

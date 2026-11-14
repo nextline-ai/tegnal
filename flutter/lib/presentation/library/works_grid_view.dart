@@ -22,7 +22,6 @@ import 'folders_view.dart';
 import 'library_routes.dart';
 import 'local_thumbnail.dart';
 import '../design/alert_dialog.dart';
-import '../../core/content/manga_urls.dart';
 import '../content/reading_queue_views.dart';
 import '../../core/content/reading_queue.dart';
 
@@ -128,41 +127,10 @@ class _WorksGridViewState extends State<WorksGridView> {
 
   void _open(Work work) {
     if (_selecting) {
-      setState(() {
-        final id = work.id;
-        if (id != null) _selection.contains(id) ? _selection.remove(id) : _selection.add(id);
-      });
+      setState(() => _selection.contains(work.galleryId) ? _selection.remove(work.galleryId) : _selection.add(work.galleryId));
     } else {
-      _openOnItsSite(work);
-    }
-  }
-
-  /// A work from another connected website whose numbers mean other works opens there.
-  Future<void> _openOnItsSite(Work work) async {
-    final content = widget.routes.content;
-    final site = work.site;
-    final current = content.mangaSiteAddress;
-    if (site == null || site == current || !content.comicSites.contains(site) || ComicSites.sharesNumbers(site, current)) {
       widget.routes.openWork(context, work.galleryId);
-      return;
     }
-    final choice = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => TegnalAlertDialog(
-        title: Text(L10n.text('Saved from %@', [site])),
-        content: Text(
-          L10n.text('This work was saved from %@, which numbers its works differently from %@. Switch websites to open the same work.', [site, current]),
-        ),
-        actions: [
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Switch and Open'))),
-          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Open Here'))),
-          CupertinoDialogAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
-        ],
-      ),
-    );
-    if (choice == null || !mounted) return;
-    if (choice) content.switchComicsSite(site);
-    widget.routes.openWork(context, work.galleryId);
   }
 
   void _toast(String message) => widget.routes.showMessage(context, message);
@@ -171,7 +139,7 @@ class _WorksGridViewState extends State<WorksGridView> {
     final id = target.id;
     if (id == null) return;
     try {
-      widget.routes.database.moveWorkToFolder(work.galleryId, id, currentFolderId: widget.folder?.id, site: work.site);
+      widget.routes.database.moveWorkToFolder(work.galleryId, id, currentFolderId: widget.folder?.id);
       _toast(L10n.text("Moved to folder '%@'", [target.displayName]));
     } on Object catch (error) {
       _toast('$error');
@@ -205,7 +173,7 @@ class _WorksGridViewState extends State<WorksGridView> {
         ],
       ),
     );
-    if (delete == true) widget.routes.database.deleteWork(work.galleryId, site: work.site);
+    if (delete == true) widget.routes.database.deleteWork(work.galleryId);
   }
 
   Future<void> _confirmDeleteSelection() async {
@@ -351,7 +319,7 @@ class _WorksGridViewState extends State<WorksGridView> {
     buttonContext,
     anchor: anchorOf(buttonContext),
     actions: [
-      ContextMenuAction(title: L10n.text('Select All'), onSelected: () => setState(() => _selection = {for (final work in _works) ?work.id})),
+      ContextMenuAction(title: L10n.text('Select All'), onSelected: () => setState(() => _selection = {for (final work in _works) work.galleryId})),
       for (final target in _folders) ContextMenuAction(title: target.displayName, onSelected: () => _moveSelection(target)),
     ],
   );
@@ -490,7 +458,7 @@ class _WorksGridViewState extends State<WorksGridView> {
                                 Positioned(
                                   top: style.inset(10),
                                   right: style.inset(10),
-                                  child: SelectionMark(selected: _selection.contains(work.id), size: style.fontSize(22, minimum: 12)),
+                                  child: SelectionMark(selected: _selection.contains(work.galleryId), size: style.fontSize(22, minimum: 12)),
                                 ),
                             ],
                           ),

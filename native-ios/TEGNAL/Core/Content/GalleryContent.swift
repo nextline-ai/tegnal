@@ -71,14 +71,6 @@ struct NativeGallery: Codable, Identifiable, Sendable {
     /// Optional so works downloaded before these were read still decode.
     var versions: [GalleryVersion]? = nil
     var relatedIDs: [Int64]? = nil
-    /// Every title the website lists, and the page count when the pages themselves are not
-    /// listed yet: what tells one work listed by two websites apart.
-    var listedTitles: [String]? = nil
-    var listedPageCount: Int? = nil
-
-    var matchFingerprint: WorkMatcher.Fingerprint {
-        WorkMatcher.fingerprint(titles: (listedTitles ?? []) + [title], artists: artists, pages: listedPageCount ?? (pages.count > 1 ? pages.count : 0))
-    }
 
     /// The other languages of this work, with the given language first.
     func otherVersions(preferring language: String) -> [GalleryVersion] {
@@ -136,8 +128,7 @@ struct NativeGallery: Codable, Identifiable, Sendable {
                              artists: (json["artists"] as? [[String: Any]] ?? []).compactMap { $0["artist"] as? String },
                              language: json["language"] as? String ?? "", type: json["type"] as? String ?? "",
                              tags: Self.parseCredits(json) + Self.parseTags(json["tags"]), pages: pages,
-                             versions: Self.parseVersions(json["languages"]), relatedIDs: Self.parseRelatedIDs(json["related"]),
-                             listedTitles: [json["title"] as? String, japanese].compactMap { $0.map(decodeEntities) })
+                             versions: Self.parseVersions(json["languages"]), relatedIDs: Self.parseRelatedIDs(json["related"]))
     }
 
     static func parseVersions(_ value: Any?) -> [GalleryVersion] {

@@ -220,7 +220,7 @@ struct ContentFailureView: View {
     private var asksForSignIn: Bool {
         env != nil && message == ContentError.signInRequired.localizedDescription && MangaUrls.signInURL != nil
     }
-    /// A connected website that numbers works the same way may still show what this one won't.
+    /// Another connected website may carry what this one does not: works have the same number on each.
     private var sibling: String? {
         guard let env, env.isSiteVerified else { return nil }
         let blocked = [ContentError.signInRequired, .galleryNotFound, .unavailable(403), .unavailable(404), .unavailable(410)].map(\.localizedDescription)
@@ -303,7 +303,7 @@ private struct GalleryFeedView: View {
     @State private var paginationViewport = GalleryPaginationViewport()
     @State private var searchViewportHeight: CGFloat = 0
     @State private var footerVisible = false
-    @State private var savedWorks = SavedWorkKeys()
+    @State private var bookmarkedIDs = Set<Int64>()
     @State private var history: [String] = []
     @State private var savedSearches: [String] = []
     @State private var loadedQuery: GalleryQuery?
@@ -376,7 +376,6 @@ private struct GalleryFeedView: View {
 
     var body: some View {
         let visibleEntries = loader.items.enumerated().filter { !env.hiddenMangaGalleryIDs.contains($0.element.id) }
-        let saved = Dictionary(uniqueKeysWithValues: Set(loader.items.map(\.site)).map { ($0, savedWorks.ids(on: $0)) })
         ScrollViewReader { scrollProxy in
         ZStack(alignment: .top) {
         ScrollView {
@@ -400,7 +399,7 @@ private struct GalleryFeedView: View {
                     ForEach(visibleEntries, id: \.element) { index, item in
                         let id = item.id
                         let itemImages = loader.images(for: item) ?? images
-                        GalleryGridCard(id: id, preview: previews[item], isBookmarked: saved[item.site]?.contains(id) == true, source: loader.source(for: item), images: itemImages, site: item.site,
+                        GalleryGridCard(id: id, preview: previews[item], isBookmarked: bookmarkedIDs.contains(id), source: loader.source(for: item), images: itemImages, site: item.site,
                                         details: { showing(item) { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) } },
                                         open: { showing(item) {
                                             // The reader steps through works of the website it reads.
@@ -543,8 +542,10 @@ private struct GalleryFeedView: View {
         .task(id: isActive) {
             guard isActive else { return }
             do {
-                let observation = ValueObservation.tracking { db in try SavedWorkKeys.fetch(db) }
-                for try await keys in observation.values(in: env.database.dbWriter) { savedWorks = keys }
+                let observation = ValueObservation.tracking { db in
+                    Set(try Int64.fetchAll(db, sql: "SELECT gallery_id FROM works"))
+                }
+                for try await ids in observation.values(in: env.database.dbWriter) { bookmarkedIDs = ids }
             } catch { /* Preserve the last known bookmark state if observation is interrupted. */ }
         }
         .task(id: InitialRequest(query: effectiveQuery, site: feedSite)) {
@@ -1046,9 +1047,10 @@ struct GalleryWorkInformation: View {
         .task {
             guard links != nil else { return }
             do {
-                let site = env.mangaSiteAddress
-                let observation = ValueObservation.tracking { db in try SavedWorkKeys.fetch(db) }
-                for try await keys in observation.values(in: env.database.dbWriter) { savedIDs = keys.ids(on: site) }
+                let observation = ValueObservation.tracking { db in
+                    Set(try Int64.fetchAll(db, sql: "SELECT gallery_id FROM works"))
+                }
+                for try await ids in observation.values(in: env.database.dbWriter) { savedIDs = ids }
             } catch { /* Saved marks are a hint, so a dropped observation keeps the last ones. */ }
         }
     }

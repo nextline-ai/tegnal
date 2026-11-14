@@ -10,7 +10,7 @@ import 'package:tegnal/core/support/preferences.dart';
 void main() {
   setUp(() => ContentPreferences.defaults = MemoryPreferences());
 
-  test('connected sites keep what was learned and know which share numbers', () {
+  test('connected sites keep what was learned and all share numbers', () {
     final preferences = ContentPreferences.defaults;
     void learn(String site, MangaBackend backend) {
       preferences
@@ -35,12 +35,10 @@ void main() {
     expect(MangaUrls.hasResolvedBackend, isTrue, reason: 'Switching back needs no new check');
     expect(MangaUrls.backend, MangaBackend.keyed);
     expect(preferences.object('manga.resolved_media_hosts'), ['media.keyed-one.example'], reason: 'Lists come back as text lists');
-    expect(ComicSites.sharesNumbers('keyed-one.example', 'keyed-two.example'), isTrue);
-    expect(ComicSites.sharesNumbers('keyed-one.example', 'indexed.example'), isFalse);
-    expect(ComicSites.siblings('keyed-one.example'), ['keyed-two.example']);
+    expect(ComicSites.siblings('keyed-one.example'), ['keyed-two.example', 'indexed.example'], reason: 'Every website numbers works the same way, however it is read');
 
     ComicSites.remove('keyed-two.example');
-    expect(ComicSites.siblings('keyed-one.example'), isEmpty);
+    expect(ComicSites.siblings('keyed-one.example'), ['indexed.example']);
     expect(ComicSites.backendOf('keyed-two.example'), isNull, reason: 'A removed site forgets what was learned');
   });
 

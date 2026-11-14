@@ -565,15 +565,9 @@ abstract final class ComicSites {
     return MangaBackend.fromRawValue(saved['manga.resolved_protocol'] as String?);
   }
 
-  /// Two sites read their works the same way, so a saved number names the same work on both.
-  static bool sharesNumbers(String a, String b) {
-    if (a == b) return true;
-    final first = backendOf(a), second = backendOf(b);
-    return first != null && first == second;
-  }
-
-  /// Other connected sites that can open this site's works.
-  static List<String> siblings(String site) => all.where((other) => other != site && sharesNumbers(other, site)).toList();
+  /// Other connected sites. Every supported site numbers its works the same way, so a number
+  /// names the same work on each; they differ only in which works they carry.
+  static List<String> siblings(String site) => all.where((other) => other != site).toList();
 }
 
 /// Coalesce discovery for concurrent covers and lists. Failed discovery has a

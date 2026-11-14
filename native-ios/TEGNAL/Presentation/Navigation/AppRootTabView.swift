@@ -453,12 +453,8 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
 
     private var tasteMode: TasteMode { mode == .booru ? .booru : .comics }
     private var queueInset: ReadingQueueInset { ReadingQueueInset(enabled: mode == .manga) }
-    /// Opens a waiting work on the site it was found on.
+    /// Opens a waiting work; its number names the same work on every connected site.
     private func readQueued(_ id: Int64) {
-        if let site = env.readingQueue.items.first(where: { $0.id == id })?.site, !site.isEmpty, site != env.mangaSiteAddress,
-           env.comicSites.contains(site), !ComicSites.sharesNumbers(site, env.mangaSiteAddress) {
-            env.switchComicsSite(to: site)
-        }
         readingQueued = IdentifiableInt64(id: id)
     }
     @available(iOS 18.0, *)

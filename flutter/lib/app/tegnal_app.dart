@@ -51,7 +51,6 @@ import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
 import '../presentation/settings/site_account_section.dart';
 import '../presentation/settings/website_setup.dart';
-import '../core/content/manga_urls.dart';
 import '../core/content/reading_queue.dart';
 import '../presentation/design/app_sheet.dart';
 import '../presentation/content/reading_queue_views.dart';
@@ -483,14 +482,9 @@ class _RootState extends State<_Root> {
         .then((_) => services.taste.dismissRecap(mode));
   }
 
-  /// Opens a waiting work on the site it was found on; the reader pages on through the list.
+  /// Opens a waiting work, whose number names the same work on every connected site; the reader
+  /// pages on through the list.
   void _readQueued(BuildContext context, int id) {
-    final queue = services.readingQueue;
-    final site = queue.items.where((item) => item.id == id).firstOrNull?.site;
-    final content = services.content;
-    if (site != null && site != content.mangaSiteAddress && content.comicSites.contains(site) && !ComicSites.sharesNumbers(site, content.mangaSiteAddress)) {
-      content.switchComicsSite(site);
-    }
     _contentRoutes.read(context, id, page: 1, queue: true);
   }
 
