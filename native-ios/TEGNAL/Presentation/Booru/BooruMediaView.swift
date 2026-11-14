@@ -365,6 +365,8 @@ struct BooruMediaView: UIViewRepresentable {
     var onRemoved: () -> Void = {}
     /// Off, a quick second tap is another tap: it never zooms, and taps do not wait for it.
     var doubleTapZoom = true
+    /// Translated balloons over the image, as the comics reader draws them.
+    var translation: [ReaderTextRegion] = []
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> WKWebView {
@@ -395,6 +397,7 @@ struct BooruMediaView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onNote = onNote; coordinator.onStatus = onStatus; coordinator.notes = notes
         coordinator.showNotes = showNotes
+        coordinator.translation = translation
         coordinator.onGesture = onGesture
         if coordinator.doubleTapZoom != doubleTapZoom {
             coordinator.doubleTapZoom = doubleTapZoom
@@ -409,7 +412,7 @@ struct BooruMediaView: UIViewRepresentable {
             coordinator.key = key
             coordinator.ready = false
             coordinator.restrictedDocumentID = nil
-            coordinator.renderedNotes = nil
+            coordinator.renderedNotes = nil; coordinator.renderedTranslation = nil
             coordinator.width = max(post.width, 1); coordinator.height = max(post.height, 1)
             var displayURL = url
             if !post.isVideo, let url, url.scheme == "https" {
@@ -448,7 +451,7 @@ struct BooruMediaView: UIViewRepresentable {
                     view.loadHTMLString(coordinator.document, baseURL: coordinator.baseURL)
                 }
             })
-        } else { coordinator.updateNotes(view) }
+        } else { coordinator.updateNotes(view); coordinator.updateTranslation(view) }
         if failed {
             coordinator.transition.failed(id: coordinator.documentID)
             coordinator.pause()
@@ -503,7 +506,8 @@ struct BooruMediaView: UIViewRepresentable {
         #canvas{position:relative;flex:none}#media{display:block;width:100%;height:100%;object-fit:contain;visibility:hidden}
         #notes{position:absolute;inset:0;pointer-events:none}.note{position:absolute;box-sizing:border-box;border:0;outline:0;border-radius:6px;appearance:none;background:rgba(0,0,0,0.2);color:white;pointer-events:auto;padding:0;min-width:18px;min-height:18px;display:flex;align-items:center;justify-content:center;text-align:center}
         .note span{background:transparent;color:white;padding:0;font:12px -apple-system;text-shadow:none}
-        </style></head><body><div id="canvas">\(media)<div id="notes"></div></div>
+        #translation{position:absolute;inset:0;pointer-events:none}.balloon{position:absolute;box-sizing:border-box;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;background:white;color:black;border-radius:3px;font-family:-apple-system;font-weight:500;line-height:1.15;word-break:break-word}
+        </style></head><body><div id="canvas">\(media)<div id="translation"></div><div id="notes"></div></div>
         <script nonce="\(nonce)">
         window.tegnalDocumentID='\(identifier)';
         const media=document.getElementById('media');
@@ -519,7 +523,7 @@ struct BooruMediaView: UIViewRepresentable {
           audioMuted=media.muted;send({audio:{muted:audioMuted}});
         });
         const fit=()=>{const w=media.naturalWidth||media.videoWidth||\(max(post.width, 1));const h=media.naturalHeight||media.videoHeight||\(max(post.height, 1));
-          const scale=Math.min(document.body.clientWidth/w,document.body.clientHeight/h);const canvas=document.getElementById('canvas');canvas.style.width=(w*scale)+'px';canvas.style.height=(h*scale)+'px';};
+          const scale=Math.min(document.body.clientWidth/w,document.body.clientHeight/h);const canvas=document.getElementById('canvas');canvas.style.width=(w*scale)+'px';canvas.style.height=(h*scale)+'px';window.renderTranslation?.(window.translationRegions||[]);};
         let retries=0,retryTimer=null,pendingMediaError=false;
         const retryMedia=()=>{
           if(!media.hasAttribute('src'))return;
@@ -662,6 +666,15 @@ struct BooruMediaView: UIViewRepresentable {
           e.preventDefault();e.stopPropagation();
           if(!e.repeat)send({gesture:'shortcut',key:key});
         },true);
+        // Each balloon fills its box like the comics reader's labels: sized from the original's
+        // lines, then shrunk until the translation fits.
+        window.renderTranslation=regions=>{window.translationRegions=regions;const layer=document.getElementById('translation'),canvas=document.getElementById('canvas');layer.replaceChildren();
+          const W=canvas.clientWidth,H=canvas.clientHeight;
+          regions.forEach(r=>{const b=document.createElement('div');b.className='balloon';
+            const pad=3,left=Math.max(0,r.x*W/100-pad),top=Math.max(0,r.y*H/100-pad),w=Math.min(W-left,r.w*W/100+pad*2),h=Math.min(H-top,r.h*H/100+pad*2);
+            b.style.left=left+'px';b.style.top=top+'px';b.style.width=w+'px';b.style.height=h+'px';b.textContent=r.text;layer.appendChild(b);
+            let size=Math.max(8,Math.min(22,(r.vertical?w*0.6:h*0.78)/Math.max(1,r.lines)));b.style.fontSize=size+'px';
+            while(size>4&&(b.scrollHeight>b.clientHeight+1||b.scrollWidth>b.clientWidth+1)){size-=0.5;b.style.fontSize=size+'px';}});};
         window.renderNotes=(notes,visible)=>{const layer=document.getElementById('notes');layer.replaceChildren();layer.hidden=!visible;
           notes.forEach((note,index)=>{const b=document.createElement('button');b.className='note';b.setAttribute('aria-label','Note '+(index+1));
           b.style.left=note.x+'%';b.style.top=note.y+'%';b.style.width=note.w+'%';b.style.height=note.h+'%';
@@ -743,6 +756,8 @@ struct BooruMediaView: UIViewRepresentable {
         var showNotes = false
         var renderedNotes: [BooruNote]?
         private var renderedShowNotes = false
+        var translation: [ReaderTextRegion] = []
+        var renderedTranslation: [ReaderTextRegion]?
         var onNote: ((BooruNote) -> Void)?
         var onStatus: ((String) -> Void)?
         var onGesture: ((BooruMediaGesture) -> Void)?
@@ -770,6 +785,18 @@ struct BooruMediaView: UIViewRepresentable {
             guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
             renderedNotes = notes; renderedShowNotes = showNotes
             view.evaluateJavaScript("window.renderNotes(\(json), \(showNotes ? "true" : "false"));", completionHandler: nil)
+        }
+        func updateTranslation(_ view: WKWebView) {
+            guard ready, renderedTranslation != translation else { return }
+            // Vision's boxes have their origin at the bottom left; the page's at the top left.
+            let values = translation.map { region -> [String: Any] in
+                let box = region.bounds
+                return ["x": box.minX * 100, "y": (1 - box.maxY) * 100, "w": box.width * 100, "h": box.height * 100,
+                        "text": region.text, "lines": region.lines, "vertical": region.vertical]
+            }
+            guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
+            renderedTranslation = translation
+            view.evaluateJavaScript("window.renderTranslation?.(\(json));", completionHandler: nil)
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard restrictedDocumentID != documentID, message.frameInfo.isMainFrame,
@@ -808,7 +835,7 @@ struct BooruMediaView: UIViewRepresentable {
             }
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            ready = true; renderedNotes = nil; updateNotes(webView)
+            ready = true; renderedNotes = nil; renderedTranslation = nil; updateNotes(webView); updateTranslation(webView)
             let canPlay = active && restrictedDocumentID != documentID && !document.isEmpty && !transition.hasPendingDocument && UIApplication.shared.applicationState == .active
             let playback = canPlay ? "window.resumePlayback?.()" : "window.pausePlayback?.()"
             webView.evaluateJavaScript("window.setAudioPreferences?.(\(audio.muted ? "true" : "false"));" + playback, completionHandler: nil)
@@ -819,7 +846,7 @@ struct BooruMediaView: UIViewRepresentable {
             onStatus?("error")
         }
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            ready = false; renderedNotes = nil
+            ready = false; renderedNotes = nil; renderedTranslation = nil
             resources.cancel()
             guard active, restrictedDocumentID != documentID, UIApplication.shared.applicationState == .active else { return }
             onStatus?("loading")

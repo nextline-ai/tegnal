@@ -219,6 +219,14 @@ struct ReaderTranslationHost: View {
 
 /// Translation mode: once on, every page shows its translation over the original as it comes
 /// into view, the next page is prepared ahead, and a tap on the pill shows the original again.
+/// One image to translate: where it sits in the reading order, the key its balloons are kept
+/// under, and how its pixels are read.
+struct ReaderTranslationJob {
+    let index: Int
+    let key: String
+    let load: @MainActor () async throws -> UIImage
+}
+
 @MainActor @Observable final class ReaderTranslationSession {
     private(set) var isOn = false
     var showsOriginal = false
@@ -228,16 +236,16 @@ struct ReaderTranslationHost: View {
     var message: String?
     let broker = ReaderTranslationBroker()
     private var target = "en"
-    private var queue: [(index: Int, page: GalleryPage, galleryID: Int64)] = []
+    private var queue: [ReaderTranslationJob] = []
     /// The work's language tag: text is read in it rather than detected, and its balloons grouped by it.
     private var source: String?
     private var worker: Task<Void, Never>?
     private var history: [Int: [(String, String)]] = [:]
-    private var images: PageImageStore?
     /// Zoomed areas of each page already read again, and the reading in progress.
     private var readAreas: [String: [CGRect]] = [:]
     private var zoomWorker: Task<Void, Never>?
     private var zoomWorking: String?
+    private var continues = true
 
     /// Apple Translation needs iOS 18; the language model, iOS 26.
     static var isSupported: Bool { if #available(iOS 18.0, *) { true } else { false } }
@@ -245,10 +253,11 @@ struct ReaderTranslationHost: View {
     func balloons(for hash: String) -> [ReaderTextRegion]? { isOn && !showsOriginal ? pages[hash] : nil }
     func isWorking(on hash: String) -> Bool { isOn && (working.contains(hash) || zoomWorking == hash) }
 
-    func toggle() {
+    /// `booru` reads into the image viewer's language rather than the comics reader's.
+    func toggle(booru: Bool = false) {
         if isOn { stop() } else {
             isOn = true; showsOriginal = false; message = nil
-            target = ReaderTranslationLanguage.resolved(ReaderTranslationLanguage.preference(booru: false))
+            target = ReaderTranslationLanguage.resolved(ReaderTranslationLanguage.preference(booru: booru))
             #if canImport(FoundationModels)
             // Loading the model takes seconds; start while the first page is read.
             if #available(iOS 26.0, *) { ReaderModelTranslator.prewarm() }
@@ -266,23 +275,28 @@ struct ReaderTranslationHost: View {
     /// pixels, so small text the page-wide reading missed is translated; its balloons replace the
     /// page-wide ones where it found text. `area` is normalized with a top-left origin.
     func readZoomed(_ page: GalleryPage, index: Int, galleryID: Int64, area: CGRect, images: PageImageStore) {
+        readZoomed(key: page.hash, index: index, area: area) { try await images.translationCrop(page, galleryID: galleryID, rect: $0) }
+    }
+
+    /// `crop` reads the part of the image at a normalized, top-left-origin rectangle.
+    func readZoomed(key: String, index: Int, area: CGRect, crop: @escaping @MainActor (CGRect) async throws -> UIImage) {
         // A page still being read whole is read first; zooming again after that reads the area.
-        guard isOn, pages[page.hash] != nil, ReaderZoomedText.needsReading(area, after: readAreas[page.hash] ?? []) else { return }
+        guard isOn, pages[key] != nil, ReaderZoomedText.needsReading(area, after: readAreas[key] ?? []) else { return }
         zoomWorker?.cancel()
-        zoomWorking = page.hash
+        zoomWorking = key
         zoomWorker = Task {
-            defer { if zoomWorking == page.hash, !Task.isCancelled { zoomWorking = nil } }
+            defer { if zoomWorking == key, !Task.isCancelled { zoomWorking = nil } }
             do {
-                let crop = try await images.translationCrop(page, galleryID: galleryID, rect: area)
+                let crop = try await crop(area)
                 let found = ReaderZoomedText.place(try await foreignBalloons(in: crop), readIn: area)
                 try Task.checkCancellation()
-                readAreas[page.hash, default: []].append(area)
+                readAreas[key, default: []].append(area)
                 guard isOn, !found.isEmpty else { return }
                 let texts = try await translate(found.map(\.text), index: index, addingTo: true)
                 try Task.checkCancellation()
                 guard isOn else { return }
                 let translated = zip(found, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
-                pages[page.hash] = ReaderZoomedText.merge(pages[page.hash] ?? [], with: translated)
+                pages[key] = ReaderZoomedText.merge(pages[key] ?? [], with: translated)
             } catch is CancellationError {
             } catch { if isOn, message == nil { message = ContentError.message(error) } }
         }
@@ -290,35 +304,42 @@ struct ReaderTranslationHost: View {
 
     /// Translates the visible spread first, then the next one.
     func follow(gallery: NativeGallery, index: Int, count: Int, images: PageImageStore) {
-        guard isOn else { return }
-        self.images = images
-        source = gallery.language
         let wanted = Array(index..<min(gallery.pages.count, index + count * 2))
-        queue = wanted.compactMap { position in
-            let page = gallery.pages[position]
-            return pages[page.hash] == nil ? (position, page, gallery.id) : nil
-        }
+        follow(wanted.map { position in
+            let page = gallery.pages[position], id = gallery.id
+            return ReaderTranslationJob(index: position, key: page.hash) { try await images.load(page, galleryID: id) }
+        }, language: gallery.language)
+    }
+
+    /// Translates these images in order, the one on screen first. `language` is the work's
+    /// language tag, nil when it is unknown and read from the text. Pages of one work read on from
+    /// the pages before; `continues` false keeps unrelated images, such as posts, apart.
+    func follow(_ jobs: [ReaderTranslationJob], language: String?, continues: Bool = true) {
+        guard isOn else { return }
+        source = language
+        self.continues = continues
+        queue = jobs.filter { pages[$0.key] == nil }
         if worker == nil { worker = Task { await run() } }
     }
 
     private func run() async {
         while isOn, !Task.isCancelled, !queue.isEmpty {
             let job = queue.removeFirst()
-            guard pages[job.page.hash] == nil, let images else { continue }
-            working.insert(job.page.hash)
+            guard pages[job.key] == nil else { continue }
+            working.insert(job.key)
             do {
-                let balloons = try await translate(job.page, index: job.index, galleryID: job.galleryID, images: images)
-                if isOn { pages[job.page.hash] = balloons }
+                let balloons = try await translate(job)
+                if isOn { pages[job.key] = balloons }
             } catch is CancellationError {
             } catch { if isOn, message == nil { message = ContentError.message(error) } }
-            working.remove(job.page.hash)
+            working.remove(job.key)
         }
         worker = nil
     }
 
     /// Shows Apple's quick translation as soon as it is ready, then the on-device model's.
-    private func translate(_ page: GalleryPage, index: Int, galleryID: Int64, images: PageImageStore) async throws -> [ReaderTextRegion] {
-        let image = try await images.load(page, galleryID: galleryID)
+    private func translate(_ job: ReaderTranslationJob) async throws -> [ReaderTextRegion] {
+        let image = try await job.load(), index = job.index
         let foreign = try await foreignBalloons(in: image)
         guard !foreign.isEmpty else { return [] }
         func regions(_ texts: [String]) -> [ReaderTextRegion] {
@@ -326,7 +347,7 @@ struct ReaderTranslationHost: View {
         }
         let texts = try await translate(foreign.map(\.text), index: index, addingTo: false) { [weak self] quick in
             guard let self, isOn else { return }
-            pages[page.hash] = regions(quick)
+            pages[job.key] = regions(quick)
         }
         return regions(texts)
     }
@@ -351,7 +372,7 @@ struct ReaderTranslationHost: View {
     /// the model is unavailable, gives an unusable reply or takes longer than `modelLimit`.
     private func translate(_ sources: [String], index: Int, addingTo: Bool, preview: (([String]) -> Void)? = nil) async throws -> [String] {
         var context = ReaderTranslationContext()
-        for previous in stride(from: index - 1, through: max(0, index - 3), by: -1) { context.pairs.insert(contentsOf: history[previous] ?? [], at: 0) }
+        if continues { for previous in stride(from: index - 1, through: max(0, index - 3), by: -1) { context.pairs.insert(contentsOf: history[previous] ?? [], at: 0) } }
         if addingTo { context.pairs += history[index] ?? [] }
         context.pairs = Array(context.pairs.suffix(ReaderTranslationContext.limit))
         let target = target, sourceCode = ReaderSourceLanguage.code(for: source)

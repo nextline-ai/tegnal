@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/content/content_errors.dart';
@@ -8,6 +10,10 @@ import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import 'image_translation.dart';
 import 'page_image_store.dart';
+
+/// One image to translate: where it sits in the reading order, the key its balloons are kept
+/// under, and how its bytes are read (`ReaderTranslationJob`).
+typedef ReaderTranslationJob = ({int index, String key, Future<Uint8List> Function() load});
 
 /// `ReaderTranslationSession`: translation mode. Once on, every page shows its translation over
 /// the original as it comes into view, the next spread is prepared ahead, and a tap on the pill
@@ -21,10 +27,10 @@ class ReaderTranslationSession extends ChangeNotifier {
   final _pages = <String, List<TranslatedRegion>>{};
   final _working = <String>{};
   final _history = <int, List<(String, String)>>{};
-  List<({int index, GalleryPage page, int galleryID})> _queue = [];
+  List<ReaderTranslationJob> _queue = [];
+  bool _continues = true;
   bool _running = false;
   int _generation = 0;
-  PageImageStore? _images;
   String _target = 'en';
 
   /// The last failure worth telling the reader about.
@@ -70,12 +76,21 @@ class ReaderTranslationSession extends ChangeNotifier {
 
   /// Translates the visible spread first, then the next one.
   void follow(NativeGallery gallery, {required int index, required int count, required PageImageStore images}) {
-    if (!_on) return;
-    _images = images;
     final end = (index + count * 2).clamp(0, gallery.pages.length);
-    _queue = [
+    followJobs([
       for (var position = index; position < end; position++)
-        if (!_pages.containsKey(gallery.pages[position].hash)) (index: position, page: gallery.pages[position], galleryID: gallery.id),
+        (index: position, key: gallery.pages[position].hash, load: () => images.data(gallery.pages[position], galleryID: gallery.id)),
+    ]);
+  }
+
+  /// Translates these images in order, the one on screen first. Pages of one work read on from
+  /// the pages before; [continues] false keeps unrelated images, such as posts, apart.
+  void followJobs(List<ReaderTranslationJob> jobs, {bool continues = true}) {
+    if (!_on) return;
+    _continues = continues;
+    _queue = [
+      for (final job in jobs)
+        if (!_pages.containsKey(job.key)) job,
     ];
     if (!_running) _run();
   }
@@ -85,23 +100,22 @@ class ReaderTranslationSession extends ChangeNotifier {
     final generation = _generation;
     while (_on && generation == _generation && _queue.isNotEmpty) {
       final job = _queue.removeAt(0);
-      final images = _images;
-      if (_pages.containsKey(job.page.hash) || images == null) continue;
-      _working.add(job.page.hash);
+      if (_pages.containsKey(job.key)) continue;
+      _working.add(job.key);
       notifyListeners();
       try {
-        final regions = await _translate(job.page, job.index, job.galleryID, images);
-        if (generation == _generation) _pages[job.page.hash] = regions;
+        final regions = await _translate(job);
+        if (generation == _generation) _pages[job.key] = regions;
       } on TranslationError catch (error) {
         if (error.isQuiet) {
-          if (generation == _generation) _pages[job.page.hash] = const [];
+          if (generation == _generation) _pages[job.key] = const [];
         } else {
           message ??= error.message;
         }
       } on Object catch (error) {
         message ??= ContentError.message(error);
       }
-      _working.remove(job.page.hash);
+      _working.remove(job.key);
       if (generation == _generation) notifyListeners();
     }
     _running = false;
@@ -109,9 +123,13 @@ class ReaderTranslationSession extends ChangeNotifier {
     if (_on && _queue.isNotEmpty && generation != _generation) _run();
   }
 
-  Future<List<TranslatedRegion>> _translate(GalleryPage page, int index, int galleryID, PageImageStore images) async {
-    final bytes = await images.data(page, galleryID: galleryID);
-    final context = <(String, String)>[for (var previous = (index - 3).clamp(0, index); previous < index; previous++) ...?_history[previous]];
+  Future<List<TranslatedRegion>> _translate(ReaderTranslationJob job) async {
+    final bytes = await job.load();
+    final index = job.index;
+    final context = <(String, String)>[
+      if (_continues)
+        for (var previous = (index - 3).clamp(0, index); previous < index; previous++) ...?_history[previous],
+    ];
     final regions = await ImageTranslation.translate(
       bytes,
       _target,

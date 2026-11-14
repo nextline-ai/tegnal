@@ -13,6 +13,7 @@ import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_support.dart';
 import '../../core/support/l10n.dart';
 import '../design/tegnal_theme.dart';
+import '../content/image_translation.dart';
 import '../content/reader_models.dart';
 import 'booru_common.dart';
 
@@ -69,6 +70,7 @@ class BooruMediaView extends StatefulWidget {
     required this.onExitDrag,
     required this.onGoldRequired,
     required this.onRemoved,
+    this.translation = const [],
   });
 
   final BooruContext booru;
@@ -89,6 +91,9 @@ class BooruMediaView extends StatefulWidget {
   final void Function(double offset, {bool? end, double velocity, double sideways}) onExitDrag;
   final VoidCallback onGoldRequired;
   final VoidCallback onRemoved;
+
+  /// Translated balloons over the image, as the comics reader draws them.
+  final List<TranslatedRegion> translation;
 
   @override
   State<BooruMediaView> createState() => _BooruMediaViewState();
@@ -456,7 +461,14 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
                       children: [
                         Positioned.fromRect(
                           rect: rect,
-                          child: Stack(fit: StackFit.expand, children: [media, if (widget.showNotes && !_isVideo) ..._notes(rect.size)]),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              media,
+                              if (widget.translation.isNotEmpty && !_isVideo) TranslatedRegionsLayer(regions: widget.translation),
+                              if (widget.showNotes && !_isVideo) ..._notes(rect.size),
+                            ],
+                          ),
                         ),
                       ],
                     ),

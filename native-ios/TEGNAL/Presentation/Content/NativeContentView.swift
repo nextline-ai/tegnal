@@ -1457,44 +1457,54 @@ struct GalleryActionHeight: Layout {
     }
 }
 
+/// Drawn as the image viewer's Details list draws its Content Controls section, an inset grouped
+/// list: the work information is a scroll view, so the list's look is drawn here.
 private struct MangaContentControls: View {
     let gallery: NativeGallery
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    /// An inset grouped list's row: icons in a column, titles after it.
+    private static let iconColumn: CGFloat = 56
+    private func row(_ title: String, icon: String, color: Color = .accentColor, chevron: Bool = false) -> some View {
+        HStack(spacing: 0) {
+            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: Self.iconColumn)
+            Text(title).foregroundStyle(color).multilineTextAlignment(.leading)
+            Spacer(minLength: 8)
+            if chevron {
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(uiColor: .tertiaryLabel))
+            }
+        }
+        .padding(.trailing, 16).frame(minHeight: 52).contentShape(Rectangle())
+    }
+    private var divider: some View { Divider().padding(.leading, Self.iconColumn).padding(.trailing, 16) }
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("Content Controls")).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 16)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.text("Content Controls")).foregroundStyle(.secondary).padding(.horizontal, 17)
             VStack(spacing: 0) {
                 if let page = URL(string: MangaUrls.galleryUrl(for: gallery.id)) {
                     NavigationLink { ContentReportView(page: page) } label: {
-                        HStack {
-                            Label(L10n.text("Report Content"), systemImage: "flag")
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
-                        }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                        row(L10n.text("Report Content"), icon: "flag", color: .primary, chevron: true)
                     }.accessibilityIdentifier("content.report")
-                    Divider().padding(.leading, 16)
+                    divider
                 }
                 Button {
                     env.setMangaGalleryHidden(gallery.id, hidden: !env.hiddenMangaGalleryIDs.contains(gallery.id))
                     dismiss()
                 } label: {
-                    Label(L10n.text(env.hiddenMangaGalleryIDs.contains(gallery.id) ? "Show This Work" : "Hide This Work"), systemImage: "eye.slash")
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    row(L10n.text(env.hiddenMangaGalleryIDs.contains(gallery.id) ? "Show This Work" : "Hide This Work"), icon: "eye.slash")
                 }.accessibilityIdentifier("content.hideWork")
                 if !gallery.artists.isEmpty {
-                    Divider().padding(.leading, 16)
+                    divider
                     Menu {
                         ForEach(gallery.artists, id: \.self) { artist in
                             Button(artist) { env.blockMangaArtist(artist); dismiss() }
                         }
                     } label: {
-                        Label(L10n.text("Block Artist"), systemImage: "person.crop.circle.badge.xmark")
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                        row(L10n.text("Block Artist"), icon: "person.crop.circle.badge.xmark")
                     }.accessibilityIdentifier("content.blockArtist")
                 }
-            }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            }.buttonStyle(.plain)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         }.accessibilityIdentifier("content.controls")
     }
 }

@@ -32,6 +32,7 @@ import 'booru_media_view.dart';
 import 'booru_post_details.dart';
 import '../design/alert_dialog.dart';
 import '../content/image_translation.dart';
+import '../content/reader_translation.dart';
 import 'booru_settings_views.dart';
 import '../content/viewer_quick_menu.dart';
 import '../../core/content/recent_works.dart';
@@ -136,6 +137,11 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
   String? _loadedNotesKey;
   String? _toast;
   Timer? _toastTimer;
+
+  /// Translation mode over every post as it comes into view, as the comics reader translates pages.
+  late final ReaderTranslationSession _translation = ReaderTranslationSession(_booru.booruDefaults)..addListener(_translationChanged);
+  Timer? _pillTimer;
+  bool _pillShown = false;
   Timer? _autoTimer;
   late final _dismiss = ViewerDismiss(vsync: this);
   bool _loadingMore = false;
@@ -188,6 +194,10 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
     _loadingTimer?.cancel();
     _toastTimer?.cancel();
     _autoTimer?.cancel();
+    _pillTimer?.cancel();
+    _translation
+      ..removeListener(_translationChanged)
+      ..dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     ReaderScreen.keepAwake(false);
     super.dispose();
@@ -218,6 +228,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
     _viewing.resume();
     _scheduleLoadingIndicator();
     _resolveCurrentPost();
+    _followTranslation();
   }
 
   void _scheduleLoadingIndicator() {
@@ -531,10 +542,51 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
     setState(() {});
   }
 
-  void _translate() => setState(() {
-    _translating = _post;
-    _menuVisible = false;
-  });
+  /// Turns translation mode on or off from the quick menu, as the comics reader does.
+  void _translate() {
+    if (!ReaderPreferences.continuousTranslation && !_translation.isOn) {
+      setState(() {
+        _translating = _post;
+        _menuVisible = false;
+      });
+      return;
+    }
+    setState(() => _menuVisible = false);
+    _translation.toggle();
+    _followTranslation();
+  }
+
+  /// Translates the post on screen, then the next image.
+  void _followTranslation() {
+    if (!_translation.isOn) return;
+    final index = _index;
+    final posts = [_post, if (index + 1 < _posts.length) _posts[index + 1]];
+    _translation.followJobs([
+      for (final (offset, post) in posts.indexed)
+        if (!post.isVideo)
+          if (post.viewerURL(original: _original, reducedData: _reducedData) case final url?)
+            (index: index + offset, key: post.id, load: () => _booru.viewerImages.load(url, _booru.server(post.serverID) ?? _booru.store.servers.first)),
+    ], continues: false);
+    _showPill();
+  }
+
+  void _showPill() {
+    _pillTimer?.cancel();
+    if (mounted) setState(() => _pillShown = true);
+    _pillTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted) setState(() => _pillShown = false);
+    });
+  }
+
+  void _translationChanged() {
+    if (!mounted) return;
+    final message = _translation.message;
+    if (message != null) {
+      _translation.message = null;
+      _showToast(message);
+    }
+    setState(() {});
+  }
 
   void _showToast(String message) {
     _toastTimer?.cancel();
@@ -734,6 +786,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                       onExitDrag: _exitDrag,
                       onGoldRequired: () => _skipGoldRestricted(_post.id),
                       onRemoved: () => _removedPost(_post.id),
+                      translation: _translation.balloons(_post.id) ?? const [],
                     ),
                   ),
                 if (!_removed && (_mediaStatus == 'error' || url == null && !_resolvesMissingMedia || _mediaStatus == 'unavailable'))
@@ -795,6 +848,32 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                       failed: (message) {
                         setState(() => _translating = null);
                         _showToast(message);
+                      },
+                    ),
+                  ),
+                if (_translation.isOn)
+                  Positioned(
+                    top: media.padding.top + 8,
+                    right: 16,
+                    child: Builder(
+                      builder: (context) {
+                        final working = _translation.isWorking(_post.id);
+                        final visible = _menuVisible || working || _pillShown;
+                        return IgnorePointer(
+                          ignoring: !visible,
+                          child: AnimatedOpacity(
+                            opacity: visible ? 1 : 0,
+                            duration: const Duration(milliseconds: 250),
+                            child: ReaderTranslationToggle(
+                              showsOriginal: _translation.showsOriginal,
+                              working: working,
+                              onPressed: () {
+                                _translation.toggleOriginal();
+                                _showPill();
+                              },
+                            ),
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -913,7 +992,11 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
       (L10n.text('Save to Folder'), symbol(CupertinoIcons.folder), _openFolders),
       // Translation arrives with its own rebuild step.
       if (AppPlatform.hasImageTranslation)
-        (L10n.text('Translate'), const TranslateSymbol(color: Color(0xFFFFFFFF)), _post.isVideo || _viewerURL == null ? null : _translate),
+        (
+          L10n.text(_translation.isOn ? 'Stop Translating' : 'Translate'),
+          TranslateSymbol(color: _translation.isOn ? TegnalColors.tint.resolveFrom(context) : const Color(0xFFFFFFFF)),
+          !_translation.isOn && (_post.isVideo || _viewerURL == null) ? null : _translate,
+        ),
       (L10n.text('Exit'), const ExitSymbol(color: Color(0xFFFFFFFF)), _close),
       (
         L10n.text('Notes'),

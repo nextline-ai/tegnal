@@ -539,15 +539,21 @@ private struct ReadingQueueAccessory: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .bottom) {
-                if visible {
-                    ReadingQueueBar(read: read, showList: showList)
-                        .frame(height: Self.height)
-                        .modifier(ReadingQueueBarBackground())
-                        .padding(.horizontal, 21)
-                        // Just above the tab bar.
-                        .padding(.bottom, 57)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                // It stays just above the tab bar while a keyboard is open, under the keyboard,
+                // rather than rising over the search field and its results.
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    if visible {
+                        ReadingQueueBar(read: read, showList: showList)
+                            .frame(height: Self.height)
+                            .modifier(ReadingQueueBarBackground())
+                            .padding(.horizontal, 21)
+                            // Just above the tab bar.
+                            .padding(.bottom, 57)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
             .overlay { if enabled { ReadingQueueCarryOverlay(queue: env.readingQueue) } }
             .animation(.snappy, value: visible)

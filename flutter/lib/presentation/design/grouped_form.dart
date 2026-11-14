@@ -19,8 +19,11 @@ abstract final class FormColors {
 
 /// A `Form` section: an optional header, then rows on one rounded card with 26 pt corners.
 class FormSection extends StatelessWidget {
-  const FormSection({super.key, this.header, required this.children, this.footer, this.prominentHeader = false, this.rowColor});
+  const FormSection({super.key, this.header, required this.children, this.footer, this.prominentHeader = false, this.rowColor, this.margin = 16});
   final Widget? header;
+
+  /// Space beside the card; a page that already keeps its own margins passes 0.
+  final double margin;
 
   /// Rows on the screen use [FormColors.listRow]; rows in sheets keep [FormColors.row].
   final Color? rowColor;
@@ -34,7 +37,7 @@ class FormSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final separator = TegnalColors.separator.resolveFrom(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: margin),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

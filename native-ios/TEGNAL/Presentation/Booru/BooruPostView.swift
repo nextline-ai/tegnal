@@ -220,7 +220,12 @@ struct BooruPostView: View {
         get { sheet == .folder }
         nonmutating set { setSheet(.folder, visible: newValue) }
     }
-    @State private var translation: ReaderTranslationRequest?
+    @State private var translationRequest: ReaderTranslationRequest?
+    /// AI translation over every post as it comes into view, as the comics reader translates pages.
+    @State private var translation = ReaderTranslationSession()
+    /// The switch under the image stays after it turns translation off, until Translate closes it.
+    @State private var showsTranslationBar = false
+    @State private var translationPillUntil = Date.distantPast
     @State private var viewport = BooruViewerViewport()
     @State private var zoomed = false
     @State private var toast: String?
@@ -273,17 +278,17 @@ struct BooruPostView: View {
     }
     private var isActive: Bool { !exiting && (challenge != nil || env.mode == browsingMode) && scenePhase == .active }
     private var mediaActive: Bool {
-        isActive && sheet == nil && !post.isRemoved && mediaStatus != "removed" && store.isVisible(post) && !accessNavigation.restrictedIDs.contains(post.id) && translation == nil && !info && !readerSettings && !filing && !showJump && selectedNote == nil
+        isActive && sheet == nil && !post.isRemoved && mediaStatus != "removed" && store.isVisible(post) && !accessNavigation.restrictedIDs.contains(post.id) && translationRequest == nil && !info && !readerSettings && !filing && !showJump && selectedNote == nil
     }
     private var resolvesMissingMedia: Bool { server.engine.usesGelbooruPages || server.engine == .danbooru }
     private var mediaReady: Bool { ["ready", "playing", "ended"].contains(mediaStatus) }
     private var waitingForMedia: Bool { mediaStatus == "loading" || loadingMore && wantsNext }
     private var mayLoadNotes: Bool { isActive && (info || sheet == nil && showNotes && mediaReady) }
     private var mayAutoAdvance: Bool {
-        autoAdvance && guide.step == nil && isActive && sheet == nil && translation == nil && !menuVisible && !showJump && !zoomed && ["ready", "ended"].contains(mediaStatus)
+        autoAdvance && guide.step == nil && isActive && sheet == nil && translationRequest == nil && !menuVisible && !showJump && !zoomed && ["ready", "ended"].contains(mediaStatus)
     }
     private var autoAdvanceTaskID: String {
-        [String(guide.step?.rawValue ?? -1), post.id, mediaStatus, sheet?.id ?? "", translation?.id.uuidString ?? "", String(autoAdvance),
+        [String(guide.step?.rawValue ?? -1), post.id, mediaStatus, sheet?.id ?? "", translationRequest?.id.uuidString ?? "", String(autoAdvance),
          String(autoSeconds), String(menuVisible), String(showJump), String(zoomed), String(isActive)].joined(separator: ":")
     }
     var body: some View {
@@ -297,7 +302,8 @@ struct BooruPostView: View {
                                    onNote: { selectedNote = $0 }, onStatus: { [postID = post.id] status in
                                        if post.id == postID, !accessNavigation.restrictedIDs.contains(postID) { mediaStatus = status }
                                    }, onGesture: gesture, onGoldRequired: { [postID = post.id] in skipGoldRestricted(postID) },
-                                   onRemoved: { [postID = post.id] in removedPost(postID) }, doubleTapZoom: doubleTapZoom)
+                                   onRemoved: { [postID = post.id] in removedPost(postID) }, doubleTapZoom: doubleTapZoom,
+                                   translation: translation.balloons(for: post.id) ?? [])
                         .ignoresSafeArea().id("\(server.id)-\(retry)")
                     #if DEBUG
                     if BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled {
@@ -332,12 +338,39 @@ struct BooruPostView: View {
             }
             .animation(NativeReaderView.menuMotion, value: menuVisible)
             .overlay {
-                if let translation {
+                if let translationRequest {
                     ReaderTranslationView(loadImage: {
-                        try await BooruThumbnailCache.shared.translationImage(post: post, server: server, rect: translation.rect)
-                    }, booru: true, finished: { self.translation = nil }, failed: { message in self.translation = nil; toast = message })
-                        .id(translation.id).frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).transition(.opacity)
+                        try await BooruThumbnailCache.shared.translationImage(post: post, server: server, rect: translationRequest.rect)
+                    }, booru: true, finished: { self.translationRequest = nil }, failed: { message in self.translationRequest = nil; toast = message })
+                        .id(translationRequest.id).frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).transition(.opacity)
                 }
+            }
+            .overlay(alignment: .topTrailing) {
+                if translation.isOn {
+                    TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                        let working = translation.isWorking(on: post.id)
+                        let visible = menuVisible || working || context.date < translationPillUntil
+                        ReaderTranslationToggle(showsOriginal: translation.showsOriginal, working: working) {
+                            translation.showsOriginal.toggle(); showTranslationPill()
+                        }
+                        .opacity(visible ? 1 : 0).allowsHitTesting(visible)
+                        .animation(.easeInOut(duration: 0.25), value: visible)
+                    }
+                    .padding(.top, 8).padding(.trailing, 16)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if showsTranslationBar, !menuVisible, sheet == nil {
+                    ReaderTranslationModeBar(mode: translationMode, select: setTranslationMode)
+                        // On the row of Live Text's own buttons, which sit this far above the safe area.
+                        .padding(.bottom, ReaderTranslationModeBar.bottomInset)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: showsTranslationBar)
+            .onChange(of: translation.message) { _, message in if let message { toast = message; translation.message = nil } }
+            .background {
+                if #available(iOS 18.0, *) { ReaderTranslationHost(broker: translation.broker) }
             }
             .foregroundStyle(.white).tint(.white).preferredColorScheme(.dark)
             .overlay(alignment: .top) {
@@ -345,15 +378,15 @@ struct BooruPostView: View {
                     .ignoresSafeArea(edges: .top).allowsHitTesting(false)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if bottomMenu && !menuVisible && translation == nil { menuActions(compact: true).padding(12).modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
+                if bottomMenu && !menuVisible && translationRequest == nil { menuActions(compact: true).padding(12).modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
             }
             .overlay(alignment: .top) {
-                if let challenge, translation == nil { ChallengeViewerControls(controller: challenge) }
+                if let challenge, translationRequest == nil { ChallengeViewerControls(controller: challenge) }
             }
             .onChange(of: challenge?.session.phase) { _, phase in
                 if phase == .idle || phase == .ended { closeViewer() }
             }
-            .background(VideoMenuGesture(enabled: post.isVideo && sheet == nil && translation == nil && !showJump) { withAnimation(NativeReaderView.menuMotion) { menuVisible.toggle() } })
+            .background(VideoMenuGesture(enabled: post.isVideo && sheet == nil && translationRequest == nil && !showJump) { withAnimation(NativeReaderView.menuMotion) { menuVisible.toggle() } })
             .accessibilityAction(named: L10n.text("Open Menu")) { menuVisible = true }
             .background(ReaderKeyboardCommands(enabled: sheet == nil && !showJump, action: shortcut))
             .statusBarHidden(true)
@@ -383,8 +416,8 @@ struct BooruPostView: View {
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
                 requestMore()
             }
-            .task(id: mediaReady && isActive && !helpHidden && sheet == nil && !menuVisible && !showJump && translation == nil) {
-                guard mediaReady, isActive, !helpHidden, !guide.hasStarted, sheet == nil, !menuVisible, !showJump, translation == nil else { return }
+            .task(id: mediaReady && isActive && !helpHidden && sheet == nil && !menuVisible && !showJump && translationRequest == nil) {
+                guard mediaReady, isActive, !helpHidden, !guide.hasStarted, sheet == nil, !menuVisible, !showJump, translationRequest == nil else { return }
                 guide.start()
             }
             .alert(L10n.text("Go to Page"), isPresented: $showJump) {
@@ -407,6 +440,7 @@ struct BooruPostView: View {
             .onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value }
             .onChange(of: post) { previous, current in
                 if previous.id != current.id { recordViewing(previous); viewing.resume(); if !isActive { viewing.pause() } }
+                if previous.id != current.id { followTranslation() }
             }
             .onChange(of: isActive, initial: true) { _, active in
                 if active { viewing.resume() } else { viewing.pause() }
@@ -472,7 +506,7 @@ struct BooruPostView: View {
         }
         .presentationBackground(.clear)
         .overlayPreferenceValue(ReaderGuideMenuBounds.self) { bounds in
-            if let step = guide.step, sheet == nil, translation == nil, !showJump {
+            if let step = guide.step, sheet == nil, translationRequest == nil, !showJump {
                 ReaderGuideOverlay(step: step, configuration: ReaderGuideConfiguration(booru: true, defaults: ReaderPreferences.booruDefaults),
                                    menuBounds: bounds, next: advanceGuide, finish: finishGuide)
             }
@@ -496,15 +530,62 @@ struct BooruPostView: View {
                 }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
         }
-        .background(ReaderExitGesture(enabled: isActive && sheet == nil && !zoomed && !showJump && translation == nil, movesContainer: true, progress: { _ in }, exit: { closeViewer() }))
+        .background(ReaderExitGesture(enabled: isActive && sheet == nil && !zoomed && !showJump && translationRequest == nil, movesContainer: true, progress: { _ in }, exit: { closeViewer() }))
     }
+    private var translationMode: ReaderTranslationMode {
+        translation.isOn ? .ai : translationRequest != nil ? .standard : .off
+    }
+    /// Translate in the quick menu starts the mode last chosen, AI unless the standard translation
+    /// was picked, with the switch under the image; while that switch shows, it stops translating
+    /// and closes the switch. The same as the comics reader.
+    private func translate() {
+        menuVisible = false
+        if showsTranslationBar || translationMode != .off {
+            setTranslationMode(.off)
+            showsTranslationBar = false
+            return
+        }
+        showsTranslationBar = true
+        setTranslationMode(ReaderTranslationSession.isSupported && ReaderPreferences.continuousTranslation ? .ai : .standard)
+    }
+    /// The switch under the image; AI or standard becomes what Translate starts next time.
+    private func setTranslationMode(_ mode: ReaderTranslationMode) {
+        guard mode != translationMode else { return }
+        if translation.isOn { translation.stop() }
+        translationRequest = nil
+        switch mode {
+        case .off: break
+        case .standard:
+            ReaderPreferences.continuousTranslation = false
+            guard !post.isVideo else { return }
+            translationRequest = .init(index: index, rect: viewport.rect)
+        case .ai:
+            ReaderPreferences.continuousTranslation = true
+            translation.toggle(booru: true)
+            followTranslation()
+        }
+    }
+    /// Translates the post on screen, then the next image.
+    private func followTranslation() {
+        guard translation.isOn else { return }
+        let upcoming = posts.indices.contains(index + 1) ? [posts[index + 1]] : []
+        let jobs = ([post] + upcoming).enumerated().compactMap { offset, item -> ReaderTranslationJob? in
+            guard !item.isVideo, let server = store.servers.first(where: { $0.id == item.serverID }) ?? (item.id == post.id ? self.server : nil) else { return nil }
+            return ReaderTranslationJob(index: index + offset, key: item.id) {
+                try await BooruThumbnailCache.shared.translationImage(post: item, server: server, rect: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+        }
+        translation.follow(jobs, language: nil, continues: false)
+        showTranslationPill()
+    }
+    private func showTranslationPill() { translationPillUntil = Date().addingTimeInterval(2.5) }
     private func shortcut(_ command: ReaderShortcut) {
         guard sheet == nil, !showJump else { return }
         if command == .exit {
-            if translation != nil { translation = nil } else { closeViewer() }
+            if translationRequest != nil { translationRequest = nil } else { closeViewer() }
             return
         }
-        guard translation == nil else { return }
+        guard translationRequest == nil else { return }
         switch command {
         case .previous: move(rtl ? 1 : -1)
         case .next: move(rtl ? -1 : 1)
@@ -550,9 +631,9 @@ struct BooruPostView: View {
             menuButton(L10n.text(store.isFavorite(post) ? "Remove Favorite" : "Add Favorite"), icon: store.isFavorite(post) ? "heart.fill" : "heart", id: "favorite", compact: compact,
                        color: store.isFavorite(post) ? WorkSaveResult.added(.booru).color : nil) { toggleFavorite() }
             menuButton(L10n.text("Save to Folder"), icon: "folder", id: "folder", compact: compact) { filing = true }
-            menuButton(L10n.text("Translate"), icon: "translate", id: "translate", compact: compact) {
-                menuVisible = false; translation = .init(index: index, rect: viewport.rect)
-            }.disabled(post.isVideo || mediaStatus != "ready")
+            menuButton(L10n.text(showsTranslationBar || translation.isOn ? "Stop Translating" : "Translate"), icon: "translate", id: "translate", compact: compact,
+                       color: showsTranslationBar || translation.isOn ? .accentColor : nil) { translate() }
+                .disabled(!showsTranslationBar && (post.isVideo || mediaStatus != "ready"))
             menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "close", compact: compact) { closeViewer() }
             menuButton(L10n.text("Notes"), icon: showNotes ? "text.bubble.fill" : "text.bubble", id: "notes", compact: compact) { showNotes.toggle() }
             menuButton(L10n.text("Details"), icon: "info.circle", id: "info", compact: compact) { info = true }
@@ -594,7 +675,7 @@ struct BooruPostView: View {
         dismiss()
     }
     private func gesture(_ gesture: BooruMediaGesture) {
-        guard sheet == nil, translation == nil, !showJump else { return }
+        guard sheet == nil, translationRequest == nil, !showJump else { return }
         switch gesture {
         case .shortcut(let command): shortcut(command)
         case .tap(let x):
@@ -605,7 +686,14 @@ struct BooruPostView: View {
             toggleFavorite()
         case .details: if !zoomed { info = true }
         case .zoom(let value): if zoomed != value { zoomed = value }
-        case .viewport(let rect): viewport.rect = rect
+        case .viewport(let rect):
+            viewport.rect = rect
+            // AI translation reads a zoomed-in area again, for text too small to read on the whole image.
+            let scale = 1 / max(0.01, min(rect.width, rect.height))
+            if translation.isOn, zoomed, scale >= ReaderZoomedText.minimumScale, rect.width > 0.01, rect.height > 0.01 {
+                let post = post, server = server
+                translation.readZoomed(key: post.id, index: index, area: rect) { try await BooruThumbnailCache.shared.translationImage(post: post, server: server, rect: $0) }
+            }
         }
     }
     private func resolveCurrentPost() async {
@@ -755,7 +843,7 @@ struct BooruPostView: View {
         selectPost(at: next)
     }
     private func selectPost(at next: Int) {
-        viewport.rect = CGRect(x: 0, y: 0, width: 1, height: 1); translation = nil
+        viewport.rect = CGRect(x: 0, y: 0, width: 1, height: 1); translationRequest = nil
         post = posts[next]; original = loadOriginal; mediaStatus = "loading"; zoomed = false; notes = []; loadedNotesKey = nil
         positionChanged(post)
     }

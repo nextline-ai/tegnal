@@ -1231,70 +1231,53 @@ class _MangaContentControls extends StatelessWidget {
   final NativeGallery gallery;
   final ContentEnvironment content;
 
+  /// The same section, rows and colors as the image viewer's Details (`BooruPostDetailsView`).
   @override
   Widget build(BuildContext context) {
     final tint = TegnalColors.tint.resolveFrom(context);
     final hidden = content.hiddenMangaGalleryIDs.contains(gallery.id);
-    Widget row(IconData icon, String title, VoidCallback onTap, {bool chevron = false}) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: tint),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(title, style: TegnalType.style(17, color: tint)),
-            ),
-            if (chevron) Icon(CupertinoIcons.chevron_right, size: 13, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
-          ],
-        ),
-      ),
-    );
-    final divider = Container(height: 0.5, margin: const EdgeInsets.only(left: 16), color: TegnalColors.separator.resolveFrom(context));
     final page = MangaUrls.galleryUrl(gallery.id);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    Widget label(IconData icon, String title, {Color? color, bool chevron = false}) => Row(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(L10n.text('Content Controls'), style: TegnalType.style(15, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+        Icon(icon, size: 22, color: tint),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(title, style: color == null ? null : TegnalType.style(17, color: color)),
         ),
-        const SizedBox(height: 12),
-        ClipRSuperellipse(
-          borderRadius: BorderRadius.circular(12),
-          child: ColoredBox(
-            color: FormColors.row.resolveFrom(context),
-            child: Column(
-              children: [
-                if (page.isNotEmpty) ...[row(CupertinoIcons.flag, L10n.text('Report Content'), () {}, chevron: true), divider],
-                row(CupertinoIcons.eye_slash, L10n.text(hidden ? 'Show This Work' : 'Hide This Work'), () {
-                  content.setMangaGalleryHidden(gallery.id, hidden: !hidden);
-                  Navigator.of(context).pop();
-                }),
-                if (gallery.artists.isNotEmpty) ...[
-                  divider,
-                  row(CupertinoIcons.person_crop_circle_badge_xmark, L10n.text('Block Artist'), () async {
-                    final artist = await showCupertinoModalPopup<String>(
-                      context: context,
-                      builder: (context) => CupertinoActionSheet(
-                        actions: [
-                          for (final artist in gallery.artists)
-                            CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, artist), child: Text(artist)),
-                        ],
-                        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
-                      ),
-                    );
-                    if (artist == null || !context.mounted) return;
-                    content.blockMangaArtist(artist);
-                    Navigator.of(context).pop();
-                  }),
-                ],
-              ],
-            ),
+        if (chevron) Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+      ],
+    );
+    return FormSection(
+      margin: 0,
+      rowColor: FormColors.row.resolveFrom(context),
+      header: Text(L10n.text('Content Controls')),
+      children: [
+        if (page.isNotEmpty) FormRow(onTap: () {}, child: label(CupertinoIcons.flag, L10n.text('Report Content'), chevron: true)),
+        FormRow(
+          onTap: () {
+            content.setMangaGalleryHidden(gallery.id, hidden: !hidden);
+            Navigator.of(context).pop();
+          },
+          child: label(CupertinoIcons.eye_slash, L10n.text(hidden ? 'Show This Work' : 'Hide This Work'), color: tint),
+        ),
+        if (gallery.artists.isNotEmpty)
+          FormRow(
+            onTap: () async {
+              final artist = await showCupertinoModalPopup<String>(
+                context: context,
+                builder: (context) => CupertinoActionSheet(
+                  actions: [
+                    for (final artist in gallery.artists) CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, artist), child: Text(artist)),
+                  ],
+                  cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
+                ),
+              );
+              if (artist == null || !context.mounted) return;
+              content.blockMangaArtist(artist);
+              Navigator.of(context).pop();
+            },
+            child: label(CupertinoIcons.person_crop_circle_badge_xmark, L10n.text('Block Artist'), color: tint),
           ),
-        ),
       ],
     );
   }

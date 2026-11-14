@@ -1584,11 +1584,47 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "settings.gridColumns").buttons["4"].isSelected)
     }
 
-    func testBooruUsesAppleImageTranslation() {
+    /// Translate starts AI translation by default, as in the comics reader; the switch under the
+    /// image picks the standard one.
+    private func startStandardTranslation(_ app: XCUIApplication) {
+        openMenu(app); element(app, "booru.translate").tap()
+        if !element(app, "reader.original").waitForExistence(timeout: 2) {
+            let standard = app.buttons["Standard"]
+            XCTAssertTrue(standard.waitForExistence(timeout: 10))
+            standard.tap()
+        }
+    }
+
+    func testBooruTranslateStartsAITranslationWithASwitchUnderTheImage() {
         let app = launch()
         let card = element(app, "booru.post.101")
         XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
         openMenu(app); element(app, "booru.translate").tap()
+        let ai = app.buttons["AI"], standard = app.buttons["Standard"], off = app.buttons["Off"]
+        XCTAssertTrue(ai.waitForExistence(timeout: 10), "Translating shows the mode switch under the image")
+        XCTAssertTrue(ai.isSelected, "AI translation is the default")
+        XCTAssertFalse(element(app, "reader.original").exists, "AI translation stays in the viewer")
+        capture(app, "Booru AI translation with its mode switch")
+        off.tap()
+        XCTAssertTrue(ai.exists, "The switch stays under the image after Off")
+        openMenu(app)
+        XCTAssertEqual(element(app, "booru.translate").label, "Stop Translating")
+        element(app, "booru.translate").tap()
+        XCTAssertTrue(ai.waitForNonExistence(timeout: 5), "Stop Translating closes the switch")
+        openMenu(app); element(app, "booru.translate").tap()
+        XCTAssertTrue(ai.waitForExistence(timeout: 10))
+        standard.tap()
+        XCTAssertTrue(element(app, "reader.original").waitForExistence(timeout: 10), "Standard opens Apple's translation of the image")
+        element(app, "reader.original").tap()
+        // Leave the next run on the default.
+        XCTAssertTrue(ai.waitForExistence(timeout: 5)); ai.tap()
+    }
+
+    func testBooruUsesAppleImageTranslation() {
+        let app = launch()
+        let card = element(app, "booru.post.101")
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        startStandardTranslation(app)
         XCTAssertTrue(element(app, "reader.original").waitForExistence(timeout: 10))
         XCTAssertTrue(element(app, "reader.translation.canvas").waitForExistence(timeout: 30))
         let canvas = element(app, "reader.translation.canvas")
@@ -2184,19 +2220,26 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "translation.language.system").isSelected)
     }
 
-    func testExplicitTranslationLanguageUsesAppleTranslation() {
+    func testExplicitTranslationLanguageUsesAppleTranslation() throws {
         let app = launch()
         app.tabBars.buttons["More"].tap()
-        element(app, "settings.translationLanguage").tap()
+        reveal(app, "settings.translationLanguage").tap()
         reveal(app, "translation.language.en").tap()
         app.tabBars.buttons["Explore"].tap()
         let card = element(app, "booru.post.101")
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
-        openMenu(app); element(app, "booru.translate").tap()
+        startStandardTranslation(app)
         let text = element(app, "reader.translation.text.0")
         // Apple may ask to download a language the first time this device uses it.
         if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
-        XCTAssertTrue(text.waitForExistence(timeout: 45))
+        guard text.waitForExistence(timeout: 45) else {
+            #if targetEnvironment(simulator)
+            // Apple Translation tells a simulator it is not supported on virtual devices.
+            throw XCTSkip("Apple Translation cannot translate on a simulator")
+            #else
+            XCTFail("The page was not translated"); return
+            #endif
+        }
         XCTAssertTrue(text.label.lowercased().contains("weather") || text.label.lowercased().contains("day"))
         capture(app, "Explicit English translation")
         element(app, "reader.original").tap()
