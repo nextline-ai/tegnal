@@ -615,6 +615,12 @@ final class ReaderUXTests: XCTestCase {
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
         window.layoutIfNeeded(); canvas.layoutIfNeeded()
         let size = canvas.bounds.size
+        // Live Text's buttons are placed from the page on screen; a page filling the screen puts
+        // them just inside the safe area.
+        canvas.scroll.update(image: UIGraphicsImageRenderer(size: size).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(origin: .zero, size: size))
+        })
+        window.layoutIfNeeded(); canvas.layoutIfNeeded()
         let initial = canvas.interaction.supplementaryInterfaceContentInsets
         for extra in [UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0),
                       UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 120), .zero] {

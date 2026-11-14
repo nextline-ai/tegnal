@@ -230,6 +230,25 @@ final class WorkIdentityTests: XCTestCase {
 
 /// Lists every connected website at once.
 final class CombinedCatalogTests: XCTestCase {
+    func testExploreListsTheWebsitesPickedInTheMenuAsImageModePicksServers() {
+        let sites = ["one.example", "two.example", "three.example"]
+        func listed(_ chosen: [String]?, active: String = "one.example") -> [String] { AppEnvironment.listedSites(sites, active: active, chosen: chosen) }
+        XCTAssertEqual(listed(nil), ["one.example"], "Until someone picks, the checked website alone")
+        XCTAssertEqual(listed(["two.example"], active: "three.example"), ["three.example"], "One picked website follows the checked one")
+        XCTAssertEqual(listed(["one.example", "three.example"]), ["one.example", "three.example"])
+        XCTAssertEqual(listed(["two.example", "three.example"]), sites, "The checked website is always among several")
+        XCTAssertEqual(listed([]), [], "Every website can be unpicked")
+        XCTAssertEqual(AppEnvironment.listedSites(["one.example"], active: "one.example", chosen: []), ["one.example"], "A single website has no menu")
+
+        let added = AppEnvironment.toggling("three.example", listed: ["one.example"], sites: sites, active: "one.example")
+        XCTAssertEqual(added.chosen, ["one.example", "three.example"]); XCTAssertNil(added.check)
+        let removed = AppEnvironment.toggling("one.example", listed: ["one.example", "three.example"], sites: sites, active: "one.example")
+        XCTAssertEqual(removed.chosen, ["three.example"])
+        XCTAssertEqual(removed.check, "three.example", "Unpicking the checked website checks a listed one")
+        let none = AppEnvironment.toggling("one.example", listed: ["one.example"], sites: sites, active: "one.example")
+        XCTAssertEqual(none.chosen, []); XCTAssertNil(none.check)
+    }
+
     private actor Source: ContentProviding {
         let works: [Int64: NativeGallery]
         let order: [Int64]

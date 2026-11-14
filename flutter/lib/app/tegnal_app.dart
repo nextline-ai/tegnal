@@ -584,7 +584,7 @@ class _ExploreRoot extends StatelessWidget {
       }
       return ExploreView(
         // A combined list stays when opening a work checks another website.
-        key: ValueKey(content.listsAllComicSites ? '*' : content.mangaSiteAddress),
+        key: ValueKey(content.listsSeveralComicSites ? '*' : content.mangaSiteAddress),
         state: state,
         source: content.source,
         images: services.images,

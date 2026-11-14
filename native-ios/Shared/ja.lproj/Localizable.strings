@@ -1681,4 +1681,5 @@
 "Copies here from %@" = "%@からコピー";
 "Moves here from %@" = "%@から移動";
 "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name." = "スマートフォルダは、新しく保存したもののうちタグが一致するものを自動で整理します。フォルダを長押しするとスマートフォルダにでき、名前のあとに%@が付きます。";
-"All Websites" = "すべてのウェブサイト";
+"No websites selected" = "ウェブサイトが選択されていません";
+"Choose websites using the website button above. Your saved works are kept." = "上部のウェブサイトボタンから選んでください。保存した作品は保持されています。";

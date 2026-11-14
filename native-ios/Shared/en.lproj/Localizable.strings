@@ -1681,4 +1681,5 @@
 "Copies here from %@" = "Copies here from %@";
 "Moves here from %@" = "Moves here from %@";
 "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name." = "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name.";
-"All Websites" = "All Websites";
+"No websites selected" = "No websites selected";
+"Choose websites using the website button above. Your saved works are kept." = "Choose websites using the website button above. Your saved works are kept.";

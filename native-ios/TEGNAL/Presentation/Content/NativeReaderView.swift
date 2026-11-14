@@ -24,6 +24,8 @@ struct NativeReaderView: View {
     @SwiftUI.AppStorage("reader.continuousWorkSwipe", store: ReaderPreferences.defaults) private var continuousWorkSwipe = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var translationRequest: ReaderTranslationRequest?
+    /// The switch under the page stays after it turns translation off, until Translate closes it.
+    @State private var showsTranslationBar = false
     /// Translation mode, kept while pages turn.
     @State private var translation = ReaderTranslationSession()
     /// The translation pill shows for a moment after something changes, then fades away.
@@ -157,14 +159,14 @@ struct NativeReaderView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if translationMode != .off, !menuVisible, sheet == nil, gallery != nil {
+            if showsTranslationBar, !menuVisible, sheet == nil, gallery != nil {
                 ReaderTranslationModeBar(mode: translationMode, select: setTranslationMode)
                     // On the row of Live Text's own buttons, which sit this far above the safe area.
                     .padding(.bottom, ReaderTranslationModeBar.bottomInset)
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: translationMode)
+        .animation(.easeInOut(duration: 0.2), value: showsTranslationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if bottomMenu && !menuVisible && gallery != nil { menuActions(compact: true).padding(.horizontal, 12).padding(.vertical, 8)
                     .modifier(ReaderMenuGlass()).padding(.horizontal, 12).padding(.bottom, 6) }
@@ -408,8 +410,8 @@ struct NativeReaderView: View {
             menuButton(L10n.text(saved ? "Remove Bookmark" : "Bookmark"), icon: saved ? "bookmark.fill" : "bookmark", id: "bookmark", compact: compact,
                        color: saved ? WorkSaveResult.added(.comics).color : nil, action: bookmark)
             menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "exit", compact: compact, action: closeReader)
-            menuButton(L10n.text(translation.isOn ? "Stop Translating" : "Translate"), icon: "translate", id: "translate", compact: compact,
-                       color: translation.isOn ? .accentColor : nil) { translate() }
+            menuButton(L10n.text(showsTranslationBar || translation.isOn ? "Stop Translating" : "Translate"), icon: "translate", id: "translate", compact: compact,
+                       color: showsTranslationBar || translation.isOn ? .accentColor : nil) { translate() }
             menuButton(L10n.text("Work Details"), icon: "info.circle", id: "information", compact: compact) { sheet = .information }
             menuButton(L10n.text("More Settings"), icon: "slider.horizontal.3", id: "settings", compact: compact) { sheet = .settings }
         }
@@ -500,10 +502,16 @@ struct NativeReaderView: View {
         translation.isOn ? .ai : translationRequest != nil ? .standard : .off
     }
     /// Translate in the quick menu starts the mode last chosen, AI unless the reader picked the
-    /// standard translation, or stops translating.
+    /// standard translation, with the switch under the page; while that switch shows, it stops
+    /// translating and closes the switch.
     private func translate() {
         menuVisible = false
-        if translationMode != .off { setTranslationMode(.off); return }
+        if showsTranslationBar || translationMode != .off {
+            setTranslationMode(.off)
+            showsTranslationBar = false
+            return
+        }
+        showsTranslationBar = true
         setTranslationMode(ReaderTranslationSession.isSupported && ReaderPreferences.continuousTranslation ? .ai : .standard)
     }
     /// The switch under the page; AI or standard becomes what Translate starts next time.

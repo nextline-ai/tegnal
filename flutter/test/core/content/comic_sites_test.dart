@@ -62,4 +62,25 @@ void main() {
     db.upsertWork(galleryId: 11, site: 'two.example');
     expect(db.getWork(11)?.site, 'two.example', reason: 'An unknown site is filled in when it becomes known');
   });
+
+  test('Explore lists the websites picked in the website menu, as image mode picks servers', () {
+    const sites = ['one.example', 'two.example', 'three.example'];
+    List<String> listed(List<String>? chosen, {String active = 'one.example'}) => ContentEnvironment.listedSites(sites, active: active, chosen: chosen);
+    expect(listed(null), ['one.example'], reason: 'Until someone picks, the checked website alone');
+    expect(listed(['two.example'], active: 'three.example'), ['three.example'], reason: 'One picked website follows the checked one');
+    expect(listed(['one.example', 'three.example']), ['one.example', 'three.example']);
+    expect(listed(['two.example', 'three.example']), sites, reason: 'The checked website is always among several');
+    expect(listed([]), isEmpty, reason: 'Every website can be unpicked');
+    expect(ContentEnvironment.listedSites(['one.example'], active: 'one.example', chosen: []), ['one.example'], reason: 'A single website has no menu');
+
+    final added = ContentEnvironment.toggling('three.example', listed: ['one.example'], sites: sites, active: 'one.example');
+    expect(added.chosen, ['one.example', 'three.example']);
+    expect(added.check, isNull);
+    final removed = ContentEnvironment.toggling('one.example', listed: ['one.example', 'three.example'], sites: sites, active: 'one.example');
+    expect(removed.chosen, ['three.example']);
+    expect(removed.check, 'three.example', reason: 'Unpicking the checked website checks a listed one');
+    final none = ContentEnvironment.toggling('one.example', listed: ['one.example'], sites: sites, active: 'one.example');
+    expect(none.chosen, isEmpty);
+    expect(none.check, isNull);
+  });
 }

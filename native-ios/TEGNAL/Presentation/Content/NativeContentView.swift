@@ -180,25 +180,33 @@ public struct NativeContentView: View {
     }
 }
 
-/// Switches between the connected comics websites; lists reload for the chosen one.
+/// Picks the connected comics websites Explore lists together, as image mode picks servers.
 struct ComicSiteMenu: View {
     @Environment(AppEnvironment.self) private var env
-    private static let allSites = "*"
     var body: some View {
+        let listed = env.listedComicSites
         Menu {
-            // Every connected website at once, or one of them.
-            Picker(L10n.text("Website"), selection: Binding(get: { env.listsAllComicSites ? Self.allSites : env.mangaSiteAddress }, set: { site in
-                if site == Self.allSites { env.combinesComicSites = true; return }
-                env.combinesComicSites = false
-                env.switchComicsSite(to: site)
-            })) {
-                Text(L10n.text("All Websites")).tag(Self.allSites)
-                ForEach(env.comicSites, id: \.self) { site in Text(site).tag(site) }
+            ForEach(env.comicSites, id: \.self) { site in
+                Toggle(site, isOn: Binding(get: { listed.contains(site) }, set: { selected in
+                    guard selected != env.listedComicSites.contains(site) else { return }
+                    env.toggleListedComicSite(site)
+                }))
             }
         } label: {
             Label(L10n.text("Website"), systemImage: "globe")
         }
+        .menuActionDismissBehavior(.disabled)
+        .accessibilityLabel(L10n.text("Website") + ": " + (listed.isEmpty ? L10n.text("No websites selected") : listed.joined(separator: ", ")))
         .accessibilityIdentifier("content.siteMenu")
+    }
+}
+
+/// Explore with every website unpicked, as image mode shows no servers.
+struct ComicNoSiteSelectionView: View {
+    var body: some View {
+        ContentUnavailableView(L10n.text("No websites selected"), systemImage: "globe",
+            description: Text(L10n.text("Choose websites using the website button above. Your saved works are kept.")))
+            .accessibilityIdentifier("content.noSiteSelection")
     }
 }
 
@@ -380,6 +388,9 @@ private struct GalleryFeedView: View {
                         categoryMenu
                     }
                 }
+                if picksNoSite {
+                    ComicNoSiteSelectionView().padding(.top, 40)
+                } else {
                 ArtworkGrid(mode: .manga, surroundingPadding: 16, topMarginScale: 0.5) { style in
                     let prefetchColumns = style.columns
                     let lookahead = prefetchColumns * 6
@@ -438,6 +449,7 @@ private struct GalleryFeedView: View {
                 } action: { frame in
                     paginationViewport.footer = frame
                     updateFooterVisibility()
+                }
                 }
             }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, 8).padding(.top, 56)
         }
@@ -545,11 +557,11 @@ private struct GalleryFeedView: View {
             await reload(useLaunchPage: initial).value
         }
         .task(id: "\(footerVisible):\(loader.loading):\(loader.ids.count):\(isActive):\(isVisible)") {
-            guard footerVisible, isActive, isVisible, !loader.loading, loader.hasMore, loader.error == nil else { return }
+            guard footerVisible, isActive, isVisible, !picksNoSite, !loader.loading, loader.hasMore, loader.error == nil else { return }
             // Give appended rows time to move the footer below the viewport.
             // Recheck after refresh/resume even when the first IDs stay unchanged.
             do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
-            guard footerVisible, isActive, isVisible, !loader.loading, loader.hasMore, loader.error == nil else { return }
+            guard footerVisible, isActive, isVisible, !picksNoSite, !loader.loading, loader.hasMore, loader.error == nil else { return }
             loader.load(effectiveQuery, reset: false)
         }
         .onAppear {
@@ -588,18 +600,22 @@ private struct GalleryFeedView: View {
         }
     }
 
-    /// What the list shows: the checked website, or every connected one together.
-    private var feedSite: String { env.listsAllComicSites ? "*" + env.comicSites.joined(separator: ",") : env.mangaSiteAddress }
+    /// What the list shows: the checked website, the picked ones together, or none.
+    private var feedSite: String { picksNoSite || env.listsSeveralComicSites ? "*" + env.listedComicSites.joined(separator: ",") : env.mangaSiteAddress }
+
+    /// Every connected website unpicked in the website menu.
+    private var picksNoSite: Bool { env.listedComicSites.isEmpty && !env.comicSites.isEmpty }
 
     @discardableResult private func reload(useLaunchPage: Bool = false) -> Task<Void, Never> {
-        if env.listsAllComicSites { return loader.load(effectiveQuery, reset: true, combinedSites: env.comicSites) }
+        if picksNoSite { return Task {} }
+        if env.listsSeveralComicSites { return loader.load(effectiveQuery, reset: true, combinedSites: env.listedComicSites) }
         return loader.load(effectiveQuery, reset: true, useLaunchPage: useLaunchPage, site: env.mangaSiteAddress)
     }
 
     /// A work from another website in a combined list opens with that website checked, which
     /// leaves the combined list as it is.
     private func showing(_ item: FeedItem, _ action: () -> Void) {
-        if env.listsAllComicSites, item.site != env.mangaSiteAddress { env.switchComicsSite(to: item.site) }
+        if env.listsSeveralComicSites, item.site != env.mangaSiteAddress { env.switchComicsSite(to: item.site) }
         action()
     }
 

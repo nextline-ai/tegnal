@@ -2,6 +2,14 @@ import XCTest
 import Vision
 import UIKit
 
+private extension XCUIElement {
+    func waitForSelected(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline { if isSelected { return true }; RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+        return isSelected
+    }
+}
+
 final class NativeContentUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -556,7 +564,12 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertFalse(element(app, "reader.original").exists, "AI translation stays in the reader")
         capture(app, "AI translation with its mode switch")
         off.tap()
-        XCTAssertTrue(ai.waitForNonExistence(timeout: 5), "Off stops translating and the switch leaves")
+        XCTAssertTrue(off.waitForSelected(timeout: 5), "Off stops translating")
+        XCTAssertTrue(ai.exists, "The switch stays under the page after Off")
+        menu(app)
+        XCTAssertEqual(element(app, "reader.translate").label, "번역 끄기")
+        element(app, "reader.translate").tap()
+        XCTAssertTrue(ai.waitForNonExistence(timeout: 5), "Stop Translating closes the switch")
         menu(app)
         XCTAssertEqual(element(app, "reader.translate").label, "번역")
         element(app, "reader.translate").tap()

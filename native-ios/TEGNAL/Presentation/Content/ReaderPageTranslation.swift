@@ -421,11 +421,9 @@ struct ReaderTranslationModeBar: View {
         }
         .pickerStyle(.segmented).labelsHidden()
         .controlSize(.small)
-        // Narrow enough to fit between Live Text's buttons on the smallest iPhone.
+        // Narrow enough to fit between Live Text's buttons on the smallest iPhone. The segmented
+        // control draws its own capsule; another glass capsule around it read as a second frame.
         .frame(maxWidth: 196)
-        .padding(4)
-        // Interactive glass would take the segments' taps for its own press effect.
-        .modifier(GlassCapsuleModifier())
         .environment(\.colorScheme, .dark)
         .accessibilityIdentifier("reader.translation.mode")
     }

@@ -19,7 +19,7 @@ class ContentEnvironment extends ChangeNotifier {
       _isOnboardingCompleted = browserPreferences.boolean('onboarding_completed') ?? false,
       _useEmbeddedBrowser = browserPreferences.boolean('use_embedded_browser') ?? false,
       _allowsMangaLanguageExceptions = browserPreferences.boolean('manga.languageExceptions') ?? false,
-      _combinesComicSites = browserPreferences.boolean('manga.combinedSites') ?? false,
+      _chosenComicSites = _strings(browserPreferences.object('manga.exploreSites')),
       _defaultTags = browserPreferences.string('manga.defaultTags') ?? '',
       _defaultExcludedTags = browserPreferences.string('manga.defaultExcludedTags') ?? '',
       _mangaBrowseCategory = browserPreferences.string('manga.browseCategory') ?? '',
@@ -118,13 +118,41 @@ class ContentEnvironment extends ChangeNotifier {
   bool get allowsMangaLanguageExceptions => _allowsMangaLanguageExceptions;
   set allowsMangaLanguageExceptions(bool value) => _allowsMangaLanguageExceptions = _store('manga.languageExceptions', value);
 
-  /// Explore and its searches list every connected comics website at once.
-  bool _combinesComicSites;
-  bool get combinesComicSites => _combinesComicSites;
-  set combinesComicSites(bool value) => _combinesComicSites = _store('manga.combinedSites', value);
+  /// The comics websites Explore and its searches list together, picked as image mode picks
+  /// its servers. Null until someone picks.
+  List<String>? _chosenComicSites;
+  static List<String>? _strings(Object? value) => value is List ? value.whereType<String>().toList() : null;
 
-  /// Whether lists show every connected website: chosen, and more than one connected.
-  bool get listsAllComicSites => _combinesComicSites && comicSites.length > 1;
+  /// The connected websites lists show. One picked website, or none picked yet, is the checked
+  /// one, so switching websites elsewhere still changes what is listed; with several picked,
+  /// the checked one is always among them. A single connected website is always listed.
+  List<String> get listedComicSites => listedSites(comicSites, active: _mangaSiteAddress, chosen: _chosenComicSites);
+
+  static List<String> listedSites(List<String> sites, {required String active, List<String>? chosen}) {
+    if (sites.length <= 1) return sites.isEmpty && active.isNotEmpty ? [active] : sites;
+    if (chosen == null || chosen.length == 1) return sites.where((site) => site == active).toList();
+    if (chosen.isEmpty) return const [];
+    return sites.where((site) => chosen.contains(site) || site == active).toList();
+  }
+
+  /// The websites picked after tapping [site] in the menu, and the one to check, if it changes.
+  static ({List<String> chosen, String? check}) toggling(String site, {required List<String> listed, required List<String> sites, required String active}) {
+    final next = listed.toList();
+    if (!next.remove(site)) next.add(site);
+    final chosen = sites.where(next.contains).toList();
+    return (chosen: chosen, check: chosen.isEmpty || chosen.contains(active) ? null : chosen.first);
+  }
+
+  /// Whether lists mix several websites.
+  bool get listsSeveralComicSites => listedComicSites.length > 1;
+
+  /// Adds or removes a website from the listed ones. Removing the checked website checks
+  /// another listed one, so reading and accounts follow what is shown.
+  void toggleListedComicSite(String site) {
+    final next = toggling(site, listed: listedComicSites, sites: comicSites, active: _mangaSiteAddress);
+    _chosenComicSites = _store('manga.exploreSites', next.chosen);
+    if (next.check != null) switchComicsSite(next.check!);
+  }
 
   String _defaultTags;
   String get defaultTags => _defaultTags;

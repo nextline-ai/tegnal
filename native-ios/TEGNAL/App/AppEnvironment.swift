@@ -420,13 +420,42 @@ public final class AppEnvironment: @unchecked Sendable {
         didSet { browserPreferences.set(allowsMangaLanguageExceptions, forKey: "manga.languageExceptions") }
     }
 
-    /// Explore and its searches list every connected comics website at once.
-    var combinesComicSites: Bool {
-        didSet { browserPreferences.set(combinesComicSites, forKey: "manga.combinedSites") }
+    /// The comics websites Explore and its searches list together, picked as image mode picks
+    /// its servers. Nil until someone picks.
+    private var chosenComicSites: [String]? {
+        didSet { browserPreferences.set(chosenComicSites, forKey: "manga.exploreSites") }
     }
 
-    /// Whether lists show every connected website: chosen, and more than one connected.
-    var listsAllComicSites: Bool { combinesComicSites && comicSites.count > 1 }
+    /// The connected websites lists show. One picked website, or none picked yet, is the checked
+    /// one, so switching websites elsewhere still changes what is listed; with several picked,
+    /// the checked one is always among them. A single connected website is always listed.
+    var listedComicSites: [String] { Self.listedSites(comicSites, active: mangaSiteAddress, chosen: chosenComicSites) }
+
+    static func listedSites(_ sites: [String], active: String, chosen: [String]?) -> [String] {
+        guard sites.count > 1 else { return sites.isEmpty && !active.isEmpty ? [active] : sites }
+        guard let chosen, chosen.count != 1 else { return sites.filter { $0 == active } }
+        if chosen.isEmpty { return [] }
+        return sites.filter { chosen.contains($0) || $0 == active }
+    }
+
+    /// The websites picked after tapping `site` in the menu, and the one to check, if it changes.
+    static func toggling(_ site: String, listed: [String], sites: [String], active: String) -> (chosen: [String], check: String?) {
+        var listed = listed
+        if listed.contains(site) { listed.removeAll { $0 == site } } else { listed.append(site) }
+        let chosen = sites.filter(listed.contains)
+        return (chosen, chosen.first.flatMap { chosen.contains(active) ? nil : $0 })
+    }
+
+    /// Whether lists mix several websites.
+    var listsSeveralComicSites: Bool { listedComicSites.count > 1 }
+
+    /// Adds or removes a website from the listed ones. Removing the checked website checks
+    /// another listed one, so reading and accounts follow what is shown.
+    @MainActor func toggleListedComicSite(_ site: String) {
+        let next = Self.toggling(site, listed: listedComicSites, sites: comicSites, active: mangaSiteAddress)
+        chosenComicSites = next.chosen
+        if let check = next.check { switchComicsSite(to: check) }
+    }
 
     var defaultTags: String {
         didSet { browserPreferences.set(defaultTags, forKey: "manga.defaultTags") }
@@ -658,7 +687,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
-        self.combinesComicSites = browserPreferences.bool(forKey: "manga.combinedSites")
+        self.chosenComicSites = browserPreferences.stringArray(forKey: "manga.exploreSites")
         self.defaultTags = browserPreferences.string(forKey: "manga.defaultTags") ?? ""
         self.defaultExcludedTags = browserPreferences.string(forKey: "manga.defaultExcludedTags") ?? ""
         self.mangaBrowseCategory = browserPreferences.string(forKey: "manga.browseCategory") ?? ""

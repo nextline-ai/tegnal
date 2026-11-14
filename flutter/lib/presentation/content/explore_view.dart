@@ -191,18 +191,23 @@ class _ExploreViewState extends State<ExploreView> {
 
   StreamSubscription<int>? _libraryChanges;
 
-  /// What the list shows: the checked website, or every connected one together.
-  String get _feedSite => widget.content.listsAllComicSites ? '*${widget.content.comicSites.join(',')}' : widget.content.mangaSiteAddress;
+  /// What the list shows: the checked website, the picked ones together, or none.
+  String get _feedSite =>
+      _picksNoSite || widget.content.listsSeveralComicSites ? '*${widget.content.listedComicSites.join(',')}' : widget.content.mangaSiteAddress;
+
+  /// Every connected website unpicked in the website menu.
+  bool get _picksNoSite => widget.content.listedComicSites.isEmpty && widget.content.comicSites.isNotEmpty;
   String? _loadedSite;
 
   Future<void> _reload() {
     _loadedSite = _feedSite;
     final content = widget.content;
-    if (content.listsAllComicSites) return _loader.load(_effectiveQuery, reset: true, combinedSites: content.comicSites);
+    if (_picksNoSite) return Future.value();
+    if (content.listsSeveralComicSites) return _loader.load(_effectiveQuery, reset: true, combinedSites: content.listedComicSites);
     return _loader.load(_effectiveQuery, reset: true, site: content.mangaSiteAddress);
   }
 
-  /// Choosing every website, or one, lists again; opening a work from another website in a
+  /// Picking websites lists again; opening a work from another website in a
   /// combined list checks that website and leaves the list as it is.
   void _contentChanged() {
     if (!mounted || !widget.isActive || _loadedSite == null || _loadedSite == _feedSite) return;
@@ -211,7 +216,7 @@ class _ExploreViewState extends State<ExploreView> {
 
   /// A work from another website in a combined list opens with that website checked.
   void _showing(FeedItem item) {
-    if (widget.content.listsAllComicSites && item.site != widget.content.mangaSiteAddress) widget.content.switchComicsSite(item.site);
+    if (widget.content.listsSeveralComicSites && item.site != widget.content.mangaSiteAddress) widget.content.switchComicsSite(item.site);
   }
 
   @override
@@ -244,7 +249,7 @@ class _ExploreViewState extends State<ExploreView> {
     _lastOffset = offset;
     if (visible != null && visible != _searchBarVisible) setState(() => _searchBarVisible = visible);
     final position = _scroll.position;
-    if (position.extentAfter < 600 && _loader.hasMore && !_loader.loading && _loader.error == null) {
+    if (position.extentAfter < 600 && !_picksNoSite && _loader.hasMore && !_loader.loading && _loader.error == null) {
       _loader.load(_effectiveQuery, reset: false);
     }
   }
@@ -301,10 +306,13 @@ class _ExploreViewState extends State<ExploreView> {
     final barBottom = rootContentTop(context, pushed: widget.onBack != null);
     final hidden = _hidden;
     final entries = [
-      for (final item in _loader.items)
-        if (!hidden.contains(item.id)) item,
+      if (!_picksNoSite)
+        for (final item in _loader.items)
+          if (!hidden.contains(item.id)) item,
     ];
-    final saved = {for (final site in {for (final item in entries) item.site}) site: _bookmarked.idsOn(site)};
+    final saved = {
+      for (final site in {for (final item in entries) item.site}) site: _bookmarked.idsOn(site),
+    };
     final title = _query.text.isEmpty ? L10n.text('Explore') : L10n.text('Search Results');
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
@@ -503,6 +511,13 @@ class _ExploreViewState extends State<ExploreView> {
 
   Widget _footer(BuildContext context) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    if (_picksNoSite) {
+      return ContentUnavailable(
+        icon: Symbols.globe,
+        title: L10n.text('No websites selected'),
+        message: L10n.text('Choose websites using the website button above. Your saved works are kept.'),
+      );
+    }
     if (_loader.loading) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -594,42 +609,34 @@ abstract final class _MeasuredWidth {
   }
 }
 
-/// `ComicSiteMenu`: switches between the connected comics websites; lists reload for the chosen one.
+/// `ComicSiteMenu`: picks the connected comics websites Explore lists together, as image
+/// mode picks servers.
 class ComicSiteMenu extends StatelessWidget {
   const ComicSiteMenu({super.key, required this.content});
   final ContentEnvironment content;
-  static const _allSites = '*';
 
   @override
-  Widget build(BuildContext context) => ToolbarGroup(
-    children: [
-      Builder(
-        builder: (context) => ToolbarIconButton(
-          label: L10n.text('Website'),
-          icon: Symbols.globe,
-          onPressed: () async {
-            // Every connected website at once, or one of them.
-            final all = content.listsAllComicSites;
-            final site = await showPullDownMenu<String>(
-              context,
-              anchor: anchorRectOf(context),
-              items: [
-                PullDownMenuItem(value: _allSites, title: L10n.text('All Websites'), checked: all),
-                for (final site in content.comicSites) PullDownMenuItem(value: site, title: site, checked: !all && site == content.mangaSiteAddress),
-              ],
-            );
-            if (site == null) return;
-            if (site == _allSites) {
-              content.combinesComicSites = true;
-              return;
-            }
-            content.combinesComicSites = false;
-            content.switchComicsSite(site);
-          },
+  Widget build(BuildContext context) {
+    final listed = content.listedComicSites;
+    return ToolbarGroup(
+      children: [
+        Builder(
+          builder: (context) => ToolbarIconButton(
+            label: '${L10n.text('Website')}: ${listed.isEmpty ? L10n.text('No websites selected') : listed.join(', ')}',
+            icon: Symbols.globe,
+            onPressed: () async {
+              final site = await showPullDownMenu<String>(
+                context,
+                anchor: anchorRectOf(context),
+                items: [for (final site in content.comicSites) PullDownMenuItem(value: site, title: site, checked: listed.contains(site))],
+              );
+              if (site != null) content.toggleListedComicSite(site);
+            },
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 /// `ContentUnavailableView`: a centered symbol, title, message and optional action.
