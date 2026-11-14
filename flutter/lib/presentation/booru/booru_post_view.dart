@@ -545,6 +545,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
   /// Turns translation mode on or off from the quick menu, as the comics reader does.
   void _translate() {
     if (!ReaderPreferences.continuousTranslation && !_translation.isOn) {
+      if (ReaderPreferences.wantsUnavailableAI) _showToast(L10n.text('This device doesn’t have the on-device AI model, so the standard translation is used.'));
       setState(() {
         _translating = _post;
         _menuVisible = false;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -29,6 +30,9 @@ class ReaderTranslationSession extends ChangeNotifier {
   final _history = <int, List<(String, String)>>{};
   List<ReaderTranslationJob> _queue = [];
   bool _continues = true;
+
+  /// The work's language tag, when known: only its recognizer reads the pages.
+  String? _language;
   bool _running = false;
   int _generation = 0;
   String _target = 'en';
@@ -59,6 +63,8 @@ class ReaderTranslationSession extends ChangeNotifier {
     _on = true;
     _showsOriginal = false;
     message = null;
+    // Loading the model takes seconds; start while the first page is read.
+    unawaited(AITranslationModel.check(prepare: true));
     _target = TranslationLanguage.resolved(TranslationLanguage.preference(preferences));
     notifyListeners();
   }
@@ -83,14 +89,15 @@ class ReaderTranslationSession extends ChangeNotifier {
     followJobs([
       for (var position = index; position < end; position++)
         (index: position, key: gallery.pages[position].hash, load: () => images.data(gallery.pages[position], galleryID: gallery.id)),
-    ]);
+    ], language: gallery.language);
   }
 
   /// Translates these images in order, the one on screen first. Pages of one work read on from
   /// the pages before; [continues] false keeps unrelated images, such as posts, apart.
-  void followJobs(List<ReaderTranslationJob> jobs, {bool continues = true}) {
+  void followJobs(List<ReaderTranslationJob> jobs, {bool continues = true, String? language}) {
     if (!_on) return;
     _continues = continues;
+    _language = language;
     _queue = [
       for (final job in jobs)
         if (!_pages.containsKey(job.key)) job,
@@ -107,7 +114,7 @@ class ReaderTranslationSession extends ChangeNotifier {
       _working.add(job.key);
       notifyListeners();
       try {
-        final regions = await _translate(job);
+        final regions = await _translate(job, generation);
         if (generation == _generation) _pages[job.key] = regions;
       } on TranslationError catch (error) {
         if (error.isQuiet) {
@@ -126,18 +133,29 @@ class ReaderTranslationSession extends ChangeNotifier {
     if (_on && _queue.isNotEmpty && generation != _generation) _run();
   }
 
-  Future<List<TranslatedRegion>> _translate(ReaderTranslationJob job) async {
+  /// Shows the quick translation as soon as it is ready, then the on-device AI model's, which
+  /// reads the page as a whole with the lines of the pages before.
+  Future<List<TranslatedRegion>> _translate(ReaderTranslationJob job, int generation) async {
     final bytes = await job.load();
     final index = job.index;
-    final context = <(String, String)>[
-      if (_continues)
-        for (var previous = (index - 3).clamp(0, index); previous < index; previous++) ...?_history[previous],
-    ];
-    final regions = await ImageTranslation.translate(
-      bytes,
-      _target,
-      context: context.length > contextLimit ? context.sublist(context.length - contextLimit) : context,
-    );
+    final quick = await ImageTranslation.translate(bytes, _target, language: _language);
+    var regions = quick;
+    if (quick.isNotEmpty && generation == _generation && _on) {
+      _pages[job.key] = quick;
+      notifyListeners();
+      if (AITranslationModel.status == AITranslationModel.available) {
+        final context = <(String, String)>[
+          if (_continues)
+            for (var previous = (index - 3).clamp(0, index); previous < index; previous++) ...?_history[previous],
+        ];
+        final lines = await ImageTranslation.refine(
+          [for (final region in quick) region.source ?? region.text],
+          _target,
+          context: context.length > contextLimit ? context.sublist(context.length - contextLimit) : context,
+        );
+        if (lines != null) regions = [for (final (position, region) in quick.indexed) region.withText(lines[position])];
+      }
+    }
     _history[index] = [
       for (final region in regions)
         if (region.source case final source?) (source, region.text),

@@ -28,6 +28,10 @@ class TranslatedRegion {
   });
   final String text;
 
+  /// The same balloon with another translation in it.
+  TranslatedRegion withText(String text) =>
+      TranslatedRegion(text: text, left: left, top: top, width: width, height: height, vertical: vertical, lines: lines, source: source);
+
   /// The original text, remembered so the next page can read on from it.
   final String? source;
   final double left, top, width, height;
@@ -43,6 +47,7 @@ class TranslatedRegion {
 /// translation run on the phone. Translation models download from Google once per language pair.
 abstract final class ImageTranslation {
   static const _channel = MethodChannel('work.nextline.tegnal/translation');
+  static var _files = 0;
 
   /// Supported target languages with names in the app's language, sorted by name.
   static Future<List<(String, String)>> languages() async {
@@ -58,20 +63,20 @@ abstract final class ImageTranslation {
     }
   }
 
-  /// [context] holds lines of the pages before, original and translated, so the on-device model
-  /// can keep speakers and names consistent.
-  static Future<List<TranslatedRegion>> translate(Uint8List image, String target, {List<(String, String)> context = const []}) async {
+  /// The quick translation: the page is read and translated on the device at once. [language] is
+  /// the work's language tag when known, such as `japanese`: only its recognizer reads the page,
+  /// and a work already in the target language is left as drawn.
+  static Future<List<TranslatedRegion>> translate(Uint8List image, String target, {String? language}) async {
     final folder = Directory('${(await getApplicationCacheDirectory()).path}/translation');
     await folder.create(recursive: true);
-    final file = File('${folder.path}/page');
+    // Each request its own file, so two pages read at once never trade images.
+    final file = File('${folder.path}/page-${DateTime.now().microsecondsSinceEpoch}-${_files++}');
     await file.writeAsBytes(image, flush: true);
     try {
       final result = await _channel.invokeMapMethod<Object?, Object?>('translate', {
         'path': file.path,
         'target': target,
-        'context': [
-          for (final (source, translation) in context) {'source': source, 'translation': translation},
-        ],
+        if (language != null && language.isNotEmpty) 'language': language,
       });
       return [
         for (final item in (result?['regions'] as List?) ?? const [])
@@ -101,6 +106,51 @@ abstract final class ImageTranslation {
     } finally {
       if (await file.exists()) await file.delete();
     }
+  }
+
+  /// The on-device AI model's translation of a page's [lines], reading on from [context], the
+  /// lines of the pages before; null when the model cannot give one in time.
+  static Future<List<String>?> refine(List<String> lines, String target, {List<(String, String)> context = const []}) async {
+    if (lines.isEmpty) return null;
+    try {
+      final result = await _channel.invokeListMethod<Object?>('refine', {
+        'lines': lines,
+        'target': target,
+        'context': [
+          for (final (source, translation) in context) {'source': source, 'translation': translation},
+        ],
+      });
+      final texts = [
+        for (final item in result ?? const [])
+          if (item is String) item,
+      ];
+      return texts.length == lines.length ? texts : null;
+    } on Object {
+      return null;
+    }
+  }
+}
+
+/// `AITranslationModel`: whether this device has the on-device AI model AI translation needs.
+/// Without it AI translation cannot be turned on, and Translate uses the standard translation.
+abstract final class AITranslationModel {
+  static const available = 'available', downloadable = 'downloadable', downloading = 'downloading', unavailable = 'unavailable';
+  static const _channel = MethodChannel('work.nextline.tegnal/translation');
+
+  /// The last answer; unavailable until the device has been asked.
+  static String status = unavailable;
+
+  /// The model is installed, or the device is getting it.
+  static bool get usable => status != unavailable;
+
+  /// Asks the device; [prepare] starts a download it offers and loads an installed model.
+  static Future<String> check({bool prepare = false}) async {
+    try {
+      status = await _channel.invokeMethod<String>('aiStatus', {'prepare': prepare}) ?? unavailable;
+    } on Object {
+      status = unavailable;
+    }
+    return status;
   }
 }
 

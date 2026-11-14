@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -34,6 +35,7 @@ import 'presentation/booru/booru_web_page.dart';
 import 'presentation/content/content_browser_transport.dart';
 import 'core/content/reading_queue.dart';
 import 'presentation/content/page_image_store.dart';
+import 'presentation/content/image_translation.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
 import 'core/content/recent_works.dart';
@@ -162,6 +164,8 @@ Future<AppServices> _launch() async {
   final preferences = await PerfTrace.span('launch preferences', AppPreferences.load);
   ContentPreferences.defaults = preferences.defaults;
   ReaderPreferences.install(preferences);
+  // Whether AI translation can be on; asked early, as Translate needs the answer.
+  unawaited(AITranslationModel.check());
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');

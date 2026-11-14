@@ -781,6 +781,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
   /// Turns translation mode on or off from the quick menu.
   void _translate() {
     if (!ReaderPreferences.continuousTranslation && !_translation.isOn) {
+      if (ReaderPreferences.wantsUnavailableAI) _showToast(L10n.text('This device doesn’t have the on-device AI model, so the standard translation is used.'));
       setState(() {
         _translating = _current;
         _menuVisible = false;
@@ -1097,6 +1098,31 @@ class ReaderSettingsView extends StatefulWidget {
 class _ReaderSettingsViewState extends State<ReaderSettingsView> {
   Preferences get _defaults => widget.preferences;
 
+  @override
+  void initState() {
+    super.initState();
+    // Whether this device has the model AI translation needs, asked again as it may have arrived.
+    if (!widget.booru) AITranslationModel.check().then((_) => mounted ? setState(() {}) : null);
+  }
+
+  /// AI translation turns on only where the on-device AI model is; elsewhere it says why.
+  Future<void> _setAITranslation(bool on) async {
+    if (on && !AITranslationModel.usable) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => TegnalAlertDialog(
+          title: Text(L10n.text('AI Translation Not Available')),
+          content: Text(
+            L10n.text('This device doesn’t have the on-device AI model that AI translation needs. Translate uses the standard on-device translation.'),
+          ),
+          actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+        ),
+      );
+      return;
+    }
+    _set(ReaderPreferences.continuousTranslationKey, on);
+  }
+
   void _set(String key, Object? value) {
     setState(() => _defaults.set(key, value));
     widget.onChanged?.call();
@@ -1225,13 +1251,24 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
             FormSection(
               prominentHeader: true,
               header: Text(L10n.text('Translation')),
+              footer: widget.booru
+                  ? null
+                  : switch (AITranslationModel.status) {
+                      AITranslationModel.unavailable => Text(
+                        L10n.text(
+                          'This device doesn’t have the on-device AI model that AI translation needs. Translate uses the standard on-device translation.',
+                        ),
+                      ),
+                      AITranslationModel.available => null,
+                      _ => Text(L10n.text('The on-device AI model is downloading. Until it is ready, AI translation shows the standard translation.')),
+                    },
               children: [
                 if (!widget.booru)
                   _ToggleRow(
                     title: L10n.text('AI Translation (Beta)'),
-                    help: 'Keeps translation on while you turn pages, and the on-device AI reads each page with the lines before it. Vertical or small text may not be recognized; turn this off to use the standard translation.',
-                    value: _bool(ReaderPreferences.continuousTranslationKey, false),
-                    onChanged: (value) => _set(ReaderPreferences.continuousTranslationKey, value),
+                    help: 'Keeps translation on while you turn pages. Each page shows the standard translation at once, then the on-device AI’s reading of the whole page with the lines before it replaces it. Turn this off to translate one page at a time.',
+                    value: _bool(ReaderPreferences.continuousTranslationKey, true) && AITranslationModel.usable,
+                    onChanged: _setAITranslation,
                   ),
                 _PickerRow<TranslationBackground>(
                   title: L10n.text('AI Translation Background'),

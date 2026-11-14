@@ -8,6 +8,7 @@ import '../../core/content/manga_urls.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import '../../core/taste/taste_models.dart';
+import 'image_translation.dart';
 
 /// The reader's two preference stores: comics options live in the standard
 /// defaults, image-mode options in their own store (`ReaderPreferences`).
@@ -22,9 +23,13 @@ abstract final class ReaderPreferences {
 
   static const continuousTranslationKey = 'reader.continuousTranslation';
 
-  /// Off by default: Translate shows one translated page. On, translation stays on while pages
-  /// turn and the on-device model reads each page with the ones before it.
-  static bool get continuousTranslation => defaults.boolean(continuousTranslationKey) ?? false;
+  /// On by default where the device has the on-device AI model: translation stays on while pages
+  /// turn, a quick translation shows first and the model's reading of the page replaces it. Without
+  /// the model it cannot be on, and Translate shows the standard translation of one page.
+  static bool get continuousTranslation => (defaults.boolean(continuousTranslationKey) ?? true) && AITranslationModel.usable;
+
+  /// Turned on before, on a device that turns out not to have the model.
+  static bool get wantsUnavailableAI => defaults.boolean(continuousTranslationKey) == true && !AITranslationModel.usable;
 
   /// On by default: a work with a version in the preferred language shows a banner in the viewer.
   static const versionBannerKey = 'reader.versionBanner';

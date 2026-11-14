@@ -10,6 +10,7 @@ import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/presentation/content/image_translation.dart';
 import 'package:tegnal/presentation/content/page_image_store.dart';
+import 'package:tegnal/presentation/content/reader_models.dart';
 import 'package:tegnal/presentation/content/reader_translation.dart';
 
 void main() {
@@ -18,16 +19,26 @@ void main() {
   const paths = MethodChannel('plugins.flutter.io/path_provider');
   late Directory cache;
   late List<Map<Object?, Object?>> calls;
+  late List<Map<Object?, Object?>> refines;
   late Map<int, String> failures;
+  late String aiStatus;
 
   setUp(() {
     cache = Directory.systemTemp.createTempSync('reader-translation');
     calls = [];
+    refines = [];
     failures = {};
+    aiStatus = AITranslationModel.available;
+    AITranslationModel.status = AITranslationModel.available;
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(paths, (call) async => cache.path);
     messenger.setMockMethodCallHandler(translation, (call) async {
       final arguments = call.arguments as Map<Object?, Object?>;
+      if (call.method == 'aiStatus') return aiStatus;
+      if (call.method == 'refine') {
+        refines.add(arguments);
+        return ['AI ${refines.length}'];
+      }
       calls.add(arguments);
       final page = calls.length;
       if (failures[page] case final code?) throw PlatformException(code: code);
@@ -52,7 +63,7 @@ void main() {
     }
   }
 
-  test('translation mode follows the reader and carries earlier lines along', () async {
+  test('translation mode shows the quick translation, then the AI reading with earlier lines', () async {
     final source = FixtureContentSource();
     final gallery = await source.gallery(1001);
     final images = PageImageStore(source: source, allowsPrefetch: () => false);
@@ -64,9 +75,11 @@ void main() {
     session.follow(gallery, index: 0, count: 1, images: images);
     await settle(session);
     expect(calls, hasLength(2), reason: 'The visible page, then the next');
-    expect(session.balloons(gallery.pages[0].hash)?.single.text, '번역 1');
-    expect(calls[1]['context'], [
-      {'source': 'line 1', 'translation': '번역 1'},
+    expect(calls.first['language'], gallery.language, reason: "The work's language picks the recognizer");
+    expect(session.balloons(gallery.pages[0].hash)?.single.text, 'AI 1', reason: "The AI model's reading replaces the quick translation");
+    expect(refines.first['lines'], ['line 1']);
+    expect(refines[1]['context'], [
+      {'source': 'line 1', 'translation': 'AI 1'},
     ], reason: 'The next page reads on from the one before');
 
     session.toggleOriginal();
@@ -108,5 +121,19 @@ void main() {
     expect(PreferredWorkLanguage.systemLanguage('ja'), 'japanese');
     expect(PreferredWorkLanguage.systemLanguage('en-US'), 'english');
     expect(PreferredWorkLanguage.systemLanguage('fr_FR'), 'english', reason: 'Other system languages fall back to English');
+  });
+
+  test('without the AI model the quick translation stays and AI translation cannot be on', () async {
+    aiStatus = AITranslationModel.unavailable;
+    AITranslationModel.status = AITranslationModel.unavailable;
+    final source = FixtureContentSource();
+    final gallery = await source.gallery(1001);
+    final images = PageImageStore(source: source, allowsPrefetch: () => false);
+    final session = ReaderTranslationSession(MemoryPreferences())..toggle();
+    session.follow(gallery, index: 0, count: 1, images: images);
+    await settle(session);
+    expect(session.balloons(gallery.pages[0].hash)?.single.text, '번역 1');
+    expect(refines, isEmpty);
+    expect(ReaderPreferences.continuousTranslation, isFalse, reason: 'Off without the model, whatever was chosen');
   });
 }

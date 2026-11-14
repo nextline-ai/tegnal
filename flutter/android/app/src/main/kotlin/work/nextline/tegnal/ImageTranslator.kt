@@ -26,21 +26,30 @@ import com.google.mlkit.vision.text.TextRecognizerOptionsInterface
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The native app's image translation on Android: ML Kit reads the text on the device, names its
- * language, and translates it on the device. Translation models download from Google once per
- * language pair; no image or text leaves the device.
+ * language, and translates it on the device at once; on devices with Gemini Nano the AI model's
+ * reading of the whole page then replaces it, as on iOS. Translation models download from Google
+ * once per language pair; no image or text leaves the device.
  */
 object ImageTranslator {
     private const val CHANNEL = "work.nextline.tegnal/translation"
     private val executor = Executors.newSingleThreadExecutor()
+    /** The AI model works apart from reading pages, so a slow answer never holds up the next page. */
+    private val modelExecutor = Executors.newSingleThreadExecutor()
+    private val statusExecutor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var context: Context? = null
 
@@ -57,17 +66,43 @@ object ImageTranslator {
                         },
                     )
                 }
-                "translate" -> {
-                    val path = call.argument<String>("path")
+                // Whether the on-device AI model can be used: "available", "downloadable",
+                // "downloading" or "unavailable". `prepare` starts a download the device offers and
+                // loads an installed model, so the first page does not wait for it.
+                "aiStatus" -> {
+                    val prepare = call.argument<Boolean>("prepare") == true
+                    statusExecutor.execute {
+                        val status = PageModel.status(prepare)
+                        main.post { result.success(status) }
+                    }
+                }
+                // The on-device AI model's translation of a page's lines, or null when it cannot give
+                // one in time; the quick translation already shown then stays.
+                "refine" -> {
+                    val lines = call.argument<List<String>>("lines").orEmpty()
                     val target = call.argument<String>("target")
                     // Lines of the pages before, original and translated, so a page reads on from the last.
                     val context = call.argument<List<Map<String, String>>>("context").orEmpty()
                         .mapNotNull { pair -> pair["source"]?.let { source -> pair["translation"]?.let { source to it } } }
+                    if (target == null) {
+                        result.error("invalid", "A target language is required.", null)
+                    } else {
+                        modelExecutor.execute {
+                            val outcome = runCatching { PageModel.translate(lines, target, context) }
+                            main.post { result.success(outcome.getOrNull()) }
+                        }
+                    }
+                }
+                "translate" -> {
+                    val path = call.argument<String>("path")
+                    val target = call.argument<String>("target")
+                    // The work's language tag when known, such as "japanese": only its recognizer reads the page.
+                    val language = call.argument<String>("language")
                     if (path == null || target == null) {
                         result.error("invalid", "An image and a target language are required.", null)
                     } else {
                         executor.execute {
-                            val outcome = runCatching { translate(File(path), target, context) }
+                            val outcome = runCatching { translate(File(path), target, language) }
                             main.post {
                                 outcome.fold(
                                     onSuccess = { result.success(it) },
@@ -89,10 +124,46 @@ object ImageTranslator {
 
     /**
      * Gemini Nano through Android AICore translates a whole page at once, so speakers keep their
-     * voice and a sentence split across balloons reads as one. It runs on the device and is used
-     * only where the model is already installed; elsewhere ML Kit Translate takes over.
+     * voice and a sentence split across balloons reads as one. It runs on the device, on the devices
+     * that have it; one client serves every page, and its model is loaded before the first one.
      */
     private object PageModel {
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private var client: com.google.mlkit.genai.prompt.GenerativeModel? = null
+        @Volatile private var downloading = false
+        /** Longest a page waits for the model before keeping the quick translation, as on iOS. */
+        private const val LIMIT = 25_000L
+
+        @Synchronized private fun model() = client ?: Generation.getClient().also { client = it }
+
+        fun status(prepare: Boolean): String {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return "unavailable"
+            return try {
+                runBlocking {
+                    val model = model()
+                    when (model.checkStatus()) {
+                        FeatureStatus.AVAILABLE -> {
+                            if (prepare) scope.launch { runCatching { model.warmup() } }
+                            "available"
+                        }
+                        FeatureStatus.DOWNLOADABLE -> {
+                            if (prepare && !downloading) {
+                                downloading = true
+                                scope.launch {
+                                    try { model.download().collect { } } catch (_: Throwable) { } finally { downloading = false }
+                                }
+                            }
+                            if (downloading) "downloading" else "downloadable"
+                        }
+                        FeatureStatus.DOWNLOADING -> "downloading"
+                        else -> "unavailable"
+                    }
+                }
+            } catch (error: Throwable) {
+                "unavailable"
+            }
+        }
+
         fun translate(lines: List<String>, target: String, context: List<Pair<String, String>>): List<String>? {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || lines.isEmpty()) return null
             val language = java.util.Locale.forLanguageTag(target).getDisplayLanguage(java.util.Locale.ENGLISH)
@@ -110,17 +181,10 @@ object ImageTranslator {
             }
             return try {
                 runBlocking {
-                    withTimeoutOrNull(30_000) {
-                        val model = Generation.getClient()
-                        try {
-                            if (model.checkStatus() != FeatureStatus.AVAILABLE) {
-                                null
-                            } else {
-                                parse(model.generateContent(prompt).candidates.firstOrNull()?.text.orEmpty(), lines.size)
-                            }
-                        } finally {
-                            model.close()
-                        }
+                    withTimeoutOrNull(LIMIT) {
+                        val model = model()
+                        if (model.checkStatus() != FeatureStatus.AVAILABLE) null
+                        else parse(model.generateContent(prompt).candidates.firstOrNull()?.text.orEmpty(), lines.size)
                     }
                 }
             } catch (error: Throwable) {
@@ -146,21 +210,30 @@ object ImageTranslator {
     /** One text block with the language it is written in, and its words when it is one line. */
     private class Block(val box: Rect, val text: String, val language: String, val lines: Int, val words: List<Pair<Rect, String>> = emptyList())
 
-    private fun translate(file: File, target: String, context: List<Pair<String, String>>): Map<String, Any?> {
+    /** ML Kit's language code for a work's language tag, such as "japanese", when it has one. */
+    private fun workLanguage(tag: String?): String? {
+        val name = tag?.trim()?.lowercase().orEmpty()
+        if (name.isEmpty()) return null
+        val locale = java.util.Locale.getAvailableLocales().firstOrNull { it.getDisplayLanguage(java.util.Locale.ENGLISH).lowercase() == name }
+        return locale?.language?.let(TranslateLanguage::fromLanguageTag)
+    }
+
+    /** Reads a page and translates it with ML Kit at once: the quick translation shown first. */
+    private fun translate(file: File, target: String, languageTag: String?): Map<String, Any?> {
+        val targetLanguage = TranslateLanguage.fromLanguageTag(target)
+            ?: throw TranslationFailure("unsupportedLanguage", "This translation language is not available.")
+        val known = workLanguage(languageTag)
+        // A work already in the target language stays as drawn, without reading it.
+        if (known == targetLanguage) throw TranslationFailure("alreadyTarget", "This image is already in the translation language.")
         val bitmap = decode(file) ?: throw TranslationFailure("unsupported", "The image could not be read.")
         try {
-            val targetLanguage = TranslateLanguage.fromLanguageTag(target)
-                ?: throw TranslationFailure("unsupportedLanguage", "This translation language is not available.")
-            val blocks = recognize(InputImage.fromBitmap(bitmap, 0))
+            val blocks = recognize(InputImage.fromBitmap(bitmap, 0), known)
             if (blocks.isEmpty()) throw TranslationFailure("noText", "No text was found in this image.")
             // Text already in the target language stays as drawn; only the rest is covered.
             val foreign = blocks.filter { it.language != targetLanguage }
             if (foreign.isEmpty()) throw TranslationFailure("alreadyTarget", "This image is already in the translation language.")
             val translated = HashMap<Block, String>()
-            PageModel.translate(foreign.map { it.text }, target, context)?.let { lines ->
-                foreign.zip(lines).forEach { (block, line) -> translated[block] = line }
-            }
-            for ((source, group) in foreign.filter { it !in translated }.groupBy { it.language }) {
+            for ((source, group) in foreign.groupBy { it.language }) {
                 val translator = Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(targetLanguage).build())
                 try {
                     try {
@@ -209,7 +282,21 @@ object ImageTranslator {
      * both read the page: Korean blocks come from the Korean reading, the rest from the Japanese
      * one where no Korean block covers it. Han text with no kana anywhere is read again as Chinese.
      */
-    private fun recognize(image: InputImage): List<Block> {
+    private fun recognize(image: InputImage, known: String? = null): List<Block> {
+        // A work whose language is known is read once, by the recognizer for its script.
+        if (known != null) {
+            val options: TextRecognizerOptionsInterface = when (known) {
+                TranslateLanguage.JAPANESE -> JapaneseTextRecognizerOptions.Builder().build()
+                TranslateLanguage.KOREAN -> KoreanTextRecognizerOptions.Builder().build()
+                TranslateLanguage.CHINESE -> ChineseTextRecognizerOptions.Builder().build()
+                else -> TextRecognizerOptions.DEFAULT_OPTIONS
+            }
+            val pieces = read(image, options).textBlocks.filter { it.boundingBox != null && it.text.isNotBlank() }.flatMap { block ->
+                val language = if (cjk(known) || known == TranslateLanguage.KOREAN) language(block.text, known == TranslateLanguage.CHINESE) else known
+                block.lines.flatMap { line -> segments(line, language) }
+            }
+            return balloons(separate(pieces).filter { it.text.isNotBlank() && it.text.any(Char::isLetter) })
+        }
         val japanese = read(image, JapaneseTextRecognizerOptions.Builder().build())
         val korean = read(image, KoreanTextRecognizerOptions.Builder().build())
         val koreanBlocks = korean.textBlocks.filter { block -> block.boundingBox != null && block.text.any(::isHangul) }
