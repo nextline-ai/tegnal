@@ -61,7 +61,7 @@ abstract final class SiteAccountActions {
     do {
       final (ids, cursor) = await favorites(after: next);
       for (final id in ids) {
-        if (database.getWork(id) != null) continue;
+        if (database.getWork(id, site: ComicSites.active) != null) continue;
         final work = preview?.call(id);
         database.upsertWork(
           galleryId: id,

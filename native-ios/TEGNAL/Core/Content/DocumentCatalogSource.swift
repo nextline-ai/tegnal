@@ -319,12 +319,17 @@ actor DocumentCatalogSource {
         return NativeGallery(id: id, title: NativeGallery.decodeEntities(title(object, id: id, language: language, translated: languages.contains("translated"))),
             artists: pairs.filter { $0[0] == "artist" }.map { $0[1] },
             language: language, type: categoryNames[category] ?? "",
-            tags: pairs.filter { $0[0] != "language" && $0[0] != "artist" }.map { localNamespace($0[0]) + ":" + $0[1] }, pages: pages)
+            tags: pairs.filter { $0[0] != "language" && $0[0] != "artist" }.map { localNamespace($0[0]) + ":" + $0[1] }, pages: pages,
+            listedTitles: listedTitles(object), listedPageCount: (object["files"] as? [Any])?.count)
     }
 
     private nonisolated static let languageQualifiers: Set<String> = ["translated", "rewrite"]
 
     /// The original-script title is kept even on translations, so it only leads for works still in Japanese.
+    nonisolated static func listedTitles(_ object: [String: Any]) -> [String] {
+        ["title", "title_jpn"].compactMap { (object[$0] as? String).map(NativeGallery.decodeEntities) }.filter { !$0.isEmpty }
+    }
+
     nonisolated static func title(_ object: [String: Any], id: Int64, language: String, translated: Bool) -> String {
         let main = (object["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let original = (object["title_jpn"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

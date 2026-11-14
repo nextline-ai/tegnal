@@ -16,6 +16,8 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
 
     private final class Download {
         let limit: Int
+        /// The website the request was made for; the delegate answers for it.
+        let scope = SiteScope.site
         let continuation: CheckedContinuation<(Data, HTTPURLResponse), Error>
         var response: HTTPURLResponse?
         var data = Data()
@@ -73,7 +75,8 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
-        if request.url.map(Self.allows) == true { completionHandler(request); return }
+        let scope = lock.withLock { requests[task.taskIdentifier]?.scope }
+        if SiteScope.$site.withValue(scope, operation: { request.url.map(Self.allows) == true }) { completionHandler(request); return }
         if let origin = task.originalRequest?.url, let target = request.url {
             lock.withLock {
                 if foreignRedirects.count > 16 { foreignRedirects.removeAll() }
@@ -227,7 +230,7 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         guard let download = lock.withLock({ requests[dataTask.taskIdentifier] }), let http = response as? HTTPURLResponse else {
             finish(dataTask, error: ContentError.invalidResponse); completionHandler(.cancel); return
         }
-        SiteAccount.store(http)
+        SiteScope.$site.withValue(download.scope) { SiteAccount.store(http) }
         guard [200, 206, 416].contains(http.statusCode) else {
             finish(dataTask, error: ContentError.unavailable(http.statusCode)); completionHandler(.cancel); return
         }

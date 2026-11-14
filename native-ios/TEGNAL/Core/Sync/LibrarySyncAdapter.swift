@@ -66,8 +66,11 @@ struct LibrarySyncAdapter {
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],
         "manga.folders": ["sync_id", "name", "description", "color", "sort_order", "created_at", "source_group_id"],
-        "manga.works": ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page", "site"],
-        "manga.folder_works": ["folder_id", "work_id", "added_at"],
+        "manga.works": workColumns,
+        // Further works under a number already saved from another website. Older versions,
+        // which keep one work per number, leave this table alone.
+        "manga.work_variants": workColumns,
+        "manga.folder_works": ["folder_id", "work_id", "added_at", "work_site"],
         "manga.artists": ["name", "kind", "note", "bookmarked_at"],
         "manga.search_history": ["query", "used_at"], "manga.saved_searches": ["query"],
         "booru.challenges": ["id", "payload"],
@@ -76,6 +79,7 @@ struct LibrarySyncAdapter {
         "booru.history": ["server_id", "query", "used_at"], "booru.saved_tags": ["server_id", "name", "kind"],
         "booru.settings": ["key", "value"]
     ]
+    static let workColumns = ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page", "site"]
     /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
     static let keepsKnownValue: Set<String> = ["site"]
 
@@ -99,11 +103,23 @@ struct LibrarySyncAdapter {
             var result: [LibrarySyncRow] = []
             for (table, columns) in Self.columns where table.hasPrefix("manga.") {
                 let local = String(table.dropFirst(6))
-                let sql = local == "folder_works"
-                    ? "SELECT f.sync_id AS folder_id, w.gallery_id AS work_id, fw.added_at FROM folder_works fw JOIN folders f ON f.id = fw.folder_id JOIN works w ON w.id = fw.work_id"
-                    : "SELECT \(columns.joined(separator: ",")) FROM \(local)"
+                let primary = WorkIdentity.primaryCondition
+                let sql = switch local {
+                // A link names its work by number, as older versions read it, and by website.
+                case "folder_works": """
+                    SELECT f.sync_id AS folder_id, CASE WHEN \(primary) THEN w.gallery_id ELSE w.gallery_id || '@' || w.site END AS work_id,
+                           fw.added_at, w.site AS work_site
+                    FROM folder_works fw JOIN folders f ON f.id = fw.folder_id JOIN works w ON w.id = fw.work_id
+                    """
+                case "works": "SELECT \(columns.map { "w." + $0 }.joined(separator: ",")) FROM works w WHERE \(primary)"
+                case "work_variants": "SELECT \(columns.map { "w." + $0 }.joined(separator: ",")) FROM works w WHERE NOT (\(primary))"
+                default: "SELECT \(columns.joined(separator: ",")) FROM \(local)"
+                }
                 result += try Row.fetchAll(db, sql: sql).map { row in
-                    LibrarySyncRow(table: table, values: Dictionary(uniqueKeysWithValues: columns.map { ($0, SyncValue(row[$0] as DatabaseValue)) }))
+                    var values = Dictionary(uniqueKeysWithValues: columns.map { ($0, SyncValue(row[$0] as DatabaseValue)) })
+                    // Links to a work whose website is unknown stay as older versions wrote them.
+                    if local == "folder_works", values["work_site"] == .null { values["work_site"] = nil }
+                    return LibrarySyncRow(table: table, values: values)
                 }
             }
             return result
@@ -186,19 +202,23 @@ struct LibrarySyncAdapter {
         let values = Array(changes.values)
         try manga.dbWriter.write { db in
             // Remove dependent links before parents; never replace a whole database.
-            for table in ["folder_works", "artists", "works", "folders", "search_history", "saved_searches", "library_order"] {
+            for table in ["folder_works", "artists", "work_variants", "works", "folders", "search_history", "saved_searches", "library_order"] {
                 for change in values where change.deleted && change.row.table == "manga." + table {
                     var row = change.row
+                    if table == "works" || table == "work_variants" {
+                        if let work = try Self.localWork(row.values, variant: table == "work_variants", db) { try db.execute(sql: "DELETE FROM works WHERE id = ?", arguments: [work.id]) }
+                        continue
+                    }
                     if table == "folders", row.values["sync_id"]?.string == "unsorted",
                        try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM folder_works JOIN folders ON folders.id = folder_works.folder_id WHERE folders.sync_id = 'unsorted')") == true { continue }
                     if table == "folder_works" {
-                        guard let folder = try localFolder(row.values["folder_id"], db), let work = try localWork(row.values["work_id"], db) else { continue }
-                        row.values["folder_id"] = .integer(folder); row.values["work_id"] = .integer(work)
+                        guard let folder = try localFolder(row.values["folder_id"], db), let work = try localWork(row.values["work_id"], site: row.values["work_site"], db) else { continue }
+                        row.values["folder_id"] = .integer(folder); row.values["work_id"] = .integer(work); row.values["work_site"] = nil
                     }
                     try Self.delete(row, db: db)
                 }
             }
-            for table in ["folders", "works", "artists", "folder_works", "search_history", "saved_searches", "library_order"] {
+            for table in ["folders", "works", "work_variants", "artists", "folder_works", "search_history", "saved_searches", "library_order"] {
                 for change in values.sorted(by: { $0.row.key < $1.row.key }) where !change.deleted && change.row.table == "manga." + table {
                     var row = change.row
                     if table == "folders", let uid = row.values["sync_id"]?.string, let name = row.values["name"]?.string {
@@ -206,9 +226,10 @@ struct LibrarySyncAdapter {
                             row.values["name"] = .text(name + " (" + String(uid.prefix(8)) + ")")
                         }
                     }
+                    if table == "works" || table == "work_variants" { try Self.applyWork(row.values, variant: table == "work_variants", db: db); continue }
                     if table == "folder_works" {
-                        guard let folder = try localFolder(row.values["folder_id"], db), let work = try localWork(row.values["work_id"], db) else { continue }
-                        row.values["folder_id"] = .integer(folder); row.values["work_id"] = .integer(work)
+                        guard let folder = try localFolder(row.values["folder_id"], db), let work = try localWork(row.values["work_id"], site: row.values["work_site"], db) else { continue }
+                        row.values["folder_id"] = .integer(folder); row.values["work_id"] = .integer(work); row.values["work_site"] = nil
                     }
                     try Self.upsert(row, db: db)
                 }
@@ -353,9 +374,44 @@ struct LibrarySyncAdapter {
         guard let uid = value?.string else { return nil }
         return try Int64.fetchOne(db, sql: "SELECT id FROM folders WHERE sync_id = ?", arguments: [uid])
     }
-    private func localWork(_ value: SyncValue?, _ db: Database) throws -> Int64? {
-        guard let id = value?.integer else { return nil }
-        return try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [id])
+    /// A link's work: its number (as text with its website, for further works under one
+    /// number) and the website, which older versions leave out.
+    private func localWork(_ value: SyncValue?, site: SyncValue?, _ db: Database) throws -> Int64? {
+        var number = value?.integer, website = site?.string
+        if number == nil, let text = value?.string, let separator = text.firstIndex(of: "@") {
+            number = Int64(text[..<separator]); website = website ?? String(text[text.index(after: separator)...])
+        }
+        guard let number else { return nil }
+        let rows = try WorkIdentity.rows(db, galleryId: number)
+        if let website, !website.isEmpty { return WorkIdentity.pick(rows, site: website)?.id }
+        // A link without a website: to the work whose website is unknown, as newer versions send
+        // it, else to the one the number alone names, as older versions do.
+        return (rows.first { $0.site == nil } ?? WorkIdentity.primary(rows))?.id
+    }
+
+    /// The saved work a synced work row names: the one from its website (one whose website is
+    /// unknown takes it). Without a website, a number row names the one whose website is
+    /// unknown, else the one the number alone names, as older versions mean it; a further
+    /// work row only the one whose website is unknown.
+    private static func localWork(_ values: [String: SyncValue], variant: Bool, _ db: Database) throws -> Work? {
+        guard let number = values["gallery_id"]?.integer else { return nil }
+        let rows = try WorkIdentity.rows(db, galleryId: number)
+        if let site = values["site"]?.string, !site.isEmpty { return WorkIdentity.pick(rows, site: site) }
+        return rows.first { $0.site == nil } ?? (variant ? nil : WorkIdentity.primary(rows))
+    }
+
+    private static func applyWork(_ values: [String: SyncValue], variant: Bool, db: Database) throws {
+        guard values["gallery_id"]?.integer != nil else { throw BooruError.invalidResponse }
+        let fields = workColumns.filter { values[$0] != nil }
+        if let work = try localWork(values, variant: variant, db), let id = work.id {
+            let updates = fields.filter { $0 != "gallery_id" }
+            guard !updates.isEmpty else { return }
+            let sql = "UPDATE works SET " + updates.map { keepsKnownValue.contains($0) ? "\($0) = COALESCE(?, \($0))" : "\($0) = ?" }.joined(separator: ",") + " WHERE id = ?"
+            try db.execute(sql: sql, arguments: StatementArguments(updates.map { values[$0]!.databaseValue } + [id]))
+        } else {
+            let sql = "INSERT INTO works (\(fields.joined(separator: ","))) VALUES (\(fields.map { _ in "?" }.joined(separator: ",")))"
+            try db.execute(sql: sql, arguments: StatementArguments(fields.map { values[$0]!.databaseValue }))
+        }
     }
     private static func upsert(_ incoming: LibrarySyncRow, db: Database) throws {
         var row = incoming

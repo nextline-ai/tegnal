@@ -420,6 +420,14 @@ public final class AppEnvironment: @unchecked Sendable {
         didSet { browserPreferences.set(allowsMangaLanguageExceptions, forKey: "manga.languageExceptions") }
     }
 
+    /// Explore and its searches list every connected comics website at once.
+    var combinesComicSites: Bool {
+        didSet { browserPreferences.set(combinesComicSites, forKey: "manga.combinedSites") }
+    }
+
+    /// Whether lists show every connected website: chosen, and more than one connected.
+    var listsAllComicSites: Bool { combinesComicSites && comicSites.count > 1 }
+
     var defaultTags: String {
         didSet { browserPreferences.set(defaultTags, forKey: "manga.defaultTags") }
     }
@@ -650,6 +658,7 @@ public final class AppEnvironment: @unchecked Sendable {
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
+        self.combinesComicSites = browserPreferences.bool(forKey: "manga.combinedSites")
         self.defaultTags = browserPreferences.string(forKey: "manga.defaultTags") ?? ""
         self.defaultExcludedTags = browserPreferences.string(forKey: "manga.defaultExcludedTags") ?? ""
         self.mangaBrowseCategory = browserPreferences.string(forKey: "manga.browseCategory") ?? ""
@@ -759,7 +768,7 @@ public final class AppEnvironment: @unchecked Sendable {
         repeat {
             let page = try await MangaContentSource.shared.accountFavorites(after: next)
             try Task.checkCancellation()
-            for id in page.ids where try database.getWork(galleryId: id) == nil {
+            for id in page.ids where try database.getWork(galleryId: id, site: ComicSites.active) == nil {
                 let work = MangaContentSource.shared.cachedPreview(id)
                 _ = try database.upsertWork(galleryId: id, folderId: folder, title: work?.title, artists: work?.artists.joined(separator: ", "),
                                             language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active)

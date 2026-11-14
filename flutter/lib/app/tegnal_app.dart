@@ -583,7 +583,8 @@ class _ExploreRoot extends StatelessWidget {
         return InAppMangaBrowserView(key: ValueKey('browser:${content.mangaSiteAddress}'), embedded: true, state: state);
       }
       return ExploreView(
-        key: ValueKey(content.mangaSiteAddress),
+        // A combined list stays when opening a work checks another website.
+        key: ValueKey(content.listsAllComicSites ? '*' : content.mangaSiteAddress),
         state: state,
         source: content.source,
         images: services.images,
@@ -592,7 +593,7 @@ class _ExploreRoot extends StatelessWidget {
         isActive: state.tab == AppTab.works && state.mode == AppMode.manga,
         openGallery: (id) => routes.openThumbnail(context, id),
         details: (id) => routes.openGallery(context, id),
-        bookmark: (id, gallery) => routes.toggleBookmark(context, id, gallery, aboveTabBar: true),
+        bookmark: (id, gallery, {site, images}) => routes.toggleBookmark(context, id, gallery, aboveTabBar: true, site: site, images: images),
       );
     },
   );

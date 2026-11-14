@@ -201,7 +201,7 @@ actor KeyedCatalogSource {
                                index: index, sourceSite: site)
         }
         return NativeGallery(id: id, title: preview.title, artists: preview.artists, language: preview.language,
-                             type: preview.type, tags: preview.tags, pages: pages)
+                             type: preview.type, tags: preview.tags, pages: pages, listedTitles: preview.listedTitles, listedPageCount: fileCount)
     }
 
     /// The key comes from a link already seen, or from searching the number.
@@ -573,7 +573,8 @@ actor KeyedCatalogSource {
         }
         let work = NativeGallery(id: id, title: NativeGallery.decodeEntities(title), artists: tags.filter { $0.0 == "artist" }.map(\.1),
                                  language: language, type: category == "asianporn" ? "photo" : category,
-                                 tags: tags.filter { $0.0 != "language" && $0.0 != "artist" }.map { localNamespace($0.0) + ":" + $0.1 }, pages: pages)
+                                 tags: tags.filter { $0.0 != "language" && $0.0 != "artist" }.map { localNamespace($0.0) + ":" + $0.1 }, pages: pages,
+                                 listedTitles: DocumentCatalogSource.listedTitles(item), listedPageCount: Int(number(item["filecount"]) ?? 0))
         return (work, max(0, min(10_000, Int(number(item["filecount"]) ?? 0))))
     }
 

@@ -1681,3 +1681,4 @@
 "Copies here from %@" = "%@에서 복사해 옴";
 "Moves here from %@" = "%@에서 옮겨 옴";
 "A smart folder files new saves that match its tags. Hold a folder to make it one; smart folders show %@ after their name." = "스마트 폴더는 새로 저장하는 항목 중 태그가 일치하는 것을 자동으로 정리합니다. 폴더를 길게 눌러 스마트 폴더로 만들 수 있으며, 스마트 폴더는 이름 뒤에 %@ 표시가 붙습니다.";
+"All Websites" = "모든 웹사이트";

@@ -81,7 +81,7 @@ class _AddWorkSheetState extends State<AddWorkSheet> {
     setState(() => _saving = true);
     var created = 0;
     for (final id in _detected) {
-      final existing = _database.getWork(id);
+      final existing = _database.getWork(id, site: ComicSites.active);
       final catalog = _database.getCatalog(id);
       _database.upsertWork(
         galleryId: id,
@@ -278,7 +278,7 @@ class _WorkFolderSheetState extends State<WorkFolderSheet> {
     if (id == null) return;
     try {
       final current = widget.savedFolders[widget.galleryID];
-      if (id != current) widget.database.moveWorkToFolder(widget.galleryID, id, currentFolderId: current);
+      if (id != current) widget.database.moveWorkToFolder(widget.galleryID, id, currentFolderId: current, site: ComicSites.active);
       widget.savedFolders[widget.galleryID] = id;
       widget.filed(folder.displayName);
     } on Object {

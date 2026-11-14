@@ -19,6 +19,7 @@ class ContentEnvironment extends ChangeNotifier {
       _isOnboardingCompleted = browserPreferences.boolean('onboarding_completed') ?? false,
       _useEmbeddedBrowser = browserPreferences.boolean('use_embedded_browser') ?? false,
       _allowsMangaLanguageExceptions = browserPreferences.boolean('manga.languageExceptions') ?? false,
+      _combinesComicSites = browserPreferences.boolean('manga.combinedSites') ?? false,
       _defaultTags = browserPreferences.string('manga.defaultTags') ?? '',
       _defaultExcludedTags = browserPreferences.string('manga.defaultExcludedTags') ?? '',
       _mangaBrowseCategory = browserPreferences.string('manga.browseCategory') ?? '',
@@ -116,6 +117,14 @@ class ContentEnvironment extends ChangeNotifier {
   bool _allowsMangaLanguageExceptions;
   bool get allowsMangaLanguageExceptions => _allowsMangaLanguageExceptions;
   set allowsMangaLanguageExceptions(bool value) => _allowsMangaLanguageExceptions = _store('manga.languageExceptions', value);
+
+  /// Explore and its searches list every connected comics website at once.
+  bool _combinesComicSites;
+  bool get combinesComicSites => _combinesComicSites;
+  set combinesComicSites(bool value) => _combinesComicSites = _store('manga.combinedSites', value);
+
+  /// Whether lists show every connected website: chosen, and more than one connected.
+  bool get listsAllComicSites => _combinesComicSites && comicSites.length > 1;
 
   String _defaultTags;
   String get defaultTags => _defaultTags;

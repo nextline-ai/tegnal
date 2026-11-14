@@ -430,38 +430,40 @@ struct RemovedBookmark {
 
 @MainActor
 enum ContentBookmarkAction {
-    static func toggle(id: Int64, gallery: NativeGallery?, env: AppEnvironment, images: PageImageStore? = nil, context: DiscoveryContext = .unknown) throws -> WorkSaveResult {
-        if let work = try env.database.getWork(galleryId: id) {
-            let folders = try env.database.folderIDs(galleryId: id)
-            try env.database.deleteWork(galleryId: id)
+    /// `site` is the website the work is shown from; a saved work from another website that
+    /// numbers its works differently is a different work.
+    static func toggle(id: Int64, gallery: NativeGallery?, env: AppEnvironment, images: PageImageStore? = nil, context: DiscoveryContext = .unknown, site: String = ComicSites.active) throws -> WorkSaveResult {
+        if let work = try env.database.getWork(galleryId: id, site: site) {
+            let folders = try env.database.folderIDs(galleryId: id, site: work.site)
+            try env.database.deleteWork(galleryId: id, site: work.site)
             env.removedBookmarks[id] = RemovedBookmark(folders: folders, note: work.note)
-            env.syncAccountFavorite(id, saved: false)
+            if site == ComicSites.active { env.syncAccountFavorite(id, saved: false) }
             return .removed(.comics)
         }
-        return try save(id: id, gallery: gallery, env: env, images: images, context: context)
+        return try save(id: id, gallery: gallery, env: env, images: images, context: context, site: site)
     }
 
-    static func save(id: Int64, gallery: NativeGallery?, env: AppEnvironment, images: PageImageStore? = nil, context: DiscoveryContext = .unknown) throws -> WorkSaveResult {
-        if try env.database.getWork(galleryId: id) != nil { return .unchanged(.comics) }
+    static func save(id: Int64, gallery: NativeGallery?, env: AppEnvironment, images: PageImageStore? = nil, context: DiscoveryContext = .unknown, site: String = ComicSites.active) throws -> WorkSaveResult {
+        if try env.database.getWork(galleryId: id, site: site) != nil { return .unchanged(.comics) }
         let removed = env.removedBookmarks.removeValue(forKey: id)
         let existing = Set(try env.database.listFolders().compactMap(\.id))
         let restored = (removed?.folders ?? []).filter(existing.contains)
         let folder = try restored.first ?? env.database.defaultSaveFolder().id
         env.savedFolders[id] = folder
-        _ = try env.database.upsertWork(galleryId: id, folderId: folder,
+        let saved = try env.database.upsertWork(galleryId: id, folderId: folder,
             title: gallery?.title, artists: gallery?.artists.joined(separator: ", "),
-            language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active, discoveryContext: context)
-        for folder in restored.dropFirst() { try env.database.addWork(galleryId: id, folderID: folder) }
-        if let note = removed?.note { try env.database.setNote(galleryId: id, note: note) }
-        env.syncAccountFavorite(id, saved: true)
+            language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", site: site, discoveryContext: context)
+        for folder in restored.dropFirst() { try env.database.addWork(galleryId: id, site: saved.site, folderID: folder) }
+        if let note = removed?.note { try env.database.setNote(galleryId: id, site: saved.site, note: note) }
+        if site == ComicSites.active { env.syncAccountFavorite(id, saved: true) }
         if let gallery, let page = gallery.pages.first, let images {
             Task {
                 do {
                     let image = try await images.load(page, galleryID: id, thumbnail: true)
-                    guard try env.database.getWork(galleryId: id) != nil, let data = image.jpegData(compressionQuality: 0.9) else { return }
-                    let url = AppStorage.thumbsDirURL.appendingPathComponent("native_\(id).jpg")
+                    guard try env.database.getWork(galleryId: id, site: saved.site) != nil, let data = image.jpegData(compressionQuality: 0.9) else { return }
+                    let url = try env.database.thumbnailURL(galleryId: id, site: saved.site)
                     try data.write(to: url, options: .atomic)
-                    try env.database.setThumb(galleryId: id, status: "ready", path: url.path, page: 1)
+                    try env.database.setThumb(galleryId: id, site: saved.site, status: "ready", path: url.path, page: 1)
                 } catch { env.startCoverQueue() }
             }
         }

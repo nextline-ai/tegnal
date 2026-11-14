@@ -114,17 +114,34 @@ class SqlDatabase {
 class SqlMigrator {
   final _migrations = <(String, void Function(SqlDatabase db))>[];
 
-  void registerMigration(String identifier, void Function(SqlDatabase db) migrate) => _migrations.add((identifier, migrate));
+  final _rebuildsTables = <String>{};
 
-  void migrate(SqlDatabase database) {
+  /// [rebuildsTables] migrations recreate tables others refer to, so foreign keys are off
+  /// while they run and checked before they commit, as GRDB's migrator does for every one.
+  void registerMigration(String identifier, void Function(SqlDatabase db) migrate, {bool rebuildsTables = false}) {
+    _migrations.add((identifier, migrate));
+    if (rebuildsTables) _rebuildsTables.add(identifier);
+  }
+
+  /// Applies registered migrations in order, stopping after [upTo] when given.
+  void migrate(SqlDatabase database, {String? upTo}) {
     database.execute('CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)');
     final applied = database.column<String>('SELECT identifier FROM grdb_migrations').toSet();
     for (final (identifier, migrate) in _migrations) {
-      if (applied.contains(identifier)) continue;
-      database.write((db) {
-        migrate(db);
-        db.execute('INSERT INTO grdb_migrations VALUES (?)', [identifier]);
-      });
+      if (!applied.contains(identifier)) {
+        final rebuilds = _rebuildsTables.contains(identifier);
+        if (rebuilds) database.execute('PRAGMA foreign_keys = OFF');
+        try {
+          database.write((db) {
+            migrate(db);
+            if (rebuilds && db.rows('PRAGMA foreign_key_check').isNotEmpty) throw StateError('Migration $identifier broke a foreign key');
+            db.execute('INSERT INTO grdb_migrations VALUES (?)', [identifier]);
+          });
+        } finally {
+          if (rebuilds) database.execute('PRAGMA foreign_keys = ON');
+        }
+      }
+      if (identifier == upTo) return;
     }
   }
 }
