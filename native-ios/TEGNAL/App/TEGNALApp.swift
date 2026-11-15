@@ -341,6 +341,13 @@ struct TEGNALApp: App {
             )) {
                 OnboardingView()
             }
+            // Sync left off from the old onboarding switch: ask once, after the splash.
+            .appSheet(isPresented: Binding(
+                get: { env.isOnboardingCompleted && env.sync.needsOffReminder && (!isSplashScreenVisible || !splashEnabled) },
+                set: { _ in }
+            )) {
+                CloudSyncTurnOffView(alreadyOff: true)
+            }
             // Include the presenting root and its sheets, not just the tab content.
             // Retained UIKit hosts also inject these same instances at their own roots.
             .environment(env)

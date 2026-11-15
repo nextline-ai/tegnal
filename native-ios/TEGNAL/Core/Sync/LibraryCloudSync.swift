@@ -7,6 +7,7 @@ import CryptoKit
 @MainActor @Observable
 final class LibraryCloudSync {
     static let enabledKey = "icloud.librarySyncEnabled"
+    static let offReminderKey = "icloud.offReminderShown"
     private(set) var status = L10n.text("Waiting for iCloud")
     private(set) var syncing = false
     private(set) var lastSynced: Date?
@@ -16,9 +17,27 @@ final class LibraryCloudSync {
     var enabled: Bool {
         didSet {
             defaults.set(enabled, forKey: Self.enabledKey)
-            if !enabled { invalidateAccess(); status = L10n.text("Sync Off") }
+            // Turning it off now goes through the full warning, so it never needs the reminder.
+            if !enabled { invalidateAccess(); status = L10n.text("Sync Off"); offReminderAnswered() }
         }
     }
+    /// Onboarding used to offer an off switch. People who left sync off there see the
+    /// turn-off warning once, where the main button turns it back on.
+    private(set) var offReminderShown: Bool
+    var needsOffReminder: Bool { !enabled && !offReminderShown }
+    func offReminderAnswered() {
+        guard !offReminderShown else { return }
+        offReminderShown = true
+        defaults.set(true, forKey: Self.offReminderKey)
+    }
+    #if DEBUG
+    /// UI tests start from a library whose sync was turned off before this reminder existed.
+    func simulateSyncLeftOffBeforeReminder() {
+        enabled = false
+        offReminderShown = false
+        defaults.removeObject(forKey: Self.offReminderKey)
+    }
+    #endif
     private let defaults: UserDefaults
     private let query = NSMetadataQuery()
     @ObservationIgnored nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
@@ -41,6 +60,7 @@ final class LibraryCloudSync {
         self.resolveContainer = resolveContainer
         self.defaults = defaults
         enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+        offReminderShown = defaults.bool(forKey: Self.offReminderKey)
         let installation = defaults.string(forKey: "icloud.installation") ?? UUID().uuidString
         defaults.set(installation, forKey: "icloud.installation")
         device = Self.digest(Data((installation + (UIDevice.current.identifierForVendor?.uuidString ?? "")).utf8))

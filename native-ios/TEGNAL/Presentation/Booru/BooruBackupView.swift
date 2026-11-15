@@ -12,6 +12,7 @@ struct BooruBackupView: View {
                 NavigationLink { AnimeBoxesImportView() } label: { Label(L10n.text("Import from Anime Boxes"), systemImage: "shippingbox") }
                     .accessibilityIdentifier("booru.importLink")
             }.disabled(busy)
+            CloudSyncSection()
         }
         .navigationTitle(L10n.text("Library Management"))
         .navigationBarTitleDisplayMode(.inline)

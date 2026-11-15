@@ -348,7 +348,6 @@ struct BooruMoreView: View {
             }
             SearchHistorySettings(booru: true)
             TasteSettingsSection(mode: .booru)
-            CloudSyncSection()
             BooruSafeModeSettings()
             Section {
                 NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }

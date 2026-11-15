@@ -49,7 +49,6 @@ public struct SettingsView: View {
             MangaDefaultTagsSettings()
             SearchHistorySettings()
             TasteSettingsSection(mode: .comics)
-            CloudSyncSection()
             Section {
                 NavigationLink { MangaLibraryToolsView() } label: {
                     Label(L10n.text("Library Management"), systemImage: "externaldrive")
@@ -265,6 +264,7 @@ struct MangaLibraryToolsView: View {
                     }
                 }
             }
+            if !importOnly { CloudSyncSection() }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(L10n.text(importOnly ? "Import from Another Manga Viewer" : "Library Management"))
