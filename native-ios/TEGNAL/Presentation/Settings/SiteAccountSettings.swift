@@ -524,17 +524,18 @@ private struct SiteFavoritesSyncRows: View {
                 }
             }
             let free = categories.map(\.id).filter { state.folders[$0] == nil }
-            if !free.isEmpty {
-                Picker(selection: Binding(get: { state.unassigned.flatMap { free.contains($0) ? $0 : nil } ?? free[0] },
+            if !categories.isEmpty {
+                Picker(selection: Binding(get: { state.unassigned.flatMap { free.contains($0) ? $0 : nil } },
                                           set: { env.setUnassignedFavoriteCategory($0, site: site) })) {
-                    ForEach(free, id: \.self) { Text(name($0)).tag($0) }
+                    Text(L10n.text("Keep in App Only")).tag(Int?.none)
+                    ForEach(free, id: \.self) { Text(name($0)).tag(Optional($0)) }
                 } label: {
                     if state.exclusive == false {
                         SettingsHelpLabel("List for Other Folders",
-                                          help: "Works you save in folders that are not a favorites list are added to this list on the website.")
+                                          help: "Works you save in folders that are not a favorites list are added to this list on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a list you use yourself.")
                     } else {
                         SettingsHelpLabel("Category for Other Folders",
-                                          help: "Works you save in folders that are not a favorites category are added to this category on the website.")
+                                          help: "Works you save in folders that are not a favorites category are added to this category on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a category you use yourself. With every category in use, this is the only choice.")
                     }
                 }.accessibilityIdentifier("settings.siteAccount.otherCategory")
             }

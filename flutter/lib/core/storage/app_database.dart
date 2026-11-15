@@ -438,11 +438,13 @@ class AppDatabase implements SmartFolderLibrary {
           db.row("SELECT * FROM folders WHERE name = '미분류' AND id != ? LIMIT 1", [id]) ??
           db.row('SELECT * FROM folders WHERE id != ? ORDER BY sort_order ASC, id ASC LIMIT 1', [id]);
       final defaultFolder = fallback != null ? Folder.fromRow(fallback) : unfiledFolder(db);
-      // Move works to default folder
+      // Works only this folder held move to Unfiled; ones another folder holds stay there.
       db.execute(
         '''
         INSERT INTO folder_works (folder_id, work_id, added_at)
-        SELECT ?, work_id, added_at FROM folder_works WHERE folder_id = ? ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)
+        SELECT ?, fw.work_id, fw.added_at FROM folder_works fw WHERE fw.folder_id = ?
+          AND NOT EXISTS (SELECT 1 FROM folder_works other WHERE other.work_id = fw.work_id AND other.folder_id != fw.folder_id)
+        ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)
         ''',
         [defaultFolder.id, id],
       );

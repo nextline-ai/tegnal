@@ -582,7 +582,8 @@ final class SiteFavoriteFolders: @unchecked Sendable {
     struct State: Codable, Equatable, Sendable {
         /// Favorites category or list → the sync identity of its folder.
         var folders: [Int: String] = [:]
-        /// Where works in other folders are kept on the website; nil when every category has a folder.
+        /// Where works in other folders are kept on the website: a category the account left empty,
+        /// or one chosen in settings. Nil keeps them in the app only.
         var unassigned: Int?
         /// The categories holding each work after the last sync; nil before the first.
         var baseline: [Int64: Set<Int>]?
@@ -630,6 +631,14 @@ final class SiteFavoriteFolders: @unchecked Sendable {
 
     private var states: [String: Data] { defaults.dictionary(forKey: Self.statesKey) as? [String: Data] ?? [:] }
     private var declined: Set<String> { Set(defaults.stringArray(forKey: Self.declinedKey) ?? []) }
+}
+
+extension AccountFavorites {
+    /// A category or list the account doesn't use and no folder stands for, to keep works from other
+    /// folders in; nil when there is none, as when all ten fixed categories hold favorites.
+    func spareCategory(besides folders: Set<Int>) -> Int? {
+        categories.first { $0.count == 0 && !folders.contains($0.id) }?.id
+    }
 }
 
 /// What one sync changes on each side. Comparing each work's places with where it was after the
@@ -699,10 +708,11 @@ struct FavoriteSyncPlan: Equatable, Sendable {
             // The categories the website should hold the work in.
             var wanted = Set(final.compactMap(\.category))
             if final == [.unassigned] {
+                // Without a category kept for other folders the work stays in the app, rather than
+                // being mixed into a category the account uses for something else.
                 let elsewhere = rawRemote.subtracting(folders)
                 if !elsewhere.isEmpty { wanted = elsewhere }
                 else if let unassigned { wanted = [unassigned] }
-                else { plan.keepLocal.append(id) }
             } else if !exclusive, !final.isEmpty {
                 // Lists without folders keep what they hold; only a work taken away leaves them too.
                 wanted.formUnion(rawRemote.subtracting(folders))

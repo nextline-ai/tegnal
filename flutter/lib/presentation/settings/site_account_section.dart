@@ -232,17 +232,18 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
         for (final category in state.folders.keys.toList()..sort())
           if (widget.database.folderIDForIdentity(state.folders[category]!) case final folder? when folderNames[folder] != null)
             SettingsValueRow(title: name(category), value: folderNames[folder]!),
-        if (free.isNotEmpty)
+        // -1 stands for keeping them in the app only; categories and lists count from 0.
+        if (_favoriteLists.isNotEmpty)
           SettingsPickerRow<int>(
             title: L10n.text(lists ? 'List for Other Folders' : 'Category for Other Folders'),
             help: L10n.text(
               lists
-                  ? 'Works you save in folders that are not a favorites list are added to this list on the website.'
-                  : 'Works you save in folders that are not a favorites category are added to this category on the website.',
+                  ? 'Works you save in folders that are not a favorites list are added to this list on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a list you use yourself.'
+                  : 'Works you save in folders that are not a favorites category are added to this category on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a category you use yourself. With every category in use, this is the only choice.',
             ),
-            options: [for (final category in free) (category, name(category))],
-            selected: free.contains(state.unassigned) ? state.unassigned! : free.first,
-            onSelected: (value) => sync.setUnassigned(value, widget.site),
+            options: [(-1, L10n.text('Keep in App Only')), for (final category in free) (category, name(category))],
+            selected: free.contains(state.unassigned) ? state.unassigned! : -1,
+            onSelected: (value) => sync.setUnassigned(value < 0 ? null : value, widget.site),
           ),
         FormRow(
           separatorInset: settingsIconInset,

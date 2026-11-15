@@ -171,7 +171,18 @@ void main() {
       localOnly: {},
     );
     expect(out.site, [const FavoriteSiteChange(1, 0, adds: false)], reason: 'Taken out of the category folder with nowhere else to go');
-    expect(out.keepLocal, [1]);
+    expect(out.local, isEmpty, reason: 'It stays in the app');
+    final later = FavoriteSyncPlan.make(
+      local: {
+        1: {_unassigned},
+      },
+      remote: {},
+      base: {},
+      folders: {0},
+      unassigned: null,
+      localOnly: {},
+    );
+    expect(later.isEmpty, isTrue, reason: 'Without a spare category, works in other folders are never sent');
   });
 
   test('lists keep a work in several folders and leave lists without folders alone', () {
@@ -199,6 +210,17 @@ void main() {
     expect(plan.site, [const FavoriteSiteChange(1, 11, adds: true), const FavoriteSiteChange(2, 11, adds: false)]);
     expect(plan.local, isEmpty);
     expect(plan.settled[2], {10, 30});
+  });
+
+  test('works from other folders get only a category the account left empty', () {
+    AccountFavorites favorites(List<int> counts) => AccountFavorites(
+      categories: [for (var id = 0; id < counts.length; id++) FavoriteCategory(id: id, name: 'Favorites $id', count: counts[id])],
+      members: const {},
+      exclusive: true,
+    );
+    expect(favorites([3, 0, 2, 0]).spareCategory(besides: {0, 2}), 1);
+    expect(favorites([3, 4, 2, 1]).spareCategory(besides: {0, 1, 2}), isNull, reason: "A category holding favorites without a folder is the account's own");
+    expect(favorites(List.filled(10, 1)).spareCategory(besides: {for (var id = 0; id < 10; id++) id}), isNull);
   });
 
   test('favorite lists are read from the favorites page', () {

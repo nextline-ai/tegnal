@@ -153,7 +153,7 @@ class _FoldersViewState extends State<FoldersView> {
       context: context,
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text("Delete the folder '%@'?", [folder.displayName])),
-        content: Text(L10n.text('Works in this folder will be moved to Unfiled.')),
+        content: Text(L10n.text('Works only in this folder move to Unfiled. Works also in other folders stay there.')),
         actions: [
           CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
           CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),

@@ -100,6 +100,16 @@ void main() {
     expect(database.matchingWorkCount(rule('', excluded: 'language:japanese')), 0);
   });
 
+  test('deleting a folder moves only works no other folder holds to unfiled', () {
+    final first = database.createFolder(name: 'First'), second = database.createFolder(name: 'Second');
+    database.upsertWork(galleryId: 1, folderId: first.id);
+    database.upsertWork(galleryId: 2, folderId: first.id);
+    database.addWork(2, second.id!);
+    database.deleteFolder(first.id!);
+    expect(folderNames(1), {'미분류'});
+    expect(folderNames(2), {'Second'}, reason: 'A work another folder holds stays only there');
+  });
+
   test('folder filled from a tag keeps other folders and leaves unfiled', () {
     final favorites = database.createFolder(name: 'Favorites');
     save(1);

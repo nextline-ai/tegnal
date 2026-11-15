@@ -200,7 +200,11 @@ final class CombinedCatalogTests: XCTestCase {
 
         let out = FavoriteSyncPlan.make(local: [1: [.unassigned]], remote: [1: [0]], base: [1: [0]], folders: [0], unassigned: nil, localOnly: [])
         XCTAssertEqual(out.site, [Change(id: 1, category: 0, adds: false)], "Taken out of the category's folder with nowhere else to go")
-        XCTAssertEqual(out.keepLocal, [1])
+        XCTAssertTrue(out.local.isEmpty, "It stays in the app")
+        let later = FavoriteSyncPlan.make(local: [1: [.unassigned]], remote: [:], base: [:], folders: [0], unassigned: nil, localOnly: [])
+        XCTAssertTrue(later.isEmpty, "Without a spare category, works in other folders are never sent")
+        let chosen = FavoriteSyncPlan.make(local: [1: [.unassigned]], remote: [:], base: [:], folders: [0], unassigned: 3, localOnly: [])
+        XCTAssertEqual(chosen.site, [Change(id: 1, category: 3, adds: true)], "and go once a category is chosen for them")
         XCTAssertTrue(FavoriteSyncPlan.make(local: [1: [.category(0)]], remote: [1: [0]], base: [1: [0]], folders: [0], unassigned: 5, localOnly: []).isEmpty)
     }
 
@@ -240,6 +244,16 @@ final class CombinedCatalogTests: XCTestCase {
         XCTAssertTrue(store.isDeclined("a.example.org"), "Turned off by hand, it is not set up again on its own")
         store.setState(SiteFavoriteFolders.State(), for: "a.example.org")
         XCTAssertFalse(store.isDeclined("a.example.org"), "Turning it back on clears that")
+    }
+
+    func testWorksFromOtherFoldersGetOnlyACategoryTheAccountLeftEmpty() {
+        func favorites(_ counts: [Int]) -> AccountFavorites {
+            AccountFavorites(categories: counts.enumerated().map { FavoriteCategory(id: $0.offset, name: "Favorites \($0.offset)", count: $0.element) },
+                             members: [:], exclusive: true)
+        }
+        XCTAssertEqual(favorites([3, 0, 2, 0]).spareCategory(besides: [0, 2]), 1)
+        XCTAssertNil(favorites([3, 4, 2, 1]).spareCategory(besides: [0, 1, 2]), "A category holding favorites without a folder is the account's own")
+        XCTAssertNil(favorites(Array(repeating: 1, count: 10)).spareCategory(besides: Set(0..<10)), "All ten categories in use leave none")
     }
 
     func testFavoriteListsAreReadFromTheFavoritesPage() throws {

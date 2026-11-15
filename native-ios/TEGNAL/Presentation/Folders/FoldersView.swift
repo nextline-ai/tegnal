@@ -148,7 +148,7 @@ public struct FoldersView: View {
                 folderPendingDelete = nil
             }
         } message: { _ in
-            Text(L10n.text("Works in this folder will be moved to Unfiled."))
+            Text(L10n.text("Works only in this folder move to Unfiled. Works also in other folders stay there."))
         }
         .appSheet(isPresented: $showAddSheet, onDismiss: { loadFolders() }) {
             AddWorkSheet()

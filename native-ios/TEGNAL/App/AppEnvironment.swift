@@ -937,7 +937,7 @@ public final class AppEnvironment: @unchecked Sendable {
     /// The first time a signed-in website's favorites can be read, each favorites category or list
     /// that holds works becomes a folder of the same name, or the folder already named so, filled
     /// with them; from then on the two are kept the same. Works saved in other folders are kept in
-    /// the first category without a folder. Turned off in the website's settings, it is not set up
+    /// an empty category without a folder, or in the app only when the account has none to spare. Turned off in the website's settings, it is not set up
     /// again unless turned back on there (`requested`).
     @MainActor func setUpSiteFavorites(site: String, requested: Bool = false) async {
         let store = SiteFavoriteFolders.shared
@@ -952,7 +952,7 @@ public final class AppEnvironment: @unchecked Sendable {
                 guard let id = folder.id else { continue }
                 state.folders[category.id] = try database.identity(ofFolder: id)
             }
-            state.unassigned = favorites.categories.map(\.id).first { state.folders[$0] == nil }
+            state.unassigned = favorites.spareCategory(besides: Set(state.folders.keys))
             store.setState(state, for: site)
             favoriteFoldersRevision += 1
             try await syncSiteFavorites(site: site, remote: favorites)
@@ -965,7 +965,8 @@ public final class AppEnvironment: @unchecked Sendable {
         favoriteFoldersRevision += 1
     }
 
-    @MainActor func setUnassignedFavoriteCategory(_ category: Int, site: String) {
+    /// The category works in other folders are kept in on the website; nil keeps them in the app only.
+    @MainActor func setUnassignedFavoriteCategory(_ category: Int?, site: String) {
         guard var state = SiteFavoriteFolders.shared.state(for: site) else { return }
         state.unassigned = category
         SiteFavoriteFolders.shared.setState(state, for: site)
@@ -1007,7 +1008,7 @@ public final class AppEnvironment: @unchecked Sendable {
             let existing = Set(favorites.categories.map(\.id))
             for category in state.folders.keys where !existing.contains(category) { state.folders[category] = nil; folders[category] = nil }
             if let unassigned = state.unassigned, !existing.contains(unassigned) {
-                state.unassigned = favorites.categories.map(\.id).first { state.folders[$0] == nil }
+                state.unassigned = favorites.spareCategory(besides: Set(state.folders.keys))
             }
         } else { remote = state.baseline ?? [:] }
         let exclusive = state.exclusive ?? true
