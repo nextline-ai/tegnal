@@ -622,7 +622,7 @@ actor KeyedCatalogSource {
         }.prefix(20).map { $0 }
     }
 
-    // MARK: Ratings, comments and torrents
+    // MARK: Ratings and comments
 
     func extras(_ id: Int64, site: String) async throws -> WorkExtras {
         try prepare(site)
@@ -641,18 +641,6 @@ actor KeyedCatalogSource {
         let key = try await key(for: id, site: site)
         guard let url = URL(string: "\(site)g/\(id)/\(key)/?hc=1") else { throw ContentError.invalidQuery }
         return KeyedWorkPage.comments(from: try await page(url, site: site))
-    }
-
-    func torrents(_ id: Int64, site: String) async throws -> [WorkTorrent] {
-        let extras = try await extras(id, site: site)
-        guard extras.torrentCount > 0 else { return [] }
-        let key = try await key(for: id, site: site)
-        var components = URLComponents(string: site + "gallerytorrents.php")
-        components?.queryItems = [URLQueryItem(name: "gid", value: String(id)), URLQueryItem(name: "t", value: key)]
-        // The work page names the torrent page; only a page on the connected website is followed.
-        let named = extras.torrentsURL.flatMap { url in url.host?.lowercased() == URL(string: site)?.host?.lowercased() ? url : nil }
-        guard let url = named ?? components?.url else { throw ContentError.invalidQuery }
-        return KeyedWorkPage.torrents(from: try await page(url, site: site))
     }
 
     func rate(_ id: Int64, halfStars: Int, site: String) async throws -> (average: Double, count: Int) {

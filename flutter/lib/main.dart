@@ -194,7 +194,10 @@ Future<AppServices> _launch() async {
   final support = await loadingSupport;
   // Keys of numbered works and where works opened elsewhere outlive the session.
   GalleryKeys.shared = GalleryKeys(file: File('${support.path}/gallery-keys.json'));
-  WorkSiteMemory.shared = WorkSiteMemory(file: File('${support.path}/work-sites.json'));
+  // The list of where works last opened made them stay there after switching websites.
+  final legacySites = File('${support.path}/work-sites.json');
+  if (legacySites.existsSync()) legacySites.deleteSync();
+  WorkSiteMemory.shared = WorkSiteMemory(file: File('${support.path}/work-missing-sites.json'));
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);

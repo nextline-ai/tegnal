@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/content/content_environment.dart';
@@ -17,9 +16,8 @@ import '../design/app_sheet.dart';
 import '../design/grouped_form.dart';
 import '../design/pull_down_menu.dart';
 import '../design/tegnal_theme.dart';
+import 'gallery_preview_models.dart';
 import '../library/folders_view.dart' show ContentUnavailable;
-
-const _borderedFill = CupertinoDynamicColor.withBrightness(color: Color(0x1F787880), darkColor: Color(0xFF39393D));
 
 String _shortDate(DateTime date, {bool time = false}) {
   final local = date.toLocal();
@@ -38,8 +36,9 @@ String _count(int value) {
   return buffer.toString();
 }
 
-/// `WorkExtrasSection`: rating, how often a work is kept, who uploaded it, comments and torrents,
-/// on websites that keep them. Nothing shows for websites that don't.
+/// `WorkExtrasSection`: rating, how often a work is kept, who uploaded it and comments, on
+/// websites that keep them, with the account's actions in a box of rows. Nothing shows for
+/// websites that don't.
 class WorkExtrasSection extends StatefulWidget {
   const WorkExtrasSection({super.key, required this.galleryID, required this.source, required this.content});
   final int galleryID;
@@ -147,25 +146,44 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
     );
   }
 
-  Widget _wideButton(BuildContext context, String label, IconData icon, VoidCallback onPressed) {
+  /// A box with the page's other boxes' corners and fill.
+  Widget _box(BuildContext context, List<Widget> rows) => ClipRSuperellipse(
+    borderRadius: BorderRadius.circular(galleryBoxRadius),
+    child: ColoredBox(
+      color: FormColors.row.resolveFrom(context),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+    ),
+  );
+
+  Widget _separator(BuildContext context, {double leading = galleryTextInset}) => Padding(
+    padding: EdgeInsets.only(left: leading, right: galleryTextInset),
+    child: Container(height: 0.5, color: TegnalColors.separator.resolveFrom(context)),
+  );
+
+  /// One of the account's actions: an icon in its column and the title after it, a list row's height.
+  Widget _actionRow(BuildContext context, String label, IconData icon, VoidCallback onPressed) {
     final tint = TegnalColors.tint.resolveFrom(context);
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onPressed,
-      child: Container(
-        height: 44,
-        decoration: ShapeDecoration(color: _borderedFill.resolveFrom(context), shape: const StadiumBorder()),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: tint),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TegnalType.style(15, weight: FontWeight.w600, color: tint),
-            ),
-          ],
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: galleryRowHeight),
+          child: Row(
+            children: [
+              SizedBox(
+                width: galleryIconColumn,
+                child: Icon(icon, size: 22, color: tint),
+              ),
+              Expanded(
+                child: Text(label, style: TegnalType.style(17, color: tint)),
+              ),
+              const SizedBox(width: galleryTextInset),
+            ],
+          ),
         ),
       ),
     );
@@ -196,6 +214,64 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
         if (canRate) Icon(CupertinoIcons.chevron_up_chevron_down, size: 13, color: secondary),
       ],
     );
+    final provider = _provider;
+    final actions = <Widget>[
+      if (extras.comments.isNotEmpty)
+        _actionRow(
+          context,
+          L10n.text('All Comments'),
+          CupertinoIcons.text_bubble,
+          () => showAppSheet<void>(
+            context,
+            builder: (context, controller) =>
+                WorkCommentsPage(galleryID: widget.galleryID, initial: extras.comments, loadsAll: extras.hasMoreComments, provider: provider),
+          ),
+        ),
+      if (extras.canComment && provider != null)
+        _actionRow(
+          context,
+          L10n.text('Write Comment'),
+          CupertinoIcons.square_pencil,
+          () => showAppSheet<void>(
+            context,
+            builder: (context, controller) => WorkCommentComposerPage(
+              galleryID: widget.galleryID,
+              provider: provider,
+              posted: (comments) => setState(() {
+                _extras?.comments = comments;
+                _extras?.hasMoreComments = false;
+              }),
+            ),
+          ),
+        ),
+      // The page hands its rating key, and so its votes and archives, only to a signed-in account.
+      if (extras.canRate && extras.tagVotes.isNotEmpty && provider != null)
+        _actionRow(
+          context,
+          L10n.text('Vote on Tags'),
+          CupertinoIcons.hand_thumbsup,
+          () => showAppSheet<void>(
+            context,
+            builder: (context, controller) => WorkTagVotesPage(
+              galleryID: widget.galleryID,
+              votes: extras.tagVotes,
+              provider: provider,
+              changed: (votes) => setState(() => _extras?.tagVotes = votes),
+            ),
+          ),
+        ),
+      if (extras.canRate && extras.archiveURL != null && provider != null)
+        _actionRow(
+          context,
+          L10n.text('Archive Download'),
+          CupertinoIcons.archivebox,
+          () => showAppSheet<void>(
+            context,
+            builder: (context, controller) => WorkArchivePage(galleryID: widget.galleryID, provider: provider),
+          ),
+        ),
+    ];
+    final previews = WorkExtrasSection.preview(extras.comments);
     return Padding(
       padding: const EdgeInsets.only(top: 22),
       child: Column(
@@ -203,118 +279,64 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
         children: [
           Container(height: 0.5, color: TegnalColors.separator.resolveFrom(context)),
           const SizedBox(height: 14),
-          if (canRate)
-            Builder(
-              builder: (anchor) => Semantics(
-                button: true,
-                label: L10n.text('Rate This Work'),
-                child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _rate(anchor), child: ratingRow),
-              ),
-            )
-          else
-            ratingRow,
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (extras.favorited case final favorited?) _stat(context, L10n.text('%@ favorites', [_count(favorited)]), CupertinoIcons.heart),
-              if (extras.favoriteName case final name? when extras.favoriteCategory != null)
-                _stat(context, name, CupertinoIcons.heart_fill, tint: CupertinoColors.systemPink.resolveFrom(context)),
-              if (extras.fileSize case final size?) _stat(context, size, CupertinoIcons.archivebox),
-              if (extras.posted case final posted?) _stat(context, _shortDate(posted), CupertinoIcons.calendar),
-              if (extras.uploader case final uploader?) _stat(context, uploader, CupertinoIcons.person),
-            ],
+          // Text sits inside the page margin, in line with the text in the boxes.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (canRate)
+                  Builder(
+                    builder: (anchor) => Semantics(
+                      button: true,
+                      label: L10n.text('Rate This Work'),
+                      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _rate(anchor), child: ratingRow),
+                    ),
+                  )
+                else
+                  ratingRow,
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (extras.favorited case final favorited?) _stat(context, L10n.text('%@ favorites', [_count(favorited)]), CupertinoIcons.heart),
+                    if (extras.favoriteName case final name? when extras.favoriteCategory != null)
+                      _stat(context, name, CupertinoIcons.heart_fill, tint: CupertinoColors.systemPink.resolveFrom(context)),
+                    if (extras.fileSize case final size?) _stat(context, size, CupertinoIcons.archivebox),
+                    if (extras.posted case final posted?) _stat(context, _shortDate(posted), CupertinoIcons.calendar),
+                    if (extras.uploader case final uploader?) _stat(context, uploader, CupertinoIcons.person),
+                  ],
+                ),
+              ],
+            ),
           ),
-          if (extras.comments.isNotEmpty) ...[
+          if (previews.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Text(
-              L10n.text('Comments'),
-              style: TegnalType.style(17, weight: FontWeight.w600, color: label),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
+              child: Text(
+                L10n.text('Comments'),
+                style: TegnalType.style(17, weight: FontWeight.w600, color: label),
+              ),
             ),
             const SizedBox(height: 8),
-            for (final comment in WorkExtrasSection.preview(extras.comments)) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: ShapeDecoration(
-                  color: TegnalColors.secondaryLabel.resolveFrom(context).withValues(alpha: 0.08),
-                  shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(14)),
+            // One box, its corners the same as every other box on the page.
+            _box(context, [
+              for (final (index, comment) in previews.indexed) ...[
+                if (index > 0) _separator(context),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: galleryTextInset, vertical: 12),
+                  child: WorkCommentRow(comment: comment, maxLines: 4),
                 ),
-                child: WorkCommentRow(comment: comment, maxLines: 4),
-              ),
-              const SizedBox(height: 8),
-            ],
-            _wideButton(
-              context,
-              L10n.text('All Comments'),
-              CupertinoIcons.text_bubble,
-              () => showAppSheet<void>(
-                context,
-                builder: (context, controller) =>
-                    WorkCommentsPage(galleryID: widget.galleryID, initial: extras.comments, loadsAll: extras.hasMoreComments, provider: _provider),
-              ),
-            ),
+              ],
+            ]),
           ],
-          if (extras.canComment && _provider != null) ...[
-            const SizedBox(height: 8),
-            _wideButton(
-              context,
-              L10n.text('Write Comment'),
-              CupertinoIcons.square_pencil,
-              () => showAppSheet<void>(
-                context,
-                builder: (context, controller) => WorkCommentComposerPage(
-                  galleryID: widget.galleryID,
-                  provider: _provider!,
-                  posted: (comments) => setState(() {
-                    _extras?.comments = comments;
-                    _extras?.hasMoreComments = false;
-                  }),
-                ),
-              ),
-            ),
-          ],
-          // The page hands its rating key, and so its votes, only to a signed-in account.
-          if (extras.canRate && extras.tagVotes.isNotEmpty && _provider != null) ...[
-            const SizedBox(height: 8),
-            _wideButton(
-              context,
-              L10n.text('Vote on Tags'),
-              CupertinoIcons.hand_thumbsup,
-              () => showAppSheet<void>(
-                context,
-                builder: (context, controller) => WorkTagVotesPage(
-                  galleryID: widget.galleryID,
-                  votes: extras.tagVotes,
-                  provider: _provider!,
-                  changed: (votes) => setState(() => _extras?.tagVotes = votes),
-                ),
-              ),
-            ),
-          ],
-          if (extras.torrentCount > 0) ...[
-            const SizedBox(height: 8),
-            _wideButton(
-              context,
-              L10n.text('Torrents (%@)', ['${extras.torrentCount}']),
-              CupertinoIcons.arrow_down_doc,
-              () => showAppSheet<void>(
-                context,
-                builder: (context, controller) => WorkTorrentsPage(galleryID: widget.galleryID, provider: _provider),
-              ),
-            ),
-          ],
-          if (extras.canRate && extras.archiveURL != null && _provider != null) ...[
-            const SizedBox(height: 8),
-            _wideButton(
-              context,
-              L10n.text('Archive Download'),
-              CupertinoIcons.archivebox,
-              () => showAppSheet<void>(
-                context,
-                builder: (context, controller) => WorkArchivePage(galleryID: widget.galleryID, provider: _provider!),
-              ),
-            ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _box(context, [
+              for (final (index, row) in actions.indexed) ...[if (index > 0) _separator(context, leading: galleryIconColumn), row],
+            ]),
           ],
         ],
       ),
@@ -483,147 +505,6 @@ class _WorkCommentsPageState extends State<WorkCommentsPage> {
         children: [
           SheetNavigationBar(
             title: L10n.text('Comments'),
-            trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()),
-          ),
-          Expanded(child: body),
-        ],
-      ),
-    );
-  }
-}
-
-/// `WorkTorrentsView`: the torrents a website offers for a work.
-class WorkTorrentsPage extends StatefulWidget {
-  const WorkTorrentsPage({super.key, required this.galleryID, required this.provider});
-  final int galleryID;
-  final WorkExtrasProviding? provider;
-
-  @override
-  State<WorkTorrentsPage> createState() => _WorkTorrentsPageState();
-}
-
-class _WorkTorrentsPageState extends State<WorkTorrentsPage> {
-  static const _screen = MethodChannel('work.nextline.tegnal/screen');
-  List<WorkTorrent>? _torrents;
-  String? _error;
-  String? _copied;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final provider = widget.provider;
-    if (provider == null) {
-      setState(() => _torrents = const []);
-      return;
-    }
-    try {
-      final torrents = await provider.torrents(widget.galleryID);
-      if (mounted) setState(() => _torrents = torrents);
-    } on Object catch (error) {
-      if (mounted) setState(() => _error = ContentError.message(error));
-    }
-  }
-
-  String _details(WorkTorrent torrent) => [
-    ?torrent.size,
-    if (torrent.seeds case final seeds?) L10n.text('Seeds %@', ['$seeds']),
-    if (torrent.peers case final peers?) L10n.text('Peers %@', ['$peers']),
-    if (torrent.downloads case final downloads?) L10n.text('Downloads %@', ['$downloads']),
-    ?torrent.posted,
-  ].join(' · ');
-
-  Widget _smallButton(BuildContext context, String label, IconData icon, VoidCallback onPressed) {
-    final tint = TegnalColors.tint.resolveFrom(context);
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      minimumSize: const Size(0, 32),
-      onPressed: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: ShapeDecoration(color: _borderedFill.resolveFrom(context), shape: const StadiumBorder()),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: tint),
-            const SizedBox(width: 4),
-            Text(label, style: TegnalType.style(13, color: tint)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final torrents = _torrents;
-    final Widget body;
-    if (torrents != null) {
-      body = torrents.isEmpty
-          ? Center(
-              child: ContentUnavailable(icon: CupertinoIcons.arrow_down_doc, title: L10n.text('No Torrents')),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-              itemCount: torrents.length,
-              separatorBuilder: (context, index) =>
-                  Container(height: 0.5, margin: const EdgeInsets.symmetric(vertical: 12), color: TegnalColors.separator.resolveFrom(context)),
-              itemBuilder: (context, index) {
-                final torrent = torrents[index];
-                final magnet = torrent.magnet;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      torrent.name,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TegnalType.style(15, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(_details(torrent), style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context))),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        if (magnet != null) ...[
-                          _smallButton(context, L10n.text('Copy Magnet Link'), CupertinoIcons.link, () {
-                            Clipboard.setData(ClipboardData(text: magnet.toString()));
-                            setState(() => _copied = torrent.url.toString());
-                          }),
-                          const SizedBox(width: 10),
-                        ],
-                        _smallButton(
-                          context,
-                          L10n.text('Share'),
-                          CupertinoIcons.share,
-                          () => _screen.invokeMethod<void>('share', {'text': torrent.url.toString()}),
-                        ),
-                      ],
-                    ),
-                    if (_copied == torrent.url.toString()) ...[
-                      const SizedBox(height: 4),
-                      Text(L10n.text('Copied'), style: TegnalType.style(11, color: CupertinoColors.systemGreen.resolveFrom(context))),
-                    ],
-                  ],
-                );
-              },
-            );
-    } else if (_error != null) {
-      body = Center(
-        child: ContentUnavailable(icon: CupertinoIcons.wifi_exclamationmark, title: L10n.text('Unable to Load'), description: _error),
-      );
-    } else {
-      body = const Center(child: CupertinoActivityIndicator());
-    }
-    return ColoredBox(
-      color: TegnalColors.background.resolveFrom(context),
-      child: Column(
-        children: [
-          SheetNavigationBar(
-            title: L10n.text('Torrents'),
             trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()),
           ),
           Expanded(child: body),

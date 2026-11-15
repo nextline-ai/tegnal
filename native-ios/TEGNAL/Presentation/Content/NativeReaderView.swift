@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum ReaderSheet: String, Identifiable {
-    case settings, information, downloads
+    case settings, information, downloads, previews
     var id: String { rawValue }
 }
 
@@ -225,6 +225,8 @@ struct NativeReaderView: View {
         }) { item in
             switch item {
             case .downloads: DownloadsSheet(mode: .manga)
+            case .previews:
+                if let gallery { ReaderPagePreviewsView(gallery: gallery, images: images, current: $currentPage) }
             case .settings: ReaderSettingsView(onShowGuide: { pendingGuide = true; sheet = nil })
             case .information:
                 if let gallery {
@@ -428,7 +430,7 @@ struct NativeReaderView: View {
             }.disabled(gallery == nil || offline)
             menuButton(L10n.text(saved ? "Remove Bookmark" : "Bookmark"), icon: saved ? "bookmark.fill" : "bookmark", id: "bookmark", compact: compact,
                        color: saved ? WorkSaveResult.added(.comics).color : nil, action: bookmark)
-            menuButton(L10n.text("Exit"), icon: "rectangle.portrait.and.arrow.right", id: "exit", compact: compact, action: closeReader)
+            menuButton(L10n.text("Preview"), icon: "square.grid.2x2", id: "previews", compact: compact) { sheet = .previews }
             menuButton(L10n.text(showsTranslationBar || translation.isOn ? "Stop Translating" : "Translate"), icon: "translate", id: "translate", compact: compact,
                        color: showsTranslationBar || translation.isOn ? .accentColor : nil) { translate() }
             menuButton(L10n.text("Work Details"), icon: "info.circle", id: "information", compact: compact) { sheet = .information }
@@ -451,7 +453,7 @@ struct NativeReaderView: View {
                 ViewerQuickMenuButton(title: title, icon: icon, color: color, action: action)
             }
         }
-        .disabled(gallery == nil && id != "exit" && id != "settings")
+        .disabled(gallery == nil && id != "settings")
         .accessibilityIdentifier("reader.\(id)")
     }
 
@@ -609,6 +611,10 @@ struct NativeReaderView: View {
             if gallery == nil {
                 currentPage = ReaderLayout.initialPage(opening.initialPage, saved: 0, total: value.pages.count, count: pagesPerSpread)
                 gallery = value
+                // Opened straight into the reader, the work information that says so was skipped.
+                if let site = (source as? SiteFallbackContent)?.servingSite(for: galleryID) {
+                    toast = L10n.text("Opened from %@", site)
+                }
             }
             if savesProgress { rememberOpened(value) }
             if opening.needsConfirmation {

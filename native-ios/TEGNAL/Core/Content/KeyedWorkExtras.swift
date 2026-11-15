@@ -11,27 +11,6 @@ struct WorkComment: Identifiable, Hashable, Sendable {
     var isUploader: Bool { id == 0 }
 }
 
-/// A torrent a catalog offers for a work.
-struct WorkTorrent: Identifiable, Hashable, Sendable {
-    var id: String { url.absoluteString }
-    let name: String
-    let url: URL
-    let size: String?
-    let seeds: Int?
-    let peers: Int?
-    let downloads: Int?
-    let posted: String?
-    let uploader: String?
-    let hash: String?
-    var magnet: URL? {
-        guard let hash else { return nil }
-        var components = URLComponents()
-        components.scheme = "magnet"
-        components.queryItems = [URLQueryItem(name: "xt", value: "urn:btih:" + hash), URLQueryItem(name: "dn", value: name)]
-        return components.url
-    }
-}
-
 /// A work's tag on an account-based catalog, as the website spells it, with the account's vote.
 struct WorkTagVote: Identifiable, Hashable, Sendable {
     /// `namespace:name` as the website writes it, with spaces.
@@ -89,8 +68,6 @@ struct WorkExtras: Hashable, Sendable {
     /// The account's favorites category holding this work, from 0, when it is a favorite.
     var favoriteCategory: Int?
     var favoriteName: String?
-    var torrentCount = 0
-    var torrentsURL: URL?
     var comments: [WorkComment] = []
     /// The page shows only the newest comments until asked for all of them.
     var hasMoreComments = false
@@ -134,10 +111,6 @@ enum KeyedWorkPage {
         if let uploader = firstCapture(#"<div id="gdn"[^>]*>(.*?)</div>"#, in: html) {
             let name = plain(uploader)
             extras.uploader = name.isEmpty ? nil : name
-        }
-        if let count = firstCapture(#">\s*Torrent Download\s*\(\s*([0-9]+)\s*\)"#, in: html) { extras.torrentCount = Int(count) ?? 0 }
-        if let address = firstCapture(#"['"]([^'"]*gallerytorrents\.php\?[^'"]*)['"]"#, in: html) {
-            extras.torrentsURL = URL(string: NativeGallery.decodeEntities(address))
         }
         let favorite = favoriteState(html)
         extras.favoriteCategory = favorite.category
@@ -262,26 +235,6 @@ enum KeyedWorkPage {
         return result
     }
 
-    static func torrents(from html: String) -> [WorkTorrent] {
-        let forms = html.components(separatedBy: "<form").dropFirst()
-        var result: [WorkTorrent] = []
-        var seen = Set<String>()
-        for form in forms {
-            guard let match = firstMatch(#"<a\b[^>]*\bhref="([^"]+\.torrent[^"]*)"[^>]*>([^<]+)</a>"#, in: form),
-                  let url = URL(string: NativeGallery.decodeEntities(match[0])), url.scheme == "https",
-                  seen.insert(url.absoluteString).inserted else { continue }
-            func field(_ name: String) -> String? {
-                firstCapture(name + #":\s*</span>\s*(?:<span[^>]*>)?\s*([^<]+?)\s*<"#, in: form).map { plain($0) }.flatMap { $0.isEmpty ? nil : $0 }
-            }
-            let hash = firstCapture(#"([0-9a-fA-F]{40})"#, in: url.path)?.lowercased()
-            result.append(WorkTorrent(name: plain(match[1]), url: url, size: field("Size"),
-                                      seeds: field("Seeds").flatMap { Int($0) }, peers: field("Peers").flatMap { Int($0) },
-                                      downloads: field("Downloads").flatMap { Int($0) }, posted: field("Posted"),
-                                      uploader: field("Uploader"), hash: hash))
-        }
-        return result
-    }
-
     // MARK: Helpers
 
     private static func detailRows(_ html: String) -> [(String, String)] {
@@ -365,12 +318,11 @@ struct FavoriteCategory: Identifiable, Hashable, Sendable {
     let count: Int
 }
 
-/// Catalogs that keep ratings, comments and torrents for their works.
+/// Catalogs that keep ratings and comments for their works.
 protocol WorkExtrasProviding: Sendable {
     /// Nil when the website keeps none of this for its works.
     func extras(_ id: Int64) async throws -> WorkExtras?
     func allComments(_ id: Int64) async throws -> [WorkComment]
-    func torrents(_ id: Int64) async throws -> [WorkTorrent]
     /// Rates a work from 1 to 10 half-stars; returns the new average and count.
     func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int)
     /// Votes a tag of a work up (1) or down (-1); voting against the account's vote withdraws it.

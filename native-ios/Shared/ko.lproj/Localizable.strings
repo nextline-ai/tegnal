@@ -1696,13 +1696,10 @@
 "All Comments" = "댓글 모두 보기";
 "Category %@" = "분류 %@";
 "Comments" = "댓글";
-"Copy Magnet Link" = "마그넷 링크 복사";
 "Copy the cookies from a browser where you’re signed in to the website, such as a cookie list or a shortcut’s output, then paste them here." = "웹사이트에 로그인한 브라우저에서 쿠키를 복사해 여기에 붙여 넣으세요. 쿠키 목록이나 단축어 결과를 그대로 붙여 넣어도 됩니다.";
-"Downloads %@" = "다운로드 %@";
 "Favorites Category" = "즐겨찾기 분류";
 "Finish any check the website shows. The app keeps the result for this website." = "웹사이트에 나오는 확인 절차를 마치세요. 앱이 이 웹사이트용으로 결과를 보관합니다.";
 "Forget" = "지우기";
-"Forget Where Works Opened" = "작품을 연 웹사이트 기록 지우기";
 "Image Allowance" = "이미지 한도";
 "Image Cache" = "이미지 캐시";
 "In Use" = "사용 중";
@@ -1712,7 +1709,6 @@
 "Maximum Size" = "최대 크기";
 "Member ID" = "회원 ID";
 "No Comments" = "댓글 없음";
-"No Torrents" = "토렌트 없음";
 "No sign-in cookies were found in what you pasted." = "붙여 넣은 내용에서 로그인 쿠키를 찾지 못했습니다.";
 "Not Rated Yet" = "아직 평가 없음";
 "Opened from %@" = "%@에서 열었습니다";
@@ -1720,12 +1716,10 @@
 "Other Websites" = "다른 웹사이트";
 "Pages and previews you’ve viewed are kept so they open without downloading again. When the cache is full, the least recently viewed images are removed first. Saved works and their covers are not affected." = "본 페이지와 미리보기를 보관해 다시 받지 않고 바로 엽니다. 캐시가 가득 차면 가장 오래전에 본 이미지부터 지웁니다. 저장한 작품과 표지는 영향을 받지 않습니다.";
 "Pass Hash" = "패스 해시";
-"Peers %@" = "피어 %@";
 "Popular of All Time" = "역대 인기순";
 "Rate This Work" = "이 작품 평가하기";
 "Refresh Website Access" = "웹사이트 접근 권한 다시 받기";
 "Saved works are kept. Images will be downloaded again when needed." = "저장한 작품은 그대로 남습니다. 이미지는 필요할 때 다시 받습니다.";
-"Seeds %@" = "시드 %@";
 "Sign In" = "로그인";
 "Sign In with Cookies" = "쿠키로 로그인";
 "Signed in, but the website still didn’t show your account. Check the cookies, including the access cookie, or try again later." = "로그인했지만 웹사이트에 아직 계정이 보이지 않습니다. 접근 쿠키를 포함해 쿠키를 확인하거나 잠시 후 다시 시도하세요.";
@@ -1735,15 +1729,11 @@
 "This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again." = "이 웹사이트가 봇이 아닌지 확인을 요청합니다. 클라이언트 확인을 열어 절차를 마친 뒤 다시 시도하세요.";
 "This website has paused access from your network for a while. Try again later, or change networks." = "이 웹사이트가 현재 네트워크의 접속을 잠시 막았습니다. 나중에 다시 시도하거나 다른 네트워크를 사용하세요.";
 "This website’s check and the browser data kept for it are removed. Your account sign-in in the app is kept." = "이 웹사이트의 확인 결과와 보관한 브라우저 데이터를 지웁니다. 앱의 계정 로그인은 유지됩니다.";
-"Torrents" = "토렌트";
-"Torrents (%@)" = "토렌트 (%@)";
 "Unable to Rate" = "평가할 수 없음";
 "Uploader" = "업로더";
 "Use This Account on This Website" = "이 웹사이트에서도 이 계정 사용";
 "Viewer and Preview Images" = "뷰어·미리보기 이미지";
 "Watched Tags" = "구독 태그";
-"When the checked website no longer has a work, the app opens it from another connected website and opens it there first next time. Forgetting this tries the checked website first again." = "체크한 웹사이트에 더 이상 없는 작품은 연결한 다른 웹사이트에서 열고, 다음부터는 그 웹사이트에서 먼저 엽니다. 기록을 지우면 다시 체크한 웹사이트부터 시도합니다.";
-"Works Opened Elsewhere" = "다른 웹사이트에서 연 작품";
 "%@ pages" = "%@페이지";
 "iCloud Sync is off. Your library is saved only on this device." = "iCloud 동기화가 꺼져 있습니다. 보관함은 이 기기에만 저장됩니다.";
 "Keep iCloud Sync On" = "iCloud 동기화 유지하기";
@@ -1834,3 +1824,6 @@
 "Loads each page’s original file instead of the resized one. The website may charge GP for originals; a page it won’t send is shown resized." = "축소본 대신 각 페이지의 원본 파일을 불러옵니다. 웹사이트가 원본에 GP를 청구할 수 있으며, 보내 주지 않는 페이지는 축소본으로 표시합니다.";
 "Settings Profile" = "설정 프로필";
 "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings." = "앱이 웹사이트를 읽을 때 사용할 설정 프로필입니다. 앱용으로 만든 프로필 등을 고를 수 있습니다. 프로필은 웹사이트 설정에서 만드세요.";
+"Works Deleted on a Website" = "웹사이트에서 삭제된 작품";
+"Forget Deleted Works" = "삭제된 작품 기록 지우기";
+"Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again." = "작품은 항상 체크한 웹사이트에서 먼저 엽니다. 체크한 웹사이트에 더 이상 없는 작품은 연결한 다른 웹사이트에서 열고, 체크한 웹사이트에서 삭제되었다는 사실을 기억합니다. 기록을 지우면 모든 웹사이트에 다시 확인합니다.";

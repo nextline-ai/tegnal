@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// Rating, how often a work is kept, who uploaded it, comments and torrents, on websites that
-/// keep them. Nothing shows for websites that don't.
+/// Rating, how often a work is kept, who uploaded it and comments, on websites that keep them,
+/// with the account's actions in a box of rows. Nothing shows for websites that don't.
 struct WorkExtrasSection: View {
     @Environment(AppEnvironment.self) private var env
     let galleryID: Int64
     let source: any ContentProviding
     @State private var extras: WorkExtras?
     @State private var showsComments = false
-    @State private var showsTorrents = false
     @State private var votingTags = false
     @State private var writingComment = false
     @State private var showsArchive = false
@@ -23,48 +22,44 @@ struct WorkExtrasSection: View {
             if let extras, Self.hasContent(extras) {
                 VStack(alignment: .leading, spacing: 14) {
                     Divider()
-                    ratingRow(extras)
-                    FlowLayout(spacing: 6) { stats(extras) }
+                    VStack(alignment: .leading, spacing: 14) {
+                        ratingRow(extras)
+                        FlowLayout(spacing: 6) { stats(extras) }
+                    }.padding(.horizontal, GalleryDetailInset.text)
                     if !extras.comments.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(L10n.text("Comments")).font(.headline)
-                            ForEach(Self.preview(extras.comments)) { comment in
-                                WorkCommentRow(comment: comment, lineLimit: 4)
-                                    .padding(12)
-                                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            Text(L10n.text("Comments")).font(.headline).padding(.horizontal, GalleryDetailInset.text)
+                            // One box, its corners the same as every other box on the page.
+                            VStack(spacing: 0) {
+                                ForEach(Array(Self.preview(extras.comments).enumerated()), id: \.element.id) { index, comment in
+                                    if index > 0 { Divider().padding(.horizontal, GalleryDetailInset.text) }
+                                    WorkCommentRow(comment: comment, lineLimit: 4)
+                                        .padding(.horizontal, GalleryDetailInset.text).padding(.vertical, 12)
+                                }
                             }
-                            Button { showsComments = true } label: {
-                                Label(L10n.text("All Comments"), systemImage: "text.bubble")
-                                    .frame(maxWidth: .infinity)
+                            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                        in: RoundedRectangle(cornerRadius: GalleryDetailInset.boxRadius, style: .continuous))
+                        }
+                    }
+                    let actions = actions(extras)
+                    if !actions.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
+                                if index > 0 { Divider().padding(.leading, GalleryDetailInset.iconColumn).padding(.trailing, GalleryDetailInset.text) }
+                                Button(action: action.open) {
+                                    HStack(spacing: 0) {
+                                        Image(systemName: action.icon).foregroundStyle(Color.accentColor).frame(width: GalleryDetailInset.iconColumn)
+                                        Text(action.title).foregroundStyle(Color.accentColor)
+                                        Spacer(minLength: 8)
+                                    }
+                                    .padding(.trailing, GalleryDetailInset.text)
+                                    .frame(minHeight: GalleryDetailInset.rowHeight).contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain).accessibilityIdentifier(action.id)
                             }
-                            .buttonStyle(.bordered).accessibilityIdentifier("content.detail.comments")
                         }
-                    }
-                    if extras.canComment && provider != nil {
-                        Button { writingComment = true } label: {
-                            Label(L10n.text("Write Comment"), systemImage: "square.and.pencil").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.writeComment")
-                    }
-                    // The page hands its rating key, and so its votes, only to a signed-in account.
-                    if extras.canRate && !extras.tagVotes.isEmpty && provider != nil {
-                        Button { votingTags = true } label: {
-                            Label(L10n.text("Vote on Tags"), systemImage: "hand.thumbsup").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.voteTags")
-                    }
-                    if extras.torrentCount > 0 {
-                        Button { showsTorrents = true } label: {
-                            Label(L10n.text("Torrents (%@)", String(extras.torrentCount)), systemImage: "arrow.down.doc")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.torrents")
-                    }
-                    if extras.canRate && extras.archiveURL != nil && provider != nil {
-                        Button { showsArchive = true } label: {
-                            Label(L10n.text("Archive Download"), systemImage: "archivebox").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.archive")
+                        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                    in: RoundedRectangle(cornerRadius: GalleryDetailInset.boxRadius, style: .continuous))
                     }
                 }
                 .accessibilityIdentifier("content.detail.extras")
@@ -77,9 +72,6 @@ struct WorkExtrasSection: View {
         }
         .appSheet(isPresented: $showsComments) {
             WorkCommentsView(galleryID: galleryID, initial: extras?.comments ?? [], loadsAll: extras?.hasMoreComments == true, provider: provider)
-        }
-        .appSheet(isPresented: $showsTorrents) {
-            WorkTorrentsView(galleryID: galleryID, provider: provider)
         }
         .appSheet(isPresented: $votingTags) {
             WorkTagVotesView(galleryID: galleryID, votes: extras?.tagVotes ?? [], provider: provider) { extras?.tagVotes = $0 }
@@ -99,7 +91,34 @@ struct WorkExtrasSection: View {
     }
 
     static func hasContent(_ extras: WorkExtras) -> Bool {
-        extras.rating != nil || extras.favorited != nil || extras.uploader != nil || extras.fileSize != nil || !extras.comments.isEmpty || extras.torrentCount > 0
+        extras.rating != nil || extras.favorited != nil || extras.uploader != nil || extras.fileSize != nil || !extras.comments.isEmpty
+            || extras.canComment || extras.canRate
+    }
+
+    private struct Action: Identifiable {
+        let id: String
+        let title: String
+        let icon: String
+        let open: () -> Void
+    }
+
+    /// Comments first, then what the account can do on the website.
+    private func actions(_ extras: WorkExtras) -> [Action] {
+        var actions: [Action] = []
+        if !extras.comments.isEmpty {
+            actions.append(Action(id: "content.detail.comments", title: L10n.text("All Comments"), icon: "text.bubble") { showsComments = true })
+        }
+        if extras.canComment && provider != nil {
+            actions.append(Action(id: "content.detail.writeComment", title: L10n.text("Write Comment"), icon: "square.and.pencil") { writingComment = true })
+        }
+        // The page hands its rating key, and so its votes and archives, only to a signed-in account.
+        if extras.canRate && !extras.tagVotes.isEmpty && provider != nil {
+            actions.append(Action(id: "content.detail.voteTags", title: L10n.text("Vote on Tags"), icon: "hand.thumbsup") { votingTags = true })
+        }
+        if extras.canRate && extras.archiveURL != nil && provider != nil {
+            actions.append(Action(id: "content.detail.archive", title: L10n.text("Archive Download"), icon: "archivebox") { showsArchive = true })
+        }
+        return actions
     }
 
     /// The uploader's note first, then the best-scored comments.
@@ -255,73 +274,6 @@ struct WorkCommentsView: View {
     }
 }
 
-struct WorkTorrentsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
-    let galleryID: Int64
-    let provider: (any WorkExtrasProviding)?
-    @State private var torrents: [WorkTorrent]?
-    @State private var error: String?
-    @State private var copied: String?
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if let torrents {
-                    if torrents.isEmpty { ContentUnavailableView(L10n.text("No Torrents"), systemImage: "arrow.down.doc") }
-                    else {
-                        List(torrents) { torrent in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(torrent.name).font(.subheadline.weight(.semibold)).lineLimit(3)
-                                Text(details(torrent)).font(.caption).foregroundStyle(.secondary)
-                                HStack(spacing: 10) {
-                                    if let magnet = torrent.magnet {
-                                        Button(L10n.text("Copy Magnet Link"), systemImage: "link") {
-                                            UIPasteboard.general.string = magnet.absoluteString
-                                            copied = torrent.id
-                                        }
-                                    }
-                                    ShareLink(item: torrent.url) { Label(L10n.text("Share"), systemImage: "square.and.arrow.up") }
-                                }
-                                .font(.caption).buttonStyle(.bordered).controlSize(.small)
-                                if copied == torrent.id {
-                                    Text(L10n.text("Copied")).font(.caption2).foregroundStyle(.green)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .contextMenu {
-                                Button(L10n.text("Open"), systemImage: "safari") { openURL(torrent.url) }
-                            }
-                        }
-                        .listStyle(.plain)
-                    }
-                } else if let error {
-                    ContentFailureView(message: error) { self.error = nil; Task { await load() } }
-                } else { ProgressView() }
-            }
-            .navigationTitle(L10n.text("Torrents")).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
-            .task { await load() }
-        }
-    }
-
-    private func details(_ torrent: WorkTorrent) -> String {
-        var parts: [String] = []
-        if let size = torrent.size { parts.append(size) }
-        if let seeds = torrent.seeds { parts.append(L10n.text("Seeds %@", String(seeds))) }
-        if let peers = torrent.peers { parts.append(L10n.text("Peers %@", String(peers))) }
-        if let downloads = torrent.downloads { parts.append(L10n.text("Downloads %@", String(downloads))) }
-        if let posted = torrent.posted { parts.append(posted) }
-        return parts.joined(separator: " · ")
-    }
-
-    private func load() async {
-        guard let provider else { torrents = []; return }
-        do { torrents = try await provider.torrents(galleryID) }
-        catch { self.error = ContentError.message(error) }
-    }
-}
-
 /// The work's tags with the account's votes. A vote decides, with everyone else's, which tags the
 /// work keeps on the website; voting against the account's own vote withdraws it.
 struct WorkTagVotesView: View {
@@ -365,11 +317,14 @@ struct WorkTagVotesView: View {
 
     private func row(_ tag: WorkTagVote) -> some View {
         Menu {
-            if tag.vote == 0 {
-                Button(L10n.text("Vote Up"), systemImage: "hand.thumbsup") { vote(tag, 1) }
-                Button(L10n.text("Vote Down"), systemImage: "hand.thumbsdown") { vote(tag, -1) }
-            } else {
-                Button(L10n.text("Withdraw Vote"), systemImage: "arrow.uturn.backward") { vote(tag, -tag.vote) }
+            // The menu opens over the row it came from, so it names the tag itself.
+            Section(tag.localNamespace.isEmpty ? tag.name : "\(tag.localNamespace): \(tag.name)") {
+                if tag.vote == 0 {
+                    Button(L10n.text("Vote Up"), systemImage: "hand.thumbsup") { vote(tag, 1) }
+                    Button(L10n.text("Vote Down"), systemImage: "hand.thumbsdown") { vote(tag, -1) }
+                } else {
+                    Button(L10n.text("Withdraw Vote"), systemImage: "arrow.uturn.backward") { vote(tag, -tag.vote) }
+                }
             }
         } label: {
             HStack {

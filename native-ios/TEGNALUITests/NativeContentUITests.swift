@@ -58,6 +58,14 @@ final class NativeContentUITests: XCTestCase {
     private func tap(_ app: XCUIApplication, x: CGFloat, y: CGFloat = 0.5) {
         app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
     }
+    /// The quick menu has no Exit button; the reader closes by pulling its handle down.
+    private func exitReader(_ app: XCUIApplication) {
+        if element(app, "reader.menu.close").exists { element(app, "reader.menu.close").tap() }
+        let handle = element(app, "reader.exitHandle")
+        XCTAssertTrue(handle.waitForExistence(timeout: 5))
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+    }
+
     private func menu(_ app: XCUIApplication) {
         expectation(for: NSPredicate { _, _ in
             app.images.matching(identifier: "reader.image").allElementsBoundByIndex.contains { $0.isHittable }
@@ -343,7 +351,7 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(element(app, "reader.image").waitForExistence(timeout: 10))
         menu(app)
         XCTAssertEqual(element(app, "reader.position").label, "Page 3 / 3")
-        element(app, "reader.exit").tap()
+        exitReader(app)
         XCTAssertTrue(element(app, "content.detail.preview.3").waitForExistence(timeout: 5))
     }
 
@@ -426,7 +434,7 @@ final class NativeContentUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         app.activate()
         menu(app)
-        element(app, "reader.exit").tap()
+        exitReader(app)
         XCTAssertTrue(element(app, "content.read").waitForExistence(timeout: 5))
         XCTAssertEqual(app.webViews.count, 0)
     }

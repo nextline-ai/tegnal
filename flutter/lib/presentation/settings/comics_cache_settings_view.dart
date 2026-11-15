@@ -54,7 +54,7 @@ class _ComicsCacheSettingsViewState extends State<ComicsCacheSettingsView> {
     final forget = await showCupertinoModalPopup<bool>(
       context: context,
       builder: (context) => CupertinoActionSheet(
-        title: Text(L10n.text('Forget Where Works Opened')),
+        title: Text(L10n.text('Forget Deleted Works')),
         actions: [CupertinoActionSheetAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Forget')))],
         cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
       ),
@@ -100,12 +100,12 @@ class _ComicsCacheSettingsViewState extends State<ComicsCacheSettingsView> {
           header: Text(L10n.text('Other Websites')),
           footer: Text(
             L10n.text(
-              'When the checked website no longer has a work, the app opens it from another connected website and opens it there first next time. Forgetting this tries the checked website first again.',
+              'Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again.',
             ),
           ),
           children: [
-            SettingsValueRow(title: L10n.text('Works Opened Elsewhere'), value: '$remembered'),
-            SettingsLinkRow(title: L10n.text('Forget Where Works Opened'), tinted: true, chevron: false, onTap: remembered == 0 ? null : _confirmForget),
+            SettingsValueRow(title: L10n.text('Works Deleted on a Website'), value: '$remembered'),
+            SettingsLinkRow(title: L10n.text('Forget Deleted Works'), tinted: true, chevron: false, onTap: remembered == 0 ? null : _confirmForget),
           ],
         ),
       ],
