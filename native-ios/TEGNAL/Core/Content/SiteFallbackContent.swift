@@ -263,6 +263,22 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
         guard let source = extrasSource(for: id) else { throw ContentError.unsupportedFormat }
         return try await source.rate(id, halfStars: halfStars)
     }
+    func voteTag(_ id: Int64, tag: String, vote: Int) async throws -> [WorkTagVote] {
+        guard let source = extrasSource(for: id) else { throw ContentError.unsupportedFormat }
+        return try await source.voteTag(id, tag: tag, vote: vote)
+    }
+    func postComment(_ id: Int64, text: String) async throws -> [WorkComment] {
+        guard let source = extrasSource(for: id) else { throw ContentError.unsupportedFormat }
+        return try await source.postComment(id, text: text)
+    }
+    func archiveOffer(_ id: Int64) async throws -> WorkArchiveOffer {
+        guard let source = extrasSource(for: id) else { throw ContentError.unsupportedFormat }
+        return try await source.archiveOffer(id)
+    }
+    func archiveDownloadURL(_ id: Int64, option: WorkArchiveOffer.Option) async throws -> URL {
+        guard let source = extrasSource(for: id) else { throw ContentError.unsupportedFormat }
+        return try await source.archiveDownloadURL(id, option: option)
+    }
 
     func suggestions(for token: String) async throws -> [TagSuggestion] {
         try await primary.suggestions(for: token)

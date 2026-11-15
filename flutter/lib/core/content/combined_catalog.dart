@@ -37,6 +37,14 @@ class SiteContent extends ContentProviding implements WorkExtrasProviding {
   Future<List<WorkTorrent>> torrents(int id) => SiteScope.run(site, () => _inner.torrents(id));
   @override
   Future<(double, int)> rate(int id, int halfStars) => SiteScope.run(site, () => _inner.rate(id, halfStars));
+  @override
+  Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote}) => SiteScope.run(site, () => _inner.voteTag(id, tag: tag, vote: vote));
+  @override
+  Future<List<WorkComment>> postComment(int id, String text) => SiteScope.run(site, () => _inner.postComment(id, text));
+  @override
+  Future<WorkArchiveOffer> archiveOffer(int id) => SiteScope.run(site, () => _inner.archiveOffer(id));
+  @override
+  Future<Uri> archiveDownloadURL(int id, WorkArchiveOption option) => SiteScope.run(site, () => _inner.archiveDownloadURL(id, option));
 
   /// The website's account favorites, to check that a sign-in made for it works there.
   Future<(List<int>, String?)> accountFavorites({String? after, int? category}) =>

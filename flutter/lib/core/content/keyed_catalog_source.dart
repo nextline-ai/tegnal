@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:characters/characters.dart';
 import 'package:crypto/crypto.dart';
 
+import '../support/l10n.dart';
 import '../support/swift_json.dart';
 import 'content_errors.dart';
 import 'content_transport.dart';
@@ -62,9 +63,12 @@ class KeyedEntry {
 }
 
 class ShownImage {
-  const ShownImage(this.url, this.reload);
+  const ShownImage(this.url, this.reload, {this.original});
   final Uri url;
   final String? reload;
+
+  /// The page's original file, which a signed-in account may load instead.
+  final Uri? original;
 }
 
 class _Detail {
@@ -449,6 +453,9 @@ class KeyedCatalogSource {
 
   _PreviewBatch? _openBatch;
 
+  /// Websites that wouldn't send original files lately, until when.
+  final _originalsRefusedUntil = <String, DateTime>{};
+
   /// A work as a list card shows it: title, tags, cover and page count from the details endpoint,
   /// never from the work's own page. Cards asking at the same moment share one details request,
   /// so a list that lost its cached details costs a request per 25 works, not a page load per card.
@@ -641,6 +648,25 @@ class KeyedCatalogSource {
       final shown = url == null ? null : shownImage(await _page(url, site));
       if (shown == null) throw ContentError.unsupportedFormat;
       if (isLimitNotice(shown.url)) throw ContentError.imageLimit;
+      final original = shown.original, host = ContentURL.parse(site)?.host.toLowerCase();
+      if (original != null &&
+          host != null &&
+          loadsOriginals(host) &&
+          SiteAccount.isSignedIn &&
+          (_originalsRefusedUntil[host] ?? DateTime(0)).isBefore(DateTime.now())) {
+        try {
+          return await _fetch(original, galleryID: galleryID, limit: 64000000, site: site);
+        } on CancellationError {
+          rethrow;
+        } on ContentError catch (error) {
+          if (error == ContentError.imageLimit || error == ContentError.accessDenied || error == ContentError.temporarilyBlocked) rethrow;
+          // The website keeps originals for GP the account may not have, or for quieter hours:
+          // the page shown in their place serves meanwhile.
+          _originalsRefusedUntil[host] = DateTime.now().add(const Duration(minutes: 10));
+        } on Object {
+          _originalsRefusedUntil[host] = DateTime.now().add(const Duration(minutes: 10));
+        }
+      }
       try {
         return await _fetch(shown.url, galleryID: galleryID, limit: 24000000, site: site);
       } catch (error) {
@@ -854,6 +880,138 @@ class KeyedCatalogSource {
     }
     return result.take(20).toList();
   }
+
+  // MARK: Tags, comments, archives and settings profiles
+
+  Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote, required String site}) async {
+    _prepare(site);
+    if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
+    if ((vote != 1 && vote != -1) || tag.isEmpty || tag.length > 200) throw ContentError.invalidQuery;
+    final key = await keyFor(id, site: site);
+    var detail = await _detailPage(id, key: key, page: 0, site: site);
+    if (detail.apiKey == null) {
+      _details.remove(id);
+      detail = await _detailPage(id, key: key, page: 0, site: site);
+    }
+    final credentials = detail.apiKey;
+    if (credentials == null) throw ContentError.signInRequired;
+    final object = await _api({
+      'method': 'taggallery',
+      'apiuid': credentials.uid,
+      'apikey': credentials.key,
+      'gid': id,
+      'token': key,
+      'tags': tag,
+      'vote': vote,
+    }, site);
+    final message = object['error'];
+    if (message is String && message.isNotEmpty) throw SiteMessage(message);
+    final pane = object['tagpane'];
+    final votes = KeyedWorkPage.tagVotes(pane is String ? pane : '');
+    if (votes.isEmpty) throw ContentError.invalidResponse;
+    _details[id]?.extras?.tagVotes = votes;
+    return votes;
+  }
+
+  /// The website takes a comment of at least ten bytes, and joins it to the account's own comment
+  /// when that one is the last.
+  Future<List<WorkComment>> postComment(int id, String text, {required String site}) async {
+    _prepare(site);
+    if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
+    final comment = text.trim();
+    if (utf8.encode(comment).length < 10) throw SiteMessage(L10n.text('A comment is too short.'));
+    if (utf8.encode(comment).length > 10000) throw ContentError.invalidQuery;
+    final key = await keyFor(id, site: site);
+    final url = ContentURL.parse('${site}g/$id/$key/');
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    if (url == null || host == null) throw ContentError.invalidQuery;
+    await pacer.wait(host);
+    final result = await transport.post(
+      url,
+      body: utf8.encode('commenttext_new=${formEncoded(comment)}'),
+      contentType: 'application/x-www-form-urlencoded',
+      limit: 3000000,
+    );
+    _prepare(site);
+    final page = utf8.decode(result.data, allowMalformed: true);
+    if (asksForSignIn(page)) throw ContentError.signInRequired;
+    final error = pageError(page);
+    if (error != null && error != ContentError.signInRequired) throw error;
+    _details.remove(id);
+    final probe = _commentProbe(comment);
+    bool posted(List<WorkComment> comments) => comments.any((item) => _commentProbe(item.text).contains(probe));
+    var comments = KeyedWorkPage.comments(page);
+    if (posted(comments)) return comments;
+    // A long conversation shows only part of itself on the work's page.
+    comments = await allComments(id, site: site);
+    if (posted(comments)) return comments;
+    final refusal = KeyedWorkPage.firstCapture(r'<p class="br">(.*?)</p>', page);
+    throw SiteMessage(refusal == null ? L10n.text('The website didn’t take the comment. Try again later.') : KeyedWorkPage.plain(refusal));
+  }
+
+  static String _commentProbe(String text) {
+    final compact = text.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    return compact.length > 40 ? compact.substring(0, 40) : compact;
+  }
+
+  Future<Uri> _archiverURL(int id, String site) async {
+    final info = await extras(id, site: site);
+    // The work page names its archive page; only a page on the connected website is followed.
+    final named = info.archiveURL;
+    if (named != null && named.host.toLowerCase() == ContentURL.parse(site)?.host.toLowerCase()) return named;
+    final key = await keyFor(id, site: site);
+    return ContentURL.withQueryItems('${site}archiver.php', [('gid', '$id'), ('token', key)]);
+  }
+
+  Future<WorkArchiveOffer> archiveOffer(int id, {required String site}) async {
+    _prepare(site);
+    if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
+    final offer = KeyedWorkPage.archiveOffer(await _page(await _archiverURL(id, site), site));
+    if (offer.options.isEmpty) throw ContentError.unsupportedFormat;
+    return offer;
+  }
+
+  Future<Uri> archiveDownloadURL(int id, WorkArchiveOption option, {required String site}) async {
+    _prepare(site);
+    if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
+    if (!const ['org', 'res'].contains(option.kind) || !option.available) throw ContentError.invalidQuery;
+    final url = await _archiverURL(id, site);
+    await pacer.wait(url.host.toLowerCase());
+    final form = 'dltype=${formEncoded(option.kind)}&dlcheck=${formEncoded(option.button)}';
+    final result = await transport.post(url, body: utf8.encode(form), contentType: 'application/x-www-form-urlencoded', limit: 1000000);
+    _prepare(site);
+    final page = utf8.decode(result.data, allowMalformed: true);
+    if (asksForSignIn(page)) throw ContentError.signInRequired;
+    final address = KeyedWorkPage.archiveDownloadURL(page);
+    if (address == null) throw SiteMessage(KeyedWorkPage.message(page) ?? L10n.text('The website didn’t prepare the archive. Try again later.'));
+    if (!safeMediaURL(address)) throw ContentError.unsupportedFormat;
+    MangaUrls.registerMedia([address], site: site);
+    return address;
+  }
+
+  /// The account's settings profiles, which one the app uses checked.
+  Future<List<SiteSettingsProfile>> settingsProfiles({required String site}) async {
+    _prepare(site);
+    final url = ContentURL.parse('${site}uconfig.php');
+    if (!SiteAccount.isSignedIn || url == null) throw ContentError.signInRequired;
+    return KeyedWorkPage.settingsProfiles(await _page(url, site));
+  }
+
+  /// Reads the website with one of the account's settings profiles from now on.
+  void useSettingsProfile(int profile, {required String site}) {
+    _prepare(site);
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    if (profile < 1 || profile > 9999 || host == null) throw ContentError.invalidQuery;
+    SiteAccount.setSiteCookie(profileCookie, '$profile', host: host);
+    // Lists and work pages read with the other profile may look different.
+    _feeds.clear();
+    _details.clear();
+    _toplists.clear();
+    _popular = null;
+  }
+
+  /// The cookie the website reads the chosen settings profile from.
+  static const profileCookie = 'sp';
 
   // MARK: Account favorites
 
@@ -1156,7 +1314,30 @@ class KeyedCatalogSource {
     final url = value == null ? null : ContentURL.parse(_decode(value));
     if (url == null) return null;
     final call = RegExp(r"nl\('([0-9A-Za-z_-]{1,64})'\)").firstMatch(text);
-    return ShownImage(url, call?[1]);
+    // Shown only to signed-in accounts, and only when the original is larger than the page shown.
+    final link = KeyedWorkPage.firstCapture(r'<a\b[^>]*\bhref="([^"]*fullimg[^"]*)"', text);
+    final original = link == null ? null : ContentURL.parse(_decode(link));
+    return ShownImage(url, call?[1], original: original != null && original.scheme == 'https' ? original : null);
+  }
+
+  static const _originalsKey = 'manga.originalImageSites';
+
+  /// Whether the reader loads each page's original file on [host], for a signed-in account.
+  static bool loadsOriginals(String host) => _originalHosts().contains(host);
+
+  static Set<String> _originalHosts() {
+    final value = ContentPreferences.defaults.object(_originalsKey);
+    return {if (value is List) ...value.whereType<String>()};
+  }
+
+  static void setLoadsOriginals(bool loads, {required String host}) {
+    final hosts = _originalHosts();
+    if (loads) {
+      hosts.add(host);
+    } else {
+      hosts.remove(host);
+    }
+    ContentPreferences.defaults.set(_originalsKey, (hosts.toList()..sort()));
   }
 
   /// When an account's image allowance runs out, the site shows a fixed notice image instead.

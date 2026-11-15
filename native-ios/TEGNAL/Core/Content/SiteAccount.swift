@@ -263,7 +263,7 @@ enum SiteAccount {
 
     /// Cookies an account carries besides its identity: access, settings key and perks.
     static func keepsForAccount(_ name: String) -> Bool {
-        [accessCookie, "sk", "star", "hath_perks", "iq"].contains(name)
+        [accessCookie, "sk", "sp", "star", "hath_perks", "iq"].contains(name)
     }
 
     private static func isCookieName(_ name: String) -> Bool {
@@ -295,6 +295,19 @@ enum SiteAccount {
     /// The value of a cookie the site set for [host], as the next request sends it.
     static func siteCookie(_ name: String, host: String) -> String? {
         lock.withLock { load().sites[host]?[name] }
+    }
+
+    /// Sets a cookie for [host] the way the website's own pages would, such as its settings profile.
+    static func setSiteCookie(_ name: String, value: String, host: String) {
+        guard isCookieName(name), isCookieValue(value), !host.isEmpty else { return }
+        lock.withLock {
+            var stored = load()
+            var site = stored.sites[host] ?? [:]
+            guard site[name] != value else { return }
+            site[name] = value
+            stored.sites[host] = site
+            save(stored)
+        }
     }
 
     /// Drops a cookie the site refused, unless the same answer already handed out another one:

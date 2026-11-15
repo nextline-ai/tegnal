@@ -1,10 +1,16 @@
+import 'dart:io';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../core/content/content_environment.dart';
 import '../../core/content/content_errors.dart';
 import '../../core/content/gallery_content.dart';
+import '../../core/content/keyed_catalog_source.dart';
 import '../../core/content/keyed_work_extras.dart';
+import '../../core/content/content_transport.dart';
+import '../../core/support/document_files.dart';
 import '../../core/support/l10n.dart';
 import '../design/alert_dialog.dart';
 import '../design/app_sheet.dart';
@@ -249,6 +255,43 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
               ),
             ),
           ],
+          if (extras.canComment && _provider != null) ...[
+            const SizedBox(height: 8),
+            _wideButton(
+              context,
+              L10n.text('Write Comment'),
+              CupertinoIcons.square_pencil,
+              () => showAppSheet<void>(
+                context,
+                builder: (context, controller) => WorkCommentComposerPage(
+                  galleryID: widget.galleryID,
+                  provider: _provider!,
+                  posted: (comments) => setState(() {
+                    _extras?.comments = comments;
+                    _extras?.hasMoreComments = false;
+                  }),
+                ),
+              ),
+            ),
+          ],
+          // The page hands its rating key, and so its votes, only to a signed-in account.
+          if (extras.canRate && extras.tagVotes.isNotEmpty && _provider != null) ...[
+            const SizedBox(height: 8),
+            _wideButton(
+              context,
+              L10n.text('Vote on Tags'),
+              CupertinoIcons.hand_thumbsup,
+              () => showAppSheet<void>(
+                context,
+                builder: (context, controller) => WorkTagVotesPage(
+                  galleryID: widget.galleryID,
+                  votes: extras.tagVotes,
+                  provider: _provider!,
+                  changed: (votes) => setState(() => _extras?.tagVotes = votes),
+                ),
+              ),
+            ),
+          ],
           if (extras.torrentCount > 0) ...[
             const SizedBox(height: 8),
             _wideButton(
@@ -258,6 +301,18 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
               () => showAppSheet<void>(
                 context,
                 builder: (context, controller) => WorkTorrentsPage(galleryID: widget.galleryID, provider: _provider),
+              ),
+            ),
+          ],
+          if (extras.canRate && extras.archiveURL != null && _provider != null) ...[
+            const SizedBox(height: 8),
+            _wideButton(
+              context,
+              L10n.text('Archive Download'),
+              CupertinoIcons.archivebox,
+              () => showAppSheet<void>(
+                context,
+                builder: (context, controller) => WorkArchivePage(galleryID: widget.galleryID, provider: _provider!),
               ),
             ),
           ],
@@ -575,5 +630,387 @@ class _WorkTorrentsPageState extends State<WorkTorrentsPage> {
         ],
       ),
     );
+  }
+}
+
+String _failure(Object error) => error is SiteMessage ? error.text : ContentError.message(error);
+
+Future<void> _alert(BuildContext context, String title, String message) => showCupertinoDialog<void>(
+  context: context,
+  builder: (context) => TegnalAlertDialog(
+    title: Text(title),
+    content: Text(message),
+    actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+  ),
+);
+
+/// `WorkTagVotesView`: the work's tags with the account's votes. A vote decides, with everyone
+/// else's, which tags the work keeps on the website; voting against the account's own vote withdraws it.
+class WorkTagVotesPage extends StatefulWidget {
+  const WorkTagVotesPage({super.key, required this.galleryID, required this.votes, required this.provider, required this.changed});
+  final int galleryID;
+  final List<WorkTagVote> votes;
+  final WorkExtrasProviding provider;
+  final ValueChanged<List<WorkTagVote>> changed;
+
+  @override
+  State<WorkTagVotesPage> createState() => _WorkTagVotesPageState();
+}
+
+class _WorkTagVotesPageState extends State<WorkTagVotesPage> {
+  late List<WorkTagVote> _votes = widget.votes;
+  String? _voting;
+
+  Future<void> _vote(WorkTagVote tag) async {
+    final choice = await showCupertinoModalPopup<int>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(tag.name),
+        actions: [
+          if (tag.vote == 0) ...[
+            CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, 1), child: Text(L10n.text('Vote Up'))),
+            CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, -1), child: Text(L10n.text('Vote Down'))),
+          ] else
+            CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, -tag.vote), child: Text(L10n.text('Withdraw Vote'))),
+        ],
+        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    setState(() => _voting = tag.tag);
+    try {
+      final votes = await widget.provider.voteTag(widget.galleryID, tag: tag.tag, vote: choice);
+      widget.changed(votes);
+      if (mounted) setState(() => _votes = votes);
+    } on Object catch (error) {
+      if (mounted) await _alert(context, L10n.text('Unable to Vote'), _failure(error));
+    }
+    if (mounted) setState(() => _voting = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    final namespaces = <String>[];
+    for (final tag in _votes) {
+      if (!namespaces.contains(tag.localNamespace)) namespaces.add(tag.localNamespace);
+    }
+    return ColoredBox(
+      color: FormColors.background.resolveFrom(context),
+      child: Column(
+        children: [
+          SheetNavigationBar(
+            title: L10n.text('Vote on Tags'),
+            trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(top: 8, bottom: 32),
+              children: [
+                for (final namespace in namespaces) ...[
+                  FormSection(
+                    rowColor: row,
+                    header: Text(namespace.isEmpty ? L10n.text('Tags') : namespace),
+                    children: [
+                      for (final tag in _votes.where((tag) => tag.localNamespace == namespace))
+                        FormRow(
+                          onTap: _voting == null ? () => _vote(tag) : null,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(tag.name, style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context))),
+                              ),
+                              if (_voting == tag.tag)
+                                const CupertinoActivityIndicator()
+                              else if (tag.vote > 0)
+                                Semantics(
+                                  label: L10n.text('Voted Up'),
+                                  child: Icon(CupertinoIcons.hand_thumbsup_fill, size: 20, color: CupertinoColors.systemGreen.resolveFrom(context)),
+                                )
+                              else if (tag.vote < 0)
+                                Semantics(
+                                  label: L10n.text('Voted Down'),
+                                  child: Icon(CupertinoIcons.hand_thumbsdown_fill, size: 20, color: CupertinoColors.systemRed.resolveFrom(context)),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                ],
+                FormSection(
+                  rowColor: row,
+                  footer: Text(L10n.text('Votes decide, with everyone else’s, which tags the work keeps on the website.')),
+                  children: const [],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `WorkCommentComposer`: writes a comment under the work, posted on the website under the signed-in account.
+class WorkCommentComposerPage extends StatefulWidget {
+  const WorkCommentComposerPage({super.key, required this.galleryID, required this.provider, required this.posted});
+  final int galleryID;
+  final WorkExtrasProviding provider;
+  final ValueChanged<List<WorkComment>> posted;
+
+  @override
+  State<WorkCommentComposerPage> createState() => _WorkCommentComposerPageState();
+}
+
+class _WorkCommentComposerPageState extends State<WorkCommentComposerPage> {
+  final _text = TextEditingController();
+  bool _posting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _post() async {
+    setState(() => _posting = true);
+    try {
+      final comments = await widget.provider.postComment(widget.galleryID, _text.text);
+      widget.posted(comments);
+      if (mounted) Navigator.of(context).pop();
+      return;
+    } on Object catch (error) {
+      if (mounted) await _alert(context, L10n.text('Unable to Post'), _failure(error));
+    }
+    if (mounted) setState(() => _posting = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    return ColoredBox(
+      color: FormColors.background.resolveFrom(context),
+      child: Column(
+        children: [
+          SheetNavigationBar(
+            title: L10n.text('Write Comment'),
+            leading: GlassTextButton(label: L10n.text('Cancel'), onPressed: _posting ? null : () => Navigator.of(context).pop()),
+            trailing: _posting
+                ? const CupertinoActivityIndicator()
+                : GlassTextButton(label: L10n.text('Post'), prominent: true, onPressed: _text.text.trim().isEmpty ? null : _post),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(top: 8, bottom: 32),
+              children: [
+                FormSection(
+                  rowColor: row,
+                  footer: Text(L10n.text('Your comment is posted on the website under your account, where everyone can read it.')),
+                  children: [
+                    FormRow(
+                      child: CupertinoTextField.borderless(
+                        controller: _text,
+                        padding: EdgeInsets.zero,
+                        minLines: 8,
+                        maxLines: 16,
+                        style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `WorkArchiveView`: the work's archives as the website offers them, with what each costs the
+/// account, and a download of the one chosen, saved wherever the person picks.
+class WorkArchivePage extends StatefulWidget {
+  const WorkArchivePage({super.key, required this.galleryID, required this.provider});
+  final int galleryID;
+  final WorkExtrasProviding provider;
+
+  @override
+  State<WorkArchivePage> createState() => _WorkArchivePageState();
+}
+
+class _WorkArchivePageState extends State<WorkArchivePage> {
+  WorkArchiveOffer? _offer;
+  String? _error;
+  bool _downloading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final offer = await widget.provider.archiveOffer(widget.galleryID);
+      if (mounted) setState(() => _offer = offer);
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = _failure(error));
+    }
+  }
+
+  Future<void> _download(WorkArchiveOption option) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => TegnalAlertDialog(
+        title: Text(L10n.text('Download This Archive?')),
+        content: Text(L10n.text('It costs %@.', [option.cost])),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Download'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _downloading = true);
+    try {
+      final address = await widget.provider.archiveDownloadURL(widget.galleryID, option);
+      final file = await ArchiveFile.download(address, name: '${widget.galleryID}-${option.kind}');
+      await const DocumentFiles().createDocument(name: file.uri.pathSegments.last, source: file, mimeType: 'application/zip');
+    } on Object catch (error) {
+      if (mounted) await _alert(context, L10n.text('Unable to Download'), _failure(error));
+    }
+    if (mounted) setState(() => _downloading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    final offer = _offer;
+    final Widget body;
+    if (offer != null) {
+      body = ListView(
+        padding: const EdgeInsets.only(top: 8, bottom: 32),
+        children: [
+          if (offer.funds case final funds?) ...[
+            FormSection(
+              rowColor: row,
+              children: [SettingsValueRowLite(title: L10n.text('Account Balance'), value: funds)],
+            ),
+            const SizedBox(height: 28),
+          ],
+          FormSection(
+            rowColor: row,
+            footer: Text(L10n.text('The website takes the cost shown from your account when it prepares the archive. Save the file where you like.')),
+            children: [
+              for (final option in offer.options)
+                FormRow(
+                  onTap: option.available && !_downloading ? () => _download(option) : null,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              L10n.text(option.isOriginal ? 'Original Archive' : 'Resampled Archive'),
+                              style: TegnalType.style(17, color: (option.available ? TegnalColors.label : TegnalColors.tertiaryLabel).resolveFrom(context)),
+                            ),
+                            Text(option.size, style: TegnalType.style(13, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+                          ],
+                        ),
+                      ),
+                      Text(option.cost, style: TegnalType.style(17, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          if (_downloading) ...[
+            const SizedBox(height: 28),
+            FormSection(
+              rowColor: row,
+              children: [
+                FormRow(
+                  child: Row(
+                    children: [
+                      const CupertinoActivityIndicator(),
+                      const SizedBox(width: 12),
+                      Text(L10n.text('Preparing Archive…'), style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      );
+    } else if (_error != null) {
+      body = Center(
+        child: ContentUnavailable(icon: CupertinoIcons.archivebox, title: L10n.text('Unable to Load'), description: _error),
+      );
+    } else {
+      body = const Center(child: CupertinoActivityIndicator());
+    }
+    return ColoredBox(
+      color: FormColors.background.resolveFrom(context),
+      child: Column(
+        children: [
+          SheetNavigationBar(
+            title: L10n.text('Archive Download'),
+            trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: _downloading ? null : () => Navigator.of(context).pop()),
+          ),
+          Expanded(child: body),
+        ],
+      ),
+    );
+  }
+}
+
+/// A plain title and value row, as Settings shows one.
+class SettingsValueRowLite extends StatelessWidget {
+  const SettingsValueRowLite({super.key, required this.title, required this.value});
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => FormRow(
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(title, style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context))),
+        ),
+        Text(value, style: TegnalType.style(17, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+      ],
+    ),
+  );
+}
+
+/// An archive the website prepared, downloaded to a file the person can save.
+abstract final class ArchiveFile {
+  static Future<File> download(Uri url, {required String name}) async {
+    if (url.scheme != 'https' || !KeyedCatalogSource.safeMediaURL(url)) throw ContentError.unsupportedFormat;
+    final client = HttpClient()..userAgent = ContentTransport.userAgent;
+    try {
+      final request = await client.getUrl(url);
+      final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) throw ContentError.unavailable(response.statusCode);
+      final folder = Directory('${(await getTemporaryDirectory()).path}/archives');
+      await folder.create(recursive: true);
+      final disposition = response.headers.value('content-disposition') ?? '';
+      final suggested = RegExp(r'filename="?([^";]+\.zip)"?', caseSensitive: false).firstMatch(disposition)?.group(1);
+      final file = File('${folder.path}/${(suggested ?? '$name.zip').replaceAll('/', '_')}');
+      await response.pipe(file.openWrite());
+      return file;
+    } finally {
+      client.close();
+    }
   }
 }

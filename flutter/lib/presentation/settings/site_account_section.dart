@@ -8,6 +8,7 @@ import '../../core/content/combined_catalog.dart';
 import '../../core/content/content_environment.dart';
 import '../../core/content/content_errors.dart';
 import '../../core/content/content_transport.dart';
+import '../../core/content/keyed_catalog_source.dart';
 import '../../core/content/keyed_work_extras.dart';
 import '../../core/content/manga_content_source.dart';
 import '../../core/content/manga_urls.dart';
@@ -55,6 +56,7 @@ class SiteAccountSection extends StatefulWidget {
 class _SiteAccountSectionState extends State<SiteAccountSection> {
   bool _importing = false;
   List<FavoriteCategory> _categories = [];
+  List<SiteSettingsProfile> _profiles = [];
   (int, int)? _allowance;
 
   ContentEnvironment get _content => widget.content;
@@ -99,6 +101,12 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
       if (mounted) setState(() => _allowance = allowance);
     } on Object {
       // The allowance is a hint; a page that does not show it leaves the row out.
+    }
+    try {
+      final profiles = await MangaContentSource.shared.settingsProfiles();
+      if (mounted) setState(() => _profiles = profiles);
+    } on Object {
+      // Without the settings page the app reads with the account's own profile.
     }
     if (!_content.syncsAccountFavorites || _categories.isNotEmpty) return;
     try {
@@ -146,7 +154,19 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
         SiteAccountActions.signOut(_content, site: widget.site);
         _allowance = null;
         _categories = [];
+        _profiles = [];
       });
+    }
+  }
+
+  Future<void> _useProfile(int id) async {
+    setState(() => _profiles = [for (final profile in _profiles) SiteSettingsProfile(profile.id, profile.name, selected: profile.id == id)]);
+    try {
+      await MangaContentSource.shared.useSettingsProfile(id);
+      final profiles = await MangaContentSource.shared.settingsProfiles();
+      if (mounted) setState(() => _profiles = profiles);
+    } on Object {
+      // The choice stays as picked; the next page read shows whether the website took it.
     }
   }
 
@@ -230,6 +250,24 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                 }),
               ),
             if (checked && _keyed) ...[
+              SettingsToggleRow(
+                title: L10n.text('Load Original Images'),
+                help: L10n.text(
+                  'Loads each page’s original file instead of the resized one. The website may charge GP for originals; a page it won’t send is shown resized.',
+                ),
+                value: KeyedCatalogSource.loadsOriginals(_host),
+                onChanged: (value) => setState(() => KeyedCatalogSource.setLoadsOriginals(value, host: _host)),
+              ),
+              if (_profiles.length > 1)
+                SettingsPickerRow<int>(
+                  title: L10n.text('Settings Profile'),
+                  help: L10n.text(
+                    'Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings.',
+                  ),
+                  options: [for (final profile in _profiles) (profile.id, profile.name)],
+                  selected: (_profiles.where((profile) => profile.selected).firstOrNull ?? _profiles.first).id,
+                  onSelected: _useProfile,
+                ),
               SettingsToggleRow(
                 title: L10n.text('Sync Bookmarks with Account Favorites'),
                 help: L10n.text('Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.'),

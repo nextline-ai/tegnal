@@ -9,6 +9,9 @@ struct WorkExtrasSection: View {
     @State private var extras: WorkExtras?
     @State private var showsComments = false
     @State private var showsTorrents = false
+    @State private var votingTags = false
+    @State private var writingComment = false
+    @State private var showsArchive = false
     @State private var rating: String?
     @State private var rateError: String?
 
@@ -36,12 +39,31 @@ struct WorkExtrasSection: View {
                             .buttonStyle(.bordered).accessibilityIdentifier("content.detail.comments")
                         }
                     }
+                    if extras.canComment && provider != nil {
+                        Button { writingComment = true } label: {
+                            Label(L10n.text("Write Comment"), systemImage: "square.and.pencil").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.writeComment")
+                    }
+                    // The page hands its rating key, and so its votes, only to a signed-in account.
+                    if extras.canRate && !extras.tagVotes.isEmpty && provider != nil {
+                        Button { votingTags = true } label: {
+                            Label(L10n.text("Vote on Tags"), systemImage: "hand.thumbsup").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.voteTags")
+                    }
                     if extras.torrentCount > 0 {
                         Button { showsTorrents = true } label: {
                             Label(L10n.text("Torrents (%@)", String(extras.torrentCount)), systemImage: "arrow.down.doc")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered).accessibilityIdentifier("content.detail.torrents")
+                    }
+                    if extras.canRate && extras.archiveURL != nil && provider != nil {
+                        Button { showsArchive = true } label: {
+                            Label(L10n.text("Archive Download"), systemImage: "archivebox").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).accessibilityIdentifier("content.detail.archive")
                     }
                 }
                 .accessibilityIdentifier("content.detail.extras")
@@ -57,6 +79,18 @@ struct WorkExtrasSection: View {
         }
         .appSheet(isPresented: $showsTorrents) {
             WorkTorrentsView(galleryID: galleryID, provider: provider)
+        }
+        .appSheet(isPresented: $votingTags) {
+            WorkTagVotesView(galleryID: galleryID, votes: extras?.tagVotes ?? [], provider: provider) { extras?.tagVotes = $0 }
+        }
+        .appSheet(isPresented: $writingComment) {
+            WorkCommentComposer(galleryID: galleryID, provider: provider) { comments in
+                extras?.comments = comments
+                extras?.hasMoreComments = false
+            }
+        }
+        .appSheet(isPresented: $showsArchive) {
+            WorkArchiveView(galleryID: galleryID, provider: provider)
         }
         .alert(L10n.text("Unable to Rate"), isPresented: Binding(get: { rateError != nil }, set: { if !$0 { rateError = nil } })) {
             Button(L10n.text("OK"), role: .cancel) {}
@@ -284,5 +318,234 @@ struct WorkTorrentsView: View {
         guard let provider else { torrents = []; return }
         do { torrents = try await provider.torrents(galleryID) }
         catch { self.error = ContentError.message(error) }
+    }
+}
+
+/// The work's tags with the account's votes. A vote decides, with everyone else's, which tags the
+/// work keeps on the website; voting against the account's own vote withdraws it.
+struct WorkTagVotesView: View {
+    let galleryID: Int64
+    @State var votes: [WorkTagVote]
+    let provider: (any WorkExtrasProviding)?
+    let changed: ([WorkTagVote]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var voting: String?
+    @State private var failure: String?
+
+    init(galleryID: Int64, votes: [WorkTagVote], provider: (any WorkExtrasProviding)?, changed: @escaping ([WorkTagVote]) -> Void) {
+        self.galleryID = galleryID
+        _votes = State(initialValue: votes)
+        self.provider = provider
+        self.changed = changed
+    }
+
+    private var namespaces: [String] {
+        var seen = Set<String>()
+        return votes.map(\.localNamespace).filter { seen.insert($0).inserted }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(namespaces, id: \.self) { namespace in
+                    Section {
+                        ForEach(votes.filter { $0.localNamespace == namespace }) { tag in row(tag) }
+                    } header: { Text(namespace.isEmpty ? L10n.text("Tags") : namespace) }
+                }
+                Section {} footer: { Text(L10n.text("Votes decide, with everyone else’s, which tags the work keeps on the website.")) }
+            }
+            .navigationTitle(L10n.text("Vote on Tags")).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
+            .alert(L10n.text("Unable to Vote"), isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button(L10n.text("OK"), role: .cancel) {}
+            } message: { Text(failure ?? "") }
+        }
+    }
+
+    private func row(_ tag: WorkTagVote) -> some View {
+        Menu {
+            if tag.vote == 0 {
+                Button(L10n.text("Vote Up"), systemImage: "hand.thumbsup") { vote(tag, 1) }
+                Button(L10n.text("Vote Down"), systemImage: "hand.thumbsdown") { vote(tag, -1) }
+            } else {
+                Button(L10n.text("Withdraw Vote"), systemImage: "arrow.uturn.backward") { vote(tag, -tag.vote) }
+            }
+        } label: {
+            HStack {
+                Text(tag.name).foregroundStyle(.primary)
+                Spacer()
+                if voting == tag.tag { ProgressView().controlSize(.small) }
+                else if tag.vote > 0 { Label(L10n.text("Voted Up"), systemImage: "hand.thumbsup.fill").labelStyle(.iconOnly).foregroundStyle(.green) }
+                else if tag.vote < 0 { Label(L10n.text("Voted Down"), systemImage: "hand.thumbsdown.fill").labelStyle(.iconOnly).foregroundStyle(.red) }
+            }.contentShape(Rectangle())
+        }
+        .disabled(voting != nil)
+        .accessibilityIdentifier("content.tagVote.\(tag.tag)")
+    }
+
+    private func vote(_ tag: WorkTagVote, _ vote: Int) {
+        guard let provider else { return }
+        voting = tag.tag
+        Task {
+            defer { voting = nil }
+            do {
+                votes = try await provider.voteTag(galleryID, tag: tag.tag, vote: vote)
+                changed(votes)
+            } catch { failure = (error as? SiteMessage)?.text ?? ContentError.message(error) }
+        }
+    }
+}
+
+/// Writes a comment under the work, posted on the website under the signed-in account.
+struct WorkCommentComposer: View {
+    let galleryID: Int64
+    let provider: (any WorkExtrasProviding)?
+    let posted: ([WorkComment]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var posting = false
+    @State private var failure: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextEditor(text: $text).frame(minHeight: 180).accessibilityIdentifier("content.comment.text")
+                } footer: {
+                    Text(L10n.text("Your comment is posted on the website under your account, where everyone can read it."))
+                }
+            }
+            .navigationTitle(L10n.text("Write Comment")).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    if posting { ProgressView() }
+                    else {
+                        Button(L10n.text("Post")) { post() }
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("content.comment.post")
+                    }
+                }
+            }
+            .interactiveDismissDisabled(posting || !text.isEmpty)
+            .alert(L10n.text("Unable to Post"), isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button(L10n.text("OK"), role: .cancel) {}
+            } message: { Text(failure ?? "") }
+        }
+    }
+
+    private func post() {
+        guard let provider else { return }
+        posting = true
+        Task {
+            defer { posting = false }
+            do {
+                posted(try await provider.postComment(galleryID, text: text))
+                dismiss()
+            } catch { failure = (error as? SiteMessage)?.text ?? ContentError.message(error) }
+        }
+    }
+}
+
+/// The work's archives as the website offers them, with what each costs the account, and a
+/// download of the one chosen, saved wherever the person picks.
+struct WorkArchiveView: View {
+    let galleryID: Int64
+    let provider: (any WorkExtrasProviding)?
+    @Environment(\.dismiss) private var dismiss
+    @State private var offer: WorkArchiveOffer?
+    @State private var failure: String?
+    @State private var confirming: WorkArchiveOffer.Option?
+    @State private var downloading = false
+    @State private var file: URL?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let offer {
+                    if let funds = offer.funds {
+                        Section { LabeledContent(L10n.text("Account Balance"), value: funds) }
+                    }
+                    Section {
+                        ForEach(offer.options) { option in
+                            Button { confirming = option } label: {
+                                LabeledContent {
+                                    Text(option.cost).monospacedDigit()
+                                } label: {
+                                    Text(L10n.text(option.isOriginal ? "Original Archive" : "Resampled Archive"))
+                                    Text(option.size).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .disabled(!option.available || downloading)
+                            .accessibilityIdentifier("content.archive.\(option.kind)")
+                        }
+                    } footer: {
+                        Text(L10n.text("The website takes the cost shown from your account when it prepares the archive. Save the file where you like."))
+                    }
+                    if downloading {
+                        Section { HStack { ProgressView(); Text(L10n.text("Preparing Archive…")) } }
+                    }
+                    if let file {
+                        Section {
+                            ShareLink(item: file) { Label(L10n.text("Save or Share Archive"), systemImage: "square.and.arrow.up") }
+                                .accessibilityIdentifier("content.archive.share")
+                        }
+                    }
+                } else if let failure {
+                    ContentUnavailableView(L10n.text("Unable to Load"), systemImage: "archivebox", description: Text(failure))
+                } else {
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                }
+            }
+            .navigationTitle(L10n.text("Archive Download")).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
+            .interactiveDismissDisabled(downloading)
+            .task { await load() }
+            .confirmationDialog(L10n.text("Download This Archive?"), isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+                                titleVisibility: .visible, presenting: confirming) { option in
+                Button(L10n.text("Download")) { download(option) }
+            } message: { option in Text(L10n.text("It costs %@.", option.cost)) }
+            .alert(L10n.text("Unable to Download"), isPresented: Binding(get: { failure != nil && offer != nil }, set: { if !$0 { failure = nil } })) {
+                Button(L10n.text("OK"), role: .cancel) {}
+            } message: { Text(failure ?? "") }
+        }
+    }
+
+    private func load() async {
+        guard let provider else { failure = ContentError.unsupportedFormat.localizedDescription; return }
+        do { offer = try await provider.archiveOffer(galleryID) }
+        catch { failure = (error as? SiteMessage)?.text ?? ContentError.message(error) }
+    }
+
+    private func download(_ option: WorkArchiveOffer.Option) {
+        guard let provider else { return }
+        downloading = true
+        Task {
+            defer { downloading = false }
+            do {
+                let address = try await provider.archiveDownloadURL(galleryID, option: option)
+                file = try await ArchiveFile.download(address, name: "\(galleryID)-\(option.kind)")
+            } catch { failure = (error as? SiteMessage)?.text ?? ContentError.message(error) }
+        }
+    }
+}
+
+/// An archive the website prepared, downloaded to a file the person can save.
+enum ArchiveFile {
+    static func download(_ url: URL, name: String) async throws -> URL {
+        guard url.scheme == "https", KeyedCatalogSource.safeMediaURL(url) else { throw ContentError.unsupportedFormat }
+        var request = URLRequest(url: url)
+        request.setValue(ContentTransport.userAgent, forHTTPHeaderField: "User-Agent")
+        let (downloaded, response) = try await URLSession.shared.download(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ContentError.unavailable((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("archives", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let suggested = response.suggestedFilename.flatMap { $0.lowercased().hasSuffix(".zip") ? $0 : nil } ?? name + ".zip"
+        let file = folder.appendingPathComponent(suggested.replacingOccurrences(of: "/", with: "_"))
+        try? FileManager.default.removeItem(at: file)
+        try FileManager.default.moveItem(at: downloaded, to: file)
+        return file
     }
 }

@@ -41,6 +41,86 @@ class FavoriteCategory {
   final int count;
 }
 
+/// A work's tag on an account-based catalog, as the website spells it, with the account's vote.
+class WorkTagVote {
+  const WorkTagVote(this.tag, this.vote);
+
+  /// `namespace:name` as the website writes it, with spaces.
+  final String tag;
+
+  /// 1 voted up, -1 voted down, 0 not voted.
+  final int vote;
+
+  String get namespace => tag.contains(':') ? tag.substring(0, tag.indexOf(':')) : '';
+  String get name => tag.contains(':') ? tag.substring(tag.indexOf(':') + 1) : tag;
+
+  /// The namespace as the app's searches write it.
+  String get localNamespace => switch (namespace) {
+    'parody' => 'series',
+    'other' => 'tag',
+    _ => namespace,
+  };
+
+  @override
+  bool operator ==(Object other) => other is WorkTagVote && other.tag == tag && other.vote == vote;
+  @override
+  int get hashCode => Object.hash(tag, vote);
+  @override
+  String toString() => 'WorkTagVote($tag, $vote)';
+}
+
+/// One archive an account-based catalog offers for a work.
+class WorkArchiveOption {
+  const WorkArchiveOption({required this.kind, required this.button, required this.cost, required this.size, required this.available});
+
+  /// The website's name for the kind of archive: the original files or resized ones.
+  final String kind;
+
+  /// The label of the website's own button, sent back with the request.
+  final String button;
+  final String cost;
+  final String size;
+  final bool available;
+  bool get isOriginal => kind == 'org';
+
+  @override
+  bool operator ==(Object other) =>
+      other is WorkArchiveOption && other.kind == kind && other.button == button && other.cost == cost && other.size == size && other.available == available;
+  @override
+  int get hashCode => Object.hash(kind, button, cost, size, available);
+}
+
+/// What an account-based catalog asks for a work's archives, and what the account holds.
+class WorkArchiveOffer {
+  WorkArchiveOffer({this.funds, List<WorkArchiveOption>? options}) : options = options ?? [];
+  String? funds;
+  final List<WorkArchiveOption> options;
+}
+
+/// One of the account's settings profiles on a website that keeps several.
+class SiteSettingsProfile {
+  const SiteSettingsProfile(this.id, this.name, {this.selected = false});
+  final int id;
+  final String name;
+  final bool selected;
+  @override
+  bool operator ==(Object other) => other is SiteSettingsProfile && other.id == id && other.name == name && other.selected == selected;
+  @override
+  int get hashCode => Object.hash(id, name, selected);
+}
+
+/// An answer the website gave in its own words, shown as it is.
+class SiteMessage implements Exception {
+  const SiteMessage(this.text);
+  final String text;
+  @override
+  bool operator ==(Object other) => other is SiteMessage && other.text == text;
+  @override
+  int get hashCode => text.hashCode;
+  @override
+  String toString() => text;
+}
+
 /// What a work's page on an account-based catalog says besides its pages: how it is rated, how
 /// often it is kept, who uploaded it, and the conversation under it.
 class WorkExtras {
@@ -60,6 +140,9 @@ class WorkExtras {
     this.comments = const [],
     this.hasMoreComments = false,
     this.canRate = false,
+    this.tagVotes = const [],
+    this.canComment = false,
+    this.archiveURL,
   });
   double? rating;
   int? ratingCount;
@@ -82,6 +165,15 @@ class WorkExtras {
 
   /// The signed-in account's key for rating, kept only in memory.
   bool canRate;
+
+  /// The work's tags with the account's votes, when the page lets the account vote.
+  List<WorkTagVote> tagVotes;
+
+  /// Whether the page offers the account a comment form.
+  bool canComment;
+
+  /// The work's archive page, when the page links one.
+  Uri? archiveURL;
 
   bool get hasContent => rating != null || favorited != null || uploader != null || fileSize != null || comments.isNotEmpty || torrentCount > 0;
 }
@@ -136,7 +228,84 @@ abstract final class KeyedWorkPage {
     extras.comments = comments(html);
     extras.hasMoreComments = RegExp(r'[?&]hc=1').hasMatch(html);
     extras.canRate = apiKey(html) != null;
+    extras.tagVotes = tagVotes(html);
+    extras.canComment = html.contains('name="commenttext_new"');
+    final archive = firstCapture(r"""['"]([^'"]*archiver\.php\?[^'"]*)['"]""", html);
+    if (archive != null) extras.archiveURL = Uri.tryParse(NativeGallery.decodeEntities(archive));
     return extras;
+  }
+
+  /// The tags of a work's tag pane, each with the account's vote: the page marks a tag voted up
+  /// or down on its link.
+  static List<WorkTagVote> tagVotes(String html) {
+    final seen = <String>{};
+    final result = <WorkTagVote>[];
+    for (final match in RegExp(r'<a\b[^>]*\bid="ta_([^"]+)"[^>]*>').allMatches(html)) {
+      final link = match[0]!;
+      // The menu call names the tag with its spaces; the link's own id writes them as underscores.
+      final named = firstCapture(r"toggle_tagmenu\(\s*[0-9]+\s*,\s*'([^']+)'", link);
+      final tag = (named == null ? match[1]!.replaceAll('_', ' ') : NativeGallery.decodeEntities(named)).trim();
+      if (tag.isEmpty || tag.length > 200 || !seen.add(tag)) continue;
+      final classes = (firstCapture(r'\bclass="([^"]*)"', link) ?? '').split(' ');
+      result.add(WorkTagVote(tag, classes.contains('tup') ? 1 : (classes.contains('tdn') ? -1 : 0)));
+    }
+    return result;
+  }
+
+  /// The archives a work's archive page offers for download, with their cost and size, and the
+  /// account's funds. A greyed-out offer the page marks unavailable.
+  static WorkArchiveOffer archiveOffer(String html) {
+    final offer = WorkArchiveOffer();
+    final funds = firstCapture(r'Current Funds:\s*</p>\s*<p>(.*?)</p>', html);
+    if (funds != null) {
+      final text = plain(funds).replaceAll('[?]', '');
+      final match = RegExp(r'([0-9][0-9,]*)\s*GP.*?([0-9][0-9,]*)\s*Credits', dotAll: true).firstMatch(text);
+      if (match != null) offer.funds = '${match[1]} GP · ${match[2]} Credits';
+    }
+    final pattern = RegExp(r'Download Cost:(.*?)</div>\s*<form\b[^>]*>(.*?)</form>\s*<p>\s*Estimated Size:(.*?)</p>', caseSensitive: false, dotAll: true);
+    for (final match in pattern.allMatches(html)) {
+      final form = match[2]!;
+      final kind = firstCapture(r'name="dltype"[^>]*value="([a-z]+)"', form);
+      final button = firstCapture(r'name="dlcheck"[^>]*value="([^"]+)"', form);
+      if (kind == null || button == null) continue;
+      final cost = plain(match[1]!), size = plain(match[3]!);
+      offer.options.add(
+        WorkArchiveOption(
+          kind: kind,
+          button: NativeGallery.decodeEntities(button),
+          cost: cost,
+          size: size,
+          available: cost.isNotEmpty && cost.toUpperCase() != 'N/A' && !form.contains('disabled'),
+        ),
+      );
+    }
+    return offer;
+  }
+
+  /// Where the archive the page just prepared downloads from.
+  static Uri? archiveDownloadURL(String html) {
+    final address = firstCapture(r'document\.location\s*=\s*"([^"]+)"', html);
+    final url = address == null ? null : Uri.tryParse(NativeGallery.decodeEntities(address));
+    if (url == null) return null;
+    return url.replace(queryParameters: {...url.queryParameters, 'start': '1'});
+  }
+
+  /// A page's own short message, as an answer that took no action gives it.
+  static String? message(String html) {
+    final body = firstCapture(r'<div id="db"[^>]*>(.*)</div>', html) ?? firstCapture(r'<body[^>]*>(.*)</body>', html) ?? html;
+    final text = plain(body.replaceAll(RegExp(r'<h1\b.*?</h1>', caseSensitive: false, dotAll: true), ''));
+    return text.isNotEmpty && text.length <= 400 ? text : null;
+  }
+
+  /// The account's settings profiles from the website's settings page.
+  static List<SiteSettingsProfile> settingsProfiles(String html) {
+    final select = firstCapture(r'<select\b[^>]*name="profile_set"[^>]*>(.*?)</select>', html);
+    if (select == null) return [];
+    return [
+      for (final match in RegExp(r'<option\b([^>]*)>([^<]*)</option>', caseSensitive: false).allMatches(select))
+        if (int.tryParse(firstCapture(r'value="([0-9]{1,4})"', match[1]!) ?? '') case final value?)
+          SiteSettingsProfile(value, plain(match[2]!).isEmpty ? '$value' : plain(match[2]!), selected: match[1]!.contains('selected')),
+    ];
   }
 
   static WorkAPIKey? apiKey(String html) {
@@ -274,4 +443,17 @@ abstract interface class WorkExtrasProviding {
 
   /// Rates a work from 1 to 10 half-stars; returns the new average and count.
   Future<(double, int)> rate(int id, int halfStars);
+
+  /// Votes a tag of a work up (1) or down (-1); voting against the account's vote withdraws it.
+  /// Returns the work's tags with the votes as they now stand.
+  Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote});
+
+  /// Posts a comment under a work and returns the comments as they now stand.
+  Future<List<WorkComment>> postComment(int id, String text);
+
+  /// What the website asks for the work's archives.
+  Future<WorkArchiveOffer> archiveOffer(int id);
+
+  /// Has the website prepare an archive, charging what the offer showed; returns where it downloads from.
+  Future<Uri> archiveDownloadURL(int id, WorkArchiveOption option);
 }

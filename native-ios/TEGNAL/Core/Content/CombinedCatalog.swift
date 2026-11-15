@@ -40,6 +40,19 @@ final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int) {
         try await SiteScope.$site.withValue(site) { try await inner.rate(id, halfStars: halfStars) }
     }
+    func voteTag(_ id: Int64, tag: String, vote: Int) async throws -> [WorkTagVote] {
+        try await SiteScope.$site.withValue(site) { try await inner.voteTag(id, tag: tag, vote: vote) }
+    }
+    func postComment(_ id: Int64, text: String) async throws -> [WorkComment] {
+        try await SiteScope.$site.withValue(site) { try await inner.postComment(id, text: text) }
+    }
+    func archiveOffer(_ id: Int64) async throws -> WorkArchiveOffer {
+        try await SiteScope.$site.withValue(site) { try await inner.archiveOffer(id) }
+    }
+    func archiveDownloadURL(_ id: Int64, option: WorkArchiveOffer.Option) async throws -> URL {
+        try await SiteScope.$site.withValue(site) { try await inner.archiveDownloadURL(id, option: option) }
+    }
+
     /// The website's account favorites, to check that a sign-in made for it works there.
     func accountFavorites(after next: String?) async throws -> (ids: [Int64], next: String?) {
         try await SiteScope.$site.withValue(site) { try await inner.accountFavorites(after: next) }

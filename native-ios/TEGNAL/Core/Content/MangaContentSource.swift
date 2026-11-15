@@ -234,6 +234,44 @@ actor MangaContentSource: ContentProviding, WorkExtrasProviding {
         return try await keyed.rate(id, halfStars: halfStars, site: site)
     }
 
+    func voteTag(_ id: Int64, tag: String, vote: Int) async throws -> [WorkTagVote] {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.voteTag(id, tag: tag, vote: vote, site: site)
+    }
+
+    func postComment(_ id: Int64, text: String) async throws -> [WorkComment] {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.postComment(id, text: text, site: site)
+    }
+
+    func archiveOffer(_ id: Int64) async throws -> WorkArchiveOffer {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.archiveOffer(id, site: site)
+    }
+
+    func archiveDownloadURL(_ id: Int64, option: WorkArchiveOffer.Option) async throws -> URL {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.archiveDownloadURL(id, option: option, site: site)
+    }
+
+    /// The account's settings profiles on the checked website, when it keeps several.
+    func settingsProfiles() async throws -> [SiteSettingsProfile] {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return [] }
+        return try await keyed.settingsProfiles(site: site)
+    }
+
+    func useSettingsProfile(_ profile: Int) async throws {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return }
+        try await keyed.useSettingsProfile(profile, site: site)
+        galleryCache.removeAllObjects()
+    }
+
     /// Used by performance regression tests to wait for consumers, not wall-clock delays.
     func galleryConsumerCount(_ id: Int64) -> Int { galleryFlights[id]?.waiters.count ?? 0 }
 

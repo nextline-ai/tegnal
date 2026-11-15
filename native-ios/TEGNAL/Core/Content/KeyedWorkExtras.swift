@@ -32,6 +32,49 @@ struct WorkTorrent: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A work's tag on an account-based catalog, as the website spells it, with the account's vote.
+struct WorkTagVote: Identifiable, Hashable, Sendable {
+    /// `namespace:name` as the website writes it, with spaces.
+    let tag: String
+    /// 1 voted up, -1 voted down, 0 not voted.
+    var vote: Int
+    var id: String { tag }
+    var namespace: String { tag.split(separator: ":", maxSplits: 1).count == 2 ? String(tag.split(separator: ":", maxSplits: 1)[0]) : "" }
+    var name: String { String(tag.split(separator: ":", maxSplits: 1).last ?? "") }
+    /// The namespace as the app's searches write it.
+    var localNamespace: String { namespace == "parody" ? "series" : namespace == "other" ? "tag" : namespace }
+}
+
+/// What an account-based catalog asks for a work's archive, and what the account holds.
+struct WorkArchiveOffer: Hashable, Sendable {
+    struct Option: Identifiable, Hashable, Sendable {
+        /// The website's name for the kind of archive: the original files or resized ones.
+        let kind: String
+        /// The label of the website's own button, sent back with the request.
+        let button: String
+        let cost: String
+        let size: String
+        let available: Bool
+        var id: String { kind }
+        var isOriginal: Bool { kind == "org" }
+    }
+    var funds: String?
+    var options: [Option] = []
+}
+
+/// One of the account's settings profiles on a website that keeps several.
+struct SiteSettingsProfile: Identifiable, Hashable, Sendable {
+    let id: Int
+    let name: String
+    let selected: Bool
+}
+
+/// An answer the website gave in its own words, shown as it is.
+struct SiteMessage: LocalizedError, Equatable, Sendable {
+    let text: String
+    var errorDescription: String? { text }
+}
+
 /// What a work's page on an account-based catalog says besides its pages: how it is rated, how
 /// often it is kept, who uploaded it, and the conversation under it.
 struct WorkExtras: Hashable, Sendable {
@@ -53,6 +96,12 @@ struct WorkExtras: Hashable, Sendable {
     var hasMoreComments = false
     /// The signed-in account's key for rating, kept only in memory.
     var canRate = false
+    /// The work's tags with the account's votes, when the page lets the account vote.
+    var tagVotes: [WorkTagVote] = []
+    /// Whether the page offers the account a comment form.
+    var canComment = false
+    /// The work's archive page, when the page links one.
+    var archiveURL: URL?
 }
 
 /// Reads the shapes these pages share. Only page structure is matched, never a site's name.
@@ -96,7 +145,84 @@ enum KeyedWorkPage {
         extras.comments = comments(from: html)
         extras.hasMoreComments = html.range(of: #"[?&]hc=1"#, options: .regularExpression) != nil
         extras.canRate = apiKey(in: html) != nil
+        extras.tagVotes = tagVotes(from: html)
+        extras.canComment = html.range(of: #"name="commenttext_new""#) != nil
+        if let address = firstCapture(#"['"]([^'"]*archiver\.php\?[^'"]*)['"]"#, in: html) {
+            extras.archiveURL = URL(string: NativeGallery.decodeEntities(address))
+        }
         return extras
+    }
+
+    private static let tagLinkPattern = try! NSRegularExpression(pattern: #"<a\b[^>]*\bid="ta_([^"]+)"[^>]*>"#)
+
+    /// The tags of a work's tag pane, each with the account's vote: the page marks a tag voted up
+    /// or down on its link.
+    static func tagVotes(from html: String) -> [WorkTagVote] {
+        let source = html as NSString
+        var seen = Set<String>()
+        return tagLinkPattern.matches(in: html, range: NSRange(location: 0, length: source.length)).compactMap { match in
+            let link = source.substring(with: match.range)
+            // The menu call names the tag with its spaces; the link's own id writes them as underscores.
+            let named = firstCapture(#"toggle_tagmenu\(\s*[0-9]+\s*,\s*'([^']+)'"#, in: link).map(NativeGallery.decodeEntities)
+            let tag = (named ?? source.substring(with: match.range(at: 1)).replacingOccurrences(of: "_", with: " ")).trimmingCharacters(in: .whitespaces)
+            guard !tag.isEmpty, tag.count <= 200, seen.insert(tag).inserted else { return nil }
+            let classes = firstCapture(#"\bclass="([^"]*)""#, in: link)?.split(separator: " ").map(String.init) ?? []
+            return WorkTagVote(tag: tag, vote: classes.contains("tup") ? 1 : classes.contains("tdn") ? -1 : 0)
+        }
+    }
+
+    /// The archives a work's archive page offers for download, with their cost and size, and the
+    /// account's funds. A greyed-out offer the page marks unavailable.
+    static func archiveOffer(from html: String) -> WorkArchiveOffer {
+        var offer = WorkArchiveOffer()
+        if let funds = firstCapture(#"Current Funds:\s*</p>\s*<p>(.*?)</p>"#, in: html) {
+            let text = plain(funds).replacingOccurrences(of: "[?]", with: "")
+            if let match = firstMatch(#"([0-9][0-9,]*)\s*GP.*?([0-9][0-9,]*)\s*Credits"#, in: text) {
+                offer.funds = "\(match[0]) GP · \(match[1]) Credits"
+            }
+        }
+        guard let regex = try? NSRegularExpression(
+            pattern: #"Download Cost:(.*?)</div>\s*<form\b[^>]*>(.*?)</form>\s*<p>\s*Estimated Size:(.*?)</p>"#,
+            options: [.dotMatchesLineSeparators, .caseInsensitive]) else { return offer }
+        let source = html as NSString
+        for match in regex.matches(in: html, range: NSRange(location: 0, length: source.length)) {
+            let form = source.substring(with: match.range(at: 2))
+            guard let kind = firstCapture(#"name="dltype"[^>]*value="([a-z]+)""#, in: form),
+                  let button = firstCapture(#"name="dlcheck"[^>]*value="([^"]+)""#, in: form) else { continue }
+            let cost = plain(source.substring(with: match.range(at: 1)))
+            let size = plain(source.substring(with: match.range(at: 3)))
+            offer.options.append(.init(kind: kind, button: NativeGallery.decodeEntities(button), cost: cost, size: size,
+                                       available: !cost.isEmpty && cost.uppercased() != "N/A" && !form.contains("disabled")))
+        }
+        return offer
+    }
+
+    /// Where the archive the page just prepared downloads from.
+    static func archiveDownloadURL(from html: String) -> URL? {
+        guard let address = firstCapture(#"document\.location\s*=\s*"([^"]+)""#, in: html).map(NativeGallery.decodeEntities),
+              var components = URLComponents(string: address) else { return nil }
+        components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "start", value: "1")]
+        return components.url
+    }
+
+    /// A page's own short message, as an answer that took no action gives it.
+    static func message(in html: String) -> String? {
+        let body = firstCapture(#"<div id="db"[^>]*>(.*)</div>"#, in: html) ?? firstCapture(#"<body[^>]*>(.*)</body>"#, in: html) ?? html
+        let text = plain(body.replacingOccurrences(of: #"<h1\b.*?</h1>"#, with: "", options: [.regularExpression, .caseInsensitive]))
+        return (1...400).contains(text.count) ? text : nil
+    }
+
+    /// The account's settings profiles from the website's settings page.
+    static func settingsProfiles(from html: String) -> [SiteSettingsProfile] {
+        guard let select = firstCapture(#"<select\b[^>]*name="profile_set"[^>]*>(.*?)</select>"#, in: html),
+              let regex = try? NSRegularExpression(pattern: #"<option\b([^>]*)>([^<]*)</option>"#, options: [.caseInsensitive]) else { return [] }
+        let source = select as NSString
+        return regex.matches(in: select, range: NSRange(location: 0, length: source.length)).compactMap { match in
+            let attributes = source.substring(with: match.range(at: 1))
+            guard let value = firstCapture(#"value="([0-9]{1,4})""#, in: attributes).flatMap(Int.init) else { return nil }
+            let name = plain(source.substring(with: match.range(at: 2)))
+            return SiteSettingsProfile(id: value, name: name.isEmpty ? String(value) : name, selected: attributes.contains("selected"))
+        }
     }
 
     /// The signed-in account's id and key the page hands its own scripts for rating.
@@ -221,7 +347,7 @@ enum KeyedWorkPage {
 
     static func firstCapture(_ pattern: String, in text: String) -> String? { firstMatch(pattern, in: text)?.first }
 
-    private static func firstMatch(_ pattern: String, in text: String) -> [String]? {
+    static func firstMatch(_ pattern: String, in text: String) -> [String]? {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else { return nil }
         let source = text as NSString
         guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: source.length)), match.numberOfRanges > 1 else { return nil }
@@ -247,4 +373,20 @@ protocol WorkExtrasProviding: Sendable {
     func torrents(_ id: Int64) async throws -> [WorkTorrent]
     /// Rates a work from 1 to 10 half-stars; returns the new average and count.
     func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int)
+    /// Votes a tag of a work up (1) or down (-1); voting against the account's vote withdraws it.
+    /// Returns the work's tags with the votes as they now stand.
+    func voteTag(_ id: Int64, tag: String, vote: Int) async throws -> [WorkTagVote]
+    /// Posts a comment under a work and returns the comments as they now stand.
+    func postComment(_ id: Int64, text: String) async throws -> [WorkComment]
+    /// What the website asks for the work's archives.
+    func archiveOffer(_ id: Int64) async throws -> WorkArchiveOffer
+    /// Has the website prepare an archive, charging what the offer showed; returns where it downloads from.
+    func archiveDownloadURL(_ id: Int64, option: WorkArchiveOffer.Option) async throws -> URL
+}
+
+extension WorkExtrasProviding {
+    func voteTag(_ id: Int64, tag: String, vote: Int) async throws -> [WorkTagVote] { throw ContentError.unsupportedFormat }
+    func postComment(_ id: Int64, text: String) async throws -> [WorkComment] { throw ContentError.unsupportedFormat }
+    func archiveOffer(_ id: Int64) async throws -> WorkArchiveOffer { throw ContentError.unsupportedFormat }
+    func archiveDownloadURL(_ id: Int64, option: WorkArchiveOffer.Option) async throws -> URL { throw ContentError.unsupportedFormat }
 }

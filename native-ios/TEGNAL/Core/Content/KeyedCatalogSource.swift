@@ -55,6 +55,8 @@ actor KeyedCatalogSource {
     struct ShownImage: Equatable, Sendable {
         let url: URL
         let reload: String?
+        /// The page's original file, which a signed-in account may load instead.
+        var original: URL? = nil
     }
     private struct Detail {
         var perPage: Int
@@ -366,6 +368,8 @@ actor KeyedCatalogSource {
         init(site: String) { self.site = site }
     }
     private var openBatch: PreviewBatch?
+    /// Websites that wouldn't send original files lately, until when.
+    private var originalsRefusedUntil: [String: Date] = [:]
 
     private func send(_ batch: PreviewBatch) async -> Result<[Int64: NativeGallery], Error> {
         if openBatch === batch { openBatch = nil }
@@ -455,6 +459,17 @@ actor KeyedCatalogSource {
             if let reload { components.queryItems = [URLQueryItem(name: "nl", value: reload)] }
             guard let url = components.url, let shown = Self.shownImage(in: try await self.page(url, site: site)) else { throw ContentError.unsupportedFormat }
             if Self.isLimitNotice(shown.url) { throw ContentError.imageLimit }
+            if let original = shown.original, let host = URL(string: site)?.host?.lowercased(), Self.loadsOriginals(host: host),
+               SiteAccount.isSignedIn, (originalsRefusedUntil[host] ?? .distantPast) < Date() {
+                do { return try await fetch(original, galleryID: galleryID, limit: 64_000_000, site: site) }
+                catch {
+                    try Task.checkCancellation()
+                    if let notice = error as? ContentError, [.imageLimit, .accessDenied, .temporarilyBlocked].contains(notice) { throw notice }
+                    // The website keeps originals for GP the account may not have, or for quieter hours:
+                    // the page shown in their place serves meanwhile.
+                    originalsRefusedUntil[host] = Date().addingTimeInterval(600)
+                }
+            }
             do { return try await fetch(shown.url, galleryID: galleryID, limit: 24_000_000, site: site) }
             catch {
                 try Task.checkCancellation()
@@ -658,6 +673,115 @@ actor KeyedCatalogSource {
         }
         return (average, count)
     }
+
+    // MARK: Tags, comments, archives and settings profiles
+
+    func voteTag(_ id: Int64, tag: String, vote: Int, site: String) async throws -> [WorkTagVote] {
+        try prepare(site)
+        guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
+        guard vote == 1 || vote == -1, !tag.isEmpty, tag.count <= 200 else { throw ContentError.invalidQuery }
+        let key = try await key(for: id, site: site)
+        var detail = try await detailPage(id, key: key, page: 0, site: site)
+        if detail.apiKey == nil { details[id] = nil; detail = try await detailPage(id, key: key, page: 0, site: site) }
+        guard let credentials = detail.apiKey else { throw ContentError.signInRequired }
+        let object = try await api(["method": "taggallery", "apiuid": credentials.uid, "apikey": credentials.key, "gid": id, "token": key,
+                                    "tags": tag, "vote": vote], site: site)
+        if let message = object["error"] as? String, !message.isEmpty { throw SiteMessage(text: message) }
+        let votes = KeyedWorkPage.tagVotes(from: object["tagpane"] as? String ?? "")
+        guard !votes.isEmpty else { throw ContentError.invalidResponse }
+        details[id]?.extras?.tagVotes = votes
+        return votes
+    }
+
+    /// The website takes a comment of at least ten bytes, and joins it to the account's own comment
+    /// when that one is the last.
+    func postComment(_ id: Int64, text: String, site: String) async throws -> [WorkComment] {
+        try prepare(site)
+        guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.utf8.count >= 10 else { throw SiteMessage(text: L10n.text("A comment is too short.")) }
+        guard text.utf8.count <= 10_000 else { throw ContentError.invalidQuery }
+        let key = try await key(for: id, site: site)
+        guard let url = URL(string: "\(site)g/\(id)/\(key)/"), let host = URL(string: site)?.host?.lowercased() else { throw ContentError.invalidQuery }
+        try await pacer.wait(host: host)
+        let (data, _) = try await transport.post(url, body: Data(("commenttext_new=" + Self.formEncoded(text)).utf8),
+                                                 contentType: "application/x-www-form-urlencoded", limit: 3_000_000)
+        try prepare(site)
+        let page = String(decoding: data, as: UTF8.self)
+        if Self.asksForSignIn(page) { throw ContentError.signInRequired }
+        if let error = Self.pageError(page), error != .signInRequired { throw error }
+        details[id] = nil
+        let probe = Self.commentProbe(text)
+        func posted(_ comments: [WorkComment]) -> Bool { comments.contains { Self.commentProbe($0.text).contains(probe) } }
+        var comments = KeyedWorkPage.comments(from: page)
+        if posted(comments) { return comments }
+        // A long conversation shows only part of itself on the work's page.
+        comments = try await allComments(id, site: site)
+        if posted(comments) { return comments }
+        throw SiteMessage(text: KeyedWorkPage.firstCapture(#"<p class="br">(.*?)</p>"#, in: page).map { KeyedWorkPage.plain($0) }
+                          ?? L10n.text("The website didn’t take the comment. Try again later."))
+    }
+
+    private nonisolated static func commentProbe(_ text: String) -> String {
+        String(text.lowercased().filter { !$0.isWhitespace }.prefix(40))
+    }
+
+    private func archiverURL(_ id: Int64, site: String) async throws -> URL {
+        let extras = try await extras(id, site: site)
+        // The work page names its archive page; only a page on the connected website is followed.
+        if let named = extras.archiveURL, named.host?.lowercased() == URL(string: site)?.host?.lowercased() { return named }
+        let key = try await key(for: id, site: site)
+        var components = URLComponents(string: site + "archiver.php")
+        components?.queryItems = [URLQueryItem(name: "gid", value: String(id)), URLQueryItem(name: "token", value: key)]
+        guard let url = components?.url else { throw ContentError.invalidQuery }
+        return url
+    }
+
+    func archiveOffer(_ id: Int64, site: String) async throws -> WorkArchiveOffer {
+        try prepare(site)
+        guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
+        let offer = KeyedWorkPage.archiveOffer(from: try await page(try await archiverURL(id, site: site), site: site))
+        guard !offer.options.isEmpty else { throw ContentError.unsupportedFormat }
+        return offer
+    }
+
+    func archiveDownloadURL(_ id: Int64, option: WorkArchiveOffer.Option, site: String) async throws -> URL {
+        try prepare(site)
+        guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
+        guard ["org", "res"].contains(option.kind), option.available else { throw ContentError.invalidQuery }
+        let url = try await archiverURL(id, site: site)
+        if let host = url.host?.lowercased() { try await pacer.wait(host: host) }
+        let form = "dltype=" + Self.formEncoded(option.kind) + "&dlcheck=" + Self.formEncoded(option.button)
+        let (data, _) = try await transport.post(url, body: Data(form.utf8), contentType: "application/x-www-form-urlencoded", limit: 1_000_000)
+        try prepare(site)
+        let page = String(decoding: data, as: UTF8.self)
+        if Self.asksForSignIn(page) { throw ContentError.signInRequired }
+        guard let address = KeyedWorkPage.archiveDownloadURL(from: page) else {
+            throw SiteMessage(text: KeyedWorkPage.message(in: page) ?? L10n.text("The website didn’t prepare the archive. Try again later."))
+        }
+        guard Self.safeMediaURL(address) else { throw ContentError.unsupportedFormat }
+        MangaUrls.registerMedia([address], site: site)
+        return address
+    }
+
+    /// The account's settings profiles, which one the app uses checked.
+    func settingsProfiles(site: String) async throws -> [SiteSettingsProfile] {
+        try prepare(site)
+        guard SiteAccount.isSignedIn, let url = URL(string: site + "uconfig.php") else { throw ContentError.signInRequired }
+        return KeyedWorkPage.settingsProfiles(from: try await page(url, site: site))
+    }
+
+    /// Reads the website with one of the account's settings profiles from now on.
+    func useSettingsProfile(_ profile: Int, site: String) throws {
+        try prepare(site)
+        guard (1...9999).contains(profile), let host = URL(string: site)?.host?.lowercased() else { throw ContentError.invalidQuery }
+        SiteAccount.setSiteCookie(Self.profileCookie, value: String(profile), host: host)
+        // Lists and work pages read with the other profile may look different.
+        feeds.removeAll(); details.removeAll(); toplists.removeAll(); popular = nil
+    }
+
+    /// The cookie the website reads the chosen settings profile from.
+    nonisolated static let profileCookie = "sp"
 
     // MARK: Account favorites
 
@@ -938,7 +1062,23 @@ actor KeyedCatalogSource {
         if let call = text.range(of: #"nl\('([0-9A-Za-z_-]{1,64})'\)"#, options: .regularExpression) {
             reload = String(text[call].dropFirst(4).dropLast(2))
         }
-        return ShownImage(url: url, reload: reload)
+        // Shown only to signed-in accounts, and only when the original is larger than the page shown.
+        let original = KeyedWorkPage.firstCapture(#"<a\b[^>]*\bhref="([^"]*fullimg[^"]*)""#, in: text)
+            .flatMap { URL(string: decode($0)) }.flatMap { $0.scheme == "https" ? $0 : nil }
+        return ShownImage(url: url, reload: reload, original: original)
+    }
+
+    private static let originalsKey = "manga.originalImageSites"
+
+    /// Whether the reader loads each page's original file on [host], for a signed-in account.
+    nonisolated static func loadsOriginals(host: String) -> Bool {
+        (ContentPreferences.defaults.stringArray(forKey: originalsKey) ?? []).contains(host)
+    }
+
+    nonisolated static func setLoadsOriginals(_ loads: Bool, host: String) {
+        var hosts = Set(ContentPreferences.defaults.stringArray(forKey: originalsKey) ?? [])
+        if loads { hosts.insert(host) } else { hosts.remove(host) }
+        ContentPreferences.defaults.set(hosts.sorted(), forKey: originalsKey)
     }
 
     /// When an account's image allowance runs out, the site shows a fixed notice image instead.

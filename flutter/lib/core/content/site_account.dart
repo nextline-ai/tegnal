@@ -274,7 +274,7 @@ abstract final class SiteAccount {
   }
 
   /// Cookies an account carries besides its identity: access, settings key and perks.
-  static bool keepsForAccount(String name) => const [accessCookie, 'sk', 'star', 'hath_perks', 'iq'].contains(name);
+  static bool keepsForAccount(String name) => const [accessCookie, 'sk', 'sp', 'star', 'hath_perks', 'iq'].contains(name);
 
   static bool _isCookieName(String name) => name.isNotEmpty && name.length <= 64 && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(name);
 
@@ -318,6 +318,16 @@ abstract final class SiteAccount {
 
   /// The value of a cookie the site set for [host], as the next request sends it.
   static String? siteCookie(String name, {required String host}) => _load().sites[host]?[name];
+
+  /// Sets a cookie for [host] the way the website's own pages would, such as its settings profile.
+  static void setSiteCookie(String name, String value, {required String host}) {
+    if (!_isCookieName(name) || !_isCookieValue(value) || host.isEmpty) return;
+    final stored = _load();
+    final site = stored.sites.putIfAbsent(host, () => {});
+    if (site[name] == value) return;
+    site[name] = value;
+    _save(stored);
+  }
 
   /// Drops a cookie the site refused, unless the same answer already handed out another one:
   /// a members-only catalog may show its wall to a request without access while setting the

@@ -10,9 +10,11 @@ import 'package:tegnal/core/content/content_url.dart';
 import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/content/gallery_id_parser.dart';
 import 'package:tegnal/core/content/keyed_catalog_source.dart';
+import 'package:tegnal/core/content/keyed_work_extras.dart';
 import 'package:tegnal/core/content/manga_content_source.dart';
 import 'package:tegnal/core/content/manga_urls.dart';
 import 'package:tegnal/core/content/site_account.dart';
+import 'package:tegnal/core/support/l10n.dart';
 
 import 'content_test_support.dart';
 
@@ -44,7 +46,7 @@ String listing(List<int> ids, {int? next}) {
   return '<html><body><form><input type="text" id="f_search" name="f_search"></form><table class="itg">$rows</table>$nav</body></html>';
 }
 
-String detail(int id, {required int page}) {
+String detail(int id, {required int page, List<String> comments = const []}) {
   final entries = page == 0
       ? [('1111111111', 1, 'one.jpg', '$id-0.png', 0), ('2222222222', 2, 'two.jpg', '$id-0.png', -100)]
       : [('3333333333', 3, 'three.jpg', '$id-1.png', 0)];
@@ -54,8 +56,26 @@ String detail(int id, {required int page}) {
             '<a href="https://keyed.example/s/${entry.$1}/$id-${entry.$2}"><div title="Page ${entry.$2}: ${entry.$3}" style="width:100px;height:150px;background:transparent url(https://sheets.example/${entry.$4}) ${entry.$5}px 0 no-repeat"></div></a>',
       )
       .join();
-  return '<html><script>var api_url = "https://api.keyed.example/api.php";\nvar login_url = "https://keyed.example/bounce_login.php?b=d&bt=1";</script><div id="gdt">$links</div></html>';
+  final thread = [
+    for (final (index, text) in comments.indexed)
+      '<div class="c1"><div class="c2"><div class="c3">Posted on 01 January 2026, 00:00 by: &nbsp; <a href="https://keyed.example/uploader/me">me</a></div></div><div class="c6" id="comment_${index + 1}">$text</div></div>',
+  ].join();
+  final extras =
+      '<div id="taglist"><table><tr><td class="tc">female:</td><td><div id="td_female:sample_tag" class="gt"><a id="ta_female:sample_tag" href="https://keyed.example/tag/female:sample+tag" class="tup" onclick="return toggle_tagmenu(1,\'female:sample tag\',this)">sample tag</a></div></td></tr><tr><td class="tc">parody:</td><td><div id="td_parody:sample_series" class="gtl"><a id="ta_parody:sample_series" href="https://keyed.example/tag/parody:sample+series" class="" onclick="return toggle_tagmenu(2,\'parody:sample series\',this)">sample series</a></div></td></tr></table></div>'
+      '<p class="g2"><a href="#" onclick="return popUp(\'https://keyed.example/archiver.php?gid=$id&amp;token=${key(id)}\',480,320)">Archive Download</a></p>'
+      '<div id="cdiv">$thread</div><div id="formdiv" style="display:none"><form method="post" action="#cnew"><textarea name="commenttext_new"></textarea></form></div>';
+  return '<html><script>var api_url = "https://api.keyed.example/api.php";\nvar login_url = "https://keyed.example/bounce_login.php?b=d&bt=1";\nvar apiuid = 42;\nvar apikey = "0123abcd4567";</script><div id="gdt">$links</div>${page == 0 ? extras : ''}</html>';
 }
+
+const archivePage = '''
+<html><body><div id="db"><h1>Sample 3000</h1><p>Current Funds:</p><p>1,200 GP [<a href="#">?</a>] &nbsp; 393 Credits [<a href="#">?</a>]</p>
+<div><div style="width:180px; float:left"><div style="text-align:center">Download Cost: &nbsp; <strong>446 GP</strong></div>
+<form action="https://keyed.example/archiver.php?gid=3000&amp;token=0000000bb8" method="post"><input type="hidden" name="dltype" value="org"><div><input type="submit" name="dlcheck" value="Download Original Archive"></div></form>
+<p>Estimated Size: &nbsp; <strong>21.24 MiB</strong></p></div>
+<div style="width:180px; float:right; color:#CCCCCC"><div style="text-align:center">Download Cost: &nbsp; <strong>N/A</strong></div>
+<form action="https://keyed.example/archiver.php?gid=3000&amp;token=0000000bb8" method="post"><input type="hidden" name="dltype" value="res"><div><input type="submit" name="dlcheck" value="Download Resample Archive"></div></form>
+<p>Estimated Size: &nbsp; <strong>N/A</strong></p></div></div></div></body></html>
+''';
 
 /// A work page for an account that reads in the multi-page viewer: its pages link there.
 String viewerDetail(int id) {
@@ -95,11 +115,31 @@ class KeyedFixture {
   bool viewer = false;
   final image = List.filled(64, 0x42);
 
+  /// Tag votes, comments and archive forms as the website received them.
+  final voteRequests = <Map<String, Object?>>[];
+  final posted = <String>[];
+  final archiveForms = <String>[];
+
+  /// What the website answers a comment it does not take.
+  String? commentRefusal;
+
+  /// Reader pages link each page's original, which the website sends only while the account can pay for it.
+  bool offersOriginals = false;
+  bool grantsOriginals = true;
+
   int count(String path) => requests.where((url) => url.path == path).length;
   ContentTransport transport() => ContentTransport(fetcher: FixtureFetcher(reply));
 
   String _details(List<int> body) {
     final request = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
+    if (request['method'] == 'taggallery') {
+      voteRequests.add(request);
+      final vote = request['vote'] as int? ?? 0;
+      return jsonEncode({
+        'tagpane':
+            '<div id="taglist"><a id="ta_female:sample_tag" class="${vote > 0 ? 'tup' : 'tdn'}" onclick="return toggle_tagmenu(1,\'female:sample tag\',this)">sample tag</a></div>',
+      });
+    }
     if (request['method'] == 'tagsuggest') {
       return jsonEncode({
         'tags': {
@@ -179,6 +219,25 @@ class KeyedFixture {
         return FixtureReply.text(200, listing(shown, next: next == null ? 2999 : null), {'Content-Type': 'text/html'});
       case '/popular':
         return FixtureReply.text(200, listing([2999, 3000, 3001]), {'Content-Type': 'text/html'});
+      case '/uconfig.php':
+        final chosen = (cookie ?? '').contains('sp=2') ? 2 : 1;
+        final options = [
+          for (final (id, name) in const [(1, 'Default Profile'), (2, 'Reading in the App')])
+            '<option value="$id"${id == chosen ? ' selected="selected"' : ''}>$name</option>',
+        ].join();
+        return FixtureReply.text(
+          200,
+          '<html><body><div id="profile_outer"><select name="profile_set" onchange="do_profile_post()">$options</select></div><p>settings page with enough text to read</p></body></html>',
+          {'Content-Type': 'text/html'},
+        );
+      case '/archiver.php':
+        if (request.method != 'POST') return FixtureReply.text(200, archivePage, {'Content-Type': 'text/html'});
+        archiveForms.add(utf8.decode(request.body ?? const []));
+        return FixtureReply.text(
+          200,
+          '<html><body><script type="text/javascript">document.location = "https://node1.volunteer.example:8440/archive/3000/abcdef/0";</script><p>Your archive is ready, the download starts in a moment.</p></body></html>',
+          {'Content-Type': 'text/html'},
+        );
       case '/favorites.php':
         if (!(cookie ?? '').contains('app_member_id=42')) {
           return FixtureReply.text(200, '<html><form><input type="password" name="PassWord"></form></html>', {'Content-Type': 'text/html'});
@@ -199,7 +258,24 @@ class KeyedFixture {
         final parts = url.pathSegments.where((part) => part.isNotEmpty).toList();
         if (parts.length == 3 && parts[0] == 'g' && int.tryParse(parts[1]) != null && parts[2] == key(int.parse(parts[1]))) {
           final id = int.parse(parts[1]);
-          return FixtureReply.text(200, viewer ? viewerDetail(id) : detail(id, page: url.query == 'p=1' ? 1 : 0), {'Content-Type': 'text/html'});
+          if (request.method == 'POST') {
+            final text = Uri.splitQueryString(utf8.decode(request.body ?? const []))['commenttext_new'] ?? '';
+            if (commentRefusal case final refusal?) {
+              final page = detail(id, page: 0, comments: posted).replaceFirst('<html>', '<html><p class="br">$refusal</p>');
+              return FixtureReply.text(200, page, {'Content-Type': 'text/html'});
+            }
+            posted.add(text);
+          }
+          return FixtureReply.text(200, viewer ? viewerDetail(id) : detail(id, page: url.query == 'p=1' ? 1 : 0, comments: posted), {
+            'Content-Type': 'text/html',
+          });
+        }
+        if (parts.isNotEmpty && parts[0] == 'fullimg') {
+          return grantsOriginals
+              ? FixtureReply(200, List.filled(96, 0x77), {'Content-Type': 'image/png'})
+              : FixtureReply.text(200, 'Downloading original files of this gallery during peak hours requires GP, and you do not have enough.', {
+                  'Content-Type': 'text/html',
+                });
         }
         if (parts.length == 3 && parts[0] == 'mpv' && int.tryParse(parts[1]) != null && parts[2] == key(int.parse(parts[1]))) {
           return FixtureReply.text(200, viewerPage, {'Content-Type': 'text/html'});
@@ -212,9 +288,12 @@ class KeyedFixture {
               : reload == null
               ? 'https://node1.volunteer.example:8440/h/$number.webp'
               : 'https://node2.volunteer.example:8440/h/$number.webp';
+          final original = offersOriginals
+              ? '<div id="i6"><a href="https://keyed.example/fullimg/3000/$number/okey123/orig.png">Download original 2400 x 3400 3.1 MiB source</a></div>'
+              : '';
           return FixtureReply.text(
             200,
-            '<html><div id="i3"><a href="/next"><img id="img" src="$host" onerror="this.onerror=null; nl(\'alt-$number\')"></a></div><p>reader page with enough text to be a real page</p></html>',
+            '<html><div id="i3"><a href="/next"><img id="img" src="$host" onerror="this.onerror=null; nl(\'alt-$number\')"></a></div>$original<p>reader page with enough text to be a real page</p></html>',
             {'Content-Type': 'text/html'},
           );
         }
@@ -409,6 +488,108 @@ void main() {
     clock.reset();
     await pacer.wait('b.example');
     expect(clock.elapsedMilliseconds, lessThan(50));
+  });
+
+  void signIn() => expect(
+    SiteAccount.signIn(const [
+      SiteCookie(name: 'app_member_id', value: '42'),
+      SiteCookie(name: 'app_pass_hash', value: 'secret'),
+    ], host: MangaUrls.configuredHost),
+    isTrue,
+  );
+
+  test('work pages show tag votes the comment form and the archive', () {
+    final extras = KeyedWorkPage.extras(detail(3000, page: 0));
+    expect(extras.tagVotes, const [WorkTagVote('female:sample tag', 1), WorkTagVote('parody:sample series', 0)]);
+    expect(extras.tagVotes[1].localNamespace, 'series');
+    expect(extras.canComment, isTrue);
+    expect(extras.canRate, isTrue);
+    expect(extras.archiveURL.toString(), 'https://keyed.example/archiver.php?gid=3000&token=0000000bb8');
+    final offer = KeyedWorkPage.archiveOffer(archivePage);
+    expect(offer.funds, '1,200 GP · 393 Credits');
+    expect(offer.options, const [
+      WorkArchiveOption(kind: 'org', button: 'Download Original Archive', cost: '446 GP', size: '21.24 MiB', available: true),
+      WorkArchiveOption(kind: 'res', button: 'Download Resample Archive', cost: 'N/A', size: 'N/A', available: false),
+    ], reason: "An archive the page greys out can't be chosen");
+  });
+
+  test("tag votes go to the details endpoint with the work's key", () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    signIn();
+    final votes = await source.voteTag(3000, tag: 'female:sample tag', vote: -1);
+    expect(votes, const [WorkTagVote('female:sample tag', -1)], reason: 'The votes come back as they now stand');
+    final request = fixture.voteRequests.last;
+    expect(request['tags'], 'female:sample tag');
+    expect(request['token'], key(3000));
+    expect(request['apiuid'], 42);
+    expect(request['vote'], -1);
+  });
+
+  test("comments are posted and confirmed on the work's page", () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    signIn();
+    await expectLater(source.postComment(3000, 'short'), throwsA(SiteMessage(L10n.text('A comment is too short.'))));
+    expect(fixture.posted, isEmpty, reason: 'A short comment never reaches the website');
+
+    final comments = await source.postComment(3000, 'A lovely work & thanks\nsecond line');
+    expect(comments.any((comment) => comment.text.contains('A lovely work & thanks')), isTrue, reason: "The comment shows on the work's page");
+    expect(fixture.posted.last, 'A lovely work & thanks\nsecond line');
+
+    fixture.commentRefusal = 'You can only post one comment every minute.';
+    await expectLater(
+      source.postComment(3000, 'Another comment that is long enough'),
+      throwsA(const SiteMessage('You can only post one comment every minute.')),
+      reason: "A comment the website didn't take must not pass as posted",
+    );
+  });
+
+  test('archives show their cost and download from the address the website hands out', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    signIn();
+    final offer = await source.archiveOffer(3000);
+    final original = offer.options.firstWhere((option) => option.isOriginal);
+    expect(fixture.archiveForms, isEmpty, reason: 'Looking at the offer costs nothing');
+    final address = await source.archiveDownloadURL(3000, original);
+    expect(address.toString(), 'https://node1.volunteer.example:8440/archive/3000/abcdef/0?start=1');
+    expect(fixture.archiveForms, ['dltype=org&dlcheck=Download+Original+Archive']);
+    await expectLater(
+      source.archiveDownloadURL(3000, offer.options.firstWhere((option) => !option.available)),
+      throwsA(ContentError.invalidQuery),
+      reason: 'An archive the page greys out is never requested',
+    );
+  });
+
+  test('original images load when chosen and the resized page shows when refused', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    final gallery = await source.gallery(3000);
+    fixture.offersOriginals = true;
+    signIn();
+    await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false);
+    expect(fixture.requests.any((url) => url.path.startsWith('/fullimg/')), isFalse, reason: 'Originals load only when chosen');
+
+    KeyedCatalogSource.setLoadsOriginals(true, host: 'keyed.example');
+    addTearDown(() => KeyedCatalogSource.setLoadsOriginals(false, host: 'keyed.example'));
+    final original = await source.image(gallery.pages[0], galleryID: 3000, thumbnail: false);
+    expect(original, List.filled(96, 0x77));
+
+    fixture.grantsOriginals = false;
+    final resized = await MangaContentSource(transport: fixture.transport()).image(gallery.pages[2], galleryID: 3000, thumbnail: false);
+    expect(resized, fixture.image, reason: 'A page whose original the website keeps for GP shows resized');
+  });
+
+  test('the chosen settings profile is sent with every page', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    signIn();
+    final profiles = await source.settingsProfiles();
+    expect(profiles, const [SiteSettingsProfile(1, 'Default Profile', selected: true), SiteSettingsProfile(2, 'Reading in the App')]);
+    await source.useSettingsProfile(2);
+    final chosen = await source.settingsProfiles();
+    expect(chosen.where((profile) => profile.selected).first.id, 2);
+    expect(fixture.cookies.last.contains('sp=2'), isTrue);
   });
 
   test('favorites keep their note and a refused change is reported', () async {

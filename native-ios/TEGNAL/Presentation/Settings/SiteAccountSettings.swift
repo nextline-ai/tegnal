@@ -18,6 +18,7 @@ struct SiteAccountSection: View {
     @State private var revision = 0
     @State private var categories: [FavoriteCategory] = []
     @State private var allowance: (used: Int, limit: Int)?
+    @State private var profiles: [SiteSettingsProfile] = []
 
     /// What was learned about this website, read in its own scope.
     private func scoped<T>(_ body: () -> T) -> T { SiteScope.$site.withValue(site, operation: body) }
@@ -55,6 +56,19 @@ struct SiteAccountSection: View {
                             .accessibilityIdentifier("settings.siteAccount.refreshAccess")
                     }
                     if isChecked && keyed {
+                        Toggle(isOn: Binding(get: { _ = revision; return KeyedCatalogSource.loadsOriginals(host: host) },
+                                             set: { KeyedCatalogSource.setLoadsOriginals($0, host: host); revision += 1 })) {
+                            SettingsHelpLabel("Load Original Images",
+                                              help: "Loads each page’s original file instead of the resized one. The website may charge GP for originals; a page it won’t send is shown resized.")
+                        }.accessibilityIdentifier("settings.siteAccount.originals")
+                        if profiles.count > 1 {
+                            Picker(selection: Binding(get: { profiles.first(where: \.selected)?.id ?? profiles[0].id }, set: { useProfile($0) })) {
+                                ForEach(profiles) { Text($0.name).tag($0.id) }
+                            } label: {
+                                SettingsHelpLabel("Settings Profile",
+                                                  help: "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings.")
+                            }.accessibilityIdentifier("settings.siteAccount.profile")
+                        }
                         Toggle(isOn: $env.syncsAccountFavorites) {
                             SettingsHelpLabel("Sync Bookmarks with Account Favorites",
                                               help: "Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.")
@@ -136,6 +150,10 @@ struct SiteAccountSection: View {
             guard isChecked, signedIn, keyed else { allowance = nil; return }
             allowance = (try? await MangaContentSource.shared.imageAllowance()) ?? nil
         }
+        .task(id: "\(signedIn)-\(isChecked)-profiles") {
+            guard isChecked, signedIn, keyed else { profiles = []; return }
+            profiles = (try? await MangaContentSource.shared.settingsProfiles()) ?? []
+        }
         .task(id: env.syncsAccountFavorites) {
             guard isChecked, env.syncsAccountFavorites, categories.isEmpty else { return }
             categories = (try? await MangaContentSource.shared.favoriteCategories()) ?? []
@@ -145,6 +163,14 @@ struct SiteAccountSection: View {
     private func finished() {
         env.siteSignInFinished(site: site)
         revision += 1
+    }
+
+    private func useProfile(_ id: Int) {
+        profiles = profiles.map { SiteSettingsProfile(id: $0.id, name: $0.name, selected: $0.id == id) }
+        Task {
+            try? await MangaContentSource.shared.useSettingsProfile(id)
+            profiles = (try? await MangaContentSource.shared.settingsProfiles()) ?? profiles
+        }
     }
 
     private func importFavorites(byCategory: Bool) async {

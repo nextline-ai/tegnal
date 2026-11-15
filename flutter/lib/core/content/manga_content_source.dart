@@ -270,6 +270,48 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
   }
 
   @override
+  Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote}) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.voteTag(id, tag: tag, vote: vote, site: site);
+  }
+
+  @override
+  Future<List<WorkComment>> postComment(int id, String text) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.postComment(id, text, site: site);
+  }
+
+  @override
+  Future<WorkArchiveOffer> archiveOffer(int id) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.archiveOffer(id, site: site);
+  }
+
+  @override
+  Future<Uri> archiveDownloadURL(int id, WorkArchiveOption option) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.archiveDownloadURL(id, option, site: site);
+  }
+
+  /// The account's settings profiles on the checked website, when it keeps several.
+  Future<List<SiteSettingsProfile>> settingsProfiles() async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return [];
+    return keyed.settingsProfiles(site: site);
+  }
+
+  Future<void> useSettingsProfile(int profile) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return;
+    keyed.useSettingsProfile(profile, site: site);
+    _galleryCache.clear();
+  }
+
+  @override
   Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count}) => PerfTrace.span(
     'manga list',
     () => _list(query, offset: offset, count: count),
