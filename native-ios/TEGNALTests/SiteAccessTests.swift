@@ -239,7 +239,7 @@ final class SiteAccessTests: XCTestCase {
 
     // MARK: Filling from websites that block bulk reading
 
-    func testAFillReadsFromOtherWebsitesWhileOneThatBlocksBulkReadingIsConnected() async throws {
+    func testAFillReadsABlockingWebsiteOnlyForWorksTheOthersNoLongerHave() async throws {
         let blocking = FakeSite(name: "keyed.example", works: [1: "one", 3: "three"])
         let mirror = FakeSite(name: "b.example", works: [1: "one", 2: "two"])
         let content = SiteFallbackContent(primary: blocking, sourceFor: { _ in mirror },
@@ -248,47 +248,76 @@ final class SiteAccessTests: XCTestCase {
 
         let filled = try await content.gallery(1, preferring: "keyed.example", inBulk: true)
         XCTAssertEqual(filled.title, "one")
-        let checked = await blocking.calls
-        XCTAssertEqual(checked, 0, "A fill never reads the website that blocks bulk reading while another can be read")
-        XCTAssertFalse(content.readsOnlyBlockingSites)
-        do {
-            _ = try await content.gallery(3, preferring: nil, inBulk: true)
-            XCTFail("A work only the skipped website carries is left for later")
-        } catch { XCTAssertTrue(error is CoverFillGuard.LeftForBlockingSite, "Not missing: the skipped website has it") }
+        var checked = await blocking.calls
+        XCTAssertEqual(checked, 0, "A work another website has is never read from the one that blocks bulk reading")
+        XCTAssertFalse(content.tookBlockingRead(1))
 
-        let opened = try await content.gallery(3)
+        let deleted = try await content.gallery(3, preferring: "b.example", inBulk: true)
+        XCTAssertEqual(deleted.title, "three", "A work the other websites deleted is read from the one that blocks bulk reading")
+        checked = await blocking.calls
+        XCTAssertEqual(checked, 1)
+        XCTAssertTrue(content.tookBlockingRead(3), "So the next read waits longer")
+        XCTAssertFalse(content.tookBlockingRead(3))
+
+        do {
+            _ = try await content.gallery(9, preferring: nil, inBulk: true)
+            XCTFail("A work no website has stays missing")
+        } catch { XCTAssertEqual(error as? ContentError, .galleryNotFound) }
+
+        let unreachable = FakeSite(name: "b.example", works: [:], refusal: .unavailable(503))
+        let cut = SiteFallbackContent(primary: blocking, sourceFor: { _ in unreachable },
+                                      sites: { ("keyed.example", ["keyed.example", "b.example"]) }, memory: WorkSiteMemory(file: nil),
+                                      blocksBulkReading: { $0 == "keyed.example" })
+        let before = await blocking.calls
+        do {
+            _ = try await cut.gallery(3, preferring: nil, inBulk: true)
+            XCTFail("A work the other websites could not be asked about waits for a later fill")
+        } catch { XCTAssertTrue(error is CoverFillGuard.LeftForBlockingSite) }
+        let after = await blocking.calls
+        XCTAssertEqual(before, after)
+        let opened = try await cut.gallery(3)
         XCTAssertEqual(opened.title, "three", "Opening a work by hand still reads every website")
 
         let alone = SiteFallbackContent(primary: blocking, sourceFor: { _ in mirror }, sites: { ("keyed.example", ["keyed.example"]) },
                                         memory: WorkSiteMemory(file: nil), blocksBulkReading: { $0 == "keyed.example" })
         let only = try await alone.gallery(1, preferring: nil, inBulk: true)
         XCTAssertEqual(only.title, "one", "With no other website, the fill reads it (after asking, and slowly)")
-        XCTAssertTrue(alone.readsOnlyBlockingSites)
+        XCTAssertTrue(alone.tookBlockingRead(1))
     }
 
-    func testTheFillLeavesWorksOnlyABlockingWebsiteCarriesAsFailedNotGone() async throws {
+    func testTheFillReadsDeletedWorksFromABlockingWebsiteAndLeavesUnreachableOnesForLater() async throws {
         let db = try AppDatabase.inMemory()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("bulk-fill-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let blocking = FakeSite(name: "keyed.example", works: [7: "seven"])
+        let blocking = FakeSite(name: "keyed.example", works: [7: "seven", 8: "eight"])
         let mirror = FakeSite(name: "b.example", works: [:])
-        let content = SiteFallbackContent(primary: blocking, sourceFor: { _ in mirror },
-                                          sites: { ("keyed.example", ["keyed.example", "b.example"]) }, memory: WorkSiteMemory(file: nil),
+        let content = SiteFallbackContent(primary: mirror, sourceFor: { _ in blocking },
+                                          sites: { ("b.example", ["keyed.example", "b.example"]) }, memory: WorkSiteMemory(file: nil),
                                           blocksBulkReading: { $0 == "keyed.example" })
-        _ = try db.upsertWork(galleryId: 7, metadataSource: nil, catalogMatched: false, site: "keyed.example")
+        _ = try db.upsertWork(galleryId: 7, metadataSource: nil, catalogMatched: false, site: "b.example")
+        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .zero).start(state: CoverQueueState())
+        var checked = await blocking.calls
+        XCTAssertEqual(checked, 1)
+        XCTAssertEqual(try db.getWork(galleryId: 7)?.title, "seven", "Deleted on the other website, read from the one that still has it")
+
+        let unreachable = FakeSite(name: "b.example", works: [:], refusal: .unavailable(503))
+        let cut = SiteFallbackContent(primary: unreachable, sourceFor: { _ in blocking },
+                                      sites: { ("b.example", ["keyed.example", "b.example"]) }, memory: WorkSiteMemory(file: nil),
+                                      blocksBulkReading: { $0 == "keyed.example" })
+        _ = try db.upsertWork(galleryId: 8, metadataSource: nil, catalogMatched: false, site: "b.example")
+        try db.setThumb(galleryId: 7, status: "gone")
         let state = CoverQueueState()
-        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .zero).start(state: state)
-        let checked = await blocking.calls
-        XCTAssertEqual(checked, 0)
+        await CoverQueueActor(database: db, thumbsDir: root, source: cut, allowsBackfill: { true }, delay: .zero, slowDelay: .zero).start(state: state)
+        checked = await blocking.calls
+        XCTAssertEqual(checked, 1, "An unreachable website is not a deleted work")
         XCTAssertEqual(state.failed, 1)
         XCTAssertEqual(state.gone, 0)
-        XCTAssertEqual(try db.getWork(galleryId: 7)?.thumbStatus, "failed", "Tried again on a later fill")
+        XCTAssertEqual(try db.getWork(galleryId: 8)?.thumbStatus, "failed", "Tried again on a later fill")
 
-        let stopped = CoverQueueState()
-        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .zero)
-            .start(state: stopped, mayRead: { false })
-        let mirrorCalls = await mirror.calls
-        XCTAssertEqual(mirrorCalls, 1, "A run that must ask first reads nothing")
+        await CoverQueueActor(database: db, thumbsDir: root, source: cut, allowsBackfill: { true }, delay: .zero, slowDelay: .zero)
+            .start(state: CoverQueueState(), mayRead: { false })
+        let unreachableCalls = await unreachable.calls
+        XCTAssertEqual(unreachableCalls, 1, "A run that must ask first reads nothing")
     }
 
     func testReadingFromABlockingWebsiteWaitsLongerBetweenWorks() async throws {

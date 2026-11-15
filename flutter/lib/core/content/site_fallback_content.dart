@@ -182,18 +182,23 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
 
   ContentProviding _source(String site) => site == _sites().$1 ? primary : _sourceFor(site);
 
-  /// `inBulk` reads for a background fill: websites that block bulk reading are skipped while
-  /// another connected website can be read, and a work only they carry is left for later.
+  /// `inBulk` reads for a background fill. Websites that block bulk reading are read last, and
+  /// only for a work every other connected website says it no longer has; a work the others
+  /// could not be asked about is left for later.
   @override
   Future<NativeGallery> gallery(int id, {String? preferring, bool inBulk = false}) async {
-    var order = candidates(id, preferring: preferring);
-    final skipped = inBulk ? CoverFillGuard.skipped(_sites().$2, blocks: _blocksBulkReading) : const <String>{};
-    final skips = order.any(skipped.contains);
-    if (skips) order = order.where((site) => !skipped.contains(site)).toList();
+    final order = candidates(id, preferring: preferring);
     if (order.isEmpty) return primary.gallery(id);
+    final skipped = inBulk ? CoverFillGuard.skipped(_sites().$2, blocks: _blocksBulkReading) : const <String>{};
+    final others = order.where((site) => !skipped.contains(site)), last = order.where(skipped.contains);
     Object? firstError;
     StackTrace? firstTrace;
-    for (final site in order) {
+    var missingElsewhere = true;
+    for (final site in [...others, ...last]) {
+      final blocking = inBulk && _blocksBulkReading(site);
+      // Not missing: the other websites could not be read, and this one may carry it.
+      if (skipped.contains(site) && !missingElsewhere) throw const LeftForBlockingSite();
+      if (blocking) _blockingReads.add(id);
       try {
         final gallery = await _source(site).gallery(id);
         _record(id, site, afterFailure: firstError != null);
@@ -205,21 +210,23 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
           if (firstError != null) Error.throwWithStackTrace(firstError, firstTrace!);
           rethrow;
         }
+        // A website that stopped answering this device is not asked again in a fill.
+        if (blocking && ContentError.refusesDevice(error)) rethrow;
         firstError ??= error;
         firstTrace ??= trace;
+        if (!ContentError.isMissingWork(error)) missingElsewhere = false;
       }
     }
-    // Not missing: a skipped website may carry it.
-    if (skips) throw const LeftForBlockingSite();
     if (firstError != null) Error.throwWithStackTrace(firstError, firstTrace!);
     throw ContentError.galleryNotFound;
   }
 
-  /// Whether every connected website blocks bulk reading, so a fill can read only from them.
-  bool get readsOnlyBlockingSites {
-    final all = _sites().$2;
-    return all.isNotEmpty && all.every(_blocksBulkReading);
-  }
+  /// Works a fill read from a website that blocks bulk reading, until the fill asks.
+  final _blockingReads = <int>{};
+
+  /// Whether a fill's last read of a work went to a website that blocks bulk reading, so the
+  /// next read waits longer. Asking forgets it.
+  bool tookBlockingRead(int id) => _blockingReads.remove(id);
 
   void _record(int id, String site, {required bool afterFailure}) {
     if (_serving.length > 4096) _serving.clear();

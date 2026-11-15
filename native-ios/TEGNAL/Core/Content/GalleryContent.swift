@@ -24,6 +24,20 @@ enum ContentError: LocalizedError, Equatable {
         }
     }
 
+    /// The website says the work isn't there, as for one it deleted.
+    static func isMissingWork(_ error: Error) -> Bool {
+        switch error as? ContentError {
+        case .galleryNotFound: return true
+        case .unavailable(let status): return status == 404 || status == 410
+        default: return false
+        }
+    }
+
+    /// The website has stopped answering this device for now.
+    static func refusesDevice(_ error: Error) -> Bool {
+        error as? ContentError == .temporarilyBlocked || error as? ContentError == .imageLimit
+    }
+
     /// Errors after which the same work may still open on another connected website.
     static func allowsOtherSite(_ error: Error) -> Bool {
         if let error = error as? ContentError {

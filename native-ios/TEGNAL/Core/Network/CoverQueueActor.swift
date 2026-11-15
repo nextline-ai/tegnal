@@ -4,12 +4,13 @@ import SwiftUI
 
 /// Some comics websites, the keyed kind, block a network address that reads many works in a short
 /// time. Filling a library reads every work that lacks information, so it reads from the other
-/// connected websites when there are any, and asks first when there are none.
+/// connected websites when there are any, going to such a website only for a work the others no
+/// longer have, and asks first when there are none.
 enum CoverFillGuard {
     /// Works filled without asking even from such a website: a few new saves.
     static let quietLimit = 10
     /// How long the fill waits after a work read from such a website.
-    static let slowDelay: Duration = .seconds(3)
+    static let slowDelay: Duration = .seconds(2)
 
     /// What the person chose the last time they were asked, on this device.
     enum Decision: String { case none, declined, approved }
@@ -21,7 +22,8 @@ enum CoverFillGuard {
         case ask(pending: Int, sites: [String])
     }
 
-    /// Thrown for a work none of the other websites carry, left for the person to open themselves.
+    /// Thrown when the other websites could not be asked about a work: the websites that block
+    /// bulk reading are read only for a work the others no longer have, so it waits for a later fill.
     struct LeftForBlockingSite: Error {}
 
     /// The websites known to block bulk reading, by digest of their domain, for the time before
@@ -41,7 +43,8 @@ enum CoverFillGuard {
 
     static func blocksBulkReading(_ site: String) -> Bool { blocksBulkReading(site, backend: ComicSites.backend(of: site)) }
 
-    /// The websites a fill skips: those that block bulk reading, while another website can be read.
+    /// The websites a fill reads last, for works the others no longer have: those that block bulk
+    /// reading, while another website can be read.
     static func skipped(among sites: [String], blocks: (String) -> Bool = blocksBulkReading) -> Set<String> {
         let blocking = sites.filter(blocks)
         return blocking.count < sites.count ? Set(blocking) : []
@@ -239,7 +242,7 @@ public actor CoverQueueActor {
                             // The website no longer has the work: nothing more to read.
                             if refreshes { try? database.finishRefresh(galleryId: galleryId) }
                             await MainActor.run { state.gone += 1 }
-                        } catch let error as ContentError where error == .temporarilyBlocked || error == .imageLimit {
+                        } catch let error as ContentError where ContentError.refusesDevice(error) {
                             refused = true
                             await MainActor.run { state.failed += 1; state.error = error.localizedDescription }
                             break
@@ -307,9 +310,9 @@ public actor CoverQueueActor {
         let gallery: NativeGallery
         do {
             if let fallback = source as? SiteFallbackContent {
-                // Websites that block bulk reading are skipped while another website can be read;
-                // with none, every read from them, answered or not, waits longer before the next.
-                readFromBlockingSite = fallback.readsOnlyBlockingSites
+                // Every read from a website that blocks bulk reading, answered or not, waits longer
+                // before the next.
+                defer { readFromBlockingSite = fallback.tookBlockingRead(galleryId) }
                 gallery = try await fallback.gallery(galleryId, preferring: existing?.site, inBulk: true)
             } else { gallery = try await source.gallery(galleryId) }
         } catch ContentError.unavailable(let status) where status == 404 || status == 410 {

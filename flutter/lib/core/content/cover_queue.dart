@@ -53,20 +53,22 @@ final class CoverFillAsk extends CoverFillOutcome {
   String toString() => 'CoverFillAsk($pending, $sites)';
 }
 
-/// Thrown for a work none of the other websites carry, left for the person to open themselves.
+/// Thrown when the other websites could not be asked about a work: the websites that block bulk
+/// reading are read only for a work the others no longer have, so it waits for a later fill.
 class LeftForBlockingSite implements Exception {
   const LeftForBlockingSite();
 }
 
 /// `CoverFillGuard`: some comics websites, the keyed kind, block a network address that reads
 /// many works in a short time. Filling a library reads every work that lacks information, so it
-/// reads from the other connected websites when there are any, and asks first when there are none.
+/// reads from the other connected websites when there are any, going to such a website only for a
+/// work the others no longer have, and asks first when there are none.
 abstract final class CoverFillGuard {
   /// Works filled without asking even from such a website: a few new saves.
   static const quietLimit = 10;
 
   /// How long the fill waits after a work read from such a website.
-  static const slowDelay = Duration(seconds: 3);
+  static const slowDelay = Duration(seconds: 2);
 
   /// The websites known to block bulk reading, by digest of their domain, for the time before
   /// their protocol is learned (a members-only one shows signed-out visitors nothing to learn from).
@@ -85,7 +87,8 @@ abstract final class CoverFillGuard {
 
   static bool blocksBulkReading(String site) => blocksBulkReadingWith(site, ComicSites.backendOf(site));
 
-  /// The websites a fill skips: those that block bulk reading, while another website can be read.
+  /// The websites a fill reads last, for works the others no longer have: those that block bulk
+  /// reading, while another website can be read.
   static Set<String> skipped(List<String> sites, {bool Function(String site) blocks = blocksBulkReading}) {
     final blocking = sites.where(blocks).toSet();
     return blocking.length < sites.length ? blocking : <String>{};
@@ -317,7 +320,7 @@ class CoverQueueActor {
                 // The website no longer has the work: nothing more to read.
                 if (refreshes) database.finishRefresh(galleryId);
                 state.update((state) => state.gone += 1);
-              } else if (error.kind == ContentErrorKind.temporarilyBlocked || error.kind == ContentErrorKind.imageLimit) {
+              } else if (ContentError.refusesDevice(error)) {
                 refused = true;
                 state.update((state) {
                   state.failed += 1;
@@ -400,10 +403,13 @@ class CoverQueueActor {
     final NativeGallery gallery;
     try {
       if (fallback != null) {
-        // Websites that block bulk reading are skipped while another website can be read; with
-        // none, every read from them, answered or not, waits longer before the next.
-        _readFromBlockingSite = fallback.readsOnlyBlockingSites;
-        gallery = await fallback.gallery(galleryId, preferring: site, inBulk: true);
+        // Every read from a website that blocks bulk reading, answered or not, waits longer
+        // before the next.
+        try {
+          gallery = await fallback.gallery(galleryId, preferring: site, inBulk: true);
+        } finally {
+          _readFromBlockingSite = fallback.tookBlockingRead(galleryId);
+        }
       } else {
         gallery = await (other ?? source).gallery(galleryId);
       }

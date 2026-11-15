@@ -113,6 +113,8 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
     private nonisolated(unsafe) var serving: [Int64: String] = [:]
     /// The website a saved work came from, tried before the other connected websites.
     private nonisolated(unsafe) var origins: [Int64: String] = [:]
+    /// Works a fill read from a website that blocks bulk reading, until the fill asks.
+    private nonisolated(unsafe) var blockingReads = Set<Int64>()
 
     init(primary: any ContentProviding = MangaContentSource.shared,
          sourceFor: @escaping SourceFor = { SiteContent.for($0) },
@@ -164,17 +166,24 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
 
     func gallery(_ id: Int64) async throws -> NativeGallery { try await gallery(id, preferring: nil) }
 
-    /// `inBulk` reads for a background fill: websites that block bulk reading are skipped while
-    /// another connected website can be read, and a work only they carry is left for later.
+    /// `inBulk` reads for a background fill. Websites that block bulk reading are read last, and
+    /// only for a work every other connected website says it no longer has; a work the others
+    /// could not be asked about is left for later.
     func gallery(_ id: Int64, preferring preferred: String?, inBulk: Bool = false) async throws -> NativeGallery {
-        var order = candidates(for: id, preferring: preferred)
-        let skipped = inBulk ? CoverFillGuard.skipped(among: sites().all, blocks: blocksBulkReading) : []
-        let skips = order.contains(where: skipped.contains)
-        if skips { order.removeAll(where: skipped.contains) }
+        let order = candidates(for: id, preferring: preferred)
         guard !order.isEmpty else { return try await primary.gallery(id) }
+        let skipped = inBulk ? CoverFillGuard.skipped(among: sites().all, blocks: blocksBulkReading) : []
+        let others = order.filter { !skipped.contains($0) }, last = order.filter(skipped.contains)
         var firstError: Error?
-        for site in order {
+        var missingElsewhere = true
+        for site in others + last {
             try Task.checkCancellation()
+            let blocking = inBulk && blocksBulkReading(site)
+            if skipped.contains(site) {
+                // Not missing: the other websites could not be read, and this one may carry it.
+                guard missingElsewhere else { throw CoverFillGuard.LeftForBlockingSite() }
+            }
+            if blocking { _ = lock.withLock { blockingReads.insert(id) } }
             do {
                 let gallery = try await source(for: site).gallery(id)
                 record(id, site: site, afterFailure: firstError != nil)
@@ -183,18 +192,19 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
                 try Task.checkCancellation()
                 if error is CancellationError { throw error }
                 guard ContentError.allowsOtherSite(error) else { throw firstError ?? error }
+                // A website that stopped answering this device is not asked again in a fill.
+                if blocking, ContentError.refusesDevice(error) { throw error }
                 firstError = firstError ?? error
+                if !ContentError.isMissingWork(error) { missingElsewhere = false }
             }
         }
-        // Not missing: a skipped website may carry it.
-        if skips { throw CoverFillGuard.LeftForBlockingSite() }
         throw firstError ?? ContentError.galleryNotFound
     }
 
-    /// Whether every connected website blocks bulk reading, so a fill can read only from them.
-    var readsOnlyBlockingSites: Bool {
-        let all = sites().all
-        return !all.isEmpty && all.allSatisfy(blocksBulkReading)
+    /// Whether a fill's last read of a work went to a website that blocks bulk reading, so the
+    /// next read waits longer. Asking forgets it.
+    func tookBlockingRead(_ id: Int64) -> Bool {
+        lock.withLock { blockingReads.remove(id) != nil }
     }
 
     private func record(_ id: Int64, site: String, afterFailure: Bool) {

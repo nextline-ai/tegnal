@@ -101,6 +101,14 @@ class ContentError implements Exception {
     ContentErrorKind.temporarilyBlocked => L10n.text('This website has paused access from your network for a while. Try again later, or change networks.'),
   };
 
+  /// The website says the work isn't there, as for one it deleted.
+  static bool isMissingWork(Object error) =>
+      error is ContentError && (error.kind == ContentErrorKind.galleryNotFound || error.isUnavailable(404) || error.isUnavailable(410));
+
+  /// The website has stopped answering this device for now.
+  static bool refusesDevice(Object error) =>
+      error is ContentError && (error.kind == ContentErrorKind.temporarilyBlocked || error.kind == ContentErrorKind.imageLimit);
+
   /// Errors after which the same work may still open on another connected website.
   static bool allowsOtherSite(Object error) {
     if (error is ContentError) {
