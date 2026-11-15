@@ -356,7 +356,7 @@ public final class AppEnvironment: @unchecked Sendable {
     var showsMangaArtists: Bool { didSet { browserPreferences.set(showsMangaArtists, forKey: "manga.grid.showArtists") } }
     var showsMangaCategories: Bool { didSet { browserPreferences.set(showsMangaCategories, forKey: "manga.grid.showCategories") } }
     /// Signed in to the connected website, for sites that use accounts.
-    var siteAccountSignedIn = SiteAccount.isSignedIn
+    var siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
     var syncsAccountFavorites: Bool { didSet { browserPreferences.set(syncsAccountFavorites, forKey: "manga.syncAccountFavorites") } }
     private var mangaFolderColumns: Int
     private var booruFolderColumns: Int
@@ -527,10 +527,10 @@ public final class AppEnvironment: @unchecked Sendable {
         let manga: any ContentProviding
         let images: any BooruProviding
         #if DEBUG
-        manga = ContentUITestSupport.enabled || ContentUITestSupport.unitTestsEnabled ? ContentUITestSupport.source : MangaContentSource.shared
+        manga = ContentUITestSupport.enabled || ContentUITestSupport.unitTestsEnabled ? ContentUITestSupport.source : SiteFallbackContent.shared
         images = BooruUITestSupport.enabled || ContentUITestSupport.unitTestsEnabled ? BooruUITestSupport.source : BooruClient.shared
         #else
-        manga = MangaContentSource.shared; images = BooruClient.shared
+        manga = SiteFallbackContent.shared; images = BooruClient.shared
         #endif
         let value = LaunchFeedWarmup(manga: manga, booru: images)
         launchFeedsStorage = value
@@ -601,6 +601,7 @@ public final class AppEnvironment: @unchecked Sendable {
             }
             ComicSites.add(mangaSiteAddress)
             comicSitesRevision += 1
+            siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
         }
     }
 
@@ -614,6 +615,7 @@ public final class AppEnvironment: @unchecked Sendable {
         isSiteVerified = true
         mangaSiteAddress = site
         ContentBrowserTransport.reset()
+        siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
     }
 
     /// Forgets a site; forgetting the active one moves to the next, or disconnects.
@@ -624,6 +626,7 @@ public final class AppEnvironment: @unchecked Sendable {
             else { isSiteVerified = false; mangaSiteAddress = "" }
         }
         ComicSites.remove(site)
+        WorkSiteMemory.shared.forget(site: site)
         comicSitesRevision += 1
     }
 
@@ -777,43 +780,94 @@ public final class AppEnvironment: @unchecked Sendable {
 
     /// A finished sign-in changes what the site shows, so its protocol is read again.
     @MainActor func siteSignInFinished() {
-        siteAccountSignedIn = SiteAccount.isSignedIn
+        siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
         MangaUrls.resetResolvedBackend()
         ContentBrowserTransport.reset()
     }
 
     @MainActor func signOutOfSite() {
+        if MangaUrls.usesSiteSession {
+            let host = MangaUrls.configuredHost
+            SiteAccount.signOut(host: host)
+            siteAccountSignedIn = false
+            MangaUrls.resetResolvedBackend()
+            ContentBrowserTransport.reset()
+            Task { await ComicsBrowserProfile.forgetSignIn(host: host, session: true) }
+            return
+        }
         SiteAccount.signOut()
         siteAccountSignedIn = false
         syncsAccountFavorites = false
         MangaUrls.resetResolvedBackend()
         ContentBrowserTransport.reset()
+        // The sign-in pages share the website's browser profile; it must not sign the account back in.
+        let hosts = Set(([MangaUrls.signInURL?.host] + ComicSites.all.map { Optional($0) }).compactMap { $0?.lowercased() })
+        Task { for host in hosts { await ComicsBrowserProfile.forgetSignIn(host: host) } }
     }
 
-    /// Bookmarks every account favorite not already saved, into the default folder.
-    @MainActor func importAccountFavorites() async throws -> Int {
-        let folder = try database.defaultSaveFolder().id
+    /// Whether the connected website now shows the signed-in account: its favorites open, or a
+    /// members-only website shows its works.
+    @MainActor func checkSiteAccount() async -> Bool {
+        await MangaUrls.resolveBackend(force: true)
+        guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return false }
+        do {
+            _ = try await MangaContentSource.shared.accountFavorites(after: nil)
+            return true
+        } catch { return false }
+    }
+
+    /// Bookmarks every account favorite not already saved, into the default folder, or each
+    /// favorites category into a folder of the same name. With categories, works already saved
+    /// join their category's folder too, so the library holds the account's arrangement.
+    @MainActor func importAccountFavorites(intoCategoryFolders: Bool = false) async throws -> Int {
+        var added = 0
+        if intoCategoryFolders {
+            let categories = try await MangaContentSource.shared.favoriteCategories()
+            for category in categories where category.count > 0 {
+                try Task.checkCancellation()
+                let folder = try database.createFolder(name: category.name)
+                added += try await importAccountFavorites(category: category.id, folder: folder.id, joinsExisting: true)
+            }
+        } else {
+            added = try await importAccountFavorites(category: nil, folder: try database.defaultSaveFolder().id, joinsExisting: false)
+        }
+        if added > 0 { startCoverQueue() }
+        return added
+    }
+
+    @MainActor private func importAccountFavorites(category: Int?, folder: Int64?, joinsExisting: Bool) async throws -> Int {
         var next: String?, added = 0, pages = 0
         repeat {
-            let page = try await MangaContentSource.shared.accountFavorites(after: next)
+            let page = try await MangaContentSource.shared.accountFavorites(after: next, category: category)
             try Task.checkCancellation()
-            for id in page.ids where try database.getWork(galleryId: id) == nil {
+            for id in page.ids {
+                if try database.getWork(galleryId: id) != nil {
+                    if joinsExisting, let folder { try database.addWork(galleryId: id, folderID: folder) }
+                    continue
+                }
                 let work = MangaContentSource.shared.cachedPreview(id)
                 _ = try database.upsertWork(galleryId: id, folderId: folder, title: work?.title, artists: work?.artists.joined(separator: ", "),
-                                            language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active)
+                                            language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: ComicSites.active,
+                                            pageCount: work?.displayedPageCount)
                 added += 1
             }
             next = page.next
             pages += 1
         } while next != nil && pages < 500
-        if added > 0 { startCoverQueue() }
         return added
+    }
+
+    /// The account favorites category new bookmarks are added to when syncing, from 0.
+    var accountFavoriteCategory: Int {
+        get { access(keyPath: \.accountFavoriteCategory); return min(9, max(0, browserPreferences.integer(forKey: "manga.accountFavoriteCategory"))) }
+        set { withMutation(keyPath: \.accountFavoriteCategory) { browserPreferences.set(min(9, max(0, newValue)), forKey: "manga.accountFavoriteCategory") } }
     }
 
     /// Mirrors a bookmark change to the account's favorites when that is turned on.
     @MainActor func syncAccountFavorite(_ id: Int64, saved: Bool) {
         guard syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
-        Task { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved) }
+        let category = accountFavoriteCategory
+        Task { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category) }
     }
 
     /// Fetches every saved work's information again through the background queue.

@@ -28,6 +28,8 @@ actor KeyedCatalogSource {
     private struct Detail {
         var perPage: Int
         var entries: [Int: Entry]
+        var extras: WorkExtras? = nil
+        var apiKey: KeyedWorkPage.APIKey? = nil
         let created = Date()
     }
     private struct Lane {
@@ -53,6 +55,8 @@ actor KeyedCatalogSource {
     private var feeds: [GalleryQuery: Feed] = [:]
     private var details: [Int64: Detail] = [:]
     private var popular: ([Int64], Date)?
+    private struct Toplist { var ids: [Int64] = []; var page = 0; var more = true; let created = Date() }
+    private var toplists: [Int: Toplist] = [:]
     private nonisolated(unsafe) let previews = NSCache<NSString, Preview>()
     private nonisolated(unsafe) let sheets = NSCache<NSURL, NSData>()
 
@@ -78,7 +82,7 @@ actor KeyedCatalogSource {
         guard requestedSite == MangaUrls.home else { throw CancellationError() }
         if site != requestedSite {
             site = requestedSite
-            feeds.removeAll(); details.removeAll(); popular = nil
+            feeds.removeAll(); details.removeAll(); popular = nil; toplists.removeAll()
             previews.removeAllObjects(); sheets.removeAllObjects()
         }
     }
@@ -88,7 +92,8 @@ actor KeyedCatalogSource {
     func list(_ query: GalleryQuery, offset: Int, count: Int, site: String) async throws -> GalleryBatch {
         try prepare(site)
         let selected = try Self.selectedCategories(query)
-        if query.sort != .latest { return try await popularList(query, selected: selected, offset: offset, count: count, site: site) }
+        if let toplist = query.sort.toplist { return try await toplistList(query, selected: selected, toplist: toplist, offset: offset, count: count, site: site) }
+        if query.sort != .latest && query.sort != .watched { return try await popularList(query, selected: selected, offset: offset, count: count, site: site) }
         var feed = feeds[query] ?? Feed(lanes: Self.lanes(query, selected: selected))
         if Date().timeIntervalSince(feed.created) > 300 { feed = Feed(lanes: Self.lanes(query, selected: selected)) }
         let exclusions = DocumentCatalogSource.exclusions(query)
@@ -128,8 +133,11 @@ actor KeyedCatalogSource {
     }
 
     private func fill(_ lane: inout Lane, query: GalleryQuery, exclusions: String, site: String) async throws {
-        let url = try Self.searchURL(query, site: site, categories: lane.categories, language: lane.language, next: lane.next)
+        // Watched tags list the same way as the front page, from their own page.
+        let base = query.sort == .watched ? site + "watched" : site
+        let url = try Self.searchURL(query, site: base, categories: lane.categories, language: lane.language, next: lane.next)
         let text = try await page(url, site: site)
+        MangaUrls.noteKeyedNavigation(text, site: site)
         let links = Self.links(in: text)
         keys.remember(links.map { ($0.id, $0.key) })
         let next = Self.nextCursor(in: text)
@@ -157,18 +165,46 @@ actor KeyedCatalogSource {
             ids = links.map(\.id)
             popular = (ids, Date())
         }
+        let matching = ids.filter { self.matches($0, query: query, selected: selected) }
+        return GalleryBatch(ids: Array(matching.dropFirst(offset).prefix(count)), hasMore: matching.count > offset + count)
+    }
+
+    /// Rankings the site lists itself narrow to the search here, from each work's details.
+    private func matches(_ id: Int64, query: GalleryQuery, selected: Set<String>) -> Bool {
         let terms = query.text.split(whereSeparator: \.isWhitespace).map(String.init).filter { !$0.hasPrefix("type:") && !$0.hasPrefix("-type:") }
         let wanted = terms.filter { !$0.hasPrefix("-") } + (query.artist.map { ["artist:" + $0.replacingOccurrences(of: " ", with: "_")] } ?? [])
         let excluded = terms.filter { $0.hasPrefix("-") }.joined(separator: " ")
-        let matches = ids.filter { id in
-            guard let work = cachedPreview(id) else { return true }
-            if !work.type.isEmpty && !selected.contains(work.type) { return false }
-            if query.language != "all" && work.language != query.language
-                && !(query.allowsLanguageExceptions && Self.visualCategories.contains(work.type)) { return false }
-            if !excluded.isEmpty && work.isExcluded(by: excluded) { return false }
-            return wanted.allSatisfy { work.isExcluded(by: $0) }
+        guard let work = cachedPreview(id) else { return true }
+        if !work.type.isEmpty && !selected.contains(work.type) { return false }
+        if query.language != "all" && work.language != query.language
+            && !(query.allowsLanguageExceptions && Self.visualCategories.contains(work.type)) { return false }
+        if !excluded.isEmpty && work.isExcluded(by: excluded) { return false }
+        return wanted.allSatisfy { work.isExcluded(by: $0) }
+    }
+
+    /// A toplist pages through the site's ranking, a few pages per request at most.
+    private func toplistList(_ query: GalleryQuery, selected: Set<String>, toplist: Int, offset: Int, count: Int, site: String) async throws -> GalleryBatch {
+        var list = toplists[toplist] ?? Toplist()
+        if Date().timeIntervalSince(list.created) > 1800 { list = Toplist() }
+        var requests = 0
+        func found() -> [Int64] { list.ids.filter { matches($0, query: query, selected: selected) } }
+        while list.more, requests < 4, found().count < offset + count {
+            guard var components = URLComponents(string: site + "toplist.php") else { throw ContentError.invalidQuery }
+            components.queryItems = [URLQueryItem(name: "tl", value: String(toplist)), URLQueryItem(name: "p", value: String(list.page))]
+            guard let url = components.url else { throw ContentError.invalidQuery }
+            let links = Self.links(in: try await page(url, site: site))
+            keys.remember(links.map { ($0.id, $0.key) })
+            _ = await previews(for: links, site: site)
+            let known = Set(list.ids)
+            let added = links.map(\.id).filter { !known.contains($0) }
+            list.ids += added
+            list.page += 1
+            list.more = !added.isEmpty && list.page < 200
+            requests += 1
         }
-        return GalleryBatch(ids: Array(matches.dropFirst(offset).prefix(count)), hasMore: matches.count > offset + count)
+        toplists[toplist] = list
+        let matched = found()
+        return GalleryBatch(ids: Array(matched.dropFirst(offset).prefix(count)), hasMore: matched.count > offset + count || list.more)
     }
 
     private func page(_ url: URL, site: String) async throws -> String {
@@ -177,8 +213,33 @@ actor KeyedCatalogSource {
         catch ContentError.unavailable(let status) where (300..<400).contains(status) { throw ContentError.signInRequired }
         try prepare(site)
         let text = String(decoding: data, as: UTF8.self)
-        if Self.asksForSignIn(text) || text.trimmingCharacters(in: .whitespacesAndNewlines).count < 64 { throw ContentError.signInRequired }
+        if let error = Self.pageError(text) {
+            // A refused access cookie is dropped, so the next request is handed a fresh one.
+            if error == .signInRequired, Self.isRestrictedNotice(text), let host = URL(string: site)?.host?.lowercased() {
+                SiteAccount.forget(SiteAccount.accessCookie, host: host)
+            }
+            throw error
+        }
         return text
+    }
+
+    /// What a page says instead of the listing or work it was asked for.
+    nonisolated static func pageError(_ text: String) -> ContentError? {
+        // These notices are whole pages of their own; a listing that merely names them in a title is not one.
+        if text.utf8.count < 10_000 {
+            let lowered = text.lowercased()
+            if lowered.contains("temporarily banned") || lowered.contains("ban expires in") { return .temporarilyBlocked }
+            if lowered.contains("exceeded your image viewing limits") || lowered.contains("you have reached the image limit") { return .imageLimit }
+        }
+        if isRestrictedNotice(text) || asksForSignIn(text) || text.trimmingCharacters(in: .whitespacesAndNewlines).count < 64 { return .signInRequired }
+        return nil
+    }
+
+    /// The wall a members-only catalog shows an account whose access cookie it does not accept.
+    nonisolated static func isRestrictedNotice(_ text: String) -> Bool {
+        guard text.utf8.count < 10_000 else { return false }
+        let lowered = text.lowercased()
+        return lowered.contains("kokomade.") || (lowered.contains("access to ") && lowered.contains(" is restricted"))
     }
 
     // MARK: Works
@@ -231,7 +292,11 @@ actor KeyedCatalogSource {
         guard !entries.isEmpty else { throw ContentError.galleryNotFound }
         let perPage = page == 0 ? entries.count : (details[id]?.perPage ?? entries.count)
         if details.count >= 64, let oldest = details.min(by: { $0.value.created < $1.value.created })?.key { details[oldest] = nil }
-        let detail = Detail(perPage: max(1, perPage), entries: entries)
+        var detail = Detail(perPage: max(1, perPage), entries: entries)
+        if page == 0 {
+            detail.extras = KeyedWorkPage.extras(from: text)
+            detail.apiKey = KeyedWorkPage.apiKey(in: text)
+        }
         details[id] = detail
         return detail
     }
@@ -369,14 +434,69 @@ actor KeyedCatalogSource {
         }.prefix(20).map { $0 }
     }
 
+    // MARK: Ratings, comments and torrents
+
+    func extras(_ id: Int64, site: String) async throws -> WorkExtras {
+        try prepare(site)
+        let key = try await key(for: id, site: site)
+        var detail = try await detailPage(id, key: key, page: 0, site: site)
+        if detail.extras == nil {
+            // A page cached by a later page's request lacks what only the first page says.
+            details[id] = nil
+            detail = try await detailPage(id, key: key, page: 0, site: site)
+        }
+        return detail.extras ?? WorkExtras()
+    }
+
+    func allComments(_ id: Int64, site: String) async throws -> [WorkComment] {
+        try prepare(site)
+        let key = try await key(for: id, site: site)
+        guard let url = URL(string: "\(site)g/\(id)/\(key)/?hc=1") else { throw ContentError.invalidQuery }
+        return KeyedWorkPage.comments(from: try await page(url, site: site))
+    }
+
+    func torrents(_ id: Int64, site: String) async throws -> [WorkTorrent] {
+        let extras = try await extras(id, site: site)
+        guard extras.torrentCount > 0 else { return [] }
+        let key = try await key(for: id, site: site)
+        var components = URLComponents(string: site + "gallerytorrents.php")
+        components?.queryItems = [URLQueryItem(name: "gid", value: String(id)), URLQueryItem(name: "t", value: key)]
+        // The work page names the torrent page; only a page on the connected website is followed.
+        let named = extras.torrentsURL.flatMap { url in url.host?.lowercased() == URL(string: site)?.host?.lowercased() ? url : nil }
+        guard let url = named ?? components?.url else { throw ContentError.invalidQuery }
+        return KeyedWorkPage.torrents(from: try await page(url, site: site))
+    }
+
+    func rate(_ id: Int64, halfStars: Int, site: String) async throws -> (average: Double, count: Int) {
+        try prepare(site)
+        guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
+        guard (1...10).contains(halfStars) else { throw ContentError.invalidQuery }
+        let key = try await key(for: id, site: site)
+        var detail = try await detailPage(id, key: key, page: 0, site: site)
+        if detail.apiKey == nil { details[id] = nil; detail = try await detailPage(id, key: key, page: 0, site: site) }
+        guard let credentials = detail.apiKey else { throw ContentError.signInRequired }
+        let object = try await api(["method": "rategallery", "apiuid": credentials.uid, "apikey": credentials.key, "gid": id, "token": key, "rating": halfStars], site: site)
+        guard let average = (object["rating_avg"] as? NSNumber)?.doubleValue else { throw ContentError.invalidResponse }
+        let count = (object["rating_cnt"] as? NSNumber)?.intValue ?? 0
+        if var cached = details[id], var extras = cached.extras {
+            extras.rating = average; extras.ratingCount = count
+            cached.extras = extras
+            details[id] = cached
+        }
+        return (average, count)
+    }
+
     // MARK: Account favorites
 
-    /// One page of the signed-in account's favorites, newest first.
-    func favorites(after next: String?, site: String) async throws -> (ids: [Int64], next: String?) {
+    /// One page of the signed-in account's favorites, newest first, from one category or all.
+    func favorites(after next: String?, category: Int? = nil, site: String) async throws -> (ids: [Int64], next: String?) {
         try prepare(site)
         guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
         guard var components = URLComponents(string: site + "favorites.php") else { throw ContentError.invalidQuery }
-        if let next { components.queryItems = [URLQueryItem(name: "next", value: next)] }
+        var items: [URLQueryItem] = []
+        if let category, (0...9).contains(category) { items.append(URLQueryItem(name: "favcat", value: String(category))) }
+        if let next { items.append(URLQueryItem(name: "next", value: next)) }
+        components.queryItems = items.isEmpty ? nil : items
         guard let url = components.url else { throw ContentError.invalidQuery }
         let text = try await page(url, site: site)
         let links = Self.links(in: text)
@@ -386,20 +506,68 @@ actor KeyedCatalogSource {
         return (links.map(\.id), links.isEmpty || cursor == next ? nil : cursor)
     }
 
-    func setFavorite(_ id: Int64, saved: Bool, site: String) async throws {
+    /// How many images the account has viewed against its allowance, when the site shows it.
+    func imageAllowance(site: String) async throws -> (used: Int, limit: Int)? {
+        try prepare(site)
+        guard SiteAccount.isSignedIn, let url = URL(string: site + "home.php") else { return nil }
+        let text: String
+        do { text = try await page(url, site: site) }
+        catch ContentError.unavailable(404) { return nil }
+        return Self.imageAllowance(in: text)
+    }
+
+    nonisolated static func imageAllowance(in text: String) -> (used: Int, limit: Int)? {
+        guard let used = KeyedWorkPage.firstCapture(#"currently at\s*<strong>([0-9,]+)</strong>"#, in: text),
+              let limit = KeyedWorkPage.firstCapture(#"limit of\s*<strong>([0-9,]+)</strong>"#, in: text),
+              let usedValue = Int(used.replacingOccurrences(of: ",", with: "")),
+              let limitValue = Int(limit.replacingOccurrences(of: ",", with: "")), limitValue > 0 else { return nil }
+        return (usedValue, limitValue)
+    }
+
+    /// The account's favorites categories with their names and how many works each holds.
+    func favoriteCategories(site: String) async throws -> [FavoriteCategory] {
+        try prepare(site)
+        guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
+        guard let url = URL(string: site + "favorites.php") else { throw ContentError.invalidQuery }
+        let categories = Self.favoriteCategories(in: try await page(url, site: site))
+        guard !categories.isEmpty else { throw ContentError.unsupportedFormat }
+        return categories
+    }
+
+    func setFavorite(_ id: Int64, saved: Bool, category: Int = 0, site: String) async throws {
         try prepare(site)
         guard SiteAccount.isSignedIn else { throw ContentError.signInRequired }
         let key = try await key(for: id, site: site)
         guard var components = URLComponents(string: site + "gallerypopups.php") else { throw ContentError.invalidQuery }
         components.queryItems = [URLQueryItem(name: "gid", value: String(id)), URLQueryItem(name: "t", value: key), URLQueryItem(name: "act", value: "addfav")]
         guard let url = components.url else { throw ContentError.invalidQuery }
-        let form = saved ? "favcat=0&favnote=&apply=Add+to+Favorites&update=1" : "favcat=favdel&favnote=&update=1"
+        let form = saved ? "favcat=\(min(9, max(0, category)))&favnote=&apply=Add+to+Favorites&update=1" : "favcat=favdel&favnote=&update=1"
         let (data, _) = try await transport.post(url, body: Data(form.utf8), contentType: "application/x-www-form-urlencoded", limit: 1_000_000)
         try prepare(site)
         if Self.asksForSignIn(String(decoding: data, as: UTF8.self)) { throw ContentError.signInRequired }
     }
 
     // MARK: Page shapes
+
+    /// Category rows at the top of the favorites page: each names its number in its link, then
+    /// shows its count, its icon and its name.
+    nonisolated static func favoriteCategories(in text: String) -> [FavoriteCategory] {
+        guard let regex = try? NSRegularExpression(pattern: #"<div class="fp(?: [^"]*)?"[^>]*favcat=([0-9])[^>]*>"#) else { return [] }
+        let source = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: source.length))
+        var result: [FavoriteCategory] = []
+        for (index, match) in matches.enumerated() {
+            guard let number = Int(source.substring(with: match.range(at: 1))), !result.contains(where: { $0.id == number }) else { continue }
+            let start = match.range.location + match.range.length
+            let end = index + 1 < matches.count ? matches[index + 1].range.location : min(source.length, start + 800)
+            let body = source.substring(with: NSRange(location: start, length: max(0, end - start)))
+            let texts = KeyedWorkPage.texts(inDivs: body)
+            let count = texts.first.flatMap { Int($0.replacingOccurrences(of: ",", with: "")) } ?? 0
+            let name = texts.dropFirst().last { !$0.isEmpty && Int($0.replacingOccurrences(of: ",", with: "")) == nil } ?? ""
+            result.append(FavoriteCategory(id: number, name: name.isEmpty ? "\(number)" : name, count: count))
+        }
+        return result.sorted { $0.id < $1.id }
+    }
 
     private nonisolated static let linkPattern = try! NSRegularExpression(pattern: #"/g/([0-9]{1,10})/([0-9a-f]{10})(?![0-9a-f])"#)
 
@@ -571,10 +739,12 @@ actor KeyedCatalogSource {
             pages = [GalleryPage(hash: pageHash(site: site, id: id, index: -1), name: "cover", width: 0, height: 0, hasAVIF: false,
                                  imageURL: cover, thumbnailURL: cover, index: 0, sourceSite: site)]
         }
-        let work = NativeGallery(id: id, title: NativeGallery.decodeEntities(title), artists: tags.filter { $0.0 == "artist" }.map(\.1),
+        var work = NativeGallery(id: id, title: NativeGallery.decodeEntities(title), artists: tags.filter { $0.0 == "artist" }.map(\.1),
                                  language: language, type: category == "asianporn" ? "photo" : category,
                                  tags: tags.filter { $0.0 != "language" && $0.0 != "artist" }.map { localNamespace($0.0) + ":" + $0.1 }, pages: pages)
-        return (work, max(0, min(10_000, Int(number(item["filecount"]) ?? 0))))
+        let fileCount = max(0, min(10_000, Int(number(item["filecount"]) ?? 0)))
+        work.pageCount = fileCount
+        return (work, fileCount)
     }
 
     private nonisolated static func number(_ value: Any?) -> Int64? {

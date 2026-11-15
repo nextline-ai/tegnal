@@ -58,7 +58,7 @@ struct WorkDownload: Codable, Identifiable {
     @ObservationIgnored private var suspended = false
 
     init(directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads"),
-         manga: any ContentProviding = MangaContentSource.shared, booru: any BooruProviding = BooruClient.shared) {
+         manga: any ContentProviding = SiteFallbackContent.shared, booru: any BooruProviding = BooruClient.shared) {
         self.directory = directory; self.manga = manga; self.booru = booru
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

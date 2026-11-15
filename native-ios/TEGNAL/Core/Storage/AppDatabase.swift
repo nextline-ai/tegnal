@@ -163,6 +163,9 @@ public final class AppDatabase: Sendable {
             if try !db.columns(in: "works").map(\.name).contains("site") { try db.execute(sql: "ALTER TABLE works ADD COLUMN site TEXT") }
         }
         migrator.registerMigration("v14_one_work_per_number") { try Self.restoreOneWorkPerNumber($0) }
+        migrator.registerMigration("v15_work_page_count") { db in
+            if try !db.columns(in: "works").map(\.name).contains("page_count") { try db.execute(sql: "ALTER TABLE works ADD COLUMN page_count INTEGER") }
+        }
         return migrator
     }
 
@@ -624,6 +627,7 @@ public final class AppDatabase: Sendable {
         catalogMatched: Bool = false,
         overwriteMetadata: Bool = false,
         site: String? = nil,
+        pageCount: Int? = nil,
         discoveryContext: DiscoveryContext? = nil
     ) throws -> Work {
         try dbWriter.write { db in
@@ -647,6 +651,7 @@ public final class AppDatabase: Sendable {
                 }
                 // The first site a work is known from stays its site.
                 if existing.site == nil, let site, !site.isEmpty { existing.site = site }
+                if let pageCount, pageCount > 0 { existing.pageCount = pageCount }
                 existing.updatedAt = now
                 try existing.update(db)
                 work = existing
@@ -665,7 +670,8 @@ public final class AppDatabase: Sendable {
                     updatedAt: now,
                     metadataSource: metadataSource,
                     catalogMatched: catalogMatched,
-                    site: site?.isEmpty == true ? nil : site
+                    site: site?.isEmpty == true ? nil : site,
+                    pageCount: pageCount.flatMap { $0 > 0 ? $0 : nil }
                 )
                 try newWork.insert(db)
                 if newWork.id == nil {
@@ -818,6 +824,14 @@ public final class AppDatabase: Sendable {
                 guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return }
                 _ = try? await store.save(data: data, scope: "comics", id: galleryId)
             }
+        }
+    }
+
+    /// Keeps a saved work's page count once a website has said it; unsaved works are left alone.
+    public func fillPageCount(galleryId: Int64, count: Int?) throws {
+        guard let count, count > 0 else { return }
+        try dbWriter.write { db in
+            try db.execute(sql: "UPDATE works SET page_count = ? WHERE gallery_id = ? AND COALESCE(page_count, 0) != ?", arguments: [count, galleryId, count])
         }
     }
 

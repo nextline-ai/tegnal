@@ -110,7 +110,7 @@ def main():
             f"{parts[1]}/{method}()" in skipped for method in tests[tuple(parts)]
         )
         if relative in skipped or excluded_class:
-            parser.error("This integration/translation check needs an explicit device validation command; see docs/testing.md")
+            parser.error("This integration/translation check needs an explicit device validation command; see native-ios/docs/testing.md")
 
     devices = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "-j"]))
     available = [d for group in devices["devices"].values() for d in group if d["isAvailable"]]

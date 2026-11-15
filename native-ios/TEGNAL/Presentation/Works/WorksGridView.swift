@@ -338,7 +338,11 @@ public struct WorksGridView: View {
         })
     }
     /// A saved number names the same work on every connected website.
-    private func open(_ work: Work) { openManga(for: work.galleryId) }
+    private func open(_ work: Work) {
+        // Opens where it still is: the website it came from comes right after the checked one.
+        SiteFallbackContent.shared.prefer(work.site, for: work.galleryId)
+        openManga(for: work.galleryId)
+    }
     private func openManga(for galleryId: Int64) {
         let opening = MangaThumbnailOpening.stored()
         activeBrowserShowsInformation = opening == .information

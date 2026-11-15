@@ -77,3 +77,11 @@ __pycache__/
 
 # Local OCR benchmark harness for comic translation (kept out of the repository)
 /native-ios/scripts/ocr-bench/
+
+# Kept on this Mac, never published: files taken out of the repository, and documentation.
+/archive/
+/native-ios/docs/
+/flutter/docs/
+/flutter/CLAUDE.md
+/flutter/REBUILD.md
+/flutter/test/fixtures/native/README.md

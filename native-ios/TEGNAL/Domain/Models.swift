@@ -139,6 +139,8 @@ public struct Work: Identifiable, Codable, Equatable, Hashable, Sendable, Fetcha
     public var thumbPage: Int?
     /// The comics site (its host) the work was saved from; unknown for older saves and imports.
     public var site: String?
+    /// How many pages the work has, once any website has said.
+    public var pageCount: Int?
 
     public var folders: [Folder] = []
 
@@ -173,9 +175,11 @@ public struct Work: Identifiable, Codable, Equatable, Hashable, Sendable, Fetcha
         thumbFailedAt: String? = nil,
         thumbPage: Int? = 1,
         site: String? = nil,
+        pageCount: Int? = nil,
         folders: [Folder] = []
     ) {
         self.site = site
+        self.pageCount = pageCount
         self.id = id
         self.galleryId = galleryId
         self.title = title
@@ -222,6 +226,7 @@ public struct Work: Identifiable, Codable, Equatable, Hashable, Sendable, Fetcha
         case thumbFailedAt = "thumb_failed_at"
         case thumbPage = "thumb_page"
         case site
+        case pageCount = "page_count"
     }
 
     public init(from decoder: Decoder) throws {
@@ -247,6 +252,7 @@ public struct Work: Identifiable, Codable, Equatable, Hashable, Sendable, Fetcha
         thumbFailedAt = try container.decodeIfPresent(String.self, forKey: .thumbFailedAt)
         thumbPage = try container.decodeIfPresent(Int.self, forKey: .thumbPage) ?? 1
         site = try container.decodeIfPresent(String.self, forKey: .site)
+        pageCount = try container.decodeIfPresent(Int.self, forKey: .pageCount)
         folders = []
     }
 
@@ -273,6 +279,7 @@ public struct Work: Identifiable, Codable, Equatable, Hashable, Sendable, Fetcha
         try container.encodeIfPresent(thumbFailedAt, forKey: .thumbFailedAt)
         try container.encodeIfPresent(thumbPage, forKey: .thumbPage)
         try container.encodeIfPresent(site, forKey: .site)
+        try container.encodeIfPresent(pageCount, forKey: .pageCount)
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {

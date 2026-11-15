@@ -483,7 +483,8 @@ enum ContentBookmarkAction {
         env.savedFolders[id] = folder
         _ = try env.database.upsertWork(galleryId: id, folderId: folder,
             title: gallery?.title, artists: gallery?.artists.joined(separator: ", "),
-            language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", site: site, discoveryContext: context)
+            language: gallery?.language, type: gallery?.type, tags: gallery?.tags.joined(separator: ", "), metadataSource: "remote", site: site,
+            pageCount: gallery?.displayedPageCount, discoveryContext: context)
         for folder in restored.dropFirst() { try env.database.addWork(galleryId: id, folderID: folder) }
         if let note = removed?.note { try env.database.setNote(galleryId: id, note: note) }
         if site == ComicSites.active { env.syncAccountFavorite(id, saved: true) }

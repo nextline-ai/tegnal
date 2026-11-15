@@ -9,19 +9,21 @@ struct ReadingQueueItem: Codable, Equatable, Identifiable, Sendable {
     var details: String
     /// The comics site the work was found on, so it opens there.
     var site: String?
+    /// How many pages the work has, when known.
+    var pages: Int?
 
-    init(id: Int64, title: String, artists: String, details: String, site: String?) {
-        self.id = id; self.title = title; self.artists = artists; self.details = details; self.site = site
+    init(id: Int64, title: String, artists: String, details: String, site: String?, pages: Int? = nil) {
+        self.id = id; self.title = title; self.artists = artists; self.details = details; self.site = site; self.pages = pages
     }
-    init(gallery: NativeGallery?, id: Int64, title: String?, artists: String?, language: String?, type: String?, site: String?) {
+    init(gallery: NativeGallery?, id: Int64, title: String?, artists: String?, language: String?, type: String?, site: String?, pages: Int? = nil) {
         self.init(id: id,
                   title: gallery?.title ?? title ?? "",
                   artists: gallery.map { $0.artists.joined(separator: ", ") } ?? artists ?? "",
                   details: [gallery?.language ?? language, gallery?.type ?? type].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
-                  site: site)
+                  site: site, pages: gallery?.displayedPageCount ?? pages)
     }
     init(work: Work) {
-        self.init(gallery: nil, id: work.galleryId, title: work.hasTitle ? work.title : nil, artists: work.artists, language: work.language, type: work.type, site: work.site)
+        self.init(gallery: nil, id: work.galleryId, title: work.hasTitle ? work.title : nil, artists: work.artists, language: work.language, type: work.type, site: work.site, pages: work.pageCount)
     }
     var displayTitle: String { title.isEmpty ? L10n.text("Work %@", String(describing: id)) : title }
 }

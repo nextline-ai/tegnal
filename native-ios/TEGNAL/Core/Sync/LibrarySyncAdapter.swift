@@ -66,7 +66,7 @@ struct LibrarySyncAdapter {
     static let columns: [String: [String]] = [
         "manga.library_order": ["key", "value"],
         "manga.folders": ["sync_id", "name", "description", "color", "sort_order", "created_at", "source_group_id"],
-        "manga.works": ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page", "site"],
+        "manga.works": ["gallery_id", "title", "artists", "language", "type", "series", "groups", "tags", "note", "bookmarked_at", "published_at", "metadata_source", "catalog_matched", "thumb_page", "site", "page_count"],
         "manga.folder_works": ["folder_id", "work_id", "added_at"],
         "manga.artists": ["name", "kind", "note", "bookmarked_at"],
         "manga.search_history": ["query", "used_at"], "manga.saved_searches": ["query"],
@@ -77,7 +77,7 @@ struct LibrarySyncAdapter {
         "booru.settings": ["key", "value"]
     ]
     /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
-    static let keepsKnownValue: Set<String> = ["site"]
+    static let keepsKnownValue: Set<String> = ["site", "page_count"]
 
     private func assignFolderIdentities() throws {
         // Also assigns identities to legacy imports and share-extension-created folders.

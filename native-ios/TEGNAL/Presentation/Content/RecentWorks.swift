@@ -448,7 +448,7 @@ private struct RecentWorkCard: View {
     let cover: UIImage?
     var body: some View {
         GalleryCardLayout(title: entry.item.title.isEmpty ? String(entry.id) : entry.item.title, artists: entry.item.artists,
-                          language: entry.language ?? "", type: entry.type ?? "") {
+                          language: entry.language ?? "", type: entry.type ?? "", pages: entry.item.pages ?? saved?.pageCount) {
             if let saved, saved.thumbStatus == "ready" {
                 LocalThumbnailView(path: saved.thumbPath, revision: String(saved.thumbPage ?? 1)) { image in
                     if let image { Image(uiImage: image).resizable().scaledToFill() } else { placeholder }

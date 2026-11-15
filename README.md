@@ -55,41 +55,13 @@ iPhone, iPhone Duo, iPad, Mac, Apple Vision Pro에서 쓸 수 있고 한국어, 
 
 [App Store](https://apps.apple.com/app/id6825935560)에서 설치합니다. 업데이트도 App Store로 받습니다.
 
-새 버전을 먼저 써 보고 싶다면 [TestFlight 베타](https://testflight.apple.com/join/gnkqu44W)에 참여할 수 있습니다.
-
 iCloud 동기화를 켜면 북마크, 폴더, 작가, 검색 기록이 내 Apple 기기끼리 이어집니다.
-
-<details>
-<summary>AltStore, SideStore, IPA로 설치하기</summary>
-
-IPA는 일부 버전만 올리기 때문에 App Store보다 버전이 낮을 수 있습니다.
-
-| 방법 | 링크 |
-| --- | --- |
-| AltStore Classic | [소스 등록](https://nextline-ai.github.io/tegnal/#altstore) |
-| SideStore | [소스 등록](https://nextline-ai.github.io/tegnal/#sidestore) |
-| IPA 수동 설치 | [안내 보기](https://nextline-ai.github.io/tegnal/manual-install.html) |
-
-직접 등록하려면 Sources에서 + 를 누르고 아래 주소를 넣습니다.
-
-```text
-https://nextline-ai.github.io/tegnal/source.json
-```
-
-IPA는 설치 도구에서 자신의 Apple 계정으로 다시 서명해야 합니다. 서명 갱신 주기와 쓸 수 있는 iCloud 기능은 계정과 도구에 따라 다릅니다.
-
-</details>
 
 ### Android
 
 [Google Play](https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko)에서 설치합니다. Android 7.0 이상에서 쓸 수 있고, 업데이트도 Google Play로 받습니다.
 
-<details>
-<summary>예전 베타 APK</summary>
-
-Google Play 정식 출시 전에 배포한 베타 APK는 더 이상 갱신하지 않습니다. 자동 업데이트를 받을 수 없으니 특별한 이유가 없다면 Google Play 버전을 쓰세요. 파일은 [릴리스 페이지](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5)에 남겨 두었습니다.
-
-</details>
+IPA와 APK 파일은 일부 버전만 [릴리스](https://github.com/nextline-ai/tegnal/releases)에 올립니다. 자동 업데이트가 없고 스토어 버전보다 낮을 수 있으니, 특별한 이유가 없다면 App Store와 Google Play 버전을 쓰세요.
 
 ## 처음 시작할 때
 
@@ -126,4 +98,4 @@ iOS 앱은 `native-ios/TEGNAL`에 있습니다. `native-ios/TEGNAL.xcodeproj`를
 
 NextLine · [nextline.work](https://nextline.work) · [contact@nextline.work](mailto:contact@nextline.work)
 
-<sub>TEGNAL은 Apple 및 연결하는 외부 사이트와 관계없는 독립 클라이언트입니다. · <a href="docs/privacy-policy.md">개인정보처리방침</a></sub>
+<sub>TEGNAL은 Apple 및 연결하는 외부 사이트와 관계없는 독립 클라이언트입니다. · <a href="native-ios/privacy-policy.md">개인정보처리방침</a></sub>

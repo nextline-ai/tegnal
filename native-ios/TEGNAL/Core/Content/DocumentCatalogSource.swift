@@ -60,6 +60,8 @@ actor DocumentCatalogSource {
         let (data, _) = try await transport.get(url, limit: 4_000_000)
         try Task.checkCancellation()
         try prepare(site)
+        // A members-only host sends a signed-out visitor to its sign-in page instead of the work.
+        if KeyedCatalogSource.asksForSignIn(String(decoding: data.prefix(200_000), as: UTF8.self)) { throw ContentError.signInRequired }
         let gallery = try Self.parseGallery(data, id: id, site: site)
         MangaUrls.registerMedia(gallery.pages.flatMap { [$0.imageURL, $0.thumbnailURL].compactMap { $0 } }, site: site)
         if documents.count >= 128, let oldest = documents.min(by: { $0.value.1 < $1.value.1 })?.key { documents[oldest] = nil }
@@ -305,7 +307,9 @@ actor DocumentCatalogSource {
         let hash = SHA256.hash(data: Data((site + "#preview:\(id)").utf8)).map { String(format: "%02x", $0) }.joined()
         let page = GalleryPage(hash: hash, name: "preview", width: 0, height: 0, hasAVIF: false,
                                imageURL: url, thumbnailURL: url, index: 0, sourceSite: site)
-        return metadata(object, id: id, pages: [page])
+        var preview = metadata(object, id: id, pages: [page])
+        preview.pageCount = max(0, min(10_000, (object["filecount"] as? NSNumber)?.intValue ?? 0))
+        return preview
     }
 
     private nonisolated static let categoryNames = [1: "doujinshi", 2: "manga", 3: "artistcg", 4: "gamecg", 5: "western",

@@ -50,12 +50,10 @@ public actor CoverQueueActor {
     public init(database: AppDatabase, thumbsDir: URL = AppStorage.thumbsDirURL) {
         self.database = database
         self.thumbsDir = thumbsDir
-        self.source = MangaContentSource.shared
-        self.images = PageImageStore(source: MangaContentSource.shared)
-        self.siteSource = { site in
-            guard site != ComicSites.active, ComicSites.all.contains(site) else { return nil }
-            return SiteContent.for(site)
-        }
+        // A saved work opens from whichever connected website still carries it, its own first.
+        self.source = SiteFallbackContent.shared
+        self.images = PageImageStore(source: SiteFallbackContent.shared)
+        self.siteSource = { _ in nil }
         self.allowsBackfill = { CoverQueuePolicy.allowsBackfill }
         self.delay = .milliseconds(150)
     }
@@ -205,7 +203,8 @@ public actor CoverQueueActor {
         let (source, images) = reader(for: existing?.site)
         let gallery: NativeGallery
         do {
-            gallery = try await source.gallery(galleryId)
+            if let fallback = source as? SiteFallbackContent { gallery = try await fallback.gallery(galleryId, preferring: existing?.site) }
+            else { gallery = try await source.gallery(galleryId) }
         } catch ContentError.unavailable(let status) where status == 404 || status == 410 {
             try Task.checkCancellation()
             // Only a missing gallery document means the work is gone. A 404
@@ -219,7 +218,8 @@ public actor CoverQueueActor {
         _ = try database.upsertWork(
             galleryId: galleryId, title: needTitle || refresh ? gallery.title : nil,
             artists: gallery.artists.joined(separator: ", "), language: gallery.language,
-            type: gallery.type, tags: gallery.tags.joined(separator: ", "), metadataSource: "manga"
+            type: gallery.type, tags: gallery.tags.joined(separator: ", "), metadataSource: "manga",
+            pageCount: gallery.displayedPageCount
         )
         if needCover {
             guard !gallery.pages.isEmpty else { throw ContentError.invalidResponse }

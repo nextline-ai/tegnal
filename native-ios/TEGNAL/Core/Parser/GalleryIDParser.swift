@@ -37,7 +37,7 @@ final class ScopedPreferences: @unchecked Sendable {
     /// Snapshots change from several requests at once.
     static let lock = NSRecursiveLock()
     static let snapshotsKey = "manga.siteSnapshots"
-    private static var scopedKeys: Set<String> { Set(MangaUrls.resolvedKeys + ["manga.account_site", "manga.account_host"]) }
+    private static var scopedKeys: Set<String> { Set(MangaUrls.resolvedKeys + MangaUrls.accountKeys) }
     private var base: UserDefaults { ContentPreferences.defaults }
 
     private func snapshotValue(_ key: String, site: String) -> Any? {
@@ -259,6 +259,9 @@ public enum MangaUrls {
     static func isDocumentPage(_ text: String) -> Bool {
         if text.range(of: #"/js/index\.search\."#, options: .regularExpression) != nil { return true }
         if text.contains("/ajax/search"), text.contains("serverConfig"), text.contains("thumbServer") { return true }
+        // A members-only host of the same catalog greets visitors with its sign-in page, which
+        // carries the same configuration and posts to the same kind of endpoint.
+        if text.contains("serverConfig"), text.contains("thumbServer"), text.range(of: #"action="/ajax/[a-z-]+""#, options: .regularExpression) != nil { return true }
         guard let data = text.data(using: .utf8),
               let gallery = try? DocumentCatalogSource.embeddedObject(data, named: "gallery"),
               (gallery["id"] as? NSNumber)?.int64Value ?? 0 > 0,
@@ -309,9 +312,21 @@ public enum MangaUrls {
         return URL(string: home + "api.php")
     }
 
-    /// Where the person signs in: what the site itself named, else the account host it sent visitors to.
+    /// Where the person signs in: what the site itself named, else the account host it sent visitors
+    /// to. A members-only site that names neither shares the account of another connected site.
     static var signInURL: URL? {
+        if let own = ownSignInURL { return own }
+        guard SiteScope.other == nil else { return nil }
+        for site in ComicSites.siblings(of: ComicSites.active) {
+            let home = home(forSite: site)
+            if let url = SiteScope.$site.withValue(site, operation: { MangaUrls.home == home ? ownSignInURL : nil }) { return url }
+        }
+        return nil
+    }
+
+    private static var ownSignInURL: URL? {
         guard !home.isEmpty else { return nil }
+        if let page = accountSignInPage { return page }
         if backend == .keyed, hasResolvedBackend, let saved = preferences.string(forKey: "manga.resolved_login"), let url = URL(string: saved) { return url }
         if let host = accountHost { return URL(string: "https://\(host)/index.php?act=Login&CODE=00") }
         return backend == .keyed && hasResolvedBackend ? URL(string: home + "favorites.php") : nil
@@ -331,6 +346,29 @@ public enum MangaUrls {
     static var usesAccount: Bool {
         (hasResolvedBackend && backend == .keyed) || preferences.string(forKey: "manga.account_site") == home
     }
+
+    /// The person signed in for this site, so it gets the account's cookies before its protocol is known.
+    static func markUsesAccount(site: String, signInPage: URL? = nil) {
+        guard home == site else { return }
+        if let signInPage { preferences.set(signInPage.absoluteString, forKey: "manga.account_login") }
+        guard !(hasResolvedBackend && backend == .keyed) else { return }
+        preferences.set(site, forKey: "manga.account_site")
+    }
+
+    /// What belongs to one site's account rather than to its protocol: kept with the site, and
+    /// not forgotten when the protocol is looked up again.
+    static let accountKeys = ["manga.account_site", "manga.account_host", "manga.account_login"]
+
+    /// The site's own sign-in page, found where it sent a signed-out visitor.
+    static var accountSignInPage: URL? {
+        guard preferences.string(forKey: "manga.account_site") == home,
+              let value = preferences.string(forKey: "manga.account_login"), let url = URL(string: value),
+              url.scheme == "https", url.host?.lowercased() == configuredHost else { return nil }
+        return url
+    }
+
+    /// A catalog whose works open with the signed-in session of its own pages, not with forum cookies.
+    static var usesSiteSession: Bool { hasResolvedBackend && backend == .document && accountSignInPage != nil }
 
     static func markRequiresSignIn(site: String, accountHost: String?) {
         guard home == site else { return }
@@ -368,12 +406,12 @@ public enum MangaUrls {
         await MangaBackendResolver.shared.resolve(transport: transport, force: force)
     }
 
-    static func discoverBackend(site: String, transport: ContentTransport) async -> Bool {
+    static func discoverBackend(site: String, transport: ContentTransport, retried: Bool = false) async -> Bool {
         guard let homepage = URL(string: site), !site.isEmpty else { return false }
         var scripts: [URL] = []
         do {
-            let data: Data
-            do { (data, _) = try await transport.get(homepage, limit: 1_000_000, timeout: 8) }
+            let data: Data, response: HTTPURLResponse
+            do { (data, response) = try await transport.get(homepage, limit: 1_000_000, timeout: 8) }
             catch {
                 // A site that hands signed-out visitors to another host with a one-time
                 // token is asking for an account; a plain move to a new address is not.
@@ -386,7 +424,13 @@ public enum MangaUrls {
             guard home == site, !Task.isCancelled else { return false }
             let body = String(decoding: data, as: UTF8.self)
             if extractBackend(from: body, site: site) { return true }
-            if extractDocumentBackend(from: body, site: site) { return true }
+            if extractDocumentBackend(from: body, site: site) {
+                // Its works open only for a signed-in visitor; lists stay open to everyone.
+                if KeyedCatalogSource.asksForSignIn(body), let page = response.url, page.host?.lowercased() == homepage.host?.lowercased() {
+                    markUsesAccount(site: site, signInPage: page)
+                }
+                return true
+            }
             if extractKeyedBackend(from: body, site: site) {
                 if let link = KeyedCatalogSource.links(in: body).first,
                    let page = URL(string: "\(site)g/\(link.id)/\(link.key)/"),
@@ -395,9 +439,16 @@ public enum MangaUrls {
                 }
                 return true
             }
-            if body.trimmingCharacters(in: .whitespacesAndNewlines).count < 64, preferences.string(forKey: "manga.account_site") == site {
-                // Signed in, yet the site still shows nothing: the account lacks access.
+            // A members-only catalog shows signed-out visitors nothing, or only a picture.
+            let showsNothing = response.mimeType?.lowercased().hasPrefix("image/") == true
+                || body.trimmingCharacters(in: .whitespacesAndNewlines).count < 64
+            if showsNothing {
+                let askedBefore = preferences.string(forKey: "manga.account_site") == site
                 markRequiresSignIn(site: site, accountHost: nil)
+                // An account signed in elsewhere is tried here once, now that the site asks for one.
+                if !askedBefore, !retried, SiteAccount.isSignedIn, home == site {
+                    return await discoverBackend(site: site, transport: transport, retried: true)
+                }
                 return false
             }
             let pattern = #"<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]"#
@@ -427,7 +478,27 @@ public enum MangaUrls {
     static var resetGeneration: Int { resetLock.withLock { resets } }
 
     static let resolvedKeys = ["manga.resolved_data_host", "manga.resolved_cdn_host", "manga.resolved_backend_site", "manga.resolved_protocol", "manga.resolved_media_hosts",
-                               "manga.resolved_preview_base", "manga.resolved_api", "manga.resolved_login", "manga.account_required"]
+                               "manga.resolved_preview_base", "manga.resolved_api", "manga.resolved_login", "manga.account_required", "manga.resolved_features"]
+
+    /// Pages a keyed catalog links to from its own navigation, on its own host.
+    enum KeyedFeature: String, CaseIterable, Sendable { case toplist, watched }
+
+    static var keyedFeatures: Set<KeyedFeature> {
+        guard hasResolvedBackend, backend == .keyed else { return [] }
+        return Set((preferences.stringArray(forKey: "manga.resolved_features") ?? []).compactMap(KeyedFeature.init))
+    }
+
+    /// Notes what a keyed catalog's navigation offers, from any of its listing pages.
+    static func noteKeyedNavigation(_ text: String, site: String) {
+        guard home == site, hasResolvedBackend, backend == .keyed, let host = URL(string: site)?.host?.lowercased() else { return }
+        let escaped = NSRegularExpression.escapedPattern(for: host)
+        var found = Set<KeyedFeature>()
+        if text.range(of: #"href="(?:https://"# + escaped + #")?/toplist\.php"#, options: .regularExpression) != nil { found.insert(.toplist) }
+        if text.range(of: #"href="(?:https://"# + escaped + #")?/watched""#, options: .regularExpression) != nil { found.insert(.watched) }
+        let current = keyedFeatures
+        guard !found.isEmpty, !found.isSubset(of: current) else { return }
+        preferences.set(found.union(current).map(\.rawValue).sorted(), forKey: "manga.resolved_features")
+    }
 
     public static func resetResolvedBackend() {
         resetLock.withLock { resets += 1 }
@@ -447,7 +518,7 @@ enum ComicSites {
     private static let listKey = "manga.sites"
     private static let snapshotsKey = "manga.siteSnapshots"
     /// Account details that belong to one site, kept with what was learned about it.
-    private static var snapshotKeys: [String] { MangaUrls.resolvedKeys + ["manga.account_site", "manga.account_host"] }
+    private static var snapshotKeys: [String] { MangaUrls.resolvedKeys + MangaUrls.accountKeys }
 
     /// Connected sites by host, the active one included.
     static var all: [String] {
@@ -490,7 +561,7 @@ enum ComicSites {
             }
         }
         MangaUrls.resetResolvedBackend()
-        for key in ["manga.account_site", "manga.account_host"] { preferences.removeObject(forKey: key) }
+        for key in MangaUrls.accountKeys { preferences.removeObject(forKey: key) }
         if let saved = snapshots[new] as? [String: Any] {
             for (key, value) in saved where snapshotKeys.contains(key) { preferences.set(value, forKey: key) }
         }

@@ -589,6 +589,7 @@ struct NativeReaderView: View {
     private func rememberOpened(_ value: NativeGallery) {
         let recents = env.recentWorks
         recents.opened(value, site: ComicSites.active.isEmpty ? nil : ComicSites.active)
+        try? env.database.fillPageCount(galleryId: value.id, count: value.displayedPageCount)
         guard recents.entries.first?.id == value.id, !recents.hasCover(value.id), let first = value.pages.first else { return }
         let images = images, id = value.id
         Task(priority: .utility) {

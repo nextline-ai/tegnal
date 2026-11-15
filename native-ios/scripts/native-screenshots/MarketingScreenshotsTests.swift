@@ -10,14 +10,18 @@ final class MarketingScreenshotsTests: XCTestCase {
         button?.tap()
     }
     private func shot(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        // A foldable simulator exposes two screens; TEST_RUNNER_TEGNAL_CAPTURE_SCREEN=largest captures the unfolded inner one.
+        var screen = XCUIScreen.main
+        if ProcessInfo.processInfo.environment["TEGNAL_CAPTURE_SCREEN"] == "largest",
+           let largest = XCUIScreen.screens.max(by: { $0.screenshot().image.size.width < $1.screenshot().image.size.width }) { screen = largest }
+        let attachment = XCTAttachment(screenshot: screen.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
         let hierarchy = XCTAttachment(string: app.debugDescription)
         hierarchy.name = name + "-hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
     }
     func testScreenshots() throws {
         continueAfterFailure = false
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = ProcessInfo.processInfo.environment["TEGNAL_CAPTURE_ORIENTATION"] == "landscape" ? .landscapeLeft : .portrait
         let app = XCUIApplication()
         app.launchArguments = ["--booru-ui-test", "--marketing-capture", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
         app.launch()
@@ -38,7 +42,7 @@ final class MarketingScreenshotsTests: XCTestCase {
         let loaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'ready'"), object: ready)
         XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 10), .completed)
         shot(app, "03-viewer")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        if ProcessInfo.processInfo.environment["TEGNAL_CAPTURE_SCREEN"] == "largest" { element(app, "booru.media").tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
         XCTAssertTrue(element(app, "booru.menuClose").waitForExistence(timeout: 5))
         shot(app, "04-viewer-controls")
         // Exit through the visible menu so a top-edge drag cannot open Notification Center.
