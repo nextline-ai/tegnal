@@ -281,70 +281,70 @@ void main() {
       expect(memory.site(2), isNull);
     });
 
-    test('a fill reads from other websites while one that blocks bulk reading is connected', () async {
+    test('a fill reads a blocking website only for works the others no longer have', () async {
       final blocking = _FakeSite('keyed.example', {1: 'one', 3: 'three'});
       final mirror = _FakeSite('b.example', {1: 'one', 2: 'two'});
-      final content = SiteFallbackContent(
+      SiteFallbackContent fallback(ContentProviding other, List<String> all) => SiteFallbackContent(
         primary: blocking,
-        sourceFor: (_) => mirror,
-        sites: () => ('keyed.example', ['keyed.example', 'b.example']),
+        sourceFor: (_) => other,
+        sites: () => ('keyed.example', all),
         memory: WorkSiteMemory(),
         blocksBulkReading: (site) => site == 'keyed.example',
       );
+      final content = fallback(mirror, ['keyed.example', 'b.example']);
 
       expect((await content.gallery(1, preferring: 'keyed.example', inBulk: true)).title, 'one');
-      expect(blocking.calls, 0, reason: 'A fill never reads the website that blocks bulk reading while another can be read');
-      expect(content.readsOnlyBlockingSites, isFalse);
-      await expectLater(content.gallery(3, inBulk: true), throwsA(isA<LeftForBlockingSite>()), reason: 'Not missing: the skipped website has it');
-      expect((await content.gallery(3)).title, 'three', reason: 'Opening a work by hand still reads every website');
+      expect(blocking.calls, 0, reason: 'A work another website has is never read from the one that blocks bulk reading');
+      expect(content.tookBlockingRead(1), isFalse);
 
-      final alone = SiteFallbackContent(
-        primary: blocking,
-        sourceFor: (_) => mirror,
-        sites: () => ('keyed.example', ['keyed.example']),
-        memory: WorkSiteMemory(),
-        blocksBulkReading: (site) => site == 'keyed.example',
-      );
+      expect((await content.gallery(3, preferring: 'b.example', inBulk: true)).title, 'three', reason: 'A work the other websites deleted is read there');
+      expect(blocking.calls, 1);
+      expect(content.tookBlockingRead(3), isTrue, reason: 'So the next read waits longer');
+      expect(content.tookBlockingRead(3), isFalse);
+      await expectLater(content.gallery(9, inBulk: true), throwsA(ContentError.galleryNotFound), reason: 'A work no website has stays missing');
+
+      final cut = fallback(_FakeSite('b.example', {}, refusal: ContentError.unavailable(503)), ['keyed.example', 'b.example']);
+      final before = blocking.calls;
+      await expectLater(cut.gallery(3, inBulk: true), throwsA(isA<LeftForBlockingSite>()), reason: 'A work the others could not be asked about waits');
+      expect(blocking.calls, before);
+      expect((await cut.gallery(3)).title, 'three', reason: 'Opening a work by hand still reads every website');
+
+      final alone = fallback(mirror, ['keyed.example']);
       expect((await alone.gallery(1, inBulk: true)).title, 'one', reason: 'With no other website, the fill reads it (after asking, and slowly)');
-      expect(alone.readsOnlyBlockingSites, isTrue);
+      expect(alone.tookBlockingRead(1), isTrue);
     });
 
-    test('the fill leaves works only a blocking website carries as failed, not gone', () async {
+    test('the fill reads deleted works from a blocking website and leaves unreachable ones for later', () async {
       final db = AppDatabase.inMemory();
       final root = Directory.systemTemp.createTempSync('bulk-fill');
       addTearDown(() => root.deleteSync(recursive: true));
-      final blocking = _FakeSite('keyed.example', {7: 'seven'});
-      final mirror = _FakeSite('b.example', {});
-      final content = SiteFallbackContent(
-        primary: blocking,
-        sourceFor: (_) => mirror,
-        sites: () => ('keyed.example', ['keyed.example', 'b.example']),
+      final blocking = _FakeSite('keyed.example', {7: 'seven', 8: 'eight'});
+      SiteFallbackContent fallback(ContentProviding other) => SiteFallbackContent(
+        primary: other,
+        sourceFor: (_) => blocking,
+        sites: () => ('b.example', ['keyed.example', 'b.example']),
         memory: WorkSiteMemory(),
         blocksBulkReading: (site) => site == 'keyed.example',
       );
-      db.upsertWork(galleryId: 7, site: 'keyed.example');
-      final state = CoverQueueState();
-      await CoverQueueActor(
-        database: db,
-        thumbsDir: root,
-        source: content,
-        allowsBackfill: () => true,
-        delay: Duration.zero,
-        slowDelay: Duration.zero,
-      ).start(state);
-      expect(blocking.calls, 0);
-      expect((state.failed, state.gone), (1, 0));
-      expect(db.getWork(7)!.thumbStatus, 'failed', reason: 'Tried again on a later fill');
+      CoverQueueActor actor(ContentProviding source) =>
+          CoverQueueActor(database: db, thumbsDir: root, source: source, allowsBackfill: () => true, delay: Duration.zero, slowDelay: Duration.zero);
 
-      await CoverQueueActor(
-        database: db,
-        thumbsDir: root,
-        source: content,
-        allowsBackfill: () => true,
-        delay: Duration.zero,
-        slowDelay: Duration.zero,
-      ).start(CoverQueueState(), mayRead: () => false);
-      expect(mirror.calls, 1, reason: 'A run that must ask first reads nothing');
+      db.upsertWork(galleryId: 7, site: 'b.example');
+      await actor(fallback(_FakeSite('b.example', {}))).start(CoverQueueState());
+      expect(blocking.calls, 1);
+      expect(db.getWork(7)!.title, 'seven', reason: 'Deleted on the other website, read from the one that still has it');
+
+      final unreachable = _FakeSite('b.example', {}, refusal: ContentError.unavailable(503));
+      db.upsertWork(galleryId: 8, site: 'b.example');
+      db.setThumb(7, 'gone');
+      final state = CoverQueueState();
+      await actor(fallback(unreachable)).start(state);
+      expect(blocking.calls, 1, reason: 'An unreachable website is not a deleted work');
+      expect((state.failed, state.gone), (1, 0));
+      expect(db.getWork(8)!.thumbStatus, 'failed', reason: 'Tried again on a later fill');
+
+      await actor(fallback(unreachable)).start(CoverQueueState(), mayRead: () => false);
+      expect(unreachable.calls, 1, reason: 'A run that must ask first reads nothing');
     });
 
     test('reading from a blocking website waits longer between works', () async {
