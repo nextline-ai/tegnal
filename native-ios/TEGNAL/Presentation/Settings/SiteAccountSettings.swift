@@ -150,6 +150,12 @@ struct SiteAccountSection: View {
             guard isChecked, signedIn, keyed else { allowance = nil; return }
             allowance = (try? await MangaContentSource.shared.imageAllowance()) ?? nil
         }
+        .task(id: site) {
+            // A website added a moment ago names its sign-in page on its own pages; read one so signing in works right away.
+            guard !scoped({ MangaUrls.hasResolvedBackend }) else { return }
+            await SiteScope.$site.withValue(site) { await MangaUrls.resolveBackend() }
+            revision += 1
+        }
         .task(id: "\(signedIn)-\(isChecked)-profiles") {
             guard isChecked, signedIn, keyed else { profiles = []; return }
             profiles = (try? await MangaContentSource.shared.settingsProfiles()) ?? []

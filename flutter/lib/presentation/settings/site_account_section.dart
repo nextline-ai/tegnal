@@ -75,6 +75,14 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     SiteClearance.listeners.add(_changed);
     SiteAccount.listeners.add(_changed);
     _loadAccountDetails();
+    _resolveSite();
+  }
+
+  /// A website added a moment ago names its sign-in page on its own pages; read one so signing in works right away.
+  Future<void> _resolveSite() async {
+    if (_scoped(() => MangaUrls.hasResolvedBackend)) return;
+    await _scoped(() => MangaUrls.resolveBackend());
+    if (mounted) setState(() {});
   }
 
   @override
