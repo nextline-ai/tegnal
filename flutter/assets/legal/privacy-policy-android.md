@@ -6,7 +6,7 @@
 
 문의 / Contact: **contact@nextline.work** · https://nextline.work
 
-이 방침은 TEGNAL Android 앱에 적용됩니다. Apple 앱의 방침은 [별도 문서](privacy-policy.md)를 참고하세요. English follows the Korean policy below.
+이 방침은 TEGNAL Android 앱에 적용됩니다. Apple 앱의 방침은 [별도 문서](https://github.com/nextline-ai/tegnal/blob/main/native-ios/privacy-policy.md)를 참고하세요. English follows the Korean policy below.
 
 ## 기기의 라이브러리
 

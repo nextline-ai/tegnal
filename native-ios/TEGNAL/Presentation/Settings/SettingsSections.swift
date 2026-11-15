@@ -46,7 +46,7 @@ struct PrivacyPolicyView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text(policy).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                Link(L10n.text("View Online"), destination: URL(string: "https://github.com/nextline-ai/tegnal/blob/main/docs/privacy-policy.md")!)
+                Link(L10n.text("View Online"), destination: URL(string: "https://github.com/nextline-ai/tegnal/blob/main/native-ios/privacy-policy.md")!)
                 Link("contact@nextline.work", destination: URL(string: "mailto:contact@nextline.work")!)
             }.padding(20)
         }.navigationTitle(L10n.text("Privacy Policy")).navigationBarTitleDisplayMode(.inline)
