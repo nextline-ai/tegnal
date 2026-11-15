@@ -439,9 +439,12 @@ public enum MangaUrls {
                 }
                 return true
             }
-            // A members-only catalog shows signed-out visitors nothing, or only a picture.
-            let showsNothing = response.mimeType?.lowercased().hasPrefix("image/") == true
-                || body.trimmingCharacters(in: .whitespacesAndNewlines).count < 64
+            // A members-only catalog shows signed-out visitors nothing, or only a picture; a short
+            // reply of another kind, such as an interface's error, is not that.
+            let mime = response.mimeType?.lowercased()
+            let shown = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let showsNothing = mime?.hasPrefix("image/") == true || shown.isEmpty
+                || (shown.count < 64 && mime?.hasPrefix("text/html") == true)
             if showsNothing {
                 let askedBefore = preferences.string(forKey: "manga.account_site") == site
                 markRequiresSignIn(site: site, accountHost: nil)

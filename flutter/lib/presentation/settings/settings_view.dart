@@ -21,6 +21,7 @@ import '../library/library_routes.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import 'comics_cache_settings_view.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
 import 'website_setup.dart';
@@ -400,6 +401,11 @@ class _SettingsViewState extends State<SettingsView> {
                       title: L10n.text('Library Management'),
                       symbol: (color) => ExternalDriveSymbol(color: color),
                       onTap: _deps.openLibraryManagement == null ? null : () => _deps.openLibraryManagement!(context),
+                    ),
+                    SettingsLinkRow(
+                      title: L10n.text('Image Cache'),
+                      icon: CupertinoIcons.photo_on_rectangle,
+                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const ComicsCacheSettingsView())),
                     ),
                   ],
                 ),

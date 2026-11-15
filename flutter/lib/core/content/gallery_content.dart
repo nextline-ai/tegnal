@@ -110,6 +110,7 @@ class NativeGallery {
     required this.pages,
     this.versions,
     this.relatedIDs,
+    this.pageCount,
   });
 
   final int id;
@@ -123,6 +124,17 @@ class NativeGallery {
   /// Optional so works downloaded before these were read still decode.
   final List<GalleryVersion>? versions;
   final List<int>? relatedIDs;
+
+  /// How many pages the work has, when a list knows it apart from `pages`: lists carry only a
+  /// cover. Zero means a list row that did not say.
+  final int? pageCount;
+
+  /// The page count worth showing on a card, if known.
+  int? get displayedPageCount {
+    final count = pageCount;
+    if (count != null) return count > 0 ? count : null;
+    return pages.isEmpty ? null : pages.length;
+  }
 
   /// The other languages of this work, with the given language first.
   List<GalleryVersion> otherVersions(String preferring) {
@@ -282,6 +294,7 @@ class NativeGallery {
     pages: json.list('pages', (value) => GalleryPage.fromJson(jsonObject(value))),
     versions: json.listOrNull('versions', (value) => GalleryVersion.fromJson(jsonObject(value))),
     relatedIDs: json.listOrNull('relatedIDs', jsonInteger),
+    pageCount: json.integerOrNull('pageCount'),
   );
 
   JsonObject toJson() =>
@@ -295,9 +308,10 @@ class NativeGallery {
           'pages': [for (final page in pages) page.toJson()],
         }
         ..putIfPresent('versions', versions?.map((version) => version.toJson()).toList())
-        ..putIfPresent('relatedIDs', relatedIDs);
+        ..putIfPresent('relatedIDs', relatedIDs)
+        ..putIfPresent('pageCount', pageCount);
 
-  NativeGallery copyWith({List<GalleryPage>? pages}) => NativeGallery(
+  NativeGallery copyWith({List<GalleryPage>? pages, int? pageCount}) => NativeGallery(
     id: id,
     title: title,
     artists: artists,
@@ -307,6 +321,7 @@ class NativeGallery {
     pages: pages ?? this.pages,
     versions: versions,
     relatedIDs: relatedIDs,
+    pageCount: pageCount ?? this.pageCount,
   );
 }
 
@@ -319,14 +334,39 @@ enum GallerySort {
   today,
   week,
   month,
-  year;
+  year,
+
+  /// Keyed catalogs rank all time too, in their toplists.
+  allTime,
+
+  /// What a signed-in account follows by its watched tags, newest first.
+  watched;
 
   String get rawValue => name;
   static GallerySort? fromRawValue(String value) => values.where((sort) => sort.name == value).firstOrNull;
 
-  /// Keyed catalogs only rank what is popular right now.
-  static List<GallerySort> get available =>
-      MangaUrls.hasResolvedBackend && MangaUrls.backend == MangaBackend.keyed ? const [GallerySort.latest, GallerySort.today] : values;
+  /// Keyed catalogs rank what is popular right now, plus the toplists and watched tags the
+  /// website itself links to.
+  static List<GallerySort> get available {
+    if (!MangaUrls.hasResolvedBackend || MangaUrls.backend != MangaBackend.keyed) {
+      return const [GallerySort.latest, GallerySort.today, GallerySort.week, GallerySort.month, GallerySort.year];
+    }
+    final features = MangaUrls.keyedFeatures;
+    return [
+      GallerySort.latest,
+      GallerySort.today,
+      if (features.contains(KeyedFeature.toplist)) ...[GallerySort.month, GallerySort.year, GallerySort.allTime],
+      if (features.contains(KeyedFeature.watched) && SiteAccount.isSignedIn) GallerySort.watched,
+    ];
+  }
+
+  /// The toplist a keyed catalog keeps for this ranking.
+  int? get toplist => switch (this) {
+    month => 13,
+    year => 12,
+    allTime => 11,
+    _ => null,
+  };
 
   String get title => switch (this) {
     latest => L10n.text('Latest'),
@@ -334,6 +374,8 @@ enum GallerySort {
     week => L10n.text('Popular This Week'),
     month => L10n.text('Popular This Month'),
     year => L10n.text('Popular This Year'),
+    allTime => L10n.text('Popular of All Time'),
+    watched => L10n.text('Watched Tags'),
   };
 }
 

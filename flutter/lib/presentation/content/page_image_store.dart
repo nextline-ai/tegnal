@@ -57,6 +57,41 @@ class _Flight {
   final completer = Completer<ui.Image>();
 }
 
+/// The one on-device cache of comics pages and previews, with the size a person picked.
+abstract final class ComicsPageCache {
+  static const capacityKey = 'manga.pageCacheMegabytes';
+
+  /// Sizes a person can pick, in megabytes.
+  static const choices = [256, 512, 1024, 2048, 4096];
+  static const defaultMegabytes = 512;
+  static ThumbnailDiskCache? _shared;
+
+  static int get configuredMegabytes {
+    final value = ReaderPreferences.defaults.integer(capacityKey);
+    return choices.contains(value) ? value : defaultMegabytes;
+  }
+
+  /// The shared cache, once launch has named its directory.
+  static ThumbnailDiskCache? get shared {
+    final directory = PageImageStore.defaultDiskDirectory;
+    if (directory == null) return null;
+    final current = _shared;
+    if (current != null && current.directory.path == directory.path) return current;
+    return _shared = ThumbnailDiskCache(directory: directory, capacity: configuredMegabytes * 1024 * 1024, fileExtension: 'page');
+  }
+
+  static int get usedBytes => shared?.usedBytes ?? 0;
+
+  /// Applies a new size limit at once, removing the least recently viewed pages above it.
+  static void setMegabytes(int megabytes) {
+    if (!choices.contains(megabytes)) return;
+    ReaderPreferences.defaults.set(capacityKey, megabytes);
+    shared?.capacity = megabytes * 1024 * 1024;
+  }
+
+  static void clear() => shared?.clear();
+}
+
 /// Decoded page and cover images, bounded in memory and on disk, shared between
 /// concurrent requests for the same page. Thumbnails decode to at most 480 px on
 /// the long side and pages to 3000 px, as in the native store.
@@ -78,9 +113,11 @@ class PageImageStore {
   static bool get isTesting => ContentPreferences.isIsolated || Platform.environment.containsKey('FLUTTER_TEST');
 
   static ThumbnailDiskCache? _makeDisk(Directory? directory, int capacity) {
-    final target = directory ?? (isTesting ? null : defaultDiskDirectory);
-    if (capacity <= 0 || target == null) return null;
-    return ThumbnailDiskCache(directory: target, capacity: capacity, fileExtension: 'page');
+    if (capacity <= 0) return null;
+    // Every store that keeps pages in the default place shares one cache, so its size limit
+    // holds for the whole app instead of for each screen.
+    if (directory == null) return isTesting ? null : ComicsPageCache.shared;
+    return ThumbnailDiskCache(directory: directory, capacity: capacity, fileExtension: 'page');
   }
 
   final ContentProviding source;

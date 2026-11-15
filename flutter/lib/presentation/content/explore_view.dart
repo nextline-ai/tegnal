@@ -158,8 +158,11 @@ class _ExploreViewState extends State<ExploreView> {
     return _query
         .filteredTo(category)
         .applyingDefaults(tags: content.defaultTags, excluded: content.defaultExcludedTags)
-        .copyWith(allowsLanguageExceptions: content.allowsMangaLanguageExceptions);
+        // A ranking chosen on another website, or before signing out, falls back to the latest works.
+        .copyWith(allowsLanguageExceptions: content.allowsMangaLanguageExceptions, sort: _availableSort);
   }
+
+  GallerySort get _availableSort => GallerySort.available.contains(_query.sort) ? _query.sort : GallerySort.latest;
 
   GalleryQuery get _effectiveQuery => _effective(_category);
 
@@ -345,6 +348,7 @@ class _ExploreViewState extends State<ExploreView> {
                     key: ValueKey(item),
                     id: id,
                     site: _loader.combinedSites == null ? null : item.site,
+                    marksSite: _loader.combinedSites != null && item.site != widget.content.mangaSiteAddress,
                     preview: preview,
                     style: style,
                     bookmarked: _bookmarked.contains(id),
@@ -481,10 +485,10 @@ class _ExploreViewState extends State<ExploreView> {
       },
     );
     final sort = BrowseFilterMenu<GallerySort>(
-      title: _query.sort.title,
+      title: _availableSort.title,
       icon: Symbols.arrowUpArrowDown,
       options: [for (final value in GallerySort.available) (value, value.title)],
-      selected: _query.sort,
+      selected: _availableSort,
       onSelected: (value) => _changeQuery(_query.copyWith(sort: value)),
     );
     // `ViewThatFits`: one row when it fits, otherwise category moves below.
@@ -688,6 +692,7 @@ class _GalleryGridCard extends StatefulWidget {
     super.key,
     required this.id,
     this.site,
+    this.marksSite = false,
     required this.preview,
     required this.style,
     required this.bookmarked,
@@ -700,6 +705,10 @@ class _GalleryGridCard extends StatefulWidget {
 
   /// The website the work is listed from, when a list shows several.
   final String? site;
+
+  /// Whether the card names its website: in a list of several, for works from a website other
+  /// than the checked one.
+  final bool marksSite;
   final GalleryFeedPreview? preview;
   final ArtworkCellStyle style;
   final bool bookmarked;
@@ -760,6 +769,7 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
           title: display?.title ?? L10n.text('Work %@', ['${widget.id}']),
           artists: display?.artists ?? '',
           language: display?.language ?? '',
+          pages: display?.pages,
           category: type.isEmpty ? '' : GalleryCategory.title(type),
           categoryColor: galleryCategoryColor(type),
           cover: image != null
@@ -769,14 +779,32 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
                   child: Center(child: Icon(Symbols.book, color: TegnalColors.secondaryLabel.resolveFrom(context))),
                 ),
         ),
-        if (widget.bookmarked)
+        if (widget.bookmarked || (widget.marksSite && widget.site != null))
           Positioned(
             left: style.inset(7),
             top: style.inset(7),
-            child: Container(
-              padding: EdgeInsets.all(style.inset(8)),
-              decoration: const ShapeDecoration(color: Color(0xB8000000), shape: CircleBorder()),
-              child: Icon(Symbols.bookmarkFill, size: style.fontSize(14), color: CupertinoColors.systemYellow),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.bookmarked)
+                  Container(
+                    padding: EdgeInsets.all(style.inset(8)),
+                    decoration: const ShapeDecoration(color: Color(0xB8000000), shape: CircleBorder()),
+                    child: Icon(Symbols.bookmarkFill, size: style.fontSize(14), color: CupertinoColors.systemYellow),
+                  ),
+                if (widget.bookmarked && widget.marksSite && widget.site != null) SizedBox(width: style.inset(4)),
+                if (widget.marksSite && widget.site != null)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: style.inset(8), vertical: style.inset(5)),
+                    decoration: const ShapeDecoration(color: Color(0xB8000000), shape: StadiumBorder()),
+                    child: Text(
+                      shortSiteName(widget.site!),
+                      maxLines: 1,
+                      style: TegnalType.style(style.fontSize(11), weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
+                      textScaler: TextScaler.noScaling,
+                    ),
+                  ),
+              ],
             ),
           ),
         Positioned(
@@ -826,6 +854,7 @@ class _GalleryGridCardState extends State<_GalleryGridCard> {
       language: display?.language,
       type: display?.type,
       site: widget.site ?? ComicSites.active,
+      pages: display?.pages,
     );
   }
 
@@ -900,4 +929,12 @@ class _SuggestionRow extends StatelessWidget {
 
   /// `Int.formatted()`: digits grouped by thousands.
   static String _grouped(int value) => value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+}
+
+/// A website's address without its leading `www.` and its last label, short enough for a card.
+String shortSiteName(String site) {
+  final labels = site.toLowerCase().split('.');
+  if (labels.firstOrNull == 'www') labels.removeAt(0);
+  if (labels.length > 1) labels.removeLast();
+  return labels.join('.');
 }

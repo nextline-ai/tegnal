@@ -44,7 +44,7 @@ class BookmarkSession {
   /// Mirrors a bookmark change to the account's favorites when that is turned on.
   void syncAccountFavorite(int id, {required bool saved}) {
     if (!content.syncsAccountFavorites || !content.siteAccountSignedIn || !MangaUrls.hasResolvedBackend || MangaUrls.backend != MangaBackend.keyed) return;
-    unawaited(MangaContentSource.shared.setAccountFavorite(id, saved: saved).catchError((Object _) {}));
+    unawaited(MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: content.accountFavoriteCategory).catchError((Object _) {}));
   }
 }
 
@@ -52,7 +52,14 @@ class BookmarkSession {
 abstract final class ContentBookmarkAction {
   /// [site] is the website the work is shown from, the checked one unless given, kept as where
   /// it was saved from: the work has the same number everywhere, but not every website carries it.
-  static WorkSaveResult toggle(int id, {NativeGallery? gallery, required BookmarkSession session, PageImageStore? images, DiscoveryContext? context, String? site}) {
+  static WorkSaveResult toggle(
+    int id, {
+    NativeGallery? gallery,
+    required BookmarkSession session,
+    PageImageStore? images,
+    DiscoveryContext? context,
+    String? site,
+  }) {
     final website = site ?? ComicSites.active;
     final database = session.database;
     final work = database.getWork(id);
@@ -66,7 +73,14 @@ abstract final class ContentBookmarkAction {
     return save(id, gallery: gallery, session: session, images: images, context: context, site: website);
   }
 
-  static WorkSaveResult save(int id, {NativeGallery? gallery, required BookmarkSession session, PageImageStore? images, DiscoveryContext? context, String? site}) {
+  static WorkSaveResult save(
+    int id, {
+    NativeGallery? gallery,
+    required BookmarkSession session,
+    PageImageStore? images,
+    DiscoveryContext? context,
+    String? site,
+  }) {
     final website = site ?? ComicSites.active;
     final database = session.database;
     if (database.getWork(id) != null) return const WorkSaveResult.unchanged(TasteMode.comics);
@@ -85,6 +99,7 @@ abstract final class ContentBookmarkAction {
       tags: gallery?.tags.join(', '),
       metadataSource: 'remote',
       site: website,
+      pageCount: gallery?.displayedPageCount,
       discoveryContext: context ?? DiscoveryContext.unknown,
     );
     for (final other in restored.skip(1)) {

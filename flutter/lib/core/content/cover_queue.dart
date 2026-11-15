@@ -9,6 +9,7 @@ import 'combined_catalog.dart';
 import 'content_errors.dart';
 import 'gallery_content.dart';
 import 'manga_urls.dart';
+import 'site_fallback_content.dart';
 
 /// The device's thermal pressure, as `ProcessInfo.ThermalState` reports it.
 enum DeviceThermalState { nominal, fair, serious, critical }
@@ -243,10 +244,12 @@ class CoverQueueActor {
     }
 
     final site = existing?.site;
-    final other = site == null ? null : _siteSource(site);
+    final fallback = source is SiteFallbackContent ? source as SiteFallbackContent : null;
+    // A saved work opens from whichever connected website still carries it, its own first.
+    final other = site == null || fallback != null ? null : _siteSource(site);
     final NativeGallery gallery;
     try {
-      gallery = await (other ?? source).gallery(galleryId);
+      gallery = fallback != null ? await fallback.gallery(galleryId, preferring: site) : await (other ?? source).gallery(galleryId);
     } on ContentError catch (error) {
       if (!error.isUnavailable(404) && !error.isUnavailable(410)) rethrow;
       _checkCancellation();
@@ -265,6 +268,7 @@ class CoverQueueActor {
       type: gallery.type,
       tags: gallery.tags.join(', '),
       metadataSource: 'manga',
+      pageCount: gallery.displayedPageCount,
     );
     if (needCover) {
       if (gallery.pages.isEmpty) throw ContentError.invalidResponse;

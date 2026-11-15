@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/content/site_fallback_content.dart';
 import '../../core/content/gallery_content.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
@@ -126,6 +127,8 @@ class _WorksGridViewState extends State<WorksGridView> {
   }
 
   void _open(Work work) {
+    // Opens where it still is: the website it came from comes right after the checked one.
+    SiteFallbackContent.shared.prefer(work.site, work.galleryId);
     if (_selecting) {
       setState(() => _selection.contains(work.galleryId) ? _selection.remove(work.galleryId) : _selection.add(work.galleryId));
     } else {
@@ -238,6 +241,7 @@ class _WorksGridViewState extends State<WorksGridView> {
                         language: work.language,
                         type: work.type,
                         site: work.site,
+                        pages: work.pageCount,
                       ),
                       cover: path == null ? null : File(path).readAsBytes().then<Uint8List?>((data) => data, onError: (_) => null),
                     );
@@ -565,6 +569,7 @@ class WorkCard extends StatelessWidget {
       title: work.hasTitle ? work.title ?? '' : '${work.galleryId}',
       artists: work.artists ?? '',
       language: work.language ?? '',
+      pages: work.pageCount,
       category: type.isEmpty ? '' : GalleryCategory.title(type),
       categoryColor: galleryCategoryColor(type),
       cover: LocalThumbnail(path: work.thumbStatus == 'ready' ? work.thumbPath : null, revision: '${work.thumbPage ?? 1}', placeholder: placeholder),

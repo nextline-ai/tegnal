@@ -14,7 +14,7 @@ import 'gallery_content.dart';
 /// never has to load it.
 @immutable
 class ReadingQueueItem {
-  const ReadingQueueItem({required this.id, required this.title, required this.artists, required this.details, this.site});
+  const ReadingQueueItem({required this.id, required this.title, required this.artists, required this.details, this.site, this.pages});
 
   factory ReadingQueueItem.fromGallery({
     required int id,
@@ -24,12 +24,14 @@ class ReadingQueueItem {
     String? language,
     String? type,
     String? site,
+    int? pages,
   }) => ReadingQueueItem(
     id: id,
     title: gallery?.title ?? title ?? '',
     artists: gallery?.artists.join(', ') ?? artists ?? '',
     details: [gallery?.language ?? language, gallery?.type ?? type].whereType<String>().where((part) => part.isNotEmpty).join(' · '),
     site: site == null || site.isEmpty ? null : site,
+    pages: gallery?.displayedPageCount ?? pages,
   );
 
   factory ReadingQueueItem.fromJson(Map<String, Object?> json) => ReadingQueueItem(
@@ -38,6 +40,7 @@ class ReadingQueueItem {
     artists: json['artists'] as String? ?? '',
     details: json['details'] as String? ?? '',
     site: json['site'] as String?,
+    pages: (json['pages'] as num?)?.toInt(),
   );
 
   final int id;
@@ -48,9 +51,19 @@ class ReadingQueueItem {
   /// The comics site the work was found on, so it opens there.
   final String? site;
 
+  /// How many pages the work has, when known.
+  final int? pages;
+
   String get displayTitle => title.isEmpty ? L10n.text('Work %@', ['$id']) : title;
 
-  Map<String, Object?> toJson() => {'id': id, 'title': title, 'artists': artists, 'details': details, if (site != null) 'site': site};
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'title': title,
+    'artists': artists,
+    'details': details,
+    if (site != null) 'site': site,
+    if (pages != null) 'pages': pages,
+  };
 }
 
 /// `ReadingQueue`: Up Next for comics, like a music queue. Works held and carried down, or added

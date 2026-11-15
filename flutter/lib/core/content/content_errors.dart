@@ -53,6 +53,12 @@ enum ContentErrorKind {
   tooManySearchTerms,
   signInRequired,
   imageLimit,
+
+  /// The website's bot check stopped the request; a browser has to pass it once.
+  verificationRequired,
+
+  /// The website stopped answering this network for a while.
+  temporarilyBlocked,
 }
 
 class ContentError implements Exception {
@@ -67,6 +73,8 @@ class ContentError implements Exception {
   static const galleryNotFound = ContentError(ContentErrorKind.galleryNotFound);
   static const signInRequired = ContentError(ContentErrorKind.signInRequired);
   static const imageLimit = ContentError(ContentErrorKind.imageLimit);
+  static const verificationRequired = ContentError(ContentErrorKind.verificationRequired);
+  static const temporarilyBlocked = ContentError(ContentErrorKind.temporarilyBlocked);
 
   final ContentErrorKind kind;
 
@@ -87,7 +95,40 @@ class ContentError implements Exception {
     ContentErrorKind.tooManySearchTerms => L10n.text('Use up to %@ search terms, including default and excluded tags.', ['$value']),
     ContentErrorKind.signInRequired => L10n.text('This website shows works only to signed-in accounts. Sign in, then try again.'),
     ContentErrorKind.imageLimit => L10n.text('This website’s image allowance for you has run out. Try again later.'),
+    ContentErrorKind.verificationRequired => L10n.text(
+      'This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again.',
+    ),
+    ContentErrorKind.temporarilyBlocked => L10n.text('This website has paused access from your network for a while. Try again later, or change networks.'),
   };
+
+  /// Errors after which the same work may still open on another connected website.
+  static bool allowsOtherSite(Object error) {
+    if (error is ContentError) {
+      return switch (error.kind) {
+        ContentErrorKind.galleryNotFound ||
+        ContentErrorKind.signInRequired ||
+        ContentErrorKind.imageLimit ||
+        ContentErrorKind.verificationRequired ||
+        ContentErrorKind.temporarilyBlocked ||
+        ContentErrorKind.unsupportedFormat ||
+        ContentErrorKind.invalidResponse => true,
+        ContentErrorKind.unavailable => const [401, 403, 404, 410, 429, 451, 500, 502, 503, 504].contains(error.value),
+        ContentErrorKind.tooLarge || ContentErrorKind.invalidQuery || ContentErrorKind.tooManySearchTerms => false,
+      };
+    }
+    if (error is NetworkError) {
+      return const [
+        NetworkErrorCode.cannotFindHost,
+        NetworkErrorCode.dnsLookupFailed,
+        NetworkErrorCode.cannotConnectToHost,
+        NetworkErrorCode.secureConnectionFailed,
+        NetworkErrorCode.networkConnectionLost,
+        NetworkErrorCode.timedOut,
+        NetworkErrorCode.unsupportedURL,
+      ].contains(error.code);
+    }
+    return false;
+  }
 
   static String get initialConnectionHelp => L10n.text(
     'Depending on the website and network, a VPN or HTTPS bypass may help or block connections. If it’s on, turn it off; if it’s off, turn it on, then try again.',

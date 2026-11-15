@@ -1,3 +1,6 @@
+import '../../core/content/site_fallback_content.dart';
+import 'work_extras_views.dart';
+
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -5,6 +8,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
+import '../settings/site_account_section.dart';
 import '../../core/content/content_environment.dart';
 import '../../core/content/content_errors.dart';
 import '../../core/content/gallery_content.dart';
@@ -151,6 +155,9 @@ class RemoteGalleryView extends StatefulWidget {
 
 class _RemoteGalleryViewState extends State<RemoteGalleryView> {
   NativeGallery? _gallery;
+
+  /// The connected website the work opened on when the checked one no longer carries it.
+  String? _servedFrom;
   ui.Image? _cover;
   bool _coverFinished = false;
   String? _error;
@@ -166,7 +173,12 @@ class _RemoteGalleryViewState extends State<RemoteGalleryView> {
     try {
       final gallery = await widget.source.gallery(widget.galleryID);
       if (!mounted) return;
-      setState(() => _gallery = gallery);
+      final source = widget.source;
+      setState(() {
+        _gallery = gallery;
+        _servedFrom = source is SiteFallbackContent ? source.servingSite(widget.galleryID) : null;
+      });
+      widget.database.fillPageCount(widget.galleryID, gallery.displayedPageCount);
       final page = gallery.pages.firstOrNull;
       if (page != null) {
         try {
@@ -197,6 +209,7 @@ class _RemoteGalleryViewState extends State<RemoteGalleryView> {
         actions: widget.actions,
         scrollController: widget.scrollController,
         topInset: 76,
+        source: widget.source,
       );
     } else if (_error != null) {
       body = Center(
@@ -216,12 +229,43 @@ class _RemoteGalleryViewState extends State<RemoteGalleryView> {
         ),
       );
     }
+    final servedFrom = gallery == null ? null : _servedFrom;
     return ScrollEdgeSheet(
       bar: SheetNavigationBar(
         title: L10n.text('Work Details'),
         trailing: GlassIconButton(icon: CupertinoIcons.xmark, label: L10n.text('Close'), onPressed: () => Navigator.of(context).pop()),
       ),
-      child: body,
+      child: servedFrom == null
+          ? body
+          : Stack(
+              children: [
+                Positioned.fill(child: body),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: MediaQuery.paddingOf(context).bottom + 8,
+                  child: Center(
+                    child: Glass.capsule(
+                      elevated: true,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(CupertinoIcons.arrow_branch, size: 15, color: TegnalColors.label.resolveFrom(context)),
+                            const SizedBox(width: 6),
+                            Text(
+                              L10n.text('Opened from %@', [servedFrom]),
+                              style: TegnalType.style(13, weight: FontWeight.w500, color: TegnalColors.label.resolveFrom(context)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -277,9 +321,42 @@ class ContentFailure extends StatelessWidget {
     return ComicSites.siblings(content.mangaSiteAddress).firstOrNull;
   }
 
+  /// A website that shows nothing until someone signs in gets its sign-in right here.
+  bool get _asksForSignIn => content != null && message == ContentError.signInRequired.errorDescription;
+
+  /// A website whose bot check stopped the app gets the check right here.
+  bool get _asksForCheck => message == ContentError.verificationRequired.errorDescription && MangaUrls.configuredHost.isNotEmpty;
+
+  Future<void> _present(BuildContext context, Widget Function(VoidCallback finished) sheet) async {
+    var finished = false;
+    await showAppSheet<void>(context, builder: (context, controller) => sheet(() => finished = true));
+    if (finished) retry();
+  }
+
+  Widget _secondaryButton(BuildContext context, String title, VoidCallback onPressed) => CupertinoButton(
+    onPressed: onPressed,
+    child: Text(title, style: TegnalType.style(15, color: TegnalColors.tint.resolveFrom(context))),
+  );
+
   @override
   Widget build(BuildContext context) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final content = this.content;
+    final primaryTitle = _asksForCheck
+        ? L10n.text('Validate Client')
+        : _asksForSignIn && MangaUrls.signInURL != null
+        ? L10n.text('Sign In to Website')
+        : L10n.text('Try Again');
+    void primary() {
+      if (_asksForCheck) {
+        _present(context, (finished) => SiteVerificationView(host: MangaUrls.configuredHost, finished: finished));
+      } else if (_asksForSignIn && content != null && MangaUrls.signInURL != null) {
+        _present(context, (finished) => SiteSignInView(content: content, finished: finished));
+      } else {
+        retry();
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -288,7 +365,7 @@ class ContentFailure extends StatelessWidget {
           Icon(Symbols.wifiExclamationmark, size: 44, color: secondary),
           const SizedBox(height: 12),
           Text(
-            L10n.text('Unable to Load'),
+            L10n.text(_asksForSignIn ? 'Sign In Required' : 'Unable to Load'),
             style: TegnalType.style(22, weight: FontWeight.w700, color: TegnalColors.label.resolveFrom(context)),
           ),
           const SizedBox(height: 8),
@@ -300,12 +377,19 @@ class ContentFailure extends StatelessWidget {
           const SizedBox(height: 16),
           CupertinoButton.filled(
             borderRadius: const BorderRadius.all(Radius.circular(999)),
-            onPressed: retry,
+            onPressed: primary,
             child: Text(
-              L10n.text('Try Again'),
+              primaryTitle,
               style: TegnalType.style(15, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
             ),
           ),
+          if (_asksForSignIn && content != null && !MangaUrls.usesSiteSession)
+            _secondaryButton(
+              context,
+              L10n.text('Sign In with Cookies'),
+              () => _present(context, (finished) => SiteCookieSignInView(content: content, finished: finished)),
+            ),
+          if (primaryTitle != L10n.text('Try Again')) _secondaryButton(context, L10n.text('Try Again'), retry),
           if (_sibling case final sibling?)
             CupertinoButton(
               onPressed: () {
@@ -335,6 +419,7 @@ class GalleryWorkInformation extends StatefulWidget {
     this.showsRead = true,
     this.scrollController,
     this.topInset = 0,
+    this.source,
   });
 
   final NativeGallery gallery;
@@ -342,6 +427,9 @@ class GalleryWorkInformation extends StatefulWidget {
   final ContentEnvironment content;
   final AppDatabase database;
   final GalleryDetailActions actions;
+
+  /// Where ratings, comments and torrents come from, on websites that keep them.
+  final ContentProviding? source;
   final ui.Image? cover;
   final bool coverFinished;
   final bool showsCover;
@@ -471,6 +559,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
               ],
             ),
           ),
+          if (widget.source case final source?) WorkExtrasSection(galleryID: gallery.id, source: source, content: widget.content),
           const SizedBox(height: 22),
           ConstrainedBox(
             constraints: BoxConstraints(minHeight: _previewsEnabled ? 0 : constraints.maxHeight),

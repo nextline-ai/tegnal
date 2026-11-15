@@ -125,6 +125,7 @@ class LibrarySyncAdapter {
       'catalog_matched',
       'thumb_page',
       'site',
+      'page_count',
     ],
     'manga.folder_works': ['folder_id', 'work_id', 'added_at'],
     'manga.artists': ['name', 'kind', 'note', 'bookmarked_at'],
@@ -140,7 +141,7 @@ class LibrarySyncAdapter {
   };
 
   /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
-  static const keepsKnownValue = {'site'};
+  static const keepsKnownValue = {'site', 'page_count'};
 
   /// Also gives identities to legacy imports and folders made outside the app.
   void _assignFolderIdentities() {

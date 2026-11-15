@@ -118,19 +118,40 @@ class SiteCookie {
 }
 
 class _Stored {
-  _Stored({Map<String, String>? identity, Map<String, Map<String, String>>? sites}) : identity = identity ?? {}, sites = sites ?? {};
+  _Stored({Map<String, String>? identity, Map<String, Map<String, String>>? sites, Map<String, Map<String, String>>? sessions})
+    : identity = identity ?? {},
+      sites = sites ?? {},
+      sessions = sessions ?? {};
   Map<String, String> identity;
 
   /// Cookies the connected site set for itself, by host.
   Map<String, Map<String, String>> sites;
 
+  /// Sign-ins made on a site's own pages, by host: the cookies its pages set once signed in.
+  Map<String, Map<String, String>> sessions;
+
+  static Map<String, Map<String, String>> _byHost(Object? value) => {
+    for (final MapEntry(:key, :value) in ((value as Map?) ?? {}).entries) key as String: {...(value as Map).cast<String, String>()},
+  };
+
   factory _Stored.fromJson(Map<String, Object?> json) => _Stored(
     identity: {...?(json['identity'] as Map?)?.cast<String, String>()},
-    sites: {
-      for (final MapEntry(:key, :value) in ((json['sites'] as Map?) ?? {}).entries) key as String: {...(value as Map).cast<String, String>()},
-    },
+    sites: _byHost(json['sites']),
+    // Missing in sign-ins kept before these existed.
+    sessions: _byHost(json['sessions']),
   );
-  Map<String, Object?> toJson() => {'identity': identity, 'sites': sites};
+  Map<String, Object?> toJson() => {'identity': identity, 'sites': sites, if (sessions.isNotEmpty) 'sessions': sessions};
+  bool get isEmpty => identity.isEmpty && sites.isEmpty && sessions.isEmpty;
+}
+
+/// What a person pasted from a browser where they are signed in.
+class PastedCookies {
+  PastedCookies({Map<String, String>? identity, Map<String, String>? site}) : identity = identity ?? {}, site = site ?? {};
+  final Map<String, String> identity;
+
+  /// Other cookies the site keeps for the account, such as access to a members-only catalog.
+  final Map<String, String> site;
+  bool get isComplete => SiteAccount._signedIn(identity);
 }
 
 /// The signed-in identity a catalog may ask for, kept in secure storage.
@@ -150,7 +171,110 @@ abstract final class SiteAccount {
   /// Names follow the forum software these catalogs share, not any one site.
   static bool isIdentity(String name) => name.endsWith('_member_id') || name.endsWith('_pass_hash');
 
+  /// The cookie a members-only catalog hands an account it lets in.
+  static const accessCookie = 'igneous';
+
+  /// A value the site sends instead of access when the account is not let in. Keeping it would
+  /// keep the account out even after the account is allowed.
+  static bool isPlaceholder(String name, String value) => name == accessCookie && (value.isEmpty || value == 'mystery' || value == 'deleted');
+
   static bool get isSignedIn => _signedIn(_load().identity);
+
+  /// Whether [host] has an account: the forum identity, or a sign-in made on its own pages.
+  static bool isSignedInAt(String host) {
+    final stored = _load();
+    if ((stored.sessions[host] ?? const {}).isNotEmpty) return true;
+    // A site that signs in on its own pages does not take the forum identity.
+    return !MangaUrls.usesSiteSession && _signedIn(stored.identity);
+  }
+
+  static bool hasSession(String host) => (_load().sessions[host] ?? const {}).isNotEmpty;
+
+  /// Reads `name=value` pairs from a cookie header, a browser's cookie list or one value per line.
+  /// Only the account cookies and cookies the site keeps for it are taken.
+  static PastedCookies parseCookies(String text) {
+    final result = PastedCookies();
+    for (final piece in text.split(RegExp(r'[;\n\r\t,]'))) {
+      var pair = piece.trim();
+      if (pair.toLowerCase().startsWith('cookie:')) pair = pair.substring(7).trim();
+      final equals = pair.indexOf('=');
+      if (equals <= 0) continue;
+      final name = pair.substring(0, equals).trim();
+      final value = pair.substring(equals + 1).trim().replaceAll(RegExp('^["\']+|["\']+\$'), '');
+      if (!_isCookieName(name) || !_isCookieValue(value)) continue;
+      if (isIdentity(name)) {
+        result.identity[name] = value;
+      } else if (keepsForAccount(name) && !isPlaceholder(name, value)) {
+        result.site[name] = value;
+      }
+    }
+    return result;
+  }
+
+  /// Cookies an account carries besides its identity: access, settings key and perks.
+  static bool keepsForAccount(String name) => const [accessCookie, 'sk', 'star', 'hath_perks', 'yay', 'iq'].contains(name);
+
+  static bool _isCookieName(String name) => name.isNotEmpty && name.length <= 64 && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(name);
+
+  static bool _isCookieValue(String value) => value.isNotEmpty && value.length <= 512 && RegExp(r'^[\x21-\x3A\x3C-\x7E]+$').hasMatch(value);
+
+  /// Signs in with cookies copied from a browser. The other cookies belong to [host].
+  static bool signInPasted(PastedCookies pasted, {required String host}) {
+    if (!pasted.isComplete) return false;
+    final stored = _load()
+      ..identity = {...pasted.identity}
+      // Cookies a site set for another account no longer apply; its own sign-ins stay.
+      ..sites.clear();
+    if (host.isNotEmpty && pasted.site.isNotEmpty) stored.sites[host] = {...pasted.site};
+    _save(stored);
+    _notify();
+    return true;
+  }
+
+  /// Keeps a sign-in made on [host]'s own pages: the cookies its pages set for it, apart from a
+  /// bot check's and analytics. Returns false when none are left.
+  static bool signInSession(List<SiteCookie> cookies, {required String host}) {
+    final values = {
+      for (final cookie in cookies)
+        if (cookie.value.isNotEmpty &&
+            _isCookieName(cookie.name) &&
+            _isCookieValue(cookie.value) &&
+            !SiteClearance.isClearanceCookie(cookie.name) &&
+            !cookie.name.startsWith('_ga') &&
+            !cookie.name.startsWith('_gid') &&
+            !(cookie.expires?.isBefore(DateTime.now()) ?? false))
+          cookie.name: cookie.value,
+    };
+    if (values.isEmpty || host.isEmpty) return false;
+    final stored = _load();
+    stored.sessions[host] = values;
+    _save(stored);
+    _notify();
+    return true;
+  }
+
+  /// Drops one cookie the site set, so the site hands out a fresh one on the next request.
+  static void forget(String name, {required String host}) {
+    final stored = _load();
+    if (stored.sites[host]?.remove(name) == null) return;
+    _save(stored);
+  }
+
+  /// The account cookie names saved for [host], for showing what is kept without the values.
+  static List<String> savedCookieNames(String host) {
+    final stored = _load();
+    if (!_signedIn(stored.identity)) return [];
+    return [...stored.identity.keys, ...?stored.sites[host]?.keys]..sort();
+  }
+
+  /// Signs out of one site that signs in on its own pages; other sites keep their accounts.
+  static void signOutAt(String host) {
+    final stored = _load();
+    stored.sessions.remove(host);
+    stored.sites.remove(host);
+    _save(stored);
+    _notify();
+  }
 
   static bool _signedIn(Map<String, String> identity) =>
       identity.entries.any((entry) => entry.key.endsWith('_member_id') && (int.tryParse(entry.value) ?? 0) > 0) &&
@@ -165,6 +289,7 @@ abstract final class SiteAccount {
     if (!_signedIn(identity)) return false;
     final stored = _load()
       ..identity = identity
+      // Cookies a site set for another account no longer apply; its own sign-ins stay.
       ..sites.clear();
     _save(stored);
     _notify();
@@ -202,7 +327,11 @@ abstract final class SiteAccount {
   /// What the site expects back: the identity, cookies it set, and consent to open flagged works.
   static Map<String, String> cookies(String host) {
     final stored = _load();
-    final values = {...?stored.sites[host]};
+    final values = {...?stored.sessions[host]};
+    // What the site set later, such as a renewed session, replaces what sign-in kept.
+    for (final MapEntry(:key, :value) in (stored.sites[host] ?? const <String, String>{}).entries) {
+      if (!isPlaceholder(key, value)) values[key] = value;
+    }
     values['nw'] = '1';
     if (_signedIn(stored.identity)) values.addAll(stored.identity);
     return values;
@@ -222,6 +351,8 @@ abstract final class SiteAccount {
       try {
         final cookie = Cookie.fromSetCookieValue(header);
         if (isIdentity(cookie.name) || cookie.name == 'nw') continue;
+        // A placeholder instead of access is never kept: the access already held stays.
+        if (isPlaceholder(cookie.name, cookie.value)) continue;
         received.add(SiteCookie(name: cookie.name, value: cookie.value, expires: cookie.expires));
       } on FormatException {
         continue;
@@ -269,6 +400,101 @@ abstract final class SiteAccount {
   static void _save(_Stored stored) {
     _cached = stored;
     _cachedStore = store;
-    store.write(_secretName, stored.identity.isEmpty && stored.sites.isEmpty ? null : jsonEncode(stored.toJson()));
+    store.write(_secretName, stored.isEmpty ? null : jsonEncode(stored.toJson()));
+  }
+}
+
+/// What a website's bot check hands a browser that passed it, kept per website with the exact
+/// browser identity that earned it: the check accepts its cookies only from that same browser.
+/// The cookies reach nothing but that website and its subdomains.
+class ClearanceEntry {
+  const ClearanceEntry({required this.cookies, required this.userAgent, required this.savedAt});
+  final Map<String, String> cookies;
+  final String userAgent;
+  final DateTime savedAt;
+
+  factory ClearanceEntry.fromJson(Map<String, Object?> json) => ClearanceEntry(
+    cookies: {...?(json['cookies'] as Map?)?.cast<String, String>()},
+    userAgent: json['userAgent'] as String? ?? '',
+    savedAt: DateTime.tryParse(json['savedAt'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
+  );
+  Map<String, Object?> toJson() => {'cookies': cookies, 'userAgent': userAgent, 'savedAt': savedAt.toIso8601String()};
+}
+
+abstract final class SiteClearance {
+  static const _secretName = 'site-clearance';
+  static Map<String, ClearanceEntry>? _cached;
+  static SecretStore? _cachedStore;
+
+  /// Notified when a check is passed or forgotten.
+  static final listeners = <void Function()>[];
+
+  /// Cookies the bot check sets. Nothing else from the check's browser is kept.
+  static bool isClearanceCookie(String name) => name.startsWith('cf_') || name.startsWith('__cf');
+
+  /// The website a host belongs to, so a check passed on one of its hosts covers the others.
+  static String domain(String host) => SiteAccount.registrableDomain(host.toLowerCase());
+
+  static ClearanceEntry? entryFor(Uri url) => url.scheme == 'https' && url.host.isNotEmpty ? entry(url.host) : null;
+
+  static ClearanceEntry? entry(String host) => _load()[domain(host)];
+
+  static bool hasClearance(String host) => entry(host) != null;
+
+  /// Keeps a passed check. Returns false when the cookies hold no clearance.
+  static bool save(List<SiteCookie> cookies, {required String userAgent, required String host}) {
+    final values = {
+      for (final cookie in cookies)
+        if (isClearanceCookie(cookie.name) && cookie.value.isNotEmpty && !(cookie.expires?.isBefore(DateTime.now()) ?? false)) cookie.name: cookie.value,
+    };
+    if (!values.containsKey('cf_clearance') || userAgent.isEmpty) return false;
+    final entries = _load()..[domain(host)] = ClearanceEntry(cookies: values, userAgent: userAgent, savedAt: DateTime.now());
+    _save(entries);
+    _notify();
+    return true;
+  }
+
+  /// Forgets a website's passed check, as when the website asks again.
+  static void remove(String host) {
+    final entries = _load();
+    if (entries.remove(domain(host)) == null) return;
+    _save(entries);
+    _notify();
+  }
+
+  static void removeAll() {
+    _save({});
+    _notify();
+  }
+
+  static void _notify() {
+    for (final listener in [...listeners]) {
+      listener();
+    }
+  }
+
+  static Map<String, ClearanceEntry> _load() {
+    final store = SiteAccount.store;
+    if (_cached != null && identical(_cachedStore, store)) return _cached!;
+    final result = <String, ClearanceEntry>{};
+    final saved = store.read(_secretName);
+    if (saved != null) {
+      try {
+        for (final MapEntry(:key, :value) in (jsonDecode(saved) as Map).entries) {
+          result[key as String] = ClearanceEntry.fromJson((value as Map).cast<String, Object?>());
+        }
+      } on Object {
+        result.clear();
+      }
+    }
+    _cached = result;
+    _cachedStore = store;
+    return result;
+  }
+
+  static void _save(Map<String, ClearanceEntry> entries) {
+    _cached = entries;
+    _cachedStore = SiteAccount.store;
+    SiteAccount.store.write(_secretName, entries.isEmpty ? null : jsonEncode({for (final MapEntry(:key, :value) in entries.entries) key: value.toJson()}));
   }
 }

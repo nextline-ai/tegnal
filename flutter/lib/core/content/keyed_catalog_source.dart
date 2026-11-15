@@ -11,6 +11,7 @@ import 'content_transport.dart';
 import 'content_url.dart';
 import 'document_catalog_source.dart';
 import 'gallery_content.dart';
+import 'keyed_work_extras.dart';
 import 'manga_urls.dart';
 import 'site_account.dart';
 
@@ -67,8 +68,17 @@ class ShownImage {
 
 class _Detail {
   _Detail({required this.perPage, required this.entries});
+  WorkExtras? extras;
+  WorkAPIKey? apiKey;
   int perPage;
   final Map<int, KeyedEntry> entries;
+  final created = DateTime.now();
+}
+
+class _Toplist {
+  final ids = <int>[];
+  var page = 0;
+  var more = true;
   final created = DateTime.now();
 }
 
@@ -107,6 +117,7 @@ class KeyedCatalogSource {
   final _feeds = <GalleryQuery, _Feed>{};
   final _details = <int, _Detail>{};
   (List<int>, DateTime)? _popular;
+  final _toplists = <int, _Toplist>{};
   final _previews = BoundedCache<String, NativeGallery>(512);
   final _sheets = BoundedCache<String, Uint8List>(24);
 
@@ -135,6 +146,7 @@ class KeyedCatalogSource {
       _feeds.clear();
       _details.clear();
       _popular = null;
+      _toplists.clear();
       _previews.clear();
       _sheets.clear();
     }
@@ -145,7 +157,11 @@ class KeyedCatalogSource {
   Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count, required String site}) async {
     _prepare(site);
     final selected = selectedCategories(query);
-    if (query.sort != GallerySort.latest) return _popularList(query, selected: selected, offset: offset, count: count, site: site);
+    final toplist = query.sort.toplist;
+    if (toplist != null) return _toplistList(query, selected: selected, toplist: toplist, offset: offset, count: count, site: site);
+    if (query.sort != GallerySort.latest && query.sort != GallerySort.watched) {
+      return _popularList(query, selected: selected, offset: offset, count: count, site: site);
+    }
     var feed = _feeds[query] ?? _Feed(_lanes(query, selected));
     if (DateTime.now().difference(feed.created) > const Duration(seconds: 300)) feed = _Feed(_lanes(query, selected));
     final exclusions = DocumentCatalogSource.exclusions(query);
@@ -195,8 +211,11 @@ class KeyedCatalogSource {
   }
 
   Future<void> _fill(_Lane lane, GalleryQuery query, {required String exclusions, required String site}) async {
-    final url = searchURL(query, site: site, categories: lane.categories, language: lane.language, next: lane.next);
+    // Watched tags list the same way as the front page, from their own page.
+    final base = query.sort == GallerySort.watched ? '${site}watched' : site;
+    final url = searchURL(query, site: base, categories: lane.categories, language: lane.language, next: lane.next);
     final text = await _page(url, site);
+    MangaUrls.noteKeyedNavigation(text, site: site);
     final found = links(text);
     keys.rememberAll([for (final link in found) (link.id, link.key)]);
     final next = nextCursor(text);
@@ -228,20 +247,56 @@ class KeyedCatalogSource {
       ids = [for (final link in found) link.id];
       _popular = (ids, DateTime.now());
     }
+    final matching = ids.where((id) => _matches(id, query, selected)).toList();
+    return GalleryBatch(ids: matching.skip(offset).take(count).toList(), hasMore: matching.length > offset + count);
+  }
+
+  /// Rankings the site lists itself narrow to the search here, from each work's details.
+  bool _matches(int id, GalleryQuery query, Set<String> selected) {
     final terms = splitWhitespace(query.text).where((term) => !term.startsWith('type:') && !term.startsWith('-type:')).toList();
     final artist = query.artist;
     final wanted = [...terms.where((term) => !term.startsWith('-')), if (artist != null) 'artist:${artist.replaceAll(' ', '_')}'];
     final excluded = terms.where((term) => term.startsWith('-')).join(' ');
-    final matches = ids.where((id) {
-      final work = cachedPreview(id);
-      if (work == null) return true;
-      if (work.type.isNotEmpty && !selected.contains(work.type)) return false;
-      final visual = query.allowsLanguageExceptions && _visualCategories.contains(work.type);
-      if (query.language != 'all' && work.language != query.language && !visual) return false;
-      if (excluded.isNotEmpty && work.isExcluded(excluded)) return false;
-      return wanted.every(work.isExcluded);
-    }).toList();
-    return GalleryBatch(ids: matches.skip(offset).take(count).toList(), hasMore: matches.length > offset + count);
+    final work = cachedPreview(id);
+    if (work == null) return true;
+    if (work.type.isNotEmpty && !selected.contains(work.type)) return false;
+    final visual = query.allowsLanguageExceptions && _visualCategories.contains(work.type);
+    if (query.language != 'all' && work.language != query.language && !visual) return false;
+    if (excluded.isNotEmpty && work.isExcluded(excluded)) return false;
+    return wanted.every(work.isExcluded);
+  }
+
+  /// A toplist pages through the site's ranking, a few pages per request at most.
+  Future<GalleryBatch> _toplistList(
+    GalleryQuery query, {
+    required Set<String> selected,
+    required int toplist,
+    required int offset,
+    required int count,
+    required String site,
+  }) async {
+    var list = _toplists[toplist] ?? _Toplist();
+    if (DateTime.now().difference(list.created) > const Duration(minutes: 30)) list = _Toplist();
+    var requests = 0;
+    List<int> found() => list.ids.where((id) => _matches(id, query, selected)).toList();
+    while (list.more && requests < 4 && found().length < offset + count) {
+      final url = ContentURL.withQueryItems('${site}toplist.php', [('tl', '$toplist'), ('p', '${list.page}')]);
+      final linked = links(await _page(url, site));
+      keys.rememberAll([for (final link in linked) (link.id, link.key)]);
+      await _previewsFor(linked, site);
+      final known = list.ids.toSet();
+      final added = [
+        for (final link in linked)
+          if (!known.contains(link.id)) link.id,
+      ];
+      list.ids.addAll(added);
+      list.page += 1;
+      list.more = added.isNotEmpty && list.page < 200;
+      requests += 1;
+    }
+    _toplists[toplist] = list;
+    final matched = found();
+    return GalleryBatch(ids: matched.skip(offset).take(count).toList(), hasMore: matched.length > offset + count || list.more);
   }
 
   Future<String> _page(Uri url, String site) async {
@@ -255,8 +310,33 @@ class KeyedCatalogSource {
     }
     _prepare(site);
     final text = utf8.decode(result.data, allowMalformed: true);
-    if (asksForSignIn(text) || text.trim().characters.length < 64) throw ContentError.signInRequired;
+    final error = pageError(text);
+    if (error != null) {
+      // A refused access cookie is dropped, so the next request is handed a fresh one.
+      final host = ContentURL.parse(site)?.host.toLowerCase();
+      if (error == ContentError.signInRequired && isRestrictedNotice(text) && host != null) SiteAccount.forget(SiteAccount.accessCookie, host: host);
+      throw error;
+    }
     return text;
+  }
+
+  /// What a page says instead of the listing or work it was asked for.
+  static ContentError? pageError(String text) {
+    // These notices are whole pages of their own; a listing that merely names them in a title is not one.
+    if (utf8.encode(text).length < 10000) {
+      final lowered = text.toLowerCase();
+      if (lowered.contains('temporarily banned') || lowered.contains('ban expires in')) return ContentError.temporarilyBlocked;
+      if (lowered.contains('exceeded your image viewing limits') || lowered.contains('you have reached the image limit')) return ContentError.imageLimit;
+    }
+    if (isRestrictedNotice(text) || asksForSignIn(text) || text.trim().characters.length < 64) return ContentError.signInRequired;
+    return null;
+  }
+
+  /// The wall a members-only catalog shows an account whose access cookie it does not accept.
+  static bool isRestrictedNotice(String text) {
+    if (utf8.encode(text).length >= 10000) return false;
+    final lowered = text.toLowerCase();
+    return lowered.contains('kokomade.') || (lowered.contains('access to ') && lowered.contains(' is restricted'));
   }
 
   // MARK: Works
@@ -320,13 +400,83 @@ class KeyedCatalogSource {
     }
     final url = ContentURL.parse('${site}g/$id/$key/${page > 0 ? '?p=$page' : ''}');
     if (url == null) throw ContentError.invalidQuery;
-    final found = entries(await _page(url, site), id);
+    final text = await _page(url, site);
+    final found = entries(text, id);
     if (found.isEmpty) throw ContentError.galleryNotFound;
     final perPage = page == 0 ? found.length : (_details[id]?.perPage ?? found.length);
     if (_details.length >= 64) _details.remove(_details.entries.reduce((a, b) => a.value.created.isBefore(b.value.created) ? a : b).key);
     final detail = _Detail(perPage: perPage < 1 ? 1 : perPage, entries: found);
+    if (page == 0) {
+      detail.extras = KeyedWorkPage.extras(text);
+      detail.apiKey = KeyedWorkPage.apiKey(text);
+    }
     _details[id] = detail;
     return detail;
+  }
+
+  // MARK: Ratings, comments and torrents
+
+  Future<WorkExtras> extras(int id, {required String site}) async {
+    _prepare(site);
+    final key = await keyFor(id, site: site);
+    var detail = await _detailPage(id, key: key, page: 0, site: site);
+    if (detail.extras == null) {
+      // A page cached by a later page's request lacks what only the first page says.
+      _details.remove(id);
+      detail = await _detailPage(id, key: key, page: 0, site: site);
+    }
+    return detail.extras ?? WorkExtras();
+  }
+
+  Future<List<WorkComment>> allComments(int id, {required String site}) async {
+    _prepare(site);
+    final key = await keyFor(id, site: site);
+    final url = ContentURL.parse('${site}g/$id/$key/?hc=1');
+    if (url == null) throw ContentError.invalidQuery;
+    return KeyedWorkPage.comments(await _page(url, site));
+  }
+
+  Future<List<WorkTorrent>> torrents(int id, {required String site}) async {
+    final info = await extras(id, site: site);
+    if (info.torrentCount <= 0) return [];
+    final key = await keyFor(id, site: site);
+    // The work page names the torrent page; only a page on the connected website is followed.
+    final named = info.torrentsURL;
+    final url = named != null && named.host.toLowerCase() == ContentURL.parse(site)?.host.toLowerCase()
+        ? named
+        : ContentURL.withQueryItems('${site}gallerytorrents.php', [('gid', '$id'), ('t', key)]);
+    return KeyedWorkPage.torrents(await _page(url, site));
+  }
+
+  Future<(double, int)> rate(int id, int halfStars, {required String site}) async {
+    _prepare(site);
+    if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
+    if (halfStars < 1 || halfStars > 10) throw ContentError.invalidQuery;
+    final key = await keyFor(id, site: site);
+    var detail = await _detailPage(id, key: key, page: 0, site: site);
+    if (detail.apiKey == null) {
+      _details.remove(id);
+      detail = await _detailPage(id, key: key, page: 0, site: site);
+    }
+    final credentials = detail.apiKey;
+    if (credentials == null) throw ContentError.signInRequired;
+    final object = await _api({
+      'method': 'rategallery',
+      'apiuid': credentials.uid,
+      'apikey': credentials.key,
+      'gid': id,
+      'token': key,
+      'rating': halfStars,
+    }, site);
+    final average = object['rating_avg'];
+    if (average is! num) throw ContentError.invalidResponse;
+    final count = object['rating_cnt'] is num ? (object['rating_cnt'] as num).toInt() : 0;
+    final info = _details[id]?.extras;
+    if (info != null) {
+      info.rating = average.toDouble();
+      info.ratingCount = count;
+    }
+    return (average.toDouble(), count);
   }
 
   Future<KeyedEntry> _entry(int id, {required int index, required String site, required bool refresh}) async {
@@ -521,11 +671,12 @@ class KeyedCatalogSource {
 
   // MARK: Account favorites
 
-  /// One page of the signed-in account's favorites, newest first.
-  Future<(List<int>, String?)> favorites({String? after, required String site}) async {
+  /// One page of the signed-in account's favorites, newest first, from one category or all.
+  Future<(List<int>, String?)> favorites({String? after, int? category, required String site}) async {
     _prepare(site);
     if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
-    final url = ContentURL.withQueryItems('${site}favorites.php', after == null ? null : [('next', after)]);
+    final items = [if (category != null && category >= 0 && category <= 9) ('favcat', '$category'), if (after != null) ('next', after)];
+    final url = ContentURL.withQueryItems('${site}favorites.php', items.isEmpty ? null : items);
     final text = await _page(url, site);
     final found = links(text);
     keys.rememberAll([for (final link in found) (link.id, link.key)]);
@@ -534,12 +685,61 @@ class KeyedCatalogSource {
     return ([for (final link in found) link.id], found.isEmpty || cursor == after ? null : cursor);
   }
 
-  Future<void> setFavorite(int id, {required bool saved, required String site}) async {
+  /// How many images the account has viewed against its allowance, when the site shows it.
+  Future<(int, int)?> imageAllowance({required String site}) async {
+    _prepare(site);
+    final url = ContentURL.parse('${site}home.php');
+    if (!SiteAccount.isSignedIn || url == null) return null;
+    try {
+      return imageAllowanceIn(await _page(url, site));
+    } on ContentError catch (error) {
+      if (error.isUnavailable(404)) return null;
+      rethrow;
+    }
+  }
+
+  static (int, int)? imageAllowanceIn(String text) {
+    final used = int.tryParse((KeyedWorkPage.firstCapture(r'currently at\s*<strong>([0-9,]+)</strong>', text) ?? '').replaceAll(',', ''));
+    final limit = int.tryParse((KeyedWorkPage.firstCapture(r'limit of\s*<strong>([0-9,]+)</strong>', text) ?? '').replaceAll(',', ''));
+    if (used == null || limit == null || limit <= 0) return null;
+    return (used, limit);
+  }
+
+  /// The account's favorites categories with their names and how many works each holds.
+  Future<List<FavoriteCategory>> favoriteCategories({required String site}) async {
+    _prepare(site);
+    if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
+    final url = ContentURL.parse('${site}favorites.php');
+    if (url == null) throw ContentError.invalidQuery;
+    final categories = favoriteCategoriesIn(await _page(url, site));
+    if (categories.isEmpty) throw ContentError.unsupportedFormat;
+    return categories;
+  }
+
+  /// Category rows at the top of the favorites page: each names its number in its link, then
+  /// shows its count, its icon and its name.
+  static List<FavoriteCategory> favoriteCategoriesIn(String text) {
+    final matches = RegExp(r'<div class="fp(?: [^"]*)?"[^>]*favcat=([0-9])[^>]*>').allMatches(text).toList();
+    final result = <FavoriteCategory>[];
+    for (var index = 0; index < matches.length; index++) {
+      final number = int.parse(matches[index].group(1)!);
+      if (result.any((category) => category.id == number)) continue;
+      final start = matches[index].end;
+      final end = index + 1 < matches.length ? matches[index + 1].start : (start + 800).clamp(0, text.length);
+      final texts = KeyedWorkPage.textsInDivs(text.substring(start, end));
+      final count = int.tryParse((texts.firstOrNull ?? '').replaceAll(',', '')) ?? 0;
+      final name = texts.skip(1).lastWhere((value) => value.isNotEmpty && int.tryParse(value.replaceAll(',', '')) == null, orElse: () => '');
+      result.add(FavoriteCategory(id: number, name: name.isEmpty ? '$number' : name, count: count));
+    }
+    return result..sort((a, b) => a.id.compareTo(b.id));
+  }
+
+  Future<void> setFavorite(int id, {required bool saved, int category = 0, required String site}) async {
     _prepare(site);
     if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
     final key = await keyFor(id, site: site);
     final url = ContentURL.withQueryItems('${site}gallerypopups.php', [('gid', '$id'), ('t', key), ('act', 'addfav')]);
-    final form = saved ? 'favcat=0&favnote=&apply=Add+to+Favorites&update=1' : 'favcat=favdel&favnote=&update=1';
+    final form = saved ? 'favcat=${category.clamp(0, 9)}&favnote=&apply=Add+to+Favorites&update=1' : 'favcat=favdel&favnote=&update=1';
     final result = await transport.post(url, body: utf8.encode(form), contentType: 'application/x-www-form-urlencoded', limit: 1000000);
     _prepare(site);
     if (asksForSignIn(utf8.decode(result.data, allowMalformed: true))) throw ContentError.signInRequired;
@@ -754,6 +954,7 @@ class KeyedCatalogSource {
           if (namespace != 'language' && namespace != 'artist') '${_localNamespace(namespace)}:$value',
       ],
       pages: pages,
+      pageCount: (_number(item['filecount']) ?? 0).clamp(0, 10000),
     );
     final files = _number(item['filecount']) ?? 0;
     return (work, files.clamp(0, 10000));

@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'gallery_content.dart';
+import 'keyed_work_extras.dart';
 import 'manga_content_source.dart';
 import 'manga_urls.dart';
 
 /// `SiteContent`: one connected website's works, read inside its scope with caches of its
 /// own, whichever website is checked.
-class SiteContent extends ContentProviding {
+class SiteContent extends ContentProviding implements WorkExtrasProviding {
   SiteContent(this.site, {MangaContentSource? inner}) : _inner = inner ?? MangaContentSource();
   final String site;
   final MangaContentSource _inner;
@@ -26,6 +27,14 @@ class SiteContent extends ContentProviding {
   NativeGallery? cachedGallery(int id) => SiteScope.run(site, () => _inner.cachedGallery(id));
   @override
   NativeGallery? cachedPreview(int id) => SiteScope.run(site, () => _inner.cachedPreview(id));
+  @override
+  Future<WorkExtras?> extras(int id) => SiteScope.run(site, () => _inner.extras(id));
+  @override
+  Future<List<WorkComment>> allComments(int id) => SiteScope.run(site, () => _inner.allComments(id));
+  @override
+  Future<List<WorkTorrent>> torrents(int id) => SiteScope.run(site, () => _inner.torrents(id));
+  @override
+  Future<(double, int)> rate(int id, int halfStars) => SiteScope.run(site, () => _inner.rate(id, halfStars));
 
   static final _sources = <String, SiteContent>{};
 

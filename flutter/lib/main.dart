@@ -22,9 +22,9 @@ import 'core/content/content_environment.dart';
 import 'core/content/content_transport.dart';
 import 'core/content/encrypted_hello_fetcher.dart';
 import 'core/content/fixture_content_source.dart';
-import 'core/content/manga_content_source.dart';
 import 'core/content/manga_urls.dart';
 import 'core/content/site_account.dart';
+import 'core/content/site_fallback_content.dart';
 import 'core/downloads/download_store.dart';
 import 'core/storage/app_database.dart';
 import 'core/storage/app_storage.dart';
@@ -192,6 +192,9 @@ Future<AppServices> _launch() async {
   if (AppPlatform.hasWebView) BooruWebTransport.factory = WebViewBooruPage.new;
   BooruWebTransport.preferences = preferences.defaults;
   final support = await loadingSupport;
+  // Keys of numbered works and where works opened elsewhere outlive the session.
+  GalleryKeys.shared = GalleryKeys(file: File('${support.path}/gallery-keys.json'));
+  WorkSiteMemory.shared = WorkSiteMemory(file: File('${support.path}/work-sites.json'));
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
@@ -207,7 +210,8 @@ Future<AppServices> _launch() async {
     booruThumbnails: thumbnails,
     booruViewerImages: BooruImageCache.sharedViewer = BooruImageCache.viewer(caches),
     booruDownloads: BooruMediaDownloader(),
-    content: ContentEnvironment(browserPreferences: preferences.defaults, source: MangaContentSource.shared),
+    // Saved works open from whichever connected website still carries them.
+    content: ContentEnvironment(browserPreferences: preferences.defaults, source: SiteFallbackContent.shared),
     downloadsDirectory: DownloadStore.defaultDirectory,
     syncDirectory: Directory('${support.path}/drive-sync'),
     version: await loadingVersion,

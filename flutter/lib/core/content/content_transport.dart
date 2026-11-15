@@ -85,7 +85,36 @@ class ContentTransport {
   final _browserOrigins = <String>{};
   final _foreignRedirects = <String, Uri>{};
 
-  static const _userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1';
+  static const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1';
+
+  static String? cookieHeader({String? account, ClearanceEntry? clearance}) {
+    final parts = <String>[
+      if (account != null && account.isNotEmpty) account,
+      if (clearance != null && clearance.cookies.isNotEmpty) ([...clearance.cookies.keys]..sort()).map((name) => '$name=${clearance.cookies[name]}').join('; '),
+    ];
+    return parts.isEmpty ? null : parts.join('; ');
+  }
+
+  /// A website's bot check answers in its own way instead of with the page.
+  static bool isBotCheck(ContentResponse response) {
+    if (response.header('cf-mitigated')?.toLowerCase() == 'challenge') return true;
+    if (![403, 429, 503].contains(response.statusCode) || !(response.header('server')?.toLowerCase().contains('cloudflare') ?? false)) return false;
+    return response.mimeType?.contains('html') ?? false;
+  }
+
+  static final _challenged = <String, Uri>{};
+
+  /// The page a website's bot check stopped last, so the check can be passed on that page.
+  static Uri? challengedPage(String host) => _challenged[SiteClearance.domain(host)];
+
+  static void clearChallenge(String host) => _challenged.remove(SiteClearance.domain(host));
+
+  static void _recordChallenge(Uri url) {
+    if (url.host.isEmpty) return;
+    _challenged[SiteClearance.domain(url.host)] = url;
+    // The check asked again, so whatever it accepted before no longer counts.
+    SiteClearance.remove(url.host);
+  }
 
   static bool allows(Uri url) {
     if (url.scheme != 'https' || !ContentURL.hasNoCredentials(url) || url.host.isEmpty) return false;
@@ -219,13 +248,15 @@ class ContentTransport {
     List<int>? body,
     String? contentType,
   }) async {
+    final clearance = SiteClearance.entryFor(url);
     final headers = <String, String>{
-      'user-agent': _userAgent,
+      // A passed bot check counts only for the browser that passed it.
+      'user-agent': clearance?.userAgent ?? userAgent,
       'referer': galleryID == null ? MangaUrls.home : MangaUrls.readerUrl(galleryID),
       'content-type': ?contentType,
       if (range != null) 'range': 'bytes=${range.$1}-${range.$2 - 1}',
     };
-    final cookies = SiteAccount.cookieHeader(url);
+    final cookies = cookieHeader(account: SiteAccount.cookieHeader(url), clearance: clearance);
     if (cookies != null) headers['cookie'] = cookies;
     var method = body == null ? 'GET' : 'POST';
     var current = url;
@@ -252,6 +283,10 @@ class ContentTransport {
       SiteAccount.storeResponse(current, response.headers['set-cookie'] ?? const []);
       if (![200, 206, 416].contains(response.statusCode)) {
         reply.abort?.call();
+        if (isBotCheck(response)) {
+          _recordChallenge(url);
+          throw ContentError.verificationRequired;
+        }
         throw ContentError.unavailable(response.statusCode);
       }
       if (response.statusCode == 416) {
