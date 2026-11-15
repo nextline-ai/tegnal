@@ -310,6 +310,36 @@ void main() {
     }, reason: "The website's favorites stay as they were");
   });
 
+  test('a category emptied on the website takes its folder with it', () async {
+    await sync.setUp(host);
+    site.members.remove(3);
+    await sync.sync(host);
+    expect(database.listFolders().where((folder) => folder.name == 'Favorites 1'), isEmpty);
+    expect(worksIn('Favorites 0'), [1, 2]);
+  });
+
+  test('a folder emptied in the app goes once Sync Now reads the website, and the category is free again', () async {
+    await sync.setUp(host);
+    final mine = database.createFolder(name: 'Mine');
+    database.addWork(3, mine.id!);
+    database.removeWorkFromFolder(3, folderNamed('Favorites 1'));
+    await sync.sync(host, pull: false);
+    expect(site.members[3], {2}, reason: 'Saved in another folder, it moves to the category kept for other folders');
+    expect(database.listFolders().where((folder) => folder.name == 'Favorites 1'), hasLength(1), reason: 'Sending alone leaves folders be');
+    await sync.sync(host);
+    expect(database.listFolders().where((folder) => folder.name == 'Favorites 1'), isEmpty);
+    expect(sync.store.state(host)?.folders.containsKey(1), isFalse);
+    expect(database.folderIDs(3), [mine.id], reason: 'The work stays where it was put');
+  });
+
+  test('an emptied smart folder stays, so its tags are not lost', () async {
+    await sync.setUp(host);
+    database.saveRule(FolderRule(folder: database.identityOfFolder(folderNamed('Favorites 1')), query: 'language:korean', excluded: ''));
+    site.members.remove(3);
+    await sync.sync(host);
+    expect(database.listFolders().where((folder) => folder.name == 'Favorites 1'), hasLength(1));
+  });
+
   test('a category filled on the website later gets its own folder', () async {
     await sync.setUp(host);
     expect(sync.store.state(host)?.unassigned, 2);
