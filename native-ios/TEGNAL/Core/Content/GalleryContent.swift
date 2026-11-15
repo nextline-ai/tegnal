@@ -153,8 +153,12 @@ struct NativeGallery: Codable, Identifiable, Sendable {
         text.removeSubrange(match)
         if text.hasSuffix(";") { text.removeLast() }
         guard let jsonData = text.data(using: .utf8),
-              let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-              let files = json["files"] as? [[String: Any]], !files.isEmpty, files.count <= 10_000 else {
+              let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            throw ContentError.invalidResponse
+        }
+        // The site's own page answers a blocked work with its not-found page.
+        if flag(json["blocked"]) { throw ContentError.galleryNotFound }
+        guard let files = json["files"] as? [[String: Any]], !files.isEmpty, files.count <= 10_000 else {
             throw ContentError.invalidResponse
         }
         let pages = try files.enumerated().map { index, file -> GalleryPage in
@@ -409,6 +413,7 @@ struct GalleryBatch: Sendable {
 protocol ContentProviding: Sendable {
     func suggestions(for token: String) async throws -> [TagSuggestion]
     func gallery(_ id: Int64) async throws -> NativeGallery
+    func preview(_ id: Int64) async throws -> NativeGallery
     func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch
     func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data
     func cachedGallery(_ id: Int64) -> NativeGallery?
@@ -418,6 +423,9 @@ protocol ContentProviding: Sendable {
 extension ContentProviding {
     func cachedGallery(_ id: Int64) -> NativeGallery? { nil }
     func cachedPreview(_ id: Int64) -> NativeGallery? { cachedGallery(id) }
+    /// What a list card shows: title, tags, cover and page count. Sources whose works are costly to
+    /// open answer it more cheaply than `gallery`.
+    func preview(_ id: Int64) async throws -> NativeGallery { try await gallery(id) }
 }
 
 enum ContentRoute: Hashable {
@@ -446,6 +454,13 @@ enum ContentRoute: Hashable {
         if url.path.hasPrefix("/g/"), let link = KeyedCatalogSource.links(in: url.path).first {
             GalleryKeys.shared.remember(link.id, key: link.key)
             return .gallery(link.id)
+        }
+        if url.path.hasPrefix("/mpv/"), let link = KeyedCatalogSource.viewerLinks(in: url.path).first {
+            GalleryKeys.shared.remember(link.id, key: link.key)
+            return .gallery(link.id)
+        }
+        if url.path.hasPrefix("/s/"), let link = KeyedCatalogSource.pageLinks(in: url.path).first {
+            return .reader(link.id, link.page)
         }
         // The site's own search form writes spaces as plus signs.
         if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQueryItems?.first(where: { $0.name == "f_search" })?.value,

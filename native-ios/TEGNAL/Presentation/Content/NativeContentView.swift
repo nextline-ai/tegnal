@@ -1654,7 +1654,7 @@ final class GalleryFeedPreview {
             do {
                 let gallery: NativeGallery
                 if let cached = self.gallery { gallery = cached }
-                else { gallery = try await source.gallery(id) }
+                else { gallery = try await source.preview(id) }
                 try Task.checkCancellation()
                 self.setGallery(gallery)
                 if let page = gallery.pages.first {

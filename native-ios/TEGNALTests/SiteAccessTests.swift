@@ -216,6 +216,21 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertFalse(ContentError.allowsOtherSite(CancellationError()))
     }
 
+    func testTheNoAccessMarkAndBotCheckCookiesAreNeverSentBack() throws {
+        resolveKeyed("members.example")
+        let pasted = SiteAccount.parseCookies("ipb_member_id=7; ipb_pass_hash=0123456789abcdef0123456789abcdef; yay=louder; sk=abc123")
+        XCTAssertEqual(pasted.site, ["sk": "abc123"], "The mark a visit without access leaves is not part of the account")
+        XCTAssertTrue(SiteAccount.signIn(pasted: pasted, host: "members.example"))
+        let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://members.example/")!, statusCode: 200, httpVersion: nil,
+                                                     headerFields: ["Set-Cookie": "yay=louder; path=/, __cf_bm=bot; path=/, star=1-2; path=/"]))
+        SiteAccount.store(response)
+        let sent = SiteAccount.cookies(forSite: "members.example")
+        XCTAssertNil(sent["yay"])
+        XCTAssertNil(sent["__cf_bm"], "A bot check's cookie travels only with the browser that earned it")
+        XCTAssertEqual(sent["star"], "1-2")
+        XCTAssertEqual(sent["sk"], "abc123")
+    }
+
     func testAStalePageKeyIsNotASignInWall() {
         XCTAssertEqual(KeyedCatalogSource.pageError("Keep trying."), .galleryNotFound,
                        "A page link whose key no longer matches is answered in two words, which says nothing about the account")

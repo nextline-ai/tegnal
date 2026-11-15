@@ -31,6 +31,17 @@ final class GalleryKeys: @unchecked Sendable {
 
     func remember(_ id: Int64, key: String) { remember([(id, key)]) }
 
+    /// Forgets a key the site no longer accepts, so the number is searched again.
+    func forget(_ id: Int64) {
+        let changed = lock.withLock { () -> Bool in
+            loadIfNeeded()
+            guard keys.removeValue(forKey: id) != nil else { return false }
+            order.removeAll { $0 == id }
+            return true
+        }
+        if changed { scheduleSave() }
+    }
+
     func remember(_ pairs: [(Int64, String)]) {
         let changed = lock.withLock { () -> Bool in
             loadIfNeeded()
@@ -215,7 +226,7 @@ enum SiteAccount {
 
     /// Cookies an account carries besides its identity: access, settings key and perks.
     static func keepsForAccount(_ name: String) -> Bool {
-        [accessCookie, "sk", "star", "hath_perks", "yay", "iq"].contains(name)
+        [accessCookie, "sk", "star", "hath_perks", "iq"].contains(name)
     }
 
     private static func isCookieName(_ name: String) -> Bool {
@@ -299,8 +310,9 @@ enum SiteAccount {
     static func cookies(forSite host: String) -> [String: String] {
         let stored = lock.withLock { load() }
         var values = stored.sessions?[host] ?? [:]
-        // What the site set later, such as a renewed session, replaces what sign-in kept.
-        values.merge((stored.sites[host] ?? [:]).filter { !isPlaceholder(name: $0.key, value: $0.value) }) { _, newer in newer }
+        // What the site set later, such as a renewed session, replaces what sign-in kept. Cookies
+        // kept before they were known to be ignored are not sent either.
+        values.merge((stored.sites[host] ?? [:]).filter { !isPlaceholder(name: $0.key, value: $0.value) && !ignoresCookie($0.key) && !SiteClearance.isClearanceCookie($0.key) }) { _, newer in newer }
         values["nw"] = "1"
         if signedIn(stored.identity) { values.merge(stored.identity) { _, identity in identity } }
         return values
@@ -317,7 +329,9 @@ enum SiteAccount {
     static func store(_ response: HTTPURLResponse) {
         guard let url = response.url, applies(to: url),
               let fields = response.allHeaderFields as? [String: String] else { return }
-        let received = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url).filter { !isIdentity($0.name) && !ignoresCookie($0.name) }
+        // A bot check's cookies are kept with the browser that earned them, never here.
+        let received = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url)
+            .filter { !isIdentity($0.name) && !ignoresCookie($0.name) && !SiteClearance.isClearanceCookie($0.name) }
         guard !received.isEmpty else { return }
         let host = MangaUrls.configuredHost
         lock.withLock {
@@ -336,9 +350,11 @@ enum SiteAccount {
         }
     }
 
-    /// Cookies a site sets that are never kept: the content filter it sets itself, and a tracking
-    /// cookie other clients drop because sending it back changes how the site answers.
-    static func ignoresCookie(_ name: String) -> Bool { name == "nw" || name == "__utmp" }
+    /// Cookies a site sets that are never kept: the content filter it sets itself, a tracking
+    /// cookie other clients drop because sending it back changes how the site answers, and the mark
+    /// a members-only catalog leaves on a visit without access, which other clients delete at every
+    /// launch and sign-in so it can't keep an account that has access out.
+    static func ignoresCookie(_ name: String) -> Bool { ["nw", "__utmp", "yay"].contains(name) }
 
     static func registrableDomain(_ host: String) -> String {
         let labels = host.split(separator: ".")

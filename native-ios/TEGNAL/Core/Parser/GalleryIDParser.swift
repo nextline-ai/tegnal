@@ -640,9 +640,10 @@ public enum GalleryIDParser {
 
         func addFrom(_ value: String, depth: Int = 0) {
             guard depth <= 3 else { return }
-            let keyed = KeyedCatalogSource.links(in: value)
+            let keyed = KeyedCatalogSource.links(in: value) + KeyedCatalogSource.viewerLinks(in: value)
             GalleryKeys.shared.remember(keyed.map { ($0.id, $0.key) })
             for link in keyed where seen.insert(link.id).inserted { ids.append(link.id) }
+            for link in KeyedCatalogSource.pageLinks(in: value) where seen.insert(link.id).inserted { ids.append(link.id) }
             let nsValue = value as NSString
             let matches = mangaIdRegex.matches(in: value, range: NSRange(location: 0, length: nsValue.length))
             for match in matches {

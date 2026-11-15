@@ -307,14 +307,18 @@ public actor CoverQueueActor {
         }
 
         let (source, images) = reader(for: existing?.site)
+        // Title, tags, page count and a first-page cover are what a card shows, which some websites
+        // answer without opening the work; a cover chosen from a later page needs the work's pages.
+        let firstPageCover = (existing?.thumbPage ?? 1) <= 1
         let gallery: NativeGallery
         do {
             if let fallback = source as? SiteFallbackContent {
                 // Every read from a website that blocks bulk reading, answered or not, waits longer
                 // before the next.
                 defer { readFromBlockingSite = fallback.tookBlockingRead(galleryId) }
-                gallery = try await fallback.gallery(galleryId, preferring: existing?.site, inBulk: true)
-            } else { gallery = try await source.gallery(galleryId) }
+                gallery = firstPageCover ? try await fallback.preview(galleryId, preferring: existing?.site, inBulk: true)
+                    : try await fallback.gallery(galleryId, preferring: existing?.site, inBulk: true)
+            } else { gallery = firstPageCover ? try await source.preview(galleryId) : try await source.gallery(galleryId) }
         } catch ContentError.unavailable(let status) where status == 404 || status == 410 {
             try Task.checkCancellation()
             // Only a missing gallery document means the work is gone. A 404

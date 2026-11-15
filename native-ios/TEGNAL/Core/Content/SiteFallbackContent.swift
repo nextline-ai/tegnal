@@ -166,12 +166,24 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
 
     func gallery(_ id: Int64) async throws -> NativeGallery { try await gallery(id, preferring: nil) }
 
+    func preview(_ id: Int64) async throws -> NativeGallery { try await preview(id, preferring: nil) }
+
     /// `inBulk` reads for a background fill. Websites that block bulk reading are read last, and
     /// only for a work every other connected website says it no longer has; a work the others
     /// could not be asked about is left for later.
     func gallery(_ id: Int64, preferring preferred: String?, inBulk: Bool = false) async throws -> NativeGallery {
+        try await read(id, preferring: preferred, inBulk: inBulk) { try await $0.gallery(id) }
+    }
+
+    /// A work as a card or a fill needs it, from the same websites in the same order as `gallery`.
+    func preview(_ id: Int64, preferring preferred: String?, inBulk: Bool = false) async throws -> NativeGallery {
+        try await read(id, preferring: preferred, inBulk: inBulk) { try await $0.preview(id) }
+    }
+
+    private func read(_ id: Int64, preferring preferred: String?, inBulk: Bool,
+                      _ body: (any ContentProviding) async throws -> NativeGallery) async throws -> NativeGallery {
         let order = candidates(for: id, preferring: preferred)
-        guard !order.isEmpty else { return try await primary.gallery(id) }
+        guard !order.isEmpty else { return try await body(primary) }
         let skipped = inBulk ? CoverFillGuard.skipped(among: sites().all, blocks: blocksBulkReading) : []
         let others = order.filter { !skipped.contains($0) }, last = order.filter(skipped.contains)
         var firstError: Error?
@@ -185,7 +197,7 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
             }
             if blocking { _ = lock.withLock { blockingReads.insert(id) } }
             do {
-                let gallery = try await source(for: site).gallery(id)
+                let gallery = try await body(source(for: site))
                 record(id, site: site, afterFailure: firstError != nil)
                 return gallery
             } catch {
