@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'combined_catalog.dart';
 import 'content_errors.dart';
 import 'content_url.dart';
+import 'cover_queue.dart';
 import 'gallery_content.dart';
 import 'keyed_work_extras.dart';
 import 'manga_content_source.dart';
@@ -123,10 +124,12 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
     ContentProviding Function(String site)? sourceFor,
     (String, List<String>) Function()? sites,
     WorkSiteMemory? memory,
+    bool Function(String site)? blocksBulkReading,
   }) : _primaryOverride = primary,
        _sourceFor = sourceFor ?? SiteContent.of,
        _sites = sites ?? (() => (ComicSites.active, ComicSites.all)),
-       _memoryOverride = memory;
+       _memoryOverride = memory,
+       _blocksBulkReading = blocksBulkReading ?? CoverFillGuard.blocksBulkReading;
 
   static SiteFallbackContent shared = SiteFallbackContent();
 
@@ -135,6 +138,7 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
   final ContentProviding Function(String site) _sourceFor;
   final (String, List<String>) Function() _sites;
   final WorkSiteMemory? _memoryOverride;
+  final bool Function(String site) _blocksBulkReading;
 
   ContentProviding get primary => _primaryOverride ?? MangaContentSource.shared;
   WorkSiteMemory get memory => _memoryOverride ?? WorkSiteMemory.shared;
@@ -178,9 +182,14 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
 
   ContentProviding _source(String site) => site == _sites().$1 ? primary : _sourceFor(site);
 
+  /// `inBulk` reads for a background fill: websites that block bulk reading are skipped while
+  /// another connected website can be read, and a work only they carry is left for later.
   @override
-  Future<NativeGallery> gallery(int id, {String? preferring}) async {
-    final order = candidates(id, preferring: preferring);
+  Future<NativeGallery> gallery(int id, {String? preferring, bool inBulk = false}) async {
+    var order = candidates(id, preferring: preferring);
+    final skipped = inBulk ? CoverFillGuard.skipped(_sites().$2, blocks: _blocksBulkReading) : const <String>{};
+    final skips = order.any(skipped.contains);
+    if (skips) order = order.where((site) => !skipped.contains(site)).toList();
     if (order.isEmpty) return primary.gallery(id);
     Object? firstError;
     StackTrace? firstTrace;
@@ -200,8 +209,16 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
         firstTrace ??= trace;
       }
     }
+    // Not missing: a skipped website may carry it.
+    if (skips) throw const LeftForBlockingSite();
     if (firstError != null) Error.throwWithStackTrace(firstError, firstTrace!);
     throw ContentError.galleryNotFound;
+  }
+
+  /// Whether every connected website blocks bulk reading, so a fill can read only from them.
+  bool get readsOnlyBlockingSites {
+    final all = _sites().$2;
+    return all.isNotEmpty && all.every(_blocksBulkReading);
   }
 
   void _record(int id, String site, {required bool afterFailure}) {

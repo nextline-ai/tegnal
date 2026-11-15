@@ -736,6 +736,30 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
 
+    func testFillingManyWorksFromAWebsiteThatBlocksBulkReadingAsksFirst() {
+        let app = launch(extra: ["--bulk-fill-warning-test"])
+        selectMode(app, "manga")
+        app.tabBars.buttons["Settings"].tap()
+        reveal(app, "settings.libraryManagement").tap()
+        let fill = reveal(app, "library.fillMissing")
+        let caption = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "may block your network address")).firstMatch
+        XCTAssertTrue(caption.waitForExistence(timeout: 5), "The fill row says why it asks first")
+        let warning = app.alerts["Add Another Website First?"]
+        fill.tap()
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        XCTAssertTrue(warning.buttons["Fill Slowly Anyway"].exists)
+        warning.buttons["Later"].tap()
+        XCTAssertFalse(warning.waitForExistence(timeout: 1))
+        // The fill button asks again; adding a website opens the editor.
+        reveal(app, "library.fillMissing").tap()
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        warning.buttons["Add Website"].tap()
+        XCTAssertTrue(element(app, "booru.serverURL").waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertFalse(element(app, "booru.serverURL").waitForExistence(timeout: 2))
+        XCTAssertFalse(warning.exists, "Closing the editor without a new website doesn't ask again at once")
+    }
+
     func testComicCategoriesOnThumbnailsStartHiddenAndCanBeShown() {
         let app = launch()
         selectMode(app, "manga")

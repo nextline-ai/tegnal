@@ -1,15 +1,146 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
+import '../booru/booru_models.dart';
 import '../storage/app_database.dart';
+import '../support/preferences.dart';
 import '../storage/app_storage.dart';
 import 'combined_catalog.dart';
 import 'content_errors.dart';
 import 'gallery_content.dart';
 import 'manga_urls.dart';
 import 'site_fallback_content.dart';
+
+/// What the person chose the last time they were asked about filling, on this device.
+enum CoverFillDecision { none, declined, approved }
+
+/// Whether a fill may read now.
+sealed class CoverFillOutcome {
+  const CoverFillOutcome();
+}
+
+final class CoverFillRun extends CoverFillOutcome {
+  const CoverFillRun();
+  @override
+  bool operator ==(Object other) => other is CoverFillRun;
+  @override
+  int get hashCode => 1;
+}
+
+/// Wait for the person: they chose not to fill from these websites.
+final class CoverFillHold extends CoverFillOutcome {
+  const CoverFillHold();
+  @override
+  bool operator ==(Object other) => other is CoverFillHold;
+  @override
+  int get hashCode => 2;
+}
+
+/// Ask first: `pending` works would be read from `sites` alone.
+final class CoverFillAsk extends CoverFillOutcome {
+  const CoverFillAsk(this.pending, this.sites);
+  final int pending;
+  final List<String> sites;
+  @override
+  bool operator ==(Object other) => other is CoverFillAsk && other.pending == pending && listEquals(other.sites, sites);
+  @override
+  int get hashCode => Object.hash(pending, Object.hashAll(sites));
+  @override
+  String toString() => 'CoverFillAsk($pending, $sites)';
+}
+
+/// Thrown for a work none of the other websites carry, left for the person to open themselves.
+class LeftForBlockingSite implements Exception {
+  const LeftForBlockingSite();
+}
+
+/// `CoverFillGuard`: some comics websites, the keyed kind, block a network address that reads
+/// many works in a short time. Filling a library reads every work that lacks information, so it
+/// reads from the other connected websites when there are any, and asks first when there are none.
+abstract final class CoverFillGuard {
+  /// Works filled without asking even from such a website: a few new saves.
+  static const quietLimit = 10;
+
+  /// How long the fill waits after a work read from such a website.
+  static const slowDelay = Duration(seconds: 3);
+
+  /// The websites known to block bulk reading, by digest of their domain, for the time before
+  /// their protocol is learned (a members-only one shows signed-out visitors nothing to learn from).
+  static const _domains = {
+    '1b047e60dd887a4f010dc3ee0c3305b011d3ee6e40b8cd8d7a70c5fe74efc955',
+    '3eb2fe8d6f00dba0f737d0c6996400f0b2bd7b989f0d2922dadaaca1f3dddfe6',
+  };
+
+  static bool blocksBulkReadingWith(String site, MangaBackend? backend) {
+    if (backend == MangaBackend.keyed) return true;
+    final labels = BooruServer.bareHost(site).split('.');
+    if (labels.length < 2) return false;
+    final domain = labels.sublist(labels.length - 2).join('.');
+    return _domains.contains(sha256.convert(utf8.encode(domain)).toString());
+  }
+
+  static bool blocksBulkReading(String site) => blocksBulkReadingWith(site, ComicSites.backendOf(site));
+
+  /// The websites a fill skips: those that block bulk reading, while another website can be read.
+  static Set<String> skipped(List<String> sites, {bool Function(String site) blocks = blocksBulkReading}) {
+    final blocking = sites.where(blocks).toSet();
+    return blocking.length < sites.length ? blocking : <String>{};
+  }
+
+  static const _decisionKey = 'manga.bulkFill.decision';
+  static const _baselineKey = 'manga.bulkFill.baseline';
+
+  static (CoverFillDecision, int) decision([Preferences? defaults]) {
+    final store = defaults ?? ContentPreferences.defaults;
+    final name = store.string(_decisionKey);
+    return (CoverFillDecision.values.where((value) => value.name == name).firstOrNull ?? CoverFillDecision.none, store.integer(_baselineKey));
+  }
+
+  /// Keeps the person's answer with the number of works waiting when they gave it.
+  static void record(CoverFillDecision decision, int pending, [Preferences? defaults]) {
+    final store = defaults ?? ContentPreferences.defaults;
+    store.set(_decisionKey, decision.name);
+    store.set(_baselineKey, pending);
+  }
+
+  static void forget([Preferences? defaults]) {
+    final store = defaults ?? ContentPreferences.defaults;
+    store.remove(_decisionKey);
+    store.remove(_baselineKey);
+  }
+
+  /// Whether the fill may read now. A few works are read without asking; more are asked about,
+  /// and asked about again when the person presses the fill button themselves or more works are
+  /// waiting than when they last answered.
+  static CoverFillOutcome outcome({
+    required List<String> sites,
+    bool Function(String site) blocks = blocksBulkReading,
+    required int Function() pending,
+    required bool manual,
+    Preferences? defaults,
+  }) {
+    final blocking = sites.where(blocks).toList();
+    if (blocking.isEmpty || blocking.length != sites.length) return const CoverFillRun();
+    final waiting = pending();
+    if (waiting <= quietLimit) return const CoverFillRun();
+    var (decision, baseline) = CoverFillGuard.decision(defaults);
+    // Filled works lower the mark, so works saved afterwards are measured from what is left.
+    if (decision != CoverFillDecision.none && waiting < baseline) {
+      baseline = waiting;
+      record(decision, baseline, defaults);
+    }
+    final grew = waiting > baseline + quietLimit;
+    return switch (decision) {
+      CoverFillDecision.approved when !grew => const CoverFillRun(),
+      CoverFillDecision.declined when !grew && !manual => const CoverFillHold(),
+      _ => CoverFillAsk(waiting, blocking),
+    };
+  }
+}
 
 /// The device's thermal pressure, as `ProcessInfo.ThermalState` reports it.
 enum DeviceThermalState { nominal, fair, serious, critical }
@@ -67,6 +198,7 @@ class CoverQueueActor {
     ContentProviding? Function(String site)? siteSource,
     bool Function()? allowsBackfill,
     this.delay = const Duration(milliseconds: 150),
+    this.slowDelay = CoverFillGuard.slowDelay,
   }) : _thumbnailData = thumbnailData ?? ((page, galleryID) => source.image(page, galleryID: galleryID, thumbnail: true)),
        _siteSource = siteSource ?? ((site) => site != ComicSites.active && ComicSites.all.contains(site) ? SiteContent.of(site) : null),
        _allowsBackfill = allowsBackfill ?? (() => CoverQueuePolicy.allowsBackfill);
@@ -75,7 +207,11 @@ class CoverQueueActor {
   final Directory thumbsDir;
   final ContentProviding source;
   final Duration delay;
+  final Duration slowDelay;
   final CoverThumbnailData _thumbnailData;
+
+  /// Whether the last work was read from a website that blocks bulk reading, so the next waits longer.
+  bool _readFromBlockingSite = false;
 
   /// Another connected website's reader, for a work saved from it: it may carry works the
   /// checked website lacks. Null reads the work from the checked website.
@@ -101,7 +237,10 @@ class CoverQueueActor {
   /// Queues every saved work so a fix in how a site is read reaches works saved before it.
   int queueRefresh() => database.queueRefresh();
 
-  Future<void> start(CoverQueueState state, {bool downloadsEnabled = true}) async {
+  /// `mayRead` is asked before each batch: a run stops when works saved meanwhile would need the
+  /// person's answer first.
+  Future<void> start(CoverQueueState state, {bool downloadsEnabled = true, bool Function()? mayRead}) async {
+    final reads = mayRead ?? () => true;
     _isPaused = false;
     if (_isRunning) {
       _kickAgain = true;
@@ -136,9 +275,12 @@ class CoverQueueActor {
 
       // Each work is tried once per run; a queued refresh that fails is tried again next run.
       final attempted = <int>{};
+      // A website that has stopped answering this device ends the run: reading on would only
+      // keep it blocked for longer.
+      var refused = false;
       do {
         _kickAgain = false;
-        while (downloadsEnabled && !_isPaused && !_cancelled && _allowsBackfill()) {
+        while (downloadsEnabled && !refused && !_isPaused && !_cancelled && _allowsBackfill() && reads()) {
           final refresh = database.worksAwaitingRefresh(limit: 6, exclude: attempted);
           final batch = refresh.isEmpty ? database.worksNeedingFill(limit: 6, exclude: attempted).map((work) => work.galleryId).toList() : refresh;
           if (batch.isEmpty) break;
@@ -175,22 +317,29 @@ class CoverQueueActor {
                 // The website no longer has the work: nothing more to read.
                 if (refreshes) database.finishRefresh(galleryId);
                 state.update((state) => state.gone += 1);
+              } else if (error.kind == ContentErrorKind.temporarilyBlocked || error.kind == ContentErrorKind.imageLimit) {
+                refused = true;
+                state.update((state) {
+                  state.failed += 1;
+                  state.error = error.errorDescription;
+                });
               } else {
                 _recordFailure(galleryId, state);
               }
             } on Object {
               _recordFailure(galleryId, state);
             }
-            if (stopped) break;
+            if (stopped || refused) break;
 
             final remaining = database.countPendingFill();
             state.update((state) => state.remaining = remaining);
-            // Politeness delay
-            if (delay > Duration.zero) await Future<void>.delayed(delay);
+            // Politeness delay, longer after a website that blocks bulk reading
+            final wait = _readFromBlockingSite ? slowDelay : delay;
+            if (wait > Duration.zero) await Future<void>.delayed(wait);
             if (_cancelled) break;
           }
         }
-      } while (downloadsEnabled && _kickAgain && !_isPaused && !_cancelled && _allowsBackfill());
+      } while (downloadsEnabled && !refused && _kickAgain && !_isPaused && !_cancelled && _allowsBackfill() && reads());
     } on Object catch (error) {
       state.update((state) => state.error = error is ContentError ? error.errorDescription : '$error');
     }
@@ -209,6 +358,7 @@ class CoverQueueActor {
   }
 
   Future<void> fetchOne(int galleryId, {bool refresh = false}) async {
+    _readFromBlockingSite = false;
     _checkCancellation();
     var existing = database.getWork(galleryId);
 
@@ -249,7 +399,14 @@ class CoverQueueActor {
     final other = site == null || fallback != null ? null : _siteSource(site);
     final NativeGallery gallery;
     try {
-      gallery = fallback != null ? await fallback.gallery(galleryId, preferring: site) : await (other ?? source).gallery(galleryId);
+      if (fallback != null) {
+        // Websites that block bulk reading are skipped while another website can be read; with
+        // none, every read from them, answered or not, waits longer before the next.
+        _readFromBlockingSite = fallback.readsOnlyBlockingSites;
+        gallery = await fallback.gallery(galleryId, preferring: site, inBulk: true);
+      } else {
+        gallery = await (other ?? source).gallery(galleryId);
+      }
     } on ContentError catch (error) {
       if (!error.isUnavailable(404) && !error.isUnavailable(410)) rethrow;
       _checkCancellation();
@@ -317,9 +474,17 @@ class CoverQueue {
          allowsBackfill: allowsBackfill,
        );
 
-  CoverQueue.withActor(this.actor, {bool Function()? isSiteVerified, bool Function()? allowsBackfill})
-    : _isSiteVerified = isSiteVerified ?? (() => true),
-      _allowsBackfill = allowsBackfill ?? (() => CoverQueuePolicy.allowsBackfill);
+  CoverQueue.withActor(
+    this.actor, {
+    bool Function()? isSiteVerified,
+    bool Function()? allowsBackfill,
+    List<String> Function()? sites,
+    bool Function(String site)? blocksBulkReading,
+    this.decisions,
+  }) : _isSiteVerified = isSiteVerified ?? (() => true),
+       _allowsBackfill = allowsBackfill ?? (() => CoverQueuePolicy.allowsBackfill),
+       _sites = sites ?? (() => ComicSites.all),
+       _blocksBulkReading = blocksBulkReading ?? CoverFillGuard.blocksBulkReading;
 
   /// Offline fixtures and tests: nothing is fetched and nothing changes.
   factory CoverQueue.disabled({required AppDatabase database, required ContentProviding source}) => _DisabledCoverQueue(database: database, source: source);
@@ -328,6 +493,18 @@ class CoverQueue {
   final state = CoverQueueState();
   final bool Function() _isSiteVerified;
   final bool Function() _allowsBackfill;
+  final List<String> Function() _sites;
+  final bool Function(String site) _blocksBulkReading;
+
+  /// Where the person's answer is kept; the app's preferences unless a test passes its own.
+  final Preferences? decisions;
+
+  /// Asks the person before a fill reads many works from websites that block bulk reading; the
+  /// app shows the question over whatever is on screen and answers with [answerBulkFill].
+  void Function(int pending, List<String> sites)? askBeforeBulkFill;
+
+  /// The question is on screen.
+  bool asksBeforeBulkFill = false;
 
   Future<void>? _task;
   bool _active = true;
@@ -338,11 +515,13 @@ class CoverQueue {
   Future<void>? get running => _task;
 
   /// `startCoverQueue`: fills whatever is missing, or runs again once the current run ends.
-  void start() {
+  /// `manual` is the fill button: it asks again even after the person said not now.
+  void start({bool manual = false}) {
     if (!_active || !_allowsBackfill()) {
       _resume = true;
       return;
     }
+    if (!_mayFillInBulk(manual: manual)) return;
     if (_task != null) {
       _requested = true;
       return;
@@ -352,14 +531,45 @@ class CoverQueue {
       try {
         do {
           _requested = false;
-          await actor.start(state, downloadsEnabled: _isSiteVerified());
+          await actor.start(state, downloadsEnabled: _isSiteVerified(), mayRead: () => _outcome(manual: false) is CoverFillRun);
         } while (_requested && _active && _allowsBackfill());
         if (!_allowsBackfill()) _resume = true;
+        // Works saved during the run may have stopped it to ask first.
+        if (_active) _mayFillInBulk(manual: false);
       } finally {
         if (identical(_task, task)) _task = null;
       }
     }();
     _task = task;
+  }
+
+  CoverFillOutcome _outcome({required bool manual}) =>
+      CoverFillGuard.outcome(sites: _sites(), blocks: _blocksBulkReading, pending: actor.database.countPendingFill, manual: manual, defaults: decisions);
+
+  /// Whether the fill may read now, asking first when every connected website blocks bulk
+  /// reading and many works are waiting. Other websites, when connected, are read instead.
+  bool _mayFillInBulk({required bool manual}) {
+    if (!_isSiteVerified()) return true;
+    switch (_outcome(manual: manual)) {
+      case CoverFillRun():
+        return true;
+      case CoverFillHold():
+        return false;
+      case CoverFillAsk(:final pending, :final sites):
+        final ask = askBeforeBulkFill;
+        if (!asksBeforeBulkFill && ask != null) {
+          asksBeforeBulkFill = true;
+          ask(pending, sites);
+        }
+        return false;
+    }
+  }
+
+  /// The person's answer to filling from a website that blocks bulk reading.
+  void answerBulkFill(CoverFillDecision decision, int pending) {
+    asksBeforeBulkFill = false;
+    CoverFillGuard.record(decision, pending, decisions);
+    if (decision == CoverFillDecision.approved) start();
   }
 
   /// `refreshSavedWorkInformation`: fetches every saved work's information again.
@@ -377,7 +587,7 @@ class CoverQueue {
       actor.resume();
       state.update((state) => state.isPaused = false);
     } else {
-      start();
+      start(manual: true);
     }
   }
 
@@ -404,7 +614,7 @@ class _DisabledCoverQueue extends CoverQueue {
     : super.withActor(CoverQueueActor(database: database, thumbsDir: Directory.systemTemp, source: source, allowsBackfill: () => false));
 
   @override
-  void start() {}
+  void start({bool manual = false}) {}
   @override
   void requestRefresh() {}
   @override

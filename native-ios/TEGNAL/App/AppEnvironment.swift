@@ -521,6 +521,8 @@ public final class AppEnvironment: @unchecked Sendable {
     @ObservationIgnored private var coverQueueActive = true
     @ObservationIgnored private var resumeCoverQueue = false
     @ObservationIgnored private var coverQueueRequested = false
+    /// The question about filling from a website that blocks bulk reading is on screen.
+    @ObservationIgnored var asksBeforeBulkFill = false
 
     @MainActor var launchFeeds: LaunchFeedWarmup {
         if let launchFeedsStorage { return launchFeedsStorage }
@@ -592,6 +594,7 @@ public final class AppEnvironment: @unchecked Sendable {
 
     public var mangaSiteAddress: String {
         didSet {
+            let isNewSite = !mangaSiteAddress.isEmpty && !ComicSites.all.contains(mangaSiteAddress)
             // A site connected before the list existed joins it before another takes its place.
             ComicSites.add(oldValue)
             ComicSites.switchSite(from: oldValue, to: mangaSiteAddress)
@@ -600,6 +603,8 @@ public final class AppEnvironment: @unchecked Sendable {
                 MangaUrls.preferences.set(mangaSiteAddress, forKey: "manga.site_address")
             }
             ComicSites.add(mangaSiteAddress)
+            // Another set of websites is asked about afresh before a fill reads in bulk.
+            if isNewSite { CoverFillGuard.forget() }
             comicSitesRevision += 1
             siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
         }
@@ -626,6 +631,7 @@ public final class AppEnvironment: @unchecked Sendable {
             else { isSiteVerified = false; mangaSiteAddress = "" }
         }
         ComicSites.remove(site)
+        CoverFillGuard.forget()
         WorkSiteMemory.shared.forget(site: site)
         comicSitesRevision += 1
     }
@@ -758,8 +764,10 @@ public final class AppEnvironment: @unchecked Sendable {
         return AppEnvironment(database: db, browserPreferences: defaults)
     }
 
-    @MainActor public func startCoverQueue() {
+    /// `manual` is the fill button: it asks again even after the person said not now.
+    @MainActor public func startCoverQueue(manual: Bool = false) {
         guard coverQueueActive, CoverQueuePolicy.allowsBackfill else { resumeCoverQueue = true; return }
+        guard mayFillInBulk(manual: manual) else { return }
         if let task = coverQueueTask, !task.isCancelled {
             coverQueueRequested = true
             return
@@ -770,12 +778,38 @@ public final class AppEnvironment: @unchecked Sendable {
             await previous?.value
             guard let self, !Task.isCancelled else { return }
             defer { if self.coverQueueGeneration == token { self.coverQueueTask = nil } }
+            let database = self.database
             repeat {
                 coverQueueRequested = false
-                await coverQueueActor.start(state: coverQueueState, downloadsEnabled: isSiteVerified)
+                await coverQueueActor.start(state: coverQueueState, downloadsEnabled: isSiteVerified, mayRead: {
+                    CoverFillGuard.outcome(sites: ComicSites.all, pending: { (try? database.countPendingFill()) ?? 0 }, manual: false) == .run
+                })
             } while coverQueueRequested && !Task.isCancelled && coverQueueActive && CoverQueuePolicy.allowsBackfill
             if !CoverQueuePolicy.allowsBackfill { resumeCoverQueue = true }
+            // Works saved during the run may have stopped it to ask first.
+            if !Task.isCancelled { _ = mayFillInBulk(manual: false) }
         }
+    }
+
+    /// Whether the fill may read now, asking first when every connected website blocks bulk
+    /// reading and many works are waiting. Other websites, when connected, are read instead.
+    @MainActor private func mayFillInBulk(manual: Bool) -> Bool {
+        guard isSiteVerified else { return true }
+        let database = self.database
+        switch CoverFillGuard.outcome(sites: ComicSites.all, pending: { (try? database.countPendingFill()) ?? 0 }, manual: manual) {
+        case .run: return true
+        case .hold: return false
+        case .ask(let pending, let sites):
+            if !asksBeforeBulkFill { CoverFillSiteWarning.present(env: self, pending: pending, sites: sites) }
+            return false
+        }
+    }
+
+    /// The person's answer to filling from a website that blocks bulk reading.
+    @MainActor func answerBulkFill(_ decision: CoverFillGuard.Decision, pending: Int) {
+        asksBeforeBulkFill = false
+        CoverFillGuard.record(decision, pending: pending)
+        if decision == .approved { startCoverQueue() }
     }
 
     /// A finished sign-in changes what the site shows, so its protocol is read again.

@@ -1,5 +1,93 @@
+import CryptoKit
 import Foundation
 import SwiftUI
+
+/// Some comics websites, the keyed kind, block a network address that reads many works in a short
+/// time. Filling a library reads every work that lacks information, so it reads from the other
+/// connected websites when there are any, and asks first when there are none.
+enum CoverFillGuard {
+    /// Works filled without asking even from such a website: a few new saves.
+    static let quietLimit = 10
+    /// How long the fill waits after a work read from such a website.
+    static let slowDelay: Duration = .seconds(3)
+
+    /// What the person chose the last time they were asked, on this device.
+    enum Decision: String { case none, declined, approved }
+    enum Outcome: Equatable {
+        case run
+        /// Wait for the person: they chose not to fill from these websites.
+        case hold
+        /// Ask first: `pending` works would be read from `sites` alone.
+        case ask(pending: Int, sites: [String])
+    }
+
+    /// Thrown for a work none of the other websites carry, left for the person to open themselves.
+    struct LeftForBlockingSite: Error {}
+
+    /// The websites known to block bulk reading, by digest of their domain, for the time before
+    /// their protocol is learned (a members-only one shows signed-out visitors nothing to learn from).
+    private static let domains: Set<String> = [
+        "1b047e60dd887a4f010dc3ee0c3305b011d3ee6e40b8cd8d7a70c5fe74efc955",
+        "3eb2fe8d6f00dba0f737d0c6996400f0b2bd7b989f0d2922dadaaca1f3dddfe6",
+    ]
+
+    static func blocksBulkReading(_ site: String, backend: MangaUrls.Backend?) -> Bool {
+        if backend == .keyed { return true }
+        let labels = BooruServer.bareHost(site).split(separator: ".")
+        guard labels.count >= 2 else { return false }
+        let domain = labels.suffix(2).joined(separator: ".")
+        return domains.contains(SHA256.hash(data: Data(domain.utf8)).map { String(format: "%02x", $0) }.joined())
+    }
+
+    static func blocksBulkReading(_ site: String) -> Bool { blocksBulkReading(site, backend: ComicSites.backend(of: site)) }
+
+    /// The websites a fill skips: those that block bulk reading, while another website can be read.
+    static func skipped(among sites: [String], blocks: (String) -> Bool = blocksBulkReading) -> Set<String> {
+        let blocking = sites.filter(blocks)
+        return blocking.count < sites.count ? Set(blocking) : []
+    }
+
+    private static let decisionKey = "manga.bulkFill.decision"
+    private static let baselineKey = "manga.bulkFill.baseline"
+
+    static func decision(in defaults: UserDefaults = ContentPreferences.defaults) -> (Decision, baseline: Int) {
+        (Decision(rawValue: defaults.string(forKey: decisionKey) ?? "") ?? .none, defaults.integer(forKey: baselineKey))
+    }
+
+    /// Keeps the person's answer with the number of works waiting when they gave it.
+    static func record(_ decision: Decision, pending: Int, in defaults: UserDefaults = ContentPreferences.defaults) {
+        defaults.set(decision.rawValue, forKey: decisionKey)
+        defaults.set(pending, forKey: baselineKey)
+    }
+
+    static func forget(in defaults: UserDefaults = ContentPreferences.defaults) {
+        defaults.removeObject(forKey: decisionKey)
+        defaults.removeObject(forKey: baselineKey)
+    }
+
+    /// Whether the fill may read now. A few works are read without asking; more are asked about,
+    /// and asked about again when the person presses the fill button themselves or more works are
+    /// waiting than when they last answered.
+    static func outcome(sites: [String], blocks: (String) -> Bool = blocksBulkReading, pending: () -> Int, manual: Bool,
+                        defaults: UserDefaults = ContentPreferences.defaults) -> Outcome {
+        let blocking = sites.filter(blocks)
+        guard !blocking.isEmpty, blocking.count == sites.count else { return .run }
+        let waiting = pending()
+        guard waiting > quietLimit else { return .run }
+        var (decision, baseline) = decision(in: defaults)
+        // Filled works lower the mark, so works saved afterwards are measured from what is left.
+        if decision != .none, waiting < baseline {
+            baseline = waiting
+            record(decision, pending: baseline, in: defaults)
+        }
+        let grew = waiting > baseline + quietLimit
+        switch decision {
+        case .approved where !grew: return .run
+        case .declined where !grew && !manual: return .hold
+        default: return .ask(pending: waiting, sites: blocking)
+        }
+    }
+}
 
 enum CoverQueuePolicy {
     static func allowsBackfill(lowPowerMode: Bool, thermalState: ProcessInfo.ThermalState) -> Bool {
@@ -42,6 +130,9 @@ public actor CoverQueueActor {
     private var siteImages: [String: PageImageStore] = [:]
     private let allowsBackfill: @Sendable () -> Bool
     private let delay: Duration
+    private let slowDelay: Duration
+    /// Whether the last work was read from a website that blocks bulk reading, so the next waits longer.
+    private var readFromBlockingSite = false
     private var checkedThumbnailFiles = false
     private var isRunning: Bool = false
     private var isPaused: Bool = false
@@ -56,14 +147,16 @@ public actor CoverQueueActor {
         self.siteSource = { _ in nil }
         self.allowsBackfill = { CoverQueuePolicy.allowsBackfill }
         self.delay = .milliseconds(150)
+        self.slowDelay = CoverFillGuard.slowDelay
     }
 
     init(database: AppDatabase, thumbsDir: URL, source: any ContentProviding,
          siteSource: @escaping @Sendable (String) -> (any ContentProviding)? = { _ in nil },
-         allowsBackfill: @escaping @Sendable () -> Bool = { CoverQueuePolicy.allowsBackfill }, delay: Duration = .milliseconds(150)) {
+         allowsBackfill: @escaping @Sendable () -> Bool = { CoverQueuePolicy.allowsBackfill }, delay: Duration = .milliseconds(150),
+         slowDelay: Duration = CoverFillGuard.slowDelay) {
         self.database = database; self.thumbsDir = thumbsDir; self.source = source; self.siteSource = siteSource
         self.images = PageImageStore(source: source)
-        self.allowsBackfill = allowsBackfill; self.delay = delay
+        self.allowsBackfill = allowsBackfill; self.delay = delay; self.slowDelay = slowDelay
     }
 
     public func pause() {
@@ -77,7 +170,9 @@ public actor CoverQueueActor {
     /// Queues every saved work so a fix in how a site is read reaches works saved before it.
     @discardableResult func queueRefresh() throws -> Int { try database.queueRefresh() }
 
-    public func start(state: CoverQueueState, downloadsEnabled: Bool = true) async {
+    /// `mayRead` is asked before each batch: a run stops when works saved meanwhile would need
+    /// the person's answer first.
+    public func start(state: CoverQueueState, downloadsEnabled: Bool = true, mayRead: @escaping @Sendable () -> Bool = { true }) async {
         isPaused = false
         if isRunning {
             kickAgain = true
@@ -107,10 +202,13 @@ public actor CoverQueueActor {
 
             // Each work is tried once per run; a queued refresh that fails is tried again next run.
             var attempted = Set<Int64>()
+            // A website that has stopped answering this device ends the run: reading on would only
+            // keep it blocked for longer.
+            var refused = false
 
             repeat {
                 kickAgain = false
-                while downloadsEnabled && !isPaused && !Task.isCancelled && allowsBackfill() {
+                while downloadsEnabled && !refused && !isPaused && !Task.isCancelled && allowsBackfill() && mayRead() {
                     let refresh = try database.worksAwaitingRefresh(limit: 6, exclude: attempted)
                     let batch = refresh.isEmpty ? try database.worksNeedingFill(limit: 6, exclude: attempted).map(\.galleryId) : refresh
                     if batch.isEmpty { break }
@@ -141,6 +239,10 @@ public actor CoverQueueActor {
                             // The website no longer has the work: nothing more to read.
                             if refreshes { try? database.finishRefresh(galleryId: galleryId) }
                             await MainActor.run { state.gone += 1 }
+                        } catch let error as ContentError where error == .temporarilyBlocked || error == .imageLimit {
+                            refused = true
+                            await MainActor.run { state.failed += 1; state.error = error.localizedDescription }
+                            break
                         } catch {
                             await MainActor.run { state.failed += 1 }
                             if (try? database.getWork(galleryId: galleryId)?.hasThumb) != true {
@@ -150,11 +252,11 @@ public actor CoverQueueActor {
 
                         let remaining = try database.countPendingFill()
                         await MainActor.run { state.remaining = remaining }
-                        // Politeness delay
-                        do { try await Task.sleep(for: delay) } catch { break }
+                        // Politeness delay, longer after a website that blocks bulk reading
+                        do { try await Task.sleep(for: readFromBlockingSite ? slowDelay : delay) } catch { break }
                     }
                 }
-            } while downloadsEnabled && kickAgain && !isPaused && !Task.isCancelled && allowsBackfill()
+            } while downloadsEnabled && !refused && kickAgain && !isPaused && !Task.isCancelled && allowsBackfill() && mayRead()
         } catch {
             await MainActor.run { state.error = error.localizedDescription }
         }
@@ -165,6 +267,7 @@ public actor CoverQueueActor {
     }
 
     public func fetchOne(_ galleryId: Int64, refresh: Bool = false) async throws {
+        readFromBlockingSite = false
         try Task.checkCancellation()
         var existing = try database.getWork(galleryId: galleryId)
 
@@ -203,8 +306,12 @@ public actor CoverQueueActor {
         let (source, images) = reader(for: existing?.site)
         let gallery: NativeGallery
         do {
-            if let fallback = source as? SiteFallbackContent { gallery = try await fallback.gallery(galleryId, preferring: existing?.site) }
-            else { gallery = try await source.gallery(galleryId) }
+            if let fallback = source as? SiteFallbackContent {
+                // Websites that block bulk reading are skipped while another website can be read;
+                // with none, every read from them, answered or not, waits longer before the next.
+                readFromBlockingSite = fallback.readsOnlyBlockingSites
+                gallery = try await fallback.gallery(galleryId, preferring: existing?.site, inBulk: true)
+            } else { gallery = try await source.gallery(galleryId) }
         } catch ContentError.unavailable(let status) where status == 404 || status == 410 {
             try Task.checkCancellation()
             // Only a missing gallery document means the work is gone. A 404

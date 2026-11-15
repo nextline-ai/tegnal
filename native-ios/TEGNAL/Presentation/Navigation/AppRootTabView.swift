@@ -468,6 +468,67 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     }
 }
 
+/// Asks before a fill reads many works from websites that block bulk reading, offering to add
+/// another website to read from instead. Imports, restores and iCloud start fills from many
+/// screens, so it is shown over whatever is on screen.
+@MainActor enum CoverFillSiteWarning {
+    static func present(env: AppEnvironment, pending: Int, sites: [String], attempt: Int = 0) {
+        guard let presenter = topViewController() else { return }
+        // A screen still opening or closing can't show it yet.
+        if presenter.isBeingPresented || presenter.isBeingDismissed {
+            guard attempt < 4 else { return }
+            env.asksBeforeBulkFill = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                env.asksBeforeBulkFill = false
+                present(env: env, pending: pending, sites: sites, attempt: attempt + 1)
+            }
+            return
+        }
+        env.asksBeforeBulkFill = true
+        let alert = UIAlertController(
+            title: L10n.text("Add Another Website First?"),
+            message: L10n.text("%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds.",
+                               String(pending), sites.joined(separator: ", ")),
+            preferredStyle: .alert)
+        let add = UIAlertAction(title: L10n.text("Add Website"), style: .default) { _ in
+            env.answerBulkFill(.declined, pending: pending)
+            presentWebsiteEditor(env: env)
+        }
+        alert.addAction(add)
+        alert.addAction(UIAlertAction(title: L10n.text("Fill Slowly Anyway"), style: .destructive) { _ in
+            env.answerBulkFill(.approved, pending: pending)
+        })
+        alert.addAction(UIAlertAction(title: L10n.text("Later"), style: .cancel) { _ in
+            env.answerBulkFill(.declined, pending: pending)
+        })
+        alert.preferredAction = add
+        alert.view.accessibilityIdentifier = "library.bulkFillWarning"
+        presenter.present(alert, animated: true)
+        // A presentation UIKit refused leaves the question to be asked next time.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            if alert.presentingViewController == nil { env.asksBeforeBulkFill = false }
+        }
+    }
+
+    /// The website editor, as Website Connection opens it; the fill runs again once it closes,
+    /// reading from the new website when one was added.
+    private static func presentWebsiteEditor(env: AppEnvironment) {
+        guard let presenter = topViewController() else { return }
+        let editor = UIHostingController(rootView: AppPresentationRoot(
+            environment: env, content: WebsiteConnectionEditor(server: nil).onDisappear { env.startCoverQueue() }))
+        presenter.present(editor, animated: true)
+    }
+
+    private static func topViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let windows = scenes.filter { $0.activationState == .foregroundActive }.flatMap(\.windows)
+        var top = (windows.first(where: \.isKeyWindow) ?? windows.first)?.rootViewController
+        while let next = top?.presentedViewController, !next.isBeingDismissed { top = next }
+        // Another question already on screen goes first; this one is asked next time.
+        return top is UIAlertController ? nil : top
+    }
+}
+
 private struct CoverFillHeatBanner: View {
     let state: CoverQueueState
     var body: some View {

@@ -1794,3 +1794,7 @@
 "Hold to Keep It Off" = "Hold to Keep It Off";
 "Changes on this device won’t sync. You can turn iCloud Sync on later in Library Management." = "Changes on this device won’t sync. You can turn iCloud Sync on later in Library Management.";
 "Approximately %@" = "About %@";
+"Add Another Website First?" = "Add Another Website First?";
+"%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds." = "%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds.";
+"Fill Slowly Anyway" = "Fill Slowly Anyway";
+"%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there." = "%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there.";

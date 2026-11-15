@@ -4,6 +4,7 @@ import '../support/l10n.dart';
 import '../support/preferences.dart';
 import '../support/swift_json.dart';
 import '../support/swift_url.dart';
+import 'cover_queue.dart';
 import 'fixture_content_source.dart';
 import 'gallery_content.dart';
 import 'manga_content_source.dart';
@@ -67,6 +68,7 @@ class ContentEnvironment extends ChangeNotifier {
   String get mangaSiteAddress => _mangaSiteAddress;
   set mangaSiteAddress(String value) {
     final previous = _mangaSiteAddress;
+    final isNewSite = value.isNotEmpty && !ComicSites.all.contains(value);
     // A site connected before the list existed joins it before another takes its place.
     ComicSites.add(previous);
     _mangaSiteAddress = value;
@@ -74,6 +76,8 @@ class ContentEnvironment extends ChangeNotifier {
     browserPreferences.set('manga.site_address', value);
     if (ContentPreferences.isIsolated) MangaUrls.preferences.set('manga.site_address', value);
     ComicSites.add(value);
+    // Another set of websites is asked about afresh before a fill reads in bulk.
+    if (isNewSite) CoverFillGuard.forget();
     _siteAccountSignedIn = SiteAccount.isSignedInAt(MangaUrls.configuredHost);
     notifyListeners();
   }
@@ -100,6 +104,7 @@ class ContentEnvironment extends ChangeNotifier {
       }
     }
     ComicSites.remove(site);
+    CoverFillGuard.forget();
     WorkSiteMemory.shared.forget(site);
     notifyListeners();
   }

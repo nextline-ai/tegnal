@@ -1794,3 +1794,7 @@
 "Hold to Keep It Off" = "長押しでオフのままにする";
 "Changes on this device won’t sync. You can turn iCloud Sync on later in Library Management." = "このデバイスの変更は同期されません。あとから「ライブラリ管理」でiCloud同期をオンにできます。";
 "Approximately %@" = "約%@";
+"Add Another Website First?" = "先に別のサイトを追加しますか？";
+"%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds." = "表紙・タイトル・タグが未取得の作品が%1$@件あります。取得するには作品ごとに%2$@から読み込みますが、このサイトは1台の端末が短時間に多くの作品を読み込むとネットワークアドレス（IP）をブロックすることがあります。\n\n別のマンガサイトを追加すると、未取得の情報はそちらから読み込みます。それでも取得する場合は、数秒に1作品ずつゆっくり読み込みます。";
+"Fill Slowly Anyway" = "それでもゆっくり取得";
+"%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there." = "%@は一度に多くの作品を読み込むとネットワークアドレス（IP）をブロックすることがあるため、取得の前に確認し、ゆっくり読み込みます。別のサイトを追加すると、未取得の情報はそちらから読み込みます。";
