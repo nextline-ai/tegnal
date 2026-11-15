@@ -128,11 +128,13 @@ final class BooruRevisionTests: XCTestCase {
         }
     }
 
-    @MainActor func testDomainSuffixAloneDoesNotChooseAWebsiteMode() async throws {
+    @MainActor func testWebsitesThatAreNoSupportedImageEngineOpenInComicsMode() async throws {
         for address in ["https://comics.la", "https://test.la", "https://custom.example"] {
             let type = try await ServerType.detect(at: URL(string: address)!, loadHTML: { _ in "<html>Unrecognized</html>" })
-            XCTAssertNil(type, "A domain suffix must not substitute for identifying the response protocol")
+            XCTAssertEqual(type, .comics, "Comics Mode finds the protocol itself once it connects")
         }
+        let renamedBooru = try await ServerType.detect(at: URL(string: "https://renamed.example")!, loadHTML: { _ in #"<a href="/posts?tags=blue_sky">blue sky</a>"# })
+        XCTAssertEqual(renamedBooru, .booru(.danbooru), "A renamed image engine is still known by its own pages")
     }
 
     func testWebsiteResponseRecognizesBothComicsProtocolsWithoutSiteNames() {
@@ -142,9 +144,17 @@ final class BooruRevisionTests: XCTestCase {
         XCTAssertEqual(ServerType.recognizing("Danbooru.Post.initialize();"), .booru(.danbooru))
         XCTAssertEqual(ServerType.recognizing("Running Gelbooru Beta 0.1.11"), .booru(.oldGelbooru))
         XCTAssertEqual(ServerType.recognizing("Moebooru"), .booru(.moebooru))
-        XCTAssertNil(ServerType.recognizing("<html><title>Unknown website</title></html>"))
-        XCTAssertNil(ServerType.recognizing("<script>const gallery = {\"images\":[]};</script><a href='/ajax/search'>Search</a>"))
-        XCTAssertNil(ServerType.recognizing("<script>const domain = 'analytics.example';</script>"))
+        XCTAssertEqual(ServerType.recognizing(#"<a href="https://keyed.example/g/3000/0000000bb8/">Work</a><input name="f_search">"#), .comics)
+        XCTAssertEqual(ServerType.recognizing(#"<a href="index.php?page=post&amp;s=list&amp;tags=all">Posts</a>"#), .booru(.gelbooru))
+        XCTAssertEqual(ServerType.recognizing(#"<a href="/post/show/1234">Post</a>"#), .booru(.moebooru))
+        XCTAssertEqual(ServerType.recognizing(#"<a href="https://renamed.example/post?tags=sky">sky</a>"#), .booru(.moebooru))
+        XCTAssertEqual(ServerType.recognizing(#"<a class="search-tag" href="/posts?tags=sky">sky</a>"#), .booru(.danbooru))
+        // A first visitor may see only a check, a sign-in page, a picture or nothing; Comics Mode handles each.
+        for page in ["<html><title>Unknown website</title></html>", "<title>Just a moment...</title>", "<html><body><img src=\"/a.gif\"></body></html>", "",
+                     "<script>const gallery = {\"images\":[]};</script><a href='/ajax/search'>Search</a>", "<script>const domain = 'analytics.example';</script>",
+                     #"<a href="/posts/12">Blog post</a>"#] {
+            XCTAssertEqual(ServerType.recognizing(page), .comics, page)
+        }
     }
 
     @MainActor func testWebsiteDetectionUsesResponseAndPreservesTheExistingConnection() async throws {
@@ -163,7 +173,8 @@ final class BooruRevisionTests: XCTestCase {
         XCTAssertEqual(MangaUrls.configuredHost, "existing.example")
         XCTAssertEqual(MangaUrls.dataHost, before)
         let unknown = try await ServerType.detect(at: address, loadHTML: { _ in "<html>Unknown</html>" })
-        XCTAssertNil(unknown, "An unknown response must not silently register an image server")
+        XCTAssertEqual(unknown, .comics, "An unknown response must not silently register an image server")
+        XCTAssertEqual(MangaUrls.configuredHost, "existing.example")
     }
 
     func testReplayingSetupDoesNotRemoveAnExistingConnectionOnATypo() throws {

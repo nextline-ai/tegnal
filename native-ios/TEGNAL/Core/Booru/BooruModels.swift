@@ -24,6 +24,18 @@ enum BooruEngine: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The engine a home page was made with: its signature, or the page links each engine
+    /// keeps even when an install renames itself.
+    static func recognizing(_ html: String) -> BooruEngine? {
+        if html.range(of: #"Danbooru\.|content=["']Danbooru"#, options: .regularExpression) != nil { return .danbooru }
+        if html.range(of: #"Gelbooru\s+Beta\s+0\.1\.11"#, options: [.regularExpression, .caseInsensitive]) != nil { return .oldGelbooru }
+        if html.range(of: "Moebooru", options: .caseInsensitive) != nil { return .moebooru }
+        if html.range(of: "Gelbooru", options: .caseInsensitive) != nil { return .gelbooru }
+        if html.range(of: #"index\.php\?page=(?:post|dapi)&(?:amp;)?s="#, options: .regularExpression) != nil { return .gelbooru }
+        if html.range(of: #"["'](?:https?://[^"'/\s]+)?/post(?:/show/[0-9]|\?tags=)"#, options: .regularExpression) != nil { return .moebooru }
+        if html.range(of: #"["'](?:https?://[^"'/\s]+)?/posts\?tags="#, options: .regularExpression) != nil { return .danbooru }
+        return nil
+    }
 }
 
 struct BooruServer: Codable, Identifiable, Hashable, Sendable {

@@ -64,16 +64,16 @@ enum ServerType: Hashable, Identifiable, Sendable {
         }
     }
 
-    static func recognizing(_ html: String) -> Self? {
-        if MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html) { return .comics }
-        if html.range(of: #"Danbooru\.|content=["']Danbooru"#, options: .regularExpression) != nil { return .booru(.danbooru) }
-        if html.range(of: #"Gelbooru\s+Beta\s+0\.1\.11"#, options: [.regularExpression, .caseInsensitive]) != nil { return .booru(.oldGelbooru) }
-        if html.range(of: "Moebooru", options: .caseInsensitive) != nil { return .booru(.moebooru) }
-        if html.range(of: "Gelbooru", options: .caseInsensitive) != nil { return .booru(.gelbooru) }
-        return nil
+    /// Image Mode only for the image engines the app supports; every other website is a comics
+    /// site. Comics Mode finds the site's protocol itself once it connects, including sites that
+    /// show first visitors a check, a sign-in page or nothing at all.
+    static func recognizing(_ html: String) -> Self {
+        if MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html) || MangaUrls.isKeyedPage(html) { return .comics }
+        if let engine = BooruEngine.recognizing(html) { return .booru(engine) }
+        return .comics
     }
 
-    @MainActor static func detect(at url: URL, loadHTML: (URL) async throws -> String = { try await ContentBrowserTransport.inspectWebsite(at: $0) }) async throws -> Self? {
+    @MainActor static func detect(at url: URL, loadHTML: (URL) async throws -> String = { try await ContentBrowserTransport.inspectWebsite(at: $0) }) async throws -> Self {
         if let engine = BooruEngine.suggested(for: url) { return .booru(engine) }
         #if DEBUG
         if ContentUITestSupport.enabled { return recognizing(try await ContentUITestSupport.websiteHTML(for: url)) }
@@ -111,21 +111,22 @@ struct WebsiteConnectionEditor: View {
     @State private var serverTypeChoice: ServerType?
     @State private var showOptions = false
     private enum Detection: Equatable {
-        case idle, checking(URL), recognized(URL, ServerType), unrecognized(URL), failed(URL)
+        case idle, checking(URL), recognized(URL, ServerType), failed(URL)
     }
     @State private var detection = Detection.idle
     @State private var detectionRetry = 0
     private var needsConnectionHelp: Bool {
-        switch detection {
-        case .failed(let url), .unrecognized(let url): return url == addressURL
-        default: return false
-        }
+        if case .failed(let url) = detection { return url == addressURL }
+        return false
     }
     private var addressURL: URL? { try? BooruServer.validatedURL(address) }
     private var allowsComics: Bool { server == nil }
 
     private var detectedServerType: ServerType? {
         if case .recognized(let url, let type) = detection, url == addressURL { return type }
+        // A home page this device couldn't load may still open through the comics connection,
+        // which reaches sites the inspecting browser can't; the image engines are named above.
+        if case .failed(let url) = detection, url == addressURL { return .comics }
         if let suggested = addressURL.flatMap(BooruEngine.suggested) {
             return .booru(suggested)
         }
@@ -236,7 +237,7 @@ struct WebsiteConnectionEditor: View {
                     let type = try await ServerType.detect(at: url)
                     try Task.checkCancellation()
                     guard addressURL == url else { return }
-                    detection = type.map { .recognized(url, $0) } ?? .unrecognized(url)
+                    detection = .recognized(url, type)
                 } catch {
                     if !Task.isCancelled, addressURL == url { detection = .failed(url) }
                 }
