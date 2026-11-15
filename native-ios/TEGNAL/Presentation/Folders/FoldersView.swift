@@ -18,6 +18,8 @@ public struct FoldersView: View {
     @State private var showAddSheet = false
     @State private var editingColorFolder: Folder?
     @State private var folderPendingDelete: Folder?
+    /// A folder kept in step with a website's favorites category, which can't be deleted while signed in.
+    @State private var syncedFolder: Folder?
     @State private var renamingFolder: Folder?
     @State private var showRename = false
     @State private var renameDraft = ""
@@ -78,7 +80,8 @@ public struct FoldersView: View {
                                     smartFolder = (folder.id.flatMap { try? env.database.identity(ofFolder: $0) }).map(SmartFolderTarget.init)
                                 }
                                 Button(role: .destructive) {
-                                    if folder.name == "미분류", let id = folder.id { deleteFolder(id) }
+                                    if let id = folder.id, env.isSiteFavoritesFolder(id) { syncedFolder = folder }
+                                    else if folder.name == "미분류", let id = folder.id { deleteFolder(id) }
                                     else { folderPendingDelete = folder }
                                 } label: { Label(L10n.text("Delete Folder"), systemImage: "trash") }
                             }
@@ -149,6 +152,11 @@ public struct FoldersView: View {
             }
         } message: { _ in
             Text(L10n.text("Works only in this folder move to Unfiled. Works also in other folders stay there."))
+        }
+        .alert(L10n.text("Synced with Website Favorites"), isPresented: Binding(get: { syncedFolder != nil }, set: { if !$0 { syncedFolder = nil } })) {
+            Button(L10n.text("OK"), role: .cancel) { syncedFolder = nil }
+        } message: {
+            Text(L10n.text("This folder holds a favorites category of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings."))
         }
         .appSheet(isPresented: $showAddSheet, onDismiss: { loadFolders() }) {
             AddWorkSheet()

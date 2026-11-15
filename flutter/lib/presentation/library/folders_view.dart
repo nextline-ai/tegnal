@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/content/recent_works.dart';
+import '../../core/content/site_favorites_sync.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
@@ -113,7 +114,11 @@ class _FoldersViewState extends State<FoldersView> {
           title: L10n.text('Delete Folder'),
           icon: CupertinoIcons.trash,
           destructive: true,
-          onSelected: () => unfiled ? _delete(id) : _confirmDelete(folder),
+          onSelected: () => SiteFavoritesSync.shared?.isSiteFavoritesFolder(id) ?? false
+              ? _explainSyncedFolder()
+              : unfiled
+              ? _delete(id)
+              : _confirmDelete(folder),
         ),
       ],
     );
@@ -147,6 +152,20 @@ class _FoldersViewState extends State<FoldersView> {
       _showError('$error');
     }
   }
+
+  /// A folder kept in step with a website's favorites category stays while that website is signed in.
+  void _explainSyncedFolder() => showCupertinoDialog<void>(
+    context: context,
+    builder: (context) => TegnalAlertDialog(
+      title: Text(L10n.text('Synced with Website Favorites')),
+      content: Text(
+        L10n.text(
+          "This folder holds a favorites category of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.",
+        ),
+      ),
+      actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+    ),
+  );
 
   Future<void> _confirmDelete(Folder folder) async {
     final delete = await showCupertinoDialog<bool>(

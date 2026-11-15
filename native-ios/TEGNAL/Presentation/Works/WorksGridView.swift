@@ -224,7 +224,7 @@ public struct WorksGridView: View {
         .appSheet(isPresented: $showAddSheet, onDismiss: { loadWorks() }) {
             AddWorkSheet()
         }
-        .appSheet(isPresented: $composingFolder) { FolderRuleEditor(tag: searchText, smart: false) }
+        .appSheet(isPresented: $composingFolder) { FolderRuleEditor(tag: searchText) }
         .alert(L10n.text("Delete Work"), isPresented: Binding(
             get: { workPendingDelete != nil },
             set: { if !$0 { workPendingDelete = nil } }

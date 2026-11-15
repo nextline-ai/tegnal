@@ -1806,8 +1806,6 @@
 "When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order." = "複数のウェブサイトをまとめて表示するとき、同じ作品はこの順番で上にあるウェブサイトのものを表示します。保存した作品はチェックしたウェブサイトで先に開き、次にこの順番で開きます。";
 "Lists and searches show the checked websites together, as the Explore menu picks them. Saved works remember where they were saved, and a website that numbers its works the same way can open them too." = "一覧と検索は、チェックしたウェブサイトをまとめて表示します。探索メニューで選ぶのと同じです。保存した作品はどのウェブサイトで保存したかを覚えていて、作品番号が同じウェブサイトでも開けます。";
 "Sync Favorites with Folders" = "お気に入りをフォルダと同期";
-"Each favorites category on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the category chosen below, and favorites in a category without a folder come to Unfiled." = "サイトのお気に入りカテゴリごとに同じ名前のフォルダができ、両方が同じ作品を持ちます。ほかのフォルダに保存した作品はサイトの下で選んだカテゴリに入り、フォルダのないカテゴリのお気に入りは未分類に入ります。";
-"Each favorites list on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the list chosen below, and favorites in a list without a folder come to Unfiled." = "サイトのお気に入りリストごとに同じ名前のフォルダができ、両方が同じ作品を持ちます。ほかのフォルダに保存した作品はサイトの下で選んだリストに入り、フォルダのないリストのお気に入りは未分類に入ります。";
 "Category for Other Folders" = "ほかのフォルダ用のカテゴリ";
 "List for Other Folders" = "ほかのフォルダ用のリスト";
 "Which Works Go In" = "どの作品を入れるか";
@@ -1837,7 +1835,6 @@
 "Only works you save from now on come here." = "これから保存する作品だけが入ります。";
 "Only images you save from now on come here." = "これから保存する画像だけが入ります。";
 "More Options" = "その他のオプション";
-"Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too." = "オフにすると、保存をタップしたときに下のタグでこのフォルダを一度だけ埋めます。オンにすると、これから保存する作品のうちこのタグが付いたものも入ります。";
 "It looks only in Unfiled, and a work leaves Unfiled once it is in a folder, so a matching work always moves here." = "未分類だけを探します。未分類の作品はフォルダに入ると未分類から外れるので、当てはまる作品はいつもここに移ります。";
 "Works with any of these tags stay out." = "これらのタグのどれかが付いた作品は入りません。";
 "Images with any of these tags stay out." = "これらのタグのどれかが付いた画像は入りません。";
@@ -1845,3 +1842,7 @@
 "Works you save in folders that are not a favorites category are added to this category on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a category you use yourself. With every category in use, this is the only choice." = "お気に入りカテゴリではないフォルダに保存した作品は、サイトのこのカテゴリに入ります。「アプリにだけ保存」を選ぶとサイトには送らないので、自分で使っているカテゴリのお気に入りと混ざりません。すべてのカテゴリを使っているときは、これしか選べません。";
 "Works you save in folders that are not a favorites list are added to this list on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a list you use yourself." = "お気に入りリストではないフォルダに保存した作品は、サイトのこのリストに入ります。「アプリにだけ保存」を選ぶとサイトには送らないので、自分で使っているリストのお気に入りと混ざりません。";
 "Works only in this folder move to Unfiled. Works also in other folders stay there." = "このフォルダだけにあった作品は未分類に入り、ほかのフォルダにもある作品はそのまま残ります。";
+"Synced with Website Favorites" = "サイトのお気に入りと連携中";
+"This folder holds a favorites category of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings." = "このフォルダはログイン中のサイトのお気に入りカテゴリと連携しているため、ログインしている間は削除できません。削除するには、そのサイトからログアウトするか、サイトの設定で「お気に入りをフォルダと同期」をオフにしてください。";
+"Each favorites category on the website that holds works becomes a folder of the same name, and the two hold the same works. Such a folder stays while you're signed in. Works you save in other folders go to the category chosen below, or stay in the app only." = "サイトで作品が入っているお気に入りカテゴリごとに同じ名前のフォルダができ、両方が同じ作品を持ちます。このフォルダはログインしている間は削除されません。ほかのフォルダに保存した作品は、下で選んだカテゴリに入れるか、アプリにだけ保存します。";
+"Each favorites list on the website that holds works becomes a folder of the same name, and the two hold the same works. Such a folder stays while you're signed in. Works you save in other folders go to the list chosen below, or stay in the app only." = "サイトで作品が入っているお気に入りリストごとに同じ名前のフォルダができ、両方が同じ作品を持ちます。このフォルダはログインしている間は削除されません。ほかのフォルダに保存した作品は、下で選んだリストに入れるか、アプリにだけ保存します。";
