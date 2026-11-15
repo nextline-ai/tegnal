@@ -55,41 +55,13 @@ Runs on iPhone, iPhone Duo, iPad, Mac and Apple Vision Pro, in English, Korean a
 
 Install it from the [App Store](https://apps.apple.com/app/id6825935560). Updates arrive through the App Store too.
 
-To try new versions early, join the [TestFlight beta](https://testflight.apple.com/join/gnkqu44W).
-
 Turn on iCloud sync to keep your bookmarks, folders, artists and search history in step across your Apple devices.
-
-<details>
-<summary>Installing with AltStore, SideStore or an IPA</summary>
-
-Only some versions are published as IPAs, so these can lag behind the App Store.
-
-| Method | Link |
-| --- | --- |
-| AltStore Classic | [Add source](https://nextline-ai.github.io/tegnal/#altstore) |
-| SideStore | [Add source](https://nextline-ai.github.io/tegnal/#sidestore) |
-| Manual IPA | [Read the guide](https://nextline-ai.github.io/tegnal/manual-install.html) |
-
-To add the source by hand, tap + under Sources and enter:
-
-```text
-https://nextline-ai.github.io/tegnal/source.json
-```
-
-An IPA has to be re-signed with your own Apple account in the install tool. How often it needs renewing, and which iCloud features work, depends on your account and tool.
-
-</details>
 
 ### Android
 
 Install it from [Google Play](https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en). It runs on Android 7.0 and later, and updates arrive through Google Play too.
 
-<details>
-<summary>Old beta APKs</summary>
-
-The beta APKs released before the Google Play launch are no longer updated and can't receive automatic updates, so use the Google Play version unless you have a specific reason not to. The files are still on the [release page](https://github.com/nextline-ai/tegnal/releases/tag/android-v1.0.0-beta.5).
-
-</details>
+Some versions are also published as IPA and APK files on the [releases page](https://github.com/nextline-ai/tegnal/releases). They don't update automatically and can lag behind the stores, so use the App Store and Google Play versions unless you have a specific reason not to.
 
 ## Getting started
 
@@ -126,4 +98,4 @@ Bug reports and ideas are welcome on [Discord](https://discord.gg/DFT9Hm66Gz).
 
 NextLine · [nextline.work](https://nextline.work) · [contact@nextline.work](mailto:contact@nextline.work)
 
-<sub>TEGNAL is an independent client, not affiliated with Apple or any site you connect to. · <a href="docs/privacy-policy.md">Privacy Policy</a></sub>
+<sub>TEGNAL is an independent client, not affiliated with Apple or any site you connect to. · <a href="native-ios/privacy-policy.md">Privacy Policy</a></sub>

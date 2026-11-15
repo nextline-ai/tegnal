@@ -19,6 +19,15 @@
       "category": "entertainment",
       "versions": [
         {
+          "version": "1.4.1",
+          "buildVersion": "39",
+          "date": "2026-11-15",
+          "localizedDescription": "1.4.1 (39): TEGNAL is now on the App Store, and this is the last sideloaded build. It points you to the App Store version, where updates continue. Before switching, export a JSON backup in Library Management and import it in the App Store version.",
+          "downloadURL": "https://github.com/nextline-ai/tegnal/releases/download/manual-installation/MANUAL-NO-AUTO-UPDATE-TEGNAL-1.4.1-39.ipa",
+          "size": 12635538,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.3",
           "buildVersion": "37",
           "date": "2026-11-05",
@@ -86,5 +95,16 @@
       }
     }
   ],
-  "news": []
+  "news": [
+    {
+      "title": "TEGNAL is now on the App Store",
+      "identifier": "tegnal-app-store-release",
+      "caption": "Sideloaded builds end with 1.4.1. Export a JSON backup, then install TEGNAL from the App Store for future updates.",
+      "date": "2026-11-15",
+      "tintColor": "#737373",
+      "url": "https://apps.apple.com/app/id6825935560",
+      "appID": "work.nextline.tegnal",
+      "notify": true
+    }
+  ]
 }
