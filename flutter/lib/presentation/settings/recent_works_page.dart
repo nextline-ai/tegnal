@@ -435,6 +435,7 @@ class RecentWorkCard extends StatelessWidget {
       title: entry.item.title.isEmpty ? '${entry.id}' : entry.item.title,
       artists: entry.item.artists,
       language: entry.language ?? '',
+      pages: entry.item.pages ?? saved?.pageCount,
       category: type.isEmpty ? '' : GalleryCategory.title(type),
       categoryColor: galleryCategoryColor(type),
       cover: art,

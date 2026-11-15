@@ -11,18 +11,24 @@ import 'page_image_store.dart';
 /// The text a feed card shows, kept even when its cover is released.
 @immutable
 class GalleryDisplay {
-  GalleryDisplay(NativeGallery gallery) : title = gallery.title, artists = gallery.artists.join(', '), language = gallery.language, type = gallery.type;
+  GalleryDisplay(NativeGallery gallery)
+    : title = gallery.title,
+      artists = gallery.artists.join(', '),
+      language = gallery.language,
+      type = gallery.type,
+      pages = gallery.displayedPageCount;
 
   final String title;
   final String artists;
   final String language;
   final String type;
+  final int? pages;
 
   @override
   bool operator ==(Object other) =>
-      other is GalleryDisplay && other.title == title && other.artists == artists && other.language == language && other.type == type;
+      other is GalleryDisplay && other.title == title && other.artists == artists && other.language == language && other.type == type && other.pages == pages;
   @override
-  int get hashCode => Object.hash(title, artists, language, type);
+  int get hashCode => Object.hash(title, artists, language, type, pages);
 }
 
 /// One card's metadata and cover, loaded once and shared by the cell and prefetch.

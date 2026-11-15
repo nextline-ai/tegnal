@@ -109,6 +109,9 @@ class AppDatabase implements SmartFolderLibrary {
       if (!db.columns('works').contains('site')) db.execute('ALTER TABLE works ADD COLUMN site TEXT');
     });
     migrator.registerMigration('v14_one_work_per_number', restoreOneWorkPerNumber, rebuildsTables: true);
+    migrator.registerMigration('v15_work_page_count', (db) {
+      if (!db.columns('works').contains('page_count')) db.execute('ALTER TABLE works ADD COLUMN page_count INTEGER');
+    });
     return migrator;
   }
 
@@ -560,6 +563,7 @@ class AppDatabase implements SmartFolderLibrary {
     bool catalogMatched = false,
     bool overwriteMetadata = false,
     String? site,
+    int? pageCount,
     DiscoveryContext? discoveryContext,
   }) => dbWriter.write((db) {
     final now = iso8601();
@@ -583,6 +587,7 @@ class AppDatabase implements SmartFolderLibrary {
       }
       // The first site a work is known from stays its site.
       if (existing.site == null && site != null && site.isNotEmpty) existing.site = site;
+      if (pageCount != null && pageCount > 0) existing.pageCount = pageCount;
       existing.updatedAt = now;
       updateWork(existing, db);
     } else {
@@ -601,6 +606,7 @@ class AppDatabase implements SmartFolderLibrary {
         metadataSource: metadataSource,
         catalogMatched: catalogMatched,
         site: site == null || site.isEmpty ? null : site,
+        pageCount: pageCount != null && pageCount > 0 ? pageCount : null,
       );
       insertWork(work, db);
     }
@@ -712,6 +718,12 @@ class AppDatabase implements SmartFolderLibrary {
       }
     });
     if (status == 'ready' && path != null) onThumbnailReady?.call(galleryId, path);
+  }
+
+  /// Keeps a saved work's page count once a website has said it; unsaved works are left alone.
+  void fillPageCount(int galleryId, int? count) {
+    if (count == null || count <= 0) return;
+    dbWriter.write((db) => db.execute('UPDATE works SET page_count = ? WHERE gallery_id = ? AND COALESCE(page_count, 0) != ?', [count, galleryId, count]));
   }
 
   void setThumbPage(int galleryId, int page) => dbWriter.write((db) => db.execute('UPDATE works SET thumb_page = ? WHERE gallery_id = ?', [page, galleryId]));

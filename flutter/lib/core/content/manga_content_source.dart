@@ -12,6 +12,7 @@ import 'content_url.dart';
 import 'document_catalog_source.dart';
 import 'gallery_content.dart';
 import 'keyed_catalog_source.dart';
+import 'keyed_work_extras.dart';
 import 'manga_urls.dart';
 import '../support/perf_trace.dart';
 
@@ -30,7 +31,7 @@ class _GalleryFlight {
 
 /// Works, lists, suggestions and images of the connected comics site, whichever of the
 /// three protocols it turned out to speak.
-class MangaContentSource extends ContentProviding {
+class MangaContentSource extends ContentProviding implements WorkExtrasProviding {
   MangaContentSource({ContentTransport? transport})
     : transport = transport ?? ContentTransport.shared,
       documents = DocumentCatalogSource(transport ?? ContentTransport.shared),
@@ -86,6 +87,9 @@ class MangaContentSource extends ContentProviding {
     await MangaUrls.resolveBackend(transport: transport);
     if (MangaUrls.home != site) throw const CancellationError();
     if (MangaUrls.requiresSignIn) throw ContentError.signInRequired;
+    // A bot check that stopped the first look at the site has to be passed before anything else.
+    final host = ContentURL.parse(site)?.host;
+    if (!MangaUrls.hasResolvedBackend && host != null && ContentTransport.challengedPage(host) != null) throw ContentError.verificationRequired;
     return MangaUrls.backend;
   }
 
@@ -194,16 +198,58 @@ class MangaContentSource extends ContentProviding {
   int galleryConsumerCount(int id) => _galleryFlights[id]?.consumers ?? 0;
 
   /// The signed-in account's favorites, a page at a time, on catalogs that keep them.
-  Future<(List<int>, String?)> accountFavorites({String? after}) async {
+  Future<(List<int>, String?)> accountFavorites({String? after, int? category}) async {
     final site = _prepareSite();
     if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
-    return keyed.favorites(after: after, site: site);
+    return keyed.favorites(after: after, category: category, site: site);
   }
 
-  Future<void> setAccountFavorite(int id, {required bool saved}) async {
+  Future<List<FavoriteCategory>> favoriteCategories() async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.favoriteCategories(site: site);
+  }
+
+  Future<(int, int)?> imageAllowance() async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return null;
+    return keyed.imageAllowance(site: site);
+  }
+
+  Future<void> setAccountFavorite(int id, {required bool saved, int category = 0}) async {
     final site = _prepareSite();
     if (await _resolve(site) != MangaBackend.keyed) return;
-    await keyed.setFavorite(id, saved: saved, site: site);
+    await keyed.setFavorite(id, saved: saved, category: category, site: site);
+  }
+
+  // MARK: Ratings, comments and torrents
+
+  @override
+  Future<WorkExtras?> extras(int id) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return null;
+    return keyed.extras(id, site: site);
+  }
+
+  @override
+  Future<List<WorkComment>> allComments(int id) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return [];
+    return keyed.allComments(id, site: site);
+  }
+
+  @override
+  Future<List<WorkTorrent>> torrents(int id) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return [];
+    return keyed.torrents(id, site: site);
+  }
+
+  @override
+  Future<(double, int)> rate(int id, int halfStars) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.rate(id, halfStars, site: site);
   }
 
   @override

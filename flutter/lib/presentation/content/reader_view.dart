@@ -368,6 +368,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
 
   /// Puts the work at the top of Recently Opened Works, with its cover once it loads.
   void _rememberOpened(NativeGallery gallery) {
+    widget.database.fillPageCount(gallery.id, gallery.displayedPageCount);
     final recents = RecentWorks.shared;
     if (recents == null) return;
     final first = gallery.pages.firstOrNull;

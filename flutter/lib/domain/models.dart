@@ -126,6 +126,7 @@ class Work {
     // The native initializer accepts a page but never stores it, so a new work is saved without one.
     this.thumbPage,
     this.site,
+    this.pageCount,
     List<Folder>? folders,
   }) : bookmarkedAt = bookmarkedAt ?? iso8601(),
        folders = folders ?? [];
@@ -153,6 +154,9 @@ class Work {
 
   /// The comics site (its host) the work was saved from; unknown for older saves and imports.
   String? site;
+
+  /// How many pages the work has, once any website has said.
+  int? pageCount;
   List<Folder> folders;
 
   bool get hasTitle => (title?.trim() ?? '').isNotEmpty;
@@ -181,18 +185,19 @@ class Work {
     // Records are read through their decoder, which fills a missing page with 1.
     thumbPage: row['thumb_page'] as int? ?? 1,
     site: row['site'] as String?,
+    pageCount: row['page_count'] as int?,
   );
 
   static const columns = [
     'gallery_id', 'title', 'artists', 'language', 'type', 'series', 'groups', 'tags', 'note', 'bookmarked_at', //
     'published_at', 'last_opened_at', 'updated_at', 'metadata_source', 'catalog_matched', 'thumb_status', //
-    'thumb_path', 'thumb_failed_at', 'thumb_page', 'site',
+    'thumb_path', 'thumb_failed_at', 'thumb_page', 'site', 'page_count',
   ];
 
   List<Object?> get columnValues => [
     galleryId, title, artists, language, type, series, groups, tags, note, bookmarkedAt, //
     publishedAt, lastOpenedAt, updatedAt, metadataSource, catalogMatched, thumbStatus, //
-    thumbPath, thumbFailedAt, thumbPage, site,
+    thumbPath, thumbFailedAt, thumbPage, site, pageCount,
   ];
 }
 

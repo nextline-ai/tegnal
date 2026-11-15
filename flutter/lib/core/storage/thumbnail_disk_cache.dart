@@ -7,10 +7,25 @@ import 'package:crypto/crypto.dart';
 /// Device-local, regenerable previews and pages. Filenames contain no site URLs or tags.
 /// An in-memory index avoids scanning the cache directory on every read (`BooruThumbnailDiskCache`).
 class ThumbnailDiskCache {
-  ThumbnailDiskCache({required this.directory, int capacity = 256 * 1024 * 1024, this.fileExtension = 'png'}) : capacity = capacity < 0 ? 0 : capacity;
+  ThumbnailDiskCache({required this.directory, int capacity = 256 * 1024 * 1024, this.fileExtension = 'png'}) : _capacity = capacity < 0 ? 0 : capacity;
 
   final Directory directory;
-  final int capacity;
+  int _capacity;
+  int get capacity => _capacity;
+
+  /// Applies a new size limit at once, removing the least recently used files above it.
+  set capacity(int value) {
+    _capacity = value < 0 ? 0 : value;
+    _ensureIndex();
+    _trim();
+  }
+
+  /// Bytes the cache holds now, after any trimming to its limit.
+  int get usedBytes {
+    _ensureIndex();
+    return _bytes;
+  }
+
   final String fileExtension;
   final _entries = <String, _Entry>{};
 

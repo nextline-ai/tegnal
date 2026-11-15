@@ -67,7 +67,7 @@ void main() {
     var covers = 0;
     final added = await SiteAccountActions.importAccountFavorites(
       database: database,
-      favorites: ({String? after}) async => pages[after]!,
+      favorites: ({String? after, int? category}) async => pages[after]!,
       preview: (id) => id == 2
           ? const NativeGallery(id: 2, title: 'Preview', artists: ['someone'], language: 'english', type: 'manga', tags: ['tag:sample'], pages: [])
           : null,

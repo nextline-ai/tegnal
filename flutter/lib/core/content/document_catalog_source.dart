@@ -8,6 +8,7 @@ import 'content_errors.dart';
 import 'content_transport.dart';
 import 'content_url.dart';
 import 'gallery_content.dart';
+import 'keyed_catalog_source.dart';
 import 'manga_urls.dart';
 
 /// A bounded cache that forgets its oldest entry first, like `NSCache` with a count limit.
@@ -89,6 +90,9 @@ class DocumentCatalogSource {
     if (url == null) throw ContentError.invalidQuery;
     final result = await transport.get(url, limit: 4000000);
     _prepare(site);
+    // A members-only host sends a signed-out visitor to its sign-in page instead of the work.
+    final head = result.data.length > 200000 ? result.data.sublist(0, 200000) : result.data;
+    if (KeyedCatalogSource.asksForSignIn(utf8.decode(head, allowMalformed: true))) throw ContentError.signInRequired;
     final gallery = parseGallery(result.data, id, site: site);
     MangaUrls.registerMedia([
       for (final page in gallery.pages) ...[?page.imageURL, ?page.thumbnailURL],
@@ -424,7 +428,8 @@ class DocumentCatalogSource {
       index: 0,
       sourceSite: site,
     );
-    return _metadata(object, id, [page]);
+    final filecount = _int(object['filecount']) ?? 0;
+    return _metadata(object, id, [page]).copyWith(pageCount: filecount.clamp(0, 10000));
   }
 
   static const _categoryNames = {

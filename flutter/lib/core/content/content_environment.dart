@@ -9,6 +9,7 @@ import 'gallery_content.dart';
 import 'manga_content_source.dart';
 import 'manga_urls.dart';
 import 'site_account.dart';
+import 'site_fallback_content.dart';
 import '../support/app_platform.dart';
 
 /// The comics connection and explore settings of `AppEnvironment`, with the same
@@ -33,7 +34,7 @@ class ContentEnvironment extends ChangeNotifier {
       _mangaPreviewRows = (browserPreferences.integerOrNull('manga.preview.rows') ?? 5).clamp(1, 10),
       _mangaRemovesGridPadding = browserPreferences.boolean('manga.grid.noPadding') ?? false,
       _syncsAccountFavorites = browserPreferences.boolean('manga.syncAccountFavorites') ?? false,
-      _siteAccountSignedIn = SiteAccount.isSignedIn,
+      _siteAccountSignedIn = SiteAccount.isSignedInAt(MangaUrls.configuredHost),
       _isSiteVerified = (browserPreferences.boolean('site_verified') ?? false) && supportsComicsAddress(browserPreferences.string('manga.site_address') ?? ''),
       // Like Swift's initializer, restoring the address does not reset what was discovered for it.
       _mangaSiteAddress = browserPreferences.string('manga.site_address') ?? '';
@@ -73,6 +74,7 @@ class ContentEnvironment extends ChangeNotifier {
     browserPreferences.set('manga.site_address', value);
     if (ContentPreferences.isIsolated) MangaUrls.preferences.set('manga.site_address', value);
     ComicSites.add(value);
+    _siteAccountSignedIn = SiteAccount.isSignedInAt(MangaUrls.configuredHost);
     notifyListeners();
   }
 
@@ -98,6 +100,7 @@ class ContentEnvironment extends ChangeNotifier {
       }
     }
     ComicSites.remove(site);
+    WorkSiteMemory.shared.forget(site);
     notifyListeners();
   }
 
@@ -255,11 +258,17 @@ class ContentEnvironment extends ChangeNotifier {
   bool get syncsAccountFavorites => _syncsAccountFavorites;
   set syncsAccountFavorites(bool value) => _syncsAccountFavorites = _store('manga.syncAccountFavorites', value);
 
+  /// The account favorites category new bookmarks are added to when syncing, from 0.
+  int get accountFavoriteCategory => browserPreferences.integer('manga.accountFavoriteCategory').clamp(0, 9);
+  set accountFavoriteCategory(int value) {
+    _store('manga.accountFavoriteCategory', value.clamp(0, 9));
+  }
+
   /// Signed in to the connected website, for sites that use accounts.
   bool _siteAccountSignedIn;
   bool get siteAccountSignedIn => _siteAccountSignedIn;
   void refreshSiteAccount() {
-    _siteAccountSignedIn = SiteAccount.isSignedIn;
+    _siteAccountSignedIn = SiteAccount.isSignedInAt(MangaUrls.configuredHost);
     notifyListeners();
   }
 

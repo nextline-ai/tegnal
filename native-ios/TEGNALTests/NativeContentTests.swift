@@ -509,7 +509,9 @@ private final class SuggestionFixtureURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        Self.lock.withLock { Self.requests += 1 }
+        // Only the suggestion host counts: whether the site's own lookup runs first depends on
+        // whether an earlier test left it cooling down.
+        if request.url?.host?.hasPrefix("tagindex.") == true { Self.lock.withLock { Self.requests += 1 } }
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(#"[["korean",99947,"language"]]"#.utf8))

@@ -42,7 +42,7 @@ abstract final class SiteScope {
 /// website, or inside a [SiteScope] for another website, that website's saved snapshot.
 class ScopedPreferences extends Preferences {
   static final shared = ScopedPreferences();
-  static final _scopedKeys = {...MangaUrls.resolvedKeys, 'manga.account_site', 'manga.account_host'};
+  static final _scopedKeys = {...MangaUrls.resolvedKeys, ...MangaUrls.accountKeys};
   Preferences get _base => ContentPreferences.defaults;
 
   String? _scoped(String key) {
@@ -73,6 +73,14 @@ class ScopedPreferences extends Preferences {
     }
     ComicSites._save(snapshots);
   }
+}
+
+/// Pages a keyed catalog links to from its own navigation, on its own host.
+enum KeyedFeature {
+  toplist,
+  watched;
+
+  static KeyedFeature? fromName(String name) => values.where((feature) => feature.name == name).firstOrNull;
 }
 
 enum MangaBackend {
@@ -250,6 +258,9 @@ abstract final class MangaUrls {
   static bool isDocumentPage(String text) {
     if (RegExp(r'/js/index\.search\.').hasMatch(text)) return true;
     if (text.contains('/ajax/search') && text.contains('serverConfig') && text.contains('thumbServer')) return true;
+    // A members-only host of the same catalog greets visitors with its sign-in page, which
+    // carries the same configuration and posts to the same kind of endpoint.
+    if (text.contains('serverConfig') && text.contains('thumbServer') && RegExp(r'action="/ajax/[a-z-]+"').hasMatch(text)) return true;
     try {
       final gallery = DocumentCatalogSource.embeddedObject(utf8.encode(text), 'gallery');
       final id = gallery['id'];
@@ -311,9 +322,24 @@ abstract final class MangaUrls {
     return ContentURL.parse('${home}api.php');
   }
 
-  /// Where the person signs in: what the site itself named, else the account host it sent visitors to.
+  /// Where the person signs in: what the site itself named, else the account host it sent visitors
+  /// to. A members-only site that names neither shares the account of another connected site.
   static Uri? get signInURL {
+    final own = _ownSignInURL;
+    if (own != null) return own;
+    if (SiteScope.other != null) return null;
+    for (final site in ComicSites.siblings(ComicSites.active)) {
+      final siteHome = homeForSite(site);
+      final url = SiteScope.run(site, () => MangaUrls.home == siteHome ? _ownSignInURL : null);
+      if (url != null) return url;
+    }
+    return null;
+  }
+
+  static Uri? get _ownSignInURL {
     if (home.isEmpty) return null;
+    final page = accountSignInPage;
+    if (page != null) return page;
     if (backend == MangaBackend.keyed && hasResolvedBackend) {
       final saved = preferences.string('manga.resolved_login');
       final url = saved == null ? null : ContentURL.parse(saved);
@@ -335,6 +361,30 @@ abstract final class MangaUrls {
       !hasResolvedBackend && preferences.string('manga.account_site') == home && (preferences.boolean('manga.account_required') ?? false);
 
   static bool get usesAccount => (hasResolvedBackend && backend == MangaBackend.keyed) || preferences.string('manga.account_site') == home;
+
+  /// The person signed in for this site, so it gets the account's cookies before its protocol is known.
+  static void markUsesAccount({required String site, Uri? signInPage}) {
+    if (home != site) return;
+    if (signInPage != null) preferences.set('manga.account_login', signInPage.toString());
+    if (hasResolvedBackend && backend == MangaBackend.keyed) return;
+    preferences.set('manga.account_site', site);
+  }
+
+  /// What belongs to one site's account rather than to its protocol: kept with the site, and
+  /// not forgotten when the protocol is looked up again.
+  static const accountKeys = ['manga.account_site', 'manga.account_host', 'manga.account_login'];
+
+  /// The site's own sign-in page, found where it sent a signed-out visitor.
+  static Uri? get accountSignInPage {
+    if (preferences.string('manga.account_site') != home) return null;
+    final value = preferences.string('manga.account_login');
+    final url = value == null ? null : ContentURL.parse(value);
+    if (url == null || url.scheme != 'https' || url.host.toLowerCase() != configuredHost) return null;
+    return url;
+  }
+
+  /// A catalog whose works open with the signed-in session of its own pages, not with forum cookies.
+  static bool get usesSiteSession => hasResolvedBackend && backend == MangaBackend.document && accountSignInPage != null;
 
   static void markRequiresSignIn({required String site, String? accountHost}) {
     if (home != site) return;
@@ -379,14 +429,17 @@ abstract final class MangaUrls {
   static Future<void> resolveBackend({ContentTransport? transport, bool force = false}) =>
       _MangaBackendResolver.shared.resolve(transport ?? ContentTransport.shared, force: force);
 
-  static Future<bool> discoverBackend(String site, ContentTransport transport) async {
+  static Future<bool> discoverBackend(String site, ContentTransport transport, {bool retried = false}) async {
     final homepage = ContentURL.parse(site);
     if (homepage == null || site.isEmpty) return false;
     final scripts = <Uri>[];
     try {
       final List<int> data;
+      final ContentResponse response;
       try {
-        data = (await transport.get(homepage, limit: 1000000, timeout: const Duration(seconds: 8))).data;
+        final result = await transport.get(homepage, limit: 1000000, timeout: const Duration(seconds: 8));
+        data = result.data;
+        response = result.response;
       } catch (error) {
         // A site that hands signed-out visitors to another host with a one-time
         // token is asking for an account; a plain move to a new address is not.
@@ -400,7 +453,13 @@ abstract final class MangaUrls {
       if (home != site) return false;
       final body = utf8.decode(data, allowMalformed: true);
       if (extractBackend(body, site: site)) return true;
-      if (extractDocumentBackend(body, site: site)) return true;
+      if (extractDocumentBackend(body, site: site)) {
+        // Its works open only for a signed-in visitor; lists stay open to everyone.
+        if (KeyedCatalogSource.asksForSignIn(body) && response.url.host.toLowerCase() == homepage.host.toLowerCase()) {
+          markUsesAccount(site: site, signInPage: response.url);
+        }
+        return true;
+      }
       if (extractKeyedBackend(body, site: site)) {
         final link = KeyedCatalogSource.links(body).firstOrNull;
         final page = link == null ? null : ContentURL.parse('${site}g/${link.id}/${link.key}/');
@@ -414,9 +473,17 @@ abstract final class MangaUrls {
         }
         return true;
       }
-      if (body.trim().length < 64 && preferences.string('manga.account_site') == site) {
-        // Signed in, yet the site still shows nothing: the account lacks access.
+      // A members-only catalog shows signed-out visitors nothing, or only a picture; a short
+      // reply of another kind, such as an interface's error, is not that.
+      final mime = response.mimeType?.toLowerCase(), shown = body.trim();
+      final showsNothing = (mime?.startsWith('image/') ?? false) || shown.isEmpty || (shown.length < 64 && (mime?.startsWith('text/html') ?? false));
+      if (showsNothing) {
+        final askedBefore = preferences.string('manga.account_site') == site;
         markRequiresSignIn(site: site);
+        // An account signed in elsewhere is tried here once, now that the site asks for one.
+        if (!askedBefore && !retried && SiteAccount.isSignedIn && home == site) {
+          return await discoverBackend(site, transport, retried: true);
+        }
         return false;
       }
       final pattern = RegExp(r'''<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+)['"]''', caseSensitive: false);
@@ -463,7 +530,27 @@ abstract final class MangaUrls {
     'manga.resolved_api',
     'manga.resolved_login',
     'manga.account_required',
+    'manga.resolved_features',
   ];
+
+  static Set<KeyedFeature> get keyedFeatures {
+    if (!hasResolvedBackend || backend != MangaBackend.keyed) return {};
+    return {for (final name in _stringList('manga.resolved_features') ?? const <String>[]) ?KeyedFeature.fromName(name)};
+  }
+
+  /// Notes what a keyed catalog's navigation offers, from any of its listing pages.
+  static void noteKeyedNavigation(String text, {required String site}) {
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    if (home != site || !hasResolvedBackend || backend != MangaBackend.keyed || host == null || host.isEmpty) return;
+    final escaped = RegExp.escape(host);
+    final found = <KeyedFeature>{
+      if (RegExp('href="(?:https://$escaped)?/toplist\\.php').hasMatch(text)) KeyedFeature.toplist,
+      if (RegExp('href="(?:https://$escaped)?/watched"').hasMatch(text)) KeyedFeature.watched,
+    };
+    final current = keyedFeatures;
+    if (found.isEmpty || current.containsAll(found)) return;
+    preferences.set('manga.resolved_features', ({...found, ...current}.map((feature) => feature.name).toList()..sort()));
+  }
 
   static void resetResolvedBackend() {
     _resets += 1;
@@ -487,7 +574,7 @@ abstract final class ComicSites {
   static const _snapshotsKey = 'manga.siteSnapshots';
 
   /// Account details that belong to one site, kept with what was learned about it.
-  static const _snapshotKeys = [...MangaUrls.resolvedKeys, 'manga.account_site', 'manga.account_host'];
+  static const _snapshotKeys = [...MangaUrls.resolvedKeys, ...MangaUrls.accountKeys];
 
   static String get active => _preferences.string('manga.site_address') ?? '';
 
@@ -546,7 +633,7 @@ abstract final class ComicSites {
       }
     }
     MangaUrls.resetResolvedBackend();
-    for (final key in ['manga.account_site', 'manga.account_host']) {
+    for (final key in MangaUrls.accountKeys) {
       _preferences.remove(key);
     }
     for (final MapEntry(:key, :value) in (snapshots[to] ?? const {}).entries) {

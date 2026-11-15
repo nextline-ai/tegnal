@@ -141,6 +141,7 @@ class _DownloadsViewState extends State<DownloadsView> {
             title: item.title,
             artists: item.artists.join(', '),
             language: gallery?.language ?? '',
+            pages: gallery?.displayedPageCount,
             category: gallery == null || gallery.type.isEmpty ? '' : GalleryCategory.title(gallery.type),
             categoryColor: galleryCategoryColor(gallery?.type ?? ''),
             cover: LocalThumbnail(path: cover?.path, placeholder: placeholder),

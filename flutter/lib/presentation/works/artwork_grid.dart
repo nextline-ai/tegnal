@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/content/gallery_content.dart';
+import '../../core/support/l10n.dart';
 import '../design/tegnal_theme.dart';
 
 /// `ArtworkCellStyle`: everything scales with the cell against a 160 pt reference.
@@ -139,6 +140,7 @@ class GalleryCardLayout extends StatelessWidget {
     required this.cover,
     this.category = '',
     this.categoryColor,
+    this.pages,
     this.showsLanguage = true,
   });
 
@@ -148,6 +150,9 @@ class GalleryCardLayout extends StatelessWidget {
   final String language;
   final String category;
   final Color? categoryColor;
+
+  /// Shown before the language, as “13 | korean”.
+  final int? pages;
   final bool showsLanguage;
   final Widget cover;
 
@@ -157,7 +162,7 @@ class GalleryCardLayout extends StatelessWidget {
     final radius = style.radius(12);
     return Semantics(
       container: true,
-      label: [title, artists, category, language].where((part) => part.isNotEmpty).join(' · '),
+      label: [title, artists, category, _pageText, language].where((part) => part.isNotEmpty).join(' · '),
       excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -223,24 +228,36 @@ class GalleryCardLayout extends StatelessWidget {
             child: _badge(context, category, background: categoryColor, foreground: const Color(0xFFFFFFFF)),
           ),
         const Spacer(),
-        if (language.isNotEmpty) _badge(context, language, material: true),
+        if (_pageCount != null || language.isNotEmpty) _badge(context, language, material: true, pages: _pageCount),
       ],
     );
   }
 
-  Widget _badge(BuildContext context, String text, {Color? background, Color? foreground, bool material = false}) {
-    final label = Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.clip,
-      softWrap: false,
-      style: TegnalType.style(
-        style.fontSize(MediaQuery.textScalerOf(context).scale(11)),
-        weight: FontWeight.w700,
-        color: foreground ?? TegnalColors.label.resolveFrom(context),
-      ),
-      textScaler: TextScaler.noScaling,
+  int? get _pageCount => pages != null && pages! > 0 ? pages : null;
+  String get _pageText => _pageCount == null ? '' : L10n.text('%@ pages', ['$_pageCount']);
+
+  Widget _badge(BuildContext context, String text, {Color? background, Color? foreground, bool material = false, int? pages}) {
+    final textStyle = TegnalType.style(
+      style.fontSize(MediaQuery.textScalerOf(context).scale(11)),
+      weight: FontWeight.w700,
+      color: foreground ?? TegnalColors.label.resolveFrom(context),
     );
+    Widget words(String value) => Text(value, maxLines: 1, overflow: TextOverflow.clip, softWrap: false, style: textStyle, textScaler: TextScaler.noScaling);
+    // The page count and the language share one badge, split by a thin line.
+    final label = pages == null
+        ? words(text)
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              words('$pages'),
+              if (text.isNotEmpty) ...[
+                SizedBox(width: style.inset(4)),
+                Container(width: 1, height: (textStyle.fontSize ?? 11) * 0.85, color: TegnalColors.label.resolveFrom(context).withValues(alpha: 0.55)),
+                SizedBox(width: style.inset(4)),
+                words(text),
+              ],
+            ],
+          );
     final padded = Padding(
       padding: EdgeInsets.symmetric(horizontal: style.inset(6), vertical: style.inset(2)),
       child: label,
