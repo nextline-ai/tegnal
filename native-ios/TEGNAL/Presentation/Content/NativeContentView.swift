@@ -1233,6 +1233,17 @@ struct ReaderWorkInformationView: View {
     }
 }
 
+extension NativeGallery {
+    /// Language, kind and page count; a work the website gives no language or kind leaves that part out.
+    var headingMetadata: String {
+        let pages = String(pages.count)
+        guard !language.isEmpty, !type.isEmpty else {
+            return ([language, type].filter { !$0.isEmpty } + [L10n.text("%@ pages", pages)]).joined(separator: " · ")
+        }
+        return L10n.text("%@ · %@ · %@ pages", language, type, pages)
+    }
+}
+
 private struct GalleryInformation: View {
     let gallery: NativeGallery
     let cover: UIImage?
@@ -1250,7 +1261,7 @@ private struct GalleryInformation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             if showsCover { WorkDetailCover(image: cover, loading: !coverFinished) }
-            GalleryDetailHeading(title: gallery.title, metadata: L10n.text("%@ · %@ · %@ pages", gallery.language, gallery.type, String(gallery.pages.count)))
+            GalleryDetailHeading(title: gallery.title, metadata: gallery.headingMetadata)
             VStack(spacing: 11) {
                 GalleryDetailActions(read: read, bookmark: bookmark)
                 if let openVersion, let suggestion {

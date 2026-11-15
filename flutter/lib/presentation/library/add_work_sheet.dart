@@ -1,6 +1,7 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
+import '../content/content_bookmark.dart';
 import '../../core/content/gallery_id_parser.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/storage/folder_rules.dart';
@@ -79,7 +80,7 @@ class _AddWorkSheetState extends State<AddWorkSheet> {
   void _save() {
     if (_detected.isEmpty) return;
     setState(() => _saving = true);
-    var created = 0;
+    final created = <int>[];
     for (final id in _detected) {
       final existing = _database.getWork(id);
       final catalog = _database.getCatalog(id);
@@ -99,9 +100,11 @@ class _AddWorkSheetState extends State<AddWorkSheet> {
         site: ComicSites.active,
         discoveryContext: widget.discovery,
       );
-      if (existing == null) created++;
+      if (existing == null) created.add(id);
     }
-    if (created > 0) widget.routes.startCoverQueue?.call();
+    if (created.isNotEmpty) widget.routes.startCoverQueue?.call();
+    // A bookmark made here is one like any other: it reaches the account's favorites too.
+    syncAccountFavorites(widget.routes.content, created, saved: true);
     widget.routes.notifyChanged();
     Navigator.of(context).pop();
   }

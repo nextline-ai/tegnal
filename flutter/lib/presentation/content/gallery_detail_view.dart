@@ -549,10 +549,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (widget.showsCover) ...[WorkDetailCover(image: widget.cover, loading: !widget.coverFinished), const SizedBox(height: 22)],
-                GalleryDetailHeading(
-                  title: gallery.title,
-                  metadata: L10n.text('%@ · %@ · %@ pages', [gallery.language, gallery.type, '${gallery.pages.length}']),
-                ),
+                GalleryDetailHeading(title: gallery.title, metadata: galleryHeadingMetadata(gallery)),
                 const SizedBox(height: 22),
                 if (widget.showsRead) ...[
                   _ActionButton(prominent: true, icon: Symbols.book, label: L10n.text('Read'), onPressed: () => widget.actions.read(0, resume: true)),

@@ -42,10 +42,23 @@ class BookmarkSession {
   final Map<int, int> savedFolders = {};
 
   /// Mirrors a bookmark change to the account's favorites when that is turned on.
-  void syncAccountFavorite(int id, {required bool saved}) {
-    if (!content.syncsAccountFavorites || !content.siteAccountSignedIn || !MangaUrls.hasResolvedBackend || MangaUrls.backend != MangaBackend.keyed) return;
-    unawaited(MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: content.accountFavoriteCategory).catchError((Object _) {}));
-  }
+  void syncAccountFavorite(int id, {required bool saved}) => syncAccountFavorites(content, [id], saved: saved);
+}
+
+/// Mirrors several bookmark changes one after another, so a long list never bursts the website.
+void syncAccountFavorites(ContentEnvironment content, List<int> ids, {required bool saved}) {
+  final keyed = MangaUrls.hasResolvedBackend && MangaUrls.backend == MangaBackend.keyed;
+  if (ids.isEmpty || !content.syncsAccountFavorites || !content.siteAccountSignedIn || !keyed) return;
+  final category = content.accountFavoriteCategory;
+  unawaited(() async {
+    for (final id in ids) {
+      try {
+        await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category);
+      } on Object {
+        // The bookmark stays; the website's favorites catch up the next time they're imported.
+      }
+    }
+  }());
 }
 
 /// Bookmarking a comic from Explore, work information or the reader.

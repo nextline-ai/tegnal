@@ -18,7 +18,8 @@ struct WorkExtrasSection: View {
     private var provider: (any WorkExtrasProviding)? { source as? any WorkExtrasProviding }
 
     var body: some View {
-        Group {
+        // A stack, not a Group: a Group with nothing to show yet has no view to start the load from.
+        VStack(alignment: .leading, spacing: 0) {
             if let extras, Self.hasContent(extras) {
                 VStack(alignment: .leading, spacing: 14) {
                     Divider()

@@ -919,9 +919,16 @@ public final class AppEnvironment: @unchecked Sendable {
 
     /// Mirrors a bookmark change to the account's favorites when that is turned on.
     @MainActor func syncAccountFavorite(_ id: Int64, saved: Bool) {
-        guard syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
+        syncAccountFavorites([id], saved: saved)
+    }
+
+    /// Mirrors several bookmark changes one after another, so a long list never bursts the website.
+    @MainActor func syncAccountFavorites(_ ids: [Int64], saved: Bool) {
+        guard !ids.isEmpty, syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
         let category = accountFavoriteCategory
-        Task { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category) }
+        Task {
+            for id in ids { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category) }
+        }
     }
 
     /// Fetches every saved work's information again through the background queue.

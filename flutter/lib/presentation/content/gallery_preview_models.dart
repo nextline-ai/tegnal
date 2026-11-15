@@ -277,7 +277,17 @@ abstract final class GalleryDetailMetadata {
 }
 
 /// "English · manga · 24 pages" under the work title (`GalleryDetailHeading` metadata).
-String galleryHeadingMetadata(NativeGallery gallery) => L10n.text('%@ · %@ · %@ pages', [gallery.language, gallery.type, '${gallery.pages.length}']);
+/// Language, kind and page count; a work the website gives no language or kind leaves that part out.
+String galleryHeadingMetadata(NativeGallery gallery) {
+  final pages = '${gallery.pages.length}';
+  if (gallery.language.isEmpty || gallery.type.isEmpty) {
+    return [
+      ...[gallery.language, gallery.type].where((part) => part.isNotEmpty),
+      L10n.text('%@ pages', [pages]),
+    ].join(' · ');
+  }
+  return L10n.text('%@ · %@ · %@ pages', [gallery.language, gallery.type, pages]);
+}
 
 /// Favorite artists match however a website spells them (spaces or underscores, case).
 abstract final class MangaArtistFavorite {

@@ -158,6 +158,7 @@ public struct AddWorkSheet: View {
 
         Task {
             var createdCount = 0
+            var created: [Int64] = []
             for id in detectedIds {
                 let existing = try? env.database.getWork(galleryId: id)
                 let catalog = try? env.database.getCatalog(galleryId: id)
@@ -180,12 +181,15 @@ public struct AddWorkSheet: View {
                 )
                 if existing == nil {
                     createdCount += 1
+                    created.append(id)
                 }
             }
 
             if createdCount > 0 {
                 env.startCoverQueue()
             }
+            // A bookmark made here is one like any other: it reaches the account's favorites too.
+            env.syncAccountFavorites(created, saved: true)
 
             await MainActor.run {
                 isSaving = false
