@@ -113,6 +113,44 @@ final class KeyedCatalogTests: XCTestCase {
         } catch ContentError.imageLimit { }
     }
 
+    func testImageHostsAnsweringInWordsReportTheAllowanceOrTheBan() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        let gallery = try await source.gallery(3000)
+        fixture.textAnswer = "You have reached the image limit, and do not have sufficient GP to buy a download quota."
+        do {
+            _ = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
+            XCTFail("The allowance notice must be reported, not read as a broken image")
+        } catch ContentError.imageLimit { }
+        XCTAssertFalse(fixture.requests.contains { $0.query?.hasPrefix("nl=") == true }, "The notice is the site's answer, so no other host is asked")
+        XCTAssertEqual(fixture.count(path: "/s/2222222222/3000-2"), 1)
+
+        fixture.textAnswer = "Your IP address has been temporarily banned for excessive pageloads which indicates that you are using automated mirroring/harvesting software. The ban expires in 59 minutes and 48 seconds"
+        do {
+            _ = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
+            XCTFail("The ban must be reported, not read as a broken image")
+        } catch ContentError.temporarilyBlocked { }
+        XCTAssertFalse(fixture.requests.contains { $0.query?.hasPrefix("nl=") == true })
+
+        XCTAssertNil(KeyedCatalogSource.textNotice(Data("<html><body>An error has occurred.</body></html>".utf8), mimeType: "text/html"),
+                     "Other words from a host leave the usual retry on another host")
+        XCTAssertNil(KeyedCatalogSource.textNotice(Data("You have reached the image limit".utf8), mimeType: "image/webp"), "Image bytes are never read as words")
+    }
+
+    func testNumberLookupsIgnoreTheAccountsOwnFilters() async throws {
+        let url = try XCTUnwrap(KeyedCatalogSource.keySearchURL(2990, site: "https://keyed.example/"))
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") }),
+                       ["f_search": "gid:2990", "f_cats": "0", "advsearch": "1", "f_sfl": "on", "f_sfu": "on", "f_sft": "on"],
+                       "Hidden languages, uploaders, tags and default categories must not hide the work being looked up")
+
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 1)
+        GalleryKeys.shared.removeAll()
+        _ = try await source.gallery(2990)
+        let lookup = try XCTUnwrap(fixture.requests.first { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.contains(.init(name: "f_search", value: "gid:2990")) == true })
+        XCTAssertEqual(URLComponents(url: lookup, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "f_sfl" }?.value, "on")
+    }
+
     func testForgottenKeyIsFoundBySearchingTheNumber() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 1)
@@ -253,6 +291,8 @@ private final class KeyedFixture: @unchecked Sendable {
     private var forms: [String] = []
     var failFirstNode = false
     var allowanceUsed = false
+    /// Words the first image host sends instead of the image.
+    var textAnswer: String?
     /// The account reads in the multi-page viewer, so work pages link there instead of to each page.
     var viewer = false
     let image = Data(repeating: 0x42, count: 64)
@@ -347,6 +387,7 @@ private final class KeyedFixture: @unchecked Sendable {
         case "sheets.example":
             return url.path.hasPrefix("/large-") ? .data(200, image, ["Content-Type": "image/jpeg"]) : .data(200, Self.sheet, ["Content-Type": "image/png"])
         case "node1.volunteer.example":
+            if let textAnswer { return .data(200, Data(textAnswer.utf8), ["Content-Type": "text/html; charset=UTF-8"]) }
             return failFirstNode ? .data(503, Data(), [:]) : .data(200, image, ["Content-Type": "image/webp"])
         case "node2.volunteer.example": return .data(200, image, ["Content-Type": "image/webp"])
         case "notice.example": return .data(200, image, ["Content-Type": "image/gif"])

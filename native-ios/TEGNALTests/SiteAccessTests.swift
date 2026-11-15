@@ -84,6 +84,29 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["sk"], "settings")
     }
 
+    func testAccessTheWallHandsOutIsKeptAndRefusedAccessIsDropped() async throws {
+        resolveKeyed("members.example")
+        let pasted = SiteAccount.parseCookies("ipb_member_id=7; ipb_pass_hash=0123456789abcdef0123456789abcdef; igneous=refused001")
+        XCTAssertTrue(SiteAccount.signIn(pasted: pasted, host: "members.example"))
+        let wall = Data(#"<html><body><img src="https://members.example/img/kokomade.jpg"></body></html>"#.utf8)
+        // The wall answers a request whose access was refused, and hands out new access with it.
+        StubProtocol.handler = { _ in (200, ["Content-Type": "text/html", "Set-Cookie": "igneous=fresh00001; path=/; domain=.members.example"], wall) }
+        let source = MangaContentSource(transport: transport())
+        do {
+            _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 5)
+            XCTFail("Expected the wall")
+        } catch { XCTAssertEqual(error as? ContentError, .signInRequired) }
+        XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["igneous"], "fresh00001", "Access the wall just handed out is kept for the next request")
+
+        StubProtocol.handler = { _ in (200, ["Content-Type": "text/html"], wall) }
+        do {
+            _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 5)
+            XCTFail("Expected the wall")
+        } catch { XCTAssertEqual(error as? ContentError, .signInRequired) }
+        XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["igneous"], "Access the site refused is dropped so a fresh one is handed out")
+        XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["ipb_member_id"], "7")
+    }
+
     func testMembersOnlySiteAsksForAnAccountAndOpensOnceSignedIn() async throws {
         connect("members.example")
         let listing = #"<html><body><form><input name="f_search"></form><div class="searchnav"></div><a href="https://members.example/g/3000/0000000bb8/">Work</a></body></html>"#
@@ -191,6 +214,12 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertFalse(ContentError.allowsOtherSite(ContentError.invalidQuery))
         XCTAssertFalse(ContentError.allowsOtherSite(URLError(.notConnectedToInternet)), "Without a connection every website fails alike")
         XCTAssertFalse(ContentError.allowsOtherSite(CancellationError()))
+    }
+
+    func testAStalePageKeyIsNotASignInWall() {
+        XCTAssertEqual(KeyedCatalogSource.pageError("Keep trying."), .galleryNotFound,
+                       "A page link whose key no longer matches is answered in two words, which says nothing about the account")
+        XCTAssertEqual(KeyedCatalogSource.pageError("Short."), .signInRequired, "Other near-empty pages still read as the members-only wall")
     }
 
     // MARK: Opening works on other connected websites

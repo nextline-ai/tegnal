@@ -252,6 +252,23 @@ enum SiteAccount {
         }
     }
 
+    /// The value of a cookie the site set for [host], as the next request sends it.
+    static func siteCookie(_ name: String, host: String) -> String? {
+        lock.withLock { load().sites[host]?[name] }
+    }
+
+    /// Drops a cookie the site refused, unless the same answer already handed out another one:
+    /// a members-only catalog may show its wall to a request without access while setting the
+    /// access that lets the next request in.
+    static func forget(_ name: String, host: String, refused sent: String?) {
+        lock.withLock {
+            var stored = load()
+            guard let current = stored.sites[host]?[name], current == sent else { return }
+            stored.sites[host]?[name] = nil
+            save(stored)
+        }
+    }
+
     /// The account cookie names saved for [host], for showing what is kept without the values.
     static func savedCookieNames(host: String) -> [String] {
         let stored = lock.withLock { load() }

@@ -208,15 +208,18 @@ actor KeyedCatalogSource {
     }
 
     private func page(_ url: URL, site: String) async throws -> String {
+        let host = URL(string: site)?.host?.lowercased()
+        let access = host.flatMap { SiteAccount.siteCookie(SiteAccount.accessCookie, host: $0) }
         let data: Data
         do { (data, _) = try await transport.get(url, limit: 3_000_000) }
         catch ContentError.unavailable(let status) where (300..<400).contains(status) { throw ContentError.signInRequired }
         try prepare(site)
         let text = String(decoding: data, as: UTF8.self)
         if let error = Self.pageError(text) {
-            // A refused access cookie is dropped, so the next request is handed a fresh one.
-            if error == .signInRequired, Self.isRestrictedNotice(text), let host = URL(string: site)?.host?.lowercased() {
-                SiteAccount.forget(SiteAccount.accessCookie, host: host)
+            // A refused access cookie is dropped, so the next request is handed a fresh one; one the
+            // wall itself just handed out is kept for that request.
+            if error == .signInRequired, Self.isRestrictedNotice(text), let host {
+                SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access)
             }
             throw error
         }
@@ -234,7 +237,7 @@ actor KeyedCatalogSource {
         // A wrong or stale key, or a page that no longer exists, is answered with one short line.
         if text.utf8.count < 1_024 {
             let lowered = text.lowercased()
-            if ["key missing", "invalid page", "gallery not found"].contains(where: lowered.contains) { return .galleryNotFound }
+            if ["key missing", "invalid page", "keep trying", "gallery not found"].contains(where: lowered.contains) { return .galleryNotFound }
         }
         if isRestrictedNotice(text) || asksForSignIn(text) || text.trimmingCharacters(in: .whitespacesAndNewlines).count < 64 { return .signInRequired }
         return nil
@@ -273,13 +276,22 @@ actor KeyedCatalogSource {
     /// The key comes from a link already seen, or from searching the number.
     func key(for id: Int64, site: String) async throws -> String {
         if let key = keys.key(for: id) { return key }
-        guard var components = URLComponents(string: site) else { throw ContentError.invalidQuery }
-        components.queryItems = [URLQueryItem(name: "f_search", value: "gid:\(id)")]
-        guard let url = components.url else { throw ContentError.invalidQuery }
+        guard let url = Self.keySearchURL(id, site: site) else { throw ContentError.invalidQuery }
         let links = Self.links(in: try await page(url, site: site))
         keys.remember(links.map { ($0.id, $0.key) })
         guard let link = links.first(where: { $0.id == id }) else { throw ContentError.galleryNotFound }
         return link.key
+    }
+
+    /// A search for one number. A signed-in account's own filters (hidden languages, uploaders and
+    /// tags, and categories left out by default) apply to searches too, so they are switched off
+    /// here and every category is asked for: otherwise a work the account filters would never be found.
+    nonisolated static func keySearchURL(_ id: Int64, site: String) -> URL? {
+        guard id > 0, var components = URLComponents(string: site) else { return nil }
+        components.queryItems = [URLQueryItem(name: "f_search", value: "gid:\(id)"), URLQueryItem(name: "f_cats", value: "0"),
+                                 URLQueryItem(name: "advsearch", value: "1"), URLQueryItem(name: "f_sfl", value: "on"),
+                                 URLQueryItem(name: "f_sfu", value: "on"), URLQueryItem(name: "f_sft", value: "on")]
+        return components.url
     }
 
     private func detailPage(_ id: Int64, key: String, page: Int, site: String) async throws -> Detail {
@@ -347,7 +359,7 @@ actor KeyedCatalogSource {
             catch {
                 try Task.checkCancellation()
                 // A notice in place of the image is the site's answer, not one host's failure.
-                if let notice = error as? ContentError, notice == .imageLimit || notice == .signInRequired { throw notice }
+                if let notice = error as? ContentError, [.imageLimit, .signInRequired, .temporarilyBlocked].contains(notice) { throw notice }
                 // Another volunteer host serves the same image when this one fails.
                 guard attempt < 2, let next = shown.reload, next != reload else { throw error }
                 reload = next
@@ -359,15 +371,26 @@ actor KeyedCatalogSource {
     private func fetch(_ url: URL, galleryID: Int64, limit: Int, site: String) async throws -> Data {
         guard Self.safeMediaURL(url) else { throw ContentError.unsupportedFormat }
         MangaUrls.registerMedia([url], site: site)
+        let host = URL(string: site)?.host?.lowercased()
+        let access = host.flatMap { SiteAccount.siteCookie(SiteAccount.accessCookie, host: $0) }
         let (data, response) = try await transport.get(url, limit: limit, galleryID: galleryID)
         try prepare(site)
+        if let notice = Self.textNotice(data, mimeType: response.mimeType) { throw notice }
         guard response.mimeType?.hasPrefix("image/") != false, data.count > 32 else { throw ContentError.unsupportedFormat }
         if let notice = Self.imageNotice(data, url: response.url ?? url) {
             // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
-            if notice == .signInRequired, let host = URL(string: site)?.host?.lowercased() { SiteAccount.forget(SiteAccount.accessCookie, host: host) }
+            if notice == .signInRequired, let host { SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access) }
             throw notice
         }
         return data
+    }
+
+    /// Image hosts answer in words when the account's allowance ran out or the network is banned,
+    /// served where the image was expected. Only those two are read from such an answer.
+    nonisolated static func textNotice(_ data: Data, mimeType: String?) -> ContentError? {
+        guard data.count < 10_000, mimeType?.lowercased().hasPrefix("image/") != true else { return nil }
+        let notice = pageError(String(decoding: data, as: UTF8.self))
+        return notice == .imageLimit || notice == .temporarilyBlocked ? notice : nil
     }
 
     /// The site's own notices served where an image was expected, so they are never shown, cached or
