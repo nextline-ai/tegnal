@@ -194,6 +194,20 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
     return document;
   }
 
+  /// A card's work. A keyed catalog answers it from its details endpoint, a request per 25 works,
+  /// instead of loading each work's page.
+  @override
+  Future<NativeGallery> preview(int id) async {
+    if (id <= 0) throw ContentError.invalidQuery;
+    final site = _prepareSite();
+    final cached = cachedPreview(id);
+    if (cached != null) return cached;
+    if (await _resolve(site) != MangaBackend.keyed) return gallery(id);
+    final preview = await keyed.preview(id, site: site);
+    if (MangaUrls.home != site) throw const CancellationError();
+    return preview;
+  }
+
   /// Used by tests to wait for consumers, not wall-clock delays.
   int galleryConsumerCount(int id) => _galleryFlights[id]?.consumers ?? 0;
 

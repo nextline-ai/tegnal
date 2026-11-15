@@ -1,3 +1,4 @@
+import 'dart:convert';
 // Ported from native-ios/TEGNALTests/MangaBackendTests.swift.
 // Not ported yet: testMissingGalleryHTTPResponseIsCountedAsGoneByBackfill needs CoverQueueActor (step 3).
 import 'dart:typed_data';
@@ -90,6 +91,14 @@ b: '123/' };
 }
 
 void main() {
+  test('a work the site blocks reads as missing', () {
+    List<int> info(int blocked) => utf8.encode(
+      'var galleryinfo = {"id":"4000","blocked":$blocked,"title":"Sample","files":[{"hash":"${'a' * 64}","name":"1.webp","width":1,"height":1,"hasavif":1}]}',
+    );
+    expect(() => NativeGallery.parse(info(1), 4000), throwsA(ContentError.galleryNotFound), reason: "The site's own page answers it with its not-found page");
+    expect(NativeGallery.parse(info(0), 4000).pages.length, 1);
+  });
+
   test('derived data domain matches current indexed frontend without executing script', () {
     const script = '''
         const domain2 = 'media.example';

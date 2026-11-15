@@ -87,7 +87,7 @@ class GalleryFeedPreview extends ChangeNotifier {
 
   Future<void> _fetch() async {
     try {
-      final value = gallery ?? await source.gallery(id);
+      final value = gallery ?? await source.preview(id);
       if (_cancelled) return;
       _setGallery(value);
       notifyListeners();

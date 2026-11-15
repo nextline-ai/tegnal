@@ -14,6 +14,7 @@ import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/content/gallery_id_parser.dart';
 import 'package:tegnal/core/content/manga_content_source.dart';
 import 'package:tegnal/core/content/manga_urls.dart';
+import 'package:tegnal/core/content/site_account.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/support/preferences.dart';
 
@@ -64,6 +65,7 @@ class CatalogFixture {
       'blocked': 0,
       'thumb_extension': 'jpg',
       'tags': tags,
+      'token': id.toRadixString(16).padLeft(10, '0'),
     };
   }
 
@@ -206,6 +208,13 @@ void main() {
     expect(MangaUrls.hasResolvedBackend, isFalse);
     expect(MangaUrls.readerUrl(2000, page: 3), 'https://archive.example/reader/2000.html#3');
     expect(ContentTransport.allows(Uri.parse('https://preview.example/0/2/0.jpg')), isFalse);
+  });
+
+  test('listed works hand their keys to the account-based catalog', () async {
+    final fixture = CatalogFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(), offset: 0, count: 2);
+    expect(GalleryKeys.shared.key(2000), '00000007d0', reason: 'The same number opens there without searching for it');
+    expect(GalleryKeys.shared.key(1999), '00000007cf');
   });
 
   test('search previews avoid fetching every full document', () async {

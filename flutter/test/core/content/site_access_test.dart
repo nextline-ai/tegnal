@@ -98,6 +98,39 @@ void main() {
       expect(SiteAccount.cookies('members.example')['sk'], 'settings');
     });
 
+    test('access the wall hands out is kept and refused access is dropped', () async {
+      _resolveKeyed(preferences, 'members.example');
+      expect(SiteAccount.signInPasted(SiteAccount.parseCookies('ipb_member_id=7; ipb_pass_hash=$_hash; igneous=refused001'), host: 'members.example'), isTrue);
+      const wall = '<html><body><img src="https://members.example/img/kokomade.jpg"></body></html>';
+      // The wall answers a request whose access was refused, and hands out new access with it.
+      var handsOut = true;
+      final transport = ContentTransport(
+        fetcher: FixtureFetcher(
+          (_) => FixtureReply.text(200, wall, {'Content-Type': 'text/html', if (handsOut) 'Set-Cookie': 'igneous=fresh00001; path=/; domain=.members.example'}),
+        ),
+      );
+      final source = MangaContentSource(transport: transport);
+      await expectLater(source.list(const GalleryQuery(language: 'all'), offset: 0, count: 5), throwsA(ContentError.signInRequired));
+      expect(SiteAccount.cookies('members.example')['igneous'], 'fresh00001', reason: 'Access the wall just handed out is kept for the next request');
+      handsOut = false;
+      await expectLater(source.list(const GalleryQuery(language: 'all'), offset: 0, count: 5), throwsA(ContentError.signInRequired));
+      expect(SiteAccount.cookies('members.example')['igneous'], isNull, reason: 'Access the site refused is dropped so a fresh one is handed out');
+      expect(SiteAccount.cookies('members.example')['ipb_member_id'], '7');
+    });
+
+    test('the no-access mark and bot check cookies are never sent back', () {
+      _resolveKeyed(preferences, 'members.example');
+      final pasted = SiteAccount.parseCookies('ipb_member_id=7; ipb_pass_hash=$_hash; yay=louder; sk=abc123');
+      expect(pasted.site, {'sk': 'abc123'}, reason: 'The mark a visit without access leaves is not part of the account');
+      expect(SiteAccount.signInPasted(pasted, host: 'members.example'), isTrue);
+      SiteAccount.storeResponse(Uri.parse('https://members.example/'), ['yay=louder; path=/', '__cf_bm=bot; path=/', 'star=1-2; path=/']);
+      final sent = SiteAccount.cookies('members.example');
+      expect(sent['yay'], isNull);
+      expect(sent['__cf_bm'], isNull, reason: "A bot check's cookie travels only with the browser that earned it");
+      expect(sent['star'], '1-2');
+      expect(sent['sk'], 'abc123');
+    });
+
     test('a members-only site asks for an account and opens once signed in', () async {
       preferences.set('manga.site_address', 'members.example');
       const listing =
@@ -216,6 +249,15 @@ void main() {
     expect(KeyedCatalogSource.imageNotice(List.filled(28658, 1), url: page), isNull);
     expect(KeyedCatalogSource.imageNotice(List.filled(144844, 1), url: page), isNull);
     expect(KeyedCatalogSource.imageNotice(List.filled(64, 1), url: page), isNull);
+  });
+
+  test('a stale page key is not a sign-in wall', () {
+    expect(
+      KeyedCatalogSource.pageError('Keep trying.'),
+      ContentError.galleryNotFound,
+      reason: 'A page link whose key no longer matches is answered in two words, which says nothing about the account',
+    );
+    expect(KeyedCatalogSource.pageError('Short.'), ContentError.signInRequired, reason: 'Other near-empty pages still read as the members-only wall');
   });
 
   test('pages that say no instead of showing works', () {

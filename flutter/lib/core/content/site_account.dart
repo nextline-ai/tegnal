@@ -27,6 +27,14 @@ class GalleryKeys {
 
   void remember(int id, String key) => rememberAll([(id, key)]);
 
+  /// Forgets a key the site no longer accepts, so the number is searched again.
+  void forget(int id) {
+    _loadIfNeeded();
+    if (_keys.remove(id) == null) return;
+    _order.remove(id);
+    _scheduleSave();
+  }
+
   void rememberAll(List<(int, String)> pairs) {
     _loadIfNeeded();
     var changed = false;
@@ -212,7 +220,7 @@ abstract final class SiteAccount {
   }
 
   /// Cookies an account carries besides its identity: access, settings key and perks.
-  static bool keepsForAccount(String name) => const [accessCookie, 'sk', 'star', 'hath_perks', 'yay', 'iq'].contains(name);
+  static bool keepsForAccount(String name) => const [accessCookie, 'sk', 'star', 'hath_perks', 'iq'].contains(name);
 
   static bool _isCookieName(String name) => name.isNotEmpty && name.length <= 64 && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(name);
 
@@ -257,6 +265,20 @@ abstract final class SiteAccount {
   static void forget(String name, {required String host}) {
     final stored = _load();
     if (stored.sites[host]?.remove(name) == null) return;
+    _save(stored);
+  }
+
+  /// The value of a cookie the site set for [host], as the next request sends it.
+  static String? siteCookie(String name, {required String host}) => _load().sites[host]?[name];
+
+  /// Drops a cookie the site refused, unless the same answer already handed out another one:
+  /// a members-only catalog may show its wall to a request without access while setting the
+  /// access that lets the next request in.
+  static void forgetRefused(String name, {required String host, required String? sent}) {
+    final stored = _load();
+    final current = stored.sites[host]?[name];
+    if (current == null || current != sent) return;
+    stored.sites[host]!.remove(name);
     _save(stored);
   }
 
@@ -328,9 +350,10 @@ abstract final class SiteAccount {
   static Map<String, String> cookies(String host) {
     final stored = _load();
     final values = {...?stored.sessions[host]};
-    // What the site set later, such as a renewed session, replaces what sign-in kept.
+    // What the site set later, such as a renewed session, replaces what sign-in kept. Cookies
+    // kept before they were known to be ignored are not sent either.
     for (final MapEntry(:key, :value) in (stored.sites[host] ?? const <String, String>{}).entries) {
-      if (!isPlaceholder(key, value)) values[key] = value;
+      if (!isPlaceholder(key, value) && !ignoresCookie(key) && !SiteClearance.isClearanceCookie(key)) values[key] = value;
     }
     values['nw'] = '1';
     if (_signedIn(stored.identity)) values.addAll(stored.identity);
@@ -344,9 +367,11 @@ abstract final class SiteAccount {
   }
 
   /// Keeps cookies the site sets for itself, such as access it grants after the identity is checked.
-  /// Cookies a site sets that are never kept: the content filter it sets itself, and a tracking
-  /// cookie other clients drop because sending it back changes how the site answers.
-  static bool ignoresCookie(String name) => name == 'nw' || name == '__utmp';
+  /// Cookies a site sets that are never kept: the content filter it sets itself, a tracking
+  /// cookie other clients drop because sending it back changes how the site answers, and the mark
+  /// a members-only catalog leaves on a visit without access, which other clients delete at every
+  /// launch and sign-in so it can't keep an account that has access out.
+  static bool ignoresCookie(String name) => const ['nw', '__utmp', 'yay'].contains(name);
 
   static void storeResponse(Uri url, List<String> setCookieHeaders) {
     if (!applies(url) || setCookieHeaders.isEmpty) return;
@@ -354,7 +379,8 @@ abstract final class SiteAccount {
     for (final header in setCookieHeaders) {
       try {
         final cookie = Cookie.fromSetCookieValue(header);
-        if (isIdentity(cookie.name) || ignoresCookie(cookie.name)) continue;
+        // A bot check's cookies are kept with the browser that earned them, never here.
+        if (isIdentity(cookie.name) || ignoresCookie(cookie.name) || SiteClearance.isClearanceCookie(cookie.name)) continue;
         // A placeholder instead of access is never kept: the access already held stays.
         if (isPlaceholder(cookie.name, cookie.value)) continue;
         received.add(SiteCookie(name: cookie.name, value: cookie.value, expires: cookie.expires));

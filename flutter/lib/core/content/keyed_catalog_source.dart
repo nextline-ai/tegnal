@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -98,6 +99,44 @@ class _Feed {
   final created = DateTime.now();
 }
 
+/// Page loads on one website, paced like a person browsing quickly: a few at once, then one at a
+/// steady interval. Bursts of page loads are what get an address banned on keyed catalogs; images
+/// and the details endpoint are not paced here.
+class PagePacer {
+  PagePacer({this.burst = 5, this.interval = const Duration(milliseconds: 800)});
+
+  static final _paced = PagePacer();
+  static final _unpaced = PagePacer(burst: 1000, interval: const Duration(milliseconds: 1));
+
+  /// Tests and the offline fixture run aren't paced.
+  static PagePacer get shared => ContentPreferences.isIsolated ? _unpaced : _paced;
+
+  final int burst;
+  final Duration interval;
+  final _buckets = <String, (double, DateTime)>{};
+
+  Future<void> wait(String host) async {
+    while (true) {
+      final now = DateTime.now();
+      final (saved, updated) = _buckets[host] ?? (burst.toDouble(), now);
+      final tokens = math.min(burst.toDouble(), saved + now.difference(updated).inMicroseconds / interval.inMicroseconds);
+      if (tokens >= 1) {
+        _buckets[host] = (tokens - 1, now);
+        return;
+      }
+      _buckets[host] = (tokens, now);
+      await Future<void>.delayed(interval * (1 - tokens));
+    }
+  }
+}
+
+class _PreviewBatch {
+  _PreviewBatch(this.site);
+  final String site;
+  final links = <KeyedLink>[];
+  late final Future<Map<int, NativeGallery>> result;
+}
+
 /// Cuts one tile out of a sheet of previews. Replaceable in tests without an engine.
 typedef PreviewCropper = Future<Uint8List> Function(List<int> sheet, CropRect crop);
 
@@ -105,13 +144,16 @@ typedef PreviewCropper = Future<Uint8List> Function(List<int> sheet, CropRect cr
 /// HTML listing with a cursor, page links per work, and a JSON endpoint for
 /// details. Only page shapes and response fields identify this protocol.
 class KeyedCatalogSource {
-  KeyedCatalogSource(this.transport, {this.keysOverride, PreviewCropper? cropper}) : cropper = cropper ?? KeyedCatalogSource.cropped;
+  KeyedCatalogSource(this.transport, {this.keysOverride, PreviewCropper? cropper, PagePacer? pacer})
+    : cropper = cropper ?? KeyedCatalogSource.cropped,
+      pacer = pacer ?? PagePacer.shared;
 
   final ContentTransport transport;
 
   /// Tests pass their own keys; the app uses the shared ones.
   final GalleryKeys? keysOverride;
   final PreviewCropper cropper;
+  final PagePacer pacer;
   GalleryKeys get keys => keysOverride ?? GalleryKeys.shared;
   String _site = '';
   final _feeds = <GalleryQuery, _Feed>{};
@@ -300,6 +342,10 @@ class KeyedCatalogSource {
   }
 
   Future<String> _page(Uri url, String site) async {
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    if (host != null) await pacer.wait(host);
+    _prepare(site);
+    final access = host == null ? null : SiteAccount.siteCookie(SiteAccount.accessCookie, host: host);
     final ContentResult result;
     try {
       result = await transport.get(url, limit: 3000000);
@@ -312,9 +358,11 @@ class KeyedCatalogSource {
     final text = utf8.decode(result.data, allowMalformed: true);
     final error = pageError(text);
     if (error != null) {
-      // A refused access cookie is dropped, so the next request is handed a fresh one.
-      final host = ContentURL.parse(site)?.host.toLowerCase();
-      if (error == ContentError.signInRequired && isRestrictedNotice(text) && host != null) SiteAccount.forget(SiteAccount.accessCookie, host: host);
+      // A refused access cookie is dropped, so the next request is handed a fresh one; one the
+      // wall itself just handed out is kept for that request.
+      if (error == ContentError.signInRequired && isRestrictedNotice(text) && host != null) {
+        SiteAccount.forgetRefused(SiteAccount.accessCookie, host: host, sent: access);
+      }
       throw error;
     }
     return text;
@@ -331,7 +379,7 @@ class KeyedCatalogSource {
     // A wrong or stale key, or a page that no longer exists, is answered with one short line.
     if (utf8.encode(text).length < 1024) {
       final lowered = text.toLowerCase();
-      if (['key missing', 'invalid page', 'gallery not found'].any(lowered.contains)) return ContentError.galleryNotFound;
+      if (['key missing', 'invalid page', 'keep trying', 'gallery not found'].any(lowered.contains)) return ContentError.galleryNotFound;
     }
     if (isRestrictedNotice(text) || asksForSignIn(text) || text.trim().characters.length < 64) return ContentError.signInRequired;
     return null;
@@ -349,10 +397,8 @@ class KeyedCatalogSource {
   Future<NativeGallery> gallery(int id, {required String site}) async {
     _prepare(site);
     if (id <= 0) throw ContentError.invalidQuery;
-    final key = await keyFor(id, site: site);
-    final items = await _metadata([KeyedLink(id, key)], site);
-    final item = items.where((item) => _number(item['gid']) == id).firstOrNull;
-    final parsed = item == null || item['error'] != null ? null : work(item, site: site);
+    final (key, item) = await _detailsRow(id, site);
+    final parsed = work(item, site: site);
     if (parsed == null) throw ContentError.galleryNotFound;
     final (preview, fileCount) = parsed;
     _previews['$site#$id'] = preview;
@@ -382,11 +428,72 @@ class KeyedCatalogSource {
     );
   }
 
+  /// A work's details row with the key the site accepted for it. A remembered key the site no
+  /// longer accepts, such as one another website handed over, is looked up again once.
+  Future<(String, Map<String, Object?>)> _detailsRow(int id, String site) async {
+    final remembered = keys.key(id) != null;
+    var key = await keyFor(id, site: site);
+    Map<String, Object?>? row(List<Map<String, Object?>> items) => items.where((item) => _number(item['gid']) == id).firstOrNull;
+    var item = row(await _metadata([KeyedLink(id, key)], site));
+    if (remembered && (item == null || item['error'] != null)) {
+      keys.forget(id);
+      key = await keyFor(id, site: site);
+      item = row(await _metadata([KeyedLink(id, key)], site));
+    }
+    if (item == null || item['error'] != null) throw ContentError.galleryNotFound;
+    return (key, item);
+  }
+
+  _PreviewBatch? _openBatch;
+
+  /// A work as a list card shows it: title, tags, cover and page count from the details endpoint,
+  /// never from the work's own page. Cards asking at the same moment share one details request,
+  /// so a list that lost its cached details costs a request per 25 works, not a page load per card.
+  Future<NativeGallery> preview(int id, {required String site}) async {
+    _prepare(site);
+    if (id <= 0) throw ContentError.invalidQuery;
+    final cached = cachedPreview(id);
+    if (cached != null) return cached;
+    final remembered = keys.key(id) != null;
+    final key = await keyFor(id, site: site);
+    final known = cachedPreview(id);
+    if (known != null) return known;
+    var batch = _openBatch;
+    if (batch == null || batch.site != site || batch.links.length >= 25) {
+      final created = _PreviewBatch(site);
+      _openBatch = created;
+      // Cards of one screen ask within moments of each other.
+      created.result = Future<void>.delayed(const Duration(milliseconds: 50)).then((_) {
+        if (identical(_openBatch, created)) _openBatch = null;
+        return _loadPreviews(created.links, site, throwing: true);
+      });
+      batch = created;
+    }
+    if (!batch.links.any((link) => link.id == id)) batch.links.add(KeyedLink(id, key));
+    final found = await batch.result;
+    _prepare(site);
+    final listed = found[id];
+    if (listed != null) return listed;
+    // A key remembered from elsewhere may be one the site doesn't accept.
+    if (!remembered) throw ContentError.galleryNotFound;
+    final (_, item) = await _detailsRow(id, site);
+    final parsed = work(item, site: site);
+    if (parsed == null) throw ContentError.galleryNotFound;
+    _previews['$site#$id'] = parsed.$1;
+    return parsed.$1;
+  }
+
+  /// A search for one number. A signed-in account's own filters (hidden languages, uploaders and
+  /// tags, and categories left out by default) apply to searches too, so they are switched off
+  /// here and every category is asked for: otherwise a work the account filters would never be found.
+  static Uri keySearchURL(int id, {required String site}) =>
+      ContentURL.withQueryItems(site, [('f_search', 'gid:$id'), ('f_cats', '0'), ('advsearch', '1'), ('f_sfl', 'on'), ('f_sfu', 'on'), ('f_sft', 'on')]);
+
   /// The key comes from a link already seen, or from searching the number.
   Future<String> keyFor(int id, {required String site}) async {
     final known = keys.key(id);
     if (known != null) return known;
-    final url = ContentURL.withQueryItems(site, [('f_search', 'gid:$id')]);
+    final url = keySearchURL(id, site: site);
     final found = links(await _page(url, site));
     keys.rememberAll([for (final link in found) (link.id, link.key)]);
     final link = found.where((link) => link.id == id).firstOrNull;
@@ -412,7 +519,7 @@ class KeyedCatalogSource {
     // the viewer's own page lists every page's key at once.
     final viewer = ContentURL.parse('${site}mpv/$id/$key/');
     if (found.isEmpty && viewer != null && linksToViewer(text, galleryID: id, key: key)) {
-      found = viewerEntries(await _page(viewer, site));
+      found = viewerEntries(await _page(viewer, site), previews: viewerPreviews(text, galleryID: id));
       perPage = found.length;
     }
     if (found.isEmpty) throw ContentError.galleryNotFound;
@@ -535,7 +642,7 @@ class KeyedCatalogSource {
         return await _fetch(shown.url, galleryID: galleryID, limit: 24000000, site: site);
       } catch (error) {
         // A notice in place of the image is the site's answer, not one host's failure.
-        if (error == ContentError.imageLimit || error == ContentError.signInRequired) rethrow;
+        if (error == ContentError.imageLimit || error == ContentError.signInRequired || error == ContentError.temporarilyBlocked) rethrow;
         // Another volunteer host serves the same image when this one fails.
         final next = shown.reload;
         if (attempt >= 2 || next == null || next == reload) rethrow;
@@ -548,17 +655,28 @@ class KeyedCatalogSource {
   Future<Uint8List> _fetch(Uri url, {required int galleryID, required int limit, required String site}) async {
     if (!safeMediaURL(url)) throw ContentError.unsupportedFormat;
     MangaUrls.registerMedia([url], site: site);
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    final access = host == null ? null : SiteAccount.siteCookie(SiteAccount.accessCookie, host: host);
     final result = await transport.get(url, limit: limit, galleryID: galleryID);
     _prepare(site);
+    final words = textNotice(result.data, mimeType: result.response.mimeType);
+    if (words != null) throw words;
     if (!(result.response.mimeType?.startsWith('image/') ?? true) || result.data.length <= 32) throw ContentError.unsupportedFormat;
     final notice = imageNotice(result.data, url: result.response.url);
     if (notice != null) {
       // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
-      final host = ContentURL.parse(site)?.host.toLowerCase();
-      if (notice == ContentError.signInRequired && host != null) SiteAccount.forget(SiteAccount.accessCookie, host: host);
+      if (notice == ContentError.signInRequired && host != null) SiteAccount.forgetRefused(SiteAccount.accessCookie, host: host, sent: access);
       throw notice;
     }
     return result.data;
+  }
+
+  /// Image hosts answer in words when the account's allowance ran out or the network is banned,
+  /// served where the image was expected. Only those two are read from such an answer.
+  static ContentError? textNotice(List<int> data, {String? mimeType}) {
+    if (data.length >= 10000 || (mimeType?.toLowerCase().startsWith('image/') ?? false)) return null;
+    final notice = pageError(utf8.decode(data, allowMalformed: true));
+    return notice == ContentError.imageLimit || notice == ContentError.temporarilyBlocked ? notice : null;
   }
 
   /// The site's own notices served where an image was expected, so they are never shown, cached or
@@ -615,6 +733,16 @@ class KeyedCatalogSource {
 
   /// Search rows only carry links, so their details come from the JSON endpoint in batches.
   Future<Map<int, NativeGallery>> _previewsFor(List<KeyedLink> links, String site) async {
+    try {
+      return await _loadPreviews(links, site, throwing: false);
+    } on ContentError {
+      return {};
+    }
+  }
+
+  /// Details for works, 25 to a request. A failed request is asked once more after a moment;
+  /// when it still fails, [throwing] decides whether the works it held are skipped or the failure is reported.
+  Future<Map<int, NativeGallery>> _loadPreviews(List<KeyedLink> links, String site, {required bool throwing}) async {
     final found = <int, NativeGallery>{};
     final missing = <KeyedLink>[];
     for (final link in links) {
@@ -626,10 +754,22 @@ class KeyedCatalogSource {
       }
     }
     for (var start = 0; start < missing.length; start += 25) {
+      final chunk = missing.sublist(start, start + 25 > missing.length ? missing.length : start + 25);
       List<Map<String, Object?>> items;
       try {
-        items = await _metadata(missing.sublist(start, start + 25 > missing.length ? missing.length : start + 25), site);
+        try {
+          items = await _metadata(chunk, site);
+        } on CancellationError {
+          rethrow;
+        } on Object {
+          await Future<void>.delayed(const Duration(seconds: 1));
+          _prepare(site);
+          items = await _metadata(chunk, site);
+        }
+      } on CancellationError {
+        rethrow;
       } on Object {
+        if (throwing) rethrow;
         continue;
       }
       for (final item in items) {
@@ -775,12 +915,36 @@ class KeyedCatalogSource {
     if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
     final key = await keyFor(id, site: site);
     final url = ContentURL.withQueryItems('${site}gallerypopups.php', [('gid', '$id'), ('t', key), ('act', 'addfav')]);
+    // The form sends the note along, so a work that is already a favorite keeps the note written
+    // for it; a work its page showed as no favorite has none to keep.
+    var note = '';
+    final shown = _details[id]?.extras;
+    if (saved && (shown == null || shown.favoriteCategory != null)) note = favoriteNote(await _page(url, site)) ?? '';
     // The form's own submit button names the change; removing sends the button its page shows for it.
-    final form = saved ? 'favcat=${category.clamp(0, 9)}&favnote=&apply=Add+to+Favorites&update=1' : 'favcat=favdel&favnote=&apply=Apply+Changes&update=1';
+    final form = saved
+        ? 'favcat=${category.clamp(0, 9)}&favnote=${formEncoded(note)}&apply=Add+to+Favorites&update=1'
+        : 'favcat=favdel&favnote=&apply=Apply+Changes&update=1';
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    if (host != null) await pacer.wait(host);
     final result = await transport.post(url, body: utf8.encode(form), contentType: 'application/x-www-form-urlencoded', limit: 1000000);
     _prepare(site);
-    if (asksForSignIn(utf8.decode(result.data, allowMalformed: true))) throw ContentError.signInRequired;
+    // The work page read before the change shows the old favorite.
+    _details[id]?.extras = null;
+    final text = utf8.decode(result.data, allowMalformed: true);
+    if (asksForSignIn(text) || text.contains('Failed login redirect setup')) throw ContentError.signInRequired;
+    // A wrong key, a removed work or a ban is answered in a few words instead of with the change.
+    final error = pageError(text);
+    if (error != null && error != ContentError.signInRequired) throw error;
   }
+
+  /// The note the account wrote for a favorite, from the favorites form.
+  static String? favoriteNote(String html) {
+    final note = KeyedWorkPage.firstCapture(r'<textarea\b[^>]*\bname="favnote"[^>]*>(.*?)</textarea>', html);
+    return note == null ? null : NativeGallery.decodeEntities(note);
+  }
+
+  /// A form value, with only unreserved ASCII left as is.
+  static String formEncoded(String value) => Uri.encodeQueryComponent(value).replaceAll('%20', '+');
 
   // MARK: Page shapes
 
@@ -794,6 +958,24 @@ class KeyedCatalogSource {
         if (int.tryParse(match[1]!) case final id? when id > 0 && seen.add(id)) KeyedLink(id, match[2]!),
     ];
   }
+
+  static final _viewerAddressPattern = RegExp(r'/mpv/([0-9]{1,10})/([0-9a-f]{10})(?![0-9a-f])');
+  static final _pageAddressPattern = RegExp(r'/s/[0-9a-f]{10}/([0-9]{1,10})-([0-9]{1,5})(?![0-9])');
+
+  /// Links into the multi-page viewer, which name the work's number and key like its own link.
+  static List<KeyedLink> viewerLinks(String text) {
+    final seen = <int>{};
+    return [
+      for (final match in _viewerAddressPattern.allMatches(text))
+        if (int.tryParse(match[1]!) case final id? when id > 0 && seen.add(id)) KeyedLink(id, match[2]!),
+    ];
+  }
+
+  /// Links to one page of a work: the work's number and the page, from 1. The key in them is the page's, not the work's.
+  static List<(int, int)> pageLinks(String text) => [
+    for (final match in _pageAddressPattern.allMatches(text))
+      if ((int.tryParse(match[1]!), int.tryParse(match[2]!)) case (final id?, final page?) when id > 0 && page >= 1) (id, page),
+  ];
 
   static String? nextCursor(String text) {
     final tag = RegExp(r'<a\b[^>]*\bid="unext"[^>]*>').firstMatch(text);
@@ -869,8 +1051,25 @@ class KeyedCatalogSource {
   static bool linksToViewer(String text, {required int galleryID, required String key}) =>
       _viewerLinkPattern.allMatches(text).any((match) => int.tryParse(match[1]!) == galleryID && match[2] == key);
 
+  static final _viewerPreviewPattern = RegExp(r'<a\b[^>]*\bhref="([^"]*)/mpv/([0-9]{1,10})/[0-9a-f]{10}/#page([0-9]{1,5})"[^>]*>(.*?)</a>', dotAll: true);
+
+  /// The previews a work's page shows beside its links into the multi-page viewer, by zero-based page index.
+  static Map<int, KeyedThumb> viewerPreviews(String text, {required int galleryID}) {
+    final result = <int, KeyedThumb>{};
+    for (final match in _viewerPreviewPattern.allMatches(text)) {
+      final number = int.tryParse(match[3]!);
+      if (int.tryParse(match[2]!) != galleryID || number == null || number < 1) continue;
+      final link = ContentURL.parse(_decode(match[1]!));
+      final base = link != null && link.scheme == 'https' && link.host.isNotEmpty ? link : null;
+      final thumb = _thumb(match[4]!, base: base);
+      if (thumb != null) result[number - 1] = thumb;
+    }
+    return result;
+  }
+
   /// Every page of a work from the multi-page viewer's list: each page's key, file name and preview, in page order.
-  static Map<int, KeyedEntry> viewerEntries(String text) {
+  /// A page whose listed preview is not a plain address takes the one its work page showed, when it showed one.
+  static Map<int, KeyedEntry> viewerEntries(String text, {Map<int, KeyedThumb> previews = const {}}) {
     final start = RegExp(r'\bimagelist\s*=\s*\[').firstMatch(text);
     if (start == null) return {};
     final open = start.end - 1;
@@ -920,7 +1119,7 @@ class KeyedCatalogSource {
       result[index] = KeyedEntry(
         key: key,
         name: decoded.isEmpty ? '${index + 1}' : decoded,
-        thumb: previewURL != null && safeMediaURL(previewURL) ? KeyedThumb(previewURL, null) : null,
+        thumb: previewURL != null && safeMediaURL(previewURL) ? KeyedThumb(previewURL, null) : previews[index],
       );
     }
     return result;
@@ -975,10 +1174,9 @@ class KeyedCatalogSource {
     }
     final items = <(String, String?)>[];
     if (terms.isNotEmpty) items.add(('f_search', terms.join(' ')));
-    if (categories.length != allCategories.length || !categories.containsAll(allCategories)) {
-      final shown = categories.fold(0, (value, category) => value | (_categoryBits[category] ?? 0));
-      items.add(('f_cats', '${1023 & ~shown}'));
-    }
+    // Always sent, so the categories picked here win over those an account leaves out by default.
+    final shown = categories.fold(0, (value, category) => value | (_categoryBits[category] ?? 0));
+    items.add(('f_cats', '${1023 & ~shown}'));
     if (next != null) items.add(('next', next));
     return ContentURL.withQueryItems(site, items.isEmpty ? null : items);
   }
