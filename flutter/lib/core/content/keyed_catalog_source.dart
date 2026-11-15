@@ -341,7 +341,7 @@ class KeyedCatalogSource {
     return GalleryBatch(ids: matched.skip(offset).take(count).toList(), hasMore: matched.length > offset + count || list.more);
   }
 
-  Future<String> _page(Uri url, String site) async {
+  Future<String> _page(Uri url, String site, {bool retried = false}) async {
     final host = ContentURL.parse(site)?.host.toLowerCase();
     if (host != null) await pacer.wait(host);
     _prepare(site);
@@ -358,11 +358,14 @@ class KeyedCatalogSource {
     final text = utf8.decode(result.data, allowMalformed: true);
     final error = pageError(text);
     if (error != null) {
-      // A refused access cookie is dropped, so the next request is handed a fresh one; one the
-      // wall itself just handed out is kept for that request.
-      if (error == ContentError.signInRequired && isRestrictedNotice(text) && host != null) {
-        SiteAccount.forgetRefused(SiteAccount.accessCookie, host: host, sent: access);
-      }
+      if (error != ContentError.signInRequired || host == null) throw error;
+      // A members-only catalog shows its wall, or nothing, to a request that came without the
+      // access it hands out with that same answer: the next request carries it.
+      final handedOut = SiteAccount.siteCookie(SiteAccount.accessCookie, host: host);
+      if (!retried && handedOut != null && handedOut != access) return _page(url, site, retried: true);
+      // A refused access cookie is dropped, so the next request is handed a fresh one.
+      if (isRestrictedNotice(text)) SiteAccount.forgetRefused(SiteAccount.accessCookie, host: host, sent: access);
+      if (SiteAccount.refusesAccess(host)) throw ContentError.accessDenied;
       throw error;
     }
     return text;
@@ -642,7 +645,12 @@ class KeyedCatalogSource {
         return await _fetch(shown.url, galleryID: galleryID, limit: 24000000, site: site);
       } catch (error) {
         // A notice in place of the image is the site's answer, not one host's failure.
-        if (error == ContentError.imageLimit || error == ContentError.signInRequired || error == ContentError.temporarilyBlocked) rethrow;
+        if (error == ContentError.imageLimit ||
+            error == ContentError.signInRequired ||
+            error == ContentError.accessDenied ||
+            error == ContentError.temporarilyBlocked) {
+          rethrow;
+        }
         // Another volunteer host serves the same image when this one fails.
         final next = shown.reload;
         if (attempt >= 2 || next == null || next == reload) rethrow;
@@ -665,7 +673,10 @@ class KeyedCatalogSource {
     final notice = imageNotice(result.data, url: result.response.url);
     if (notice != null) {
       // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
-      if (notice == ContentError.signInRequired && host != null) SiteAccount.forgetRefused(SiteAccount.accessCookie, host: host, sent: access);
+      if (notice == ContentError.signInRequired && host != null) {
+        SiteAccount.forgetRefused(SiteAccount.accessCookie, host: host, sent: access);
+        if (SiteAccount.refusesAccess(host)) throw ContentError.accessDenied;
+      }
       throw notice;
     }
     return result.data;

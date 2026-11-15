@@ -79,7 +79,9 @@ actor MangaContentSource: ContentProviding, WorkExtrasProviding {
     private func resolve(_ site: String) async throws -> MangaUrls.Backend {
         await MangaUrls.resolveBackend(transport: transport)
         guard MangaUrls.home == site else { throw CancellationError() }
-        if MangaUrls.requiresSignIn { throw ContentError.signInRequired }
+        if MangaUrls.requiresSignIn {
+            throw SiteAccount.refusesAccess(host: MangaUrls.configuredHost) ? ContentError.accessDenied : ContentError.signInRequired
+        }
         // A bot check that stopped the first look at the site has to be passed before anything else.
         if !MangaUrls.hasResolvedBackend, let host = URL(string: site)?.host, ContentTransport.challengedPage(forHost: host) != nil {
             throw ContentError.verificationRequired

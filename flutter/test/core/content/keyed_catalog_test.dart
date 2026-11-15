@@ -414,7 +414,13 @@ void main() {
   test('favorites keep their note and a refused change is reported', () async {
     final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
     await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 1);
-    expect(SiteAccount.signIn(const [SiteCookie(name: 'app_member_id', value: '42'), SiteCookie(name: 'app_pass_hash', value: 'secret')]), isTrue);
+    expect(
+      SiteAccount.signIn(const [
+        SiteCookie(name: 'app_member_id', value: '42'),
+        SiteCookie(name: 'app_pass_hash', value: 'secret'),
+      ], host: MangaUrls.configuredHost),
+      isTrue,
+    );
     fixture.favoriteNote = 'read later &amp; 다시';
     await source.setAccountFavorite(3000, saved: true, category: 2);
     expect(
@@ -473,7 +479,7 @@ void main() {
         SiteCookie(name: 'app_member_id', value: '42'),
         SiteCookie(name: 'app_pass_hash', value: 'secret'),
         SiteCookie(name: 'tracking', value: '1'),
-      ]),
+      ], host: MangaUrls.configuredHost),
       isTrue,
     );
     MangaUrls.resetResolvedBackend();
@@ -493,7 +499,13 @@ void main() {
     final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
     await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 1);
     await expectLater(source.accountFavorites(), throwsA(ContentError.signInRequired));
-    expect(SiteAccount.signIn(const [SiteCookie(name: 'app_member_id', value: '42'), SiteCookie(name: 'app_pass_hash', value: 'secret')]), isTrue);
+    expect(
+      SiteAccount.signIn(const [
+        SiteCookie(name: 'app_member_id', value: '42'),
+        SiteCookie(name: 'app_pass_hash', value: 'secret'),
+      ], host: MangaUrls.configuredHost),
+      isTrue,
+    );
     final first = await source.accountFavorites();
     expect(first.$1, [2998, 2990]);
     expect(first.$2, '2990');

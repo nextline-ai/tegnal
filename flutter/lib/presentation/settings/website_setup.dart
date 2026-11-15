@@ -630,9 +630,12 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
 /// `ComicSitesView`: the connected comics websites. Tap one to use it, swipe to remove it, or
 /// add another.
 class ComicSitesPage extends StatefulWidget {
-  const ComicSitesPage({super.key, required this.content, required this.state});
+  const ComicSitesPage({super.key, required this.content, required this.state, this.siteAccount});
   final ContentEnvironment content;
   final AppState state;
+
+  /// A website's account section, for its own settings.
+  final Widget Function(BuildContext context, String site)? siteAccount;
 
   @override
   State<ComicSitesPage> createState() => _ComicSitesPageState();
@@ -689,6 +692,21 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
                     children: [
                       Expanded(child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis)),
                       if (site == _content.mangaSiteAddress) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
+                      // Each website keeps its own account and check, like an image server.
+                      Semantics(
+                        button: true,
+                        label: '${L10n.text('Website Settings')} $site',
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.only(left: 12),
+                          minimumSize: const Size(44, 44),
+                          onPressed: () => Navigator.of(context).push(
+                            CupertinoPageRoute<void>(
+                              builder: (_) => ComicSiteSettingsPage(site: site, content: _content, siteAccount: widget.siteAccount),
+                            ),
+                          ),
+                          child: Icon(CupertinoIcons.slider_horizontal_3, size: 22, color: tint),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -708,6 +726,61 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// `ComicSiteSettingsView`: a connected website's own settings: which website it is, and its account.
+class ComicSiteSettingsPage extends StatefulWidget {
+  const ComicSiteSettingsPage({super.key, required this.site, required this.content, this.siteAccount});
+  final String site;
+  final ContentEnvironment content;
+  final Widget Function(BuildContext context, String site)? siteAccount;
+
+  @override
+  State<ComicSiteSettingsPage> createState() => _ComicSiteSettingsPageState();
+}
+
+class _ComicSiteSettingsPageState extends State<ComicSiteSettingsPage> {
+  @override
+  void initState() {
+    super.initState();
+    widget.content.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.content.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    final siteAccount = widget.siteAccount;
+    return SettingsPage(
+      title: L10n.text('Website Settings'),
+      children: [
+        FormSection(
+          rowColor: row,
+          children: [
+            SettingsValueRow(title: L10n.text('Website Address'), value: widget.site),
+            if (widget.site != widget.content.mangaSiteAddress)
+              SettingsLinkRow(
+                title: L10n.text('Use This Website'),
+                icon: CupertinoIcons.checkmark_circle,
+                tinted: true,
+                chevron: false,
+                onTap: () => widget.content.switchComicsSite(widget.site),
+              ),
+          ],
+        ),
+        if (siteAccount != null) siteAccount(context, widget.site),
       ],
     );
   }

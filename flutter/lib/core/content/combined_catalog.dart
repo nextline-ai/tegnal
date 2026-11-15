@@ -38,6 +38,10 @@ class SiteContent extends ContentProviding implements WorkExtrasProviding {
   @override
   Future<(double, int)> rate(int id, int halfStars) => SiteScope.run(site, () => _inner.rate(id, halfStars));
 
+  /// The website's account favorites, to check that a sign-in made for it works there.
+  Future<(List<int>, String?)> accountFavorites({String? after, int? category}) =>
+      SiteScope.run(site, () => _inner.accountFavorites(after: after, category: category));
+
   static final _sources = <String, SiteContent>{};
 
   /// The shared reader of a connected website.

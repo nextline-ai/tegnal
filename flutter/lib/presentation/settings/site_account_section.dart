@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/content/combined_catalog.dart';
 import '../../core/content/content_environment.dart';
 import '../../core/content/content_errors.dart';
 import '../../core/content/content_transport.dart';
@@ -35,11 +36,14 @@ const _challengeScript =
 
 bool _scriptTrue(Object? result) => result == true || result == 'true';
 
-/// `SiteAccountSection`: shown for websites that use accounts, or that have not been recognized
-/// yet and may be members-only. The person signs in on the website itself or pastes the cookies
-/// of a browser where they are signed in; the app keeps only the sign-in cookies it is handed.
+/// `SiteAccountSection`: one connected website's account, in that website's own settings. The
+/// person signs in on the website itself or pastes the cookies of a browser where they are signed
+/// in; the app keeps only the sign-in cookies it is handed, for this website alone.
 class SiteAccountSection extends StatefulWidget {
-  const SiteAccountSection({super.key, required this.content, required this.database, this.startCoverQueue});
+  const SiteAccountSection({super.key, required this.site, required this.content, required this.database, this.startCoverQueue});
+
+  /// The connected website, as the list of websites names it.
+  final String site;
   final ContentEnvironment content;
   final AppDatabase database;
   final VoidCallback? startCoverQueue;
@@ -54,18 +58,27 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
   (int, int)? _allowance;
 
   ContentEnvironment get _content => widget.content;
-  String get _host => MangaUrls.configuredHost;
+
+  /// What was learned about this website, read in its own scope.
+  T _scoped<T>(T Function() body) => SiteScope.run(widget.site, body);
+  String get _host => _scoped(() => MangaUrls.configuredHost);
+  bool get _isChecked => widget.site == _content.mangaSiteAddress;
+  bool get _signedIn => SiteAccount.isSignedInAt(_host);
+  bool get _refused => SiteAccount.refusesAccess(_host);
+  bool get _usesSiteSession => _scoped(() => MangaUrls.usesSiteSession);
 
   @override
   void initState() {
     super.initState();
     SiteClearance.listeners.add(_changed);
+    SiteAccount.listeners.add(_changed);
     _loadAccountDetails();
   }
 
   @override
   void dispose() {
     SiteClearance.listeners.remove(_changed);
+    SiteAccount.listeners.remove(_changed);
     super.dispose();
   }
 
@@ -73,10 +86,14 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     if (mounted) setState(() {});
   }
 
-  bool get _keyed => MangaUrls.hasResolvedBackend && MangaUrls.backend == MangaBackend.keyed;
+  bool get _keyed => _scoped(() => MangaUrls.hasResolvedBackend && MangaUrls.backend == MangaBackend.keyed);
+
+  /// Whether accounts matter here: a website that uses them, or one not recognized yet that may be members-only.
+  bool get _showsAccount => _signedIn || _scoped(() => MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || MangaUrls.backend == MangaBackend.keyed);
 
   Future<void> _loadAccountDetails() async {
-    if (!_content.siteAccountSignedIn || !_keyed) return;
+    // The image allowance and favorites belong to the checked website's reader.
+    if (!_isChecked || !_content.siteAccountSignedIn || !_keyed) return;
     try {
       final allowance = await MangaContentSource.shared.imageAllowance();
       if (mounted) setState(() => _allowance = allowance);
@@ -93,13 +110,19 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
   }
 
   Future<void> _signIn() async {
-    await showAppSheet<void>(context, builder: (context, controller) => SiteSignInView(content: _content));
+    await showAppSheet<void>(
+      context,
+      builder: (context, controller) => SiteSignInView(content: _content, site: widget.site),
+    );
     if (mounted) setState(() {});
     _loadAccountDetails();
   }
 
   Future<void> _pasteCookies() async {
-    await showAppSheet<void>(context, builder: (context, controller) => SiteCookieSignInView(content: _content));
+    await showAppSheet<void>(
+      context,
+      builder: (context, controller) => SiteCookieSignInView(content: _content, site: widget.site),
+    );
     if (mounted) setState(() {});
     _loadAccountDetails();
   }
@@ -120,7 +143,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     );
     if (signOut == true) {
       setState(() {
-        SiteAccountActions.signOut(_content);
+        SiteAccountActions.signOut(_content, site: widget.site);
         _allowance = null;
         _categories = [];
       });
@@ -171,45 +194,31 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     );
   }
 
-  bool get _isShown {
-    if (_content.comicSites.isEmpty || _host.isEmpty) return false;
-    return _content.siteAccountSignedIn || MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || _keyed || SiteClearance.hasClearance(_host);
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (!_isShown) return const SizedBox.shrink();
-    final signedIn = _content.siteAccountSignedIn;
+    final signedIn = _signedIn, refused = _refused, showsAccount = _showsAccount, checked = _isChecked;
     final tint = TegnalColors.tint.resolveFrom(context);
-    final allowance = _allowance;
-    final usesHere = MangaUrls.usesAccount;
+    final allowance = checked ? _allowance : null;
+    final sources = signedIn || _usesSiteSession ? const <String>[] : SiteAccount.accountSources(excluding: _host);
     return Padding(
       padding: const EdgeInsets.only(top: 28),
       child: FormSection(
         prominentHeader: true,
         rowColor: FormColors.listRow.resolveFrom(context),
-        header: Text(L10n.text('Website Account')),
-        footer: Text(
-          L10n.text(
-            "Some websites show more works, or keep favorites, for signed-in accounts. Create an account on the website itself. The app keeps only the sign-in in this device's keychain, never your password. If a website keeps asking you to check you’re not a bot, use Validate Client.",
-          ),
-        ),
+        header: Text(L10n.text(showsAccount ? 'Website Account' : 'Website')),
+        footer: !showsAccount
+            ? null
+            : Text(
+                refused
+                    // Why the website keeps a signed-in account out, and when that may change.
+                    ? ContentError.accessDenied.errorDescription
+                    : '${L10n.text("Some websites show more works, or keep favorites, for signed-in accounts. Create an account on the website itself. The app keeps only the sign-in in this device's keychain, never your password. If a website keeps asking you to check you’re not a bot, use Validate Client.")}\n\n${L10n.text('Each website keeps its own account. Two websites of one forum can share one: sign in on either, then use its account on the other.')}',
+              ),
         children: [
-          if (signedIn) ...[
-            SettingsValueRow(title: L10n.text('Website Account'), value: L10n.text('Signed In')),
+          if (showsAccount && signedIn) ...[
+            SettingsValueRow(title: L10n.text('Website Account'), value: L10n.text(refused ? 'Signed In, No Access Yet' : 'Signed In')),
             if (allowance != null) SettingsValueRow(title: L10n.text('Image Allowance'), value: '${allowance.$1} / ${allowance.$2}'),
-            if (!usesHere && !MangaUrls.usesSiteSession)
-              SettingsLinkRow(
-                title: L10n.text('Use This Account on This Website'),
-                icon: CupertinoIcons.person_crop_circle_badge_checkmark,
-                tinted: true,
-                chevron: false,
-                onTap: () => setState(() {
-                  MangaUrls.markUsesAccount(site: MangaUrls.home);
-                  SiteAccountActions.signInChanged(_content);
-                }),
-              )
-            else if (MangaUrls.requiresSignIn || SiteAccount.savedCookieNames(_host).contains(SiteAccount.accessCookie))
+            if (_scoped(() => MangaUrls.requiresSignIn) || refused || SiteAccount.savedCookieNames(_host).contains(SiteAccount.accessCookie))
               SettingsLinkRow(
                 title: L10n.text('Refresh Website Access'),
                 icon: CupertinoIcons.arrow_2_circlepath,
@@ -217,10 +226,10 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                 chevron: false,
                 onTap: () => setState(() {
                   SiteAccount.forget(SiteAccount.accessCookie, host: _host);
-                  SiteAccountActions.signInChanged(_content);
+                  SiteAccountActions.signInChanged(_content, site: widget.site);
                 }),
               ),
-            if (_keyed) ...[
+            if (checked && _keyed) ...[
               SettingsToggleRow(
                 title: L10n.text('Sync Bookmarks with Account Favorites'),
                 help: L10n.text('Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.'),
@@ -256,15 +265,23 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
               ),
             ],
             SettingsLinkRow(title: L10n.text('Sign Out'), destructive: true, chevron: false, onTap: _confirmSignOut),
-          ] else ...[
+          ] else if (showsAccount) ...[
             SettingsLinkRow(
               title: L10n.text('Sign In to Website'),
               icon: CupertinoIcons.person_crop_circle,
               tinted: true,
               chevron: false,
-              onTap: MangaUrls.signInURL == null ? null : _signIn,
+              onTap: _scoped(() => MangaUrls.signInURL) == null ? null : _signIn,
             ),
-            if (!MangaUrls.usesSiteSession)
+            for (final source in sources)
+              SettingsLinkRow(
+                title: L10n.text('Use the Account from %@', [source]),
+                icon: CupertinoIcons.person_crop_circle_badge_checkmark,
+                tinted: true,
+                chevron: false,
+                onTap: () => setState(() => SiteAccountActions.useAccount(source, _content, site: widget.site)),
+              ),
+            if (!_usesSiteSession)
               SettingsLinkRow(
                 title: L10n.text('Sign In with Cookies'),
                 icon: CupertinoIcons.doc_on_clipboard,
@@ -289,8 +306,11 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
 
 /// `SiteCookieSignInView`: signs in with the cookies of a browser where the person is already signed in.
 class SiteCookieSignInView extends StatefulWidget {
-  const SiteCookieSignInView({super.key, required this.content, this.finished});
+  const SiteCookieSignInView({super.key, required this.content, this.site, this.finished});
   final ContentEnvironment content;
+
+  /// The connected website signing in; null is the checked one.
+  final String? site;
   final VoidCallback? finished;
 
   @override
@@ -353,11 +373,16 @@ class _SiteCookieSignInViewState extends State<SiteCookieSignInView> {
 
   Future<void> _signIn() async {
     setState(() => _checking = true);
-    if (!SiteAccountActions.signInPasted(_pasted, widget.content)) {
+    final site = widget.site;
+    if (!SiteAccountActions.signInPasted(_pasted, widget.content, site: site)) {
       setState(() => _checking = false);
       return;
     }
-    final succeeded = await SiteAccountActions.checkSiteAccount(MangaContentSource.shared.accountFavorites);
+    final other = site != null && site != widget.content.mangaSiteAddress;
+    final succeeded = await SiteAccountActions.checkSiteAccount(
+      other ? SiteContent.of(site).accountFavorites : MangaContentSource.shared.accountFavorites,
+      site: site,
+    );
     if (!mounted) return;
     widget.content.refreshSiteAccount();
     if (succeeded) {
@@ -480,8 +505,11 @@ class _SiteCookieSignInViewState extends State<SiteCookieSignInView> {
 /// checked every half second, since a bot check can redirect many times before the page settles.
 /// A site that signs in on its own pages counts as signed in once its sign-in form has been left.
 class SiteSignInView extends StatefulWidget {
-  const SiteSignInView({super.key, required this.content, this.finished});
+  const SiteSignInView({super.key, required this.content, this.site, this.finished});
   final ContentEnvironment content;
+
+  /// The connected website signing in; null is the checked one.
+  final String? site;
   final VoidCallback? finished;
 
   @override
@@ -498,7 +526,7 @@ class _SiteSignInViewState extends State<SiteSignInView> {
   String? _failure;
 
   /// For a site that signs in on its own pages: its host. Null for the forum identity.
-  late final String? _session = MangaUrls.usesSiteSession ? MangaUrls.configuredHost : null;
+  late final String? _session = SiteAccountActions.scoped(widget.site, () => MangaUrls.usesSiteSession ? MangaUrls.configuredHost : null);
 
   @override
   void initState() {
@@ -514,7 +542,7 @@ class _SiteSignInViewState extends State<SiteSignInView> {
   }
 
   Future<void> _start() async {
-    final url = MangaUrls.signInURL;
+    final url = SiteAccountActions.scoped(widget.site, () => MangaUrls.signInURL);
     if (url == null) return;
     await WebCookies.clear();
     late final WebViewController controller;
@@ -579,8 +607,8 @@ class _SiteSignInViewState extends State<SiteSignInView> {
         _sawSignInForm = true;
         return;
       }
-      if (!_sawSignInForm || _done || !SiteAccountActions.finishSessionSignIn(cookies, widget.content)) return;
-    } else if (!SiteAccountActions.finishSignIn(cookies, widget.content)) {
+      if (!_sawSignInForm || _done || !SiteAccountActions.finishSessionSignIn(cookies, widget.content, site: widget.site)) return;
+    } else if (!SiteAccountActions.finishSignIn(cookies, widget.content, site: widget.site)) {
       return;
     }
     _done = true;

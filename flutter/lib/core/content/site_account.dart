@@ -126,11 +126,25 @@ class SiteCookie {
 }
 
 class _Stored {
-  _Stored({Map<String, String>? identity, Map<String, Map<String, String>>? sites, Map<String, Map<String, String>>? sessions})
-    : identity = identity ?? {},
-      sites = sites ?? {},
-      sessions = sessions ?? {};
+  _Stored({
+    Map<String, String>? identity,
+    Map<String, Map<String, String>>? sites,
+    Map<String, Map<String, String>>? sessions,
+    Map<String, Map<String, String>>? identities,
+  }) : identity = identity ?? {},
+       sites = sites ?? {},
+       sessions = sessions ?? {},
+       identities = identities ?? {};
+
+  /// The forum identity every website shared before each kept its own; on first read it moves
+  /// to the websites connected at the time.
   Map<String, String> identity;
+
+  /// Each website's forum identity, by host.
+  Map<String, Map<String, String>> identities;
+
+  /// Whether this was read from a sign-in kept before each website had its own.
+  bool fromShared = false;
 
   /// Cookies the connected site set for itself, by host.
   Map<String, Map<String, String>> sites;
@@ -147,9 +161,15 @@ class _Stored {
     sites: _byHost(json['sites']),
     // Missing in sign-ins kept before these existed.
     sessions: _byHost(json['sessions']),
-  );
-  Map<String, Object?> toJson() => {'identity': identity, 'sites': sites, if (sessions.isNotEmpty) 'sessions': sessions};
-  bool get isEmpty => identity.isEmpty && sites.isEmpty && sessions.isEmpty;
+    identities: _byHost(json['identities']),
+  )..fromShared = !json.containsKey('identities');
+  Map<String, Object?> toJson() => {
+    if (identity.isNotEmpty) 'identity': identity,
+    'sites': sites,
+    if (sessions.isNotEmpty) 'sessions': sessions,
+    'identities': identities,
+  };
+  bool get isEmpty => identity.isEmpty && sites.isEmpty && sessions.isEmpty && identities.isEmpty;
 }
 
 /// What a person pasted from a browser where they are signed in.
@@ -162,10 +182,13 @@ class PastedCookies {
   bool get isComplete => SiteAccount._signedIn(identity);
 }
 
-/// The signed-in identity a catalog may ask for, kept in secure storage.
-/// Only the account's identity cookies are kept from sign-in, and they reach
-/// nothing but the connected site and its own subdomains.
+/// The signed-in identities catalogs ask for, kept in secure storage, one per website. Only an
+/// account's identity cookies are kept from sign-in, and they reach nothing but the website they
+/// were signed in for and its own subdomains.
 abstract final class SiteAccount {
+  /// Websites that signed an account in but handed it the placeholder instead of access.
+  static final _refused = <String>{};
+
   static const _secretName = 'site-account';
 
   /// The app installs a Keystore-backed store at launch.
@@ -186,14 +209,45 @@ abstract final class SiteAccount {
   /// keep the account out even after the account is allowed.
   static bool isPlaceholder(String name, String value) => name == accessCookie && (value.isEmpty || value == 'mystery' || value == 'deleted');
 
-  static bool get isSignedIn => _signedIn(_load().identity);
+  /// Whether the connected website keeps a forum identity of its own.
+  static bool get isSignedIn => hasIdentity(MangaUrls.configuredHost);
 
-  /// Whether [host] has an account: the forum identity, or a sign-in made on its own pages.
+  /// Whether [host] keeps a forum identity of its own.
+  static bool hasIdentity(String host) => host.isNotEmpty && _signedIn(_load().identities[host] ?? const {});
+
+  /// Whether [host] has an account: its forum identity, or a sign-in made on its own pages.
   static bool isSignedInAt(String host) {
     final stored = _load();
-    if ((stored.sessions[host] ?? const {}).isNotEmpty) return true;
-    // A site that signs in on its own pages does not take the forum identity.
-    return !MangaUrls.usesSiteSession && _signedIn(stored.identity);
+    return (stored.sessions[host] ?? const {}).isNotEmpty || _signedIn(stored.identities[host] ?? const {});
+  }
+
+  /// Whether [host] signed its account in but hands it the placeholder instead of access: a
+  /// members-only catalog that hasn't opened to this account.
+  static bool refusesAccess(String host) => _refused.contains(host) && hasIdentity(host);
+
+  /// Signs [host] in with the account another website keeps, as for two websites of one forum.
+  static bool useAccount({required String from, required String on}) => _keep({...?_load().identities[from]}, host: on);
+
+  /// Other websites keeping a forum identity that [host] could use too.
+  static List<String> accountSources({required String excluding}) => [
+    for (final MapEntry(:key, :value) in _load().identities.entries)
+      if (key != excluding && _signedIn(value)) key,
+  ]..sort();
+
+  /// Keeps [identity] for [host]; cookies the website set for another account no longer apply.
+  static bool _keep(Map<String, String> identity, {Map<String, String>? site, required String host}) {
+    if (!_signedIn(identity) || host.isEmpty) return false;
+    final stored = _load();
+    stored.identities[host] = identity;
+    if (site != null && site.isNotEmpty) {
+      stored.sites[host] = {...site};
+    } else {
+      stored.sites.remove(host);
+    }
+    _refused.remove(host);
+    _save(stored);
+    _notify();
+    return true;
   }
 
   static bool hasSession(String host) => (_load().sessions[host] ?? const {}).isNotEmpty;
@@ -226,17 +280,10 @@ abstract final class SiteAccount {
 
   static bool _isCookieValue(String value) => value.isNotEmpty && value.length <= 512 && RegExp(r'^[\x21-\x3A\x3C-\x7E]+$').hasMatch(value);
 
-  /// Signs in with cookies copied from a browser. The other cookies belong to [host].
+  /// Signs [host] in with cookies copied from a browser; the other cookies belong to [host] too.
   static bool signInPasted(PastedCookies pasted, {required String host}) {
     if (!pasted.isComplete) return false;
-    final stored = _load()
-      ..identity = {...pasted.identity}
-      // Cookies a site set for another account no longer apply; its own sign-ins stay.
-      ..sites.clear();
-    if (host.isNotEmpty && pasted.site.isNotEmpty) stored.sites[host] = {...pasted.site};
-    _save(stored);
-    _notify();
-    return true;
+    return _keep({...pasted.identity}, site: pasted.site, host: host);
   }
 
   /// Keeps a sign-in made on [host]'s own pages: the cookies its pages set for it, apart from a
@@ -263,6 +310,7 @@ abstract final class SiteAccount {
 
   /// Drops one cookie the site set, so the site hands out a fresh one on the next request.
   static void forget(String name, {required String host}) {
+    if (name == accessCookie) _refused.remove(host);
     final stored = _load();
     if (stored.sites[host]?.remove(name) == null) return;
     _save(stored);
@@ -285,15 +333,18 @@ abstract final class SiteAccount {
   /// The account cookie names saved for [host], for showing what is kept without the values.
   static List<String> savedCookieNames(String host) {
     final stored = _load();
-    if (!_signedIn(stored.identity)) return [];
-    return [...stored.identity.keys, ...?stored.sites[host]?.keys]..sort();
+    final identity = stored.identities[host];
+    if (identity == null || !_signedIn(identity)) return [];
+    return [...identity.keys, ...?stored.sites[host]?.keys]..sort();
   }
 
-  /// Signs out of one site that signs in on its own pages; other sites keep their accounts.
+  /// Signs one website out; other websites keep their accounts.
   static void signOutAt(String host) {
     final stored = _load();
     stored.sessions.remove(host);
+    stored.identities.remove(host);
     stored.sites.remove(host);
+    _refused.remove(host);
     _save(stored);
     _notify();
   }
@@ -302,23 +353,15 @@ abstract final class SiteAccount {
       identity.entries.any((entry) => entry.key.endsWith('_member_id') && (int.tryParse(entry.value) ?? 0) > 0) &&
       identity.entries.any((entry) => entry.key.endsWith('_pass_hash') && entry.value.isNotEmpty);
 
-  /// Keeps the identity from a finished sign-in. Returns false when the cookies hold none.
-  static bool signIn(List<SiteCookie> cookies) {
-    final identity = {
-      for (final cookie in cookies)
-        if (isIdentity(cookie.name) && cookie.value.isNotEmpty) cookie.name: cookie.value,
-    };
-    if (!_signedIn(identity)) return false;
-    final stored = _load()
-      ..identity = identity
-      // Cookies a site set for another account no longer apply; its own sign-ins stay.
-      ..sites.clear();
-    _save(stored);
-    _notify();
-    return true;
-  }
+  /// Keeps the identity from a finished sign-in for [host]. Returns false when the cookies hold none.
+  static bool signIn(List<SiteCookie> cookies, {required String host}) => _keep({
+    for (final cookie in cookies)
+      if (isIdentity(cookie.name) && cookie.value.isNotEmpty) cookie.name: cookie.value,
+  }, host: host);
 
+  /// Signs every website out.
   static void signOut() {
+    _refused.clear();
     _save(_Stored());
     _notify();
   }
@@ -346,7 +389,7 @@ abstract final class SiteAccount {
     return names.map((name) => '$name=${values[name]}').join('; ');
   }
 
-  /// What the site expects back: the identity, cookies it set, and consent to open flagged works.
+  /// What the site expects back: its identity, cookies it set, and consent to open flagged works.
   static Map<String, String> cookies(String host) {
     final stored = _load();
     final values = {...?stored.sessions[host]};
@@ -356,7 +399,8 @@ abstract final class SiteAccount {
       if (!isPlaceholder(key, value) && !ignoresCookie(key) && !SiteClearance.isClearanceCookie(key)) values[key] = value;
     }
     values['nw'] = '1';
-    if (_signedIn(stored.identity)) values.addAll(stored.identity);
+    final identity = stored.identities[host];
+    if (identity != null && _signedIn(identity)) values.addAll(identity);
     return values;
   }
 
@@ -381,6 +425,14 @@ abstract final class SiteAccount {
         final cookie = Cookie.fromSetCookieValue(header);
         // A bot check's cookies are kept with the browser that earned them, never here.
         if (isIdentity(cookie.name) || ignoresCookie(cookie.name) || SiteClearance.isClearanceCookie(cookie.name)) continue;
+        if (cookie.name == accessCookie) {
+          final expired = cookie.expires != null && cookie.expires!.isBefore(DateTime.now());
+          if (cookie.value == 'mystery') {
+            _refused.add(MangaUrls.configuredHost);
+          } else if (!expired && !isPlaceholder(cookie.name, cookie.value)) {
+            _refused.remove(MangaUrls.configuredHost);
+          }
+        }
         // A placeholder instead of access is never kept: the access already held stays.
         if (isPlaceholder(cookie.name, cookie.value)) continue;
         received.add(SiteCookie(name: cookie.name, value: cookie.value, expires: cookie.expires));
@@ -421,6 +473,18 @@ abstract final class SiteAccount {
       } on Object {
         result = _Stored();
       }
+    }
+    if (result.fromShared) {
+      // An account kept before each website had its own stays with every website connected now.
+      if (_signedIn(result.identity)) {
+        for (final host in {...ComicSites.all, ...result.sites.keys}) {
+          if (host.isNotEmpty) result.identities[host] = {...result.identity};
+        }
+      }
+      result
+        ..identity = {}
+        ..fromShared = false;
+      _save(result);
     }
     _cached = result;
     _cachedStore = store;

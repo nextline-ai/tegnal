@@ -14,6 +14,7 @@ import 'gallery_content.dart';
 import 'keyed_catalog_source.dart';
 import 'keyed_work_extras.dart';
 import 'manga_urls.dart';
+import 'site_account.dart';
 import '../support/perf_trace.dart';
 
 class _IndexPrefix {
@@ -86,7 +87,9 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
   Future<MangaBackend> _resolve(String site) async {
     await MangaUrls.resolveBackend(transport: transport);
     if (MangaUrls.home != site) throw const CancellationError();
-    if (MangaUrls.requiresSignIn) throw ContentError.signInRequired;
+    if (MangaUrls.requiresSignIn) {
+      throw SiteAccount.refusesAccess(MangaUrls.configuredHost) ? ContentError.accessDenied : ContentError.signInRequired;
+    }
     // A bot check that stopped the first look at the site has to be passed before anything else.
     final host = ContentURL.parse(site)?.host;
     if (!MangaUrls.hasResolvedBackend && host != null && ContentTransport.challengedPage(host) != null) throw ContentError.verificationRequired;

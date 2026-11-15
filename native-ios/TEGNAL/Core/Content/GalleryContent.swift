@@ -6,6 +6,8 @@ enum ContentError: LocalizedError, Equatable {
     case verificationRequired
     /// The website stopped answering this network for a while.
     case temporarilyBlocked
+    /// The website signed the account in but hasn't opened to it, as members-only catalogs do.
+    case accessDenied
 
     var errorDescription: String? {
         switch self {
@@ -21,6 +23,7 @@ enum ContentError: LocalizedError, Equatable {
         case .imageLimit: return L10n.text("This website’s image allowance for you has run out. Try again later.")
         case .verificationRequired: return L10n.text("This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again.")
         case .temporarilyBlocked: return L10n.text("This website has paused access from your network for a while. Try again later, or change networks.")
+        case .accessDenied: return L10n.text("You’re signed in, but this website hasn’t opened to your account yet. It decides which accounts it lets in, and a new account may be let in about a week after it’s made. Check again later, or open works on another connected website.")
         }
     }
 
@@ -35,14 +38,15 @@ enum ContentError: LocalizedError, Equatable {
 
     /// The website has stopped answering this device for now.
     static func refusesDevice(_ error: Error) -> Bool {
-        error as? ContentError == .temporarilyBlocked || error as? ContentError == .imageLimit
+        guard let error = error as? ContentError else { return false }
+        return [.temporarilyBlocked, .imageLimit, .accessDenied].contains(error)
     }
 
     /// Errors after which the same work may still open on another connected website.
     static func allowsOtherSite(_ error: Error) -> Bool {
         if let error = error as? ContentError {
             switch error {
-            case .galleryNotFound, .signInRequired, .imageLimit, .verificationRequired, .temporarilyBlocked, .unsupportedFormat, .invalidResponse: return true
+            case .galleryNotFound, .signInRequired, .accessDenied, .imageLimit, .verificationRequired, .temporarilyBlocked, .unsupportedFormat, .invalidResponse: return true
             case .unavailable(let status): return [401, 403, 404, 410, 429, 451, 500, 502, 503, 504].contains(status)
             case .tooLarge, .invalidQuery, .tooManySearchTerms: return false
             }

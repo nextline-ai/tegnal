@@ -40,6 +40,10 @@ final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int) {
         try await SiteScope.$site.withValue(site) { try await inner.rate(id, halfStars: halfStars) }
     }
+    /// The website's account favorites, to check that a sign-in made for it works there.
+    func accountFavorites(after next: String?) async throws -> (ids: [Int64], next: String?) {
+        try await SiteScope.$site.withValue(site) { try await inner.accountFavorites(after: next) }
+    }
 
     private static let lock = NSLock()
     private nonisolated(unsafe) static var sources: [String: SiteContent] = [:]

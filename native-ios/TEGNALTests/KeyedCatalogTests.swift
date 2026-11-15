@@ -207,7 +207,7 @@ final class KeyedCatalogTests: XCTestCase {
         let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret")].map {
             HTTPCookie(properties: [.domain: ".keyed.example", .path: "/", .name: $0.0, .value: $0.1])!
         }
-        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
         fixture.favoriteNote = "read later &amp; 다시"
         try await source.setAccountFavorite(3000, saved: true, category: 2)
         XCTAssertEqual(fixture.favoriteForms.last, "favcat=2&favnote=read+later+%26+%EB%8B%A4%EC%8B%9C&apply=Add+to+Favorites&update=1",
@@ -265,7 +265,7 @@ final class KeyedCatalogTests: XCTestCase {
         let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret"), ("tracking", "1")].map {
             HTTPCookie(properties: [.domain: ".account.example", .path: "/", .name: $0.0, .value: $0.1])!
         }
-        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
         MangaUrls.resetResolvedBackend()
         let batch = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 2)
         XCTAssertEqual(batch.ids, [3002, 3001])
@@ -289,7 +289,7 @@ final class KeyedCatalogTests: XCTestCase {
         let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret")].map {
             HTTPCookie(properties: [.domain: ".keyed.example", .path: "/", .name: $0.0, .value: $0.1])!
         }
-        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
         let first = try await source.accountFavorites(after: nil)
         XCTAssertEqual(first.ids, [2998, 2990])
         XCTAssertEqual(first.next, "2990")

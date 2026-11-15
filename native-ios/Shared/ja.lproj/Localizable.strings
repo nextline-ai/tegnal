@@ -1798,3 +1798,10 @@
 "%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds." = "表紙・タイトル・タグが未取得の作品が%1$@件あります。取得するには作品ごとに%2$@から読み込みますが、このサイトは1台の端末が短時間に多くの作品を読み込むとネットワークアドレス（IP）をブロックすることがあります。\n\n別のマンガサイトを追加すると、未取得の情報はそちらから読み込みます。それでも取得する場合は、数秒に1作品ずつゆっくり読み込みます。";
 "Fill Slowly Anyway" = "それでもゆっくり取得";
 "%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there." = "%@は一度に多くの作品を読み込むとネットワークアドレス（IP）をブロックすることがあるため、取得の前に確認し、ゆっくり読み込みます。別のサイトを追加すると、未取得の情報はそちらから読み込みます。";
+"You’re signed in, but this website hasn’t opened to your account yet. It decides which accounts it lets in, and a new account may be let in about a week after it’s made. Check again later, or open works on another connected website." = "ログインしていますが、このウェブサイトはまだこのアカウントへのアクセスを許可していません。どのアカウントを受け入れるかはウェブサイトが決め、新しいアカウントは作成から7日ほど経つとアクセスできるようになることがあります。後でもう一度確認するか、接続している別のウェブサイトで作品を開いてください。";
+"No Access Yet" = "まだアクセスできません";
+"Signed In, No Access Yet" = "ログイン済み、アクセス権なし";
+"Use the Account from %@" = "%@ のアカウントを使う";
+"Use This Website" = "このウェブサイトを使う";
+"Website Settings" = "ウェブサイト設定";
+"Each website keeps its own account. Two websites of one forum can share one: sign in on either, then use its account on the other." = "ウェブサイトごとにアカウントを保存します。同じフォーラムの2つのウェブサイトは1つのアカウントを共有できます。どちらかでログインしてから、もう一方でそのアカウントを使ってください。";

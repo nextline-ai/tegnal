@@ -408,6 +408,8 @@ public enum MangaUrls {
 
     static func discoverBackend(site: String, transport: ContentTransport, retried: Bool = false) async -> Bool {
         guard let homepage = URL(string: site), !site.isEmpty else { return false }
+        let host = homepage.host?.lowercased() ?? ""
+        let access = SiteAccount.siteCookie(SiteAccount.accessCookie, host: host)
         var scripts: [URL] = []
         do {
             let data: Data, response: HTTPURLResponse
@@ -448,8 +450,11 @@ public enum MangaUrls {
             if showsNothing {
                 let askedBefore = preferences.string(forKey: "manga.account_site") == site
                 markRequiresSignIn(site: site, accountHost: nil)
-                // An account signed in elsewhere is tried here once, now that the site asks for one.
-                if !askedBefore, !retried, SiteAccount.isSignedIn, home == site {
+                // The site's account is tried here once, now that the site asks for one; so is access
+                // a members-only catalog handed out with this very answer.
+                let handedOut = SiteAccount.siteCookie(SiteAccount.accessCookie, host: host)
+                let newAccess = handedOut != nil && handedOut != access
+                if !retried, SiteAccount.isSignedIn, home == site, !askedBefore || newAccess {
                     return await discoverBackend(site: site, transport: transport, retried: true)
                 }
                 return false

@@ -89,18 +89,20 @@ final class SiteAccessTests: XCTestCase {
         let pasted = SiteAccount.parseCookies("ipb_member_id=7; ipb_pass_hash=0123456789abcdef0123456789abcdef; igneous=refused001")
         XCTAssertTrue(SiteAccount.signIn(pasted: pasted, host: "members.example"))
         let wall = Data(#"<html><body><img src="https://members.example/img/kokomade.jpg"></body></html>"#.utf8)
+        let listing = Data(#"<html><body><form><input name="f_search"></form><a href="https://members.example/g/3000/0000000bb8/">Work</a></body></html>"#.utf8)
         // The wall answers a request whose access was refused, and hands out new access with it.
-        StubProtocol.handler = { _ in (200, ["Content-Type": "text/html", "Set-Cookie": "igneous=fresh00001; path=/; domain=.members.example"], wall) }
+        StubProtocol.handler = { request in
+            if request.value(forHTTPHeaderField: "Cookie")?.contains("igneous=fresh00001") == true { return (200, ["Content-Type": "text/html"], listing) }
+            return (200, ["Content-Type": "text/html", "Set-Cookie": "igneous=fresh00001; path=/; domain=.members.example"], wall)
+        }
         let source = MangaContentSource(transport: transport())
-        do {
-            _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 5)
-            XCTFail("Expected the wall")
-        } catch { XCTAssertEqual(error as? ContentError, .signInRequired) }
-        XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["igneous"], "fresh00001", "Access the wall just handed out is kept for the next request")
+        let batch = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 5)
+        XCTAssertEqual(batch.ids, [3000], "The access the wall just handed out is used at once")
+        XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["igneous"], "fresh00001", "and kept")
 
         StubProtocol.handler = { _ in (200, ["Content-Type": "text/html"], wall) }
         do {
-            _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 5)
+            _ = try await source.list(GalleryQuery(language: "all", text: "other"), offset: 0, count: 5)
             XCTFail("Expected the wall")
         } catch { XCTAssertEqual(error as? ContentError, .signInRequired) }
         XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["igneous"], "Access the site refused is dropped so a fresh one is handed out")
@@ -214,6 +216,65 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertFalse(ContentError.allowsOtherSite(ContentError.invalidQuery))
         XCTAssertFalse(ContentError.allowsOtherSite(URLError(.notConnectedToInternet)), "Without a connection every website fails alike")
         XCTAssertFalse(ContentError.allowsOtherSite(CancellationError()))
+    }
+
+    func testEachWebsiteKeepsItsOwnAccount() {
+        let pasted = SiteAccount.parseCookies("ipb_member_id=7; ipb_pass_hash=0123456789abcdef0123456789abcdef; sk=abc123")
+        XCTAssertTrue(SiteAccount.signIn(pasted: pasted, host: "first.example"))
+        XCTAssertTrue(SiteAccount.isSignedIn(host: "first.example"))
+        XCTAssertFalse(SiteAccount.isSignedIn(host: "second.example"), "Signing in on one website leaves the others as they were")
+        XCTAssertNil(SiteAccount.cookies(forSite: "second.example")["ipb_member_id"], "One website's account never reaches another")
+        XCTAssertEqual(SiteAccount.accountSources(excluding: "second.example"), ["first.example"])
+
+        XCTAssertTrue(SiteAccount.useAccount(from: "first.example", on: "second.example"))
+        XCTAssertEqual(SiteAccount.cookies(forSite: "second.example")["ipb_member_id"], "7", "Two websites of one forum can share an account")
+        XCTAssertNil(SiteAccount.cookies(forSite: "second.example")["sk"], "Cookies one website set stay with it")
+
+        SiteAccount.signOut(host: "first.example")
+        XCTAssertFalse(SiteAccount.isSignedIn(host: "first.example"))
+        XCTAssertTrue(SiteAccount.isSignedIn(host: "second.example"), "Signing one website out keeps the others signed in")
+        XCTAssertFalse(SiteAccount.useAccount(from: "first.example", on: "third.example"))
+    }
+
+    func testAnAccountTheWebsiteHasntOpenedToIsToldSoInsteadOfAskedToSignIn() async throws {
+        connect("members.example")
+        MangaUrls.markRequiresSignIn(site: MangaUrls.home, accountHost: "forums.example")
+        XCTAssertTrue(SiteAccount.signIn(pasted: SiteAccount.parseCookies("ipb_member_id=7; ipb_pass_hash=0123456789abcdef0123456789abcdef"), host: "members.example"))
+        MangaUrls.markUsesAccount(site: MangaUrls.home)
+        // The members-only website answers a signed-in account it hasn't opened to with nothing, and the placeholder.
+        StubProtocol.handler = { _ in (200, ["Content-Type": "text/html; charset=UTF-8", "Set-Cookie": "igneous=mystery; path=/; domain=.members.example"], Data()) }
+        do {
+            _ = try await MangaContentSource(transport: transport()).list(GalleryQuery(language: "all"), offset: 0, count: 5)
+            XCTFail("Expected the website to keep the account out")
+        } catch { XCTAssertEqual(error as? ContentError, .accessDenied, "A signed-in account isn't asked to sign in again") }
+        XCTAssertTrue(SiteAccount.refusesAccess(host: "members.example"))
+        XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["igneous"], "The placeholder is never sent back")
+        XCTAssertNotEqual(ContentError.accessDenied.localizedDescription, ContentError.signInRequired.localizedDescription)
+
+        SiteAccount.signOut(host: "members.example")
+        XCTAssertFalse(SiteAccount.refusesAccess(host: "members.example"))
+    }
+
+    func testAccessHandedOutWithAnEmptyAnswerIsUsedAtOnce() async throws {
+        connect("members.example")
+        XCTAssertTrue(SiteAccount.signIn(pasted: SiteAccount.parseCookies("ipb_member_id=7; ipb_pass_hash=0123456789abcdef0123456789abcdef"), host: "members.example"))
+        MangaUrls.markUsesAccount(site: MangaUrls.home)
+        let listing = #"<html><body><form><input name="f_search"></form><div class="searchnav"></div><a href="https://members.example/g/3000/0000000bb8/">Work</a></body></html>"#
+        // An account the website lets in gets its access with an empty answer, then the works with it.
+        StubProtocol.handler = { request in
+            if request.value(forHTTPHeaderField: "Cookie")?.contains("igneous=granted01") == true {
+                return (200, ["Content-Type": "text/html"], Data(listing.utf8))
+            }
+            return (200, ["Content-Type": "text/html", "Set-Cookie": "igneous=granted01; path=/; domain=.members.example"], Data())
+        }
+        await MangaUrls.resolveBackend(transport: transport(), force: true)
+        XCTAssertTrue(MangaUrls.hasResolvedBackend, "The access handed out is used right away, not after the website was given up on")
+        XCTAssertEqual(MangaUrls.backend, .keyed)
+
+        // The same holds for any page of a recognized website.
+        SiteAccount.forget(SiteAccount.accessCookie, host: "members.example")
+        let batch = try await MangaContentSource(transport: transport()).list(GalleryQuery(language: "all"), offset: 0, count: 5)
+        XCTAssertEqual(batch.ids, [3000])
     }
 
     func testTheNoAccessMarkAndBotCheckCookiesAreNeverSentBack() throws {

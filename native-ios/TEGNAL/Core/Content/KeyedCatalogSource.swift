@@ -240,7 +240,7 @@ actor KeyedCatalogSource {
         return GalleryBatch(ids: Array(matched.dropFirst(offset).prefix(count)), hasMore: matched.count > offset + count || list.more)
     }
 
-    private func page(_ url: URL, site: String) async throws -> String {
+    private func page(_ url: URL, site: String, retried: Bool = false) async throws -> String {
         let host = URL(string: site)?.host?.lowercased()
         if let host { try await pacer.wait(host: host) }
         try prepare(site)
@@ -251,11 +251,14 @@ actor KeyedCatalogSource {
         try prepare(site)
         let text = String(decoding: data, as: UTF8.self)
         if let error = Self.pageError(text) {
-            // A refused access cookie is dropped, so the next request is handed a fresh one; one the
-            // wall itself just handed out is kept for that request.
-            if error == .signInRequired, Self.isRestrictedNotice(text), let host {
-                SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access)
-            }
+            guard error == .signInRequired, let host else { throw error }
+            // A members-only catalog shows its wall, or nothing, to a request that came without the
+            // access it hands out with that same answer: the next request carries it.
+            let handedOut = SiteAccount.siteCookie(SiteAccount.accessCookie, host: host)
+            if !retried, let handedOut, handedOut != access { return try await page(url, site: site, retried: true) }
+            // A refused access cookie is dropped, so the next request is handed a fresh one.
+            if Self.isRestrictedNotice(text) { SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access) }
+            if SiteAccount.refusesAccess(host: host) { throw ContentError.accessDenied }
             throw error
         }
         return text
@@ -456,7 +459,7 @@ actor KeyedCatalogSource {
             catch {
                 try Task.checkCancellation()
                 // A notice in place of the image is the site's answer, not one host's failure.
-                if let notice = error as? ContentError, [.imageLimit, .signInRequired, .temporarilyBlocked].contains(notice) { throw notice }
+                if let notice = error as? ContentError, [.imageLimit, .signInRequired, .accessDenied, .temporarilyBlocked].contains(notice) { throw notice }
                 // Another volunteer host serves the same image when this one fails.
                 guard attempt < 2, let next = shown.reload, next != reload else { throw error }
                 reload = next
@@ -476,7 +479,10 @@ actor KeyedCatalogSource {
         guard response.mimeType?.hasPrefix("image/") != false, data.count > 32 else { throw ContentError.unsupportedFormat }
         if let notice = Self.imageNotice(data, url: response.url ?? url) {
             // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
-            if notice == .signInRequired, let host { SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access) }
+            if notice == .signInRequired, let host {
+                SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access)
+                if SiteAccount.refusesAccess(host: host) { throw ContentError.accessDenied }
+            }
             throw notice
         }
         return data

@@ -1798,3 +1798,10 @@
 "%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds." = "%1$@ works are missing covers, titles or tags. Filling them reads each work from %2$@, and this website may block your network address when one device reads many works in a short time.\n\nAdd another comics website and the missing information is read from there instead. If you fill anyway, one work is read every few seconds.";
 "Fill Slowly Anyway" = "Fill Slowly Anyway";
 "%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there." = "%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there.";
+"You’re signed in, but this website hasn’t opened to your account yet. It decides which accounts it lets in, and a new account may be let in about a week after it’s made. Check again later, or open works on another connected website." = "You’re signed in, but this website hasn’t opened to your account yet. It decides which accounts it lets in, and a new account may be let in about a week after it’s made. Check again later, or open works on another connected website.";
+"No Access Yet" = "No Access Yet";
+"Signed In, No Access Yet" = "Signed In, No Access Yet";
+"Use the Account from %@" = "Use the Account from %@";
+"Use This Website" = "Use This Website";
+"Website Settings" = "Website Settings";
+"Each website keeps its own account. Two websites of one forum can share one: sign in on either, then use its account on the other." = "Each website keeps its own account. Two websites of one forum can share one: sign in on either, then use its account on the other.";

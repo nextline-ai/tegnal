@@ -99,21 +99,27 @@ final class GalleryKeys: @unchecked Sendable {
     }
 }
 
-/// The signed-in identity a catalog may ask for, kept in the keychain.
-/// Only the account's identity cookies are kept from sign-in, and they reach
-/// nothing but the connected site and its own subdomains.
+/// The signed-in identities catalogs ask for, kept in the keychain, one per website. Only an
+/// account's identity cookies are kept from sign-in, and they reach nothing but the website they
+/// were signed in for and its own subdomains.
 enum SiteAccount {
     private struct Stored: Codable {
+        /// The forum identity every website shared before each kept its own; on first read it moves
+        /// to the websites connected at the time.
         var identity: [String: String] = [:]
-        /// Cookies the connected site set for itself, by host.
+        /// Cookies each website set for itself, by host.
         var sites: [String: [String: String]] = [:]
         /// Sign-ins made on a site's own pages, by host: the cookies its pages set once signed in.
         /// Optional so sign-ins kept before these existed still read.
         var sessions: [String: [String: String]]? = nil
+        /// Each website's forum identity, by host. Optional so sign-ins kept before these existed still read.
+        var identities: [String: [String: String]]? = nil
     }
     private static let lock = NSLock()
     private static let service = "work.nextline.tegnal.site-account"
     private nonisolated(unsafe) static var cached: Stored?
+    /// Websites that signed an account in but handed it the placeholder instead of access.
+    private nonisolated(unsafe) static var refused = Set<String>()
     static let didChange = Notification.Name("siteAccountDidChange")
 
     /// Names follow the forum software these catalogs share, not any one site.
@@ -128,22 +134,34 @@ enum SiteAccount {
         name == accessCookie && (value.isEmpty || value == "mystery" || value == "deleted")
     }
 
-    static var isSignedIn: Bool { signedIn(lock.withLock { load() }.identity) }
+    /// Whether the connected website keeps a forum identity of its own.
+    static var isSignedIn: Bool { hasIdentity(host: MangaUrls.configuredHost) }
 
-    /// Whether [host] has an account: the forum identity, or a sign-in made on its own pages.
-    static func isSignedIn(host: String) -> Bool {
-        let stored = lock.withLock { load() }
-        if !(stored.sessions?[host] ?? [:]).isEmpty { return true }
-        // A site that signs in on its own pages does not take the forum identity.
-        return !MangaUrls.usesSiteSession && signedIn(stored.identity)
+    /// Whether [host] keeps a forum identity of its own.
+    static func hasIdentity(host: String) -> Bool {
+        !host.isEmpty && signedIn(lock.withLock { load() }.identities?[host] ?? [:])
     }
 
-    /// Signs out of one site that signs in on its own pages; other sites keep their accounts.
+    /// Whether [host] has an account: its forum identity, or a sign-in made on its own pages.
+    static func isSignedIn(host: String) -> Bool {
+        let stored = lock.withLock { load() }
+        return !(stored.sessions?[host] ?? [:]).isEmpty || signedIn(stored.identities?[host] ?? [:])
+    }
+
+    /// Whether [host] signed its account in but hands it the placeholder instead of access: a
+    /// members-only catalog that hasn't opened to this account.
+    static func refusesAccess(host: String) -> Bool {
+        lock.withLock { refused.contains(host) && signedIn(load().identities?[host] ?? [:]) }
+    }
+
+    /// Signs one website out; other websites keep their accounts.
     static func signOut(host: String) {
         lock.withLock {
             var stored = load()
             stored.sessions?[host] = nil
+            stored.identities?[host] = nil
             stored.sites[host] = nil
+            refused.remove(host)
             save(stored)
         }
         NotificationCenter.default.post(name: didChange, object: nil)
@@ -181,17 +199,36 @@ enum SiteAccount {
             && identity.contains { $0.key.hasSuffix("_pass_hash") && !$0.value.isEmpty }
     }
 
-    /// Keeps the identity from a finished sign-in. Returns false when the cookies hold none.
+    /// Keeps the identity from a finished sign-in for [host]. Returns false when the cookies hold none.
     @discardableResult
-    static func signIn(with cookies: [HTTPCookie]) -> Bool {
+    static func signIn(with cookies: [HTTPCookie], host: String) -> Bool {
         var identity: [String: String] = [:]
         for cookie in cookies where isIdentity(cookie.name) && !cookie.value.isEmpty { identity[cookie.name] = cookie.value }
-        guard signedIn(identity) else { return false }
+        return keep(identity, site: nil, host: host)
+    }
+
+    /// Signs [host] in with the account another website keeps, as for two websites of one forum.
+    @discardableResult
+    static func useAccount(from source: String, on host: String) -> Bool {
+        keep(lock.withLock { load().identities?[source] } ?? [:], site: nil, host: host)
+    }
+
+    /// Other websites keeping a forum identity that [host] could use too.
+    static func accountSources(excluding host: String) -> [String] {
+        let stored = lock.withLock { load() }
+        return (stored.identities ?? [:]).filter { $0.key != host && signedIn($0.value) }.keys.sorted()
+    }
+
+    /// Keeps [identity] for [host]; cookies the website set for another account no longer apply.
+    private static func keep(_ identity: [String: String], site cookies: [String: String]?, host: String) -> Bool {
+        guard signedIn(identity), !host.isEmpty else { return false }
         lock.withLock {
             var stored = load()
-            stored.identity = identity
-            // Cookies a site set for another account no longer apply; its own sign-ins stay.
-            stored.sites.removeAll()
+            var identities = stored.identities ?? [:]
+            identities[host] = identity
+            stored.identities = identities
+            stored.sites[host] = cookies.flatMap { $0.isEmpty ? nil : $0 }
+            refused.remove(host)
             save(stored)
         }
         NotificationCenter.default.post(name: didChange, object: nil)
@@ -237,26 +274,18 @@ enum SiteAccount {
         !value.isEmpty && value.count <= 512 && value.unicodeScalars.allSatisfy { $0.isASCII && !CharacterSet.whitespacesAndNewlines.contains($0) && $0 != ";" }
     }
 
-    /// Signs in with cookies copied from a browser. The other cookies belong to [host].
+    /// Signs [host] in with cookies copied from a browser; the other cookies belong to [host] too.
     @discardableResult
     static func signIn(pasted: PastedCookies, host: String) -> Bool {
         guard pasted.isComplete else { return false }
-        lock.withLock {
-            var stored = load()
-            stored.identity = pasted.identity
-            // Cookies a site set for another account no longer apply; its own sign-ins stay.
-            stored.sites.removeAll()
-            if !host.isEmpty, !pasted.site.isEmpty { stored.sites[host] = pasted.site }
-            save(stored)
-        }
-        NotificationCenter.default.post(name: didChange, object: nil)
-        return true
+        return keep(pasted.identity, site: pasted.site, host: host)
     }
 
     /// Drops one cookie the site set, so the site hands out a fresh one on the next request.
     static func forget(_ name: String, host: String) {
         lock.withLock {
             var stored = load()
+            if name == accessCookie { refused.remove(host) }
             guard stored.sites[host]?[name] != nil else { return }
             stored.sites[host]?[name] = nil
             save(stored)
@@ -283,12 +312,13 @@ enum SiteAccount {
     /// The account cookie names saved for [host], for showing what is kept without the values.
     static func savedCookieNames(host: String) -> [String] {
         let stored = lock.withLock { load() }
-        guard signedIn(stored.identity) else { return [] }
-        return (Array(stored.identity.keys) + Array((stored.sites[host] ?? [:]).keys)).sorted()
+        guard let identity = stored.identities?[host], signedIn(identity) else { return [] }
+        return (Array(identity.keys) + Array((stored.sites[host] ?? [:]).keys)).sorted()
     }
 
+    /// Signs every website out.
     static func signOut() {
-        lock.withLock { save(Stored()) }
+        lock.withLock { save(Stored()); refused.removeAll() }
         NotificationCenter.default.post(name: didChange, object: nil)
     }
 
@@ -306,7 +336,7 @@ enum SiteAccount {
         return values.isEmpty ? nil : values.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "; ")
     }
 
-    /// What the site expects back: the identity, cookies it set, and consent to open flagged works.
+    /// What the site expects back: its identity, cookies it set, and consent to open flagged works.
     static func cookies(forSite host: String) -> [String: String] {
         let stored = lock.withLock { load() }
         var values = stored.sessions?[host] ?? [:]
@@ -314,7 +344,7 @@ enum SiteAccount {
         // kept before they were known to be ignored are not sent either.
         values.merge((stored.sites[host] ?? [:]).filter { !isPlaceholder(name: $0.key, value: $0.value) && !ignoresCookie($0.key) && !SiteClearance.isClearanceCookie($0.key) }) { _, newer in newer }
         values["nw"] = "1"
-        if signedIn(stored.identity) { values.merge(stored.identity) { _, identity in identity } }
+        if let identity = stored.identities?[host], signedIn(identity) { values.merge(identity) { _, identity in identity } }
         return values
     }
 
@@ -325,7 +355,8 @@ enum SiteAccount {
         }
     }
 
-    /// Keeps cookies the site sets for itself, such as access it grants after the identity is checked.
+    /// Keeps cookies the site sets for itself, such as access it grants after the identity is
+    /// checked, and notes when it hands out the placeholder instead.
     static func store(_ response: HTTPURLResponse) {
         guard let url = response.url, applies(to: url),
               let fields = response.allHeaderFields as? [String: String] else { return }
@@ -339,6 +370,10 @@ enum SiteAccount {
             var site = stored.sites[host] ?? [:]
             for cookie in received {
                 let expired = cookie.expiresDate.map { $0 < Date() } ?? false
+                if cookie.name == accessCookie {
+                    if cookie.value == "mystery" { refused.insert(host) }
+                    else if !expired && !isPlaceholder(name: cookie.name, value: cookie.value) { refused.remove(host) }
+                }
                 // A placeholder instead of access is never kept: the access already held stays.
                 if isPlaceholder(name: cookie.name, value: cookie.value) { continue }
                 if expired || cookie.value.isEmpty || cookie.value == "deleted" { site[cookie.name] = nil }
@@ -371,6 +406,16 @@ enum SiteAccount {
             if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
                let decoded = try? JSONDecoder().decode(Stored.self, from: data) { result = decoded }
         }
+        if result.identities == nil {
+            // An account kept before each website had its own stays with every website connected now.
+            var identities: [String: [String: String]] = [:]
+            if signedIn(result.identity) {
+                for host in Set(ComicSites.all).union(result.sites.keys) where !host.isEmpty { identities[host] = result.identity }
+            }
+            result.identities = identities
+            result.identity = [:]
+            save(result)
+        }
         cached = result
         return result
     }
@@ -379,7 +424,7 @@ enum SiteAccount {
         cached = stored
         guard !ContentPreferences.isIsolated else { return }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "account"]
-        guard !stored.identity.isEmpty || !stored.sites.isEmpty || !(stored.sessions ?? [:]).isEmpty,
+        guard !stored.identity.isEmpty || !stored.sites.isEmpty || !(stored.sessions ?? [:]).isEmpty || !(stored.identities ?? [:]).isEmpty,
               let data = try? JSONEncoder().encode(stored) else {
             SecItemDelete(query as CFDictionary)
             return

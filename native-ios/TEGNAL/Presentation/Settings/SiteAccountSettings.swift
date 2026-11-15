@@ -2,10 +2,12 @@ import SwiftUI
 import WebKit
 import Combine
 
-/// Shown for websites that use accounts, or that have not been recognized yet and may be
-/// members-only. The person signs in on the website itself or pastes the cookies of a browser where
-/// they are signed in; the app keeps only the sign-in cookies it is handed.
+/// One connected website's account, in that website's own settings. The person signs in on the
+/// website itself or pastes the cookies of a browser where they are signed in; the app keeps only
+/// the sign-in cookies it is handed, for this website alone.
 struct SiteAccountSection: View {
+    /// The connected website, as the list of websites names it.
+    let site: String
     @Environment(AppEnvironment.self) private var env
     @State private var signingIn = false
     @State private var pastingCookies = false
@@ -13,45 +15,46 @@ struct SiteAccountSection: View {
     @State private var confirmingSignOut = false
     @State private var importTask: Task<Void, Never>?
     @State private var importMessage: String?
-    @State private var clearanceRevision = 0
+    @State private var revision = 0
     @State private var categories: [FavoriteCategory] = []
     @State private var allowance: (used: Int, limit: Int)?
 
-    private var host: String { MangaUrls.configuredHost }
-    private var usesAccountHere: Bool { MangaUrls.usesAccount }
-    private var isShown: Bool {
-        guard !env.comicSites.isEmpty, !host.isEmpty else { return false }
-        _ = clearanceRevision
-        return env.siteAccountSignedIn || usesAccountHere || !MangaUrls.hasResolvedBackend
-            || MangaUrls.backend == .keyed || SiteClearance.hasClearance(forHost: host)
+    /// What was learned about this website, read in its own scope.
+    private func scoped<T>(_ body: () -> T) -> T { SiteScope.$site.withValue(site, operation: body) }
+    private var isChecked: Bool { site == env.mangaSiteAddress }
+    private var host: String { scoped { MangaUrls.configuredHost } }
+    private var signedIn: Bool { _ = revision; _ = env.siteAccountSignedIn; return SiteAccount.isSignedIn(host: host) }
+    private var refused: Bool { _ = revision; return SiteAccount.refusesAccess(host: host) }
+    private var usesSiteSession: Bool { scoped { MangaUrls.usesSiteSession } }
+    private var keyed: Bool { scoped { MangaUrls.hasResolvedBackend && MangaUrls.backend == .keyed } }
+    /// Websites whose account this one can use, as two websites of one forum share theirs.
+    private var sources: [String] { _ = revision; return usesSiteSession ? [] : SiteAccount.accountSources(excluding: host) }
+    /// Whether accounts matter here: a website that uses them, or one not recognized yet that may be members-only.
+    private var showsAccount: Bool {
+        _ = revision
+        return signedIn || scoped { MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || MangaUrls.backend == .keyed }
     }
 
     var body: some View {
         @Bindable var env = env
-        if isShown {
-            Section {
-                if env.siteAccountSignedIn {
-                    LabeledContent(L10n.text("Website Account"), value: L10n.text("Signed In"))
+        Section {
+            if showsAccount {
+                if signedIn {
+                    LabeledContent(L10n.text("Website Account"), value: L10n.text(refused ? "Signed In, No Access Yet" : "Signed In"))
                         .accessibilityIdentifier("settings.siteAccount.status")
-                    if let allowance {
+                    if isChecked, let allowance {
                         LabeledContent(L10n.text("Image Allowance")) {
                             Text("\(allowance.used.formatted()) / \(allowance.limit.formatted())").monospacedDigit()
                         }.accessibilityIdentifier("settings.siteAccount.allowance")
                     }
-                    if !usesAccountHere && !MangaUrls.usesSiteSession {
-                        Button {
-                            MangaUrls.markUsesAccount(site: MangaUrls.home)
-                            env.siteSignInFinished()
-                        } label: { Label(L10n.text("Use This Account on This Website"), systemImage: "person.crop.circle.badge.checkmark") }
-                            .accessibilityIdentifier("settings.siteAccount.useHere")
-                    } else if MangaUrls.requiresSignIn || SiteAccount.savedCookieNames(host: host).contains(SiteAccount.accessCookie) {
+                    if scoped({ MangaUrls.requiresSignIn }) || refused || SiteAccount.savedCookieNames(host: host).contains(SiteAccount.accessCookie) {
                         Button {
                             SiteAccount.forget(SiteAccount.accessCookie, host: host)
-                            env.siteSignInFinished()
+                            finished()
                         } label: { Label(L10n.text("Refresh Website Access"), systemImage: "arrow.triangle.2.circlepath") }
                             .accessibilityIdentifier("settings.siteAccount.refreshAccess")
                     }
-                    if MangaUrls.backend == .keyed && MangaUrls.hasResolvedBackend {
+                    if isChecked && keyed {
                         Toggle(isOn: $env.syncsAccountFavorites) {
                             SettingsHelpLabel("Sync Bookmarks with Account Favorites",
                                               help: "Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.")
@@ -84,43 +87,64 @@ struct SiteAccountSection: View {
                     Button(L10n.text("Sign Out"), role: .destructive) { confirmingSignOut = true }
                         .accessibilityIdentifier("settings.siteAccount.signOut")
                         .confirmationDialog(L10n.text("Sign out of this website?"), isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                            Button(L10n.text("Sign Out"), role: .destructive) { env.signOutOfSite() }
+                            Button(L10n.text("Sign Out"), role: .destructive) { env.signOutOfSite(site); revision += 1 }
                         }
                 } else {
                     Button { signingIn = true } label: {
                         Label(L10n.text("Sign In to Website"), systemImage: "person.crop.circle")
-                    }.disabled(MangaUrls.signInURL == nil).accessibilityIdentifier("settings.siteAccount.signIn")
+                    }.disabled(scoped { MangaUrls.signInURL } == nil).accessibilityIdentifier("settings.siteAccount.signIn")
                     // Presented from the row: a list section cannot present a sheet.
-                    .appSheet(isPresented: $signingIn) { SiteSignInView { env.siteSignInFinished() } }
-                    if !MangaUrls.usesSiteSession {
+                    .appSheet(isPresented: $signingIn) { SiteSignInView(site: site) { finished() } }
+                    ForEach(sources, id: \.self) { source in
+                        Button {
+                            if SiteAccount.useAccount(from: source, on: host) {
+                                scoped { MangaUrls.markUsesAccount(site: MangaUrls.home) }
+                                finished()
+                            }
+                        } label: { Label(L10n.text("Use the Account from %@", source), systemImage: "person.crop.circle.badge.checkmark") }
+                            .accessibilityIdentifier("settings.siteAccount.useFrom.\(source)")
+                    }
+                    if !usesSiteSession {
                         Button { pastingCookies = true } label: {
                             Label(L10n.text("Sign In with Cookies"), systemImage: "doc.on.clipboard")
                         }.accessibilityIdentifier("settings.siteAccount.cookies")
-                        .appSheet(isPresented: $pastingCookies) { SiteCookieSignInView() }
+                        .appSheet(isPresented: $pastingCookies) { SiteCookieSignInView(site: site) { revision += 1 } }
                     }
                 }
-                Button { verifying = true } label: {
-                    LabeledContent {
-                        if SiteClearance.hasClearance(forHost: host) { Text(L10n.text("Done")) }
-                    } label: { Label(L10n.text("Validate Client"), systemImage: "checkmark.shield") }
-                }.accessibilityIdentifier("settings.siteAccount.validate")
-                .appSheet(isPresented: $verifying) { SiteVerificationView(host: host) { clearanceRevision += 1 } }
-            } header: {
-                Text(L10n.text("Website Account"))
-            } footer: {
-                Text(L10n.text("Some websites show more works, or keep favorites, for signed-in accounts. Create an account on the website itself. The app keeps only the sign-in in this device's keychain, never your password. If a website keeps asking you to check you’re not a bot, use Validate Client."))
             }
-            .onDisappear { importTask?.cancel() }
-            .onReceive(NotificationCenter.default.publisher(for: SiteClearance.didChange).receive(on: RunLoop.main)) { _ in clearanceRevision += 1 }
-            .task(id: env.siteAccountSignedIn) {
-                guard env.siteAccountSignedIn, MangaUrls.backend == .keyed, MangaUrls.hasResolvedBackend else { allowance = nil; return }
-                allowance = (try? await MangaContentSource.shared.imageAllowance()) ?? nil
-            }
-            .task(id: env.syncsAccountFavorites) {
-                guard env.syncsAccountFavorites, categories.isEmpty else { return }
-                categories = (try? await MangaContentSource.shared.favoriteCategories()) ?? []
+            Button { verifying = true } label: {
+                LabeledContent {
+                    if SiteClearance.hasClearance(forHost: host) { Text(L10n.text("Done")) }
+                } label: { Label(L10n.text("Validate Client"), systemImage: "checkmark.shield") }
+            }.accessibilityIdentifier("settings.siteAccount.validate")
+            .appSheet(isPresented: $verifying) { SiteVerificationView(host: host) { revision += 1 } }
+        } header: {
+            Text(L10n.text(showsAccount ? "Website Account" : "Website"))
+        } footer: {
+            if showsAccount && refused {
+                // Why the website keeps a signed-in account out, and when that may change.
+                Text(ContentError.accessDenied.localizedDescription)
+            } else if showsAccount {
+                Text(L10n.text("Some websites show more works, or keep favorites, for signed-in accounts. Create an account on the website itself. The app keeps only the sign-in in this device's keychain, never your password. If a website keeps asking you to check you’re not a bot, use Validate Client.")
+                     + "\n\n" + L10n.text("Each website keeps its own account. Two websites of one forum can share one: sign in on either, then use its account on the other."))
             }
         }
+        .onDisappear { importTask?.cancel() }
+        .onReceive(NotificationCenter.default.publisher(for: SiteClearance.didChange).receive(on: RunLoop.main)) { _ in revision += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: SiteAccount.didChange).receive(on: RunLoop.main)) { _ in revision += 1 }
+        .task(id: "\(signedIn)-\(isChecked)") {
+            guard isChecked, signedIn, keyed else { allowance = nil; return }
+            allowance = (try? await MangaContentSource.shared.imageAllowance()) ?? nil
+        }
+        .task(id: env.syncsAccountFavorites) {
+            guard isChecked, env.syncsAccountFavorites, categories.isEmpty else { return }
+            categories = (try? await MangaContentSource.shared.favoriteCategories()) ?? []
+        }
+    }
+
+    private func finished() {
+        env.siteSignInFinished(site: site)
+        revision += 1
     }
 
     private func importFavorites(byCategory: Bool) async {
@@ -135,8 +159,30 @@ struct SiteAccountSection: View {
     }
 }
 
+/// A connected website's own settings: which website it is, and its account.
+struct ComicSiteSettingsView: View {
+    let site: String
+    @Environment(AppEnvironment.self) private var env
+    var body: some View {
+        List {
+            Section {
+                LabeledContent(L10n.text("Website Address"), value: site)
+                if site != env.mangaSiteAddress {
+                    Button { env.switchComicsSite(to: site) } label: { Label(L10n.text("Use This Website"), systemImage: "checkmark.circle") }
+                        .accessibilityIdentifier("settings.site.use")
+                }
+            }
+            SiteAccountSection(site: site)
+        }
+        .navigationTitle(L10n.text("Website Settings")).navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("settings.siteSettings")
+    }
+}
+
 /// Signs in with the cookies of a browser where the person is already signed in.
 struct SiteCookieSignInView: View {
+    /// The connected website signing in; nil is the checked one.
+    var site: String? = nil
     var finished: () -> Void = {}
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -236,10 +282,11 @@ struct SiteCookieSignInView: View {
     private func signIn() async {
         checking = true
         defer { checking = false }
-        guard SiteAccount.signIn(pasted: pasted, host: MangaUrls.configuredHost) else { return }
-        MangaUrls.markUsesAccount(site: MangaUrls.home)
-        env.siteSignInFinished()
-        succeeded = await env.checkSiteAccount()
+        let site = site ?? env.mangaSiteAddress
+        guard SiteAccount.signIn(pasted: pasted, host: SiteScope.$site.withValue(site) { MangaUrls.configuredHost }) else { return }
+        SiteScope.$site.withValue(site) { MangaUrls.markUsesAccount(site: MangaUrls.home) }
+        env.siteSignInFinished(site: site)
+        succeeded = await env.checkSiteAccount(site: site)
         if succeeded {
             finished()
             dismiss()
@@ -252,6 +299,8 @@ struct SiteCookieSignInView: View {
 /// The website's own sign-in page in the website's browser profile, where a bot check passed
 /// before lets the page through.
 struct SiteSignInView: View {
+    /// The connected website signing in; nil is the checked one.
+    var site: String? = nil
     let finished: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var loading = true
@@ -271,19 +320,21 @@ struct SiteSignInView: View {
                         Button(L10n.text("Try Again")) { self.failure = nil; loading = true; attempt += 1 }
                             .buttonStyle(.borderedProminent).accessibilityIdentifier("site.signIn.retry")
                     }
-                } else if let url = MangaUrls.signInURL {
-                    let session = MangaUrls.usesSiteSession ? MangaUrls.configuredHost : nil
+                } else if let url = scoped({ MangaUrls.signInURL }) {
+                    let host = scoped { MangaUrls.configuredHost }
+                    let session = scoped { MangaUrls.usesSiteSession } ? host : nil
                     VStack(spacing: 0) {
                         if loading { ProgressView(value: progress).progressViewStyle(.linear) }
                         SiteSignInWebView(url: url, session: session, loading: $loading, progress: $progress, failure: $failure) { cookies in
                             if let session {
-                                guard SiteAccount.signIn(session: cookies, host: session) else { return }
+                                guard SiteAccount.signIn(session: cookies, host: session) else { return false }
                             } else {
-                                guard SiteAccount.signIn(with: cookies) else { return }
-                                MangaUrls.markUsesAccount(site: MangaUrls.home)
+                                guard SiteAccount.signIn(with: cookies, host: host) else { return false }
+                                scoped { MangaUrls.markUsesAccount(site: MangaUrls.home) }
                             }
                             finished()
                             dismiss()
+                            return true
                         }
                         .id(attempt)
                     }
@@ -297,6 +348,9 @@ struct SiteSignInView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } } }
         }
     }
+
+    /// What was learned about the website signing in, read in its own scope.
+    private func scoped<T>(_ body: () -> T) -> T { SiteScope.$site.withValue(site ?? ComicSites.active, operation: body) }
 }
 
 private struct SiteSignInWebView: UIViewRepresentable {
@@ -306,7 +360,8 @@ private struct SiteSignInWebView: UIViewRepresentable {
     @Binding var loading: Bool
     @Binding var progress: Double
     @Binding var failure: String?
-    let signedIn: ([HTTPCookie]) -> Void
+    /// Keeps the sign-in the cookies hold; true once kept.
+    let signedIn: ([HTTPCookie]) -> Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -364,15 +419,14 @@ private struct SiteSignInWebView: UIViewRepresentable {
             guard sawSignInForm, !done else { return }
             done = true
             detach()
-            parent.signedIn(cookies)
+            _ = parent.signedIn(cookies)
         }
 
         func detach() { watcher?.cancel(); watcher = nil; observation = nil }
 
         private func report(_ cookies: [HTTPCookie]) {
             guard !done, cookies.contains(where: { SiteAccount.isIdentity($0.name) }) else { return }
-            parent.signedIn(cookies)
-            if SiteAccount.isSignedIn { done = true; detach() }
+            if parent.signedIn(cookies) { done = true; detach() }
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { parent.loading = true }
