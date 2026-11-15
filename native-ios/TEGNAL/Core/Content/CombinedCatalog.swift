@@ -2,7 +2,7 @@ import Foundation
 
 /// One connected website's works, read inside its scope with caches of its own, whichever
 /// website is checked.
-final class SiteContent: ContentProviding, Sendable {
+final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     let site: String
     private let inner: MangaContentSource
 
@@ -25,6 +25,18 @@ final class SiteContent: ContentProviding, Sendable {
     }
     func cachedGallery(_ id: Int64) -> NativeGallery? { SiteScope.$site.withValue(site) { inner.cachedGallery(id) } }
     func cachedPreview(_ id: Int64) -> NativeGallery? { SiteScope.$site.withValue(site) { inner.cachedPreview(id) } }
+    func extras(_ id: Int64) async throws -> WorkExtras? {
+        try await SiteScope.$site.withValue(site) { try await inner.extras(id) }
+    }
+    func allComments(_ id: Int64) async throws -> [WorkComment] {
+        try await SiteScope.$site.withValue(site) { try await inner.allComments(id) }
+    }
+    func torrents(_ id: Int64) async throws -> [WorkTorrent] {
+        try await SiteScope.$site.withValue(site) { try await inner.torrents(id) }
+    }
+    func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int) {
+        try await SiteScope.$site.withValue(site) { try await inner.rate(id, halfStars: halfStars) }
+    }
 
     private static let lock = NSLock()
     private nonisolated(unsafe) static var sources: [String: SiteContent] = [:]

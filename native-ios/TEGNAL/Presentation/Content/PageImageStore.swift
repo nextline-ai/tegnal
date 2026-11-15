@@ -65,6 +65,8 @@ actor PageImageStore {
     // NSCache supports concurrent access; synchronous reads never touch actor state.
     private nonisolated(unsafe) let cache = NSCache<NSString, UIImage>()
     private var disk: BooruThumbnailDiskCache
+    /// The app-wide page cache, used by every store that keeps pages in the default place.
+    private let sharedDisk: ComicsPageDiskCache?
     private struct Flight {
         let id: UUID
         let task: Task<UIImage, Error>
@@ -88,8 +90,10 @@ actor PageImageStore {
          }) {
         self.source = source
         self.allowsPrefetch = allowsPrefetch
-        let capacity = diskCapacity > 0 && (diskDirectory != nil || !Self.isTesting) ? diskCapacity : 0
-        let dir = diskDirectory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("MangaPageCache", isDirectory: true)
+        let shared = diskDirectory == nil && diskCapacity > 0 && !Self.isTesting
+        sharedDisk = shared ? ComicsPageDiskCache.shared : nil
+        let capacity = !shared && diskCapacity > 0 && (diskDirectory != nil || !Self.isTesting) ? diskCapacity : 0
+        let dir = diskDirectory ?? ComicsPageDiskCache.directory
         self.disk = BooruThumbnailDiskCache(directory: dir, capacity: capacity, fileExtension: "page")
         cache.totalCostLimit = 192 * 1024 * 1024
         cache.countLimit = 128
@@ -140,8 +144,15 @@ actor PageImageStore {
         } onCancel: { Task { await self.release(key, waiter: waiter) } }
     }
 
-    private func diskData(_ key: String) -> Data? {
-        !Task.isCancelled && disk.capacity > 0 ? disk.read(key) : nil
+    private func diskData(_ key: String) async -> Data? {
+        guard !Task.isCancelled else { return nil }
+        if let sharedDisk { return await sharedDisk.read(key) }
+        return disk.capacity > 0 ? disk.read(key) : nil
+    }
+
+    private func diskWrite(_ data: Data, key: String) async {
+        if let sharedDisk { await sharedDisk.write(data, key: key) }
+        else if disk.capacity > 0 { disk.write(data, key: key) }
     }
 
     private nonisolated static func decode(_ data: Data, thumbnail: Bool) -> UIImage? {
@@ -156,21 +167,21 @@ actor PageImageStore {
     }
 
     /// Persist once per shared request, regardless of how many visible/prefetch callers await it.
-    private func store(_ image: UIImage, data: Data?, key: String, flightID: UUID) {
+    private func store(_ image: UIImage, data: Data?, key: String, flightID: UUID) async {
         guard flights[key]?.id == flightID, !Task.isCancelled else { return }
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         cache.setObject(image, forKey: key as NSString, cost: cost)
-        if disk.capacity > 0, let data { disk.write(data, key: key) }
+        if let data { await diskWrite(data, key: key) }
     }
 
     /// Decode the original at a higher bounded resolution only for zoom OCR; never OCR translated pixels.
     func translationCrop(_ page: GalleryPage, galleryID: Int64, rect: CGRect) async throws -> UIImage {
         let key = "\(page.hash):false"
         let data: Data
-        if disk.capacity > 0, let cached = disk.read(key) { data = cached }
+        if let cached = await diskData(key) { data = cached }
         else {
             let downloaded = try await source.image(page, galleryID: galleryID, thumbnail: false)
-            if disk.capacity > 0 { disk.write(downloaded, key: key) }
+            await diskWrite(downloaded, key: key)
             data = downloaded
         }
         try Task.checkCancellation()

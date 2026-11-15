@@ -13,7 +13,7 @@ private actor GalleryMetadataParser {
     }
 }
 
-actor MangaContentSource: ContentProviding {
+actor MangaContentSource: ContentProviding, WorkExtrasProviding {
     static let shared = MangaContentSource()
     private let transport: ContentTransport
     private let documents: DocumentCatalogSource
@@ -80,6 +80,10 @@ actor MangaContentSource: ContentProviding {
         await MangaUrls.resolveBackend(transport: transport)
         guard MangaUrls.home == site else { throw CancellationError() }
         if MangaUrls.requiresSignIn { throw ContentError.signInRequired }
+        // A bot check that stopped the first look at the site has to be passed before anything else.
+        if !MangaUrls.hasResolvedBackend, let host = URL(string: site)?.host, ContentTransport.challengedPage(forHost: host) != nil {
+            throw ContentError.verificationRequired
+        }
         return MangaUrls.backend
     }
 
@@ -165,16 +169,54 @@ actor MangaContentSource: ContentProviding {
     }
 
     /// The signed-in account's favorites, a page at a time, on catalogs that keep them.
-    func accountFavorites(after next: String?) async throws -> (ids: [Int64], next: String?) {
+    func accountFavorites(after next: String?, category: Int? = nil) async throws -> (ids: [Int64], next: String?) {
         let site = try prepareSite()
         guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
-        return try await keyed.favorites(after: next, site: site)
+        return try await keyed.favorites(after: next, category: category, site: site)
     }
 
-    func setAccountFavorite(_ id: Int64, saved: Bool) async throws {
+    func imageAllowance() async throws -> (used: Int, limit: Int)? {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return nil }
+        return try await keyed.imageAllowance(site: site)
+    }
+
+    func favoriteCategories() async throws -> [FavoriteCategory] {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.favoriteCategories(site: site)
+    }
+
+    func setAccountFavorite(_ id: Int64, saved: Bool, category: Int = 0) async throws {
         let site = try prepareSite()
         guard try await resolve(site) == .keyed else { return }
-        try await keyed.setFavorite(id, saved: saved, site: site)
+        try await keyed.setFavorite(id, saved: saved, category: category, site: site)
+    }
+
+    // MARK: Ratings, comments and torrents
+
+    func extras(_ id: Int64) async throws -> WorkExtras? {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return nil }
+        return try await keyed.extras(id, site: site)
+    }
+
+    func allComments(_ id: Int64) async throws -> [WorkComment] {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return [] }
+        return try await keyed.allComments(id, site: site)
+    }
+
+    func torrents(_ id: Int64) async throws -> [WorkTorrent] {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { return [] }
+        return try await keyed.torrents(id, site: site)
+    }
+
+    func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int) {
+        let site = try prepareSite()
+        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
+        return try await keyed.rate(id, halfStars: halfStars, site: site)
     }
 
     /// Used by performance regression tests to wait for consumers, not wall-clock delays.

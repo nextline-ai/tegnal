@@ -1,7 +1,11 @@
 import Foundation
 
-enum ContentError: LocalizedError {
+enum ContentError: LocalizedError, Equatable {
     case invalidResponse, unsupportedFormat, tooLarge, unavailable(Int), invalidQuery, galleryNotFound, tooManySearchTerms(Int), signInRequired, imageLimit
+    /// The website's bot check stopped the request; a browser has to pass it once.
+    case verificationRequired
+    /// The website stopped answering this network for a while.
+    case temporarilyBlocked
 
     var errorDescription: String? {
         switch self {
@@ -15,7 +19,26 @@ enum ContentError: LocalizedError {
         case .tooManySearchTerms(let limit): return L10n.text("Use up to %@ search terms, including default and excluded tags.", String(limit))
         case .signInRequired: return L10n.text("This website shows works only to signed-in accounts. Sign in, then try again.")
         case .imageLimit: return L10n.text("This website’s image allowance for you has run out. Try again later.")
+        case .verificationRequired: return L10n.text("This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again.")
+        case .temporarilyBlocked: return L10n.text("This website has paused access from your network for a while. Try again later, or change networks.")
         }
+    }
+
+    /// Errors after which the same work may still open on another connected website.
+    static func allowsOtherSite(_ error: Error) -> Bool {
+        if let error = error as? ContentError {
+            switch error {
+            case .galleryNotFound, .signInRequired, .imageLimit, .verificationRequired, .temporarilyBlocked, .unsupportedFormat, .invalidResponse: return true
+            case .unavailable(let status): return [401, 403, 404, 410, 429, 451, 500, 502, 503, 504].contains(status)
+            case .tooLarge, .invalidQuery, .tooManySearchTerms: return false
+            }
+        }
+        if error is CancellationError { return false }
+        if let error = error as? URLError {
+            return [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost, .secureConnectionFailed, .networkConnectionLost,
+                    .timedOut, .badServerResponse, .unsupportedURL].contains(error.code)
+        }
+        return false
     }
 
     static var initialConnectionHelp: String {
@@ -71,6 +94,15 @@ struct NativeGallery: Codable, Identifiable, Sendable {
     /// Optional so works downloaded before these were read still decode.
     var versions: [GalleryVersion]? = nil
     var relatedIDs: [Int64]? = nil
+    /// How many pages the work has, when a list knows it apart from `pages`: lists carry only a
+    /// cover. Zero means a list row that did not say.
+    var pageCount: Int? = nil
+
+    /// The page count worth showing on a card, if known.
+    var displayedPageCount: Int? {
+        if let pageCount { return pageCount > 0 ? pageCount : nil }
+        return pages.isEmpty ? nil : pages.count
+    }
 
     /// The other languages of this work, with the given language first.
     func otherVersions(preferring language: String) -> [GalleryVersion] {
@@ -289,10 +321,28 @@ enum RelatedWorks {
 
 enum GallerySort: String, CaseIterable, Identifiable, Sendable {
     case latest, today, week, month, year
+    /// Keyed catalogs rank all time too, in their toplists.
+    case allTime
+    /// What a signed-in account follows by its watched tags, newest first.
+    case watched
     var id: String { rawValue }
-    /// Keyed catalogs only rank what is popular right now.
+    /// Keyed catalogs rank what is popular right now, plus the toplists and watched tags the
+    /// website itself links to.
     static var available: [GallerySort] {
-        MangaUrls.hasResolvedBackend && MangaUrls.backend == .keyed ? [.latest, .today] : allCases
+        guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return [.latest, .today, .week, .month, .year] }
+        var sorts: [GallerySort] = [.latest, .today]
+        if MangaUrls.keyedFeatures.contains(.toplist) { sorts += [.month, .year, .allTime] }
+        if MangaUrls.keyedFeatures.contains(.watched), SiteAccount.isSignedIn { sorts.append(.watched) }
+        return sorts
+    }
+    /// The toplist a keyed catalog keeps for this ranking.
+    var toplist: Int? {
+        switch self {
+        case .month: return 13
+        case .year: return 12
+        case .allTime: return 11
+        default: return nil
+        }
     }
     var title: String {
         switch self {
@@ -301,6 +351,8 @@ enum GallerySort: String, CaseIterable, Identifiable, Sendable {
         case .week: return L10n.text("Popular This Week")
         case .month: return L10n.text("Popular This Month")
         case .year: return L10n.text("Popular This Year")
+        case .allTime: return L10n.text("Popular of All Time")
+        case .watched: return L10n.text("Watched Tags")
         }
     }
 }

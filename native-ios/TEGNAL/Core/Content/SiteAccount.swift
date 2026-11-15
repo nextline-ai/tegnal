@@ -96,6 +96,9 @@ enum SiteAccount {
         var identity: [String: String] = [:]
         /// Cookies the connected site set for itself, by host.
         var sites: [String: [String: String]] = [:]
+        /// Sign-ins made on a site's own pages, by host: the cookies its pages set once signed in.
+        /// Optional so sign-ins kept before these existed still read.
+        var sessions: [String: [String: String]]? = nil
     }
     private static let lock = NSLock()
     private static let service = "work.nextline.tegnal.site-account"
@@ -105,7 +108,62 @@ enum SiteAccount {
     /// Names follow the forum software these catalogs share, not any one site.
     static func isIdentity(_ name: String) -> Bool { name.hasSuffix("_member_id") || name.hasSuffix("_pass_hash") }
 
+    /// The cookie a members-only catalog hands an account it lets in.
+    static let accessCookie = "igneous"
+
+    /// A value the site sends instead of access when the account is not let in. Keeping it would
+    /// keep the account out even after the account is allowed.
+    static func isPlaceholder(name: String, value: String) -> Bool {
+        name == accessCookie && (value.isEmpty || value == "mystery" || value == "deleted")
+    }
+
     static var isSignedIn: Bool { signedIn(lock.withLock { load() }.identity) }
+
+    /// Whether [host] has an account: the forum identity, or a sign-in made on its own pages.
+    static func isSignedIn(host: String) -> Bool {
+        let stored = lock.withLock { load() }
+        if !(stored.sessions?[host] ?? [:]).isEmpty { return true }
+        // A site that signs in on its own pages does not take the forum identity.
+        return !MangaUrls.usesSiteSession && signedIn(stored.identity)
+    }
+
+    /// Signs out of one site that signs in on its own pages; other sites keep their accounts.
+    static func signOut(host: String) {
+        lock.withLock {
+            var stored = load()
+            stored.sessions?[host] = nil
+            stored.sites[host] = nil
+            save(stored)
+        }
+        NotificationCenter.default.post(name: didChange, object: nil)
+    }
+
+    static func hasSession(host: String) -> Bool { !(lock.withLock { load() }.sessions?[host] ?? [:]).isEmpty }
+
+    /// Keeps a sign-in made on [host]'s own pages: the cookies its pages set for it, apart from a
+    /// bot check's and analytics. Returns false when none are left.
+    @discardableResult
+    static func signIn(session cookies: [HTTPCookie], host: String) -> Bool {
+        let site = registrableDomain(host.lowercased())
+        var values: [String: String] = [:]
+        for cookie in cookies where !cookie.value.isEmpty && isCookieName(cookie.name) && isCookieValue(cookie.value) {
+            let owner = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            guard owner == site || owner.hasSuffix("." + site), !SiteClearance.isClearanceCookie(cookie.name),
+                  !cookie.name.hasPrefix("_ga"), !cookie.name.hasPrefix("_gid") else { continue }
+            if let expires = cookie.expiresDate, expires < Date() { continue }
+            values[cookie.name] = cookie.value
+        }
+        guard !values.isEmpty, !host.isEmpty else { return false }
+        lock.withLock {
+            var stored = load()
+            var sessions = stored.sessions ?? [:]
+            sessions[host] = values
+            stored.sessions = sessions
+            save(stored)
+        }
+        NotificationCenter.default.post(name: didChange, object: nil)
+        return true
+    }
 
     private static func signedIn(_ identity: [String: String]) -> Bool {
         identity.contains { $0.key.hasSuffix("_member_id") && (Int($0.value) ?? 0) > 0 }
@@ -121,11 +179,84 @@ enum SiteAccount {
         lock.withLock {
             var stored = load()
             stored.identity = identity
+            // Cookies a site set for another account no longer apply; its own sign-ins stay.
             stored.sites.removeAll()
             save(stored)
         }
         NotificationCenter.default.post(name: didChange, object: nil)
         return true
+    }
+
+    /// What a person pasted from a browser where they are signed in.
+    struct PastedCookies: Equatable {
+        var identity: [String: String] = [:]
+        /// Other cookies the site keeps for the account, such as access to a members-only catalog.
+        var site: [String: String] = [:]
+        var isComplete: Bool { SiteAccount.signedIn(identity) }
+    }
+
+    /// Reads `name=value` pairs from a cookie header, a browser's cookie list or one value per line.
+    /// Only the account cookies and cookies the site keeps for it are taken.
+    static func parseCookies(_ text: String) -> PastedCookies {
+        var result = PastedCookies()
+        let separators = CharacterSet(charactersIn: ";\n\r\t,")
+        for piece in text.components(separatedBy: separators) {
+            var pair = piece.trimmingCharacters(in: .whitespaces)
+            if pair.lowercased().hasPrefix("cookie:") { pair = String(pair.dropFirst(7)).trimmingCharacters(in: .whitespaces) }
+            guard let equals = pair.firstIndex(of: "=") else { continue }
+            let name = pair[..<equals].trimmingCharacters(in: .whitespaces)
+            let value = pair[pair.index(after: equals)...].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "\"'")))
+            guard isCookieName(name), isCookieValue(value) else { continue }
+            if isIdentity(name) { result.identity[name] = value }
+            else if keepsForAccount(name), !isPlaceholder(name: name, value: value) { result.site[name] = value }
+        }
+        return result
+    }
+
+    /// Cookies an account carries besides its identity: access, settings key and perks.
+    static func keepsForAccount(_ name: String) -> Bool {
+        [accessCookie, "sk", "star", "hath_perks", "yay", "iq"].contains(name)
+    }
+
+    private static func isCookieName(_ name: String) -> Bool {
+        !name.isEmpty && name.count <= 64 && name.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" }
+    }
+
+    private static func isCookieValue(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 512 && value.unicodeScalars.allSatisfy { $0.isASCII && !CharacterSet.whitespacesAndNewlines.contains($0) && $0 != ";" }
+    }
+
+    /// Signs in with cookies copied from a browser. The other cookies belong to [host].
+    @discardableResult
+    static func signIn(pasted: PastedCookies, host: String) -> Bool {
+        guard pasted.isComplete else { return false }
+        lock.withLock {
+            var stored = load()
+            stored.identity = pasted.identity
+            // Cookies a site set for another account no longer apply; its own sign-ins stay.
+            stored.sites.removeAll()
+            if !host.isEmpty, !pasted.site.isEmpty { stored.sites[host] = pasted.site }
+            save(stored)
+        }
+        NotificationCenter.default.post(name: didChange, object: nil)
+        return true
+    }
+
+    /// Drops one cookie the site set, so the site hands out a fresh one on the next request.
+    static func forget(_ name: String, host: String) {
+        lock.withLock {
+            var stored = load()
+            guard stored.sites[host]?[name] != nil else { return }
+            stored.sites[host]?[name] = nil
+            save(stored)
+        }
+    }
+
+    /// The account cookie names saved for [host], for showing what is kept without the values.
+    static func savedCookieNames(host: String) -> [String] {
+        let stored = lock.withLock { load() }
+        guard signedIn(stored.identity) else { return [] }
+        return (Array(stored.identity.keys) + Array((stored.sites[host] ?? [:]).keys)).sorted()
     }
 
     static func signOut() {
@@ -150,7 +281,9 @@ enum SiteAccount {
     /// What the site expects back: the identity, cookies it set, and consent to open flagged works.
     static func cookies(forSite host: String) -> [String: String] {
         let stored = lock.withLock { load() }
-        var values = stored.sites[host] ?? [:]
+        var values = stored.sessions?[host] ?? [:]
+        // What the site set later, such as a renewed session, replaces what sign-in kept.
+        values.merge((stored.sites[host] ?? [:]).filter { !isPlaceholder(name: $0.key, value: $0.value) }) { _, newer in newer }
         values["nw"] = "1"
         if signedIn(stored.identity) { values.merge(stored.identity) { _, identity in identity } }
         return values
@@ -175,6 +308,8 @@ enum SiteAccount {
             var site = stored.sites[host] ?? [:]
             for cookie in received {
                 let expired = cookie.expiresDate.map { $0 < Date() } ?? false
+                // A placeholder instead of access is never kept: the access already held stays.
+                if isPlaceholder(name: cookie.name, value: cookie.value) { continue }
                 if expired || cookie.value.isEmpty || cookie.value == "deleted" { site[cookie.name] = nil }
                 else { site[cookie.name] = cookie.value }
             }
@@ -207,7 +342,108 @@ enum SiteAccount {
         cached = stored
         guard !ContentPreferences.isIsolated else { return }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "account"]
-        guard !stored.identity.isEmpty || !stored.sites.isEmpty, let data = try? JSONEncoder().encode(stored) else {
+        guard !stored.identity.isEmpty || !stored.sites.isEmpty || !(stored.sessions ?? [:]).isEmpty,
+              let data = try? JSONEncoder().encode(stored) else {
+            SecItemDelete(query as CFDictionary)
+            return
+        }
+        if SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary) == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            SecItemAdd(item as CFDictionary, nil)
+        }
+    }
+}
+
+/// What a website's bot check hands a browser that passed it, kept per website with the exact
+/// browser identity that earned it: the check accepts its cookies only from that same browser.
+/// The cookies reach nothing but that website and its subdomains.
+enum SiteClearance {
+    struct Entry: Codable, Equatable {
+        var cookies: [String: String]
+        var userAgent: String
+        var savedAt: Date
+    }
+    private static let lock = NSLock()
+    private static let service = "work.nextline.tegnal.site-clearance"
+    private nonisolated(unsafe) static var cached: [String: Entry]?
+    static let didChange = Notification.Name("siteClearanceDidChange")
+
+    /// Cookies the bot check sets. Nothing else from the check's browser is kept.
+    static func isClearanceCookie(_ name: String) -> Bool { name.hasPrefix("cf_") || name.hasPrefix("__cf") }
+
+    /// The website a host belongs to, so a check passed on one of its hosts covers the others.
+    static func domain(of host: String) -> String { SiteAccount.registrableDomain(host.lowercased()) }
+
+    static func entry(for url: URL) -> Entry? {
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return nil }
+        return entry(forHost: host)
+    }
+
+    static func entry(forHost host: String) -> Entry? {
+        lock.withLock { load()[domain(of: host)] }
+    }
+
+    static func hasClearance(forHost host: String) -> Bool { entry(forHost: host) != nil }
+
+    /// Keeps a passed check. Returns false when the cookies hold no clearance.
+    @discardableResult
+    static func save(_ cookies: [HTTPCookie], userAgent: String, host: String) -> Bool {
+        let site = domain(of: host)
+        var values: [String: String] = [:]
+        for cookie in cookies where isClearanceCookie(cookie.name) && !cookie.value.isEmpty {
+            let owner = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            guard owner == site || owner.hasSuffix("." + site) else { continue }
+            if let expires = cookie.expiresDate, expires < Date() { continue }
+            values[cookie.name] = cookie.value
+        }
+        guard values.keys.contains(where: { $0 == "cf_clearance" }), !userAgent.isEmpty else { return false }
+        lock.withLock {
+            var entries = load()
+            entries[site] = Entry(cookies: values, userAgent: userAgent, savedAt: Date())
+            save(entries)
+        }
+        NotificationCenter.default.post(name: didChange, object: nil)
+        return true
+    }
+
+    /// Forgets a website's passed check, as when the website asks again.
+    static func remove(host: String) {
+        let site = domain(of: host)
+        let removed = lock.withLock { () -> Bool in
+            var entries = load()
+            guard entries.removeValue(forKey: site) != nil else { return false }
+            save(entries)
+            return true
+        }
+        if removed { NotificationCenter.default.post(name: didChange, object: nil) }
+    }
+
+    static func removeAll() {
+        lock.withLock { save([:]) }
+        NotificationCenter.default.post(name: didChange, object: nil)
+    }
+
+    private static func load() -> [String: Entry] {
+        if let cached { return cached }
+        var result: [String: Entry] = [:]
+        if !ContentPreferences.isIsolated {
+            let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                        kSecAttrAccount as String: "clearance", kSecReturnData as String: true]
+            var item: CFTypeRef?
+            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
+               let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) { result = decoded }
+        }
+        cached = result
+        return result
+    }
+
+    private static func save(_ entries: [String: Entry]) {
+        cached = entries
+        guard !ContentPreferences.isIsolated else { return }
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "clearance"]
+        guard !entries.isEmpty, let data = try? JSONEncoder().encode(entries) else {
             SecItemDelete(query as CFDictionary)
             return
         }

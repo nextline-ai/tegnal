@@ -69,6 +69,11 @@ struct BooruThumbnailDiskCache {
             if bytes <= capacity { break }
         }
     }
+    /// Bytes the cache holds now, after any trimming to its limit.
+    mutating func usedBytes() -> Int {
+        ensureIndex()
+        return bytes
+    }
     mutating func clear() {
         ensureIndex()
         for name in Array(entries.keys) { removeName(name) }

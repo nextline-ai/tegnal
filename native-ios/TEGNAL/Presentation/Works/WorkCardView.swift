@@ -91,6 +91,8 @@ struct GalleryCardLayout<Cover: View>: View {
     let artists: String
     let language: String
     var type = ""
+    /// Shown before the language, as “13 | korean”.
+    var pages: Int? = nil
     var showsLanguage = true
     var recommendationTag: String? = nil
     @ViewBuilder let cover: () -> Cover
@@ -118,7 +120,7 @@ struct GalleryCardLayout<Cover: View>: View {
             }
         }.frame(maxWidth: .infinity, alignment: .topLeading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel([title, artists, category, language].filter { !$0.isEmpty }.joined(separator: " · "))
+            .accessibilityLabel([title, artists, category, pageText, language].filter { !$0.isEmpty }.joined(separator: " · "))
     }
 
     private func badges(category: String) -> some View {
@@ -127,8 +129,24 @@ struct GalleryCardLayout<Cover: View>: View {
                 badge(category).foregroundStyle(.white).background(GalleryCategory.color(type), in: Capsule())
             }
             Spacer(minLength: 0)
-            if !language.isEmpty { badge(language).background(.ultraThinMaterial, in: Capsule()) }
+            if pageCount != nil || !language.isEmpty { pagesAndLanguage.background(.ultraThinMaterial, in: Capsule()) }
         }
+    }
+
+    private var pageCount: Int? { pages.flatMap { $0 > 0 ? $0 : nil } }
+    private var pageText: String { pageCount.map { L10n.text("%@ pages", String($0)) } ?? "" }
+
+    /// The page count and the language share one badge, split by a thin line.
+    private var pagesAndLanguage: some View {
+        HStack(spacing: style.inset(4)) {
+            if let pageCount { Text(String(pageCount)).monospacedDigit() }
+            if pageCount != nil && !language.isEmpty {
+                Rectangle().fill(.primary.opacity(0.55)).frame(width: 1, height: style.fontSize(badgeSize) * 0.85)
+            }
+            if !language.isEmpty { Text(language) }
+        }
+        .font(.system(size: style.fontSize(badgeSize), weight: .bold)).lineLimit(1).fixedSize()
+        .padding(.horizontal, style.inset(6)).padding(.vertical, style.inset(2))
     }
 
     private func badge(_ text: String) -> some View {
@@ -161,7 +179,7 @@ public struct WorkCardView: View {
     public let work: Work
     public init(work: Work) { self.work = work }
     public var body: some View {
-        GalleryCardLayout(title: work.hasTitle ? work.title ?? "" : String(work.galleryId), artists: work.artists ?? "", language: work.language ?? "", type: work.type ?? "") {
+        GalleryCardLayout(title: work.hasTitle ? work.title ?? "" : String(work.galleryId), artists: work.artists ?? "", language: work.language ?? "", type: work.type ?? "", pages: work.pageCount) {
             LocalThumbnailView(path: work.thumbStatus == "ready" ? work.thumbPath : nil, revision: String(work.thumbPage ?? 1)) { image in
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()

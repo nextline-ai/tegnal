@@ -216,9 +216,15 @@ struct ContentFailureView: View {
     /// Optional because failures also show in screens hosted outside the app's environment.
     @Environment(AppEnvironment.self) private var env: AppEnvironment?
     @State private var signingIn = false
+    @State private var pastingCookies = false
+    @State private var verifying = false
     /// A website that shows nothing until someone signs in gets its sign-in right here.
     private var asksForSignIn: Bool {
-        env != nil && message == ContentError.signInRequired.localizedDescription && MangaUrls.signInURL != nil
+        env != nil && message == ContentError.signInRequired.localizedDescription
+    }
+    /// A website whose bot check stopped the app gets the check right here.
+    private var asksForCheck: Bool {
+        env != nil && message == ContentError.verificationRequired.localizedDescription && !MangaUrls.configuredHost.isEmpty
     }
     /// Another connected website may carry what this one does not: works have the same number on each.
     private var sibling: String? {
@@ -234,9 +240,19 @@ struct ContentFailureView: View {
         } description: {
             Text(message)
         } actions: {
-            if asksForSignIn {
-                Button(L10n.text("Sign In to Website")) { signingIn = true }.buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("content.signIn")
+            if asksForCheck {
+                Button(L10n.text("Validate Client")) { verifying = true }.buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("content.validate")
+                Button(L10n.text("Try Again"), action: retry).accessibilityIdentifier("content.retry")
+            } else if asksForSignIn {
+                if MangaUrls.signInURL != nil {
+                    Button(L10n.text("Sign In to Website")) { signingIn = true }.buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("content.signIn")
+                }
+                if !MangaUrls.usesSiteSession {
+                    Button(L10n.text("Sign In with Cookies")) { pastingCookies = true }
+                        .accessibilityIdentifier("content.signInCookies")
+                }
                 Button(L10n.text("Try Again"), action: retry).accessibilityIdentifier("content.retry")
             } else {
                 Button(L10n.text("Try Again"), action: retry).buttonStyle(.borderedProminent)
@@ -249,6 +265,12 @@ struct ContentFailureView: View {
         }
         .appSheet(isPresented: $signingIn) {
             SiteSignInView { env?.siteSignInFinished(); retry() }
+        }
+        .appSheet(isPresented: $pastingCookies) {
+            SiteCookieSignInView { retry() }
+        }
+        .appSheet(isPresented: $verifying) {
+            SiteVerificationView(host: MangaUrls.configuredHost) { retry() }
         }
     }
 }
@@ -335,6 +357,8 @@ private struct GalleryFeedView: View {
     private func effectiveQuery(category: String) -> GalleryQuery {
         var result = query.filtered(to: category).applyingDefaults(tags: env.defaultTags, excluded: env.defaultExcludedTags)
         result.allowsLanguageExceptions = env.allowsMangaLanguageExceptions
+        // A ranking chosen on another website, or before signing out, falls back to the latest works.
+        if !GallerySort.available.contains(result.sort) { result.sort = .latest }
         return result
     }
 
@@ -365,9 +389,11 @@ private struct GalleryFeedView: View {
     }
 
     private var sortMenu: some View {
-        BrowseFilterMenu(title: query.sort.title, icon: "arrow.up.arrow.down") {
-            Picker(L10n.text("Sort"), selection: $query.sort) {
-                ForEach(GallerySort.available) { Text($0.title).tag($0) }
+        let sorts = GallerySort.available
+        let selected = sorts.contains(query.sort) ? query.sort : .latest
+        return BrowseFilterMenu(title: selected.title, icon: "arrow.up.arrow.down") {
+            Picker(L10n.text("Sort"), selection: Binding(get: { selected }, set: { query.sort = $0 })) {
+                ForEach(sorts) { Text($0.title).tag($0) }
             }
         }.accessibilityIdentifier("content.sort")
     }
@@ -400,6 +426,7 @@ private struct GalleryFeedView: View {
                         let id = item.id
                         let itemImages = loader.images(for: item) ?? images
                         GalleryGridCard(id: id, preview: previews[item], isBookmarked: bookmarkedIDs.contains(id), source: loader.source(for: item), images: itemImages, site: item.site,
+                                        marksSite: env.listsSeveralComicSites && item.site != env.mangaSiteAddress,
                                         details: { showing(item) { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) } },
                                         open: { showing(item) {
                                             // The reader steps through works of the website it reads.
@@ -848,6 +875,9 @@ private struct GalleryGridCard: View {
     let isBookmarked: Bool
     /// The website the work is listed from, when a list shows several.
     let site: String?
+    /// Whether the card names its website: in a list of several, for works from a website other
+    /// than the checked one.
+    let marksSite: Bool
     let open: () -> Void
     /// Work information, for a gesture set to show it; opening is the fallback.
     let details: () -> Void
@@ -876,11 +906,19 @@ private struct GalleryGridCard: View {
     private func addToQueue() {
         if env.readingQueue.add(queueItem, cover: image) { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     }
+    /// A website's address without its leading `www.` and its last label, short enough for a card.
+    static func shortName(_ site: String) -> String {
+        var labels = site.lowercased().split(separator: ".").map(String.init)
+        if labels.first == "www" { labels.removeFirst() }
+        if labels.count > 1 { labels.removeLast() }
+        return labels.joined(separator: ".")
+    }
 
     init(id: Int64, preview: GalleryFeedPreview?, isBookmarked: Bool, source: any ContentProviding, images: PageImageStore, site: String? = nil,
-         details: (() -> Void)? = nil, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
+         marksSite: Bool = false, details: (() -> Void)? = nil, open: @escaping () -> Void, bookmark: @escaping (NativeGallery?) -> Void) {
         self.id = id
         self.site = site
+        self.marksSite = marksSite
         self.isBookmarked = isBookmarked
         self.suppliedPreview = preview
         self.open = open
@@ -890,16 +928,23 @@ private struct GalleryGridCard: View {
     }
 
     var body: some View {
-        GalleryCardLayout(title: preview.display?.title ?? L10n.text("Work %@", String(describing: id)), artists: preview.display?.artists ?? "", language: preview.display?.language ?? "", type: preview.display?.type ?? "") {
+        GalleryCardLayout(title: preview.display?.title ?? L10n.text("Work %@", String(describing: id)), artists: preview.display?.artists ?? "", language: preview.display?.language ?? "", type: preview.display?.type ?? "", pages: preview.display?.pages) {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
             else { Rectangle().fill(Color.secondary.opacity(0.12)).overlay { Image(systemName: AppMode.manga.icon).foregroundStyle(.secondary) } }
         }
         .overlay(alignment: .topLeading) {
-            if isBookmarked {
-                Image(systemName: "bookmark.fill").font(.system(size: style.fontSize(14), weight: .semibold))
-                    .foregroundStyle(.yellow).padding(style.inset(8)).background(.black.opacity(0.72), in: Circle())
-                    .padding(style.inset(7)).accessibilityHidden(true).allowsHitTesting(false)
+            HStack(spacing: style.inset(4)) {
+                if isBookmarked {
+                    Image(systemName: "bookmark.fill").font(.system(size: style.fontSize(14), weight: .semibold))
+                        .foregroundStyle(.yellow).padding(style.inset(8)).background(.black.opacity(0.72), in: Circle())
+                }
+                if marksSite, let site {
+                    Text(Self.shortName(site)).font(.system(size: style.fontSize(11), weight: .semibold)).lineLimit(1)
+                        .foregroundStyle(.white).padding(.horizontal, style.inset(8)).padding(.vertical, style.inset(5))
+                        .background(.black.opacity(0.72), in: Capsule())
+                }
             }
+            .padding(style.inset(7)).accessibilityHidden(true).allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {
             if isQueued {
@@ -949,6 +994,8 @@ private struct RemoteGalleryView: View {
     @State private var coverFinished = false
     @State private var error: String?
     @State private var retry = 0
+    /// The connected website the work opened on when the checked one no longer carries it.
+    @State private var servedFrom: String?
     var read: (Int64, Int, DiscoveryContext, Bool) -> Void
     var follow: (ContentRoute) -> Void
 
@@ -969,6 +1016,16 @@ private struct RemoteGalleryView: View {
             else { ProgressView(L10n.text("Loading work details")) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .bottom) {
+            if let servedFrom, gallery != nil {
+                Label(L10n.text("Opened from %@", servedFrom), systemImage: "arrow.triangle.branch")
+                    .font(.footnote.weight(.medium))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .glassCapsule()
+                    .padding(.bottom, 8)
+                    .accessibilityIdentifier("content.servedFrom")
+            }
+        }
         .background(Color(uiColor: .systemBackground).ignoresSafeArea())
         .toolbar(.visible, for: .navigationBar)
         .navigationTitle(L10n.text("Work Details"))
@@ -979,6 +1036,8 @@ private struct RemoteGalleryView: View {
                 let value = try await source.gallery(galleryID)
                 try Task.checkCancellation()
                 gallery = value
+                servedFrom = (source as? SiteFallbackContent)?.servingSite(for: galleryID)
+                try? env.database.fillPageCount(galleryId: galleryID, count: value.displayedPageCount)
                 try? env.database.observeTaste(value, context: discovery)
                 if let page = value.pages.first {
                     let loaded = try? await images.load(page, galleryID: galleryID, thumbnail: true)
@@ -1029,6 +1088,7 @@ struct GalleryWorkInformation: View {
                             GalleryPreviewLoading.shouldLoad(metadata: geometry.frame(in: .named("gallery.detailViewport")),
                                                              viewportHeight: viewport.size.height)
                         } action: { if $0 { previewsEnabled = true } }
+                    if let source = links?.source { WorkExtrasSection(galleryID: gallery.id, source: source) }
                     GalleryDetailPreviews(gallery: gallery, images: images, enabled: previewsEnabled, select: selectPage)
                         .frame(minHeight: previewsEnabled ? nil : viewport.size.height, alignment: .topLeading)
                     if let links, previewsEnabled, gallery.relatedIDs?.isEmpty == false {
@@ -1519,11 +1579,13 @@ final class GalleryFeedPreview {
         let artists: String
         let language: String
         let type: String
+        let pages: Int?
         init(_ gallery: NativeGallery) {
             title = gallery.title
             artists = gallery.artists.joined(separator: ", ")
             language = gallery.language
             type = gallery.type
+            pages = gallery.displayedPageCount
         }
     }
     let id: Int64

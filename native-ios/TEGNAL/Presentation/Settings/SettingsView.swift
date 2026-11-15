@@ -54,6 +54,9 @@ public struct SettingsView: View {
                 NavigationLink { MangaLibraryToolsView() } label: {
                     Label(L10n.text("Library Management"), systemImage: "externaldrive")
                 }.accessibilityIdentifier("settings.libraryManagement")
+                NavigationLink { ComicsCacheSettingsView() } label: {
+                    Label(L10n.text("Image Cache"), systemImage: "photo.stack")
+                }.accessibilityIdentifier("settings.imageCache")
             } header: { Text(L10n.text("Data & Storage")) }
             SettingsSupportSection(showOnboarding: $showOnboarding)
             DeveloperInfoSection()

@@ -176,8 +176,12 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
             request.httpBody = body
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
-        if let cookies = SiteAccount.cookieHeader(for: url) { request.setValue(cookies, forHTTPHeaderField: "Cookie") }
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        let clearance = SiteClearance.entry(for: url)
+        if let cookies = Self.cookieHeader(account: SiteAccount.cookieHeader(for: url), clearance: clearance) {
+            request.setValue(cookies, forHTTPHeaderField: "Cookie")
+        }
+        // A passed bot check counts only for the browser that passed it.
+        request.setValue(clearance?.userAgent ?? Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(galleryID.map { MangaUrls.readerUrl(for: $0) } ?? MangaUrls.home, forHTTPHeaderField: "Referer")
         if let range { request.setValue("bytes=\(range.lowerBound)-\(range.upperBound - 1)", forHTTPHeaderField: "Range") }
         let cancellation = Cancellation()
@@ -191,6 +195,44 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
             try Task.checkCancellation()
             return result
         } onCancel: { cancellation.cancel() }
+    }
+
+    static let userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1"
+
+    static func cookieHeader(account: String?, clearance: SiteClearance.Entry?) -> String? {
+        var parts: [String] = []
+        if let account, !account.isEmpty { parts.append(account) }
+        if let clearance, !clearance.cookies.isEmpty {
+            parts.append(clearance.cookies.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "; "))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
+    /// A website's bot check answers in its own way instead of with the page.
+    static func isBotCheck(_ response: HTTPURLResponse) -> Bool {
+        if response.value(forHTTPHeaderField: "cf-mitigated")?.lowercased() == "challenge" { return true }
+        guard [403, 429, 503].contains(response.statusCode),
+              response.value(forHTTPHeaderField: "Server")?.lowercased().contains("cloudflare") == true else { return false }
+        return response.mimeType?.lowercased().contains("html") == true
+    }
+
+    private static let challengeLock = NSLock()
+    private nonisolated(unsafe) static var challenged: [String: URL] = [:]
+
+    /// The page a website's bot check stopped last, so the check can be passed on that page.
+    static func challengedPage(forHost host: String) -> URL? {
+        challengeLock.withLock { challenged[SiteClearance.domain(of: host)] }
+    }
+
+    static func clearChallenge(forHost host: String) {
+        _ = challengeLock.withLock { challenged.removeValue(forKey: SiteClearance.domain(of: host)) }
+    }
+
+    private static func recordChallenge(_ url: URL) {
+        guard let host = url.host?.lowercased() else { return }
+        challengeLock.withLock { challenged[SiteClearance.domain(of: host)] = url }
+        // The check asked again, so whatever it accepted before no longer counts.
+        SiteClearance.remove(host: host)
     }
 
     static func backendConnectionFailed(_ error: Error) -> Bool {
@@ -232,6 +274,10 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
         }
         SiteScope.$site.withValue(download.scope) { SiteAccount.store(http) }
         guard [200, 206, 416].contains(http.statusCode) else {
+            if Self.isBotCheck(http), let url = dataTask.originalRequest?.url ?? http.url {
+                Self.recordChallenge(url)
+                finish(dataTask, error: ContentError.verificationRequired); completionHandler(.cancel); return
+            }
             finish(dataTask, error: ContentError.unavailable(http.statusCode)); completionHandler(.cancel); return
         }
         download.response = http
