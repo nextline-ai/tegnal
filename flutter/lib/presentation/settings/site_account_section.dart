@@ -74,15 +74,18 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     super.initState();
     SiteClearance.listeners.add(_changed);
     SiteAccount.listeners.add(_changed);
-    _loadAccountDetails();
-    _resolveSite();
+    _refresh();
   }
 
-  /// A website added a moment ago names its sign-in page on its own pages; read one so signing in works right away.
-  Future<void> _resolveSite() async {
-    if (_scoped(() => MangaUrls.hasResolvedBackend)) return;
-    await _scoped(() => MangaUrls.resolveBackend());
-    if (mounted) setState(() {});
+  /// A website added a moment ago names its sign-in page on its own pages, and signing in or out forgets
+  /// what was read; read a page again so the rows that depend on it show right away.
+  Future<void> _refresh() async {
+    if (!_scoped(() => MangaUrls.hasResolvedBackend)) {
+      await _scoped(() => MangaUrls.resolveBackend());
+      if (!mounted) return;
+      setState(() {});
+    }
+    await _loadAccountDetails();
   }
 
   @override
@@ -131,7 +134,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
       builder: (context, controller) => SiteSignInView(content: _content, site: widget.site),
     );
     if (mounted) setState(() {});
-    _loadAccountDetails();
+    _refresh();
   }
 
   Future<void> _pasteCookies() async {
@@ -140,7 +143,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
       builder: (context, controller) => SiteCookieSignInView(content: _content, site: widget.site),
     );
     if (mounted) setState(() {});
-    _loadAccountDetails();
+    _refresh();
   }
 
   Future<void> _verify() async {
@@ -325,7 +328,10 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                 icon: CupertinoIcons.person_crop_circle_badge_checkmark,
                 tinted: true,
                 chevron: false,
-                onTap: () => setState(() => SiteAccountActions.useAccount(source, _content, site: widget.site)),
+                onTap: () {
+                  setState(() => SiteAccountActions.useAccount(source, _content, site: widget.site));
+                  _refresh();
+                },
               ),
             if (!_usesSiteSession)
               SettingsLinkRow(

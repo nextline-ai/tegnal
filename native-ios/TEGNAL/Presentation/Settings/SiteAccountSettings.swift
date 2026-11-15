@@ -146,17 +146,18 @@ struct SiteAccountSection: View {
         .onDisappear { importTask?.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: SiteClearance.didChange).receive(on: RunLoop.main)) { _ in revision += 1 }
         .onReceive(NotificationCenter.default.publisher(for: SiteAccount.didChange).receive(on: RunLoop.main)) { _ in revision += 1 }
-        .task(id: "\(signedIn)-\(isChecked)") {
+        .task(id: "\(signedIn)-\(isChecked)-\(keyed)") {
             guard isChecked, signedIn, keyed else { allowance = nil; return }
             allowance = (try? await MangaContentSource.shared.imageAllowance()) ?? nil
         }
-        .task(id: site) {
-            // A website added a moment ago names its sign-in page on its own pages; read one so signing in works right away.
+        .task(id: "\(site)-\(signedIn)") {
+            // A website added a moment ago names its sign-in page on its own pages, and signing in or out
+            // forgets what was read; read a page again so the rows that depend on it show right away.
             guard !scoped({ MangaUrls.hasResolvedBackend }) else { return }
             await SiteScope.$site.withValue(site) { await MangaUrls.resolveBackend() }
             revision += 1
         }
-        .task(id: "\(signedIn)-\(isChecked)-profiles") {
+        .task(id: "\(signedIn)-\(isChecked)-\(keyed)-profiles") {
             guard isChecked, signedIn, keyed else { profiles = []; return }
             profiles = (try? await MangaContentSource.shared.settingsProfiles()) ?? []
         }
