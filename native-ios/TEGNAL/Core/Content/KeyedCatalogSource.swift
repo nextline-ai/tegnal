@@ -231,6 +231,11 @@ actor KeyedCatalogSource {
             if lowered.contains("temporarily banned") || lowered.contains("ban expires in") { return .temporarilyBlocked }
             if lowered.contains("exceeded your image viewing limits") || lowered.contains("you have reached the image limit") { return .imageLimit }
         }
+        // A wrong or stale key, or a page that no longer exists, is answered with one short line.
+        if text.utf8.count < 1_024 {
+            let lowered = text.lowercased()
+            if ["key missing", "invalid page", "gallery not found"].contains(where: lowered.contains) { return .galleryNotFound }
+        }
         if isRestrictedNotice(text) || asksForSignIn(text) || text.trimmingCharacters(in: .whitespacesAndNewlines).count < 64 { return .signInRequired }
         return nil
     }
@@ -288,9 +293,15 @@ actor KeyedCatalogSource {
         }
         guard let url = URL(string: "\(site)g/\(id)/\(key)/" + (page > 0 ? "?p=\(page)" : "")) else { throw ContentError.invalidQuery }
         let text = try await self.page(url, site: site)
-        let entries = Self.entries(in: text, galleryID: id)
+        var entries = Self.entries(in: text, galleryID: id)
+        var perPage = page == 0 ? entries.count : (details[id]?.perPage ?? entries.count)
+        // An account set to read in the multi-page viewer gets links into it instead of page links;
+        // the viewer's own page lists every page's key at once.
+        if entries.isEmpty, Self.linksToViewer(text, galleryID: id, key: key), let viewer = URL(string: "\(site)mpv/\(id)/\(key)/") {
+            entries = Self.viewerEntries(in: try await self.page(viewer, site: site))
+            perPage = entries.count
+        }
         guard !entries.isEmpty else { throw ContentError.galleryNotFound }
-        let perPage = page == 0 ? entries.count : (details[id]?.perPage ?? entries.count)
         if details.count >= 64, let oldest = details.min(by: { $0.value.created < $1.value.created })?.key { details[oldest] = nil }
         var detail = Detail(perPage: max(1, perPage), entries: entries)
         if page == 0 {
@@ -541,7 +552,8 @@ actor KeyedCatalogSource {
         guard var components = URLComponents(string: site + "gallerypopups.php") else { throw ContentError.invalidQuery }
         components.queryItems = [URLQueryItem(name: "gid", value: String(id)), URLQueryItem(name: "t", value: key), URLQueryItem(name: "act", value: "addfav")]
         guard let url = components.url else { throw ContentError.invalidQuery }
-        let form = saved ? "favcat=\(min(9, max(0, category)))&favnote=&apply=Add+to+Favorites&update=1" : "favcat=favdel&favnote=&update=1"
+        // The form's own submit button names the change; removing sends the button its page shows for it.
+        let form = saved ? "favcat=\(min(9, max(0, category)))&favnote=&apply=Add+to+Favorites&update=1" : "favcat=favdel&favnote=&apply=Apply+Changes&update=1"
         let (data, _) = try await transport.post(url, body: Data(form.utf8), contentType: "application/x-www-form-urlencoded", limit: 1_000_000)
         try prepare(site)
         if Self.asksForSignIn(String(decoding: data, as: UTF8.self)) { throw ContentError.signInRequired }
@@ -563,7 +575,8 @@ actor KeyedCatalogSource {
             let body = source.substring(with: NSRange(location: start, length: max(0, end - start)))
             let texts = KeyedWorkPage.texts(inDivs: body)
             let count = texts.first.flatMap { Int($0.replacingOccurrences(of: ",", with: "")) } ?? 0
-            let name = texts.dropFirst().last { !$0.isEmpty && Int($0.replacingOccurrences(of: ",", with: "")) == nil } ?? ""
+            // The last row runs on into the "show all" button after it, so the name is the first text after the count.
+            let name = texts.dropFirst().first { !$0.isEmpty && Int($0.replacingOccurrences(of: ",", with: "")) == nil } ?? ""
             result.append(FavoriteCategory(id: number, name: name.isEmpty ? "\(number)" : name, count: count))
         }
         return result.sorted { $0.id < $1.id }
@@ -623,7 +636,50 @@ actor KeyedCatalogSource {
            let value = attribute("src", in: String(body[image])), let url = URL(string: decode(value)), safeMediaURL(url) {
             return Thumb(url: url, crop: nil)
         }
+        // Large previews are whole images drawn as a background with no offset into a sheet.
+        if let style = attribute("style", in: body), let declaration = style.range(of: #"url\(([^)]+)\)"#, options: .regularExpression) {
+            let value = String(style[declaration].dropFirst(4).dropLast()).trimmingCharacters(in: CharacterSet(charactersIn: "'\" "))
+            if let url = URL(string: decode(value)), safeMediaURL(url) { return Thumb(url: url, crop: nil) }
+        }
         return nil
+    }
+
+    private nonisolated static let viewerLinkPattern = try! NSRegularExpression(pattern: #"/mpv/([0-9]{1,10})/([0-9a-f]{10})/"#)
+
+    /// Whether a work's page links its pages into the multi-page viewer rather than to each page.
+    nonisolated static func linksToViewer(_ text: String, galleryID: Int64, key: String) -> Bool {
+        let source = text as NSString
+        return viewerLinkPattern.matches(in: text, range: NSRange(location: 0, length: source.length)).contains {
+            Int64(source.substring(with: $0.range(at: 1))) == galleryID && source.substring(with: $0.range(at: 2)) == key
+        }
+    }
+
+    /// Every page of a work from the multi-page viewer's list: each page's key, file name and preview, in page order.
+    nonisolated static func viewerEntries(in text: String) -> [Int: Entry] {
+        guard let start = text.range(of: #"\bimagelist\s*=\s*\["#, options: .regularExpression) else { return [:] }
+        let open = text.index(before: start.upperBound)
+        var depth = 0, quoted = false, escaped = false, close: String.Index?
+        for index in text[open...].indices {
+            let character = text[index]
+            if quoted {
+                if escaped { escaped = false } else if character == "\\" { escaped = true } else if character == "\"" { quoted = false }
+            } else if character == "\"" { quoted = true }
+            else if character == "[" || character == "{" { depth += 1 }
+            else if character == "]" || character == "}" {
+                depth -= 1
+                if depth == 0 { close = index; break }
+            }
+        }
+        guard let close, let data = String(text[open...close]).data(using: .utf8),
+              let items = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]], items.count <= 10_000 else { return [:] }
+        var result: [Int: Entry] = [:]
+        for (index, item) in items.enumerated() {
+            guard let key = item["k"] as? String, GalleryKeys.isKey(key) else { continue }
+            let name = (item["n"] as? String).map(decode).flatMap { $0.isEmpty ? nil : $0 } ?? String(index + 1)
+            let thumb = (item["t"] as? String).flatMap(URL.init(string:)).flatMap { safeMediaURL($0) ? Thumb(url: $0, crop: nil) : nil }
+            result[index] = Entry(key: key, name: name, thumb: thumb)
+        }
+        return result
     }
 
     /// A tile of a preview sheet travels as the sheet's address plus its rectangle.

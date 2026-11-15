@@ -173,7 +173,8 @@ final class KeyedCatalogTests: XCTestCase {
 
         try await source.setAccountFavorite(3000, saved: true)
         try await source.setAccountFavorite(3000, saved: false)
-        XCTAssertEqual(fixture.favoriteForms, ["favcat=0&favnote=&apply=Add+to+Favorites&update=1", "favcat=favdel&favnote=&update=1"])
+        XCTAssertEqual(fixture.favoriteForms, ["favcat=0&favnote=&apply=Add+to+Favorites&update=1", "favcat=favdel&favnote=&apply=Apply+Changes&update=1"],
+                       "Removing sends the submit button the form shows for it")
         XCTAssertTrue(fixture.requests.contains { $0.path == "/gallerypopups.php" && $0.query?.contains("t=\(KeyedFixture.key(3000))") == true })
     }
 
@@ -207,6 +208,28 @@ final class KeyedCatalogTests: XCTestCase {
         XCTAssertNil(ContentRoute.initial("https://other.example/g/3000/\(KeyedFixture.key(3000))/"))
     }
 
+    func testAccountsReadingInTheMultiPageViewerOpenWorksFromItsPageList() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        fixture.viewer = true
+        let gallery = try await source.gallery(3000)
+        XCTAssertEqual(gallery.pages.map(\.name), ["one.jpg", "two & three.jpg", "3"])
+        XCTAssertEqual(gallery.pages[1].thumbnailURL?.absoluteString, "https://sheets.example/large-2.jpg")
+        XCTAssertEqual(fixture.count(path: "/mpv/3000/\(KeyedFixture.key(3000))"), 1)
+        let page = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
+        XCTAssertEqual(page, fixture.image)
+        XCTAssertTrue(fixture.requests.contains { $0.path == "/s/bbbbbbbbbb/3000-2" }, "Each page opens with the key the viewer lists for it")
+        let preview = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: true)
+        XCTAssertEqual(preview, fixture.image)
+    }
+
+    func testLargePreviewsAreWholeImages() {
+        let page = #"<div id="gdt" class="gt200"><a href="https://keyed.example/s/1111111111/3000-1"><div title="Page 1: one.jpg" style="width:200px;height:283px;background:transparent url(https://sheets.example/large-1.webp) 0 0 no-repeat"></div></a></div>"#
+        let entry = KeyedCatalogSource.entries(in: page, galleryID: 3000)[0]
+        XCTAssertEqual(entry?.thumb, KeyedCatalogSource.Thumb(url: URL(string: "https://sheets.example/large-1.webp")!, crop: nil))
+        XCTAssertEqual(entry?.name, "one.jpg")
+    }
+
     func testPreviewTilesAreCutFromTheSheet() throws {
         let tile = try KeyedCatalogSource.cropped(KeyedFixture.sheet, to: CGRect(x: 100, y: 0, width: 100, height: 150))
         let image = try XCTUnwrap(UIImage(data: tile)?.cgImage)
@@ -226,6 +249,8 @@ private final class KeyedFixture: @unchecked Sendable {
     private var forms: [String] = []
     var failFirstNode = false
     var allowanceUsed = false
+    /// The account reads in the multi-page viewer, so work pages link there instead of to each page.
+    var viewer = false
     let image = Data(repeating: 0x42, count: 64)
     var requests: [URL] { lock.withLock { recorded } }
     var cookies: [String] { lock.withLock { sentCookies } }
@@ -266,6 +291,21 @@ private final class KeyedFixture: @unchecked Sendable {
         return Data(#"<html><script>var api_url = "https://api.keyed.example/api.php";\#nvar login_url = "https://keyed.example/bounce_login.php?b=d&bt=1";</script><div id="gdt">\#(links)</div></html>"#.utf8)
     }
 
+    static func viewerDetail(_ id: Int64) -> Data {
+        let links = (1...3).map { number in
+            #"<a href="https://keyed.example/mpv/\#(id)/\#(key(id))/#page\#(number)"><div title="Page \#(number): x" style="width:100px;height:150px;background:transparent url(https://sheets.example/\#(id)-0.png) -\#((number - 1) * 100)px 0 no-repeat"></div></a>"#
+        }.joined()
+        return Data(#"<html><div id="gdt">\#(links)</div><p>a work page with enough text to be a real page</p></html>"#.utf8)
+    }
+
+    static let viewerPage = Data(#"""
+    <html><body><div id="pane_images"></div><script type="text/javascript">
+    var gid=3000;
+    var mpvkey = "0123456789a";
+    var imagelist = [{"n":"one.jpg","k":"aaaaaaaaaa","t":"https:\/\/sheets.example\/large-1.jpg"},{"n":"two &amp; three.jpg","k":"bbbbbbbbbb","t":"https:\/\/sheets.example\/large-2.jpg"},{"n":"","k":"cccccccccc","t":"https:\/\/sheets.example\/large-3.jpg"}];
+    </script></body></html>
+    """#.utf8)
+
     private func details(_ body: Data) throws -> Data {
         let request = try JSONSerialization.jsonObject(with: body) as! [String: Any]
         if request["method"] as? String == "tagsuggest" {
@@ -300,7 +340,8 @@ private final class KeyedFixture: @unchecked Sendable {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         switch url.host {
         case "covers.example": return .data(200, image, ["Content-Type": "image/jpeg"])
-        case "sheets.example": return .data(200, Self.sheet, ["Content-Type": "image/png"])
+        case "sheets.example":
+            return url.path.hasPrefix("/large-") ? .data(200, image, ["Content-Type": "image/jpeg"]) : .data(200, Self.sheet, ["Content-Type": "image/png"])
         case "node1.volunteer.example":
             return failFirstNode ? .data(503, Data(), [:]) : .data(200, image, ["Content-Type": "image/webp"])
         case "node2.volunteer.example": return .data(200, image, ["Content-Type": "image/webp"])
@@ -341,7 +382,10 @@ private final class KeyedFixture: @unchecked Sendable {
         default:
             let parts = url.path.split(separator: "/")
             if parts.first == "g", parts.count == 3, let id = Int64(parts[1]), String(parts[2]) == Self.key(id) {
-                return .data(200, Self.detail(id, page: url.query == "p=1" ? 1 : 0), ["Content-Type": "text/html"])
+                return .data(200, viewer ? Self.viewerDetail(id) : Self.detail(id, page: url.query == "p=1" ? 1 : 0), ["Content-Type": "text/html"])
+            }
+            if parts.first == "mpv", parts.count == 3, let id = Int64(parts[1]), String(parts[2]) == Self.key(id) {
+                return .data(200, Self.viewerPage, ["Content-Type": "text/html"])
             }
             if parts.first == "s", parts.count == 3, let number = parts[2].split(separator: "-").last {
                 let reload = items.first { $0.name == "nl" }?.value
