@@ -270,15 +270,31 @@ void main() {
     expect(ServerType.recognizing('Danbooru.Post.initialize();'), ServerType.booru(BooruEngine.danbooru));
     expect(ServerType.recognizing('Running Gelbooru Beta 0.1.11'), ServerType.booru(BooruEngine.oldGelbooru));
     expect(ServerType.recognizing('Moebooru'), ServerType.booru(BooruEngine.moebooru));
-    expect(ServerType.recognizing('<html><title>Unknown website</title></html>'), isNull);
-    expect(ServerType.recognizing('<script>const gallery = {"images":[]};</script><a href=\'/ajax/search\'>Search</a>'), isNull);
-    expect(ServerType.recognizing("<script>const domain = 'analytics.example';</script>"), isNull);
+    expect(ServerType.recognizing('<a href="https://keyed.example/g/3000/0000000bb8/">Work</a><input name="f_search">'), ServerType.comics);
+    expect(ServerType.recognizing('<a href="index.php?page=post&amp;s=list&amp;tags=all">Posts</a>'), ServerType.booru(BooruEngine.gelbooru));
+    expect(ServerType.recognizing('<a href="/post/show/1234">Post</a>'), ServerType.booru(BooruEngine.moebooru));
+    expect(ServerType.recognizing('<a href="https://renamed.example/post?tags=sky">sky</a>'), ServerType.booru(BooruEngine.moebooru));
+    expect(ServerType.recognizing('<a class="search-tag" href="/posts?tags=sky">sky</a>'), ServerType.booru(BooruEngine.danbooru));
+    // A first visitor may see only a check, a sign-in page, a picture or nothing; Comics Mode handles each.
+    for (final page in [
+      '<html><title>Unknown website</title></html>',
+      '<title>Just a moment...</title>',
+      '<html><body><img src="/a.gif"></body></html>',
+      '',
+      '<script>const gallery = {"images":[]};</script><a href=\'/ajax/search\'>Search</a>',
+      "<script>const domain = 'analytics.example';</script>",
+      '<a href="/posts/12">Blog post</a>',
+    ]) {
+      expect(ServerType.recognizing(page), ServerType.comics, reason: page);
+    }
   });
 
-  test('a domain suffix alone does not choose a website mode', () async {
+  test('websites that are no supported image engine open in comics mode', () async {
     for (final address in ['https://comics.la', 'https://test.la', 'https://custom.example']) {
-      expect(await ServerType.detect(Uri.parse(address), loadHTML: (_) async => '<html>Unrecognized</html>'), isNull);
+      expect(await ServerType.detect(Uri.parse(address), loadHTML: (_) async => '<html>Unrecognized</html>'), ServerType.comics);
     }
+    final renamed = await ServerType.detect(Uri.parse('https://renamed.example'), loadHTML: (_) async => '<a href="/posts?tags=blue_sky">blue sky</a>');
+    expect(renamed, ServerType.booru(BooruEngine.danbooru), reason: 'A renamed image engine is still known by its own pages');
   });
 
   test('connection retries exclude authentication, challenges and cancellation', () {

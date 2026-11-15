@@ -336,8 +336,25 @@ final class NativeContentTests: XCTestCase {
         let thumb = try value.url(hash: sampleHash, format: "webp", thumbnail: true)
         XCTAssertEqual(thumb.host, "btn.comics.example")
         XCTAssertEqual(thumb.path, "/webpsmalltn/c/ab/\(sampleHash).webp")
-        XCTAssertThrowsError(try CDNRouting(routing + "unexpectedCode();"))
         XCTAssertThrowsError(try value.url(hash: "../invalid", format: "webp", thumbnail: false))
+    }
+
+    func testRoutingReadsAReformattedScriptWithMoreGroupsAndServers() throws {
+        let reformatted = #"""
+        "use strict";
+        gg={m:function(g){var o=1;switch(g){case 1:case 2:o=0;break;case 3243:o=2;break;}return o;},
+        s:function(h){var m=/(..)(.)$/.exec(h);return parseInt(m[2]+m[1],16).toString(10);},b:"999/"};
+        """#
+        let value = try CDNRouting(reformatted)
+        XCTAssertEqual(try value.url(hash: sampleHash, format: "webp", thumbnail: false).absoluteString, "https://w3.comics.example/999/3243/\(sampleHash).webp")
+        XCTAssertEqual(try value.url(hash: sampleHash, format: "avif", thumbnail: true).host, "ctn.comics.example")
+        let first = String(repeating: "0", count: 61) + "010", other = String(repeating: "0", count: 64)
+        XCTAssertEqual(try value.url(hash: first, format: "webp", thumbnail: false).host, "w1.comics.example")
+        XCTAssertEqual(try value.url(hash: first, format: "webp", thumbnail: true).host, "atn.comics.example")
+        XCTAssertEqual(try value.url(hash: other, format: "avif", thumbnail: false).host, "a2.comics.example", "Unlisted buckets use the default")
+        XCTAssertThrowsError(try CDNRouting(routing.replacingOccurrences(of: "b: '123456/'", with: "")), "Pages can't be found without the path prefix")
+        XCTAssertThrowsError(try CDNRouting(routing.replacingOccurrences(of: "case 3243:", with: "case 3243:\no = g % 3; break;\ncase 7:")),
+                             "A case this reading can't explain is refused rather than routed wrongly")
     }
 
     func testRequestPolicyRejectsForeignHostsAndCredentials() {

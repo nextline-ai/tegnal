@@ -328,6 +328,11 @@ class KeyedCatalogSource {
       if (lowered.contains('temporarily banned') || lowered.contains('ban expires in')) return ContentError.temporarilyBlocked;
       if (lowered.contains('exceeded your image viewing limits') || lowered.contains('you have reached the image limit')) return ContentError.imageLimit;
     }
+    // A wrong or stale key, or a page that no longer exists, is answered with one short line.
+    if (utf8.encode(text).length < 1024) {
+      final lowered = text.toLowerCase();
+      if (['key missing', 'invalid page', 'gallery not found'].any(lowered.contains)) return ContentError.galleryNotFound;
+    }
     if (isRestrictedNotice(text) || asksForSignIn(text) || text.trim().characters.length < 64) return ContentError.signInRequired;
     return null;
   }
@@ -401,9 +406,16 @@ class KeyedCatalogSource {
     final url = ContentURL.parse('${site}g/$id/$key/${page > 0 ? '?p=$page' : ''}');
     if (url == null) throw ContentError.invalidQuery;
     final text = await _page(url, site);
-    final found = entries(text, id);
+    var found = entries(text, id);
+    var perPage = page == 0 ? found.length : (_details[id]?.perPage ?? found.length);
+    // An account set to read in the multi-page viewer gets links into it instead of page links;
+    // the viewer's own page lists every page's key at once.
+    final viewer = ContentURL.parse('${site}mpv/$id/$key/');
+    if (found.isEmpty && viewer != null && linksToViewer(text, galleryID: id, key: key)) {
+      found = viewerEntries(await _page(viewer, site));
+      perPage = found.length;
+    }
     if (found.isEmpty) throw ContentError.galleryNotFound;
-    final perPage = page == 0 ? found.length : (_details[id]?.perPage ?? found.length);
     if (_details.length >= 64) _details.remove(_details.entries.reduce((a, b) => a.value.created.isBefore(b.value.created) ? a : b).key);
     final detail = _Detail(perPage: perPage < 1 ? 1 : perPage, entries: found);
     if (page == 0) {
@@ -522,6 +534,8 @@ class KeyedCatalogSource {
       try {
         return await _fetch(shown.url, galleryID: galleryID, limit: 24000000, site: site);
       } catch (error) {
+        // A notice in place of the image is the site's answer, not one host's failure.
+        if (error == ContentError.imageLimit || error == ContentError.signInRequired) rethrow;
         // Another volunteer host serves the same image when this one fails.
         final next = shown.reload;
         if (attempt >= 2 || next == null || next == reload) rethrow;
@@ -537,7 +551,28 @@ class KeyedCatalogSource {
     final result = await transport.get(url, limit: limit, galleryID: galleryID);
     _prepare(site);
     if (!(result.response.mimeType?.startsWith('image/') ?? true) || result.data.length <= 32) throw ContentError.unsupportedFormat;
+    final notice = imageNotice(result.data, url: result.response.url);
+    if (notice != null) {
+      // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
+      final host = ContentURL.parse(site)?.host.toLowerCase();
+      if (notice == ContentError.signInRequired && host != null) SiteAccount.forget(SiteAccount.accessCookie, host: host);
+      throw notice;
+    }
     return result.data;
+  }
+
+  /// The site's own notices served where an image was expected, so they are never shown, cached or
+  /// saved as a page: the bandwidth notice, and the wall a members-only catalog shows an account it
+  /// no longer lets in. Known by address, or by size and digest.
+  static ContentError? imageNotice(List<int> data, {required Uri url}) {
+    if (isLimitNotice(url)) return ContentError.imageLimit;
+    final notice = switch (data.length) {
+      28658 => ('f54b887b017694dc25eb1a1404f71981885f8ed9', ContentError.imageLimit),
+      144844 => ('e48ed350e902a51581246d2a764fa7827e8e6988', ContentError.signInRequired),
+      _ => null,
+    };
+    if (notice == null) return null;
+    return sha1.convert(data).toString() == notice.$1 ? notice.$2 : null;
   }
 
   Future<Uint8List> _preview(KeyedThumb thumb, {required int galleryID, required String site}) async {
@@ -728,7 +763,8 @@ class KeyedCatalogSource {
       final end = index + 1 < matches.length ? matches[index + 1].start : (start + 800).clamp(0, text.length);
       final texts = KeyedWorkPage.textsInDivs(text.substring(start, end));
       final count = int.tryParse((texts.firstOrNull ?? '').replaceAll(',', '')) ?? 0;
-      final name = texts.skip(1).lastWhere((value) => value.isNotEmpty && int.tryParse(value.replaceAll(',', '')) == null, orElse: () => '');
+      // The last row runs on into the "show all" button after it, so the name is the first text after the count.
+      final name = texts.skip(1).firstWhere((value) => value.isNotEmpty && int.tryParse(value.replaceAll(',', '')) == null, orElse: () => '');
       result.add(FavoriteCategory(id: number, name: name.isEmpty ? '$number' : name, count: count));
     }
     return result..sort((a, b) => a.id.compareTo(b.id));
@@ -739,7 +775,8 @@ class KeyedCatalogSource {
     if (!SiteAccount.isSignedIn) throw ContentError.signInRequired;
     final key = await keyFor(id, site: site);
     final url = ContentURL.withQueryItems('${site}gallerypopups.php', [('gid', '$id'), ('t', key), ('act', 'addfav')]);
-    final form = saved ? 'favcat=${category.clamp(0, 9)}&favnote=&apply=Add+to+Favorites&update=1' : 'favcat=favdel&favnote=&update=1';
+    // The form's own submit button names the change; removing sends the button its page shows for it.
+    final form = saved ? 'favcat=${category.clamp(0, 9)}&favnote=&apply=Add+to+Favorites&update=1' : 'favcat=favdel&favnote=&apply=Apply+Changes&update=1';
     final result = await transport.post(url, body: utf8.encode(form), contentType: 'application/x-www-form-urlencoded', limit: 1000000);
     _prepare(site);
     if (asksForSignIn(utf8.decode(result.data, allowMalformed: true))) throw ContentError.signInRequired;
@@ -767,25 +804,40 @@ class KeyedCatalogSource {
     return value;
   }
 
-  static final _entryPattern = RegExp(r'<a\b[^>]*\bhref="[^"]*/s/([0-9a-f]{10})/([0-9]{1,10})-([0-9]{1,5})"[^>]*>(.*?)</a>', dotAll: true);
+  static final _entryPattern = RegExp(r'<a\b[^>]*\bhref="([^"]*)/s/([0-9a-f]{10})/([0-9]{1,10})-([0-9]{1,5})"[^>]*>(.*?)</a>', dotAll: true);
 
   /// Page links on a work's page, by zero-based page index, with each page's preview.
   static Map<int, KeyedEntry> entries(String text, int galleryID) {
     final result = <int, KeyedEntry>{};
     for (final match in _entryPattern.allMatches(text)) {
-      final number = int.tryParse(match[3]!);
-      if (int.tryParse(match[2]!) != galleryID || number == null || number < 1) continue;
-      final body = match[4]!;
+      final number = int.tryParse(match[4]!);
+      if (int.tryParse(match[3]!) != galleryID || number == null || number < 1) continue;
+      final body = match[5]!;
       var name = '$number';
       final title = _attribute('title', body);
       final colon = title?.indexOf(': ') ?? -1;
       if (title != null && colon >= 0) name = _decode(title.substring(colon + 2));
-      result[number - 1] = KeyedEntry(key: match[1]!, name: name, thumb: _thumb(body));
+      // The page link beside a preview says which site a preview starting at the root belongs to.
+      final link = ContentURL.parse(_decode(match[1]!));
+      final base = link != null && link.scheme == 'https' && link.host.isNotEmpty ? link : null;
+      result[number - 1] = KeyedEntry(
+        key: match[2]!,
+        name: name,
+        thumb: _thumb(body, base: base),
+      );
     }
     return result;
   }
 
-  static KeyedThumb? _thumb(String body) {
+  /// A preview address, resolved against the page link beside it when it starts at the site's root.
+  static Uri? _mediaURL(String value, {Uri? base}) {
+    final address = _decode(value).replaceAll(RegExp('''^['" ]+|['" ]+\$'''), '');
+    final relative = address.startsWith('/') && !address.startsWith('//');
+    final url = relative ? base?.resolve(address) : ContentURL.parse(address);
+    return url != null && safeMediaURL(url) ? url : null;
+  }
+
+  static KeyedThumb? _thumb(String body, {Uri? base}) {
     final style = _attribute('style', body);
     final size = style == null ? null : RegExp(r'width:\s*([0-9]+)px;\s*height:\s*([0-9]+)px').firstMatch(style);
     final sheet = style == null ? null : RegExp(r'url\(([^)]+)\)\s*(-?[0-9]+)px').firstMatch(style);
@@ -794,18 +846,84 @@ class KeyedCatalogSource {
       final declaration = sheet[0]!;
       final open = declaration.indexOf('('), close = declaration.indexOf(')');
       if (numbers.length != 2 || open < 0 || close < 0) return null;
-      final address = _decode(declaration.substring(open + 1, close).replaceAll(RegExp('''^['" ]+|['" ]+\$'''), ''));
-      final url = ContentURL.parse(address);
+      final url = _mediaURL(declaration.substring(open + 1, close), base: base);
       final trailing = declaration.substring(close + 1).trim();
       final offset = int.tryParse(trailing.length >= 2 ? trailing.substring(0, trailing.length - 2) : '');
-      if (url == null || offset == null || !safeMediaURL(url)) return null;
+      if (url == null || offset == null) return null;
       return KeyedThumb(url, CropRect(-offset, 0, numbers[0], numbers[1]));
     }
     final image = RegExp(r'<img\b[^>]*>').firstMatch(body);
     final value = image == null ? null : _attribute('src', image[0]!);
-    final url = value == null ? null : ContentURL.parse(_decode(value));
-    if (url != null && safeMediaURL(url)) return KeyedThumb(url, null);
+    final url = value == null ? null : _mediaURL(value, base: base);
+    if (url != null) return KeyedThumb(url, null);
+    // Large previews are whole images drawn as a background with no offset into a sheet.
+    final whole = style == null ? null : RegExp(r'url\(([^)]+)\)').firstMatch(style);
+    final wholeURL = whole == null ? null : _mediaURL(whole[1]!, base: base);
+    if (wholeURL != null) return KeyedThumb(wholeURL, null);
     return null;
+  }
+
+  static final _viewerLinkPattern = RegExp(r'/mpv/([0-9]{1,10})/([0-9a-f]{10})/');
+
+  /// Whether a work's page links its pages into the multi-page viewer rather than to each page.
+  static bool linksToViewer(String text, {required int galleryID, required String key}) =>
+      _viewerLinkPattern.allMatches(text).any((match) => int.tryParse(match[1]!) == galleryID && match[2] == key);
+
+  /// Every page of a work from the multi-page viewer's list: each page's key, file name and preview, in page order.
+  static Map<int, KeyedEntry> viewerEntries(String text) {
+    final start = RegExp(r'\bimagelist\s*=\s*\[').firstMatch(text);
+    if (start == null) return {};
+    final open = start.end - 1;
+    var depth = 0;
+    var quoted = false, escaped = false;
+    int? close;
+    for (var index = open; index < text.length; index++) {
+      final character = text[index];
+      if (quoted) {
+        if (escaped) {
+          escaped = false;
+        } else if (character == r'\') {
+          escaped = true;
+        } else if (character == '"') {
+          quoted = false;
+        }
+      } else if (character == '"') {
+        quoted = true;
+      } else if (character == '[' || character == '{') {
+        depth += 1;
+      } else if (character == ']' || character == '}') {
+        depth -= 1;
+        if (depth == 0) {
+          close = index;
+          break;
+        }
+      }
+    }
+    if (close == null) return {};
+    final Object? items;
+    try {
+      items = jsonDecode(text.substring(open, close + 1));
+    } on FormatException {
+      return {};
+    }
+    if (items is! List || items.length > 10000) return {};
+    final result = <int, KeyedEntry>{};
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      if (item is! Map) continue;
+      final key = item['k'];
+      if (key is! String || !GalleryKeys.isKey(key)) continue;
+      final given = item['n'];
+      final decoded = given is String ? _decode(given) : '';
+      final preview = item['t'];
+      final previewURL = preview is String ? ContentURL.parse(preview) : null;
+      result[index] = KeyedEntry(
+        key: key,
+        name: decoded.isEmpty ? '${index + 1}' : decoded,
+        thumb: previewURL != null && safeMediaURL(previewURL) ? KeyedThumb(previewURL, null) : null,
+      );
+    }
+    return result;
   }
 
   /// A tile of a preview sheet travels as the sheet's address plus its rectangle.

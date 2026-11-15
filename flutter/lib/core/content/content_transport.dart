@@ -85,7 +85,8 @@ class ContentTransport {
   final _browserOrigins = <String>{};
   final _foreignRedirects = <String, Uri>{};
 
-  static const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1';
+  static const userAgent =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
   static String? cookieHeader({String? account, ClearanceEntry? clearance}) {
     final parts = <String>[

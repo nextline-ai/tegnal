@@ -101,15 +101,27 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertEqual(fixture.count("/1.webp"), 1, "The original remains available to the reader")
     }
 
+    func testListsKeepGoingWhateverTheSitesPageSize() async throws {
+        for size in [30, 80] {
+            let fixture = fixture(); fixture.pageSize = size
+            let source = MangaContentSource(transport: fixture.transport())
+            let batch = try await source.list(GalleryQuery(), offset: 0, count: 90)
+            XCTAssertEqual(batch.ids.count, 90, "Pages of \(size) rows")
+            XCTAssertEqual(batch.ids.first, 2000)
+            XCTAssertEqual(batch.ids.last, 1911)
+            XCTAssertTrue(batch.hasMore)
+        }
+    }
+
     func testPaginationReusesBufferedResultsAndThenFollowsTheCursor() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         _ = try await source.list(GalleryQuery(), offset: 0, count: 2)
         let second = try await source.list(GalleryQuery(), offset: 2, count: 2)
         XCTAssertEqual(second.ids, [1998, 1997])
-        XCTAssertEqual(fixture.count("/ajax/search"), 2)
+        XCTAssertEqual(fixture.count("/ajax/search"), 1, "The second page comes from the first request's rows")
         let next = try await source.list(GalleryQuery(), offset: 48, count: 4)
         XCTAssertEqual(next.ids, [1952, 1951, 1950, 1949])
-        XCTAssertEqual(fixture.count("/ajax/search"), 3)
+        XCTAssertEqual(fixture.count("/ajax/search"), 2)
         XCTAssertTrue(fixture.requests.contains { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.contains(.init(name: "next-id", value: "1951")) == true })
     }
 
@@ -452,6 +464,8 @@ private final class CatalogFixture: @unchecked Sendable {
     var omitThumbnails = false
     var visualCollections = false
     var markEvenRows = false
+    /// Rows the site returns per page.
+    var pageSize = 50
     var originalTitles: [Int64: String] = [:]
     var languages: [Int64: [String]] = [:]
     let image = Data(repeating: 0x42, count: 64)
@@ -496,7 +510,7 @@ private final class CatalogFixture: @unchecked Sendable {
             let cursor = items.first { $0.name == "next-id" || $0.name == "next-views-id" }?.value.flatMap(Int64.init)
             let start = cursor.map { $0 - 1 } ?? 2000
             let categories = Set((items.first { $0.name == "categories" }?.value ?? "2").split(separator: ",").compactMap { Int($0) })
-            var rows = categories.contains(2) ? stride(from: start, through: max(1901, start - 49), by: -1).map(row) : []
+            var rows = categories.contains(2) ? stride(from: start, through: max(1901, start - Int64(pageSize - 1)), by: -1).map(row) : []
             if visualCollections {
                 for (id, category) in [(Int64(2003), 3), (2002, 4), (2001, 6)] where categories.contains(category) && (cursor == nil || id < cursor!) {
                     var visual = row(id); visual["category"] = category

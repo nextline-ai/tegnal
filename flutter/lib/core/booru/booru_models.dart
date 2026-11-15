@@ -17,6 +17,20 @@ enum BooruEngine {
 
   String get title => this == oldGelbooru ? 'Old Gelbooru (v0.1.11)' : '${name[0].toUpperCase()}${name.substring(1)}';
   bool get usesGelbooruPages => this == gelbooru || this == oldGelbooru;
+
+  /// The engine a home page was made with: its signature, or the page links each engine
+  /// keeps even when an install renames itself.
+  static BooruEngine? recognizing(String html) {
+    final lowered = html.toLowerCase();
+    if (RegExp(r'''Danbooru\.|content=["']Danbooru''').hasMatch(html)) return danbooru;
+    if (RegExp(r'Gelbooru\s+Beta\s+0\.1\.11', caseSensitive: false).hasMatch(html)) return oldGelbooru;
+    if (lowered.contains('moebooru')) return moebooru;
+    if (lowered.contains('gelbooru')) return gelbooru;
+    if (RegExp(r'index\.php\?page=(?:post|dapi)&(?:amp;)?s=').hasMatch(html)) return gelbooru;
+    if (RegExp(r'''["'](?:https?://[^"'/\s]+)?/post(?:/show/[0-9]|\?tags=)''').hasMatch(html)) return moebooru;
+    if (RegExp(r'''["'](?:https?://[^"'/\s]+)?/posts\?tags=''').hasMatch(html)) return danbooru;
+    return null;
+  }
 }
 
 class BooruServer {

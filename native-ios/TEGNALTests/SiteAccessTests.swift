@@ -77,6 +77,11 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["igneous"], "A refused access cookie is dropped so a fresh one is handed out")
         XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["ipb_member_id"], "7")
         XCTAssertEqual(SiteAccount.savedCookieNames(host: "members.example"), ["ipb_member_id", "ipb_pass_hash"])
+        let tracked = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://members.example/")!, statusCode: 200, httpVersion: nil,
+                                                   headerFields: ["Set-Cookie": "__utmp=tracked; path=/, sk=settings; path=/"]))
+        SiteAccount.store(tracked)
+        XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["__utmp"], "The tracking cookie is never sent back")
+        XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["sk"], "settings")
     }
 
     func testMembersOnlySiteAsksForAnAccountAndOpensOnceSignedIn() async throws {
@@ -160,6 +165,15 @@ final class SiteAccessTests: XCTestCase {
 
     // MARK: Page messages
 
+    func testNoticesServedInPlaceOfAnImageAreNeverKeptAsPages() {
+        let page = URL(string: "https://node.example/h/1.webp")!
+        XCTAssertEqual(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 64), url: URL(string: "https://node.example/img/509.gif")!), .imageLimit)
+        // The notices are recognized by their digest (checked against copies of both), never by size alone.
+        XCTAssertNil(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 28_658), url: page))
+        XCTAssertNil(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 144_844), url: page))
+        XCTAssertNil(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 64), url: page))
+    }
+
     func testPagesThatSayNoInsteadOfShowingWorks() {
         let filler = String(repeating: "x", count: 200)
         XCTAssertEqual(KeyedCatalogSource.pageError("Your IP address has been temporarily banned for excessive pageloads. The ban expires in 59 minutes"), .temporarilyBlocked)
@@ -167,6 +181,8 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertEqual(KeyedCatalogSource.pageError("<p>You have exceeded your image viewing limits.</p>\(filler)"), .imageLimit)
         XCTAssertEqual(KeyedCatalogSource.pageError(""), .signInRequired)
         XCTAssertNil(KeyedCatalogSource.pageError("<html><body>\(filler)</body></html>"))
+        XCTAssertEqual(KeyedCatalogSource.pageError("Key missing, or incorrect key provided."), .galleryNotFound, "A wrong key is not a sign-in wall")
+        XCTAssertEqual(KeyedCatalogSource.pageError("Invalid page."), .galleryNotFound)
         let listing = "<html>" + String(repeating: "<tr>work</tr>", count: 1000) + "<a>Temporarily Banned Again</a></html>"
         XCTAssertNil(KeyedCatalogSource.pageError(listing), "A title on a full listing is not a notice")
         XCTAssertTrue(ContentError.allowsOtherSite(ContentError.galleryNotFound))
@@ -471,6 +487,8 @@ final class SiteAccessTests: XCTestCase {
     <div class="fp" onclick="document.location='https://keyed.example/favorites.php?favcat=0'"><div>12</div><div class="i" style="background-position:0px -2px" title="Favorites 0"></div><div>Favorites 0</div></div>
     <div class="fp fps" onclick="document.location='https://keyed.example/favorites.php?favcat=1'"><div>1,234</div><div class="i" style="background-position:0px -21px" title="Reading"></div><div>Reading</div></div>
     <div class="fp" onclick="document.location='https://keyed.example/favorites.php?favcat=9'"><div>0</div><div class="i" style="background-position:0px -173px" title="Later"></div><div>Later</div></div>
+    <div style="clear:both"></div>
+    <div class="fp fps" onclick="document.location='https://keyed.example/favorites.php'" style="width:140px">Show All Favorites</div>
     </div></div>
     """#
 }

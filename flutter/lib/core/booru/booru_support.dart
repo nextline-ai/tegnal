@@ -412,20 +412,18 @@ sealed class ServerType {
   String get id;
   String get title;
 
-  /// Recognizes a website by its own response: comics protocols by their page structure,
-  /// galleries by the software signature their pages carry.
-  static ServerType? recognizing(String html) {
-    if (MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html)) return comics;
-    if (RegExp(r'''Danbooru\.|content=["']Danbooru''').hasMatch(html)) return booru(BooruEngine.danbooru);
-    if (RegExp(r'Gelbooru\s+Beta\s+0\.1\.11', caseSensitive: false).hasMatch(html)) return booru(BooruEngine.oldGelbooru);
-    if (html.toLowerCase().contains('moebooru')) return booru(BooruEngine.moebooru);
-    if (html.toLowerCase().contains('gelbooru')) return booru(BooruEngine.gelbooru);
-    return null;
+  /// Image Mode only for the image engines the app supports; every other website is a comics
+  /// site. Comics Mode finds the site's protocol itself once it connects, including sites that
+  /// show first visitors a check, a sign-in page or nothing at all.
+  static ServerType recognizing(String html) {
+    if (MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html) || MangaUrls.isKeyedPage(html)) return comics;
+    final engine = BooruEngine.recognizing(html);
+    return engine == null ? comics : booru(engine);
   }
 
   /// Loads the website's home page with [loadHTML] and recognizes it. The native app also
   /// recognizes a few named hosts without loading them; here every site is identified by its response.
-  static Future<ServerType?> detect(Uri url, {required Future<String> Function(Uri url) loadHTML}) async => recognizing(await loadHTML(url));
+  static Future<ServerType> detect(Uri url, {required Future<String> Function(Uri url) loadHTML}) async => recognizing(await loadHTML(url));
 
   @override
   bool operator ==(Object other) => other is ServerType && other.id == id;

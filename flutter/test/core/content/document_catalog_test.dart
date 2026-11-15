@@ -25,6 +25,9 @@ class CatalogFixture {
   bool omitThumbnails = false;
   bool visualCollections = false;
   bool markEvenRows = false;
+
+  /// Rows the site returns per page.
+  int pageSize = 50;
   Map<int, String> originalTitles = {};
   Map<int, List<String>> languages = {};
   final image = List.filled(64, 0x42);
@@ -105,7 +108,7 @@ class CatalogFixture {
         final categories = (items.where((item) => item.$1 == 'categories').firstOrNull?.$2 ?? '2').split(',').map(int.tryParse).nonNulls.toSet();
         final rows = <Map<String, Object?>>[
           if (categories.contains(2))
-            for (var id = start; id >= (1901 > start - 49 ? 1901 : start - 49); id--) _row(id),
+            for (var id = start; id >= (1901 > start - (pageSize - 1) ? 1901 : start - (pageSize - 1)); id--) _row(id),
         ];
         if (visualCollections) {
           for (final (id, category) in [(2003, 3), (2002, 4), (2001, 6)]) {
@@ -246,6 +249,18 @@ void main() {
     expect(fixture.count('/1.webp'), 0);
     await source.image(gallery.pages[1], galleryID: gallery.id, thumbnail: false);
     expect(fixture.count('/1.webp'), 1, reason: 'The original remains available to the reader');
+  });
+
+  test('lists keep going whatever the site\'s page size', () async {
+    for (final size in [30, 80]) {
+      final fixture = CatalogFixture()..pageSize = size;
+      final source = MangaContentSource(transport: fixture.transport());
+      final batch = await source.list(const GalleryQuery(), offset: 0, count: 90);
+      expect(batch.ids.length, 90, reason: 'Pages of $size rows');
+      expect(batch.ids.first, 2000);
+      expect(batch.ids.last, 1911);
+      expect(batch.hasMore, isTrue);
+    }
   });
 
   test('pagination reuses buffered results and then follows the cursor', () async {

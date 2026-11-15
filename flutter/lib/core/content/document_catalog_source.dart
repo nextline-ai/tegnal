@@ -184,7 +184,8 @@ class DocumentCatalogSource {
       }
       feed.nextID = rows.isEmpty ? null : _int(rows.last['id']);
       feed.nextViews = query.sort == GallerySort.latest || rows.isEmpty ? null : _int(rows.last['views']);
-      feed.more = rows.length == 50 && feed.nextID != oldCursor;
+      // Whatever its page size, the list goes on while a page has rows and moves the cursor.
+      feed.more = rows.isNotEmpty && feed.nextID != oldCursor;
       feed.started = true;
       requests += 1;
     }
@@ -238,7 +239,7 @@ class DocumentCatalogSource {
         }
         lane.nextID = rows.isEmpty ? null : _int(rows.last['id']);
         lane.nextViews = query.sort == GallerySort.latest || rows.isEmpty ? null : _int(rows.last['views']);
-        lane.more = rows.length == 50 && lane.nextID != oldCursor;
+        lane.more = rows.isNotEmpty && lane.nextID != oldCursor;
         requests += 1;
       }
       // A lane must have a head or be exhausted before merging the next rank.

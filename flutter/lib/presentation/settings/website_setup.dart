@@ -30,18 +30,16 @@ sealed class ServerType {
   String get title;
   IconData get icon;
 
-  /// Recognition by page structure only. Image boards name their engine in the page.
-  static ServerType? recognizing(String html) {
-    if (MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html)) return comics;
-    if (RegExp(r'''Danbooru\.|content=["']Danbooru''').hasMatch(html)) return const BooruServerType(BooruEngine.danbooru);
-    if (RegExp(r'Gelbooru\s+Beta\s+0\.1\.11', caseSensitive: false).hasMatch(html)) return const BooruServerType(BooruEngine.oldGelbooru);
-    if (html.toLowerCase().contains('moebooru')) return const BooruServerType(BooruEngine.moebooru);
-    if (html.toLowerCase().contains('gelbooru')) return const BooruServerType(BooruEngine.gelbooru);
-    return null;
+  /// Image Mode only for the image engines the app supports; every other website is a comics
+  /// site, whose protocol Comics Mode finds once it connects.
+  static ServerType recognizing(String html) {
+    if (MangaUrls.isDocumentPage(html) || MangaUrls.isIndexedPage(html) || MangaUrls.isKeyedPage(html)) return comics;
+    final engine = BooruEngine.recognizing(html);
+    return engine == null ? comics : BooruServerType(engine);
   }
 
   /// Loads the home page once and recognizes it. The offline run reads the fixture pages.
-  static Future<ServerType?> detect(Uri url) async {
+  static Future<ServerType> detect(Uri url) async {
     if (ContentPreferences.isIsolated) return recognizing(await FixtureWebsites.html(url));
     final html = await PerfTrace.span('website inspect', () => inspectWebsite(url), detail: url.host);
     return recognizing(html);
@@ -281,7 +279,7 @@ class WebsiteConnectionEditor extends StatefulWidget {
   State<WebsiteConnectionEditor> createState() => _WebsiteConnectionEditorState();
 }
 
-enum _DetectionPhase { idle, checking, recognized, unrecognized, failed }
+enum _DetectionPhase { idle, checking, recognized, failed }
 
 class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
   late final _address = TextEditingController(text: widget.server?.baseURL ?? widget.initialAddress);
@@ -355,10 +353,18 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
         setState(() {
           _detected = type;
           _detectedFor = url.toString();
-          _phase = type == null ? _DetectionPhase.unrecognized : _DetectionPhase.recognized;
+          _phase = _DetectionPhase.recognized;
         });
       } on Object {
-        if (mounted && generation == _generation) setState(() => _phase = _DetectionPhase.failed);
+        // A home page this device couldn't load may still open through the comics connection,
+        // which reaches sites a plain request can't; the image engines are named in their pages.
+        if (mounted && generation == _generation) {
+          setState(() {
+            _detected = ServerType.comics;
+            _detectedFor = url.toString();
+            _phase = _DetectionPhase.failed;
+          });
+        }
       }
     });
   }
@@ -527,7 +533,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                         ),
                     ],
                   ),
-                  if (_automatic && (_phase == _DetectionPhase.failed || _phase == _DetectionPhase.unrecognized)) ...[
+                  if (_automatic && _phase == _DetectionPhase.failed) ...[
                     const SizedBox(height: 26),
                     FormSection(
                       children: [
