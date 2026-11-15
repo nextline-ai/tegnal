@@ -186,9 +186,17 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
   /// only for a work every other connected website says it no longer has; a work the others
   /// could not be asked about is left for later.
   @override
-  Future<NativeGallery> gallery(int id, {String? preferring, bool inBulk = false}) async {
+  Future<NativeGallery> gallery(int id, {String? preferring, bool inBulk = false}) =>
+      _read(id, preferring: preferring, inBulk: inBulk, (source) => source.gallery(id));
+
+  /// A work as a card or a fill needs it, from the same websites in the same order as [gallery].
+  @override
+  Future<NativeGallery> preview(int id, {String? preferring, bool inBulk = false}) =>
+      _read(id, preferring: preferring, inBulk: inBulk, (source) => source.preview(id));
+
+  Future<NativeGallery> _read(int id, Future<NativeGallery> Function(ContentProviding source) body, {String? preferring, required bool inBulk}) async {
     final order = candidates(id, preferring: preferring);
-    if (order.isEmpty) return primary.gallery(id);
+    if (order.isEmpty) return body(primary);
     final skipped = inBulk ? CoverFillGuard.skipped(_sites().$2, blocks: _blocksBulkReading) : const <String>{};
     final others = order.where((site) => !skipped.contains(site)), last = order.where(skipped.contains);
     Object? firstError;
@@ -200,7 +208,7 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
       if (skipped.contains(site) && !missingElsewhere) throw const LeftForBlockingSite();
       if (blocking) _blockingReads.add(id);
       try {
-        final gallery = await _source(site).gallery(id);
+        final gallery = await body(_source(site));
         _record(id, site, afterFailure: firstError != null);
         return gallery;
       } on CancellationError {

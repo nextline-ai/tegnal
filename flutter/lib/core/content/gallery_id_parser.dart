@@ -26,10 +26,13 @@ abstract final class GalleryIDParser {
 
     void addFrom(String value, [int depth = 0]) {
       if (depth > 3) return;
-      final keyed = KeyedCatalogSource.links(value);
+      final keyed = [...KeyedCatalogSource.links(value), ...KeyedCatalogSource.viewerLinks(value)];
       GalleryKeys.shared.rememberAll([for (final link in keyed) (link.id, link.key)]);
       for (final link in keyed) {
         if (seen.add(link.id)) ids.add(link.id);
+      }
+      for (final (id, _) in KeyedCatalogSource.pageLinks(value)) {
+        if (seen.add(id)) ids.add(id);
       }
       for (final match in _mangaIdRegex.allMatches(value)) {
         final first = match.group(1), second = match.group(2);

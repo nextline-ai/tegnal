@@ -18,6 +18,8 @@ class SiteContent extends ContentProviding implements WorkExtrasProviding {
   @override
   Future<NativeGallery> gallery(int id) => SiteScope.run(site, () => _inner.gallery(id));
   @override
+  Future<NativeGallery> preview(int id) => SiteScope.run(site, () => _inner.preview(id));
+  @override
   Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count}) =>
       SiteScope.run(site, () => _inner.list(query, offset: offset, count: count));
   @override

@@ -119,6 +119,7 @@ actor DocumentCatalogSource {
             let (data, _) = try await transport.get(url, limit: 2_000_000)
             try prepare(site)
             guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]], rows.count <= 100 else { throw ContentError.invalidResponse }
+            Self.rememberKeys(rows)
             let oldCursor = feed.nextID
             var seen = Set(feed.ids)
             for row in rows {
@@ -163,6 +164,7 @@ actor DocumentCatalogSource {
                 let (data, _) = try await transport.get(url, limit: 2_000_000)
                 try prepare(site)
                 guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]], rows.count <= 100 else { throw ContentError.invalidResponse }
+                Self.rememberKeys(rows)
                 for row in rows {
                     guard let id = (row["id"] as? NSNumber)?.int64Value, id > 0 else { throw ContentError.invalidResponse }
                     guard (row["blocked"] as? NSNumber)?.intValue ?? 0 == 0 else { continue }
@@ -256,6 +258,7 @@ actor DocumentCatalogSource {
 
     nonisolated static func parseGallery(_ data: Data, id: Int64, site: String) throws -> NativeGallery {
         let object = try embeddedObject(data, named: "gallery")
+        rememberKeys([object])
         guard (object["id"] as? NSNumber)?.int64Value == id,
               let files = object["files"] as? [[String: Any]], !files.isEmpty, files.count <= 10_000 else { throw ContentError.invalidResponse }
         guard (object["blocked"] as? NSNumber)?.intValue ?? 0 == 0 else { throw ContentError.unavailable(403) }
@@ -298,6 +301,16 @@ actor DocumentCatalogSource {
             }
         }
         throw ContentError.invalidResponse
+    }
+
+    /// Rows carry the key the account-based catalog opens the same work with. Every connected
+    /// catalog numbers works the same way, so the key spares that catalog a search for the number;
+    /// one it doesn't accept is looked up again there.
+    nonisolated static func rememberKeys(_ rows: [[String: Any]]) {
+        GalleryKeys.shared.remember(rows.compactMap { row in
+            guard let id = (row["id"] as? NSNumber)?.int64Value, id > 0, let token = row["token"] as? String else { return nil }
+            return (id, token)
+        })
     }
 
     private nonisolated static func preview(_ object: [String: Any], site: String) -> NativeGallery? {

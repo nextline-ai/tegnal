@@ -10,6 +10,7 @@ import 'content_url.dart';
 import 'gallery_content.dart';
 import 'keyed_catalog_source.dart';
 import 'manga_urls.dart';
+import 'site_account.dart';
 
 /// A bounded cache that forgets its oldest entry first, like `NSCache` with a count limit.
 class BoundedCache<K, V> {
@@ -172,6 +173,7 @@ class DocumentCatalogSource {
       final result = await transport.get(url, limit: 2000000);
       _prepare(site);
       final rows = _rows(result.data);
+      rememberKeys(rows);
       final oldCursor = feed.nextID;
       final seen = feed.ids.toSet();
       for (final row in rows) {
@@ -227,6 +229,7 @@ class DocumentCatalogSource {
         final result = await transport.get(url, limit: 2000000);
         _prepare(site);
         final rows = _rows(result.data);
+        rememberKeys(rows);
         for (final row in rows) {
           final id = _int(row['id']);
           if (id == null || id <= 0) throw ContentError.invalidResponse;
@@ -333,8 +336,19 @@ class DocumentCatalogSource {
     return categories;
   }
 
+  /// Rows carry the key the account-based catalog opens the same work with. Every connected
+  /// catalog numbers works the same way, so the key spares that catalog a search for the number;
+  /// one it doesn't accept is looked up again there.
+  static void rememberKeys(List<Map<String, Object?>> rows) {
+    GalleryKeys.shared.rememberAll([
+      for (final row in rows)
+        if ((_int(row['id']), row['token']) case (final id?, final String token) when id > 0) (id, token),
+    ]);
+  }
+
   static NativeGallery parseGallery(List<int> data, int id, {required String site}) {
     final object = embeddedObject(data, 'gallery');
+    rememberKeys([object]);
     final files = object['files'];
     if (_int(object['id']) != id || files is! List || files.isEmpty || files.length > 10000 || files.any((file) => file is! Map)) {
       throw ContentError.invalidResponse;

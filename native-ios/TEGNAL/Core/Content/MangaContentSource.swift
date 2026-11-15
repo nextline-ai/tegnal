@@ -168,6 +168,19 @@ actor MangaContentSource: ContentProviding, WorkExtrasProviding {
         } onCancel: { Task { await self.cancelGallery(id, waiter: waiter) } }
     }
 
+    /// A card's work. A keyed catalog answers it from its details endpoint, a request per 25 works,
+    /// instead of loading each work's page.
+    func preview(_ id: Int64) async throws -> NativeGallery {
+        try Task.checkCancellation()
+        guard id > 0 else { throw ContentError.invalidQuery }
+        let site = try prepareSite()
+        if let cached = cachedPreview(id) { return cached }
+        guard try await resolve(site) == .keyed else { return try await gallery(id) }
+        let preview = try await keyed.preview(id, site: site)
+        guard MangaUrls.home == site else { throw CancellationError() }
+        return preview
+    }
+
     /// The signed-in account's favorites, a page at a time, on catalogs that keep them.
     func accountFavorites(after next: String?, category: Int? = nil) async throws -> (ids: [Int64], next: String?) {
         let site = try prepareSite()

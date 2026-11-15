@@ -81,6 +81,16 @@ class KeyedFixture {
   bool failFirstNode = false;
   bool allowanceUsed = false;
 
+  /// Words the first image host sends instead of the image.
+  String? textAnswer;
+
+  /// How many details requests fail before they answer.
+  int failDetails = 0;
+
+  /// The note the favorites form shows, as the page writes it.
+  String favoriteNote = '';
+  String favoriteReply = '<html><script>window.opener.location.reload();</script></html>';
+
   /// The account reads in the multi-page viewer, so work pages link there instead of to each page.
   bool viewer = false;
   final image = List.filled(64, 0x42);
@@ -133,12 +143,17 @@ class KeyedFixture {
         if (url.path.startsWith('/large-')) return FixtureReply(200, image, {'Content-Type': 'image/jpeg'});
         return FixtureReply(200, sheet, {'Content-Type': 'image/png'});
       case 'node1.volunteer.example':
+        if (textAnswer case final words?) return FixtureReply.text(200, words, {'Content-Type': 'text/html; charset=UTF-8'});
         return failFirstNode ? FixtureReply(503) : FixtureReply(200, image, {'Content-Type': 'image/webp'});
       case 'node2.volunteer.example':
         return FixtureReply(200, image, {'Content-Type': 'image/webp'});
       case 'notice.example':
         return FixtureReply(200, image, {'Content-Type': 'image/gif'});
       case 'api.keyed.example' || 'api.members.example':
+        if (failDetails > 0) {
+          failDetails -= 1;
+          return FixtureReply(503);
+        }
         return FixtureReply.text(200, _details(request.body ?? const []), {'Content-Type': 'application/json'});
       case 'members.example':
         if (!(cookie ?? '').contains('app_member_id=42')) return FixtureReply.redirect(Uri.parse('https://account.example/remoteapi.php?ex=token'));
@@ -160,7 +175,7 @@ class KeyedFixture {
         final ids = next == null ? [3002, 3001, 3000] : [2999, 2998];
         var shown = ids;
         final mask = int.tryParse(item('f_cats') ?? '');
-        if (mask != null && mask & 4 == 0) shown = ids.where((id) => id == 3001).toList();
+        if (mask != null && mask != 0 && mask & 4 == 0) shown = ids.where((id) => id == 3001).toList();
         return FixtureReply.text(200, listing(shown, next: next == null ? 2999 : null), {'Content-Type': 'text/html'});
       case '/popular':
         return FixtureReply.text(200, listing([2999, 3000, 3001]), {'Content-Type': 'text/html'});
@@ -171,8 +186,15 @@ class KeyedFixture {
         final next = item('next');
         return FixtureReply.text(200, next == null ? listing([2998, 2990], next: 2990) : listing([2980]), {'Content-Type': 'text/html'});
       case '/gallerypopups.php':
+        if (request.method != 'POST') {
+          return FixtureReply.text(
+            200,
+            '<html><body><div id="galpop"><form method="post"><textarea name="favnote" maxlength="200">$favoriteNote</textarea></form></div></body></html>',
+            {'Content-Type': 'text/html'},
+          );
+        }
         favoriteForms.add(utf8.decode(request.body ?? const []));
-        return FixtureReply.text(200, '<html><script>window.opener.location.reload();</script></html>', {'Content-Type': 'text/html'});
+        return FixtureReply.text(200, favoriteReply, {'Content-Type': 'text/html'});
       default:
         final parts = url.pathSegments.where((part) => part.isNotEmpty).toList();
         if (parts.length == 3 && parts[0] == 'g' && int.tryParse(parts[1]) != null && parts[2] == key(int.parse(parts[1]))) {
@@ -253,7 +275,9 @@ void main() {
       site: 'https://keyed.example/',
       categories: KeyedCatalogSource.allCategories,
     );
-    expect(plain.hasQuery, isFalse);
+    expect(ContentURL.queryItems(plain), [
+      ('f_cats', '0'),
+    ], reason: "Every category is asked for outright, so an account's default exclusions don't narrow the list");
 
     final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
     final filtered = await source.list(const GalleryQuery(language: 'all', text: '-female:marked_tag'), offset: 0, count: 5);
@@ -301,6 +325,128 @@ void main() {
     final gallery = await source.gallery(3000);
     fixture.allowanceUsed = true;
     await expectLater(source.image(gallery.pages[1], galleryID: 3000, thumbnail: false), throwsA(ContentError.imageLimit));
+  });
+
+  test('image hosts answering in words report the allowance or the ban', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    final gallery = await source.gallery(3000);
+    fixture.textAnswer = 'You have reached the image limit, and do not have sufficient GP to buy a download quota.';
+    await expectLater(source.image(gallery.pages[1], galleryID: 3000, thumbnail: false), throwsA(ContentError.imageLimit));
+    expect(fixture.requests.any((url) => url.query.startsWith('nl=')), isFalse, reason: "The notice is the site's answer, so no other host is asked");
+    expect(fixture.count('/s/2222222222/3000-2'), 1);
+    fixture.textAnswer = 'Your IP address has been temporarily banned for excessive pageloads which indicates that you are using automated mirroring/harvesting software. The ban expires in 59 minutes and 48 seconds';
+    await expectLater(source.image(gallery.pages[1], galleryID: 3000, thumbnail: false), throwsA(ContentError.temporarilyBlocked));
+    expect(fixture.requests.any((url) => url.query.startsWith('nl=')), isFalse);
+    expect(KeyedCatalogSource.textNotice(utf8.encode('<html><body>An error has occurred.</body></html>'), mimeType: 'text/html'), isNull);
+    expect(KeyedCatalogSource.textNotice(utf8.encode('You have reached the image limit'), mimeType: 'image/webp'), isNull);
+  });
+
+  test('number lookups ignore the account\'s own filters', () async {
+    final url = KeyedCatalogSource.keySearchURL(2990, site: 'https://keyed.example/');
+    expect(Map.fromEntries(ContentURL.queryItems(url).map((item) => MapEntry(item.$1, item.$2))), {
+      'f_search': 'gid:2990',
+      'f_cats': '0',
+      'advsearch': '1',
+      'f_sfl': 'on',
+      'f_sfu': 'on',
+      'f_sft': 'on',
+    });
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 1);
+    GalleryKeys.shared.removeAll();
+    await source.gallery(2990);
+    final lookup = fixture.requests.firstWhere((url) => ContentURL.queryItems(url).contains(('f_search', 'gid:2990')));
+    expect(ContentURL.queryItems(lookup).contains(('f_sfl', 'on')), isTrue);
+  });
+
+  test('cards read works from the details endpoint without opening them', () async {
+    final fixture = KeyedFixture();
+    await MangaContentSource(transport: fixture.transport()).list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    // A source whose cached details are gone, as after the system emptied its caches.
+    final source = MangaContentSource(transport: fixture.transport());
+    expect(source.cachedPreview(3000), isNull);
+    final detailsBefore = fixture.count('/api.php');
+    final workPagesBefore = fixture.requests.where((url) => url.path.startsWith('/g/')).length;
+    final works = await Future.wait([source.preview(3000), source.preview(3001), source.preview(3002)]);
+    expect(works.map((work) => work.id), [3000, 3001, 3002]);
+    expect(works[0].pageCount, 3);
+    expect(works[0].pages.first.thumbnailURL.toString(), 'https://covers.example/3000.jpg');
+    expect(fixture.count('/api.php') - detailsBefore, 1, reason: 'Cards asking together share one details request');
+    expect(fixture.requests.where((url) => url.path.startsWith('/g/')).length, workPagesBefore, reason: "A card never opens the work's own page");
+    expect(source.cachedPreview(3001), isNotNull);
+  });
+
+  test('a failed details request is asked once more', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    fixture.failDetails = 1;
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    expect(source.cachedPreview(3000), isNotNull, reason: 'Details lost to one failed request come with the next');
+    expect(fixture.count('/api.php'), 2);
+  });
+
+  test('a remembered key the site refuses is looked up again', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 1);
+    GalleryKeys.shared.remember(2990, 'ffffffffff');
+    final gallery = await source.gallery(2990);
+    expect(gallery.id, 2990);
+    expect(GalleryKeys.shared.key(2990), key(2990), reason: 'The key the site accepts replaces the refused one');
+    expect(fixture.requests.any((url) => ContentURL.queryItems(url).contains(('f_search', 'gid:2990'))), isTrue);
+  });
+
+  test('page loads on one website are paced and other websites are not held up', () async {
+    final pacer = PagePacer(burst: 2, interval: const Duration(milliseconds: 100));
+    final clock = Stopwatch()..start();
+    for (var index = 0; index < 2; index++) {
+      await pacer.wait('a.example');
+    }
+    expect(clock.elapsedMilliseconds, lessThan(50), reason: 'A short burst goes at once');
+    clock.reset();
+    for (var index = 0; index < 2; index++) {
+      await pacer.wait('a.example');
+    }
+    expect(clock.elapsedMilliseconds, greaterThanOrEqualTo(180), reason: 'Then one page load per interval');
+    clock.reset();
+    await pacer.wait('b.example');
+    expect(clock.elapsedMilliseconds, lessThan(50));
+  });
+
+  test('favorites keep their note and a refused change is reported', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 1);
+    expect(SiteAccount.signIn(const [SiteCookie(name: 'app_member_id', value: '42'), SiteCookie(name: 'app_pass_hash', value: 'secret')]), isTrue);
+    fixture.favoriteNote = 'read later &amp; 다시';
+    await source.setAccountFavorite(3000, saved: true, category: 2);
+    expect(
+      fixture.favoriteForms.last,
+      'favcat=2&favnote=read+later+%26+%EB%8B%A4%EC%8B%9C&apply=Add+to+Favorites&update=1',
+      reason: 'Moving a favorite sends its note back so the site keeps it',
+    );
+    fixture.favoriteReply = 'Key missing, or incorrect key provided.';
+    await expectLater(source.setAccountFavorite(3000, saved: false), throwsA(ContentError.galleryNotFound));
+    expect(KeyedCatalogSource.favoriteNote('<textarea name="favnote">a &lt;b&gt;</textarea>'), 'a <b>');
+  });
+
+  test('viewer accounts keep the previews their work page shows', () {
+    final shown = KeyedCatalogSource.viewerPreviews(viewerDetail(3000), galleryID: 3000);
+    expect(shown[1], KeyedThumb(Uri.parse('https://sheets.example/3000-0.png'), const CropRect(100, 0, 100, 150)));
+    const viewer =
+        r'<script>var imagelist = [{"n":"one.jpg","k":"aaaaaaaaaa","t":"(https://sheets.example/3000-0.png) -0px 0"},{"n":"two.jpg","k":"bbbbbbbbbb","t":"https:\/\/sheets.example\/large-2.jpg"}];</script>';
+    final entries = KeyedCatalogSource.viewerEntries(viewer, previews: shown);
+    expect(entries[0]?.thumb, shown[0], reason: "A listed preview that is not a plain address takes the work page's");
+    expect(entries[1]?.thumb?.url.toString(), 'https://sheets.example/large-2.jpg', reason: 'A plain listed address still wins');
+  });
+
+  test('viewer and page links open in the app', () {
+    expect(GalleryIDParser.parse('https://keyed.example/mpv/3000/${key(3000)}/#page2'), [3000]);
+    expect(GalleryKeys.shared.key(3000), key(3000), reason: "A viewer link carries the work's key");
+    expect(GalleryIDParser.parse('see https://keyed.example/s/abcdef1234/3001-5'), [3001]);
+    expect(GalleryKeys.shared.key(3001), isNull, reason: "A page link's key belongs to the page, not the work");
+    expect(ContentRoute.initial('https://keyed.example/mpv/3000/${key(3000)}/'), isA<GalleryRoute>().having((route) => route.id, 'id', 3000));
+    expect(
+      ContentRoute.initial('https://keyed.example/s/abcdef1234/3001-5'),
+      isA<ReaderRoute>().having((route) => route.id, 'id', 3001).having((route) => route.page, 'page', 5),
+    );
   });
 
   test('forgotten key is found by searching the number', () async {

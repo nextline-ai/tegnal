@@ -3,6 +3,37 @@ import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
 
+/// Page loads on one website, paced like a person browsing quickly: a few at once, then one at a
+/// steady interval. Bursts of page loads are what get an address banned on keyed catalogs; images
+/// and the details endpoint are not paced here.
+actor PagePacer {
+    static let shared = ContentPreferences.isIsolated ? PagePacer(burst: 1_000, interval: .milliseconds(1)) : PagePacer()
+    private let burst: Double
+    private let interval: Duration
+    private var buckets: [String: (tokens: Double, updated: ContinuousClock.Instant)] = [:]
+
+    init(burst: Int = 5, interval: Duration = .milliseconds(800)) {
+        self.burst = Double(max(1, burst))
+        self.interval = interval
+    }
+
+    func wait(host: String) async throws {
+        while true {
+            let now = ContinuousClock.now
+            var bucket = buckets[host] ?? (burst, now)
+            bucket.tokens = min(burst, bucket.tokens + (now - bucket.updated) / interval)
+            bucket.updated = now
+            if bucket.tokens >= 1 {
+                bucket.tokens -= 1
+                buckets[host] = bucket
+                return
+            }
+            buckets[host] = bucket
+            try await Task.sleep(for: interval * (1 - bucket.tokens))
+        }
+    }
+}
+
 /// A numeric catalog whose works open with their number plus a short key: an
 /// HTML listing with a cursor, page links per work, and a JSON endpoint for
 /// details. Only page shapes and response fields identify this protocol.
@@ -51,6 +82,7 @@ actor KeyedCatalogSource {
 
     private let transport: ContentTransport
     private let keys: GalleryKeys
+    private let pacer: PagePacer
     private var site = ""
     private var feeds: [GalleryQuery: Feed] = [:]
     private var details: [Int64: Detail] = [:]
@@ -66,9 +98,10 @@ actor KeyedCatalogSource {
                                        "cosplay": 64, "photo": 128, "non-h": 256, "western": 512]
     private static let searchLimit = 200
 
-    init(transport: ContentTransport, keys: GalleryKeys = .shared) {
+    init(transport: ContentTransport, keys: GalleryKeys = .shared, pacer: PagePacer = .shared) {
         self.transport = transport
         self.keys = keys
+        self.pacer = pacer
         previews.countLimit = 512
         sheets.countLimit = 24
         sheets.totalCostLimit = 24 * 1024 * 1024
@@ -208,15 +241,20 @@ actor KeyedCatalogSource {
     }
 
     private func page(_ url: URL, site: String) async throws -> String {
+        let host = URL(string: site)?.host?.lowercased()
+        if let host { try await pacer.wait(host: host) }
+        try prepare(site)
+        let access = host.flatMap { SiteAccount.siteCookie(SiteAccount.accessCookie, host: $0) }
         let data: Data
         do { (data, _) = try await transport.get(url, limit: 3_000_000) }
         catch ContentError.unavailable(let status) where (300..<400).contains(status) { throw ContentError.signInRequired }
         try prepare(site)
         let text = String(decoding: data, as: UTF8.self)
         if let error = Self.pageError(text) {
-            // A refused access cookie is dropped, so the next request is handed a fresh one.
-            if error == .signInRequired, Self.isRestrictedNotice(text), let host = URL(string: site)?.host?.lowercased() {
-                SiteAccount.forget(SiteAccount.accessCookie, host: host)
+            // A refused access cookie is dropped, so the next request is handed a fresh one; one the
+            // wall itself just handed out is kept for that request.
+            if error == .signInRequired, Self.isRestrictedNotice(text), let host {
+                SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access)
             }
             throw error
         }
@@ -234,7 +272,7 @@ actor KeyedCatalogSource {
         // A wrong or stale key, or a page that no longer exists, is answered with one short line.
         if text.utf8.count < 1_024 {
             let lowered = text.lowercased()
-            if ["key missing", "invalid page", "gallery not found"].contains(where: lowered.contains) { return .galleryNotFound }
+            if ["key missing", "invalid page", "keep trying", "gallery not found"].contains(where: lowered.contains) { return .galleryNotFound }
         }
         if isRestrictedNotice(text) || asksForSignIn(text) || text.trimmingCharacters(in: .whitespacesAndNewlines).count < 64 { return .signInRequired }
         return nil
@@ -252,10 +290,8 @@ actor KeyedCatalogSource {
     func gallery(_ id: Int64, site: String) async throws -> NativeGallery {
         try prepare(site)
         guard id > 0 else { throw ContentError.invalidQuery }
-        let key = try await key(for: id, site: site)
-        let items = try await metadata([Link(id: id, key: key)], site: site)
-        guard let item = items.first(where: { Self.number($0["gid"]) == id }), item["error"] == nil,
-              let (preview, fileCount) = Self.work(from: item, site: site) else { throw ContentError.galleryNotFound }
+        let (key, item) = try await detailsRow(id, site: site)
+        guard let (preview, fileCount) = Self.work(from: item, site: site) else { throw ContentError.galleryNotFound }
         previews.setObject(Preview(preview), forKey: "\(site)#\(id)" as NSString)
         let detail = try await detailPage(id, key: key, page: 0, site: site)
         let cover = preview.pages.first?.thumbnailURL
@@ -270,16 +306,89 @@ actor KeyedCatalogSource {
                              type: preview.type, tags: preview.tags, pages: pages)
     }
 
+    /// A work's details row with the key the site accepted for it. A remembered key the site no
+    /// longer accepts, such as one another website handed over, is looked up again once.
+    private func detailsRow(_ id: Int64, site: String) async throws -> (key: String, item: [String: Any]) {
+        let remembered = keys.key(for: id) != nil
+        var key = try await key(for: id, site: site)
+        var item = try await metadata([Link(id: id, key: key)], site: site).first { Self.number($0["gid"]) == id }
+        if remembered, item == nil || item?["error"] != nil {
+            keys.forget(id)
+            key = try await self.key(for: id, site: site)
+            item = try await metadata([Link(id: id, key: key)], site: site).first { Self.number($0["gid"]) == id }
+        }
+        guard let item, item["error"] == nil else { throw ContentError.galleryNotFound }
+        return (key, item)
+    }
+
+    /// A work as a list card shows it: title, tags, cover and page count from the details endpoint,
+    /// never from the work's own page. Cards asking at the same moment share one details request,
+    /// so a list that lost its cached details costs a request per 25 works, not a page load per card.
+    func preview(_ id: Int64, site: String) async throws -> NativeGallery {
+        try prepare(site)
+        guard id > 0 else { throw ContentError.invalidQuery }
+        if let cached = cachedPreview(id) { return cached }
+        let remembered = keys.key(for: id) != nil
+        let key = try await key(for: id, site: site)
+        if let cached = cachedPreview(id) { return cached }
+        let batch: PreviewBatch
+        if let open = openBatch, open.site == site, open.links.count < 25 { batch = open }
+        else {
+            batch = PreviewBatch(site: site)
+            openBatch = batch
+            batch.task = Task { [weak self] in
+                // Cards of one screen ask within moments of each other.
+                try? await Task.sleep(for: .milliseconds(50))
+                guard let self else { return .failure(CancellationError()) }
+                return await self.send(batch)
+            }
+        }
+        if !batch.links.contains(where: { $0.id == id }) { batch.links.append(Link(id: id, key: key)) }
+        let found = try await batch.task.value.get()
+        try Task.checkCancellation()
+        try prepare(site)
+        if let work = found[id] { return work }
+        // A key remembered from elsewhere may be one the site doesn't accept.
+        guard remembered else { throw ContentError.galleryNotFound }
+        let (_, item) = try await detailsRow(id, site: site)
+        guard let (work, _) = Self.work(from: item, site: site) else { throw ContentError.galleryNotFound }
+        previews.setObject(Preview(work), forKey: "\(site)#\(id)" as NSString)
+        return work
+    }
+
+    private final class PreviewBatch: @unchecked Sendable {
+        let site: String
+        var links: [Link] = []
+        var task: Task<Result<[Int64: NativeGallery], Error>, Never>!
+        init(site: String) { self.site = site }
+    }
+    private var openBatch: PreviewBatch?
+
+    private func send(_ batch: PreviewBatch) async -> Result<[Int64: NativeGallery], Error> {
+        if openBatch === batch { openBatch = nil }
+        do { return .success(try await loadPreviews(batch.links, site: batch.site, throwing: true)) }
+        catch { return .failure(error) }
+    }
+
     /// The key comes from a link already seen, or from searching the number.
     func key(for id: Int64, site: String) async throws -> String {
         if let key = keys.key(for: id) { return key }
-        guard var components = URLComponents(string: site) else { throw ContentError.invalidQuery }
-        components.queryItems = [URLQueryItem(name: "f_search", value: "gid:\(id)")]
-        guard let url = components.url else { throw ContentError.invalidQuery }
+        guard let url = Self.keySearchURL(id, site: site) else { throw ContentError.invalidQuery }
         let links = Self.links(in: try await page(url, site: site))
         keys.remember(links.map { ($0.id, $0.key) })
         guard let link = links.first(where: { $0.id == id }) else { throw ContentError.galleryNotFound }
         return link.key
+    }
+
+    /// A search for one number. A signed-in account's own filters (hidden languages, uploaders and
+    /// tags, and categories left out by default) apply to searches too, so they are switched off
+    /// here and every category is asked for: otherwise a work the account filters would never be found.
+    nonisolated static func keySearchURL(_ id: Int64, site: String) -> URL? {
+        guard id > 0, var components = URLComponents(string: site) else { return nil }
+        components.queryItems = [URLQueryItem(name: "f_search", value: "gid:\(id)"), URLQueryItem(name: "f_cats", value: "0"),
+                                 URLQueryItem(name: "advsearch", value: "1"), URLQueryItem(name: "f_sfl", value: "on"),
+                                 URLQueryItem(name: "f_sfu", value: "on"), URLQueryItem(name: "f_sft", value: "on")]
+        return components.url
     }
 
     private func detailPage(_ id: Int64, key: String, page: Int, site: String) async throws -> Detail {
@@ -298,7 +407,7 @@ actor KeyedCatalogSource {
         // An account set to read in the multi-page viewer gets links into it instead of page links;
         // the viewer's own page lists every page's key at once.
         if entries.isEmpty, Self.linksToViewer(text, galleryID: id, key: key), let viewer = URL(string: "\(site)mpv/\(id)/\(key)/") {
-            entries = Self.viewerEntries(in: try await self.page(viewer, site: site))
+            entries = Self.viewerEntries(in: try await self.page(viewer, site: site), previews: Self.viewerPreviews(in: text, galleryID: id))
             perPage = entries.count
         }
         guard !entries.isEmpty else { throw ContentError.galleryNotFound }
@@ -347,7 +456,7 @@ actor KeyedCatalogSource {
             catch {
                 try Task.checkCancellation()
                 // A notice in place of the image is the site's answer, not one host's failure.
-                if let notice = error as? ContentError, notice == .imageLimit || notice == .signInRequired { throw notice }
+                if let notice = error as? ContentError, [.imageLimit, .signInRequired, .temporarilyBlocked].contains(notice) { throw notice }
                 // Another volunteer host serves the same image when this one fails.
                 guard attempt < 2, let next = shown.reload, next != reload else { throw error }
                 reload = next
@@ -359,15 +468,26 @@ actor KeyedCatalogSource {
     private func fetch(_ url: URL, galleryID: Int64, limit: Int, site: String) async throws -> Data {
         guard Self.safeMediaURL(url) else { throw ContentError.unsupportedFormat }
         MangaUrls.registerMedia([url], site: site)
+        let host = URL(string: site)?.host?.lowercased()
+        let access = host.flatMap { SiteAccount.siteCookie(SiteAccount.accessCookie, host: $0) }
         let (data, response) = try await transport.get(url, limit: limit, galleryID: galleryID)
         try prepare(site)
+        if let notice = Self.textNotice(data, mimeType: response.mimeType) { throw notice }
         guard response.mimeType?.hasPrefix("image/") != false, data.count > 32 else { throw ContentError.unsupportedFormat }
         if let notice = Self.imageNotice(data, url: response.url ?? url) {
             // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
-            if notice == .signInRequired, let host = URL(string: site)?.host?.lowercased() { SiteAccount.forget(SiteAccount.accessCookie, host: host) }
+            if notice == .signInRequired, let host { SiteAccount.forget(SiteAccount.accessCookie, host: host, refused: access) }
             throw notice
         }
         return data
+    }
+
+    /// Image hosts answer in words when the account's allowance ran out or the network is banned,
+    /// served where the image was expected. Only those two are read from such an answer.
+    nonisolated static func textNotice(_ data: Data, mimeType: String?) -> ContentError? {
+        guard data.count < 10_000, mimeType?.lowercased().hasPrefix("image/") != true else { return nil }
+        let notice = pageError(String(decoding: data, as: UTF8.self))
+        return notice == .imageLimit || notice == .temporarilyBlocked ? notice : nil
     }
 
     /// The site's own notices served where an image was expected, so they are never shown, cached or
@@ -410,13 +530,31 @@ actor KeyedCatalogSource {
 
     /// Search rows only carry links, so their details come from the JSON endpoint in batches.
     private func previews(for links: [Link], site: String) async -> [Int64: NativeGallery] {
+        (try? await loadPreviews(links, site: site, throwing: false)) ?? [:]
+    }
+
+    /// Details for works, 25 to a request. A failed request is asked once more after a moment;
+    /// when it still fails, [throwing] decides whether the works it held are skipped or the failure is reported.
+    private func loadPreviews(_ links: [Link], site: String, throwing: Bool) async throws -> [Int64: NativeGallery] {
         var found: [Int64: NativeGallery] = [:]
         let missing = links.filter { link in
             if let cached = cachedPreview(link.id) { found[link.id] = cached; return false }
             return true
         }
         for start in stride(from: 0, to: missing.count, by: 25) {
-            guard let items = try? await metadata(Array(missing[start..<min(missing.count, start + 25)]), site: site) else { continue }
+            let chunk = Array(missing[start..<min(missing.count, start + 25)])
+            let items: [[String: Any]]
+            do {
+                do { items = try await metadata(chunk, site: site) }
+                catch let error where !(error is CancellationError) {
+                    try await Task.sleep(for: .seconds(1))
+                    try prepare(site)
+                    items = try await metadata(chunk, site: site)
+                }
+            } catch {
+                if throwing || error is CancellationError { throw error }
+                continue
+            }
             for item in items {
                 guard let id = Self.number(item["gid"]), item["error"] == nil, let (work, _) = Self.work(from: item, site: site) else { continue }
                 previews.setObject(Preview(work), forKey: "\(site)#\(id)" as NSString)
@@ -570,11 +708,35 @@ actor KeyedCatalogSource {
         guard var components = URLComponents(string: site + "gallerypopups.php") else { throw ContentError.invalidQuery }
         components.queryItems = [URLQueryItem(name: "gid", value: String(id)), URLQueryItem(name: "t", value: key), URLQueryItem(name: "act", value: "addfav")]
         guard let url = components.url else { throw ContentError.invalidQuery }
+        // The form sends the note along, so a work that is already a favorite keeps the note written
+        // for it; a work its page showed as no favorite has none to keep.
+        var note = ""
+        if saved, details[id]?.extras.map({ $0.favoriteCategory != nil }) ?? true {
+            note = Self.favoriteNote(in: try await page(url, site: site)) ?? ""
+        }
         // The form's own submit button names the change; removing sends the button its page shows for it.
-        let form = saved ? "favcat=\(min(9, max(0, category)))&favnote=&apply=Add+to+Favorites&update=1" : "favcat=favdel&favnote=&apply=Apply+Changes&update=1"
+        let form = saved ? "favcat=\(min(9, max(0, category)))&favnote=\(Self.formEncoded(note))&apply=Add+to+Favorites&update=1"
+            : "favcat=favdel&favnote=&apply=Apply+Changes&update=1"
+        if let host = URL(string: site)?.host?.lowercased() { try await pacer.wait(host: host) }
         let (data, _) = try await transport.post(url, body: Data(form.utf8), contentType: "application/x-www-form-urlencoded", limit: 1_000_000)
         try prepare(site)
-        if Self.asksForSignIn(String(decoding: data, as: UTF8.self)) { throw ContentError.signInRequired }
+        // The work page read before the change shows the old favorite.
+        details[id]?.extras = nil
+        let text = String(decoding: data, as: UTF8.self)
+        if Self.asksForSignIn(text) || text.contains("Failed login redirect setup") { throw ContentError.signInRequired }
+        // A wrong key, a removed work or a ban is answered in a few words instead of with the change.
+        if let error = Self.pageError(text), error != .signInRequired { throw error }
+    }
+
+    /// The note the account wrote for a favorite, from the favorites form.
+    nonisolated static func favoriteNote(in html: String) -> String? {
+        KeyedWorkPage.firstCapture(#"<textarea\b[^>]*\bname="favnote"[^>]*>(.*?)</textarea>"#, in: html).map { NativeGallery.decodeEntities($0) }
+    }
+
+    /// A form value, with only unreserved ASCII left as is.
+    nonisolated static func formEncoded(_ value: String) -> String {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._* ")
+        return (value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "").replacingOccurrences(of: " ", with: "+")
     }
 
     // MARK: Page shapes
@@ -609,6 +771,29 @@ actor KeyedCatalogSource {
         return linkPattern.matches(in: text, range: NSRange(location: 0, length: source.length)).compactMap { match in
             guard let id = Int64(source.substring(with: match.range(at: 1))), id > 0, seen.insert(id).inserted else { return nil }
             return Link(id: id, key: source.substring(with: match.range(at: 2)))
+        }
+    }
+
+    private nonisolated static let viewerAddressPattern = try! NSRegularExpression(pattern: #"/mpv/([0-9]{1,10})/([0-9a-f]{10})(?![0-9a-f])"#)
+    private nonisolated static let pageAddressPattern = try! NSRegularExpression(pattern: #"/s/[0-9a-f]{10}/([0-9]{1,10})-([0-9]{1,5})(?![0-9])"#)
+
+    /// Links into the multi-page viewer, which name the work's number and key like its own link.
+    nonisolated static func viewerLinks(in text: String) -> [Link] {
+        let source = text as NSString
+        var seen = Set<Int64>()
+        return viewerAddressPattern.matches(in: text, range: NSRange(location: 0, length: source.length)).compactMap { match in
+            guard let id = Int64(source.substring(with: match.range(at: 1))), id > 0, seen.insert(id).inserted else { return nil }
+            return Link(id: id, key: source.substring(with: match.range(at: 2)))
+        }
+    }
+
+    /// Links to one page of a work: the work's number and the page, from 1. The key in them is the page's, not the work's.
+    nonisolated static func pageLinks(in text: String) -> [(id: Int64, page: Int)] {
+        let source = text as NSString
+        return pageAddressPattern.matches(in: text, range: NSRange(location: 0, length: source.length)).compactMap { match in
+            guard let id = Int64(source.substring(with: match.range(at: 1))), id > 0,
+                  let page = Int(source.substring(with: match.range(at: 2))), page >= 1 else { return nil }
+            return (id, page)
         }
     }
 
@@ -680,8 +865,25 @@ actor KeyedCatalogSource {
         }
     }
 
+    private nonisolated static let viewerPreviewPattern = try! NSRegularExpression(
+        pattern: #"<a\b[^>]*\bhref="([^"]*)/mpv/([0-9]{1,10})/[0-9a-f]{10}/#page([0-9]{1,5})"[^>]*>(.*?)</a>"#, options: [.dotMatchesLineSeparators])
+
+    /// The previews a work's page shows beside its links into the multi-page viewer, by zero-based page index.
+    nonisolated static func viewerPreviews(in text: String, galleryID: Int64) -> [Int: Thumb] {
+        let source = text as NSString
+        var result: [Int: Thumb] = [:]
+        for match in viewerPreviewPattern.matches(in: text, range: NSRange(location: 0, length: source.length)) {
+            guard Int64(source.substring(with: match.range(at: 2))) == galleryID,
+                  let number = Int(source.substring(with: match.range(at: 3))), number >= 1 else { continue }
+            let base = URL(string: decode(source.substring(with: match.range(at: 1)))).flatMap { $0.scheme == "https" && $0.host != nil ? $0 : nil }
+            if let thumb = thumb(in: source.substring(with: match.range(at: 4)), base: base) { result[number - 1] = thumb }
+        }
+        return result
+    }
+
     /// Every page of a work from the multi-page viewer's list: each page's key, file name and preview, in page order.
-    nonisolated static func viewerEntries(in text: String) -> [Int: Entry] {
+    /// A page whose listed preview is not a plain address takes the one its work page showed, when it showed one.
+    nonisolated static func viewerEntries(in text: String, previews: [Int: Thumb] = [:]) -> [Int: Entry] {
         guard let start = text.range(of: #"\bimagelist\s*=\s*\["#, options: .regularExpression) else { return [:] }
         let open = text.index(before: start.upperBound)
         var depth = 0, quoted = false, escaped = false, close: String.Index?
@@ -702,8 +904,8 @@ actor KeyedCatalogSource {
         for (index, item) in items.enumerated() {
             guard let key = item["k"] as? String, GalleryKeys.isKey(key) else { continue }
             let name = (item["n"] as? String).map(decode).flatMap { $0.isEmpty ? nil : $0 } ?? String(index + 1)
-            let thumb = (item["t"] as? String).flatMap(URL.init(string:)).flatMap { safeMediaURL($0) ? Thumb(url: $0, crop: nil) : nil }
-            result[index] = Entry(key: key, name: name, thumb: thumb)
+            let listed = (item["t"] as? String).flatMap(URL.init(string:)).flatMap { safeMediaURL($0) ? Thumb(url: $0, crop: nil) : nil }
+            result[index] = Entry(key: key, name: name, thumb: listed ?? previews[index])
         }
         return result
     }
@@ -765,10 +967,9 @@ actor KeyedCatalogSource {
         }
         var items: [URLQueryItem] = []
         if !terms.isEmpty { items.append(URLQueryItem(name: "f_search", value: terms.joined(separator: " "))) }
-        if categories != allCategories {
-            let shown = categories.reduce(0) { $0 | (categoryBits[$1] ?? 0) }
-            items.append(URLQueryItem(name: "f_cats", value: String(1023 & ~shown)))
-        }
+        // Always sent, so the categories picked here win over those an account leaves out by default.
+        let shown = categories.reduce(0) { $0 | (categoryBits[$1] ?? 0) }
+        items.append(URLQueryItem(name: "f_cats", value: String(1023 & ~shown)))
         if let next { items.append(URLQueryItem(name: "next", value: next)) }
         components.queryItems = items.isEmpty ? nil : items
         guard let url = components.url else { throw ContentError.invalidQuery }

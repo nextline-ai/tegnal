@@ -65,9 +65,10 @@ final class KeyedCatalogTests: XCTestCase {
                        #"female:"big breasts$" parody:"sample$" language:"korean$" artist:"sample artist$" -other:"excluded$""#)
         XCTAssertEqual(items.first { $0.name == "f_cats" }?.value, String(1023 & ~4))
         XCTAssertEqual(items.first { $0.name == "next" }?.value, "2999")
-        XCTAssertNil(try URLComponents(url: KeyedCatalogSource.searchURL(GalleryQuery(language: "all"), site: "https://keyed.example/",
-                                                                      categories: KeyedCatalogSource.allCategories, language: nil, next: nil),
-                                       resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(try URLComponents(url: KeyedCatalogSource.searchURL(GalleryQuery(language: "all"), site: "https://keyed.example/",
+                                                                        categories: KeyedCatalogSource.allCategories, language: nil, next: nil),
+                                         resolvingAgainstBaseURL: false)?.queryItems, [URLQueryItem(name: "f_cats", value: "0")],
+                       "Every category is asked for outright, so an account's default exclusions don't narrow the list")
 
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         let filtered = try await source.list(GalleryQuery(language: "all", text: "-female:marked_tag"), offset: 0, count: 5)
@@ -111,6 +112,132 @@ final class KeyedCatalogTests: XCTestCase {
             _ = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
             XCTFail("The notice image must not be shown as a page")
         } catch ContentError.imageLimit { }
+    }
+
+    func testImageHostsAnsweringInWordsReportTheAllowanceOrTheBan() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        let gallery = try await source.gallery(3000)
+        fixture.textAnswer = "You have reached the image limit, and do not have sufficient GP to buy a download quota."
+        do {
+            _ = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
+            XCTFail("The allowance notice must be reported, not read as a broken image")
+        } catch ContentError.imageLimit { }
+        XCTAssertFalse(fixture.requests.contains { $0.query?.hasPrefix("nl=") == true }, "The notice is the site's answer, so no other host is asked")
+        XCTAssertEqual(fixture.count(path: "/s/2222222222/3000-2"), 1)
+
+        fixture.textAnswer = "Your IP address has been temporarily banned for excessive pageloads which indicates that you are using automated mirroring/harvesting software. The ban expires in 59 minutes and 48 seconds"
+        do {
+            _ = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
+            XCTFail("The ban must be reported, not read as a broken image")
+        } catch ContentError.temporarilyBlocked { }
+        XCTAssertFalse(fixture.requests.contains { $0.query?.hasPrefix("nl=") == true })
+
+        XCTAssertNil(KeyedCatalogSource.textNotice(Data("<html><body>An error has occurred.</body></html>".utf8), mimeType: "text/html"),
+                     "Other words from a host leave the usual retry on another host")
+        XCTAssertNil(KeyedCatalogSource.textNotice(Data("You have reached the image limit".utf8), mimeType: "image/webp"), "Image bytes are never read as words")
+    }
+
+    func testNumberLookupsIgnoreTheAccountsOwnFilters() async throws {
+        let url = try XCTUnwrap(KeyedCatalogSource.keySearchURL(2990, site: "https://keyed.example/"))
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") }),
+                       ["f_search": "gid:2990", "f_cats": "0", "advsearch": "1", "f_sfl": "on", "f_sfu": "on", "f_sft": "on"],
+                       "Hidden languages, uploaders, tags and default categories must not hide the work being looked up")
+
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 1)
+        GalleryKeys.shared.removeAll()
+        _ = try await source.gallery(2990)
+        let lookup = try XCTUnwrap(fixture.requests.first { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.contains(.init(name: "f_search", value: "gid:2990")) == true })
+        XCTAssertEqual(URLComponents(url: lookup, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "f_sfl" }?.value, "on")
+    }
+
+    func testCardsReadWorksFromTheDetailsEndpointWithoutOpeningThem() async throws {
+        let fixture = fixture()
+        _ = try await MangaContentSource(transport: fixture.transport()).list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        // A source whose cached details are gone, as after the system emptied its caches.
+        let source = MangaContentSource(transport: fixture.transport())
+        XCTAssertNil(source.cachedPreview(3000))
+        let detailsBefore = fixture.count(path: "/api.php")
+        let workPagesBefore = fixture.requests.filter { $0.path.hasPrefix("/g/") }.count
+        async let first = source.preview(3000)
+        async let second = source.preview(3001)
+        async let third = source.preview(3002)
+        let works = try await [first, second, third]
+        XCTAssertEqual(works.map(\.id), [3000, 3001, 3002])
+        XCTAssertEqual(works[0].pageCount, 3)
+        XCTAssertEqual(works[0].pages.first?.thumbnailURL?.absoluteString, "https://covers.example/3000.jpg")
+        XCTAssertEqual(fixture.count(path: "/api.php") - detailsBefore, 1, "Cards asking together share one details request")
+        XCTAssertEqual(fixture.requests.filter { $0.path.hasPrefix("/g/") }.count, workPagesBefore, "A card never opens the work's own page")
+        XCTAssertNotNil(source.cachedPreview(3001))
+    }
+
+    func testAFailedDetailsRequestIsAskedOnceMore() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        fixture.failDetails = 1
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        XCTAssertNotNil(source.cachedPreview(3000), "Details lost to one failed request come with the next")
+        XCTAssertEqual(fixture.count(path: "/api.php"), 2)
+    }
+
+    func testARememberedKeyTheSiteRefusesIsLookedUpAgain() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 1)
+        GalleryKeys.shared.remember(2990, key: "ffffffffff")
+        let gallery = try await source.gallery(2990)
+        XCTAssertEqual(gallery.id, 2990)
+        XCTAssertEqual(GalleryKeys.shared.key(for: 2990), KeyedFixture.key(2990), "The key the site accepts replaces the refused one")
+        XCTAssertTrue(fixture.requests.contains { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.contains(.init(name: "f_search", value: "gid:2990")) == true })
+    }
+
+    func testPageLoadsOnOneWebsiteArePacedAndOtherWebsitesAreNotHeldUp() async throws {
+        let pacer = PagePacer(burst: 2, interval: .milliseconds(100))
+        let clock = ContinuousClock()
+        let burst = try await clock.measure { for _ in 0..<2 { try await pacer.wait(host: "a.example") } }
+        XCTAssertLessThan(burst, .milliseconds(50), "A short burst goes at once")
+        let paced = try await clock.measure { for _ in 0..<2 { try await pacer.wait(host: "a.example") } }
+        XCTAssertGreaterThanOrEqual(paced, .milliseconds(180), "Then one page load per interval")
+        let other = try await clock.measure { try await pacer.wait(host: "b.example") }
+        XCTAssertLessThan(other, .milliseconds(50))
+    }
+
+    func testFavoritesKeepTheirNoteAndARefusedChangeIsReported() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 1)
+        let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret")].map {
+            HTTPCookie(properties: [.domain: ".keyed.example", .path: "/", .name: $0.0, .value: $0.1])!
+        }
+        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        fixture.favoriteNote = "read later &amp; 다시"
+        try await source.setAccountFavorite(3000, saved: true, category: 2)
+        XCTAssertEqual(fixture.favoriteForms.last, "favcat=2&favnote=read+later+%26+%EB%8B%A4%EC%8B%9C&apply=Add+to+Favorites&update=1",
+                       "Moving a favorite sends its note back so the site keeps it")
+        fixture.favoriteReply = "Key missing, or incorrect key provided."
+        do {
+            try await source.setAccountFavorite(3000, saved: false)
+            XCTFail("A change the site refused must not pass as done")
+        } catch ContentError.galleryNotFound { }
+        XCTAssertEqual(KeyedCatalogSource.favoriteNote(in: #"<textarea name="favnote">a &lt;b&gt;</textarea>"#), "a <b>")
+    }
+
+    func testViewerAccountsKeepThePreviewsTheirWorkPageShows() {
+        let detail = String(decoding: KeyedFixture.viewerDetail(3000), as: UTF8.self)
+        let shown = KeyedCatalogSource.viewerPreviews(in: detail, galleryID: 3000)
+        XCTAssertEqual(shown[1], KeyedCatalogSource.Thumb(url: URL(string: "https://sheets.example/3000-0.png")!, crop: CGRect(x: 100, y: 0, width: 100, height: 150)))
+        let viewer = #"<script>var imagelist = [{"n":"one.jpg","k":"aaaaaaaaaa","t":"(https://sheets.example/3000-0.png) -0px 0"},{"n":"two.jpg","k":"bbbbbbbbbb","t":"https:\/\/sheets.example\/large-2.jpg"}];</script>"#
+        let entries = KeyedCatalogSource.viewerEntries(in: viewer, previews: shown)
+        XCTAssertEqual(entries[0]?.thumb, shown[0], "A listed preview that is not a plain address takes the work page's")
+        XCTAssertEqual(entries[1]?.thumb?.url.absoluteString, "https://sheets.example/large-2.jpg", "A plain listed address still wins")
+    }
+
+    func testViewerAndPageLinksOpenInTheApp() {
+        let key = KeyedFixture.key(3000)
+        XCTAssertEqual(GalleryIDParser.parse("https://keyed.example/mpv/3000/\(key)/#page2"), [3000])
+        XCTAssertEqual(GalleryKeys.shared.key(for: 3000), key, "A viewer link carries the work's key")
+        XCTAssertEqual(GalleryIDParser.parse("see https://keyed.example/s/abcdef1234/3001-5"), [3001])
+        XCTAssertNil(GalleryKeys.shared.key(for: 3001), "A page link's key belongs to the page, not the work")
+        XCTAssertEqual(ContentRoute.initial("https://keyed.example/mpv/3000/\(key)/"), .gallery(3000))
+        XCTAssertEqual(ContentRoute.initial("https://keyed.example/s/abcdef1234/3001-5"), .reader(3001, 5))
     }
 
     func testForgottenKeyIsFoundBySearchingTheNumber() async throws {
@@ -253,6 +380,13 @@ private final class KeyedFixture: @unchecked Sendable {
     private var forms: [String] = []
     var failFirstNode = false
     var allowanceUsed = false
+    /// Words the first image host sends instead of the image.
+    var textAnswer: String?
+    /// How many details requests fail before they answer.
+    var failDetails = 0
+    /// The note the favorites form shows, as the page writes it.
+    var favoriteNote = ""
+    var favoriteReply = "<html><script>window.opener.location.reload();</script></html>"
     /// The account reads in the multi-page viewer, so work pages link there instead of to each page.
     var viewer = false
     let image = Data(repeating: 0x42, count: 64)
@@ -347,10 +481,17 @@ private final class KeyedFixture: @unchecked Sendable {
         case "sheets.example":
             return url.path.hasPrefix("/large-") ? .data(200, image, ["Content-Type": "image/jpeg"]) : .data(200, Self.sheet, ["Content-Type": "image/png"])
         case "node1.volunteer.example":
+            if let textAnswer { return .data(200, Data(textAnswer.utf8), ["Content-Type": "text/html; charset=UTF-8"]) }
             return failFirstNode ? .data(503, Data(), [:]) : .data(200, image, ["Content-Type": "image/webp"])
         case "node2.volunteer.example": return .data(200, image, ["Content-Type": "image/webp"])
         case "notice.example": return .data(200, image, ["Content-Type": "image/gif"])
         case "api.keyed.example", "api.members.example":
+            let fails = lock.withLock { () -> Bool in
+                guard failDetails > 0 else { return false }
+                failDetails -= 1
+                return true
+            }
+            if fails { return .data(503, Data(), [:]) }
             return .data(200, try details(Self.body(request)), ["Content-Type": "application/json"])
         case "members.example":
             guard (request.value(forHTTPHeaderField: "Cookie") ?? "").contains("app_member_id=42") else {
@@ -371,7 +512,7 @@ private final class KeyedFixture: @unchecked Sendable {
             let next = items.first { $0.name == "next" }?.value
             let ids: [Int64] = next == nil ? [3002, 3001, 3000] : [2999, 2998]
             var shown = ids
-            if let cats = items.first(where: { $0.name == "f_cats" })?.value, let mask = Int(cats), mask & 4 == 0 { shown = ids.filter { $0 == 3001 } }
+            if let cats = items.first(where: { $0.name == "f_cats" })?.value, let mask = Int(cats), mask != 0, mask & 4 == 0 { shown = ids.filter { $0 == 3001 } }
             return .data(200, Self.listing(shown, next: next == nil ? 2999 : nil), ["Content-Type": "text/html"])
         case "/popular": return .data(200, Self.listing([2999, 3000, 3001], next: nil), ["Content-Type": "text/html"])
         case "/favorites.php":
@@ -381,8 +522,12 @@ private final class KeyedFixture: @unchecked Sendable {
             let next = items.first { $0.name == "next" }?.value
             return .data(200, next == nil ? Self.listing([2998, 2990], next: 2990) : Self.listing([2980], next: nil), ["Content-Type": "text/html"])
         case "/gallerypopups.php":
+            guard request.httpMethod == "POST" else {
+                let popup = #"<html><body><div id="galpop"><form method="post"><textarea name="favnote" maxlength="200">\#(favoriteNote)</textarea></form></div></body></html>"#
+                return .data(200, Data(popup.utf8), ["Content-Type": "text/html"])
+            }
             lock.withLock { forms.append(String(decoding: Self.body(request), as: UTF8.self)) }
-            return .data(200, Data("<html><script>window.opener.location.reload();</script></html>".utf8), ["Content-Type": "text/html"])
+            return .data(200, Data(favoriteReply.utf8), ["Content-Type": "text/html"])
         default:
             let parts = url.path.split(separator: "/")
             if parts.first == "g", parts.count == 3, let id = Int64(parts[1]), String(parts[2]) == Self.key(id) {

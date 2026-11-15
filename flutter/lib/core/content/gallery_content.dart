@@ -180,6 +180,8 @@ class NativeGallery {
       throw ContentError.invalidResponse;
     }
     if (json is! Map<String, Object?>) throw ContentError.invalidResponse;
+    // The site's own page answers a blocked work with its not-found page.
+    if (_flag(json['blocked'])) throw ContentError.galleryNotFound;
     final files = json['files'];
     if (files is! List || files.isEmpty || files.length > 10000 || files.any((file) => file is! Map)) throw ContentError.invalidResponse;
     final pages = <GalleryPage>[];
@@ -550,6 +552,10 @@ class GalleryBatch {
 abstract class ContentProviding {
   Future<List<TagSuggestion>> suggestions(String token) async => [];
   Future<NativeGallery> gallery(int id);
+
+  /// What a list card shows: title, tags, cover and page count. Sources whose works are costly to
+  /// open answer it more cheaply than [gallery].
+  Future<NativeGallery> preview(int id) => gallery(id);
   Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count});
   Future<Uint8List> image(GalleryPage page, {required int galleryID, required bool thumbnail});
   NativeGallery? cachedGallery(int id) => null;
@@ -584,6 +590,17 @@ sealed class ContentRoute {
         GalleryKeys.shared.remember(link.id, link.key);
         return GalleryRoute(link.id);
       }
+    }
+    if (url.path.startsWith('/mpv/')) {
+      final link = KeyedCatalogSource.viewerLinks(url.path).firstOrNull;
+      if (link != null) {
+        GalleryKeys.shared.remember(link.id, link.key);
+        return GalleryRoute(link.id);
+      }
+    }
+    if (url.path.startsWith('/s/')) {
+      final link = KeyedCatalogSource.pageLinks(url.path).firstOrNull;
+      if (link != null) return ReaderRoute(link.$1, link.$2);
     }
     // The site's own search form writes spaces as plus signs.
     final keyed = ContentURL.percentEncodedQueryItems(url).where((item) => item.$1 == 'f_search').firstOrNull?.$2;

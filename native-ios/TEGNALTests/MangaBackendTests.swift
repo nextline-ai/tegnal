@@ -160,6 +160,17 @@ final class MangaBackendTests: XCTestCase {
         XCTAssertEqual(fixture.count(path: "/"), 2)
     }
 
+    func testAWorkTheSiteBlocksReadsAsMissing() throws {
+        func info(blocked: Int) -> Data {
+            let hash = String(repeating: "a", count: 64)
+            return Data(#"var galleryinfo = {"id":"4000","blocked":\#(blocked),"title":"Sample","files":[{"hash":"\#(hash)","name":"1.webp","width":1,"height":1,"hasavif":1}]}"#.utf8)
+        }
+        XCTAssertThrowsError(try NativeGallery.parse(info(blocked: 1), id: 4000), "The site's own page answers it with its not-found page") {
+            XCTAssertEqual($0 as? ContentError, .galleryNotFound)
+        }
+        XCTAssertEqual(try NativeGallery.parse(info(blocked: 0), id: 4000).pages.count, 1)
+    }
+
     func testRemovedWorkDoesNotTriggerBackendRefresh() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         _ = try await source.list(GalleryQuery(), offset: 0, count: 2)

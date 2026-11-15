@@ -53,6 +53,15 @@ final class DocumentCatalogTests: XCTestCase {
         XCTAssertFalse(ContentTransport.allows(URL(string: "https://preview.example/0/2/0.jpg")!))
     }
 
+    func testListedWorksHandTheirKeysToTheAccountBasedCatalog() async throws {
+        GalleryKeys.shared.removeAll()
+        defer { GalleryKeys.shared.removeAll() }
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(), offset: 0, count: 2)
+        XCTAssertEqual(GalleryKeys.shared.key(for: 2000), "00000007d0", "The same number opens there without searching for it")
+        XCTAssertEqual(GalleryKeys.shared.key(for: 1999), "00000007cf")
+    }
+
     func testSearchPreviewsAvoidFetchingEveryFullDocument() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         let batch = try await source.list(GalleryQuery(), offset: 0, count: 2)
@@ -480,8 +489,9 @@ private final class CatalogFixture: @unchecked Sendable {
         var tags: [[String: Any]] = (languages[id] ?? ["korean"]).map { ["tag": ["language", $0]] }
         tags += [["tag": ["artist", "sample_artist"]], ["tag": ["parody", "sample_series"]], ["tag": ["other", "sample_tag"]]]
         if markEvenRows && id.isMultiple(of: 2) { tags.append(["tag": ["female", "marked tag"]]) }
+        let hex = String(id, radix: 16)
         return ["id": id, "title": "Sample {book}", "title_jpn": originalTitles[id] ?? NSNull(), "category": 2, "views": id * 10, "blocked": 0,
-                "thumb_extension": "jpg", "tags": tags]
+                "thumb_extension": "jpg", "tags": tags, "token": String(repeating: "0", count: 10 - hex.count) + hex]
     }
     func document(_ id: Int64) -> Data {
         var object = row(id)

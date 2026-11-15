@@ -17,6 +17,9 @@ final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     func gallery(_ id: Int64) async throws -> NativeGallery {
         try await SiteScope.$site.withValue(site) { try await inner.gallery(id) }
     }
+    func preview(_ id: Int64) async throws -> NativeGallery {
+        try await SiteScope.$site.withValue(site) { try await inner.preview(id) }
+    }
     func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch {
         try await SiteScope.$site.withValue(site) { try await inner.list(query, offset: offset, count: count) }
     }

@@ -400,18 +400,24 @@ class CoverQueueActor {
     final fallback = source is SiteFallbackContent ? source as SiteFallbackContent : null;
     // A saved work opens from whichever connected website still carries it, its own first.
     final other = site == null || fallback != null ? null : _siteSource(site);
+    // Title, tags, page count and a first-page cover are what a card shows, which some websites
+    // answer without opening the work; a cover chosen from a later page needs the work's pages.
+    final firstPageCover = (existing?.thumbPage ?? 1) <= 1;
     final NativeGallery gallery;
     try {
       if (fallback != null) {
         // Every read from a website that blocks bulk reading, answered or not, waits longer
         // before the next.
         try {
-          gallery = await fallback.gallery(galleryId, preferring: site, inBulk: true);
+          gallery = firstPageCover
+              ? await fallback.preview(galleryId, preferring: site, inBulk: true)
+              : await fallback.gallery(galleryId, preferring: site, inBulk: true);
         } finally {
           _readFromBlockingSite = fallback.tookBlockingRead(galleryId);
         }
       } else {
-        gallery = await (other ?? source).gallery(galleryId);
+        final reader = other ?? source;
+        gallery = firstPageCover ? await reader.preview(galleryId) : await reader.gallery(galleryId);
       }
     } on ContentError catch (error) {
       if (!error.isUnavailable(404) && !error.isUnavailable(410)) rethrow;
