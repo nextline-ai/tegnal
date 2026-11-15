@@ -183,6 +183,11 @@ struct MangaLibraryToolsView: View {
                                     Text(L10n.text("Still missing information: %@ works. Failed downloads can be retried.", String(env.coverQueueState.remaining)))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
+                                if let sites = sitesBlockingBulkReading {
+                                    Label(L10n.text("%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there.", sites), systemImage: "exclamationmark.triangle")
+                                        .font(.caption).foregroundStyle(.orange)
+                                        .accessibilityIdentifier("library.fillBlockingSites")
+                                }
                             }
 
                             Spacer()
@@ -321,6 +326,13 @@ struct MangaLibraryToolsView: View {
         }
     }
 
+    /// The connected websites, when every one of them blocks bulk reading.
+    private var sitesBlockingBulkReading: String? {
+        let sites = env.comicSites
+        guard !sites.isEmpty, sites.allSatisfy({ CoverFillGuard.blocksBulkReading($0) }) else { return nil }
+        return sites.joined(separator: ", ")
+    }
+
     private var queueProgressText: String {
         let state = env.coverQueueState
         let done = state.processed + state.failed + state.gone
@@ -346,7 +358,7 @@ struct MangaLibraryToolsView: View {
             Task { await env.coverQueueActor.resume() }
             env.coverQueueState.isPaused = false
         } else {
-            env.startCoverQueue()
+            env.startCoverQueue(manual: true)
         }
     }
 

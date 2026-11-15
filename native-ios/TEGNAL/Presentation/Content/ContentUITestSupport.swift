@@ -74,6 +74,17 @@ enum ContentUITestSupport {
             env.coverQueueState.remaining = 100
             env.coverQueueState.isRunning = true
         }
+        if ProcessInfo.processInfo.arguments.contains("--bulk-fill-warning-test") {
+            // The only connected website reads as the keyed kind, which blocks bulk reading.
+            for site in ComicSites.all where site != env.mangaSiteAddress { ComicSites.remove(site) }
+            let home = MangaUrls.home(forSite: env.mangaSiteAddress)
+            for (key, value) in [("manga.resolved_backend_site", home), ("manga.resolved_protocol", "keyed"),
+                                 ("manga.resolved_data_host", env.mangaSiteAddress), ("manga.resolved_cdn_host", env.mangaSiteAddress)] {
+                MangaUrls.preferences.set(value, forKey: key)
+            }
+            CoverFillGuard.forget()
+            for index in 1...20 { _ = try! env.database.upsertWork(galleryId: Int64(900000200 + index), metadataSource: nil, catalogMatched: false) }
+        }
         if ProcessInfo.processInfo.arguments.contains("--challenge-ui-test") {
             try! ChallengeUITestSupport.seed(env.booru)
         }

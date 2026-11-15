@@ -13,8 +13,10 @@ import '../../core/storage/library_maintenance.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
 import '../design/grouped_form.dart';
+import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import 'backup_reminder.dart';
+import 'cover_fill_warning.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
 import '../design/alert_dialog.dart';
@@ -272,6 +274,28 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
                                   style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
                                 ),
                                 if (queueCaption != null) Text(queueCaption, style: TegnalType.style(12, color: secondary)),
+                                if (sitesBlockingBulkReading(widget.library.content.comicSites) case final sites?)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 1, right: 4),
+                                          child: Icon(CupertinoIcons.exclamationmark_triangle, size: 13, color: SystemColors.orange.resolveFrom(context)),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            L10n.text(
+                                              '%@ may block your network address when many works are read at once, so filling asks first and reads slowly. Add another website and missing information is read from there.',
+                                              [sites],
+                                            ),
+                                            style: TegnalType.style(12, color: SystemColors.orange.resolveFrom(context)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

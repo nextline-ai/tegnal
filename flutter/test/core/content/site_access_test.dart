@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content/content_errors.dart';
 import 'package:tegnal/core/content/content_transport.dart';
+import 'package:tegnal/core/content/cover_queue.dart';
 import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/content/keyed_catalog_source.dart';
 import 'package:tegnal/core/content/keyed_work_extras.dart';
@@ -26,14 +27,18 @@ import 'content_test_support.dart';
 const _hash = '0123456789abcdef0123456789abcdef';
 
 class _FakeSite extends ContentProviding {
-  _FakeSite(this.name, this.works);
+  _FakeSite(this.name, this.works, {this.refusal});
   final String name;
   final Map<int, String> works;
+
+  /// What the website answers every request with instead of a work.
+  final ContentError? refusal;
   int calls = 0;
 
   @override
   Future<NativeGallery> gallery(int id) async {
     calls += 1;
+    if (refusal case final refusal?) throw refusal;
     final title = works[id];
     if (title == null) throw ContentError.galleryNotFound;
     return NativeGallery(id: id, title: title, artists: const [], language: '', type: '', tags: const [], pages: const []);
@@ -274,6 +279,207 @@ void main() {
       await expectLater(content.gallery(9), throwsA(ContentError.galleryNotFound));
       memory.forget('b.example');
       expect(memory.site(2), isNull);
+    });
+
+    test('a fill reads from other websites while one that blocks bulk reading is connected', () async {
+      final blocking = _FakeSite('keyed.example', {1: 'one', 3: 'three'});
+      final mirror = _FakeSite('b.example', {1: 'one', 2: 'two'});
+      final content = SiteFallbackContent(
+        primary: blocking,
+        sourceFor: (_) => mirror,
+        sites: () => ('keyed.example', ['keyed.example', 'b.example']),
+        memory: WorkSiteMemory(),
+        blocksBulkReading: (site) => site == 'keyed.example',
+      );
+
+      expect((await content.gallery(1, preferring: 'keyed.example', inBulk: true)).title, 'one');
+      expect(blocking.calls, 0, reason: 'A fill never reads the website that blocks bulk reading while another can be read');
+      expect(content.readsOnlyBlockingSites, isFalse);
+      await expectLater(content.gallery(3, inBulk: true), throwsA(isA<LeftForBlockingSite>()), reason: 'Not missing: the skipped website has it');
+      expect((await content.gallery(3)).title, 'three', reason: 'Opening a work by hand still reads every website');
+
+      final alone = SiteFallbackContent(
+        primary: blocking,
+        sourceFor: (_) => mirror,
+        sites: () => ('keyed.example', ['keyed.example']),
+        memory: WorkSiteMemory(),
+        blocksBulkReading: (site) => site == 'keyed.example',
+      );
+      expect((await alone.gallery(1, inBulk: true)).title, 'one', reason: 'With no other website, the fill reads it (after asking, and slowly)');
+      expect(alone.readsOnlyBlockingSites, isTrue);
+    });
+
+    test('the fill leaves works only a blocking website carries as failed, not gone', () async {
+      final db = AppDatabase.inMemory();
+      final root = Directory.systemTemp.createTempSync('bulk-fill');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final blocking = _FakeSite('keyed.example', {7: 'seven'});
+      final mirror = _FakeSite('b.example', {});
+      final content = SiteFallbackContent(
+        primary: blocking,
+        sourceFor: (_) => mirror,
+        sites: () => ('keyed.example', ['keyed.example', 'b.example']),
+        memory: WorkSiteMemory(),
+        blocksBulkReading: (site) => site == 'keyed.example',
+      );
+      db.upsertWork(galleryId: 7, site: 'keyed.example');
+      final state = CoverQueueState();
+      await CoverQueueActor(
+        database: db,
+        thumbsDir: root,
+        source: content,
+        allowsBackfill: () => true,
+        delay: Duration.zero,
+        slowDelay: Duration.zero,
+      ).start(state);
+      expect(blocking.calls, 0);
+      expect((state.failed, state.gone), (1, 0));
+      expect(db.getWork(7)!.thumbStatus, 'failed', reason: 'Tried again on a later fill');
+
+      await CoverQueueActor(
+        database: db,
+        thumbsDir: root,
+        source: content,
+        allowsBackfill: () => true,
+        delay: Duration.zero,
+        slowDelay: Duration.zero,
+      ).start(CoverQueueState(), mayRead: () => false);
+      expect(mirror.calls, 1, reason: 'A run that must ask first reads nothing');
+    });
+
+    test('reading from a blocking website waits longer between works', () async {
+      final db = AppDatabase.inMemory();
+      final root = Directory.systemTemp.createTempSync('bulk-fill');
+      addTearDown(() => root.deleteSync(recursive: true));
+      // Work 2 is missing: an unanswered read waits as long as an answered one.
+      final blocking = _FakeSite('keyed.example', {1: 'one'});
+      final content = SiteFallbackContent(
+        primary: blocking,
+        sourceFor: (_) => blocking,
+        sites: () => ('keyed.example', ['keyed.example']),
+        memory: WorkSiteMemory(),
+        blocksBulkReading: (site) => site == 'keyed.example',
+      );
+      for (final id in [1, 2]) {
+        db.upsertWork(galleryId: id, site: 'keyed.example');
+      }
+      final clock = Stopwatch()..start();
+      await CoverQueueActor(
+        database: db,
+        thumbsDir: root,
+        source: content,
+        allowsBackfill: () => true,
+        delay: Duration.zero,
+        slowDelay: const Duration(milliseconds: 300),
+      ).start(CoverQueueState());
+      expect(clock.elapsed, greaterThanOrEqualTo(const Duration(milliseconds: 600)));
+      expect(blocking.calls, 2);
+    });
+
+    test('a website that stops answering this device ends the fill', () async {
+      final db = AppDatabase.inMemory();
+      final root = Directory.systemTemp.createTempSync('bulk-fill');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final blocking = _FakeSite('keyed.example', {}, refusal: ContentError.temporarilyBlocked);
+      final content = SiteFallbackContent(
+        primary: blocking,
+        sourceFor: (_) => blocking,
+        sites: () => ('keyed.example', ['keyed.example']),
+        memory: WorkSiteMemory(),
+        blocksBulkReading: (site) => site == 'keyed.example',
+      );
+      for (var id = 1; id <= 5; id++) {
+        db.upsertWork(galleryId: id, site: 'keyed.example');
+      }
+      final state = CoverQueueState();
+      await CoverQueueActor(
+        database: db,
+        thumbsDir: root,
+        source: content,
+        allowsBackfill: () => true,
+        delay: Duration.zero,
+        slowDelay: Duration.zero,
+      ).start(state);
+      expect(blocking.calls, 1, reason: 'Reading on would only keep the device blocked for longer');
+      expect(state.failed, 1);
+      expect(state.error, ContentError.temporarilyBlocked.errorDescription);
+    });
+
+    test('filling from only blocking websites asks first and remembers the answer', () {
+      final defaults = MemoryPreferences();
+      bool blocks(String site) => site.startsWith('keyed');
+      CoverFillOutcome outcome(List<String> sites, int pending, {bool manual = false}) =>
+          CoverFillGuard.outcome(sites: sites, blocks: blocks, pending: () => pending, manual: manual, defaults: defaults);
+      expect(CoverFillGuard.blocksBulkReadingWith('keyed.example', MangaBackend.keyed), isTrue);
+      expect(CoverFillGuard.blocksBulkReadingWith('indexed.example', MangaBackend.indexed), isFalse);
+      expect(CoverFillGuard.blocksBulkReadingWith('indexed.example', null), isFalse);
+      expect(CoverFillGuard.skipped(['keyed.example', 'b.example'], blocks: blocks), {'keyed.example'});
+      expect(CoverFillGuard.skipped(['keyed.example'], blocks: blocks), isEmpty, reason: 'Nothing is skipped when nothing else can be read');
+
+      expect(outcome([], 500), const CoverFillRun());
+      expect(outcome(['keyed.example', 'b.example'], 500), const CoverFillRun(), reason: 'Another website is read instead');
+      expect(outcome(['keyed.example'], CoverFillGuard.quietLimit), const CoverFillRun(), reason: 'A few new saves are read without asking');
+      expect(outcome(['keyed.example'], 50), const CoverFillAsk(50, ['keyed.example']));
+
+      CoverFillGuard.record(CoverFillDecision.declined, 50, defaults);
+      expect(outcome(['keyed.example'], 50), const CoverFillHold());
+      expect(outcome(['keyed.example'], 55), const CoverFillHold());
+      expect(outcome(['keyed.example'], 50, manual: true), const CoverFillAsk(50, ['keyed.example']), reason: 'The fill button asks again');
+      expect(outcome(['keyed.example'], 61), const CoverFillAsk(61, ['keyed.example']), reason: 'An import asks again');
+
+      CoverFillGuard.record(CoverFillDecision.approved, 61, defaults);
+      expect(outcome(['keyed.example'], 61), const CoverFillRun());
+      expect(outcome(['keyed.example'], 20), const CoverFillRun());
+      expect(CoverFillGuard.decision(defaults).$2, 20, reason: 'Filled works lower the mark');
+      expect(outcome(['keyed.example'], 30), const CoverFillRun());
+      expect(outcome(['keyed.example'], 31), const CoverFillAsk(31, ['keyed.example']), reason: 'Works saved since are asked about');
+
+      CoverFillGuard.forget(defaults);
+      expect(CoverFillGuard.decision(defaults).$1, CoverFillDecision.none);
+    });
+
+    test('the fill driver asks the app before reading many works from a blocking website', () async {
+      final db = AppDatabase.inMemory();
+      final root = Directory.systemTemp.createTempSync('bulk-fill');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final blocking = _FakeSite('keyed.example', {});
+      final content = SiteFallbackContent(
+        primary: blocking,
+        sourceFor: (_) => blocking,
+        sites: () => ('keyed.example', ['keyed.example']),
+        memory: WorkSiteMemory(),
+        blocksBulkReading: (site) => site == 'keyed.example',
+      );
+      for (var id = 1; id <= 20; id++) {
+        db.upsertWork(galleryId: id, site: 'keyed.example');
+      }
+      final queue = CoverQueue.withActor(
+        CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: () => true, delay: Duration.zero, slowDelay: Duration.zero),
+        allowsBackfill: () => true,
+        sites: () => ['keyed.example'],
+        blocksBulkReading: (site) => site == 'keyed.example',
+        decisions: MemoryPreferences(),
+      );
+      final asked = <(int, List<String>)>[];
+      queue.askBeforeBulkFill = (pending, sites) => asked.add((pending, sites));
+
+      queue.start();
+      expect(queue.running, isNull);
+      expect(asked.single.$1, 20);
+      expect(asked.single.$2, ['keyed.example']);
+      queue.start();
+      expect(asked, hasLength(1), reason: 'One question at a time');
+
+      queue.answerBulkFill(CoverFillDecision.declined, 20);
+      queue.start();
+      expect(queue.running, isNull, reason: 'Not now holds automatic fills');
+      expect(asked, hasLength(1));
+      queue.toggle();
+      expect(asked, hasLength(2), reason: 'The fill button asks again');
+
+      queue.answerBulkFill(CoverFillDecision.approved, 20);
+      await queue.running;
+      expect(blocking.calls, 20);
     });
 
     test('work sites are kept across launches', () async {

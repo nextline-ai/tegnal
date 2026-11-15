@@ -44,6 +44,7 @@ import '../presentation/navigation/app_state.dart';
 import '../presentation/navigation/root_tab_view.dart';
 import '../presentation/navigation/tab_navigator.dart';
 import '../presentation/settings/backup_reminder.dart';
+import '../presentation/settings/cover_fill_warning.dart';
 import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
 import '../presentation/settings/drive_sync_section.dart';
@@ -237,6 +238,19 @@ class _RootState extends State<_Root> {
     services.recentImages;
     // Finished weeks and months become reports and recaps, as the native app does on launch.
     if (!services.isTesting) services.taste.prepareCompletedReports();
+    services.coverQueue.askBeforeBulkFill = (pending, sites) {
+      if (!mounted) {
+        services.coverQueue.asksBeforeBulkFill = false;
+        return;
+      }
+      showCoverFillSiteWarning(
+        context,
+        queue: services.coverQueue,
+        pending: pending,
+        sites: sites,
+        addWebsite: () => showWebsiteConnectionEditor(context, content: services.content, state: state),
+      );
+    };
     if (!services.isTesting) services.coverQueue.start();
     // Sync and the cover queue run only while the app is in front, as on iOS.
     _lifecycle = AppLifecycleListener(

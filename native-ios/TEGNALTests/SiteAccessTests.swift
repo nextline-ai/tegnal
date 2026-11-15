@@ -237,6 +237,127 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertNil(memory.site(for: 2))
     }
 
+    // MARK: Filling from websites that block bulk reading
+
+    func testAFillReadsFromOtherWebsitesWhileOneThatBlocksBulkReadingIsConnected() async throws {
+        let blocking = FakeSite(name: "keyed.example", works: [1: "one", 3: "three"])
+        let mirror = FakeSite(name: "b.example", works: [1: "one", 2: "two"])
+        let content = SiteFallbackContent(primary: blocking, sourceFor: { _ in mirror },
+                                          sites: { ("keyed.example", ["keyed.example", "b.example"]) }, memory: WorkSiteMemory(file: nil),
+                                          blocksBulkReading: { $0 == "keyed.example" })
+
+        let filled = try await content.gallery(1, preferring: "keyed.example", inBulk: true)
+        XCTAssertEqual(filled.title, "one")
+        let checked = await blocking.calls
+        XCTAssertEqual(checked, 0, "A fill never reads the website that blocks bulk reading while another can be read")
+        XCTAssertFalse(content.readsOnlyBlockingSites)
+        do {
+            _ = try await content.gallery(3, preferring: nil, inBulk: true)
+            XCTFail("A work only the skipped website carries is left for later")
+        } catch { XCTAssertTrue(error is CoverFillGuard.LeftForBlockingSite, "Not missing: the skipped website has it") }
+
+        let opened = try await content.gallery(3)
+        XCTAssertEqual(opened.title, "three", "Opening a work by hand still reads every website")
+
+        let alone = SiteFallbackContent(primary: blocking, sourceFor: { _ in mirror }, sites: { ("keyed.example", ["keyed.example"]) },
+                                        memory: WorkSiteMemory(file: nil), blocksBulkReading: { $0 == "keyed.example" })
+        let only = try await alone.gallery(1, preferring: nil, inBulk: true)
+        XCTAssertEqual(only.title, "one", "With no other website, the fill reads it (after asking, and slowly)")
+        XCTAssertTrue(alone.readsOnlyBlockingSites)
+    }
+
+    func testTheFillLeavesWorksOnlyABlockingWebsiteCarriesAsFailedNotGone() async throws {
+        let db = try AppDatabase.inMemory()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("bulk-fill-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocking = FakeSite(name: "keyed.example", works: [7: "seven"])
+        let mirror = FakeSite(name: "b.example", works: [:])
+        let content = SiteFallbackContent(primary: blocking, sourceFor: { _ in mirror },
+                                          sites: { ("keyed.example", ["keyed.example", "b.example"]) }, memory: WorkSiteMemory(file: nil),
+                                          blocksBulkReading: { $0 == "keyed.example" })
+        _ = try db.upsertWork(galleryId: 7, metadataSource: nil, catalogMatched: false, site: "keyed.example")
+        let state = CoverQueueState()
+        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .zero).start(state: state)
+        let checked = await blocking.calls
+        XCTAssertEqual(checked, 0)
+        XCTAssertEqual(state.failed, 1)
+        XCTAssertEqual(state.gone, 0)
+        XCTAssertEqual(try db.getWork(galleryId: 7)?.thumbStatus, "failed", "Tried again on a later fill")
+
+        let stopped = CoverQueueState()
+        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .zero)
+            .start(state: stopped, mayRead: { false })
+        let mirrorCalls = await mirror.calls
+        XCTAssertEqual(mirrorCalls, 1, "A run that must ask first reads nothing")
+    }
+
+    func testReadingFromABlockingWebsiteWaitsLongerBetweenWorks() async throws {
+        let db = try AppDatabase.inMemory()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("bulk-fill-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Work 2 is missing: an unanswered read waits as long as an answered one.
+        let blocking = FakeSite(name: "keyed.example", works: [1: "one"])
+        let content = SiteFallbackContent(primary: blocking, sourceFor: { _ in blocking }, sites: { ("keyed.example", ["keyed.example"]) },
+                                          memory: WorkSiteMemory(file: nil), blocksBulkReading: { $0 == "keyed.example" })
+        for id: Int64 in [1, 2] { _ = try db.upsertWork(galleryId: id, metadataSource: nil, catalogMatched: false, site: "keyed.example") }
+        let started = ContinuousClock.now
+        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .milliseconds(300))
+            .start(state: CoverQueueState())
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - started, .milliseconds(600))
+        let calls = await blocking.calls
+        XCTAssertEqual(calls, 2)
+    }
+
+    func testAWebsiteThatStopsAnsweringThisDeviceEndsTheFill() async throws {
+        let db = try AppDatabase.inMemory()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("bulk-fill-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocking = FakeSite(name: "keyed.example", works: [:], refusal: .temporarilyBlocked)
+        let content = SiteFallbackContent(primary: blocking, sourceFor: { _ in blocking }, sites: { ("keyed.example", ["keyed.example"]) },
+                                          memory: WorkSiteMemory(file: nil), blocksBulkReading: { $0 == "keyed.example" })
+        for id: Int64 in 1...5 { _ = try db.upsertWork(galleryId: id, metadataSource: nil, catalogMatched: false, site: "keyed.example") }
+        let state = CoverQueueState()
+        await CoverQueueActor(database: db, thumbsDir: root, source: content, allowsBackfill: { true }, delay: .zero, slowDelay: .zero).start(state: state)
+        let calls = await blocking.calls
+        XCTAssertEqual(calls, 1, "Reading on would only keep the device blocked for longer")
+        XCTAssertEqual(state.failed, 1)
+        XCTAssertEqual(state.error, ContentError.temporarilyBlocked.localizedDescription)
+    }
+
+    func testFillingFromOnlyBlockingWebsitesAsksFirstAndRemembersTheAnswer() throws {
+        let defaults = UserDefaults(suiteName: "bulk-fill-\(UUID().uuidString)")!
+        let blocks: (String) -> Bool = { $0.hasPrefix("keyed") }
+        func outcome(_ sites: [String], _ pending: Int, manual: Bool = false) -> CoverFillGuard.Outcome {
+            CoverFillGuard.outcome(sites: sites, blocks: blocks, pending: { pending }, manual: manual, defaults: defaults)
+        }
+        XCTAssertTrue(CoverFillGuard.blocksBulkReading("keyed.example", backend: .keyed))
+        XCTAssertFalse(CoverFillGuard.blocksBulkReading("indexed.example", backend: .indexed))
+        XCTAssertFalse(CoverFillGuard.blocksBulkReading("indexed.example", backend: nil))
+        XCTAssertEqual(CoverFillGuard.skipped(among: ["keyed.example", "b.example"], blocks: blocks), ["keyed.example"])
+        XCTAssertEqual(CoverFillGuard.skipped(among: ["keyed.example"], blocks: blocks), [], "Nothing is skipped when nothing else can be read")
+
+        XCTAssertEqual(outcome([], 500), .run)
+        XCTAssertEqual(outcome(["keyed.example", "b.example"], 500), .run, "Another website is read instead")
+        XCTAssertEqual(outcome(["keyed.example"], CoverFillGuard.quietLimit), .run, "A few new saves are read without asking")
+        XCTAssertEqual(outcome(["keyed.example"], 50), .ask(pending: 50, sites: ["keyed.example"]))
+
+        CoverFillGuard.record(.declined, pending: 50, in: defaults)
+        XCTAssertEqual(outcome(["keyed.example"], 50), .hold)
+        XCTAssertEqual(outcome(["keyed.example"], 55), .hold)
+        XCTAssertEqual(outcome(["keyed.example"], 50, manual: true), .ask(pending: 50, sites: ["keyed.example"]), "The fill button asks again")
+        XCTAssertEqual(outcome(["keyed.example"], 61), .ask(pending: 61, sites: ["keyed.example"]), "An import asks again")
+
+        CoverFillGuard.record(.approved, pending: 61, in: defaults)
+        XCTAssertEqual(outcome(["keyed.example"], 61), .run)
+        XCTAssertEqual(outcome(["keyed.example"], 20), .run)
+        XCTAssertEqual(CoverFillGuard.decision(in: defaults).baseline, 20, "Filled works lower the mark")
+        XCTAssertEqual(outcome(["keyed.example"], 30), .run)
+        XCTAssertEqual(outcome(["keyed.example"], 31), .ask(pending: 31, sites: ["keyed.example"]), "Works saved since are asked about")
+
+        CoverFillGuard.forget(in: defaults)
+        XCTAssertEqual(CoverFillGuard.decision(in: defaults).0, .none)
+    }
+
     func testWorkSitesAreKeptAcrossLaunches() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("work-sites-\(UUID().uuidString).plist")
         defer { try? FileManager.default.removeItem(at: file) }
@@ -503,10 +624,13 @@ private final class Recorder: @unchecked Sendable {
 private actor FakeSite: ContentProviding {
     let name: String
     let works: [Int64: String]
+    /// What the website answers every request with instead of a work.
+    let refusal: ContentError?
     private(set) var calls = 0
-    init(name: String, works: [Int64: String]) { self.name = name; self.works = works }
+    init(name: String, works: [Int64: String], refusal: ContentError? = nil) { self.name = name; self.works = works; self.refusal = refusal }
     func gallery(_ id: Int64) async throws -> NativeGallery {
         calls += 1
+        if let refusal { throw refusal }
         guard let title = works[id] else { throw ContentError.galleryNotFound }
         return NativeGallery(id: id, title: title, artists: [], language: "", type: "", tags: [], pages: [])
     }

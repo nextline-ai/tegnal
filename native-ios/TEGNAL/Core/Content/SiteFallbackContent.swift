@@ -107,6 +107,7 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
     private let sourceFor: SourceFor
     private let sites: @Sendable () -> (active: String, all: [String])
     private let memory: WorkSiteMemory
+    private let blocksBulkReading: @Sendable (String) -> Bool
     private let lock = NSLock()
     /// The website each work in this session was read from, so its pages load there too.
     private nonisolated(unsafe) var serving: [Int64: String] = [:]
@@ -116,11 +117,13 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
     init(primary: any ContentProviding = MangaContentSource.shared,
          sourceFor: @escaping SourceFor = { SiteContent.for($0) },
          sites: @escaping @Sendable () -> (active: String, all: [String]) = { (ComicSites.active, ComicSites.all) },
-         memory: WorkSiteMemory = .shared) {
+         memory: WorkSiteMemory = .shared,
+         blocksBulkReading: @escaping @Sendable (String) -> Bool = { CoverFillGuard.blocksBulkReading($0) }) {
         self.primary = primary
         self.sourceFor = sourceFor
         self.sites = sites
         self.memory = memory
+        self.blocksBulkReading = blocksBulkReading
     }
 
     /// Names the website a saved work came from, so it is tried right after the checked website.
@@ -161,8 +164,13 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
 
     func gallery(_ id: Int64) async throws -> NativeGallery { try await gallery(id, preferring: nil) }
 
-    func gallery(_ id: Int64, preferring preferred: String?) async throws -> NativeGallery {
-        let order = candidates(for: id, preferring: preferred)
+    /// `inBulk` reads for a background fill: websites that block bulk reading are skipped while
+    /// another connected website can be read, and a work only they carry is left for later.
+    func gallery(_ id: Int64, preferring preferred: String?, inBulk: Bool = false) async throws -> NativeGallery {
+        var order = candidates(for: id, preferring: preferred)
+        let skipped = inBulk ? CoverFillGuard.skipped(among: sites().all, blocks: blocksBulkReading) : []
+        let skips = order.contains(where: skipped.contains)
+        if skips { order.removeAll(where: skipped.contains) }
         guard !order.isEmpty else { return try await primary.gallery(id) }
         var firstError: Error?
         for site in order {
@@ -178,7 +186,15 @@ final class SiteFallbackContent: ContentProviding, WorkExtrasProviding, @uncheck
                 firstError = firstError ?? error
             }
         }
+        // Not missing: a skipped website may carry it.
+        if skips { throw CoverFillGuard.LeftForBlockingSite() }
         throw firstError ?? ContentError.galleryNotFound
+    }
+
+    /// Whether every connected website blocks bulk reading, so a fill can read only from them.
+    var readsOnlyBlockingSites: Bool {
+        let all = sites().all
+        return !all.isEmpty && all.allSatisfy(blocksBulkReading)
     }
 
     private func record(_ id: Int64, site: String, afterFailure: Bool) {
