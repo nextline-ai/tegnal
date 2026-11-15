@@ -370,6 +370,26 @@ final class LibrarySyncTests: XCTestCase {
         XCTAssertNil(disabled)
     }
 
+    /// Sync left off before the reminder existed asks once; a new install or a turn-off made
+    /// through the warning never does.
+    @MainActor func testOffReminderAsksOnlyForSyncLeftOffEarlier() {
+        let name = "work.nextline.tegnal.off-reminder-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertFalse(LibraryCloudSync(defaults: defaults).needsOffReminder, "New installs start with sync on")
+        defaults.set(false, forKey: LibraryCloudSync.enabledKey)
+        let earlier = LibraryCloudSync(defaults: defaults)
+        XCTAssertTrue(earlier.needsOffReminder)
+        earlier.offReminderAnswered()
+        XCTAssertFalse(earlier.needsOffReminder)
+        XCTAssertFalse(LibraryCloudSync(defaults: defaults).needsOffReminder, "Answered once, it stays answered")
+        let fresh = UserDefaults(suiteName: name + ".fresh")!
+        defer { fresh.removePersistentDomain(forName: name + ".fresh") }
+        let warned = LibraryCloudSync(defaults: fresh)
+        warned.enabled = false
+        XCTAssertFalse(LibraryCloudSync(defaults: fresh).needsOffReminder, "Turning it off now already showed the warning")
+    }
+
     @MainActor func testRecentWorksAndImagesMergeEntryByEntryThroughICloudRows() throws {
         let a = try adapter(), b = try adapter()
         let covers = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

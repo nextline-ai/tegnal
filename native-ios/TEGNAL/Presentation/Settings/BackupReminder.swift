@@ -84,7 +84,8 @@ struct BackupReminderModifier: ViewModifier {
         #if DEBUG
         if ContentUITestSupport.enabled && !ProcessInfo.processInfo.arguments.contains("--backup-reminder-test") { return }
         #endif
-        guard env.isOnboardingCompleted, !asking, document == nil else { return }
+        // The one-time iCloud reminder goes first; this one waits for a later visit.
+        guard env.isOnboardingCompleted, !env.sync.needsOffReminder, !asking, document == nil else { return }
         let works = (try? env.database.worksCount()) ?? 0
         guard works > 0 || !env.booru.favoriteIDs.isEmpty else { return }
         #if DEBUG

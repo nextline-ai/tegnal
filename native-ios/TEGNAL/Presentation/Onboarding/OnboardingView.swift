@@ -88,11 +88,6 @@ public struct OnboardingView: View {
                     }
                 }
             }.padding(18).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle(L10n.text("iCloud Sync"), isOn: Binding(get: { env.sync.enabled }, set: { env.sync.enabled = $0 }))
-                Text(L10n.text("Sync saved items and settings across your devices."))
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
         }
     }
 

@@ -49,6 +49,17 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(value.isHittable, "Missing control: " + id)
         return value
     }
+    /// The turn-off sheet keeps "Keep iCloud Sync On" over the end of the page, so scroll until
+    /// the control clears it; a tap behind the bar would keep sync on instead.
+    private func revealAboveKeep(_ app: XCUIApplication, _ id: String) -> XCUIElement {
+        let value = element(app, id), keep = element(app, "icloudOff.keep")
+        for _ in 0..<8 {
+            if value.exists && value.isHittable && value.frame.maxY < keep.frame.minY { return value }
+            app.swipeUp()
+        }
+        XCTAssertLessThan(value.frame.maxY, keep.frame.minY, "Covered control: " + id)
+        return value
+    }
     /// A card's menu sits in its corner, so the press names a point on the artwork.
     private func pressArtwork(_ card: XCUIElement) {
         card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.65)).press(forDuration: 0.7)
@@ -903,16 +914,75 @@ final class BooruUITests: XCTestCase {
         capture(app, "Autoplay video details and copy ID")
     }
 
+    /// iCloud lives at the end of Library Management, and backing out of turning it off keeps it on.
     func testICloudDisableWarningAndDeveloperEmail() {
         let app = launch()
         app.tabBars.buttons["More"].tap()
+        reveal(app, "booru.libraryManagement").tap()
         let toggle = reveal(app, "settings.icloud")
         XCTAssertEqual(toggle.value as? String, "1")
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
-        XCTAssertTrue(app.alerts["Turn Off iCloud Sync?"].waitForExistence(timeout: 5))
-        app.alerts.buttons["Cancel"].tap(); XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(element(app, "icloudOff.keep").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Turn Off iCloud Sync?"].exists)
+        capture(app, "iCloud turn-off losses")
+        element(app, "icloudOff.keep").tap()
+        XCTAssertTrue(element(app, "icloudOff.keep").waitForNonExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "1")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(reveal(app, "developer.email").exists)
         capture(app, "SVG developer identity and contact")
+    }
+
+    /// Sync left off from the old onboarding switch asks once, can't be swiped away, and its main
+    /// button turns sync back on.
+    func testICloudOffReminderTurnsSyncBackOn() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--booru-ui-test", "--icloud-off-reminder-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let keep = element(app, "icloudOff.keep")
+        XCTAssertTrue(keep.waitForExistence(timeout: 10))
+        XCTAssertEqual(keep.label, "Turn iCloud Sync Back On")
+        XCTAssertTrue(app.staticTexts["iCloud Sync Is Off"].exists)
+        XCTAssertTrue(element(app, "icloudOff.storage").exists)
+        capture(app, "iCloud off reminder")
+        app.swipeDown()
+        XCTAssertTrue(keep.waitForExistence(timeout: 2), "The reminder closes only by choosing")
+        keep.tap()
+        XCTAssertTrue(keep.waitForNonExistence(timeout: 5))
+        app.tabBars.buttons["More"].tap()
+        reveal(app, "booru.libraryManagement").tap()
+        XCTAssertEqual(reveal(app, "settings.icloud").value as? String, "1")
+    }
+
+    /// Turning sync off waits out the reading time, needs every acknowledgment and a full hold.
+    func testICloudTurnOffNeedsEveryStep() {
+        let app = launch()
+        app.tabBars.buttons["More"].tap()
+        reveal(app, "booru.libraryManagement").tap()
+        let toggle = reveal(app, "settings.icloud")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        XCTAssertTrue(element(app, "icloudOff.keep").waitForExistence(timeout: 5))
+        let forward = revealAboveKeep(app, "icloudOff.continue")
+        XCTAssertFalse(forward.isEnabled, "Continue waits for the reading time")
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: forward)
+        waitForExpectations(timeout: 15)
+        forward.tap()
+        XCTAssertTrue(element(app, "icloudOff.backup").waitForExistence(timeout: 5))
+        for item in ["deviceOnly", "deletion"] { revealAboveKeep(app, "icloudOff.ack." + item).tap() }
+        XCTAssertFalse(revealAboveKeep(app, "icloudOff.continue").isEnabled, "Every acknowledgment is needed")
+        revealAboveKeep(app, "icloudOff.ack.otherDevices").tap()
+        capture(app, "iCloud turn-off acknowledgments")
+        revealAboveKeep(app, "icloudOff.continue").tap()
+        let hold = element(app, "icloudOff.hold")
+        XCTAssertTrue(hold.waitForExistence(timeout: 5))
+        hold.press(forDuration: 2)
+        XCTAssertTrue(hold.exists, "Letting go early keeps sync on")
+        XCTAssertEqual(toggle.value as? String, "1")
+        hold.press(forDuration: 6)
+        XCTAssertTrue(hold.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertTrue(element(app, "settings.icloudStatus").label.contains("only on this device"))
+        capture(app, "iCloud sync off warning")
     }
 
     func testImageViewerKeepsCurrentWorkAcrossCompactAndWideViewports() {

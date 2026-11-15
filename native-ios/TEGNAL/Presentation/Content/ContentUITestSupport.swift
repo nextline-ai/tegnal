@@ -113,6 +113,7 @@ enum ContentUITestSupport {
                     title: "샘플 작품 \(index + 1)", bookmarkedAt: String(format: "2026-%02d-%02dT12:00:00Z", month, day))
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--icloud-off-reminder-test") { env.sync.simulateSyncLeftOffBeforeReminder() }
         return env
     }
     static let defaults: UserDefaults = {
