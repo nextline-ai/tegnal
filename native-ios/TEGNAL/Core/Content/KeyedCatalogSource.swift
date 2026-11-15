@@ -346,6 +346,8 @@ actor KeyedCatalogSource {
             do { return try await fetch(shown.url, galleryID: galleryID, limit: 24_000_000, site: site) }
             catch {
                 try Task.checkCancellation()
+                // A notice in place of the image is the site's answer, not one host's failure.
+                if let notice = error as? ContentError, notice == .imageLimit || notice == .signInRequired { throw notice }
                 // Another volunteer host serves the same image when this one fails.
                 guard attempt < 2, let next = shown.reload, next != reload else { throw error }
                 reload = next
@@ -360,7 +362,23 @@ actor KeyedCatalogSource {
         let (data, response) = try await transport.get(url, limit: limit, galleryID: galleryID)
         try prepare(site)
         guard response.mimeType?.hasPrefix("image/") != false, data.count > 32 else { throw ContentError.unsupportedFormat }
+        if let notice = Self.imageNotice(data, url: response.url ?? url) {
+            // The wall means the access cookie lapsed; a fresh one is handed out on the next page.
+            if notice == .signInRequired, let host = URL(string: site)?.host?.lowercased() { SiteAccount.forget(SiteAccount.accessCookie, host: host) }
+            throw notice
+        }
         return data
+    }
+
+    /// The site's own notices served where an image was expected, so they are never shown, cached or
+    /// saved as a page: the bandwidth notice, and the wall a members-only catalog shows an account it
+    /// no longer lets in. Known by address, or by size and digest.
+    nonisolated static func imageNotice(_ data: Data, url: URL) -> ContentError? {
+        if isLimitNotice(url) { return .imageLimit }
+        let notices = [28_658: ("f54b887b017694dc25eb1a1404f71981885f8ed9", ContentError.imageLimit),
+                       144_844: ("e48ed350e902a51581246d2a764fa7827e8e6988", ContentError.signInRequired)]
+        guard let notice = notices[data.count] else { return nil }
+        return Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined() == notice.0 ? notice.1 : nil
     }
 
     private func preview(_ thumb: Thumb, galleryID: Int64, site: String) async throws -> Data {
@@ -603,43 +621,51 @@ actor KeyedCatalogSource {
     }
 
     private nonisolated static let entryPattern = try! NSRegularExpression(
-        pattern: #"<a\b[^>]*\bhref="[^"]*/s/([0-9a-f]{10})/([0-9]{1,10})-([0-9]{1,5})"[^>]*>(.*?)</a>"#, options: [.dotMatchesLineSeparators])
+        pattern: #"<a\b[^>]*\bhref="([^"]*)/s/([0-9a-f]{10})/([0-9]{1,10})-([0-9]{1,5})"[^>]*>(.*?)</a>"#, options: [.dotMatchesLineSeparators])
 
     /// Page links on a work's page, by zero-based page index, with each page's preview.
     nonisolated static func entries(in text: String, galleryID: Int64) -> [Int: Entry] {
         let source = text as NSString
         var result: [Int: Entry] = [:]
         for match in entryPattern.matches(in: text, range: NSRange(location: 0, length: source.length)) {
-            guard Int64(source.substring(with: match.range(at: 2))) == galleryID,
-                  let number = Int(source.substring(with: match.range(at: 3))), number >= 1 else { continue }
-            let body = source.substring(with: match.range(at: 4))
+            guard Int64(source.substring(with: match.range(at: 3))) == galleryID,
+                  let number = Int(source.substring(with: match.range(at: 4))), number >= 1 else { continue }
+            let body = source.substring(with: match.range(at: 5))
             var name = String(number)
             if let title = attribute("title", in: body), let colon = title.range(of: ": ") { name = decode(String(title[colon.upperBound...])) }
-            result[number - 1] = Entry(key: source.substring(with: match.range(at: 1)), name: name, thumb: thumb(in: body))
+            // The page link beside a preview says which site a preview starting at the root belongs to.
+            let base = URL(string: decode(source.substring(with: match.range(at: 1)))).flatMap { $0.scheme == "https" && $0.host != nil ? $0 : nil }
+            result[number - 1] = Entry(key: source.substring(with: match.range(at: 2)), name: name, thumb: thumb(in: body, base: base))
         }
         return result
     }
 
-    private nonisolated static func thumb(in body: String) -> Thumb? {
+    /// A preview address, resolved against the page link beside it when it starts at the site's root.
+    private nonisolated static func mediaURL(_ value: String, base: URL?) -> URL? {
+        let address = decode(value).trimmingCharacters(in: CharacterSet(charactersIn: "'\" "))
+        let relative = address.hasPrefix("/") && !address.hasPrefix("//")
+        guard let url = relative ? base.flatMap({ URL(string: address, relativeTo: $0)?.absoluteURL }) : URL(string: address), safeMediaURL(url) else { return nil }
+        return url
+    }
+
+    private nonisolated static func thumb(in body: String, base: URL? = nil) -> Thumb? {
         if let style = attribute("style", in: body),
            let size = style.range(of: #"width:\s*([0-9]+)px;\s*height:\s*([0-9]+)px"#, options: .regularExpression),
            let sheet = style.range(of: #"url\(([^)]+)\)\s*(-?[0-9]+)px"#, options: .regularExpression) {
             let numbers = String(style[size]).split { !$0.isNumber }.compactMap { Int($0) }
             let declaration = String(style[sheet])
             guard numbers.count == 2, let open = declaration.firstIndex(of: "("), let close = declaration.firstIndex(of: ")"),
-                  let url = URL(string: decode(String(declaration[declaration.index(after: open)..<close]).trimmingCharacters(in: CharacterSet(charactersIn: "'\" ")))),
-                  let offset = Int(declaration[declaration.index(after: close)...].trimmingCharacters(in: .whitespaces).dropLast(2)),
-                  safeMediaURL(url) else { return nil }
+                  let url = mediaURL(String(declaration[declaration.index(after: open)..<close]), base: base),
+                  let offset = Int(declaration[declaration.index(after: close)...].trimmingCharacters(in: .whitespaces).dropLast(2)) else { return nil }
             return Thumb(url: url, crop: CGRect(x: -offset, y: 0, width: numbers[0], height: numbers[1]))
         }
         if let image = body.range(of: #"<img\b[^>]*>"#, options: .regularExpression),
-           let value = attribute("src", in: String(body[image])), let url = URL(string: decode(value)), safeMediaURL(url) {
+           let value = attribute("src", in: String(body[image])), let url = mediaURL(value, base: base) {
             return Thumb(url: url, crop: nil)
         }
         // Large previews are whole images drawn as a background with no offset into a sheet.
         if let style = attribute("style", in: body), let declaration = style.range(of: #"url\(([^)]+)\)"#, options: .regularExpression) {
-            let value = String(style[declaration].dropFirst(4).dropLast()).trimmingCharacters(in: CharacterSet(charactersIn: "'\" "))
-            if let url = URL(string: decode(value)), safeMediaURL(url) { return Thumb(url: url, crop: nil) }
+            if let url = mediaURL(String(style[declaration].dropFirst(4).dropLast()), base: base) { return Thumb(url: url, crop: nil) }
         }
         return nil
     }

@@ -77,6 +77,11 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["igneous"], "A refused access cookie is dropped so a fresh one is handed out")
         XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["ipb_member_id"], "7")
         XCTAssertEqual(SiteAccount.savedCookieNames(host: "members.example"), ["ipb_member_id", "ipb_pass_hash"])
+        let tracked = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://members.example/")!, statusCode: 200, httpVersion: nil,
+                                                   headerFields: ["Set-Cookie": "__utmp=tracked; path=/, sk=settings; path=/"]))
+        SiteAccount.store(tracked)
+        XCTAssertNil(SiteAccount.cookies(forSite: "members.example")["__utmp"], "The tracking cookie is never sent back")
+        XCTAssertEqual(SiteAccount.cookies(forSite: "members.example")["sk"], "settings")
     }
 
     func testMembersOnlySiteAsksForAnAccountAndOpensOnceSignedIn() async throws {
@@ -159,6 +164,15 @@ final class SiteAccessTests: XCTestCase {
     }
 
     // MARK: Page messages
+
+    func testNoticesServedInPlaceOfAnImageAreNeverKeptAsPages() {
+        let page = URL(string: "https://node.example/h/1.webp")!
+        XCTAssertEqual(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 64), url: URL(string: "https://node.example/img/509.gif")!), .imageLimit)
+        // The notices are recognized by their digest (checked against copies of both), never by size alone.
+        XCTAssertNil(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 28_658), url: page))
+        XCTAssertNil(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 144_844), url: page))
+        XCTAssertNil(KeyedCatalogSource.imageNotice(Data(repeating: 1, count: 64), url: page))
+    }
 
     func testPagesThatSayNoInsteadOfShowingWorks() {
         let filler = String(repeating: "x", count: 200)

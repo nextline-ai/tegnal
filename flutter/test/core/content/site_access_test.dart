@@ -88,6 +88,9 @@ void main() {
       expect(SiteAccount.cookies('members.example')['igneous'], isNull, reason: 'A refused access cookie is dropped so a fresh one is handed out');
       expect(SiteAccount.cookies('members.example')['ipb_member_id'], '7');
       expect(SiteAccount.savedCookieNames('members.example'), ['ipb_member_id', 'ipb_pass_hash']);
+      SiteAccount.storeResponse(Uri.parse('https://members.example/'), ['__utmp=tracked; path=/', 'sk=settings; path=/']);
+      expect(SiteAccount.cookies('members.example')['__utmp'], isNull, reason: 'The tracking cookie is never sent back');
+      expect(SiteAccount.cookies('members.example')['sk'], 'settings');
     });
 
     test('a members-only site asks for an account and opens once signed in', () async {
@@ -201,6 +204,15 @@ void main() {
     });
   });
 
+  test('notices served in place of an image are never kept as pages', () {
+    final page = Uri.parse('https://node.example/h/1.webp');
+    expect(KeyedCatalogSource.imageNotice(List.filled(64, 1), url: Uri.parse('https://node.example/img/509.gif')), ContentError.imageLimit);
+    // The notices are recognized by their digest (checked against copies of both), never by size alone.
+    expect(KeyedCatalogSource.imageNotice(List.filled(28658, 1), url: page), isNull);
+    expect(KeyedCatalogSource.imageNotice(List.filled(144844, 1), url: page), isNull);
+    expect(KeyedCatalogSource.imageNotice(List.filled(64, 1), url: page), isNull);
+  });
+
   test('pages that say no instead of showing works', () {
     final filler = 'x' * 200;
     expect(
@@ -211,6 +223,8 @@ void main() {
     expect(KeyedCatalogSource.pageError('<p>You have exceeded your image viewing limits.</p>$filler'), ContentError.imageLimit);
     expect(KeyedCatalogSource.pageError(''), ContentError.signInRequired);
     expect(KeyedCatalogSource.pageError('<html><body>$filler</body></html>'), isNull);
+    expect(KeyedCatalogSource.pageError('Key missing, or incorrect key provided.'), ContentError.galleryNotFound, reason: 'A wrong key is not a sign-in wall');
+    expect(KeyedCatalogSource.pageError('Invalid page.'), ContentError.galleryNotFound);
     final listing = '<html>${'<tr>work</tr>' * 1000}<a>Temporarily Banned Again</a></html>';
     expect(KeyedCatalogSource.pageError(listing), isNull, reason: 'A title on a full listing is not a notice');
     expect(ContentError.allowsOtherSite(ContentError.galleryNotFound), isTrue);
@@ -512,6 +526,8 @@ const _favoritesPage = '''
 <div class="fp" onclick="document.location='https://keyed.example/favorites.php?favcat=0'"><div>12</div><div class="i" style="background-position:0px -2px" title="Favorites 0"></div><div>Favorites 0</div></div>
 <div class="fp fps" onclick="document.location='https://keyed.example/favorites.php?favcat=1'"><div>1,234</div><div class="i" style="background-position:0px -21px" title="Reading"></div><div>Reading</div></div>
 <div class="fp" onclick="document.location='https://keyed.example/favorites.php?favcat=9'"><div>0</div><div class="i" style="background-position:0px -173px" title="Later"></div><div>Later</div></div>
+<div style="clear:both"></div>
+<div class="fp fps" onclick="document.location='https://keyed.example/favorites.php'" style="width:140px">Show All Favorites</div>
 </div></div>
 ''';
 

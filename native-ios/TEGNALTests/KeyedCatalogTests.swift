@@ -228,6 +228,10 @@ final class KeyedCatalogTests: XCTestCase {
         let entry = KeyedCatalogSource.entries(in: page, galleryID: 3000)[0]
         XCTAssertEqual(entry?.thumb, KeyedCatalogSource.Thumb(url: URL(string: "https://sheets.example/large-1.webp")!, crop: nil))
         XCTAssertEqual(entry?.name, "one.jpg")
+        let relative = #"<a href="https://keyed.example/s/1111111111/3000-1"><div title="Page 1: one.jpg" style="width:100px;height:150px;background:transparent url(/t/sheet.jpg) -100px 0 no-repeat"></div></a>"#
+        XCTAssertEqual(KeyedCatalogSource.entries(in: relative, galleryID: 3000)[0]?.thumb,
+                       KeyedCatalogSource.Thumb(url: URL(string: "https://keyed.example/t/sheet.jpg")!, crop: CGRect(x: 100, y: 0, width: 100, height: 150)),
+                       "A preview starting at the root belongs to the page link beside it")
     }
 
     func testPreviewTilesAreCutFromTheSheet() throws {

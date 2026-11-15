@@ -57,12 +57,32 @@ String detail(int id, {required int page}) {
   return '<html><script>var api_url = "https://api.keyed.example/api.php";\nvar login_url = "https://keyed.example/bounce_login.php?b=d&bt=1";</script><div id="gdt">$links</div></html>';
 }
 
+/// A work page for an account that reads in the multi-page viewer: its pages link there.
+String viewerDetail(int id) {
+  final links = [
+    for (var number = 1; number <= 3; number++)
+      '<a href="https://keyed.example/mpv/$id/${key(id)}/#page$number"><div title="Page $number: x" style="width:100px;height:150px;background:transparent url(https://sheets.example/$id-0.png) -${(number - 1) * 100}px 0 no-repeat"></div></a>',
+  ].join();
+  return '<html><div id="gdt">$links</div><p>a work page with enough text to be a real page</p></html>';
+}
+
+const viewerPage = r'''
+<html><body><div id="pane_images"></div><script type="text/javascript">
+var gid=3000;
+var mpvkey = "0123456789a";
+var imagelist = [{"n":"one.jpg","k":"aaaaaaaaaa","t":"https:\/\/sheets.example\/large-1.jpg"},{"n":"two &amp; three.jpg","k":"bbbbbbbbbb","t":"https:\/\/sheets.example\/large-2.jpg"},{"n":"","k":"cccccccccc","t":"https:\/\/sheets.example\/large-3.jpg"}];
+</script></body></html>
+''';
+
 class KeyedFixture {
   final requests = <Uri>[];
   final cookies = <String>[];
   final favoriteForms = <String>[];
   bool failFirstNode = false;
   bool allowanceUsed = false;
+
+  /// The account reads in the multi-page viewer, so work pages link there instead of to each page.
+  bool viewer = false;
   final image = List.filled(64, 0x42);
 
   int count(String path) => requests.where((url) => url.path == path).length;
@@ -110,6 +130,7 @@ class KeyedFixture {
       case 'covers.example':
         return FixtureReply(200, image, {'Content-Type': 'image/jpeg'});
       case 'sheets.example':
+        if (url.path.startsWith('/large-')) return FixtureReply(200, image, {'Content-Type': 'image/jpeg'});
         return FixtureReply(200, sheet, {'Content-Type': 'image/png'});
       case 'node1.volunteer.example':
         return failFirstNode ? FixtureReply(503) : FixtureReply(200, image, {'Content-Type': 'image/webp'});
@@ -155,7 +176,11 @@ class KeyedFixture {
       default:
         final parts = url.pathSegments.where((part) => part.isNotEmpty).toList();
         if (parts.length == 3 && parts[0] == 'g' && int.tryParse(parts[1]) != null && parts[2] == key(int.parse(parts[1]))) {
-          return FixtureReply.text(200, detail(int.parse(parts[1]), page: url.query == 'p=1' ? 1 : 0), {'Content-Type': 'text/html'});
+          final id = int.parse(parts[1]);
+          return FixtureReply.text(200, viewer ? viewerDetail(id) : detail(id, page: url.query == 'p=1' ? 1 : 0), {'Content-Type': 'text/html'});
+        }
+        if (parts.length == 3 && parts[0] == 'mpv' && int.tryParse(parts[1]) != null && parts[2] == key(int.parse(parts[1]))) {
+          return FixtureReply.text(200, viewerPage, {'Content-Type': 'text/html'});
         }
         if (parts.length == 3 && parts[0] == 's') {
           final number = parts[2].split('-').last;
@@ -333,7 +358,10 @@ void main() {
 
     await source.setAccountFavorite(3000, saved: true);
     await source.setAccountFavorite(3000, saved: false);
-    expect(fixture.favoriteForms, ['favcat=0&favnote=&apply=Add+to+Favorites&update=1', 'favcat=favdel&favnote=&update=1']);
+    expect(fixture.favoriteForms, [
+      'favcat=0&favnote=&apply=Add+to+Favorites&update=1',
+      'favcat=favdel&favnote=&apply=Apply+Changes&update=1',
+    ], reason: 'Removing sends the submit button the form shows for it');
     expect(fixture.requests.any((url) => url.path == '/gallerypopups.php' && url.query.contains('t=${key(3000)}')), isTrue);
   });
 
@@ -367,6 +395,35 @@ void main() {
       const QueryRoute('artist:sample_artist -tag:x_y'),
     );
     expect(ContentRoute.initial('https://other.example/g/3000/${key(3000)}/'), isNull);
+  });
+
+  test('accounts reading in the multi-page viewer open works from its page list', () async {
+    final fixture = KeyedFixture(), source = MangaContentSource(transport: fixture.transport());
+    await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 3);
+    fixture.viewer = true;
+    final gallery = await source.gallery(3000);
+    expect(gallery.pages.map((page) => page.name), ['one.jpg', 'two & three.jpg', '3']);
+    expect(gallery.pages[1].thumbnailURL.toString(), 'https://sheets.example/large-2.jpg');
+    expect(fixture.count('/mpv/3000/${key(3000)}/'), 1);
+    expect(await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false), fixture.image);
+    expect(fixture.requests.any((url) => url.path == '/s/bbbbbbbbbb/3000-2'), isTrue, reason: 'Each page opens with the key the viewer lists for it');
+    expect(await source.image(gallery.pages[1], galleryID: 3000, thumbnail: true), fixture.image);
+  });
+
+  test('large previews are whole images', () {
+    const page =
+        '<div id="gdt" class="gt200"><a href="https://keyed.example/s/1111111111/3000-1"><div title="Page 1: one.jpg" style="width:200px;height:283px;background:transparent url(https://sheets.example/large-1.webp) 0 0 no-repeat"></div></a></div>';
+    final entry = KeyedCatalogSource.entries(page, 3000)[0];
+    expect(entry?.thumb, KeyedThumb(Uri.parse('https://sheets.example/large-1.webp'), null));
+    expect(entry?.name, 'one.jpg');
+    const relative =
+        '<a href="https://keyed.example/s/1111111111/3000-1"><div title="Page 1: one.jpg" style="width:100px;height:150px;background:transparent url(/t/sheet.jpg) -100px 0 no-repeat"></div></a>';
+    final resolved = KeyedCatalogSource.entries(relative, 3000)[0]?.thumb;
+    expect(
+      resolved,
+      KeyedThumb(Uri.parse('https://keyed.example/t/sheet.jpg'), const CropRect(100, 0, 100, 150)),
+      reason: 'A preview starting at the root belongs to the page link beside it',
+    );
   });
 
   test('preview tiles are cut from the sheet', () async {

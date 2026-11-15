@@ -344,13 +344,17 @@ abstract final class SiteAccount {
   }
 
   /// Keeps cookies the site sets for itself, such as access it grants after the identity is checked.
+  /// Cookies a site sets that are never kept: the content filter it sets itself, and a tracking
+  /// cookie other clients drop because sending it back changes how the site answers.
+  static bool ignoresCookie(String name) => name == 'nw' || name == '__utmp';
+
   static void storeResponse(Uri url, List<String> setCookieHeaders) {
     if (!applies(url) || setCookieHeaders.isEmpty) return;
     final received = <SiteCookie>[];
     for (final header in setCookieHeaders) {
       try {
         final cookie = Cookie.fromSetCookieValue(header);
-        if (isIdentity(cookie.name) || cookie.name == 'nw') continue;
+        if (isIdentity(cookie.name) || ignoresCookie(cookie.name)) continue;
         // A placeholder instead of access is never kept: the access already held stays.
         if (isPlaceholder(cookie.name, cookie.value)) continue;
         received.add(SiteCookie(name: cookie.name, value: cookie.value, expires: cookie.expires));

@@ -343,8 +343,32 @@ void main() {
     final thumb = value.url(hash: sampleHash, format: 'webp', thumbnail: true);
     expect(thumb.host, 'btn.comics.example');
     expect(thumb.path, '/webpsmalltn/c/ab/$sampleHash.webp');
-    expect(() => CDNRouting('${routing}unexpectedCode();'), throwsA(isA<ContentError>()));
     expect(() => value.url(hash: '../invalid', format: 'webp', thumbnail: false), throwsA(isA<ContentError>()));
+  });
+
+  test('routing reads a reformatted script with more groups and servers', () {
+    const reformatted = r'''
+"use strict";
+gg={m:function(g){var o=1;switch(g){case 1:case 2:o=0;break;case 3243:o=2;break;}return o;},
+s:function(h){var m=/(..)(.)$/.exec(h);return parseInt(m[2]+m[1],16).toString(10);},b:"999/"};
+''';
+    final value = CDNRouting(reformatted);
+    expect(value.url(hash: sampleHash, format: 'webp', thumbnail: false).toString(), 'https://w3.comics.example/999/3243/$sampleHash.webp');
+    expect(value.url(hash: sampleHash, format: 'avif', thumbnail: true).host, 'ctn.comics.example');
+    final first = '${'0' * 61}010', other = '0' * 64;
+    expect(value.url(hash: first, format: 'webp', thumbnail: false).host, 'w1.comics.example');
+    expect(value.url(hash: first, format: 'webp', thumbnail: true).host, 'atn.comics.example');
+    expect(
+      value.url(hash: other, format: 'avif', thumbnail: false).host,
+      'a2.comics.example',
+      reason: 'Unlisted buckets use the default',
+    );
+    expect(() => CDNRouting(routing.replaceAll("b: '123456/'", '')), throwsA(isA<ContentError>()), reason: "Pages can't be found without the path prefix");
+    expect(
+      () => CDNRouting(routing.replaceAll('case 3243:', 'case 3243:\no = g % 3; break;\ncase 7:')),
+      throwsA(isA<ContentError>()),
+      reason: "A case this reading can't explain is refused rather than routed wrongly",
+    );
   });
 
   test('request policy rejects foreign hosts and credentials', () {

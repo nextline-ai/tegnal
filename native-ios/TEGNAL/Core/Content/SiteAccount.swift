@@ -300,7 +300,7 @@ enum SiteAccount {
     static func store(_ response: HTTPURLResponse) {
         guard let url = response.url, applies(to: url),
               let fields = response.allHeaderFields as? [String: String] else { return }
-        let received = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url).filter { !isIdentity($0.name) && $0.name != "nw" }
+        let received = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url).filter { !isIdentity($0.name) && !ignoresCookie($0.name) }
         guard !received.isEmpty else { return }
         let host = MangaUrls.configuredHost
         lock.withLock {
@@ -318,6 +318,10 @@ enum SiteAccount {
             save(stored)
         }
     }
+
+    /// Cookies a site sets that are never kept: the content filter it sets itself, and a tracking
+    /// cookie other clients drop because sending it back changes how the site answers.
+    static func ignoresCookie(_ name: String) -> Bool { name == "nw" || name == "__utmp" }
 
     static func registrableDomain(_ host: String) -> String {
         let labels = host.split(separator: ".")

@@ -131,7 +131,8 @@ actor DocumentCatalogSource {
             }
             feed.nextID = (rows.last?["id"] as? NSNumber)?.int64Value
             feed.nextViews = query.sort == .latest ? nil : (rows.last?["views"] as? NSNumber)?.int64Value
-            feed.more = rows.count == 50 && feed.nextID != oldCursor
+            // Whatever its page size, the list goes on while a page has rows and moves the cursor.
+            feed.more = !rows.isEmpty && feed.nextID != oldCursor
             feed.started = true
             requests += 1
         }
@@ -172,7 +173,7 @@ actor DocumentCatalogSource {
                 }
                 feed.lanes[index].nextID = (rows.last?["id"] as? NSNumber)?.int64Value
                 feed.lanes[index].nextViews = query.sort == .latest ? nil : (rows.last?["views"] as? NSNumber)?.int64Value
-                feed.lanes[index].more = rows.count == 50 && feed.lanes[index].nextID != oldCursor
+                feed.lanes[index].more = !rows.isEmpty && feed.lanes[index].nextID != oldCursor
                 requests += 1
             }
             // A lane must have a head or be exhausted before merging the next rank.
