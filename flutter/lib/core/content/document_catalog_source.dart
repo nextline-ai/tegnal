@@ -9,6 +9,7 @@ import 'content_transport.dart';
 import 'content_url.dart';
 import 'gallery_content.dart';
 import 'keyed_catalog_source.dart';
+import 'keyed_work_extras.dart';
 import 'manga_urls.dart';
 import 'site_account.dart';
 
@@ -381,16 +382,98 @@ class DocumentCatalogSource {
     return _metadata(object, id, pages);
   }
 
+  // MARK: Account lists
+
+  /// The signed-in account's favorite lists, from its favorites page: each list's name and the
+  /// works it holds. One work can be in several lists.
+  Future<AccountFavorites> favoriteLists({required String site}) async {
+    _prepare(site);
+    final url = ContentURL.parse('${site}favorites');
+    if (url == null) throw ContentError.invalidQuery;
+    final result = await transport.get(url, limit: 8000000);
+    _prepare(site);
+    final head = result.data.length > 200000 ? result.data.sublist(0, 200000) : result.data;
+    if (KeyedCatalogSource.asksForSignIn(utf8.decode(head, allowMalformed: true))) throw ContentError.signInRequired;
+    return favoriteListsIn(result.data);
+  }
+
+  static AccountFavorites favoriteListsIn(List<int> data) {
+    final rows = embeddedValue(data, 'favorites', opening: '[');
+    if (rows is! List) throw ContentError.invalidResponse;
+    final categories = <FavoriteCategory>[];
+    final members = <int, Set<int>>{};
+    for (final row in rows.whereType<Map<String, Object?>>()) {
+      final id = _int(row['id']);
+      if (id == null || id <= 0) continue;
+      final works = <int>[
+        for (final entry in (row['galleries'] is List ? row['galleries'] as List : const []))
+          if (_int(entry is Map ? entry['id'] : entry) case final work? when work > 0) work,
+      ];
+      final name = (row['name'] is String ? row['name'] as String : '').trim();
+      categories.add(FavoriteCategory(id: id, name: name.isEmpty ? 'fav:$id' : name, count: works.length));
+      for (final work in works) {
+        (members[work] ??= {}).add(id);
+      }
+    }
+    categories.sort((a, b) => a.id.compareTo(b.id));
+    return AccountFavorites(categories: categories, members: members, exclusive: false);
+  }
+
+  /// Adds a work to one of the account's lists, or takes it out, as the list checkboxes on the
+  /// website's pages do.
+  Future<void> setFavorite(int id, {required int list, required bool adds, required String site}) async {
+    _prepare(site);
+    final host = ContentURL.parse(site)?.host.toLowerCase();
+    final url = ContentURL.parse(site + (adds ? 'ajax/favorite-add-gallery' : 'ajax/favorite-remove-gallery'));
+    if (id <= 0 || list <= 0 || host == null || url == null) throw ContentError.invalidQuery;
+    if (!SiteAccount.isSignedInAt(host)) throw ContentError.signInRequired;
+    // The pages send back the token the website keeps in a cookie; a page visit sets it again.
+    var token = _formToken(host);
+    if (token == null) {
+      await favoriteLists(site: site);
+      token = _formToken(host);
+    }
+    if (token == null) throw ContentError.signInRequired;
+    final form = 'csrf=${Uri.encodeQueryComponent(token)}&favoriteId=$list&galleryId=$id';
+    final result = await transport.post(url, body: utf8.encode(form), contentType: 'application/x-www-form-urlencoded; charset=UTF-8', limit: 200000);
+    _prepare(site);
+    Object? answer;
+    try {
+      answer = jsonDecode(utf8.decode(result.data, allowMalformed: true));
+    } on FormatException {
+      final head = result.data.length > 200000 ? result.data.sublist(0, 200000) : result.data;
+      if (KeyedCatalogSource.asksForSignIn(utf8.decode(head, allowMalformed: true))) throw ContentError.signInRequired;
+      throw ContentError.invalidResponse;
+    }
+    if (answer is! Map || _int(answer['success']) != 1) throw const ContentError.unavailable(422);
+  }
+
+  static String? _formToken(String host) {
+    for (final MapEntry(:key, :value) in SiteAccount.cookies(host).entries) {
+      if (key.toLowerCase().endsWith('csrf_token') && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
   /// Extract one JSON object, respecting quoted braces and escaped quotes.
   static Map<String, Object?> embeddedObject(List<int> data, String name) {
-    if (data.length > 4000000) throw ContentError.unsupportedFormat;
+    final object = embeddedValue(data, name, opening: '{');
+    if (object is Map<String, Object?>) return object;
+    throw ContentError.invalidResponse;
+  }
+
+  /// Extract one JSON object or array a page assigns to a variable, respecting quoted brackets and
+  /// escaped quotes.
+  static Object? embeddedValue(List<int> data, String name, {required String opening}) {
+    final closing = opening == '[' ? ']' : '}';
+    if (data.length > 8000000) throw ContentError.unsupportedFormat;
     final String text;
     try {
       text = utf8.decode(data);
     } on FormatException {
       throw ContentError.unsupportedFormat;
     }
-    final assignment = RegExp('\\b(?:const|let|var)\\s+${RegExp.escape(name)}\\s*=\\s*\\{').firstMatch(text);
+    final assignment = RegExp('\\b(?:const|let|var)\\s+${RegExp.escape(name)}\\s*=\\s*${RegExp.escape(opening)}').firstMatch(text);
     if (assignment == null) throw ContentError.unsupportedFormat;
     final start = assignment.end - 1;
     var depth = 0;
@@ -407,14 +490,13 @@ class DocumentCatalogSource {
         }
       } else if (character == '"') {
         quoted = true;
-      } else if (character == '{') {
+      } else if (character == opening) {
         depth += 1;
-      } else if (character == '}') {
+      } else if (character == closing) {
         depth -= 1;
         if (depth == 0) {
           try {
-            final object = jsonDecode(text.substring(start, index + 1));
-            if (object is Map<String, Object?>) return object;
+            return jsonDecode(text.substring(start, index + 1));
           } on FormatException {
             // Reported below.
           }

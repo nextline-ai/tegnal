@@ -267,12 +267,6 @@ class ContentEnvironment extends ChangeNotifier {
   bool get mangaRemovesGridPadding => _mangaRemovesGridPadding;
   set mangaRemovesGridPadding(bool value) => _mangaRemovesGridPadding = _store('manga.grid.noPadding', value);
 
-  /// The account favorites category new bookmarks are added to when syncing, from 0.
-  int get accountFavoriteCategory => browserPreferences.integer('manga.accountFavoriteCategory').clamp(0, 9);
-  set accountFavoriteCategory(int value) {
-    _store('manga.accountFavoriteCategory', value.clamp(0, 9));
-  }
-
   /// Signed in to the connected website, for sites that use accounts.
   bool _siteAccountSignedIn;
   bool get siteAccountSignedIn => _siteAccountSignedIn;

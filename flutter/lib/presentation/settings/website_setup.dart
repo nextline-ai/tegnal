@@ -674,7 +674,7 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
           rowColor: row,
           footer: Text(
             L10n.text(
-              'Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too.',
+              'Lists and searches show the checked websites together, as the Explore menu picks them. Saved works remember where they were saved, and a website that numbers its works the same way can open them too.',
             ),
           ),
           children: [
@@ -689,12 +689,18 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
                   child: Text(L10n.text('Delete'), style: TegnalType.style(17, color: const Color(0xFFFFFFFF))),
                 ),
                 onDismissed: (_) => _content.removeComicsSite(site),
+                // Picks the websites lists show together, as the Explore menu does: several, or none.
                 child: FormRow(
-                  onTap: () => _content.switchComicsSite(site),
+                  onTap: () => _content.toggleListedComicSite(site),
                   child: Row(
                     children: [
-                      Expanded(child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      if (site == _content.mangaSiteAddress) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
+                      Expanded(
+                        child: Semantics(
+                          selected: _content.listedComicSites.contains(site),
+                          child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                      if (_content.listedComicSites.contains(site)) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
                       // Each website keeps its own account and check, like an image server.
                       Semantics(
                         button: true,

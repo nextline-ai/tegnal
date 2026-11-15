@@ -51,12 +51,24 @@ final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     }
 
     /// The website's account favorites, to check that a sign-in made for it works there.
-    func accountFavorites(after next: String?) async throws -> (ids: [Int64], next: String?) {
-        try await SiteScope.$site.withValue(site) { try await inner.accountFavorites(after: next) }
+    func accountFavorites(after next: String?, category: Int? = nil) async throws -> (ids: [Int64], next: String?) {
+        try await SiteScope.$site.withValue(site) { try await inner.accountFavorites(after: next, category: category) }
+    }
+
+    func favoriteCategories() async throws -> [FavoriteCategory] {
+        try await SiteScope.$site.withValue(site) { try await inner.favoriteCategories() }
     }
 
     func setAccountFavorite(_ id: Int64, saved: Bool, category: Int) async throws {
         try await SiteScope.$site.withValue(site) { try await inner.setAccountFavorite(id, saved: saved, category: category) }
+    }
+
+    func accountFavoriteLists() async throws -> AccountFavorites {
+        try await SiteScope.$site.withValue(site) { try await inner.accountFavoriteLists() }
+    }
+
+    func changeAccountFavorite(_ id: Int64, category: Int, adds: Bool) async throws {
+        try await SiteScope.$site.withValue(site) { try await inner.changeAccountFavorite(id, category: category, adds: adds) }
     }
 
     private static let lock = NSLock()

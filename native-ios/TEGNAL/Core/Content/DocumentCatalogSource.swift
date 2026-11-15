@@ -279,8 +279,17 @@ actor DocumentCatalogSource {
 
     /// Extract one JSON object, respecting quoted braces and escaped quotes.
     nonisolated static func embeddedObject(_ data: Data, named name: String) throws -> [String: Any] {
-        guard data.count <= 4_000_000, let text = String(data: data, encoding: .utf8),
-              let assignment = text.range(of: #"\b(?:const|let|var)\s+"# + NSRegularExpression.escapedPattern(for: name) + #"\s*=\s*\{"#, options: .regularExpression) else { throw ContentError.unsupportedFormat }
+        guard let object = try embeddedValue(data, named: name, opening: "{") as? [String: Any] else { throw ContentError.invalidResponse }
+        return object
+    }
+
+    /// Extract one JSON object or array a page assigns to a variable, respecting quoted brackets
+    /// and escaped quotes.
+    nonisolated static func embeddedValue(_ data: Data, named name: String, opening: Character) throws -> Any {
+        let closing: Character = opening == "[" ? "]" : "}"
+        guard data.count <= 8_000_000, let text = String(data: data, encoding: .utf8),
+              let assignment = text.range(of: #"\b(?:const|let|var)\s+"# + NSRegularExpression.escapedPattern(for: name) + #"\s*=\s*"#
+                                          + NSRegularExpression.escapedPattern(for: String(opening)), options: .regularExpression) else { throw ContentError.unsupportedFormat }
         let start = text.index(before: assignment.upperBound)
         var depth = 0, quoted = false, escaped = false
         for index in text[start...].indices {
@@ -290,17 +299,79 @@ actor DocumentCatalogSource {
                 else if character == "\\" { escaped = true }
                 else if character == "\"" { quoted = false }
             } else if character == "\"" { quoted = true }
-            else if character == "{" { depth += 1 }
-            else if character == "}" {
+            else if character == opening { depth += 1 }
+            else if character == closing {
                 depth -= 1
                 if depth == 0 {
-                    guard let json = String(text[start...index]).data(using: .utf8),
-                          let object = try JSONSerialization.jsonObject(with: json) as? [String: Any] else { throw ContentError.invalidResponse }
-                    return object
+                    guard let json = String(text[start...index]).data(using: .utf8) else { throw ContentError.invalidResponse }
+                    return try JSONSerialization.jsonObject(with: json)
                 }
             }
         }
         throw ContentError.invalidResponse
+    }
+
+    // MARK: Account lists
+
+    /// The signed-in account's favorite lists, from its favorites page: each list's name and the
+    /// works it holds. One work can be in several lists.
+    func favoriteLists(site: String) async throws -> AccountFavorites {
+        try prepare(site)
+        guard let url = URL(string: site + "favorites") else { throw ContentError.invalidQuery }
+        let (data, _) = try await transport.get(url, limit: 8_000_000)
+        try prepare(site)
+        if KeyedCatalogSource.asksForSignIn(String(decoding: data.prefix(200_000), as: UTF8.self)) { throw ContentError.signInRequired }
+        return try Self.favoriteLists(in: data)
+    }
+
+    nonisolated static func favoriteLists(in data: Data) throws -> AccountFavorites {
+        guard let rows = try embeddedValue(data, named: "favorites", opening: "[") as? [[String: Any]] else { throw ContentError.invalidResponse }
+        var categories: [FavoriteCategory] = [], members: [Int64: Set<Int>] = [:]
+        for row in rows {
+            guard let id = (row["id"] as? NSNumber)?.intValue, id > 0 else { continue }
+            let works = (row["galleries"] as? [Any] ?? []).compactMap { entry -> Int64? in
+                let value = (entry as? [String: Any])?["id"] ?? entry
+                return (value as? NSNumber)?.int64Value ?? (value as? String).flatMap { Int64($0) }
+            }.filter { $0 > 0 }
+            let name = (row["name"] as? String).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+            categories.append(FavoriteCategory(id: id, name: name.isEmpty ? "fav:\(id)" : name, count: works.count))
+            for work in works { members[work, default: []].insert(id) }
+        }
+        return AccountFavorites(categories: categories.sorted { $0.id < $1.id }, members: members, exclusive: false)
+    }
+
+    /// Adds a work to one of the account's lists, or takes it out, as the list checkboxes on the
+    /// website's pages do.
+    func setFavorite(_ id: Int64, list: Int, adds: Bool, site: String) async throws {
+        try prepare(site)
+        guard id > 0, list > 0, let host = URL(string: site)?.host?.lowercased(),
+              let url = URL(string: site + (adds ? "ajax/favorite-add-gallery" : "ajax/favorite-remove-gallery")) else { throw ContentError.invalidQuery }
+        guard SiteAccount.isSignedIn(host: host) else { throw ContentError.signInRequired }
+        // The pages send back the token the website keeps in a cookie; a page visit sets it again.
+        var token = Self.formToken(host: host)
+        if token == nil {
+            _ = try await favoriteLists(site: site)
+            token = Self.formToken(host: host)
+        }
+        guard let token else { throw ContentError.signInRequired }
+        let form = "csrf=\(Self.formEncoded(token))&favoriteId=\(list)&galleryId=\(id)"
+        let (data, _) = try await transport.post(url, body: Data(form.utf8), contentType: "application/x-www-form-urlencoded; charset=UTF-8", limit: 200_000)
+        try prepare(site)
+        guard let answer = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            if KeyedCatalogSource.asksForSignIn(String(decoding: data.prefix(200_000), as: UTF8.self)) { throw ContentError.signInRequired }
+            throw ContentError.invalidResponse
+        }
+        guard (answer["success"] as? NSNumber)?.intValue == 1 else { throw ContentError.unavailable(422) }
+    }
+
+    private nonisolated static func formToken(host: String) -> String? {
+        SiteAccount.cookies(forSite: host).first { $0.key.lowercased().hasSuffix("csrf_token") && !$0.value.isEmpty }?.value
+    }
+
+    private nonisolated static func formEncoded(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
     }
 
     /// Rows carry the key the account-based catalog opens the same work with. Every connected

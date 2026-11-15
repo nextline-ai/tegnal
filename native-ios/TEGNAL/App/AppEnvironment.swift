@@ -826,7 +826,7 @@ public final class AppEnvironment: @unchecked Sendable {
     @MainActor func siteSignInFinished(site: String? = nil) {
         // A first sign-in brings the website's favorites into a folder named after it.
         let signedIn = site ?? mangaSiteAddress
-        defer { Task { await setUpSiteFavoritesFolder(site: signedIn) } }
+        defer { Task { await setUpSiteFavorites(site: signedIn) } }
         if let site, site != mangaSiteAddress {
             SiteScope.$site.withValue(site) { MangaUrls.resetResolvedBackend() }
             comicSitesRevision += 1
@@ -859,18 +859,18 @@ public final class AppEnvironment: @unchecked Sendable {
     @MainActor func checkSiteAccount(site: String? = nil) async -> Bool {
         guard let site, site != mangaSiteAddress else {
             await MangaUrls.resolveBackend(force: true)
-            guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return false }
+            guard MangaUrls.hasResolvedBackend, MangaUrls.backend != .indexed else { return false }
             do {
-                _ = try await MangaContentSource.shared.accountFavorites(after: nil)
+                _ = try await MangaContentSource.shared.favoriteCategories()
                 return true
             } catch { return false }
         }
         let content = SiteContent.for(site)
         return await SiteScope.$site.withValue(site) {
             await MangaUrls.resolveBackend(force: true)
-            guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return false }
+            guard MangaUrls.hasResolvedBackend, MangaUrls.backend != .indexed else { return false }
             do {
-                _ = try await content.accountFavorites(after: nil)
+                _ = try await content.favoriteCategories()
                 return true
             } catch { return false }
         }
@@ -917,18 +917,15 @@ public final class AppEnvironment: @unchecked Sendable {
         return added
     }
 
-    /// The account favorites category new bookmarks are added to when syncing, from 0.
-    var accountFavoriteCategory: Int {
-        get { access(keyPath: \.accountFavoriteCategory); return min(9, max(0, browserPreferences.integer(forKey: "manga.accountFavoriteCategory"))) }
-        set { withMutation(keyPath: \.accountFavoriteCategory) { browserPreferences.set(min(9, max(0, newValue)), forKey: "manga.accountFavoriteCategory") } }
-    }
 
     // MARK: Website favorites folders
 
     /// Websites whose favorites sync is running, so two runs never cross.
     @ObservationIgnored private var syncingFavorites = Set<String>()
-    /// Changes when a website's favorites folder is set up or synced, so settings redraw.
+    /// Changes when a website's favorites sync is set up or runs, so settings redraw.
     public private(set) var favoriteFoldersRevision = 0
+    /// At most this many favorites are changed on a website in one sync; the rest wait for the next.
+    static let favoriteSendsPerSync = 30
 
     /// A website's signed-in account that can keep favorites, by host; nil without one.
     func favoritesAccountHost(_ site: String) -> String? {
@@ -937,124 +934,162 @@ public final class AppEnvironment: @unchecked Sendable {
         return host
     }
 
-    /// The first time a signed-in website's favorites can be read, a folder named after the website
-    /// is made, or the one already named so is used, and filled with them; from then on the two are
-    /// kept the same. Turning the sync off in the website's settings keeps it from being set up
-    /// again, unless it is turned back on there (`requested`).
-    @MainActor func setUpSiteFavoritesFolder(site: String, requested: Bool = false) async {
-        let links = SiteFavoriteFolders.shared
-        guard links.folder(for: site) == nil, requested || !links.isDeclined(site), favoritesAccountHost(site) != nil else { return }
-        // Read before anything is made, so a website that keeps the account out gets no folder.
-        guard let remote = try? await allAccountFavorites(site: site) else { return }
+    /// The first time a signed-in website's favorites can be read, each favorites category or list
+    /// that holds works becomes a folder of the same name, or the folder already named so, filled
+    /// with them; from then on the two are kept the same. Works saved in other folders are kept in
+    /// the first category without a folder. Turned off in the website's settings, it is not set up
+    /// again unless turned back on there (`requested`).
+    @MainActor func setUpSiteFavorites(site: String, requested: Bool = false) async {
+        let store = SiteFavoriteFolders.shared
+        guard store.state(for: site) == nil, requested || !store.isDeclined(site), favoritesAccountHost(site) != nil else { return }
+        // Read before anything is made, so a website that keeps the account out gets no folders.
+        guard let favorites = try? await SiteContent.for(site).accountFavoriteLists() else { return }
         do {
-            let folder = try database.listFolders().first { $0.name == site } ?? database.createFolder(name: site)
-            guard let id = folder.id else { return }
-            links.link(site, folder: try database.identity(ofFolder: id))
+            var state = SiteFavoriteFolders.State(exclusive: favorites.exclusive)
+            let folders = try database.listFolders()
+            for category in favorites.categories where category.count > 0 {
+                let folder = try folders.first { $0.name == category.name } ?? database.createFolder(name: category.name)
+                guard let id = folder.id else { continue }
+                state.folders[category.id] = try database.identity(ofFolder: id)
+            }
+            state.unassigned = favorites.categories.map(\.id).first { state.folders[$0] == nil }
+            store.setState(state, for: site)
             favoriteFoldersRevision += 1
-            try await syncSiteFavorites(site: site, remote: remote)
+            try await syncSiteFavorites(site: site, remote: favorites)
         } catch {}
     }
 
-    /// Stops keeping a website's favorites and its folder the same; both keep what they hold.
+    /// Stops keeping a website's favorites and its folders the same; both keep what they hold.
     @MainActor func stopSyncingSiteFavorites(site: String) {
-        SiteFavoriteFolders.shared.unlink(site, declined: true)
+        SiteFavoriteFolders.shared.remove(site, declined: true)
         favoriteFoldersRevision += 1
     }
 
-    /// Every page of a website's favorites, across its categories.
-    private func allAccountFavorites(site: String) async throws -> Set<Int64> {
-        let content = SiteContent.for(site)
-        var ids = Set<Int64>(), next: String?, pages = 0
-        repeat {
-            let page = try await content.accountFavorites(after: next)
-            try Task.checkCancellation()
-            ids.formUnion(page.ids)
-            next = page.next
-            pages += 1
-        } while next != nil && pages < 500
-        return ids
+    @MainActor func setUnassignedFavoriteCategory(_ category: Int, site: String) {
+        guard var state = SiteFavoriteFolders.shared.state(for: site) else { return }
+        state.unassigned = category
+        SiteFavoriteFolders.shared.setState(state, for: site)
+        favoriteFoldersRevision += 1
     }
 
-    /// Brings a website's favorites and its folder into step: what was added or removed on one side
-    /// since the last sync is added or removed on the other. `pull` reads the website's favorites
-    /// again; without it only changes made in the app are sent.
-    @MainActor @discardableResult
-    func syncSiteFavorites(site: String, pull: Bool = true, remote fetched: Set<Int64>? = nil) async throws -> FavoriteSyncPlan? {
-        let links = SiteFavoriteFolders.shared
-        guard let identity = links.folder(for: site), favoritesAccountHost(site) != nil else { return nil }
-        guard let folderID = try database.folderID(identity: identity) else {
-            // The folder was deleted: syncing stops, and the website's favorites stay as they are.
-            stopSyncingSiteFavorites(site: site)
-            return nil
+    /// Where each saved work sits: the categories' folders it is in, or anywhere else.
+    private func savedFavoritePlaces(folders: [Int: Int64]) throws -> [Int64: Set<FavoritePlace>] {
+        let categoryOf = Dictionary(folders.map { ($0.value, $0.key) }, uniquingKeysWith: min)
+        return try database.savedWorkFolders().mapValues { inFolders in
+            let categories = Set(inFolders.compactMap { categoryOf[$0] }.map(FavoritePlace.category))
+            return categories.isEmpty ? [.unassigned] : categories
         }
+    }
+
+    /// Brings a website's favorites and its folders into step: what was added, removed or moved on
+    /// one side since the last sync is done on the other. `pull` reads the website's favorites again;
+    /// without it only changes made in the app are sent.
+    @MainActor @discardableResult
+    func syncSiteFavorites(site: String, pull: Bool = true, remote fetched: AccountFavorites? = nil) async throws -> FavoriteSyncPlan? {
+        let store = SiteFavoriteFolders.shared
+        guard var state = store.state(for: site), favoritesAccountHost(site) != nil else { return nil }
         guard syncingFavorites.insert(site).inserted else { return nil }
         defer { syncingFavorites.remove(site) }
-        let base = links.baseline(for: site)
-        let remote: Set<Int64>
-        if let fetched { remote = fetched; links.notePull(for: site) }
-        else if pull || base == nil { remote = try await allAccountFavorites(site: site); links.notePull(for: site) }
-        else { remote = base ?? [] }
-        // Read after the website answers, so a change made meanwhile is not lost.
-        let local = Set(try database.galleryIDs(inFolder: folderID))
-        let plan = FavoriteSyncPlan.make(local: local, remote: remote, base: base)
-        var settled = plan.settled
-        // Recorded first, so the folder changes below are not taken for new ones made by hand.
-        links.setBaseline(settled, for: site)
+        // A deleted category folder lets its category go; its works were moved to Unfiled.
+        var folders: [Int: Int64] = [:]
+        for (category, identity) in state.folders {
+            if let id = try database.folderID(identity: identity) { folders[category] = id } else { state.folders[category] = nil }
+        }
         let content = SiteContent.for(site)
-        for id in plan.addLocally {
-            if try database.getWork(galleryId: id) != nil { try database.addWork(galleryId: id, folderID: folderID); continue }
-            let work = content.cachedPreview(id)
-            _ = try database.upsertWork(galleryId: id, folderId: folderID, title: work?.title, artists: work?.artists.joined(separator: ", "),
-                                        language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: site,
-                                        pageCount: work?.displayedPageCount)
+        let remote: [Int64: Set<Int>]
+        var favorites = fetched
+        if favorites == nil, pull || state.baseline == nil { favorites = try await content.accountFavoriteLists() }
+        if let favorites {
+            remote = favorites.members
+            state.exclusive = favorites.exclusive
+            state.lastPull = Date()
+            // A category or list removed on the website lets its folder go; the folder keeps its works.
+            let existing = Set(favorites.categories.map(\.id))
+            for category in state.folders.keys where !existing.contains(category) { state.folders[category] = nil; folders[category] = nil }
+            if let unassigned = state.unassigned, !existing.contains(unassigned) {
+                state.unassigned = favorites.categories.map(\.id).first { state.folders[$0] == nil }
+            }
+        } else { remote = state.baseline ?? [:] }
+        let exclusive = state.exclusive ?? true
+        // Read after the website answers, so a change made meanwhile is not lost.
+        let plan = FavoriteSyncPlan.make(local: try savedFavoritePlaces(folders: folders), remote: remote, base: state.baseline,
+                                         folders: Set(folders.keys), unassigned: state.unassigned, localOnly: state.localOnly, exclusive: exclusive)
+        var settled = plan.settled
+        state.localOnly.formUnion(plan.keepLocal)
+        state.localOnly.subtract(plan.stopKeepingLocal)
+        // Recorded first, so the folder changes below are not taken for new ones made by hand.
+        state.baseline = settled
+        store.setState(state, for: site)
+        let linked = Set(folders.values)
+        let unfiled = try database.unfiledFolderID()
+        for change in plan.local {
+            switch change {
+            case .remove(let id):
+                try database.deleteWork(galleryId: id)
+            case .place(let id, let places):
+                let targets = Set(places.compactMap { $0.category.flatMap { folders[$0] } })
+                let current = try database.folderIDs(galleryId: id)
+                if current.isEmpty, try database.getWork(galleryId: id) == nil {
+                    // A favorite in no category's folder comes to Unfiled.
+                    let work = content.cachedPreview(id)
+                    _ = try database.upsertWork(galleryId: id, folderId: targets.min() ?? unfiled, title: work?.title,
+                                                artists: work?.artists.joined(separator: ", "), language: work?.language, type: work?.type,
+                                                tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: site, pageCount: work?.displayedPageCount)
+                }
+                for target in targets.subtracting(current) { try database.addWork(galleryId: id, folderID: target) }
+                try database.removeWork(galleryId: id, fromFolders: linked.intersection(current).subtracting(targets))
+            }
         }
-        for id in plan.removeLocally { try database.removeWork(galleryId: id, fromFolder: folderID) }
         // A failed request leaves the rest for the next sync instead of asking again and again.
-        var failed = false
-        let category = accountFavoriteCategory
-        for id in plan.addOnSite {
-            if !failed {
-                do { try await content.setAccountFavorite(id, saved: true, category: category); continue } catch { failed = true }
+        var sent = 0, failed = false, refused = Set<Int64>()
+        for change in plan.site {
+            guard !failed, sent < Self.favoriteSendsPerSync, !refused.contains(change.id) else {
+                if !refused.contains(change.id) { settled[change.id] = remote[change.id] }
+                continue
             }
-            settled.remove(id)
-        }
-        for id in plan.removeFromSite {
-            if !failed {
-                do { try await content.setAccountFavorite(id, saved: false, category: category); continue } catch { failed = true }
+            if sent > 0 { try? await Task.sleep(for: .milliseconds(500)) }
+            sent += 1
+            do {
+                try await content.changeAccountFavorite(change.id, category: change.category, adds: change.adds)
+            } catch ContentError.galleryNotFound where change.adds {
+                refused.insert(change.id)
+            } catch ContentError.unavailable(422) where change.adds {
+                refused.insert(change.id)
+            } catch {
+                failed = true
+                settled[change.id] = remote[change.id]
             }
-            settled.insert(id)
         }
-        links.setBaseline(settled, for: site)
-        if !plan.addLocally.isEmpty { startCoverQueue() }
+        // A work the website won't keep stays in the app only.
+        for id in refused { state.localOnly.insert(id); settled[id] = remote[id] }
+        state.baseline = settled
+        store.setState(state, for: site)
+        if plan.local.contains(where: { if case .place = $0 { return true } else { return false } }) { startCoverQueue() }
         favoriteFoldersRevision += 1
         return plan
     }
 
-    /// While the app is open: sets up folders for websites signed in since, reads each website's
-    /// favorites again when it has not for half an hour, and sends folder changes made in the app.
+    /// While the app is open: sets up websites signed in since, reads each website's favorites again
+    /// when it has not for half an hour, and sends library changes made in the app.
     @MainActor func runSiteFavoritesSync() async {
-        let links = SiteFavoriteFolders.shared
+        let store = SiteFavoriteFolders.shared
         for site in ComicSites.all where favoritesAccountHost(site) != nil {
-            if links.folder(for: site) == nil { await setUpSiteFavoritesFolder(site: site) }
-            else if (links.lastPull(for: site) ?? .distantPast) < Date().addingTimeInterval(-30 * 60) { _ = try? await syncSiteFavorites(site: site) }
+            if let state = store.state(for: site) {
+                if (state.lastPull ?? .distantPast) < Date().addingTimeInterval(-30 * 60) { _ = try? await syncSiteFavorites(site: site) }
+            } else { await setUpSiteFavorites(site: site) }
             if Task.isCancelled { return }
         }
-        let observation = ValueObservation.tracking { db -> [String: Set<Int64>] in
-            var folders: [String: Set<Int64>] = [:]
-            for site in links.linkedSites {
-                guard let identity = links.folder(for: site),
-                      let id = try Int64.fetchOne(db, sql: "SELECT id FROM folders WHERE sync_id = ?", arguments: [identity]) else { continue }
-                folders[site] = Set(try Int64.fetchAll(db, sql: "SELECT w.gallery_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE fw.folder_id = ?", arguments: [id]))
-            }
-            return folders
+        // Any change to which works are saved where.
+        let observation = ValueObservation.tracking { db in
+            try Row.fetchAll(db, sql: "SELECT w.gallery_id, fw.folder_id FROM works w LEFT JOIN folder_works fw ON fw.work_id = w.id ORDER BY 1, 2")
         }
         do {
-            for try await folders in observation.values(in: database.dbWriter) {
-                for (site, ids) in folders where links.baseline(for: site).map({ $0 != ids }) == true {
-                    // A moment's wait gathers a burst of changes into one sync.
-                    try await Task.sleep(for: .seconds(1))
-                    _ = try? await syncSiteFavorites(site: site, pull: false)
-                }
+            var first = true
+            for try await _ in observation.values(in: database.dbWriter) {
+                if first { first = false; continue }
+                // A moment's wait gathers a burst of changes into one sync.
+                try await Task.sleep(for: .seconds(1))
+                for site in store.syncedSites { _ = try? await syncSiteFavorites(site: site, pull: false) }
             }
         } catch {}
     }

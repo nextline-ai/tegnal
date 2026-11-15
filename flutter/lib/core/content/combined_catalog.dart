@@ -51,6 +51,13 @@ class SiteContent extends ContentProviding implements WorkExtrasProviding {
   Future<void> setAccountFavorite(int id, {required bool saved, int category = 0}) =>
       SiteScope.run(site, () => _inner.setAccountFavorite(id, saved: saved, category: category));
 
+  Future<List<FavoriteCategory>> favoriteCategories() => SiteScope.run(site, _inner.favoriteCategories);
+
+  Future<AccountFavorites> accountFavoriteLists() => SiteScope.run(site, _inner.accountFavoriteLists);
+
+  Future<void> changeAccountFavorite(int id, {required int category, required bool adds}) =>
+      SiteScope.run(site, () => _inner.changeAccountFavorite(id, category: category, adds: adds));
+
   static final _sources = <String, SiteContent>{};
 
   /// The shared reader of a connected website.

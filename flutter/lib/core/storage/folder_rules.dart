@@ -181,6 +181,38 @@ extension AppDatabaseFolderRules on AppDatabase {
   List<int> galleryIDsInFolder(int folderID) =>
       dbWriter.read((db) => db.column<int>('SELECT w.gallery_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE fw.folder_id = ?', [folderID]));
 
+  /// Every saved work by number, with the folders holding it.
+  Map<int, Set<int>> savedWorkFolders() => dbWriter.read((db) {
+    final folders = <int, Set<int>>{};
+    for (final row in db.rows('SELECT w.gallery_id AS gallery_id, fw.folder_id AS folder_id FROM works w LEFT JOIN folder_works fw ON fw.work_id = w.id')) {
+      final ids = folders.putIfAbsent(row['gallery_id'] as int, () => <int>{});
+      final folder = row['folder_id'];
+      if (folder is int) ids.add(folder);
+    }
+    return folders;
+  });
+
+  /// Takes a work out of folders, into Unfiled when no folder is left.
+  void removeWorkFromFolders(int galleryId, Set<int> folderIDs) {
+    if (folderIDs.isEmpty) return;
+    final left = dbWriter.write((db) {
+      final workID = db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [galleryId]);
+      if (workID == null) return -1;
+      db.execute('DELETE FROM folder_works WHERE work_id = ? AND folder_id IN (${folderIDs.join(',')})', [workID]);
+      return db.value<int>('SELECT COUNT(*) FROM folder_works WHERE work_id = ?', [workID]) ?? 0;
+    });
+    if (left == 0) addWork(galleryId, unfiledFolderID());
+  }
+
+  /// Unfiled, where a work in no other folder belongs.
+  int unfiledFolderID() {
+    final unfiled = listFolders().where((folder) => folder.name == '미분류').firstOrNull?.id;
+    if (unfiled != null) return unfiled;
+    final id = ensureDefaultFolder().id;
+    if (id == null) throw StateError('No Unfiled folder');
+    return id;
+  }
+
   /// Takes a work out of a folder. A work no other folder holds leaves the library, as removing
   /// its bookmark would.
   void removeWorkFromFolder(int galleryId, int folderID) {

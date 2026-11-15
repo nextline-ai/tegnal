@@ -223,8 +223,52 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
 
   Future<List<FavoriteCategory>> favoriteCategories() async {
     final site = _prepareSite();
-    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
-    return keyed.favoriteCategories(site: site);
+    return switch (await _resolve(site)) {
+      MangaBackend.keyed => keyed.favoriteCategories(site: site),
+      MangaBackend.document => (await documents.favoriteLists(site: site)).categories,
+      _ => throw ContentError.unsupportedFormat,
+    };
+  }
+
+  /// Every favorite the signed-in account keeps, with the categories or lists holding it.
+  Future<AccountFavorites> accountFavoriteLists() async {
+    final site = _prepareSite();
+    switch (await _resolve(site)) {
+      case MangaBackend.keyed:
+        final categories = await keyed.favoriteCategories(site: site);
+        final members = <int, Set<int>>{};
+        for (final category in categories.where((category) => category.count > 0)) {
+          String? next;
+          var pages = 0;
+          do {
+            final (ids, cursor) = await keyed.favorites(after: next, category: category.id, site: site);
+            for (final id in ids) {
+              (members[id] ??= {}).add(category.id);
+            }
+            next = cursor;
+            pages += 1;
+          } while (next != null && pages < 500);
+        }
+        return AccountFavorites(categories: categories, members: members, exclusive: true);
+      case MangaBackend.document:
+        return documents.favoriteLists(site: site);
+      default:
+        throw ContentError.unsupportedFormat;
+    }
+  }
+
+  /// Adds a work to one of the account's categories or lists, or takes it out. Where a favorite
+  /// sits in one category, adding moves it there and taking it out removes the favorite.
+  Future<void> changeAccountFavorite(int id, {required int category, required bool adds}) async {
+    final site = _prepareSite();
+    switch (await _resolve(site)) {
+      case MangaBackend.keyed:
+        await keyed.setFavorite(id, saved: adds, category: category, site: site);
+      case MangaBackend.document:
+        await documents.setFavorite(id, list: category, adds: adds, site: site);
+      default:
+        throw ContentError.unsupportedFormat;
+    }
   }
 
   Future<(int, int)?> imageAllowance() async {

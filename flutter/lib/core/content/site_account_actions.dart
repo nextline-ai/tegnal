@@ -41,6 +41,8 @@ abstract final class SiteAccountActions {
   /// Keeps a sign-in made on a site's own pages. Returns false while it left no cookies.
   static bool finishSessionSignIn(List<SiteCookie> cookies, ContentEnvironment content, {String? site}) {
     if (!SiteAccount.signInSession(cookies, host: scoped(site, () => MangaUrls.configuredHost))) return false;
+    // Requests carry the account from now on, where works also open without one.
+    scoped(site, () => MangaUrls.markUsesAccount(site: MangaUrls.home, signInPage: MangaUrls.signInURL));
     signInChanged(content, site: site);
     return true;
   }

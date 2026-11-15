@@ -116,6 +116,36 @@ extension AppDatabase {
         try dbWriter.write { try Self.folderIdentity(id, db: $0) }
     }
 
+    /// Every saved work by number, with the folders it is in.
+    func savedWorkFolders() throws -> [Int64: Set<Int64>] {
+        try dbWriter.read { db in
+            var folders: [Int64: Set<Int64>] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT w.gallery_id, fw.folder_id FROM works w LEFT JOIN folder_works fw ON fw.work_id = w.id") {
+                let id: Int64 = row[0]
+                folders[id, default: []].formUnion([row[1] as Int64?].compactMap { $0 })
+            }
+            return folders
+        }
+    }
+
+    /// Takes a work out of folders, into Unfiled when no folder is left.
+    func removeWork(galleryId: Int64, fromFolders folderIDs: Set<Int64>) throws {
+        guard !folderIDs.isEmpty else { return }
+        let left = try dbWriter.write { db -> Int in
+            guard let workID = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [galleryId]) else { return -1 }
+            try db.execute(sql: "DELETE FROM folder_works WHERE work_id = ? AND folder_id IN (\(folderIDs.map(String.init).joined(separator: ",")))", arguments: [workID])
+            return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder_works WHERE work_id = ?", arguments: [workID]) ?? 0
+        }
+        if left == 0 { try addWork(galleryId: galleryId, folderID: try unfiledFolderID()) }
+    }
+
+    /// Unfiled, where a work in no other folder belongs.
+    func unfiledFolderID() throws -> Int64 {
+        if let unfiled = try listFolders().first(where: { $0.name == "미분류" })?.id { return unfiled }
+        guard let id = try ensureDefaultFolder().id else { throw BooruError.storage }
+        return id
+    }
+
     /// The saved works in a folder, by number.
     func galleryIDs(inFolder folderID: Int64) throws -> [Int64] {
         try dbWriter.read { try Int64.fetchAll($0, sql: "SELECT w.gallery_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE fw.folder_id = ?", arguments: [folderID]) }

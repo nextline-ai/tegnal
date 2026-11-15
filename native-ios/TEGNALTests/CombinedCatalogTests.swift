@@ -170,42 +170,84 @@ final class CombinedCatalogTests: XCTestCase {
         XCTAssertEqual(Array(ComicSites.all.prefix(3)), ["c.example.org", "a.example.org", "b.example.org"], "A site the order leaves out keeps its place at the end")
     }
 
-    func testFavoritesSyncFollowsTheSideThatChanged() {
-        let first = FavoriteSyncPlan.make(local: [1], remote: [1, 2, 3], base: nil)
-        XCTAssertEqual(first.addLocally, [2, 3], "The first sync brings the website's favorites into the folder")
-        XCTAssertEqual(first.addOnSite, [], "A work already on both sides needs nothing")
-        XCTAssertEqual(first.removeLocally + first.removeFromSite, [], "The first sync never removes")
-        XCTAssertEqual(first.settled, [1, 2, 3])
+    private typealias Change = FavoriteSyncPlan.SiteChange
 
-        let plan = FavoriteSyncPlan.make(local: [1, 2, 4], remote: [1, 3, 5], base: [1, 2, 3])
-        XCTAssertEqual(plan.addLocally, [5], "Added on the website")
-        XCTAssertEqual(plan.removeLocally, [2], "Removed on the website")
-        XCTAssertEqual(plan.addOnSite, [4], "Added to the folder")
-        XCTAssertEqual(plan.removeFromSite, [3], "Removed from the folder")
-        XCTAssertEqual(plan.settled, [1, 4, 5])
+    func testFavoritesSyncFollowsTheSideThatChangedACategory() {
+        // Category 0 and 1 have folders; 5 is kept for works in other folders.
+        let first = FavoriteSyncPlan.make(local: [1: [.category(0)], 9: [.unassigned]], remote: [1: [0], 2: [1], 3: [4]], base: nil,
+                                          folders: [0, 1], unassigned: 5, localOnly: [])
+        XCTAssertEqual(first.local, [.place(2, [.category(1)]), .place(3, [.unassigned])],
+                       "The first sync brings each category into its folder, and one without a folder into Unfiled")
+        XCTAssertEqual(first.keepLocal, [9], "The library saved before the sync is not sent all at once")
+        XCTAssertTrue(first.site.isEmpty)
+        XCTAssertEqual(first.settled, [1: [0], 2: [1], 3: [4]])
 
-        let push = FavoriteSyncPlan.make(local: [1, 4], remote: [1, 2], base: [1, 2])
-        XCTAssertEqual(push.addOnSite, [4])
-        XCTAssertEqual(push.removeFromSite, [2])
-        XCTAssertTrue(push.addLocally.isEmpty && push.removeLocally.isEmpty, "Sending changes alone never changes the folder")
-        XCTAssertTrue(FavoriteSyncPlan.make(local: [1, 2], remote: [1, 2], base: [1, 2]).isEmpty)
+        let base: [Int64: Set<Int>] = [1: [0], 2: [1], 3: [0], 4: [1]]
+        let plan = FavoriteSyncPlan.make(local: [1: [.category(1)], 2: [.category(1)], 3: [.category(0)], 6: [.unassigned]],
+                                         remote: [1: [0], 2: [0], 3: [0], 5: [1]], base: base, folders: [0, 1], unassigned: 5, localOnly: [])
+        XCTAssertEqual(plan.local, [.place(2, [.category(0)]), .place(5, [.category(1)])], "Moved and added on the website")
+        XCTAssertEqual(plan.site, [Change(id: 1, category: 1, adds: true), Change(id: 6, category: 5, adds: true)],
+                       "Moved to another category's folder, and saved in another folder")
+        XCTAssertFalse(plan.local.contains(.remove(4)), "A work already gone from both sides needs nothing")
+
+        let both = FavoriteSyncPlan.make(local: [1: [.category(1)]], remote: [1: [2]], base: [1: [0]], folders: [0, 1, 2], unassigned: nil, localOnly: [])
+        XCTAssertEqual(both.local, [.place(1, [.category(1), .category(2)])], "Moved on both sides: the folder follows the website too")
+        XCTAssertTrue(both.site.isEmpty, "and the website keeps its own")
+
+        let removed = FavoriteSyncPlan.make(local: [1: [.category(0)]], remote: [2: [0]], base: [1: [0], 2: [0]], folders: [0], unassigned: nil, localOnly: [])
+        XCTAssertEqual(removed.local, [.remove(1)], "Removed on the website")
+        XCTAssertEqual(removed.site, [Change(id: 2, category: 0, adds: false)], "Removed from the library")
+
+        let out = FavoriteSyncPlan.make(local: [1: [.unassigned]], remote: [1: [0]], base: [1: [0]], folders: [0], unassigned: nil, localOnly: [])
+        XCTAssertEqual(out.site, [Change(id: 1, category: 0, adds: false)], "Taken out of the category's folder with nowhere else to go")
+        XCTAssertEqual(out.keepLocal, [1])
+        XCTAssertTrue(FavoriteSyncPlan.make(local: [1: [.category(0)]], remote: [1: [0]], base: [1: [0]], folders: [0], unassigned: 5, localOnly: []).isEmpty)
     }
 
-    func testFavoriteFoldersRememberLinksBaselinesAndATurnedOffSync() {
+    func testListsKeepAWorkInSeveralFoldersAndLeaveListsWithoutFoldersAlone() {
+        let plan = FavoriteSyncPlan.make(local: [1: [.category(10), .category(11)], 2: [.category(10)], 3: [.unassigned]],
+                                         remote: [1: [10], 2: [10, 11, 30], 3: [30]], base: [1: [10], 2: [10, 11, 30], 3: [30]],
+                                         folders: [10, 11], unassigned: 20, localOnly: [], exclusive: false)
+        XCTAssertEqual(plan.site, [Change(id: 1, category: 11, adds: true), Change(id: 2, category: 11, adds: false)],
+                       "Each folder a work joins or leaves is one list change; a list without a folder keeps it")
+        XCTAssertTrue(plan.local.isEmpty)
+        XCTAssertEqual(plan.settled[2], [10, 30])
+
+        let gone = FavoriteSyncPlan.make(local: [:], remote: [4: [10, 30]], base: [4: [10, 30]], folders: [10], unassigned: nil, localOnly: [], exclusive: false)
+        XCTAssertEqual(gone.site, [Change(id: 4, category: 10, adds: false), Change(id: 4, category: 30, adds: false)],
+                       "A work removed from the library leaves every list, or it would come back")
+    }
+
+    func testAWorkTheWebsiteCannotKeepIsSentOnlyOncePutInACategoryFolder() {
+        let skipped = FavoriteSyncPlan.make(local: [7: [.unassigned]], remote: [:], base: [:], folders: [0], unassigned: 5, localOnly: [7])
+        XCTAssertTrue(skipped.isEmpty)
+        let moved = FavoriteSyncPlan.make(local: [7: [.category(0)]], remote: [:], base: [:], folders: [0], unassigned: 5, localOnly: [7])
+        XCTAssertEqual(moved.stopKeepingLocal, [7])
+        XCTAssertEqual(moved.site, [Change(id: 7, category: 0, adds: true)])
+    }
+
+    func testFavoriteFoldersRememberStatesAndATurnedOffSync() {
         let defaults = UserDefaults(suiteName: "site-favorites-\(UUID().uuidString)")!
-        let folders = SiteFavoriteFolders(defaults: defaults)
-        XCTAssertNil(folders.folder(for: "a.example.org"))
-        folders.link("a.example.org", folder: "folder-1")
-        XCTAssertEqual(folders.folder(for: "a.example.org"), "folder-1")
-        XCTAssertNil(folders.baseline(for: "a.example.org"), "A new link has no baseline, so nothing is removed on its first sync")
-        folders.setBaseline([3, 1], for: "a.example.org")
-        XCTAssertEqual(SiteFavoriteFolders(defaults: defaults).baseline(for: "a.example.org"), [1, 3])
-        folders.unlink("a.example.org", declined: true)
-        XCTAssertNil(folders.folder(for: "a.example.org"))
-        XCTAssertNil(folders.baseline(for: "a.example.org"))
-        XCTAssertTrue(folders.isDeclined("a.example.org"), "Turned off by hand, it is not set up again on its own")
-        folders.link("a.example.org", folder: "folder-2")
-        XCTAssertFalse(folders.isDeclined("a.example.org"), "Turning it back on clears that")
+        let store = SiteFavoriteFolders(defaults: defaults)
+        XCTAssertNil(store.state(for: "a.example.org"))
+        var state = SiteFavoriteFolders.State(folders: [0: "folder-1"], unassigned: 1, exclusive: false)
+        state.baseline = [3: [0, 4]]
+        store.setState(state, for: "a.example.org")
+        XCTAssertEqual(SiteFavoriteFolders(defaults: defaults).state(for: "a.example.org"), state)
+        XCTAssertEqual(store.syncedSites, ["a.example.org"])
+        store.remove("a.example.org", declined: true)
+        XCTAssertNil(store.state(for: "a.example.org"))
+        XCTAssertTrue(store.isDeclined("a.example.org"), "Turned off by hand, it is not set up again on its own")
+        store.setState(SiteFavoriteFolders.State(), for: "a.example.org")
+        XCTAssertFalse(store.isDeclined("a.example.org"), "Turning it back on clears that")
+    }
+
+    func testFavoriteListsAreReadFromTheFavoritesPage() throws {
+        let page = Data(#"<script>const favorites = [{"id":12,"name":"Later [a]","private":1,"galleries":[{"id":101,"time":1},{"id":102,"time":2}]},{"id":3,"name":"","private":0,"galleries":[{"id":101,"time":3}]}]; const favoriteThumbnails = [];</script>"#.utf8)
+        let lists = try DocumentCatalogSource.favoriteLists(in: page)
+        XCTAssertEqual(lists.categories, [FavoriteCategory(id: 3, name: "fav:3", count: 1), FavoriteCategory(id: 12, name: "Later [a]", count: 2)])
+        XCTAssertEqual(lists.members, [101: [3, 12], 102: [12]])
+        XCTAssertFalse(lists.exclusive)
     }
 
     func testOneWebsiteFailingLeavesTheOthersShowing() async throws {
