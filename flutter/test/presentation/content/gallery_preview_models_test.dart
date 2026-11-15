@@ -5,6 +5,7 @@ import 'dart:ui' show Rect;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/presentation/content/gallery_preview_models.dart';
 import 'package:tegnal/presentation/works/artwork_grid.dart';
 
@@ -29,6 +30,15 @@ void main() {
       expect(GalleryPreviewLoading.shouldLoad(metadata: reachedEnd, viewportHeight: height), isTrue);
     }
     expect(GalleryPreviewLoading.shouldLoad(metadata: Rect.zero, viewportHeight: 0), isFalse);
+  });
+
+  test('the work heading leaves out a language or kind the website did not give', () {
+    final pages = List.filled(44, const GalleryPage(hash: 'a', name: '1.jpg', width: 1, height: 1, hasAVIF: false));
+    NativeGallery work(String language, String type) =>
+        NativeGallery(id: 1, title: 'Work', artists: const [], language: language, type: type, tags: const [], pages: pages);
+    expect(galleryHeadingMetadata(work('korean', 'manga')), L10n.text('%@ · %@ · %@ pages', ['korean', 'manga', '44']));
+    expect(galleryHeadingMetadata(work('', 'artistcg')), 'artistcg · ${L10n.text('%@ pages', ['44'])}', reason: 'No separator leads the line');
+    expect(galleryHeadingMetadata(work('', '')), L10n.text('%@ pages', ['44']));
   });
 
   test('tag groups keep search queries and differentiate namespaces and API categories', () {

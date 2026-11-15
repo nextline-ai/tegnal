@@ -59,6 +59,9 @@ enum ContentErrorKind {
 
   /// The website stopped answering this network for a while.
   temporarilyBlocked,
+
+  /// The website signed the account in but hasn't opened to it, as members-only catalogs do.
+  accessDenied,
 }
 
 class ContentError implements Exception {
@@ -75,6 +78,7 @@ class ContentError implements Exception {
   static const imageLimit = ContentError(ContentErrorKind.imageLimit);
   static const verificationRequired = ContentError(ContentErrorKind.verificationRequired);
   static const temporarilyBlocked = ContentError(ContentErrorKind.temporarilyBlocked);
+  static const accessDenied = ContentError(ContentErrorKind.accessDenied);
 
   final ContentErrorKind kind;
 
@@ -99,6 +103,9 @@ class ContentError implements Exception {
       'This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again.',
     ),
     ContentErrorKind.temporarilyBlocked => L10n.text('This website has paused access from your network for a while. Try again later, or change networks.'),
+    ContentErrorKind.accessDenied => L10n.text(
+      'You’re signed in, but this website hasn’t opened to your account yet. It decides which accounts it lets in, and a new account may be let in about a week after it’s made. Check again later, or open works on another connected website.',
+    ),
   };
 
   /// The website says the work isn't there, as for one it deleted.
@@ -107,7 +114,8 @@ class ContentError implements Exception {
 
   /// The website has stopped answering this device for now.
   static bool refusesDevice(Object error) =>
-      error is ContentError && (error.kind == ContentErrorKind.temporarilyBlocked || error.kind == ContentErrorKind.imageLimit);
+      error is ContentError &&
+      (error.kind == ContentErrorKind.temporarilyBlocked || error.kind == ContentErrorKind.imageLimit || error.kind == ContentErrorKind.accessDenied);
 
   /// Errors after which the same work may still open on another connected website.
   static bool allowsOtherSite(Object error) {
@@ -115,6 +123,7 @@ class ContentError implements Exception {
       return switch (error.kind) {
         ContentErrorKind.galleryNotFound ||
         ContentErrorKind.signInRequired ||
+        ContentErrorKind.accessDenied ||
         ContentErrorKind.imageLimit ||
         ContentErrorKind.verificationRequired ||
         ContentErrorKind.temporarilyBlocked ||

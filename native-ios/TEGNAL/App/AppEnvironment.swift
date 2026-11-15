@@ -631,6 +631,8 @@ public final class AppEnvironment: @unchecked Sendable {
             else { isSiteVerified = false; mangaSiteAddress = "" }
         }
         ComicSites.remove(site)
+        // A removed website's account goes with it.
+        SiteAccount.signOut(host: site)
         CoverFillGuard.forget()
         WorkSiteMemory.shared.forget(site: site)
         comicSitesRevision += 1
@@ -813,41 +815,59 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     /// A finished sign-in changes what the site shows, so its protocol is read again.
-    @MainActor func siteSignInFinished() {
+    /// A website's account changed: what was learned about the website is looked up again with it.
+    /// [site] is a connected website; nil is the checked one.
+    @MainActor func siteSignInFinished(site: String? = nil) {
+        if let site, site != mangaSiteAddress {
+            SiteScope.$site.withValue(site) { MangaUrls.resetResolvedBackend() }
+            comicSitesRevision += 1
+            return
+        }
         siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
         MangaUrls.resetResolvedBackend()
         ContentBrowserTransport.reset()
     }
 
-    @MainActor func signOutOfSite() {
-        if MangaUrls.usesSiteSession {
-            let host = MangaUrls.configuredHost
-            SiteAccount.signOut(host: host)
-            siteAccountSignedIn = false
-            MangaUrls.resetResolvedBackend()
-            ContentBrowserTransport.reset()
-            Task { await ComicsBrowserProfile.forgetSignIn(host: host, session: true) }
-            return
+    /// Signs one connected website out; the other websites keep their accounts. Nil is the checked one.
+    @MainActor func signOutOfSite(_ site: String? = nil) {
+        let site = site ?? mangaSiteAddress
+        let (host, session, signInHost) = SiteScope.$site.withValue(site) {
+            (MangaUrls.configuredHost, MangaUrls.usesSiteSession, MangaUrls.signInURL?.host?.lowercased())
         }
-        SiteAccount.signOut()
-        siteAccountSignedIn = false
-        syncsAccountFavorites = false
-        MangaUrls.resetResolvedBackend()
-        ContentBrowserTransport.reset()
+        guard !host.isEmpty else { return }
+        SiteAccount.signOut(host: host)
+        if site == mangaSiteAddress {
+            siteAccountSignedIn = false
+            if !session { syncsAccountFavorites = false }
+        }
+        siteSignInFinished(site: site)
         // The sign-in pages share the website's browser profile; it must not sign the account back in.
-        let hosts = Set(([MangaUrls.signInURL?.host] + ComicSites.all.map { Optional($0) }).compactMap { $0?.lowercased() })
-        Task { for host in hosts { await ComicsBrowserProfile.forgetSignIn(host: host) } }
+        Task {
+            await ComicsBrowserProfile.forgetSignIn(host: host, session: session)
+            if let signInHost, signInHost != host { await ComicsBrowserProfile.forgetSignIn(host: signInHost) }
+        }
     }
 
-    /// Whether the connected website now shows the signed-in account: its favorites open, or a
-    /// members-only website shows its works.
-    @MainActor func checkSiteAccount() async -> Bool {
-        await MangaUrls.resolveBackend(force: true)
-        guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return false }
-        do {
-            _ = try await MangaContentSource.shared.accountFavorites(after: nil)
-            return true
-        } catch { return false }
+    /// Whether a connected website now shows its signed-in account: its favorites open, or a
+    /// members-only website shows its works. Nil is the checked website.
+    @MainActor func checkSiteAccount(site: String? = nil) async -> Bool {
+        guard let site, site != mangaSiteAddress else {
+            await MangaUrls.resolveBackend(force: true)
+            guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return false }
+            do {
+                _ = try await MangaContentSource.shared.accountFavorites(after: nil)
+                return true
+            } catch { return false }
+        }
+        let content = SiteContent.for(site)
+        return await SiteScope.$site.withValue(site) {
+            await MangaUrls.resolveBackend(force: true)
+            guard MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return false }
+            do {
+                _ = try await content.accountFavorites(after: nil)
+                return true
+            } catch { return false }
+        }
     }
 
     /// Bookmarks every account favorite not already saved, into the default folder, or each
@@ -899,9 +919,16 @@ public final class AppEnvironment: @unchecked Sendable {
 
     /// Mirrors a bookmark change to the account's favorites when that is turned on.
     @MainActor func syncAccountFavorite(_ id: Int64, saved: Bool) {
-        guard syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
+        syncAccountFavorites([id], saved: saved)
+    }
+
+    /// Mirrors several bookmark changes one after another, so a long list never bursts the website.
+    @MainActor func syncAccountFavorites(_ ids: [Int64], saved: Bool) {
+        guard !ids.isEmpty, syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
         let category = accountFavoriteCategory
-        Task { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category) }
+        Task {
+            for id in ids { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category) }
+        }
     }
 
     /// Fetches every saved work's information again through the background queue.

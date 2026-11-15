@@ -37,7 +37,6 @@ public struct SettingsView: View {
                     Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
                 }.accessibilityIdentifier("settings.thumbnailGestures")
             } header: { Text(L10n.text("Browsing")) }
-            SiteAccountSection()
             ReaderSettingsSection(booru: false, isPresented: $showReader)
             Section {
                 NavigationLink { DownloadsView(mode: .manga) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
@@ -88,19 +87,27 @@ struct ComicsSetupView: View {
 struct ComicSitesView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var adding = false
+    @State private var editing: String?
     var body: some View {
         List {
             Section {
                 ForEach(env.comicSites, id: \.self) { site in
-                    Button { env.switchComicsSite(to: site) } label: {
-                        HStack {
-                            Text(site).foregroundStyle(.primary)
-                            Spacer()
-                            if site == env.mangaSiteAddress { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                        }
+                    HStack {
+                        Button { env.switchComicsSite(to: site) } label: {
+                            HStack {
+                                Text(site).foregroundStyle(.primary)
+                                Spacer()
+                                if site == env.mangaSiteAddress { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                            }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.site.\(site)")
+                        // Each website keeps its own account and check, like an image server.
+                        Button { editing = site } label: { Image(systemName: "slider.horizontal.3") }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(L10n.text("Website Settings") + " " + site)
+                            .accessibilityIdentifier("settings.site.settings.\(site)")
                     }
                     .swipeActions { Button(L10n.text("Delete"), role: .destructive) { env.removeComicsSite(site) } }
-                    .accessibilityIdentifier("settings.site.\(site)")
                 }
             } footer: {
                 Text(L10n.text("Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too."))
@@ -111,6 +118,7 @@ struct ComicSitesView: View {
             }
         }
         .navigationTitle(L10n.text("Website Connection")).navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $editing) { site in ComicSiteSettingsView(site: site) }
         .appSheet(isPresented: $adding) { WebsiteConnectionEditor(server: nil) }
     }
 }

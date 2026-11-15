@@ -432,6 +432,8 @@ abstract final class MangaUrls {
   static Future<bool> discoverBackend(String site, ContentTransport transport, {bool retried = false}) async {
     final homepage = ContentURL.parse(site);
     if (homepage == null || site.isEmpty) return false;
+    final host = homepage.host.toLowerCase();
+    final access = SiteAccount.siteCookie(SiteAccount.accessCookie, host: host);
     final scripts = <Uri>[];
     try {
       final List<int> data;
@@ -480,8 +482,11 @@ abstract final class MangaUrls {
       if (showsNothing) {
         final askedBefore = preferences.string('manga.account_site') == site;
         markRequiresSignIn(site: site);
-        // An account signed in elsewhere is tried here once, now that the site asks for one.
-        if (!askedBefore && !retried && SiteAccount.isSignedIn && home == site) {
+        // The site's account is tried here once, now that the site asks for one; so is access
+        // a members-only catalog handed out with this very answer.
+        final handedOut = SiteAccount.siteCookie(SiteAccount.accessCookie, host: host);
+        final newAccess = handedOut != null && handedOut != access;
+        if (!retried && SiteAccount.isSignedIn && home == site && (!askedBefore || newAccess)) {
           return await discoverBackend(site, transport, retried: true);
         }
         return false;

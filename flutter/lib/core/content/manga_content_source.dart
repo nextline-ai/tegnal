@@ -14,6 +14,7 @@ import 'gallery_content.dart';
 import 'keyed_catalog_source.dart';
 import 'keyed_work_extras.dart';
 import 'manga_urls.dart';
+import 'site_account.dart';
 import '../support/perf_trace.dart';
 
 class _IndexPrefix {
@@ -86,7 +87,9 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
   Future<MangaBackend> _resolve(String site) async {
     await MangaUrls.resolveBackend(transport: transport);
     if (MangaUrls.home != site) throw const CancellationError();
-    if (MangaUrls.requiresSignIn) throw ContentError.signInRequired;
+    if (MangaUrls.requiresSignIn) {
+      throw SiteAccount.refusesAccess(MangaUrls.configuredHost) ? ContentError.accessDenied : ContentError.signInRequired;
+    }
     // A bot check that stopped the first look at the site has to be passed before anything else.
     final host = ContentURL.parse(site)?.host;
     if (!MangaUrls.hasResolvedBackend && host != null && ContentTransport.challengedPage(host) != null) throw ContentError.verificationRequired;
@@ -264,6 +267,48 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
     final site = _prepareSite();
     if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
     return keyed.rate(id, halfStars, site: site);
+  }
+
+  @override
+  Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote}) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.voteTag(id, tag: tag, vote: vote, site: site);
+  }
+
+  @override
+  Future<List<WorkComment>> postComment(int id, String text) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.postComment(id, text, site: site);
+  }
+
+  @override
+  Future<WorkArchiveOffer> archiveOffer(int id) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.archiveOffer(id, site: site);
+  }
+
+  @override
+  Future<Uri> archiveDownloadURL(int id, WorkArchiveOption option) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) throw ContentError.unsupportedFormat;
+    return keyed.archiveDownloadURL(id, option, site: site);
+  }
+
+  /// The account's settings profiles on the checked website, when it keeps several.
+  Future<List<SiteSettingsProfile>> settingsProfiles() async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return [];
+    return keyed.settingsProfiles(site: site);
+  }
+
+  Future<void> useSettingsProfile(int profile) async {
+    final site = _prepareSite();
+    if (await _resolve(site) != MangaBackend.keyed) return;
+    keyed.useSettingsProfile(profile, site: site);
+    _galleryCache.clear();
   }
 
   @override

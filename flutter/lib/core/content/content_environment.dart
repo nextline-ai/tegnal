@@ -104,6 +104,8 @@ class ContentEnvironment extends ChangeNotifier {
       }
     }
     ComicSites.remove(site);
+    // A removed website's account goes with it.
+    SiteAccount.signOutAt(site);
     CoverFillGuard.forget();
     WorkSiteMemory.shared.forget(site);
     notifyListeners();

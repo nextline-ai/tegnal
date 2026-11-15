@@ -32,23 +32,34 @@ abstract final class SiteAccountActions {
     return ['about:blank', 'about:srcdoc'].contains(url.toString()) || ['blob', 'data'].contains(url.scheme);
   }
 
+  /// What was learned about [site] (a connected website; null is the checked one), read in its own scope.
+  static T scoped<T>(String? site, T Function() body) => SiteScope.run(site ?? ComicSites.active, body);
+
   /// Keeps a sign-in made on a site's own pages. Returns false while it left no cookies.
-  static bool finishSessionSignIn(List<SiteCookie> cookies, ContentEnvironment content) {
-    if (!SiteAccount.signInSession(cookies, host: MangaUrls.configuredHost)) return false;
-    signInChanged(content);
+  static bool finishSessionSignIn(List<SiteCookie> cookies, ContentEnvironment content, {String? site}) {
+    if (!SiteAccount.signInSession(cookies, host: scoped(site, () => MangaUrls.configuredHost))) return false;
+    signInChanged(content, site: site);
     return true;
   }
 
-  /// Signs in with cookies copied from a browser, for the connected site.
-  static bool signInPasted(PastedCookies pasted, ContentEnvironment content) {
-    if (!SiteAccount.signInPasted(pasted, host: MangaUrls.configuredHost)) return false;
-    MangaUrls.markUsesAccount(site: MangaUrls.home);
-    signInChanged(content);
+  /// Signs a connected website in with cookies copied from a browser.
+  static bool signInPasted(PastedCookies pasted, ContentEnvironment content, {String? site}) {
+    if (!SiteAccount.signInPasted(pasted, host: scoped(site, () => MangaUrls.configuredHost))) return false;
+    scoped(site, () => MangaUrls.markUsesAccount(site: MangaUrls.home));
+    signInChanged(content, site: site);
     return true;
   }
 
-  /// Whether the connected website now shows the signed-in account: its favorites open.
-  static Future<bool> checkSiteAccount(AccountFavoritesPage favorites) async {
+  /// Signs a connected website in with the account another website keeps.
+  static bool useAccount(String source, ContentEnvironment content, {String? site}) {
+    if (!SiteAccount.useAccount(from: source, on: scoped(site, () => MangaUrls.configuredHost))) return false;
+    scoped(site, () => MangaUrls.markUsesAccount(site: MangaUrls.home));
+    signInChanged(content, site: site);
+    return true;
+  }
+
+  /// Whether a connected website now shows its signed-in account: its favorites open.
+  static Future<bool> checkSiteAccount(AccountFavoritesPage favorites, {String? site}) => scoped(site, () async {
     await MangaUrls.resolveBackend(force: true);
     if (!MangaUrls.hasResolvedBackend || MangaUrls.backend != MangaBackend.keyed) return false;
     try {
@@ -57,35 +68,30 @@ abstract final class SiteAccountActions {
     } on Object {
       return false;
     }
-  }
+  });
 
   /// Keeps the identity from a finished sign-in page. Returns false while the cookies hold
   /// none, so the page stays open until the person has signed in (`siteSignInFinished`).
-  static bool finishSignIn(List<SiteCookie> cookies, ContentEnvironment content) {
-    if (!SiteAccount.signIn(cookies)) return false;
-    MangaUrls.markUsesAccount(site: MangaUrls.home);
-    signInChanged(content);
+  static bool finishSignIn(List<SiteCookie> cookies, ContentEnvironment content, {String? site}) {
+    if (!SiteAccount.signIn(cookies, host: scoped(site, () => MangaUrls.configuredHost))) return false;
+    scoped(site, () => MangaUrls.markUsesAccount(site: MangaUrls.home));
+    signInChanged(content, site: site);
     return true;
   }
 
   /// A finished sign-in changes what the site shows, so its protocol is read again.
-  static void signInChanged(ContentEnvironment content) {
+  static void signInChanged(ContentEnvironment content, {String? site}) {
+    scoped(site, MangaUrls.resetResolvedBackend);
     content.refreshSiteAccount();
-    MangaUrls.resetResolvedBackend();
   }
 
-  static void signOut(ContentEnvironment content) {
-    if (MangaUrls.usesSiteSession) {
-      // A site that signs in on its own pages signs out alone; other sites keep their accounts.
-      SiteAccount.signOutAt(MangaUrls.configuredHost);
-      content.refreshSiteAccount();
-      MangaUrls.resetResolvedBackend();
-      return;
-    }
-    SiteAccount.signOut();
-    content.syncsAccountFavorites = false;
-    content.refreshSiteAccount();
-    MangaUrls.resetResolvedBackend();
+  /// Signs one connected website out; the other websites keep their accounts.
+  static void signOut(ContentEnvironment content, {String? site}) {
+    final host = scoped(site, () => MangaUrls.configuredHost);
+    final session = scoped(site, () => MangaUrls.usesSiteSession);
+    SiteAccount.signOutAt(host);
+    if ((site ?? ComicSites.active) == ComicSites.active && !session) content.syncsAccountFavorites = false;
+    signInChanged(content, site: site);
   }
 
   /// Bookmarks every account favorite not already saved, into the default folder, or each

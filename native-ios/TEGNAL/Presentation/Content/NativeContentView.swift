@@ -222,6 +222,15 @@ struct ContentFailureView: View {
     private var asksForSignIn: Bool {
         env != nil && message == ContentError.signInRequired.localizedDescription
     }
+    /// A website that signed the account in but hasn't let it in can hand out access afresh.
+    private var refusesAccount: Bool {
+        env != nil && message == ContentError.accessDenied.localizedDescription
+    }
+    /// Other websites' accounts this one can use, as two websites of one forum share theirs.
+    private var accountSources: [String] {
+        guard asksForSignIn, !MangaUrls.usesSiteSession else { return [] }
+        return SiteAccount.accountSources(excluding: MangaUrls.configuredHost)
+    }
     /// A website whose bot check stopped the app gets the check right here.
     private var asksForCheck: Bool {
         env != nil && message == ContentError.verificationRequired.localizedDescription && !MangaUrls.configuredHost.isEmpty
@@ -229,14 +238,15 @@ struct ContentFailureView: View {
     /// Another connected website may carry what this one does not: works have the same number on each.
     private var sibling: String? {
         guard let env, env.isSiteVerified else { return nil }
-        let blocked = [ContentError.signInRequired, .galleryNotFound, .unavailable(403), .unavailable(404), .unavailable(410)].map(\.localizedDescription)
+        let blocked = [ContentError.signInRequired, .accessDenied, .galleryNotFound, .unavailable(403), .unavailable(404), .unavailable(410)].map(\.localizedDescription)
         guard blocked.contains(message) else { return nil }
         _ = env.comicSitesRevision
         return ComicSites.siblings(of: env.mangaSiteAddress).first
     }
     var body: some View {
         ContentUnavailableView {
-            Label(L10n.text(asksForSignIn ? "Sign In Required" : "Unable to Load"), systemImage: asksForSignIn ? "person.crop.circle" : "wifi.exclamationmark")
+            Label(L10n.text(asksForSignIn ? "Sign In Required" : refusesAccount ? "No Access Yet" : "Unable to Load"),
+                  systemImage: asksForSignIn ? "person.crop.circle" : refusesAccount ? "person.crop.circle.badge.exclamationmark" : "wifi.exclamationmark")
         } description: {
             Text(message)
         } actions: {
@@ -244,10 +254,25 @@ struct ContentFailureView: View {
                 Button(L10n.text("Validate Client")) { verifying = true }.buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("content.validate")
                 Button(L10n.text("Try Again"), action: retry).accessibilityIdentifier("content.retry")
+            } else if refusesAccount {
+                Button(L10n.text("Refresh Website Access")) {
+                    SiteAccount.forget(SiteAccount.accessCookie, host: MangaUrls.configuredHost)
+                    env?.siteSignInFinished()
+                    retry()
+                }.buttonStyle(.borderedProminent).accessibilityIdentifier("content.refreshAccess")
+                Button(L10n.text("Try Again"), action: retry).accessibilityIdentifier("content.retry")
             } else if asksForSignIn {
                 if MangaUrls.signInURL != nil {
                     Button(L10n.text("Sign In to Website")) { signingIn = true }.buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("content.signIn")
+                }
+                ForEach(accountSources, id: \.self) { source in
+                    Button(L10n.text("Use the Account from %@", source)) {
+                        guard SiteAccount.useAccount(from: source, on: MangaUrls.configuredHost) else { return }
+                        MangaUrls.markUsesAccount(site: MangaUrls.home)
+                        env?.siteSignInFinished()
+                        retry()
+                    }.accessibilityIdentifier("content.useAccountFrom")
                 }
                 if !MangaUrls.usesSiteSession {
                     Button(L10n.text("Sign In with Cookies")) { pastingCookies = true }
@@ -1208,6 +1233,17 @@ struct ReaderWorkInformationView: View {
     }
 }
 
+extension NativeGallery {
+    /// Language, kind and page count; a work the website gives no language or kind leaves that part out.
+    var headingMetadata: String {
+        let pages = String(pages.count)
+        guard !language.isEmpty, !type.isEmpty else {
+            return ([language, type].filter { !$0.isEmpty } + [L10n.text("%@ pages", pages)]).joined(separator: " · ")
+        }
+        return L10n.text("%@ · %@ · %@ pages", language, type, pages)
+    }
+}
+
 private struct GalleryInformation: View {
     let gallery: NativeGallery
     let cover: UIImage?
@@ -1225,7 +1261,7 @@ private struct GalleryInformation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             if showsCover { WorkDetailCover(image: cover, loading: !coverFinished) }
-            GalleryDetailHeading(title: gallery.title, metadata: L10n.text("%@ · %@ · %@ pages", gallery.language, gallery.type, String(gallery.pages.count)))
+            GalleryDetailHeading(title: gallery.title, metadata: gallery.headingMetadata)
             VStack(spacing: 11) {
                 GalleryDetailActions(read: read, bookmark: bookmark)
                 if let openVersion, let suggestion {

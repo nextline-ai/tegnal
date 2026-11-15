@@ -13,6 +13,8 @@ import '../../core/content/content_environment.dart';
 import '../../core/content/content_errors.dart';
 import '../../core/content/gallery_content.dart';
 import '../../core/content/manga_urls.dart';
+import '../../core/content/site_account_actions.dart';
+import '../../core/content/site_account.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
@@ -312,6 +314,7 @@ class ContentFailure extends StatelessWidget {
     if (content == null || !content.isSiteVerified) return null;
     const blocked = [
       ContentError.signInRequired,
+      ContentError.accessDenied,
       ContentError.galleryNotFound,
       ContentError.unavailable(403),
       ContentError.unavailable(404),
@@ -323,6 +326,12 @@ class ContentFailure extends StatelessWidget {
 
   /// A website that shows nothing until someone signs in gets its sign-in right here.
   bool get _asksForSignIn => content != null && message == ContentError.signInRequired.errorDescription;
+
+  /// A website that signed the account in but hasn't let it in can hand out access afresh.
+  bool get _refusesAccount => content != null && message == ContentError.accessDenied.errorDescription;
+
+  /// Other websites' accounts this one can use, as two websites of one forum share theirs.
+  List<String> get _accountSources => _asksForSignIn && !MangaUrls.usesSiteSession ? SiteAccount.accountSources(excluding: MangaUrls.configuredHost) : const [];
 
   /// A website whose bot check stopped the app gets the check right here.
   bool get _asksForCheck => message == ContentError.verificationRequired.errorDescription && MangaUrls.configuredHost.isNotEmpty;
@@ -344,11 +353,17 @@ class ContentFailure extends StatelessWidget {
     final content = this.content;
     final primaryTitle = _asksForCheck
         ? L10n.text('Validate Client')
+        : _refusesAccount
+        ? L10n.text('Refresh Website Access')
         : _asksForSignIn && MangaUrls.signInURL != null
         ? L10n.text('Sign In to Website')
         : L10n.text('Try Again');
     void primary() {
-      if (_asksForCheck) {
+      if (_refusesAccount && content != null) {
+        SiteAccount.forget(SiteAccount.accessCookie, host: MangaUrls.configuredHost);
+        SiteAccountActions.signInChanged(content);
+        retry();
+      } else if (_asksForCheck) {
         _present(context, (finished) => SiteVerificationView(host: MangaUrls.configuredHost, finished: finished));
       } else if (_asksForSignIn && content != null && MangaUrls.signInURL != null) {
         _present(context, (finished) => SiteSignInView(content: content, finished: finished));
@@ -365,7 +380,13 @@ class ContentFailure extends StatelessWidget {
           Icon(Symbols.wifiExclamationmark, size: 44, color: secondary),
           const SizedBox(height: 12),
           Text(
-            L10n.text(_asksForSignIn ? 'Sign In Required' : 'Unable to Load'),
+            L10n.text(
+              _asksForSignIn
+                  ? 'Sign In Required'
+                  : _refusesAccount
+                  ? 'No Access Yet'
+                  : 'Unable to Load',
+            ),
             style: TegnalType.style(22, weight: FontWeight.w700, color: TegnalColors.label.resolveFrom(context)),
           ),
           const SizedBox(height: 8),
@@ -383,6 +404,11 @@ class ContentFailure extends StatelessWidget {
               style: TegnalType.style(15, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
             ),
           ),
+          if (content != null)
+            for (final source in _accountSources)
+              _secondaryButton(context, L10n.text('Use the Account from %@', [source]), () {
+                if (SiteAccountActions.useAccount(source, content)) retry();
+              }),
           if (_asksForSignIn && content != null && !MangaUrls.usesSiteSession)
             _secondaryButton(
               context,
@@ -523,10 +549,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (widget.showsCover) ...[WorkDetailCover(image: widget.cover, loading: !widget.coverFinished), const SizedBox(height: 22)],
-                GalleryDetailHeading(
-                  title: gallery.title,
-                  metadata: L10n.text('%@ · %@ · %@ pages', [gallery.language, gallery.type, '${gallery.pages.length}']),
-                ),
+                GalleryDetailHeading(title: gallery.title, metadata: galleryHeadingMetadata(gallery)),
                 const SizedBox(height: 22),
                 if (widget.showsRead) ...[
                   _ActionButton(prominent: true, icon: Symbols.book, label: L10n.text('Read'), onPressed: () => widget.actions.read(0, resume: true)),

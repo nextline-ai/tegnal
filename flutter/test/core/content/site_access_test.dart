@@ -102,20 +102,104 @@ void main() {
       _resolveKeyed(preferences, 'members.example');
       expect(SiteAccount.signInPasted(SiteAccount.parseCookies('ipb_member_id=7; ipb_pass_hash=$_hash; igneous=refused001'), host: 'members.example'), isTrue);
       const wall = '<html><body><img src="https://members.example/img/kokomade.jpg"></body></html>';
+      const listing = '<html><body><form><input name="f_search"></form><a href="https://members.example/g/3000/0000000bb8/">Work</a></body></html>';
       // The wall answers a request whose access was refused, and hands out new access with it.
       var handsOut = true;
       final transport = ContentTransport(
-        fetcher: FixtureFetcher(
-          (_) => FixtureReply.text(200, wall, {'Content-Type': 'text/html', if (handsOut) 'Set-Cookie': 'igneous=fresh00001; path=/; domain=.members.example'}),
-        ),
+        fetcher: FixtureFetcher((request) {
+          if (handsOut && (request.headers['cookie'] ?? '').contains('igneous=fresh00001')) {
+            return FixtureReply.text(200, listing, {'Content-Type': 'text/html'});
+          }
+          return FixtureReply.text(200, wall, {'Content-Type': 'text/html', if (handsOut) 'Set-Cookie': 'igneous=fresh00001; path=/; domain=.members.example'});
+        }),
       );
       final source = MangaContentSource(transport: transport);
-      await expectLater(source.list(const GalleryQuery(language: 'all'), offset: 0, count: 5), throwsA(ContentError.signInRequired));
-      expect(SiteAccount.cookies('members.example')['igneous'], 'fresh00001', reason: 'Access the wall just handed out is kept for the next request');
+      final batch = await source.list(const GalleryQuery(language: 'all'), offset: 0, count: 5);
+      expect(batch.ids, [3000], reason: 'The access the wall just handed out is used at once');
+      expect(SiteAccount.cookies('members.example')['igneous'], 'fresh00001', reason: 'and kept');
       handsOut = false;
-      await expectLater(source.list(const GalleryQuery(language: 'all'), offset: 0, count: 5), throwsA(ContentError.signInRequired));
+      await expectLater(source.list(const GalleryQuery(language: 'all', text: 'other'), offset: 0, count: 5), throwsA(ContentError.signInRequired));
       expect(SiteAccount.cookies('members.example')['igneous'], isNull, reason: 'Access the site refused is dropped so a fresh one is handed out');
       expect(SiteAccount.cookies('members.example')['ipb_member_id'], '7');
+    });
+
+    test('each website keeps its own account', () {
+      final pasted = SiteAccount.parseCookies('ipb_member_id=7; ipb_pass_hash=$_hash; sk=abc123');
+      expect(SiteAccount.signInPasted(pasted, host: 'first.example'), isTrue);
+      expect(SiteAccount.isSignedInAt('first.example'), isTrue);
+      expect(SiteAccount.isSignedInAt('second.example'), isFalse, reason: 'Signing in on one website leaves the others as they were');
+      expect(SiteAccount.cookies('second.example')['ipb_member_id'], isNull, reason: "One website's account never reaches another");
+      expect(SiteAccount.accountSources(excluding: 'second.example'), ['first.example']);
+
+      expect(SiteAccount.useAccount(from: 'first.example', on: 'second.example'), isTrue);
+      expect(SiteAccount.cookies('second.example')['ipb_member_id'], '7', reason: 'Two websites of one forum can share an account');
+      expect(SiteAccount.cookies('second.example')['sk'], isNull, reason: 'Cookies one website set stay with it');
+
+      SiteAccount.signOutAt('first.example');
+      expect(SiteAccount.isSignedInAt('first.example'), isFalse);
+      expect(SiteAccount.isSignedInAt('second.example'), isTrue, reason: 'Signing one website out keeps the others signed in');
+      expect(SiteAccount.useAccount(from: 'first.example', on: 'third.example'), isFalse);
+    });
+
+    test('an account kept before each website had its own stays with every connected website', () {
+      preferences.set('manga.sites', ['first.example', 'second.example']);
+      preferences.set('manga.site_address', 'first.example');
+      final store = MemorySecretStore()
+        ..write(
+          'site-account',
+          jsonEncode({
+            'identity': {'ipb_member_id': '7', 'ipb_pass_hash': _hash},
+            'sites': {},
+          }),
+        );
+      SiteAccount.store = store;
+      expect(SiteAccount.isSignedInAt('first.example'), isTrue);
+      expect(SiteAccount.isSignedInAt('second.example'), isTrue);
+      expect(SiteAccount.isSignedInAt('third.example'), isFalse);
+      expect(store.read('site-account'), contains('identities'), reason: 'The move is kept, so it happens once');
+    });
+
+    test('an account the website has not opened to is told so instead of asked to sign in', () async {
+      preferences.set('manga.site_address', 'members.example');
+      MangaUrls.markRequiresSignIn(site: MangaUrls.home, accountHost: 'forums.example');
+      expect(SiteAccount.signInPasted(SiteAccount.parseCookies('ipb_member_id=7; ipb_pass_hash=$_hash'), host: 'members.example'), isTrue);
+      MangaUrls.markUsesAccount(site: MangaUrls.home);
+      // The members-only website answers a signed-in account it hasn't opened to with nothing, and the placeholder.
+      final transport = ContentTransport(
+        fetcher: FixtureFetcher(
+          (_) => FixtureReply(200, const [], {'Content-Type': 'text/html; charset=UTF-8', 'Set-Cookie': 'igneous=mystery; path=/; domain=.members.example'}),
+        ),
+      );
+      await expectLater(
+        MangaContentSource(transport: transport).list(const GalleryQuery(language: 'all'), offset: 0, count: 5),
+        throwsA(ContentError.accessDenied),
+      );
+      expect(SiteAccount.refusesAccess('members.example'), isTrue);
+      expect(SiteAccount.cookies('members.example')['igneous'], isNull, reason: 'The placeholder is never sent back');
+      expect(ContentError.accessDenied.errorDescription, isNot(ContentError.signInRequired.errorDescription));
+      SiteAccount.signOutAt('members.example');
+      expect(SiteAccount.refusesAccess('members.example'), isFalse);
+    });
+
+    test('access handed out with an empty answer is used at once', () async {
+      preferences.set('manga.site_address', 'members.example');
+      expect(SiteAccount.signInPasted(SiteAccount.parseCookies('ipb_member_id=7; ipb_pass_hash=$_hash'), host: 'members.example'), isTrue);
+      MangaUrls.markUsesAccount(site: MangaUrls.home);
+      const listing =
+          '<html><body><form><input name="f_search"></form><div class="searchnav"></div><a href="https://members.example/g/3000/0000000bb8/">Work</a></body></html>';
+      // An account the website lets in gets its access with an empty answer, then the works with it.
+      final transport = ContentTransport(
+        fetcher: FixtureFetcher((request) {
+          if ((request.headers['cookie'] ?? '').contains('igneous=granted01')) return FixtureReply.text(200, listing, {'Content-Type': 'text/html'});
+          return FixtureReply(200, const [], {'Content-Type': 'text/html', 'Set-Cookie': 'igneous=granted01; path=/; domain=.members.example'});
+        }),
+      );
+      await MangaUrls.resolveBackend(transport: transport, force: true);
+      expect(MangaUrls.hasResolvedBackend, isTrue, reason: 'The access handed out is used right away, not after the website was given up on');
+      expect(MangaUrls.backend, MangaBackend.keyed);
+      SiteAccount.forget(SiteAccount.accessCookie, host: 'members.example');
+      final batch = await MangaContentSource(transport: transport).list(const GalleryQuery(language: 'all'), offset: 0, count: 5);
+      expect(batch.ids, [3000]);
     });
 
     test('the no-access mark and bot check cookies are never sent back', () {

@@ -305,4 +305,32 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
     if (source == null) throw ContentError.unsupportedFormat;
     return source.rate(id, halfStars);
   }
+
+  @override
+  Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote}) {
+    final source = _extrasSource(id);
+    if (source == null) throw ContentError.unsupportedFormat;
+    return source.voteTag(id, tag: tag, vote: vote);
+  }
+
+  @override
+  Future<List<WorkComment>> postComment(int id, String text) {
+    final source = _extrasSource(id);
+    if (source == null) throw ContentError.unsupportedFormat;
+    return source.postComment(id, text);
+  }
+
+  @override
+  Future<WorkArchiveOffer> archiveOffer(int id) {
+    final source = _extrasSource(id);
+    if (source == null) throw ContentError.unsupportedFormat;
+    return source.archiveOffer(id);
+  }
+
+  @override
+  Future<Uri> archiveDownloadURL(int id, WorkArchiveOption option) {
+    final source = _extrasSource(id);
+    if (source == null) throw ContentError.unsupportedFormat;
+    return source.archiveDownloadURL(id, option);
+  }
 }

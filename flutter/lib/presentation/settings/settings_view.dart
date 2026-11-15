@@ -71,8 +71,8 @@ class SettingsDependencies {
   final void Function(BuildContext context)? openLibraryManagement;
   final VoidCallback? resetSettings;
 
-  /// The website account section, shown when the connected site uses accounts.
-  final Widget Function(BuildContext context)? siteAccount;
+  /// A connected website's account section, shown in that website's own settings.
+  final Widget Function(BuildContext context, String site)? siteAccount;
 
   /// The Google Drive section that stands in for iCloud.
   final Widget Function(BuildContext context)? sync;
@@ -157,7 +157,7 @@ class _SettingsViewState extends State<SettingsView> {
                         value: _content.mangaSiteAddress,
                         onTap: () => Navigator.of(context).push(
                           CupertinoPageRoute<void>(
-                            builder: (_) => ComicSitesPage(content: _content, state: _deps.state),
+                            builder: (_) => ComicSitesPage(content: _content, state: _deps.state, siteAccount: _deps.siteAccount),
                           ),
                         ),
                       ),
@@ -181,7 +181,6 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                   ],
                 ),
-                if (_deps.siteAccount != null) _deps.siteAccount!(context),
                 settingsSectionGap,
                 section(
                   header: L10n.text('Viewer'),

@@ -274,6 +274,17 @@ final class NativeContentTests: XCTestCase {
         XCTAssertEqual(RelatedWorks.select([work(3, language: "japanese", versions: [japanese, korean])], for: current, hidden: [2], excluded: ""), [])
     }
 
+    func testWorkHeadingLeavesOutALanguageOrKindTheWebsiteDidNotGive() {
+        let page = GalleryPage(hash: "a", name: "1.jpg", width: 1, height: 1, hasAVIF: false)
+        let pages = Array(repeating: page, count: 44)
+        let full = NativeGallery(id: 1, title: "Work", artists: [], language: "korean", type: "manga", tags: [], pages: pages)
+        XCTAssertEqual(full.headingMetadata, L10n.text("%@ · %@ · %@ pages", "korean", "manga", "44"))
+        let noLanguage = NativeGallery(id: 2, title: "Work", artists: [], language: "", type: "artistcg", tags: [], pages: pages)
+        XCTAssertEqual(noLanguage.headingMetadata, "artistcg · " + L10n.text("%@ pages", "44"), "No separator leads the line")
+        let neither = NativeGallery(id: 3, title: "Work", artists: [], language: "", type: "", tags: [], pages: pages)
+        XCTAssertEqual(neither.headingMetadata, L10n.text("%@ pages", "44"))
+    }
+
     func testRelatedWorksOutliveAWorkThatFailsToLoad() async {
         let gallery = NativeGallery(id: 1, title: "Work", artists: [], language: "korean", type: "manga", tags: [], pages: [], relatedIDs: [5, 404, 6])
         struct Source: ContentProviding {

@@ -428,7 +428,7 @@ class _RootState extends State<_Root> {
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
     siteAccount: AppPlatform.hasWebView
-        ? (context) => SiteAccountSection(content: services.content, database: services.database, startCoverQueue: services.coverQueue.start)
+        ? (context, site) => SiteAccountSection(site: site, content: services.content, database: services.database, startCoverQueue: services.coverQueue.start)
         : null,
     sync: AppPlatform.hasDriveSync ? (context) => DriveSyncSection(sync: services.sync) : null,
     invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),

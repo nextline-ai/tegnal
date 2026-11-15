@@ -207,7 +207,7 @@ final class KeyedCatalogTests: XCTestCase {
         let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret")].map {
             HTTPCookie(properties: [.domain: ".keyed.example", .path: "/", .name: $0.0, .value: $0.1])!
         }
-        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
         fixture.favoriteNote = "read later &amp; 다시"
         try await source.setAccountFavorite(3000, saved: true, category: 2)
         XCTAssertEqual(fixture.favoriteForms.last, "favcat=2&favnote=read+later+%26+%EB%8B%A4%EC%8B%9C&apply=Add+to+Favorites&update=1",
@@ -240,6 +240,109 @@ final class KeyedCatalogTests: XCTestCase {
         XCTAssertEqual(ContentRoute.initial("https://keyed.example/s/abcdef1234/3001-5"), .reader(3001, 5))
     }
 
+    // MARK: Votes, comments, archives, originals and settings profiles
+
+    private func signIn() {
+        let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret")].map {
+            HTTPCookie(properties: [.domain: ".keyed.example", .path: "/", .name: $0.0, .value: $0.1])!
+        }
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
+    }
+
+    func testWorkPagesShowTagVotesTheCommentFormAndTheArchive() throws {
+        let extras = KeyedWorkPage.extras(from: String(decoding: KeyedFixture.detail(3000, page: 0), as: UTF8.self))
+        XCTAssertEqual(extras.tagVotes, [WorkTagVote(tag: "female:sample tag", vote: 1), WorkTagVote(tag: "parody:sample series", vote: 0)])
+        XCTAssertEqual(extras.tagVotes[1].localNamespace, "series")
+        XCTAssertTrue(extras.canComment)
+        XCTAssertTrue(extras.canRate)
+        XCTAssertEqual(extras.archiveURL?.absoluteString, "https://keyed.example/archiver.php?gid=3000&token=0000000bb8")
+        let offer = KeyedWorkPage.archiveOffer(from: String(decoding: KeyedFixture.archivePage, as: UTF8.self))
+        XCTAssertEqual(offer.funds, "1,200 GP · 393 Credits")
+        XCTAssertEqual(offer.options, [.init(kind: "org", button: "Download Original Archive", cost: "446 GP", size: "21.24 MiB", available: true),
+                                       .init(kind: "res", button: "Download Resample Archive", cost: "N/A", size: "N/A", available: false)],
+                       "An archive the page greys out can't be chosen")
+    }
+
+    func testTagVotesGoToTheDetailsEndpointWithTheWorksKey() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        signIn()
+        let votes = try await source.voteTag(3000, tag: "female:sample tag", vote: -1)
+        XCTAssertEqual(votes, [WorkTagVote(tag: "female:sample tag", vote: -1)], "The votes come back as they now stand")
+        let request = try XCTUnwrap(fixture.voteRequests.last)
+        XCTAssertEqual(request["tags"] as? String, "female:sample tag")
+        XCTAssertEqual(request["token"] as? String, KeyedFixture.key(3000))
+        XCTAssertEqual((request["apiuid"] as? NSNumber)?.intValue, 42)
+        XCTAssertEqual((request["vote"] as? NSNumber)?.intValue, -1)
+    }
+
+    func testCommentsArePostedAndConfirmedOnTheWorkPage() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        signIn()
+        do {
+            _ = try await source.postComment(3000, text: "short")
+            XCTFail("The website takes no comment this short")
+        } catch let error as SiteMessage { XCTAssertEqual(error.text, L10n.text("A comment is too short.")) }
+        XCTAssertTrue(fixture.posted.isEmpty, "A short comment never reaches the website")
+
+        let comments = try await source.postComment(3000, text: "A lovely work & thanks\nsecond line")
+        XCTAssertTrue(comments.contains { $0.text.contains("A lovely work & thanks") }, "The comment shows on the work's page")
+        XCTAssertEqual(fixture.posted.last, "A lovely work & thanks\nsecond line")
+
+        fixture.commentRefusal = "You can only post one comment every minute."
+        do {
+            _ = try await source.postComment(3000, text: "Another comment that is long enough")
+            XCTFail("A comment the website didn't take must not pass as posted")
+        } catch let error as SiteMessage { XCTAssertEqual(error.text, "You can only post one comment every minute.") }
+    }
+
+    func testArchivesShowTheirCostAndDownloadFromTheAddressTheWebsiteHandsOut() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        signIn()
+        let offer = try await source.archiveOffer(3000)
+        let original = try XCTUnwrap(offer.options.first { $0.isOriginal })
+        XCTAssertTrue(fixture.archiveForms.isEmpty, "Looking at the offer costs nothing")
+        let address = try await source.archiveDownloadURL(3000, option: original)
+        XCTAssertEqual(address.absoluteString, "https://node1.volunteer.example:8440/archive/3000/abcdef/0?start=1")
+        XCTAssertEqual(fixture.archiveForms, ["dltype=org&dlcheck=Download+Original+Archive"])
+        do {
+            _ = try await source.archiveDownloadURL(3000, option: try XCTUnwrap(offer.options.first { !$0.available }))
+            XCTFail("An archive the page greys out is never requested")
+        } catch { XCTAssertEqual(error as? ContentError, .invalidQuery) }
+    }
+
+    func testOriginalImagesLoadWhenChosenAndTheResizedPageShowsWhenRefused() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        let gallery = try await source.gallery(3000)
+        fixture.offersOriginals = true
+        signIn()
+        _ = try await source.image(gallery.pages[1], galleryID: 3000, thumbnail: false)
+        XCTAssertFalse(fixture.requests.contains { $0.path.hasPrefix("/fullimg/") }, "Originals load only when chosen")
+
+        KeyedCatalogSource.setLoadsOriginals(true, host: "keyed.example")
+        defer { KeyedCatalogSource.setLoadsOriginals(false, host: "keyed.example") }
+        let original = try await source.image(gallery.pages[0], galleryID: 3000, thumbnail: false)
+        XCTAssertEqual(original, Data(repeating: 0x77, count: 96))
+
+        fixture.grantsOriginals = false
+        let resized = try await MangaContentSource(transport: fixture.transport()).image(gallery.pages[2], galleryID: 3000, thumbnail: false)
+        XCTAssertEqual(resized, fixture.image, "A page whose original the website keeps for GP shows resized")
+    }
+
+    func testTheChosenSettingsProfileIsSentWithEveryPage() async throws {
+        let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
+        _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 3)
+        signIn()
+        let profiles = try await source.settingsProfiles()
+        XCTAssertEqual(profiles, [SiteSettingsProfile(id: 1, name: "Default Profile", selected: true), SiteSettingsProfile(id: 2, name: "Reading in the App", selected: false)])
+        try await source.useSettingsProfile(2)
+        let chosen = try await source.settingsProfiles()
+        XCTAssertEqual(chosen.first { $0.selected }?.id, 2)
+        XCTAssertTrue(fixture.cookies.last?.contains("sp=2") == true)
+    }
+
     func testForgottenKeyIsFoundBySearchingTheNumber() async throws {
         let fixture = fixture(), source = MangaContentSource(transport: fixture.transport())
         _ = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 1)
@@ -265,7 +368,7 @@ final class KeyedCatalogTests: XCTestCase {
         let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret"), ("tracking", "1")].map {
             HTTPCookie(properties: [.domain: ".account.example", .path: "/", .name: $0.0, .value: $0.1])!
         }
-        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
         MangaUrls.resetResolvedBackend()
         let batch = try await source.list(GalleryQuery(language: "all"), offset: 0, count: 2)
         XCTAssertEqual(batch.ids, [3002, 3001])
@@ -289,7 +392,7 @@ final class KeyedCatalogTests: XCTestCase {
         let cookies = [("app_member_id", "42"), ("app_pass_hash", "secret")].map {
             HTTPCookie(properties: [.domain: ".keyed.example", .path: "/", .name: $0.0, .value: $0.1])!
         }
-        XCTAssertTrue(SiteAccount.signIn(with: cookies))
+        XCTAssertTrue(SiteAccount.signIn(with: cookies, host: MangaUrls.configuredHost))
         let first = try await source.accountFavorites(after: nil)
         XCTAssertEqual(first.ids, [2998, 2990])
         XCTAssertEqual(first.next, "2990")
@@ -384,6 +487,16 @@ private final class KeyedFixture: @unchecked Sendable {
     var textAnswer: String?
     /// How many details requests fail before they answer.
     var failDetails = 0
+    /// Image pages link a larger original, which the website sends or refuses.
+    var offersOriginals = false
+    var grantsOriginals = true
+    /// Comments posted under work 3000, and the website's answer when it won't take one.
+    var posted: [String] = []
+    var commentRefusal: String?
+    var voteRequests: [[String: Any]] { lock.withLock { votes } }
+    private var votes: [[String: Any]] = []
+    var archiveForms: [String] { lock.withLock { archives } }
+    private var archives: [String] = []
     /// The note the favorites form shows, as the page writes it.
     var favoriteNote = ""
     var favoriteReply = "<html><script>window.opener.location.reload();</script></html>"
@@ -419,15 +532,29 @@ private final class KeyedFixture: @unchecked Sendable {
         return Data(#"<html><body><form><input type="text" id="f_search" name="f_search"></form><table class="itg">\#(rows)</table>\#(nav)</body></html>"#.utf8)
     }
 
-    static func detail(_ id: Int64, page: Int) -> Data {
+    static func detail(_ id: Int64, page: Int, comments: [String] = []) -> Data {
         let entries: [(String, Int, String, String, Int)] = page == 0
             ? [("1111111111", 1, "one.jpg", "\(id)-0.png", 0), ("2222222222", 2, "two.jpg", "\(id)-0.png", -100)]
             : [("3333333333", 3, "three.jpg", "\(id)-1.png", 0)]
         let links = entries.map { key, number, name, sheet, offset in
             #"<a href="https://keyed.example/s/\#(key)/\#(id)-\#(number)"><div title="Page \#(number): \#(name)" style="width:100px;height:150px;background:transparent url(https://sheets.example/\#(sheet)) \#(offset)px 0 no-repeat"></div></a>"#
         }.joined()
-        return Data(#"<html><script>var api_url = "https://api.keyed.example/api.php";\#nvar login_url = "https://keyed.example/bounce_login.php?b=d&bt=1";</script><div id="gdt">\#(links)</div></html>"#.utf8)
+        let thread = comments.enumerated().map { index, text in
+            #"<div class="c1"><div class="c2"><div class="c3">Posted on 01 January 2026, 00:00 by: &nbsp; <a href="https://keyed.example/uploader/me">me</a></div></div><div class="c6" id="comment_\#(index + 1)">\#(text)</div></div>"#
+        }.joined()
+        let extras = ##"<div id="taglist"><table><tr><td class="tc">female:</td><td><div id="td_female:sample_tag" class="gt"><a id="ta_female:sample_tag" href="https://keyed.example/tag/female:sample+tag" class="tup" onclick="return toggle_tagmenu(1,'female:sample tag',this)">sample tag</a></div></td></tr><tr><td class="tc">parody:</td><td><div id="td_parody:sample_series" class="gtl"><a id="ta_parody:sample_series" href="https://keyed.example/tag/parody:sample+series" class="" onclick="return toggle_tagmenu(2,'parody:sample series',this)">sample series</a></div></td></tr></table></div><p class="g2"><a href="#" onclick="return popUp('https://keyed.example/archiver.php?gid=\##(id)&amp;token=\##(key(id))',480,320)">Archive Download</a></p><div id="cdiv">\##(thread)</div><div id="formdiv" style="display:none"><form method="post" action="#cnew"><textarea name="commenttext_new"></textarea></form></div>"##
+        return Data(#"<html><script>var api_url = "https://api.keyed.example/api.php";\#nvar login_url = "https://keyed.example/bounce_login.php?b=d&bt=1";\#nvar apiuid = 42;\#nvar apikey = "0123abcd4567";</script><div id="gdt">\#(links)</div>\#(page == 0 ? extras : "")</html>"#.utf8)
     }
+
+    static let archivePage = Data(#"""
+    <html><body><div id="db"><h1>Sample 3000</h1><p>Current Funds:</p><p>1,200 GP [<a href="#">?</a>] &nbsp; 393 Credits [<a href="#">?</a>]</p>
+    <div><div style="width:180px; float:left"><div style="text-align:center">Download Cost: &nbsp; <strong>446 GP</strong></div>
+    <form action="https://keyed.example/archiver.php?gid=3000&amp;token=0000000bb8" method="post"><input type="hidden" name="dltype" value="org"><div><input type="submit" name="dlcheck" value="Download Original Archive"></div></form>
+    <p>Estimated Size: &nbsp; <strong>21.24 MiB</strong></p></div>
+    <div style="width:180px; float:right; color:#CCCCCC"><div style="text-align:center">Download Cost: &nbsp; <strong>N/A</strong></div>
+    <form action="https://keyed.example/archiver.php?gid=3000&amp;token=0000000bb8" method="post"><input type="hidden" name="dltype" value="res"><div><input type="submit" name="dlcheck" value="Download Resample Archive"></div></form>
+    <p>Estimated Size: &nbsp; <strong>N/A</strong></p></div></div></div></body></html>
+    """#.utf8)
 
     static func viewerDetail(_ id: Int64) -> Data {
         let links = (1...3).map { number in
@@ -446,6 +573,12 @@ private final class KeyedFixture: @unchecked Sendable {
 
     private func details(_ body: Data) throws -> Data {
         let request = try JSONSerialization.jsonObject(with: body) as! [String: Any]
+        if request["method"] as? String == "taggallery" {
+            lock.withLock { votes.append(request) }
+            let vote = (request["vote"] as? NSNumber)?.intValue ?? 0
+            let pane = #"<div id="taglist"><a id="ta_female:sample_tag" class="\#(vote > 0 ? "tup" : "tdn")" onclick="return toggle_tagmenu(1,'female:sample tag',this)">sample tag</a></div>"#
+            return try JSONSerialization.data(withJSONObject: ["tagpane": pane])
+        }
         if request["method"] as? String == "tagsuggest" {
             return try JSONSerialization.data(withJSONObject: ["tags": ["1": ["ns": "parody", "tn": "sample series"],
                                                                          "2": ["ns": "temp", "tn": "sample alias", "mns": "female", "mtn": "sample tag"],
@@ -515,6 +648,14 @@ private final class KeyedFixture: @unchecked Sendable {
             if let cats = items.first(where: { $0.name == "f_cats" })?.value, let mask = Int(cats), mask != 0, mask & 4 == 0 { shown = ids.filter { $0 == 3001 } }
             return .data(200, Self.listing(shown, next: next == nil ? 2999 : nil), ["Content-Type": "text/html"])
         case "/popular": return .data(200, Self.listing([2999, 3000, 3001], next: nil), ["Content-Type": "text/html"])
+        case "/uconfig.php":
+            let chosen = (request.value(forHTTPHeaderField: "Cookie") ?? "").contains("sp=2") ? 2 : 1
+            let options = [(1, "Default Profile"), (2, "Reading in the App")].map { #"<option value="\#($0.0)"\#($0.0 == chosen ? #" selected="selected""# : "")>\#($0.1)</option>"# }.joined()
+            return .data(200, Data(#"<html><body><div id="profile_outer"><select name="profile_set" onchange="do_profile_post()">\#(options)</select></div><p>settings page with enough text to read</p></body></html>"#.utf8), ["Content-Type": "text/html"])
+        case "/archiver.php":
+            guard request.httpMethod == "POST" else { return .data(200, Self.archivePage, ["Content-Type": "text/html"]) }
+            lock.withLock { archives.append(String(decoding: Self.body(request), as: UTF8.self)) }
+            return .data(200, Data(#"<html><body><script type="text/javascript">document.location = "https://node1.volunteer.example:8440/archive/3000/abcdef/0";</script><p>Your archive is ready, the download starts in a moment.</p></body></html>"#.utf8), ["Content-Type": "text/html"])
         case "/favorites.php":
             guard (request.value(forHTTPHeaderField: "Cookie") ?? "").contains("app_member_id=42") else {
                 return .data(200, Data(#"<html><form><input type="password" name="PassWord"></form></html>"#.utf8), ["Content-Type": "text/html"])
@@ -531,7 +672,21 @@ private final class KeyedFixture: @unchecked Sendable {
         default:
             let parts = url.path.split(separator: "/")
             if parts.first == "g", parts.count == 3, let id = Int64(parts[1]), String(parts[2]) == Self.key(id) {
-                return .data(200, viewer ? Self.viewerDetail(id) : Self.detail(id, page: url.query == "p=1" ? 1 : 0), ["Content-Type": "text/html"])
+                if request.httpMethod == "POST" {
+                    let form = String(decoding: Self.body(request), as: UTF8.self)
+                    let text = (form.hasPrefix("commenttext_new=") ? String(form.dropFirst(16)) : "").replacingOccurrences(of: "+", with: " ").removingPercentEncoding ?? ""
+                    if let commentRefusal {
+                        let page = String(decoding: Self.detail(id, page: 0, comments: posted), as: UTF8.self).replacingOccurrences(of: "<html>", with: #"<html><p class="br">\#(commentRefusal)</p>"#)
+                        return .data(200, Data(page.utf8), ["Content-Type": "text/html"])
+                    }
+                    lock.withLock { posted.append(text) }
+                }
+                let comments = lock.withLock { posted }
+                return .data(200, viewer ? Self.viewerDetail(id) : Self.detail(id, page: url.query == "p=1" ? 1 : 0, comments: comments), ["Content-Type": "text/html"])
+            }
+            if parts.first == "fullimg" {
+                return grantsOriginals ? .data(200, Data(repeating: 0x77, count: 96), ["Content-Type": "image/png"])
+                    : .data(200, Data("Downloading original files of this gallery during peak hours requires GP, and you do not have enough.".utf8), ["Content-Type": "text/html"])
             }
             if parts.first == "mpv", parts.count == 3, let id = Int64(parts[1]), String(parts[2]) == Self.key(id) {
                 return .data(200, Self.viewerPage, ["Content-Type": "text/html"])
@@ -539,7 +694,8 @@ private final class KeyedFixture: @unchecked Sendable {
             if parts.first == "s", parts.count == 3, let number = parts[2].split(separator: "-").last {
                 let reload = items.first { $0.name == "nl" }?.value
                 let host = allowanceUsed ? "https://notice.example/g/509.gif" : reload == nil ? "https://node1.volunteer.example:8440/h/\(number).webp" : "https://node2.volunteer.example:8440/h/\(number).webp"
-                let page = #"<html><div id="i3"><a href="/next"><img id="img" src="\#(host)" onerror="this.onerror=null; nl('alt-\#(number)')"></a></div><p>reader page with enough text to be a real page</p></html>"#
+                let original = offersOriginals ? #"<div id="i6"><a href="https://keyed.example/fullimg/3000/\#(number)/okey123/orig.png">Download original 2400 x 3400 3.1 MiB source</a></div>"# : ""
+                let page = #"<html><div id="i3"><a href="/next"><img id="img" src="\#(host)" onerror="this.onerror=null; nl('alt-\#(number)')"></a></div>\#(original)<p>reader page with enough text to be a real page</p></html>"#
                 return .data(200, Data(page.utf8), ["Content-Type": "text/html"])
             }
             return .data(404, Data(), [:])
