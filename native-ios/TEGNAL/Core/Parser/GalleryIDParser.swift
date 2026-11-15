@@ -327,6 +327,8 @@ public enum MangaUrls {
     private static var ownSignInURL: URL? {
         guard !home.isEmpty else { return nil }
         if let page = accountSignInPage { return page }
+        // A catalog of this kind keeps accounts even where works open without one.
+        if backend == .document, hasResolvedBackend { return URL(string: home + "account/login") }
         if backend == .keyed, hasResolvedBackend, let saved = preferences.string(forKey: "manga.resolved_login"), let url = URL(string: saved) { return url }
         if let host = accountHost { return URL(string: "https://\(host)/index.php?act=Login&CODE=00") }
         return backend == .keyed && hasResolvedBackend ? URL(string: home + "favorites.php") : nil
@@ -367,8 +369,9 @@ public enum MangaUrls {
         return url
     }
 
-    /// A catalog whose works open with the signed-in session of its own pages, not with forum cookies.
-    static var usesSiteSession: Bool { hasResolvedBackend && backend == .document && accountSignInPage != nil }
+    /// A catalog whose account signs in on its own pages, not with forum cookies, whether or not
+    /// its works need one.
+    static var usesSiteSession: Bool { hasResolvedBackend && backend == .document }
 
     static func markRequiresSignIn(site: String, accountHost: String?) {
         guard home == site else { return }
@@ -543,6 +546,12 @@ enum ComicSites {
         var sites = all
         if !sites.contains(site) { sites.append(site) }
         preferences.set(sites, forKey: listKey)
+    }
+
+    /// Puts the connected sites in a new order of priority. Sites the order leaves out keep their place at the end.
+    static func reorder(_ order: [String]) {
+        let current = all
+        preferences.set(order.filter(current.contains) + current.filter { !order.contains($0) }, forKey: listKey)
     }
 
     /// Forgets a site and what was learned about it.

@@ -14,7 +14,9 @@ import '../../core/content/manga_content_source.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/content/site_account.dart';
 import '../../core/content/site_account_actions.dart';
+import '../../core/content/site_favorites_sync.dart';
 import '../../core/storage/app_database.dart';
+import '../../core/storage/folder_rules.dart';
 import '../../core/support/l10n.dart';
 import '../design/alert_dialog.dart';
 import '../design/app_sheet.dart';
@@ -55,7 +57,10 @@ class SiteAccountSection extends StatefulWidget {
 
 class _SiteAccountSectionState extends State<SiteAccountSection> {
   bool _importing = false;
+  bool _syncingFavorites = false;
   List<FavoriteCategory> _categories = [];
+  List<FavoriteCategory> _favoriteLists = [];
+  bool _loadingFavoriteLists = false;
   List<SiteSettingsProfile> _profiles = [];
   (int, int)? _allowance;
 
@@ -74,6 +79,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     super.initState();
     SiteClearance.listeners.add(_changed);
     SiteAccount.listeners.add(_changed);
+    SiteFavoritesSync.shared?.addListener(_changed);
     _refresh();
   }
 
@@ -92,6 +98,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
   void dispose() {
     SiteClearance.listeners.remove(_changed);
     SiteAccount.listeners.remove(_changed);
+    SiteFavoritesSync.shared?.removeListener(_changed);
     super.dispose();
   }
 
@@ -101,8 +108,11 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
 
   bool get _keyed => _scoped(() => MangaUrls.hasResolvedBackend && MangaUrls.backend == MangaBackend.keyed);
 
+  /// Whether the account keeps favorites the app can sync with its folders.
+  bool get _keepsFavorites => _scoped(() => MangaUrls.hasResolvedBackend && MangaUrls.backend != MangaBackend.indexed);
+
   /// Whether accounts matter here: a website that uses them, or one not recognized yet that may be members-only.
-  bool get _showsAccount => _signedIn || _scoped(() => MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || MangaUrls.backend == MangaBackend.keyed);
+  bool get _showsAccount => _signedIn || _scoped(() => MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || MangaUrls.backend != MangaBackend.indexed);
 
   Future<void> _loadAccountDetails() async {
     // The image allowance and favorites belong to the checked website's reader.
@@ -119,7 +129,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     } on Object {
       // Without the settings page the app reads with the account's own profile.
     }
-    if (!_content.syncsAccountFavorites || _categories.isNotEmpty) return;
+    if (_categories.isNotEmpty) return;
     try {
       final categories = await MangaContentSource.shared.favoriteCategories();
       if (mounted) setState(() => _categories = categories);
@@ -165,6 +175,8 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
         SiteAccountActions.signOut(_content, site: widget.site);
         _allowance = null;
         _categories = [];
+        _favoriteLists = [];
+        _loadingFavoriteLists = false;
         _profiles = [];
       });
     }
@@ -179,6 +191,105 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     } on Object {
       // The choice stays as picked; the next page read shows whether the website took it.
     }
+  }
+
+  /// `SiteFavoritesSyncRows`: whether the website's favorites categories (or lists) and their
+  /// folders are kept the same, which folder each category has, the category works in other
+  /// folders are kept in, and a sync on demand.
+  List<Widget> _favoritesFolderRows() {
+    final sync = SiteFavoritesSync.shared;
+    if (sync == null) return const [];
+    final state = sync.store.state(widget.site);
+    final lists = state?.exclusive == false;
+    if (state != null && _favoriteLists.isEmpty && !_loadingFavoriteLists) unawaited(_loadFavoriteLists());
+    String name(int category) =>
+        _favoriteLists.where((entry) => entry.id == category).firstOrNull?.name ?? (lists ? 'fav:$category' : L10n.text('Category %@', ['${category + 1}']));
+    final folderNames = {for (final folder in widget.database.listFolders()) ?folder.id: folder.displayName};
+    final free = [
+      for (final category in _favoriteLists)
+        if (state != null && !state.folders.containsKey(category.id)) category.id,
+    ];
+    return [
+      SettingsToggleRow(
+        title: L10n.text('Sync Favorites with Folders'),
+        help: L10n.text(
+          lists
+              ? 'Each favorites list on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the list chosen below, and favorites in a list without a folder come to Unfiled.'
+              : 'Each favorites category on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the category chosen below, and favorites in a category without a folder come to Unfiled.',
+        ),
+        value: state != null,
+        onChanged: _syncingFavorites
+            ? null
+            : (on) {
+                if (on) {
+                  _runFavoritesSync(() => sync.setUp(widget.site, requested: true));
+                } else {
+                  sync.stop(widget.site);
+                }
+              },
+      ),
+      if (state != null) ...[
+        for (final category in state.folders.keys.toList()..sort())
+          if (widget.database.folderIDForIdentity(state.folders[category]!) case final folder? when folderNames[folder] != null)
+            SettingsValueRow(title: name(category), value: folderNames[folder]!),
+        if (free.isNotEmpty)
+          SettingsPickerRow<int>(
+            title: L10n.text(lists ? 'List for Other Folders' : 'Category for Other Folders'),
+            help: L10n.text(
+              lists
+                  ? 'Works you save in folders that are not a favorites list are added to this list on the website.'
+                  : 'Works you save in folders that are not a favorites category are added to this category on the website.',
+            ),
+            options: [for (final category in free) (category, name(category))],
+            selected: free.contains(state.unassigned) ? state.unassigned! : free.first,
+            onSelected: (value) => sync.setUnassigned(value, widget.site),
+          ),
+        FormRow(
+          separatorInset: settingsIconInset,
+          onTap: _syncingFavorites ? null : () => _runFavoritesSync(() => sync.sync(widget.site)),
+          child: Row(
+            children: [
+              SizedBox(width: 24, child: Icon(CupertinoIcons.arrow_2_circlepath, size: 22, color: TegnalColors.tint.resolveFrom(context))),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(L10n.text('Sync Now'), style: TegnalType.style(17, color: TegnalColors.tint.resolveFrom(context))),
+              ),
+              if (_syncingFavorites) const CupertinoActivityIndicator(),
+            ],
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// The website's categories or lists, by name, for the sync rows.
+  Future<void> _loadFavoriteLists() async {
+    _loadingFavoriteLists = true;
+    try {
+      final categories = await SiteContent.of(widget.site).favoriteCategories();
+      if (mounted) setState(() => _favoriteLists = categories);
+    } on Object {
+      // Category numbers stand in for names the page did not give.
+    }
+  }
+
+  Future<void> _runFavoritesSync(Future<void> Function() body) async {
+    setState(() => _syncingFavorites = true);
+    try {
+      await body();
+    } on Object catch (error) {
+      if (mounted) {
+        await showCupertinoDialog<void>(
+          context: context,
+          builder: (context) => TegnalAlertDialog(
+            title: Text(L10n.text('Sync Favorites with Folders')),
+            content: Text(ContentError.message(error)),
+            actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _syncingFavorites = false);
   }
 
   Future<void> _chooseImport() async {
@@ -260,6 +371,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                   SiteAccountActions.signInChanged(_content, site: widget.site);
                 }),
               ),
+            if (_keepsFavorites) ..._favoritesFolderRows(),
             if (checked && _keyed) ...[
               SettingsToggleRow(
                 title: L10n.text('Load Original Images'),
@@ -278,25 +390,6 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                   options: [for (final profile in _profiles) (profile.id, profile.name)],
                   selected: (_profiles.where((profile) => profile.selected).firstOrNull ?? _profiles.first).id,
                   onSelected: _useProfile,
-                ),
-              SettingsToggleRow(
-                title: L10n.text('Sync Bookmarks with Account Favorites'),
-                help: L10n.text('Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.'),
-                value: _content.syncsAccountFavorites,
-                onChanged: (value) {
-                  setState(() => _content.syncsAccountFavorites = value);
-                  if (value) _loadAccountDetails();
-                },
-              ),
-              if (_content.syncsAccountFavorites)
-                SettingsPickerRow<int>(
-                  title: L10n.text('Favorites Category'),
-                  options: [
-                    for (var number = 0; number < 10; number++)
-                      (number, _categories.where((category) => category.id == number).firstOrNull?.name ?? L10n.text('Category %@', ['${number + 1}'])),
-                  ],
-                  selected: _content.accountFavoriteCategory,
-                  onSelected: (value) => setState(() => _content.accountFavoriteCategory = value),
                 ),
               FormRow(
                 separatorInset: settingsIconInset,

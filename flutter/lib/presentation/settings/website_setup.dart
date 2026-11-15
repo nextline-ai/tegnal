@@ -12,6 +12,7 @@ import '../../core/content/manga_urls.dart';
 import '../../core/support/l10n.dart';
 import '../design/app_sheet.dart';
 import '../design/grouped_form.dart';
+import '../library/folder_order_view.dart';
 import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import 'settings_page.dart';
@@ -642,6 +643,8 @@ class ComicSitesPage extends StatefulWidget {
 }
 
 class _ComicSitesPageState extends State<ComicSitesPage> {
+  static const _priorityFooter =
+      'When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order.';
   ContentEnvironment get _content => widget.content;
 
   @override
@@ -671,7 +674,7 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
           rowColor: row,
           footer: Text(
             L10n.text(
-              'Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too.',
+              'Lists and searches show the checked websites together, as the Explore menu picks them. Saved works remember where they were saved, and a website that numbers its works the same way can open them too.',
             ),
           ),
           children: [
@@ -686,12 +689,18 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
                   child: Text(L10n.text('Delete'), style: TegnalType.style(17, color: const Color(0xFFFFFFFF))),
                 ),
                 onDismissed: (_) => _content.removeComicsSite(site),
+                // Picks the websites lists show together, as the Explore menu does: several, or none.
                 child: FormRow(
-                  onTap: () => _content.switchComicsSite(site),
+                  onTap: () => _content.toggleListedComicSite(site),
                   child: Row(
                     children: [
-                      Expanded(child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      if (site == _content.mangaSiteAddress) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
+                      Expanded(
+                        child: Semantics(
+                          selected: _content.listedComicSites.contains(site),
+                          child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                      if (_content.listedComicSites.contains(site)) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
                       // Each website keeps its own account and check, like an image server.
                       Semantics(
                         button: true,
@@ -713,6 +722,30 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
               ),
           ],
         ),
+        if (_content.comicSites.length > 1) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            footer: Text(L10n.text(_priorityFooter)),
+            children: [
+              SettingsLinkRow(
+                title: L10n.text('Website Priority'),
+                icon: CupertinoIcons.arrow_up_arrow_down,
+                tinted: true,
+                chevron: false,
+                onTap: () => showAppSheet<void>(
+                  context,
+                  builder: (context, controller) => FolderOrderView<String>(
+                    title: 'Website Priority',
+                    footer: L10n.text(_priorityFooter),
+                    folders: [for (final site in _content.comicSites) (id: site, name: site)],
+                    save: _content.reorderComicSites,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         settingsSectionGap,
         FormSection(
           rowColor: row,

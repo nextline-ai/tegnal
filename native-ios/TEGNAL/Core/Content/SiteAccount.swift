@@ -550,3 +550,182 @@ enum SiteClearance {
         }
     }
 }
+
+/// Where a saved work sits for favorites sync: in a favorites category the app keeps a folder for,
+/// or anywhere else.
+enum FavoritePlace: Hashable, Sendable {
+    case category(Int)
+    case unassigned
+
+    var category: Int? { if case .category(let category) = self { category } else { nil } }
+
+    /// A work in a category's folder is not also "anywhere else".
+    static func normalized(_ places: Set<FavoritePlace>) -> Set<FavoritePlace> {
+        places.contains { $0.category != nil } ? places.subtracting([.unassigned]) : places
+    }
+}
+
+/// A website's favorites as one read gives them: its categories, or the lists an account makes,
+/// and which of them hold each work.
+struct AccountFavorites: Equatable, Sendable {
+    var categories: [FavoriteCategory]
+    var members: [Int64: Set<Int>]
+    /// A favorite sits in one category at a time, and adding it to another moves it there. Lists
+    /// an account makes can each hold the same work.
+    var exclusive: Bool
+}
+
+/// Each signed-in website's favorites categories and the app folders kept in step with them.
+final class SiteFavoriteFolders: @unchecked Sendable {
+    static let shared = SiteFavoriteFolders(defaults: ContentPreferences.defaults)
+
+    struct State: Codable, Equatable, Sendable {
+        /// Favorites category or list → the sync identity of its folder.
+        var folders: [Int: String] = [:]
+        /// Where works in other folders are kept on the website; nil when every category has a folder.
+        var unassigned: Int?
+        /// The categories holding each work after the last sync; nil before the first.
+        var baseline: [Int64: Set<Int>]?
+        /// Works never sent to the website: saved before the sync began, or ones it cannot keep.
+        var localOnly: Set<Int64> = []
+        var lastPull: Date?
+        /// Whether a favorite sits in one category at a time; nil reads as true.
+        var exclusive: Bool?
+    }
+
+    private let defaults: UserDefaults
+    private let lock = NSLock()
+    private static let statesKey = "manga.favoriteSync"
+    private static let declinedKey = "manga.favoriteSyncDeclined"
+
+    init(defaults: UserDefaults) { self.defaults = defaults }
+
+    /// A website whose favorites are synced, with what was learned about them.
+    func state(for site: String) -> State? {
+        lock.withLock { (states[site]).flatMap { try? JSONDecoder().decode(State.self, from: $0) } }
+    }
+
+    func setState(_ state: State, for site: String) {
+        lock.withLock {
+            var states = states
+            states[site] = try? JSONEncoder().encode(state)
+            defaults.set(states, forKey: Self.statesKey)
+            defaults.set(declined.subtracting([site]).sorted(), forKey: Self.declinedKey)
+        }
+    }
+
+    var syncedSites: [String] { lock.withLock { states.keys.sorted() } }
+
+    /// Stops syncing a website. Turned off by hand, it is not set up again on its own.
+    func remove(_ site: String, declined decline: Bool) {
+        lock.withLock {
+            var states = states
+            states[site] = nil
+            defaults.set(states, forKey: Self.statesKey)
+            if decline { defaults.set(declined.union([site]).sorted(), forKey: Self.declinedKey) }
+        }
+    }
+
+    func isDeclined(_ site: String) -> Bool { lock.withLock { declined.contains(site) } }
+
+    private var states: [String: Data] { defaults.dictionary(forKey: Self.statesKey) as? [String: Data] ?? [:] }
+    private var declined: Set<String> { Set(defaults.stringArray(forKey: Self.declinedKey) ?? []) }
+}
+
+/// What one sync changes on each side. Comparing each work's places with where it was after the
+/// last sync tells which side added or took it away; the other side follows, and when both changed
+/// the same place, the website wins.
+struct FavoriteSyncPlan: Equatable, Sendable {
+    enum LocalChange: Equatable, Sendable {
+        /// The places the saved work ends up in: category folders, or anywhere else.
+        case place(Int64, Set<FavoritePlace>)
+        case remove(Int64)
+    }
+    /// One request: a work added to a category (moved there, where a favorite has one) or taken out of it.
+    struct SiteChange: Equatable, Sendable {
+        let id: Int64
+        let category: Int
+        let adds: Bool
+    }
+
+    var local: [LocalChange] = []
+    var site: [SiteChange] = []
+    /// The categories holding each work once the plan is carried out.
+    var settled: [Int64: Set<Int>] = [:]
+    /// Works that stop being sent, and works that start being sent again.
+    var keepLocal: [Int64] = []
+    var stopKeepingLocal: [Int64] = []
+
+    var isEmpty: Bool { local.isEmpty && site.isEmpty }
+
+    /// `local` is where each saved work sits; `remote` the categories holding each favorite, or the
+    /// baseline to send only changes made in the app. A category without a folder counts as
+    /// anywhere else, and a work kept anywhere else stays in the categories without folders it is in.
+    static func make(local: [Int64: Set<FavoritePlace>], remote: [Int64: Set<Int>], base: [Int64: Set<Int>]?, folders: Set<Int>,
+                     unassigned: Int?, localOnly: Set<Int64>, exclusive: Bool = true) -> FavoriteSyncPlan {
+        func places(_ categories: Set<Int>) -> Set<FavoritePlace> {
+            FavoritePlace.normalized(Set(categories.map { folders.contains($0) ? .category($0) : .unassigned }))
+        }
+        var plan = FavoriteSyncPlan()
+        let ids = Set(local.keys).union(remote.keys).union(base?.keys ?? [:].keys)
+        for id in ids.sorted() {
+            let l = FavoritePlace.normalized(local[id] ?? []), rawRemote = remote[id] ?? [], r = places(rawRemote)
+            var b = base.map { places($0[id] ?? []) }
+            if localOnly.contains(id) {
+                if !rawRemote.isEmpty { plan.stopKeepingLocal.append(id) }
+                else if l.contains(where: { $0.category != nil }) {
+                    // Put in a category folder by hand, it is sent after all.
+                    plan.stopKeepingLocal.append(id)
+                    b = []
+                } else { continue }
+            }
+            let final: Set<FavoritePlace>
+            if let b {
+                final = FavoritePlace.normalized(l.union(r).union(b).filter { place in
+                    let inLocal = l.contains(place), inRemote = r.contains(place)
+                    if inLocal == inRemote { return inLocal }
+                    // Changed on the website, or on both sides: the website wins.
+                    return inRemote != b.contains(place) ? inRemote : inLocal
+                })
+            } else {
+                // The library saved before the sync began is not sent all at once.
+                if rawRemote.isEmpty, l == [.unassigned] { plan.keepLocal.append(id); continue }
+                final = FavoritePlace.normalized(l.union(r))
+            }
+            if final != l {
+                if final.isEmpty { if !l.isEmpty { plan.local.append(.remove(id)) } }
+                else { plan.local.append(.place(id, final)) }
+            }
+            // The categories the website should hold the work in.
+            var wanted = Set(final.compactMap(\.category))
+            if final == [.unassigned] {
+                let elsewhere = rawRemote.subtracting(folders)
+                if !elsewhere.isEmpty { wanted = elsewhere }
+                else if let unassigned { wanted = [unassigned] }
+                else { plan.keepLocal.append(id) }
+            } else if !exclusive, !final.isEmpty {
+                // Lists without folders keep what they hold; only a work taken away leaves them too.
+                wanted.formUnion(rawRemote.subtracting(folders))
+            }
+            if exclusive, wanted.count > 1 {
+                // The website keeps one: where it already is, else the folder it was just put in.
+                let chosen = rawRemote.first { wanted.contains($0) }
+                    ?? wanted.filter { !(b ?? []).contains(.category($0)) }.min() ?? wanted.min()!
+                wanted = [chosen]
+            }
+            if wanted == rawRemote {
+                if !wanted.isEmpty { plan.settled[id] = wanted }
+                continue
+            }
+            if exclusive {
+                if let category = wanted.first { plan.site.append(SiteChange(id: id, category: category, adds: true)) }
+                else if let category = rawRemote.min() { plan.site.append(SiteChange(id: id, category: category, adds: false)) }
+            } else {
+                for category in wanted.subtracting(rawRemote).sorted() { plan.site.append(SiteChange(id: id, category: category, adds: true)) }
+                for category in rawRemote.subtracting(wanted).sorted() { plan.site.append(SiteChange(id: id, category: category, adds: false)) }
+            }
+            if !wanted.isEmpty { plan.settled[id] = wanted }
+        }
+        return plan
+    }
+}

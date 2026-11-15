@@ -175,6 +175,56 @@ extension AppDatabaseFolderRules on AppDatabase {
 
   String identityOfFolder(int id) => dbWriter.write((db) => folderIdentity(id, db));
 
+  int? folderIDForIdentity(String identity) => dbWriter.read((db) => db.value<int>('SELECT id FROM folders WHERE sync_id = ?', [identity]));
+
+  /// The saved works in a folder, by number.
+  List<int> galleryIDsInFolder(int folderID) =>
+      dbWriter.read((db) => db.column<int>('SELECT w.gallery_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE fw.folder_id = ?', [folderID]));
+
+  /// Every saved work by number, with the folders holding it.
+  Map<int, Set<int>> savedWorkFolders() => dbWriter.read((db) {
+    final folders = <int, Set<int>>{};
+    for (final row in db.rows('SELECT w.gallery_id AS gallery_id, fw.folder_id AS folder_id FROM works w LEFT JOIN folder_works fw ON fw.work_id = w.id')) {
+      final ids = folders.putIfAbsent(row['gallery_id'] as int, () => <int>{});
+      final folder = row['folder_id'];
+      if (folder is int) ids.add(folder);
+    }
+    return folders;
+  });
+
+  /// Takes a work out of folders, into Unfiled when no folder is left.
+  void removeWorkFromFolders(int galleryId, Set<int> folderIDs) {
+    if (folderIDs.isEmpty) return;
+    final left = dbWriter.write((db) {
+      final workID = db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [galleryId]);
+      if (workID == null) return -1;
+      db.execute('DELETE FROM folder_works WHERE work_id = ? AND folder_id IN (${folderIDs.join(',')})', [workID]);
+      return db.value<int>('SELECT COUNT(*) FROM folder_works WHERE work_id = ?', [workID]) ?? 0;
+    });
+    if (left == 0) addWork(galleryId, unfiledFolderID());
+  }
+
+  /// Unfiled, where a work in no other folder belongs.
+  int unfiledFolderID() {
+    final unfiled = listFolders().where((folder) => folder.name == '미분류').firstOrNull?.id;
+    if (unfiled != null) return unfiled;
+    final id = ensureDefaultFolder().id;
+    if (id == null) throw StateError('No Unfiled folder');
+    return id;
+  }
+
+  /// Takes a work out of a folder. A work no other folder holds leaves the library, as removing
+  /// its bookmark would.
+  void removeWorkFromFolder(int galleryId, int folderID) {
+    final others = dbWriter.write((db) {
+      final workID = db.value<int>('SELECT id FROM works WHERE gallery_id = ?', [galleryId]);
+      if (workID == null) return -1;
+      db.execute('DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?', [folderID, workID]);
+      return db.value<int>('SELECT COUNT(*) FROM folder_works WHERE work_id = ?', [workID]) ?? 0;
+    });
+    if (others == 0) deleteWork(galleryId);
+  }
+
   List<({FolderRule rule, Folder folder})> folderRules() => dbWriter.read((db) {
     final folders = AppDatabase.fetchFolders(db);
     final rules = <({FolderRule rule, Folder folder})>[];
@@ -254,7 +304,8 @@ extension AppDatabaseFolderRules on AppDatabase {
   }
 
   /// Files saved works in a folder. A copying rule leaves them where they were too; a moving
-  /// rule takes them out of the folders it looked in. Either way they leave Unfiled.
+  /// rule takes them out of the folders it looked in. Either way they leave Unfiled, which holds
+  /// only works in no other folder.
   void addMatchingWorks(FolderRule rule, int toFolder) {
     if (rule.workQuery.isEmpty) return;
     final now = iso8601();
@@ -371,7 +422,7 @@ extension AppDatabaseFolderRules on AppDatabase {
   List<SmartFolderChoice> ruleFolderChoices() => dbWriter.write(
     (db) => [
       for (final folder in AppDatabase.fetchFolders(db))
-        if (folder.id != null) SmartFolderChoice(id: folderIdentity(folder.id!, db), name: folder.displayName, canBeSmart: folder.name != '미분류'),
+        if (folder.id != null) SmartFolderChoice(id: folderIdentity(folder.id!, db), name: folder.displayName, canBeSmart: true),
     ],
   );
 
@@ -435,9 +486,7 @@ extension BooruStoreFolderRules on BooruStore {
     ];
   }
 
-  List<SmartFolderChoice> ruleFolderChoices() => [
-    for (final folder in folders()) SmartFolderChoice(id: folder.id, name: folder.displayName, canBeSmart: folder.id != 'unsorted'),
-  ];
+  List<SmartFolderChoice> ruleFolderChoices() => [for (final folder in folders()) SmartFolderChoice(id: folder.id, name: folder.displayName, canBeSmart: true)];
 
   Set<String> ruleDefaultSources() => folders().map((folder) => folder.id).where(isLanding).toSet();
 

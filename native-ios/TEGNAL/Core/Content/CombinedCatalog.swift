@@ -51,8 +51,24 @@ final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     }
 
     /// The website's account favorites, to check that a sign-in made for it works there.
-    func accountFavorites(after next: String?) async throws -> (ids: [Int64], next: String?) {
-        try await SiteScope.$site.withValue(site) { try await inner.accountFavorites(after: next) }
+    func accountFavorites(after next: String?, category: Int? = nil) async throws -> (ids: [Int64], next: String?) {
+        try await SiteScope.$site.withValue(site) { try await inner.accountFavorites(after: next, category: category) }
+    }
+
+    func favoriteCategories() async throws -> [FavoriteCategory] {
+        try await SiteScope.$site.withValue(site) { try await inner.favoriteCategories() }
+    }
+
+    func setAccountFavorite(_ id: Int64, saved: Bool, category: Int) async throws {
+        try await SiteScope.$site.withValue(site) { try await inner.setAccountFavorite(id, saved: saved, category: category) }
+    }
+
+    func accountFavoriteLists() async throws -> AccountFavorites {
+        try await SiteScope.$site.withValue(site) { try await inner.accountFavoriteLists() }
+    }
+
+    func changeAccountFavorite(_ id: Int64, category: Int, adds: Bool) async throws {
+        try await SiteScope.$site.withValue(site) { try await inner.changeAccountFavorite(id, category: category, adds: adds) }
     }
 
     private static let lock = NSLock()
@@ -167,14 +183,17 @@ actor CombinedCatalog {
         }
     }
 
-    /// Takes one work from each website in turn. Returns whether any was taken.
+    /// Takes one work from each website in turn, in order of priority. Returns whether any was taken.
+    /// A work a higher website has read but not shown yet is left to that website, so a shared
+    /// work shows from the website people prefer.
     private func takeRound() -> Bool {
         var took = false
-        for site in sites {
+        for (rank, site) in sites.enumerated() {
             guard var lane = lanes[site] else { continue }
             while !lane.pending.isEmpty {
                 let item = FeedItem(id: lane.pending.removeFirst(), site: site)
-                guard shown.insert(item.id).inserted else { leftOut += 1; continue }
+                let preferred = sites.prefix(rank).contains { lanes[$0]?.pending.contains(item.id) == true }
+                guard !preferred, shown.insert(item.id).inserted else { leftOut += 1; continue }
                 emitted.append(item)
                 took = true
                 break

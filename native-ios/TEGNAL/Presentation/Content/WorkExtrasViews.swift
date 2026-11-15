@@ -22,10 +22,8 @@ struct WorkExtrasSection: View {
             if let extras, Self.hasContent(extras) {
                 VStack(alignment: .leading, spacing: 14) {
                     Divider()
-                    VStack(alignment: .leading, spacing: 14) {
-                        ratingRow(extras)
-                        FlowLayout(spacing: 6) { stats(extras) }
-                    }.padding(.horizontal, GalleryDetailInset.text)
+                    ratingRow(extras).padding(.horizontal, GalleryDetailInset.label)
+                    FlowLayout(spacing: 6) { stats(extras) }
                     if !extras.comments.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L10n.text("Comments")).font(.headline).padding(.horizontal, GalleryDetailInset.text)

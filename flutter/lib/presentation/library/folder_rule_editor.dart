@@ -11,7 +11,21 @@ import '../design/ios_controls.dart';
 import '../design/pull_down_menu.dart';
 import '../design/tegnal_theme.dart';
 import '../design/alert_dialog.dart';
-import '../settings/settings_rows.dart' show SettingsSegmentedRow;
+
+/// Tags as words: spaces for underscores, joined the way the language lists things.
+String spokenTags(String text) {
+  final tags = [
+    for (final tag in text.split(RegExp(r'\s+')))
+      if (tag.isNotEmpty) tag.replaceAll('_', ' '),
+  ];
+  if (tags.length < 2) return tags.join();
+  final head = tags.sublist(0, tags.length - 1), last = tags.last;
+  return switch (L10n.language) {
+    'ko' => '${head.join(', ')} 및 $last',
+    'ja' => tags.join('、'),
+    _ => tags.length == 2 ? '${tags[0]} and $last' : '${head.join(', ')}, and $last',
+  };
+}
 
 /// What a rule does, in one line for the smart folder list: move or copy, and from where.
 String smartFolderSummary(FolderRule rule, {required bool booru, required Map<String, String> names, required Set<String> defaultSources}) {
@@ -100,6 +114,10 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
   /// Comics only. New rules move, so each work sits in one place; a rule saved before the
   /// choice existed loads as copying, which is what it did.
   bool _copies = false;
+
+  /// Where it looks and whether it moves or copies: shown open only when a folder already
+  /// changed them, so a newcomer sees just the tags.
+  bool _showsMore = false;
   int _matches = 0;
   int _matchesElsewhere = 0;
   Timer? _count;
@@ -108,14 +126,38 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
   WorkQuery get _query => WorkQuery(_tag.text, excluding: _excluded.text);
   bool get _usesTags => widget.creatingFolder || _isSmart;
 
-  /// How many saved works match, and how many more match where the folder does not look.
+  /// What the tags do, said as a sentence a newcomer can check: which works go in, how many
+  /// already saved match, and how many more sit where the folder does not look.
   String get _matchFooter {
-    if (_query.isEmpty) return L10n.text('Separate tags with spaces. Use _ for a space inside a tag.');
-    final found = L10n.text(widget.booru ? '%@ saved images match in the folders it looks in.' : '%@ saved works match in the folders it looks in.', [
-      '$_matches',
-    ]);
-    if (_matchesElsewhere == 0) return found;
-    return '$found ${L10n.text('%@ more match in other folders and stay there. Choose those folders under Look In to include them.', ['$_matchesElsewhere'])}';
+    final booru = widget.booru;
+    if (_query.isEmpty) {
+      return L10n.text(
+        booru
+            ? 'Enter tags separated by spaces, such as landscape. An image needs every tag to go in.'
+            : 'Enter tags separated by spaces, such as language:korean. A work needs every tag to go in.',
+      );
+    }
+    final included = spokenTags(_tag.text), left = spokenTags(_excluded.text);
+    return [
+      if (left.isEmpty)
+        L10n.text(booru ? 'Images tagged %@ go in.' : 'Works tagged %@ go in.', [included])
+      else
+        L10n.text(booru ? 'Images tagged %@ go in, unless they are tagged %@.' : 'Works tagged %@ go in, unless they are tagged %@.', [included, left]),
+      L10n.text(booru ? '%@ saved images match now.' : '%@ saved works match now.', ['$_matches']),
+      if (_matchesElsewhere > 0)
+        L10n.text('%@ more are in other folders and stay there. To bring them in too, choose those folders under More Options.', ['$_matchesElsewhere']),
+    ].join(' ');
+  }
+
+  String get _smartFooter {
+    if (_isSmart) {
+      return L10n.text(
+        widget.booru
+            ? 'Images you save that have the tags below are put here on their own. An image you move yourself stays where you put it.'
+            : 'Works you save that have the tags below are put here on their own. A work you move yourself stays where you put it.',
+      );
+    }
+    return L10n.text(widget.booru ? 'This folder holds only the images you put in it.' : 'This folder holds only the works you put in it.');
   }
 
   String get _sourceFooter {
@@ -136,30 +178,23 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
 
   String get _actionFooter {
     if (widget.booru) return L10n.text('An image is in one folder at a time, so a matching image moves here from the folder it was in.');
-    final action = L10n.text(
+    return L10n.text(
       _copies
           ? 'A matching work is added here and also stays in the folder it came from, so it appears in both.'
           : 'A matching work leaves the folder it came from, so it appears only here.',
     );
-    return '$action ${L10n.text('Unfiled always lets a work go once it is in a folder.')}';
   }
 
-  /// The toggle files works already saved once, when Save is tapped; a smart folder alone
+  /// The switch files works already saved once, when Save is tapped; a smart folder alone
   /// only takes works saved after it.
   String get _fillFooter {
     if (_fillsSavedWorks || !_isSmart) {
-      if (widget.booru) return L10n.text('When you tap Save, matching images in the folders it looks in move here once.');
+      if (widget.booru) return L10n.text('When you tap Save, matching images you already saved move here.');
       return L10n.text(
-        _copies
-            ? 'When you tap Save, matching works in the folders it looks in are copied here once.'
-            : 'When you tap Save, matching works in the folders it looks in move here once.',
+        _copies ? 'When you tap Save, matching works you already saved are copied here.' : 'When you tap Save, matching works you already saved move here.',
       );
     }
-    return L10n.text(
-      widget.booru
-          ? 'Only images saved from now on move here. Images you already saved stay where they are.'
-          : 'Only works saved from now on come here. Works you already saved stay where they are.',
-    );
+    return L10n.text(widget.booru ? 'Only images you save from now on come here.' : 'Only works you save from now on come here.');
   }
 
   List<SmartFolderChoice> get _sourceChoices => _choices.where((choice) => choice.id != _folder).toList();
@@ -245,6 +280,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
     _copies = rule.copies;
     final existing = rule.sources?.toSet().intersection(_choices.map((choice) => choice.id).toSet());
     _sources = existing != null && existing.isNotEmpty ? existing : null;
+    _showsMore = _sources != null || _everyFolder || _copies;
   }
 
   void _save() {
@@ -258,7 +294,8 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
         widget.library.deleteRule(target);
       }
       if (_usesTags && _fillsSavedWorks) widget.library.fill(saved);
-      Navigator.of(context).pop();
+      // A new folder hands its identity back to whoever asked for it.
+      Navigator.of(context).pop(widget.creatingFolder ? target : null);
     } on Object catch (error) {
       showCupertinoDialog<void>(
         context: context,
@@ -293,28 +330,38 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
     ).then((_) => _changed());
   }
 
-  Widget _tagField(TextEditingController controller, String prompt) => Expanded(
-    child: CupertinoTextField.borderless(
-      controller: controller,
-      enabled: _usesTags,
-      textAlign: TextAlign.right,
-      autocorrect: false,
-      enableSuggestions: false,
-      padding: EdgeInsets.zero,
-      placeholder: prompt,
-      placeholderStyle: TegnalType.style(17, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
-      style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)),
+  /// A tag entry under a short label, as a form row that holds a longer entry shows it.
+  Widget _tagField(String title, TextEditingController controller, String prompt) => FormRow(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ExcludeSemantics(
+            child: Text(
+              title,
+              style: TegnalType.style(15, weight: FontWeight.w600, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+            ),
+          ),
+          const SizedBox(height: 4),
+          CupertinoTextField.borderless(
+            controller: controller,
+            autocorrect: false,
+            enableSuggestions: false,
+            minLines: 1,
+            maxLines: 4,
+            padding: EdgeInsets.zero,
+            placeholder: prompt,
+            placeholderStyle: TegnalType.style(17, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+            style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)),
+          ),
+        ],
+      ),
     ),
   );
 
-  /// A section that dims and stops taking touches while the folder is not smart.
-  Widget _section({String? header, required String footer, required List<Widget> children}) => IgnorePointer(
-    ignoring: !_usesTags,
-    child: Opacity(
-      opacity: _usesTags ? 1 : 0.4,
-      child: FormSection(header: header == null ? null : Text(header), footer: Text(footer), children: children),
-    ),
-  );
+  /// A note under a row inside a section, in the footer's type.
+  Widget _caption(String text) => Text(text, style: TegnalType.style(13, color: TegnalColors.secondaryLabel.resolveFrom(context)));
 
   @override
   Widget build(BuildContext context) {
@@ -335,6 +382,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
         padding: EdgeInsets.only(top: 76 + 30, bottom: 32 + MediaQuery.paddingOf(context).bottom),
         children: [
           FormSection(
+            footer: footer(_smartFooter),
             children: [
               if (widget.creatingFolder)
                 FormRow(
@@ -384,22 +432,11 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
                     ),
                   ),
                 ),
-            ],
-          ),
-          // A section without a footer leaves 35 pt; after a footer 23 pt, as the native form spaces them.
-          const SizedBox(height: 35),
-          FormSection(
-            footer: footer(
-              L10n.text(
-                widget.booru
-                    ? 'Images you save from now on that match the tags are filed here on their own. An image you move yourself stays where you put it.'
-                    : 'Works you save from now on that match the tags are filed here on their own. A work you move yourself stays where you put it.',
-              ),
-            ),
-            children: [
               FormRow(
                 child: Row(
                   children: [
+                    SizedBox(width: 24, child: Icon(CupertinoIcons.sparkles, size: 20, color: tint)),
+                    const SizedBox(width: 16),
                     Expanded(child: Text(L10n.text('Smart Folder'))),
                     Transform.translate(
                       offset: const Offset(2, 0),
@@ -416,94 +453,129 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
               ),
             ],
           ),
-          const SizedBox(height: 23),
-          Opacity(
-            opacity: _usesTags ? 1 : 0.4,
-            child: FormSection(
+          if (_usesTags) ...[
+            const SizedBox(height: 23),
+            FormSection(
+              prominentHeader: true,
+              header: Text(L10n.text(widget.booru ? 'Which Images Go In' : 'Which Works Go In')),
               footer: footer(_matchFooter),
               children: [
-                FormRow(
-                  child: Row(children: [Text(L10n.text('Tag')), const SizedBox(width: 16), _tagField(_tag, widget.booru ? 'landscape' : 'language:korean')]),
-                ),
+                _tagField(L10n.text('Include'), _tag, widget.booru ? 'landscape' : 'language:korean'),
+                _tagField(L10n.text('Leave Out'), _excluded, L10n.text('Optional')),
+              ],
+            ),
+            const SizedBox(height: 23),
+            FormSection(
+              footer: footer(_fillFooter),
+              children: [
                 FormRow(
                   child: Row(
-                    children: [Text(L10n.text('Excluded Tags')), const SizedBox(width: 16), _tagField(_excluded, widget.booru ? 'monochrome' : 'tag:example')],
+                    children: [
+                      Expanded(child: Text(L10n.text(widget.booru ? 'Also Bring In Saved Images' : 'Also Bring In Saved Works'))),
+                      Transform.translate(
+                        offset: const Offset(2, 0),
+                        child: TegnalSwitch(value: _fillsSavedWorks, onChanged: (value) => setState(() => _fillsSavedWorks = value)),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 23),
-          _section(
-            header: L10n.text(widget.booru ? 'Where to Find Images' : 'Where to Find Works'),
-            footer: _sourceFooter,
-            children: [
-              Builder(
-                builder: (context) => FormRow(
-                  onTap: () => _openSources(context),
-                  child: Row(
-                    children: [
-                      Text(L10n.text('Look In')),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          _sourceSummary,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: TegnalType.style(17, color: tint),
+            const SizedBox(height: 23),
+            FormSection(
+              children: [
+                FormRow(
+                  onTap: () => setState(() => _showsMore = !_showsMore),
+                  child: Semantics(
+                    button: true,
+                    expanded: _showsMore,
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(L10n.text('More Options'))),
+                        AnimatedRotation(
+                          turns: _showsMore ? 0.25 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(CupertinoIcons.chevron_right, size: 15, color: label),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showsMore) ...[
+                  // Rows inside a disclosure group sit 20 pt further in, as the native form shows them.
+                  Builder(
+                    builder: (context) => FormRow(
+                      onTap: () => _openSources(context),
+                      separatorInset: 36,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 10, 0, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(L10n.text('Look In')),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    _sourceSummary,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.right,
+                                    style: TegnalType.style(17, color: tint),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(CupertinoIcons.chevron_up_chevron_down, size: 15, color: tint),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            _caption(_sourceFooter),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Icon(CupertinoIcons.chevron_up_chevron_down, size: 15, color: tint),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 23),
-          _section(
-            header: L10n.text(widget.booru ? 'When an Image Matches' : 'When a Work Matches'),
-            footer: _actionFooter,
-            children: [
-              if (widget.booru)
-                FormRow(
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(L10n.text('Matching Images'))),
-                      Text(L10n.text('Move Here'), style: TegnalType.style(17, color: secondary)),
-                    ],
-                  ),
-                )
-              else
-                SettingsSegmentedRow<bool>(
-                  options: [(false, L10n.text('Move Here')), (true, L10n.text('Copy Here'))],
-                  selected: _copies,
-                  onSelected: (value) {
-                    setState(() => _copies = value);
-                    _changed();
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: 23),
-          _section(
-            footer: _fillFooter,
-            children: [
-              FormRow(
-                child: Row(
-                  children: [
-                    Expanded(child: Text(L10n.text(widget.booru ? 'Apply to Saved Images Now' : 'Apply to Saved Works Now'))),
-                    Transform.translate(
-                      offset: const Offset(2, 0),
-                      child: TegnalSwitch(value: _fillsSavedWorks, onChanged: (value) => setState(() => _fillsSavedWorks = value)),
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+                  ),
+                  FormRow(
+                    separatorInset: 36,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 0, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.booru)
+                            Row(
+                              children: [
+                                Expanded(child: Text(L10n.text('Matching Images'))),
+                                Text(L10n.text('Move Here'), style: TegnalType.style(17, color: secondary)),
+                              ],
+                            )
+                          else ...[
+                            Text(L10n.text('Matching Works')),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: CupertinoSlidingSegmentedControl<bool>(
+                                groupValue: _copies,
+                                children: {false: Text(L10n.text('Move Here')), true: Text(L10n.text('Copy Here'))},
+                                onValueChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() => _copies = value);
+                                  _changed();
+                                },
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          _caption(_actionFooter),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ],
       ),
     );

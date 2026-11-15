@@ -340,6 +340,8 @@ abstract final class MangaUrls {
     if (home.isEmpty) return null;
     final page = accountSignInPage;
     if (page != null) return page;
+    // A catalog of this kind keeps accounts even where works open without one.
+    if (backend == MangaBackend.document && hasResolvedBackend) return ContentURL.parse('${home}account/login');
     if (backend == MangaBackend.keyed && hasResolvedBackend) {
       final saved = preferences.string('manga.resolved_login');
       final url = saved == null ? null : ContentURL.parse(saved);
@@ -384,7 +386,7 @@ abstract final class MangaUrls {
   }
 
   /// A catalog whose works open with the signed-in session of its own pages, not with forum cookies.
-  static bool get usesSiteSession => hasResolvedBackend && backend == MangaBackend.document && accountSignInPage != null;
+  static bool get usesSiteSession => hasResolvedBackend && backend == MangaBackend.document;
 
   static void markRequiresSignIn({required String site, String? accountHost}) {
     if (home != site) return;
@@ -597,6 +599,12 @@ abstract final class ComicSites {
     final sites = all;
     if (!sites.contains(site)) sites.add(site);
     _preferences.set(_listKey, sites);
+  }
+
+  /// Puts the connected sites in a new order of priority. Sites the order leaves out keep their place at the end.
+  static void reorder(List<String> order) {
+    final current = all;
+    _preferences.set(_listKey, [...order.where(current.contains), ...current.where((site) => !order.contains(site))]);
   }
 
   /// Forgets a site and what was learned about it.

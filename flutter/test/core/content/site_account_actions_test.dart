@@ -43,11 +43,9 @@ void main() {
 
     SiteAccount.store = await SecureSecretStore.load(storage);
     expect(SiteAccount.isSignedIn, isTrue);
-    content.syncsAccountFavorites = true;
     SiteAccountActions.signOut(content);
     expect(SiteAccount.isSignedIn, isFalse);
     expect(content.siteAccountSignedIn, isFalse);
-    expect(content.syncsAccountFavorites, isFalse);
   });
 
   test('the sign-in page stays on https', () {

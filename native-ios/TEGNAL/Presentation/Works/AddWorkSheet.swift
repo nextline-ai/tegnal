@@ -13,7 +13,6 @@ public struct AddWorkSheet: View {
     @State private var isSaving = false
     @State private var detectedIds: [Int64] = []
     @State private var showCreateFolderAlert = false
-    @State private var newFolderName = ""
 
     public init(initialText: String = "") {
         self.initialText = initialText
@@ -66,7 +65,6 @@ public struct AddWorkSheet: View {
 
                 Section(header: Text(L10n.text("Save to Folder"))) {
                     Button {
-                        newFolderName = ""
                         showCreateFolderAlert = true
                     } label: {
                         HStack(spacing: 8) {
@@ -116,13 +114,9 @@ public struct AddWorkSheet: View {
                     .disabled(detectedIds.isEmpty || isSaving)
                 }
             }
-            .alert(L10n.text("New Folder"), isPresented: $showCreateFolderAlert) {
-                TextField(L10n.text("Folder Name"), text: $newFolderName)
-                Button(L10n.text("Cancel"), role: .cancel) { newFolderName = "" }
-                Button(L10n.text("Create")) {
-                    createAndSelectFolder()
-                }
-                .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .newFolderPrompt(isPresented: $showCreateFolderAlert) { identity in
+                loadFolders()
+                selectedFolderId = try? env.database.folderID(identity: identity)
             }
             .task {
                 loadFolders()
@@ -131,16 +125,6 @@ public struct AddWorkSheet: View {
                 }
             }
         }
-    }
-
-    private func createAndSelectFolder() {
-        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if let created = try? env.database.createFolder(name: trimmed) {
-            loadFolders()
-            selectedFolderId = created.id
-        }
-        newFolderName = ""
     }
 
     private func loadFolders() {
@@ -158,7 +142,6 @@ public struct AddWorkSheet: View {
 
         Task {
             var createdCount = 0
-            var created: [Int64] = []
             for id in detectedIds {
                 let existing = try? env.database.getWork(galleryId: id)
                 let catalog = try? env.database.getCatalog(galleryId: id)
@@ -181,15 +164,12 @@ public struct AddWorkSheet: View {
                 )
                 if existing == nil {
                     createdCount += 1
-                    created.append(id)
                 }
             }
 
             if createdCount > 0 {
                 env.startCoverQueue()
             }
-            // A bookmark made here is one like any other: it reaches the account's favorites too.
-            env.syncAccountFavorites(created, saved: true)
 
             await MainActor.run {
                 isSaving = false

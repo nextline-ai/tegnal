@@ -48,6 +48,16 @@ class SiteContent extends ContentProviding implements WorkExtrasProviding {
   Future<(List<int>, String?)> accountFavorites({String? after, int? category}) =>
       SiteScope.run(site, () => _inner.accountFavorites(after: after, category: category));
 
+  Future<void> setAccountFavorite(int id, {required bool saved, int category = 0}) =>
+      SiteScope.run(site, () => _inner.setAccountFavorite(id, saved: saved, category: category));
+
+  Future<List<FavoriteCategory>> favoriteCategories() => SiteScope.run(site, _inner.favoriteCategories);
+
+  Future<AccountFavorites> accountFavoriteLists() => SiteScope.run(site, _inner.accountFavoriteLists);
+
+  Future<void> changeAccountFavorite(int id, {required int category, required bool adds}) =>
+      SiteScope.run(site, () => _inner.changeAccountFavorite(id, category: category, adds: adds));
+
   static final _sources = <String, SiteContent>{};
 
   /// The shared reader of a connected website.
@@ -167,14 +177,17 @@ class CombinedCatalog {
     }
   }
 
-  /// Takes one work from each website in turn. Returns whether any was taken.
+  /// Takes one work from each website in turn, in order of priority. Returns whether any was taken.
+  /// A work a higher website has read but not shown yet is left to that website, so a shared
+  /// work shows from the website people prefer.
   bool _takeRound() {
     var took = false;
-    for (final site in _sites) {
+    for (final (rank, site) in _sites.indexed) {
       final lane = _lanes[site]!;
       while (lane.pending.isNotEmpty) {
         final item = FeedItem(lane.pending.removeAt(0), site);
-        if (!_shown.add(item.id)) {
+        final preferred = _sites.take(rank).any((higher) => _lanes[higher]?.pending.contains(item.id) ?? false);
+        if (preferred || !_shown.add(item.id)) {
           leftOut += 1;
           continue;
         }

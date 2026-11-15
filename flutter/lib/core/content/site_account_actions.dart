@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
+import 'site_favorites_sync.dart';
 import 'content_environment.dart';
 import 'gallery_content.dart';
 import 'keyed_work_extras.dart';
@@ -38,6 +41,8 @@ abstract final class SiteAccountActions {
   /// Keeps a sign-in made on a site's own pages. Returns false while it left no cookies.
   static bool finishSessionSignIn(List<SiteCookie> cookies, ContentEnvironment content, {String? site}) {
     if (!SiteAccount.signInSession(cookies, host: scoped(site, () => MangaUrls.configuredHost))) return false;
+    // Requests carry the account from now on, where works also open without one.
+    scoped(site, () => MangaUrls.markUsesAccount(site: MangaUrls.home, signInPage: MangaUrls.signInURL));
     signInChanged(content, site: site);
     return true;
   }
@@ -83,14 +88,14 @@ abstract final class SiteAccountActions {
   static void signInChanged(ContentEnvironment content, {String? site}) {
     scoped(site, MangaUrls.resetResolvedBackend);
     content.refreshSiteAccount();
+    // A first sign-in brings the website's favorites into a folder named after it.
+    unawaited(SiteFavoritesSync.shared?.setUp(site ?? ComicSites.active));
   }
 
   /// Signs one connected website out; the other websites keep their accounts.
   static void signOut(ContentEnvironment content, {String? site}) {
     final host = scoped(site, () => MangaUrls.configuredHost);
-    final session = scoped(site, () => MangaUrls.usesSiteSession);
     SiteAccount.signOutAt(host);
-    if ((site ?? ComicSites.active) == ComicSites.active && !session) content.syncsAccountFavorites = false;
     signInChanged(content, site: site);
   }
 

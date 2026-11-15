@@ -1163,7 +1163,7 @@ private struct GalleryRelatedWorks: View {
             if visible?.isEmpty != true {
                 VStack(alignment: .leading, spacing: 16) {
                     Divider()
-                    Text(L10n.text("Related Works")).font(.headline).padding(.horizontal, GalleryDetailInset.text)
+                    Text(L10n.text("Related Works")).font(.headline).padding(.leading, GalleryDetailInset.label)
                     ScrollView(.horizontal) {
                         HStack(alignment: .top, spacing: 12) {
                             if let visible {
@@ -1263,7 +1263,7 @@ private struct GalleryInformation: View {
         VStack(alignment: .leading, spacing: 22) {
             if showsCover { WorkDetailCover(image: cover, loading: !coverFinished) }
             GalleryDetailHeading(title: gallery.title, metadata: gallery.headingMetadata)
-                .padding(.horizontal, GalleryDetailInset.text)
+                .padding(.horizontal, GalleryDetailInset.label)
             VStack(spacing: 11) {
                 GalleryDetailActions(read: read, bookmark: bookmark)
                 if let openVersion, let suggestion {
@@ -1271,7 +1271,6 @@ private struct GalleryInformation: View {
                 }
             }
             GalleryDetailMetadata(gallery: gallery, search: search, openVersion: openVersion, savedIDs: savedIDs)
-                .padding(.horizontal, GalleryDetailInset.text)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -1306,7 +1305,7 @@ private struct GalleryDetailMetadata: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Artists")).font(.headline)
+                Text(L10n.text("Artists")).font(.headline).padding(.leading, GalleryDetailInset.label)
                 if artists.isEmpty { MetadataPlaceholder() }
                 else {
                     FlowLayout(spacing: 6) {
@@ -1318,7 +1317,7 @@ private struct GalleryDetailMetadata: View {
             }
             ForEach(credits) { group in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.text(group.category.title)).font(.headline)
+                    Text(L10n.text(group.category.title)).font(.headline).padding(.leading, GalleryDetailInset.label)
                     ArtworkTagCloud(groups: [group], headingStyle: .hidden,
                         destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
                         action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
@@ -1327,7 +1326,7 @@ private struct GalleryDetailMetadata: View {
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Language")).font(.headline)
+                Text(L10n.text("Language")).font(.headline).padding(.leading, GalleryDetailInset.label)
                 if gallery.language.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { MetadataPlaceholder() }
                 else if let search {
                     Button { search("language:" + gallery.language.replacingOccurrences(of: " ", with: "_")) } label: { languageTag }
@@ -1341,6 +1340,7 @@ private struct GalleryDetailMetadata: View {
                 // Other versions belong with the language, a step below it.
                 if let openVersion, !versions.isEmpty {
                     Text(L10n.text("Other Languages")).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 6)
+                        .padding(.leading, GalleryDetailInset.label)
                     FlowLayout(spacing: 6) {
                         ForEach(versions) { version in
                             Button { openVersion(version.id) } label: { versionTag(version) }
@@ -1354,6 +1354,7 @@ private struct GalleryDetailMetadata: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 SettingsHelpLabel("Tags", help: "Hold an artist or tag to add it to your favorites. Hold it again to remove it.").font(.headline)
+                    .padding(.leading, GalleryDetailInset.label)
                 ArtworkTagCloud(groups: [tags], headingStyle: .hidden,
                     destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
                     action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
@@ -1431,7 +1432,7 @@ struct GalleryWorkNumber: View {
     @State private var copied = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.text("Number")).font(.headline)
+            Text(L10n.text("Number")).font(.headline).padding(.leading, GalleryDetailInset.label)
             HStack {
                 Button(action: copy) {
                     Text(String(number)).foregroundStyle(ArtworkTagCategory.general.color)

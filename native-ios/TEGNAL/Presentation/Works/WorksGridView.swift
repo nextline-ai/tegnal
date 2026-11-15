@@ -29,7 +29,6 @@ public struct WorksGridView: View {
     @State private var workPendingDelete: Work?
     @State private var workPendingMoveToNewFolder: Work?
     @State private var showNewFolderAlert = false
-    @State private var newFolderName = ""
     @State private var toastMessage: String?
     @State private var isSearchBarVisible = true
     @State private var searchScroll = ScrollSearchVisibility()
@@ -244,23 +243,12 @@ public struct WorksGridView: View {
                 Text(L10n.text("Delete this work (number: %@)?", String(describing: String(work.galleryId))))
             }
         }
-        .alert(L10n.text("Create Folder and Move"), isPresented: $showNewFolderAlert) {
-            TextField(L10n.text("New Folder Name"), text: $newFolderName)
-            Button(L10n.text("Cancel"), role: .cancel) {
-                newFolderName = ""
-                workPendingMoveToNewFolder = nil
+        .newFolderPrompt(isPresented: $showNewFolderAlert, title: "Create Folder and Move", actionTitle: "Create and Move") { identity in
+            if let work = workPendingMoveToNewFolder, let id = try? env.database.folderID(identity: identity),
+               let folder = try? env.database.listFolders().first(where: { $0.id == id }) {
+                moveWork(work, to: folder)
             }
-            Button(L10n.text("Create and Move")) {
-                if let work = workPendingMoveToNewFolder {
-                    let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty, let newFolder = try? env.database.createFolder(name: trimmed) {
-                        moveWork(work, to: newFolder)
-                    }
-                }
-                newFolderName = ""
-                workPendingMoveToNewFolder = nil
-            }
-            .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            workPendingMoveToNewFolder = nil
         }
         .overlay(alignment: .bottom) {
             if let toastMessage {
@@ -411,7 +399,6 @@ public struct WorksGridView: View {
         Menu {
             Button {
                 workPendingMoveToNewFolder = work
-                newFolderName = ""
                 showNewFolderAlert = true
             } label: {
                 Label(L10n.text("Create New Folder…"), systemImage: "folder.badge.plus")

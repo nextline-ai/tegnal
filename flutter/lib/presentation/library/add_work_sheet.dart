@@ -1,7 +1,6 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
-import '../content/content_bookmark.dart';
 import '../../core/content/gallery_id_parser.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/storage/folder_rules.dart';
@@ -68,12 +67,11 @@ class _AddWorkSheetState extends State<AddWorkSheet> {
   }
 
   Future<void> _createFolder() async {
-    final result = await showFolderNamePrompt(context);
-    if (!mounted || result == null || result.name.isEmpty) return;
-    final created = _database.createFolder(name: result.name);
+    final identity = await createFolderWithPrompt(context, library: _database);
+    if (!mounted || identity == null) return;
     setState(() {
       _loadFolders();
-      _selectedFolderID = created.id;
+      _selectedFolderID = _database.folderIDForIdentity(identity);
     });
   }
 
@@ -103,8 +101,6 @@ class _AddWorkSheetState extends State<AddWorkSheet> {
       if (existing == null) created.add(id);
     }
     if (created.isNotEmpty) widget.routes.startCoverQueue?.call();
-    // A bookmark made here is one like any other: it reaches the account's favorites too.
-    syncAccountFavorites(widget.routes.content, created, saved: true);
     widget.routes.notifyChanged();
     Navigator.of(context).pop();
   }
@@ -302,6 +298,11 @@ class _WorkFolderSheetState extends State<WorkFolderSheet> {
       final folder = _folders.where((folder) => '${folder.id}' == row.id).firstOrNull;
       if (folder != null) _file(folder);
     },
-    create: (name) => _file(widget.database.createFolder(name: name)),
+    library: widget.database,
+    create: (identity) {
+      final id = widget.database.folderIDForIdentity(identity);
+      final folder = widget.database.listFolders().where((folder) => folder.id == id).firstOrNull;
+      if (folder != null) _file(folder);
+    },
   );
 }

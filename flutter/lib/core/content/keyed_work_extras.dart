@@ -13,12 +13,31 @@ class WorkComment {
   bool get isUploader => id == 0;
 }
 
-/// One of the account's favorites categories on a catalog that keeps them.
+/// One of the account's favorites categories, or lists, on a catalog that keeps them.
 class FavoriteCategory {
   const FavoriteCategory({required this.id, required this.name, required this.count});
   final int id;
   final String name;
   final int count;
+
+  @override
+  bool operator ==(Object other) => other is FavoriteCategory && other.id == id && other.name == name && other.count == count;
+  @override
+  int get hashCode => Object.hash(id, name, count);
+  @override
+  String toString() => 'FavoriteCategory($id, $name, $count)';
+}
+
+/// `AccountFavorites`: a website's favorites as one read gives them: its categories, or the lists
+/// an account makes, and which of them hold each work.
+class AccountFavorites {
+  const AccountFavorites({required this.categories, required this.members, required this.exclusive});
+  final List<FavoriteCategory> categories;
+  final Map<int, Set<int>> members;
+
+  /// A favorite sits in one category at a time, and adding it to another moves it there. Lists an
+  /// account makes can each hold the same work.
+  final bool exclusive;
 }
 
 /// A work's tag on an account-based catalog, as the website spells it, with the account's vote.
@@ -324,7 +343,6 @@ abstract final class KeyedWorkPage {
     }
     return result;
   }
-
 
   /// The text of each innermost `div`, in order.
   static List<String> textsInDivs(String html) => [

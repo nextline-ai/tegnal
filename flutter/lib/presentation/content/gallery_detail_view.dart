@@ -550,7 +550,7 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
               children: [
                 if (widget.showsCover) ...[WorkDetailCover(image: widget.cover, loading: !widget.coverFinished), const SizedBox(height: 22)],
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
+                  padding: const EdgeInsets.symmetric(horizontal: galleryLabelInset),
                   child: GalleryDetailHeading(title: gallery.title, metadata: galleryHeadingMetadata(gallery)),
                 ),
                 const SizedBox(height: 22),
@@ -569,22 +569,18 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
                   _VersionSuggestion(version: suggestion, open: () => widget.actions.openVersion!(suggestion.id)),
                 ],
                 const SizedBox(height: 22),
-                // Text sits inside the page margin, in line with the text in the boxes.
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
-                  child: _GalleryDetailMetadata(
-                    gallery: gallery,
-                    content: widget.content,
-                    savedIDs: _savedIDs,
-                    savedQueries: _savedQueries,
-                    favoriteArtists: {
-                      for (final value in _savedTags)
-                        if (value.kind == 0) MangaArtistFavorite.key(value.name),
-                    },
-                    search: widget.actions.search,
-                    openVersion: widget.actions.openVersion,
-                    toggleSaved: _toggleSaved,
-                  ),
+                _GalleryDetailMetadata(
+                  gallery: gallery,
+                  content: widget.content,
+                  savedIDs: _savedIDs,
+                  savedQueries: _savedQueries,
+                  favoriteArtists: {
+                    for (final value in _savedTags)
+                      if (value.kind == 0) MangaArtistFavorite.key(value.name),
+                  },
+                  search: widget.actions.search,
+                  openVersion: widget.actions.openVersion,
+                  toggleSaved: _toggleSaved,
                 ),
               ],
             ),
@@ -891,9 +887,20 @@ class _GalleryDetailMetadata extends StatelessWidget {
     final versions = gallery.otherVersions(L10n.contentLanguage).where((version) => !content.hiddenMangaGalleryIDs.contains(version.id)).toList();
     final languageColor = artworkTagColor(ArtworkTagCategory.language, context);
     final artistColor = artworkTagColor(ArtworkTagCategory.artist, context);
+    // Labels sit a little inside the tags' rounded ends; the tags keep the page margin.
     Widget section(Widget heading, Widget body) => Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const SizedBox(height: 4), body]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: galleryLabelInset),
+            child: heading,
+          ),
+          const SizedBox(height: 4),
+          body,
+        ],
+      ),
     );
     final artists = _artists;
     final languageSaved = savedQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true));
@@ -941,9 +948,12 @@ class _GalleryDetailMetadata extends StatelessWidget {
               // Other versions belong with the language, a step below it.
               if (openVersion != null && versions.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Text(
-                  L10n.text('Other Languages'),
-                  style: TegnalType.style(15, weight: FontWeight.w600, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                Padding(
+                  padding: const EdgeInsets.only(left: galleryLabelInset),
+                  child: Text(
+                    L10n.text('Other Languages'),
+                    style: TegnalType.style(15, weight: FontWeight.w600, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 FlowLayout(
@@ -1059,9 +1069,12 @@ class _GalleryWorkNumberState extends State<GalleryWorkNumber> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          L10n.text('Number'),
-          style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+        Padding(
+          padding: const EdgeInsets.only(left: galleryLabelInset),
+          child: Text(
+            L10n.text('Number'),
+            style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+          ),
         ),
         const SizedBox(height: 4),
         Row(
@@ -1132,7 +1145,7 @@ class _GalleryDetailPreviewsState extends State<GalleryDetailPreviews> {
             const SizedBox(height: 16),
             Row(
               children: [
-                const SizedBox(width: galleryTextInset),
+                const SizedBox(width: galleryLabelInset),
                 Text(
                   L10n.text('Preview'),
                   style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),

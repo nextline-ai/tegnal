@@ -198,8 +198,47 @@ actor MangaContentSource: ContentProviding, WorkExtrasProviding {
 
     func favoriteCategories() async throws -> [FavoriteCategory] {
         let site = try prepareSite()
-        guard try await resolve(site) == .keyed else { throw ContentError.unsupportedFormat }
-        return try await keyed.favoriteCategories(site: site)
+        switch try await resolve(site) {
+        case .keyed: return try await keyed.favoriteCategories(site: site)
+        case .document: return try await documents.favoriteLists(site: site).categories
+        default: throw ContentError.unsupportedFormat
+        }
+    }
+
+    /// Every favorite the signed-in account keeps, with the categories or lists holding it.
+    func accountFavoriteLists() async throws -> AccountFavorites {
+        let site = try prepareSite()
+        switch try await resolve(site) {
+        case .keyed:
+            let categories = try await keyed.favoriteCategories(site: site)
+            var members: [Int64: Set<Int>] = [:]
+            for category in categories where category.count > 0 {
+                var next: String?, pages = 0
+                repeat {
+                    let page = try await keyed.favorites(after: next, category: category.id, site: site)
+                    try Task.checkCancellation()
+                    for id in page.ids { members[id, default: []].insert(category.id) }
+                    next = page.next
+                    pages += 1
+                } while next != nil && pages < 500
+            }
+            return AccountFavorites(categories: categories, members: members, exclusive: true)
+        case .document:
+            return try await documents.favoriteLists(site: site)
+        default:
+            throw ContentError.unsupportedFormat
+        }
+    }
+
+    /// Adds a work to one of the account's categories or lists, or takes it out. Where a favorite
+    /// sits in one category, adding moves it there and taking it out removes the favorite.
+    func changeAccountFavorite(_ id: Int64, category: Int, adds: Bool) async throws {
+        let site = try prepareSite()
+        switch try await resolve(site) {
+        case .keyed: try await keyed.setFavorite(id, saved: adds, category: category, site: site)
+        case .document: try await documents.setFavorite(id, list: category, adds: adds, site: site)
+        default: throw ContentError.unsupportedFormat
+        }
     }
 
     func setAccountFavorite(_ id: Int64, saved: Bool, category: Int = 0) async throws {

@@ -8,9 +8,13 @@ import '../design/tegnal_theme.dart';
 /// `FolderOrderView`: the folders in an editing list, dragged by their handles, saved together.
 /// Comics and image folders differ only in their identifiers and store.
 class FolderOrderView<ID extends Object> extends StatefulWidget {
-  const FolderOrderView({super.key, required this.folders, required this.save});
+  const FolderOrderView({super.key, required this.folders, required this.save, this.title = 'Reorder Folders', this.footer});
   final List<({ID id, String name})> folders;
   final void Function(List<ID> order) save;
+  final String title;
+
+  /// Said under the list, when the order means more than how the list looks.
+  final String? footer;
 
   @override
   State<FolderOrderView<ID>> createState() => _FolderOrderViewState<ID>();
@@ -36,7 +40,7 @@ class _FolderOrderViewState<ID extends Object> extends State<FolderOrderView<ID>
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     return ScrollEdgeSheet(
       bar: SheetNavigationBar(
-        title: L10n.text('Reorder Folders'),
+        title: L10n.text(widget.title),
         leading: GlassTextButton(label: L10n.text('Cancel'), onPressed: () => Navigator.of(context).pop()),
         trailing: GlassTextButton(label: L10n.text('Save'), prominent: true, onPressed: _save),
       ),
@@ -93,6 +97,13 @@ class _FolderOrderViewState<ID extends Object> extends State<FolderOrderView<ID>
               },
             ),
           ),
+          if (widget.footer case final footer?)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(32, 8, 32, 0),
+              sliver: SliverToBoxAdapter(
+                child: Text(footer, style: TegnalType.style(13, color: secondary)),
+              ),
+            ),
           if (_error != null)
             SliverPadding(
               padding: const EdgeInsets.all(16),

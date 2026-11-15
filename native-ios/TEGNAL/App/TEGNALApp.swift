@@ -306,6 +306,11 @@ struct TEGNALApp: App {
                     do { try await Task.sleep(for: .seconds(60)) } catch { return }
                 }
             }
+            // Keeps each signed-in website's favorites and its folder the same while the app is open.
+            .task(id: "\(scenePhase):\(isSplashScreenVisible):favorites") {
+                guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible else { return }
+                await env.runSiteFavoritesSync()
+            }
             .onChange(of: scenePhase, initial: true) { _, phase in
                 if phase != .inactive { DownloadStore.shared.setBackground(phase == .background) }
                 guard !isContentUITest else { return }

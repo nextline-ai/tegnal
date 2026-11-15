@@ -16,7 +16,6 @@ struct SiteAccountSection: View {
     @State private var importTask: Task<Void, Never>?
     @State private var importMessage: String?
     @State private var revision = 0
-    @State private var categories: [FavoriteCategory] = []
     @State private var allowance: (used: Int, limit: Int)?
     @State private var profiles: [SiteSettingsProfile] = []
 
@@ -27,13 +26,16 @@ struct SiteAccountSection: View {
     private var signedIn: Bool { _ = revision; _ = env.siteAccountSignedIn; return SiteAccount.isSignedIn(host: host) }
     private var refused: Bool { _ = revision; return SiteAccount.refusesAccess(host: host) }
     private var usesSiteSession: Bool { scoped { MangaUrls.usesSiteSession } }
+    private var favoritesNotSynced: Bool { _ = env.favoriteFoldersRevision; return SiteFavoriteFolders.shared.state(for: site) == nil }
     private var keyed: Bool { scoped { MangaUrls.hasResolvedBackend && MangaUrls.backend == .keyed } }
+    /// Whether the account keeps favorites the app can sync with its folders.
+    private var keepsFavorites: Bool { scoped { MangaUrls.hasResolvedBackend && MangaUrls.backend != .indexed } }
     /// Websites whose account this one can use, as two websites of one forum share theirs.
     private var sources: [String] { _ = revision; return usesSiteSession ? [] : SiteAccount.accountSources(excluding: host) }
     /// Whether accounts matter here: a website that uses them, or one not recognized yet that may be members-only.
     private var showsAccount: Bool {
         _ = revision
-        return signedIn || scoped { MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || MangaUrls.backend == .keyed }
+        return signedIn || scoped { MangaUrls.usesAccount || !MangaUrls.hasResolvedBackend || MangaUrls.backend != .indexed }
     }
 
     var body: some View {
@@ -55,6 +57,7 @@ struct SiteAccountSection: View {
                         } label: { Label(L10n.text("Refresh Website Access"), systemImage: "arrow.triangle.2.circlepath") }
                             .accessibilityIdentifier("settings.siteAccount.refreshAccess")
                     }
+                    if keepsFavorites { SiteFavoritesSyncRows(site: site) }
                     if isChecked && keyed {
                         Toggle(isOn: Binding(get: { _ = revision; return KeyedCatalogSource.loadsOriginals(host: host) },
                                              set: { KeyedCatalogSource.setLoadsOriginals($0, host: host); revision += 1 })) {
@@ -69,18 +72,8 @@ struct SiteAccountSection: View {
                                                   help: "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings.")
                             }.accessibilityIdentifier("settings.siteAccount.profile")
                         }
-                        Toggle(isOn: $env.syncsAccountFavorites) {
-                            SettingsHelpLabel("Sync Bookmarks with Account Favorites",
-                                              help: "Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.")
-                        }.accessibilityIdentifier("settings.siteAccount.syncFavorites")
-                        if env.syncsAccountFavorites {
-                            Picker(L10n.text("Favorites Category"), selection: $env.accountFavoriteCategory) {
-                                ForEach(0..<10, id: \.self) { number in
-                                    Text(categories.first { $0.id == number }?.name ?? L10n.text("Category %@", String(number + 1))).tag(number)
-                                }
-                            }.accessibilityIdentifier("settings.siteAccount.category")
-                        }
-                        Menu {
+                        // With the sync on, the categories' folders already hold the favorites.
+                        if favoritesNotSynced { Menu {
                             Button(L10n.text("Into the Default Folder"), systemImage: "tray.and.arrow.down") {
                                 importTask = Task { await importFavorites(byCategory: false) }
                             }
@@ -96,7 +89,7 @@ struct SiteAccountSection: View {
                         }.disabled(importTask != nil).accessibilityIdentifier("settings.siteAccount.import")
                         .alert(L10n.text("Import Account Favorites"), isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
                             Button(L10n.text("OK"), role: .cancel) { }
-                        } message: { Text(importMessage ?? "") }
+                        } message: { Text(importMessage ?? "") } }
                     }
                     Button(L10n.text("Sign Out"), role: .destructive) { confirmingSignOut = true }
                         .accessibilityIdentifier("settings.siteAccount.signOut")
@@ -160,10 +153,6 @@ struct SiteAccountSection: View {
         .task(id: "\(signedIn)-\(isChecked)-\(keyed)-profiles") {
             guard isChecked, signedIn, keyed else { profiles = []; return }
             profiles = (try? await MangaContentSource.shared.settingsProfiles()) ?? []
-        }
-        .task(id: env.syncsAccountFavorites) {
-            guard isChecked, env.syncsAccountFavorites, categories.isEmpty else { return }
-            categories = (try? await MangaContentSource.shared.favoriteCategories()) ?? []
         }
     }
 
@@ -361,6 +350,8 @@ struct SiteSignInView: View {
                         SiteSignInWebView(url: url, session: session, loading: $loading, progress: $progress, failure: $failure) { cookies in
                             if let session {
                                 guard SiteAccount.signIn(session: cookies, host: session) else { return false }
+                                // Requests carry the account from now on, where works also open without one.
+                                scoped { MangaUrls.markUsesAccount(site: MangaUrls.home, signInPage: url) }
                             } else {
                                 guard SiteAccount.signIn(with: cookies, host: host) else { return false }
                                 scoped { MangaUrls.markUsesAccount(site: MangaUrls.home) }
@@ -491,3 +482,81 @@ private struct SiteSignInWebView: UIViewRepresentable {
         }
     }
 }
+
+/// Whether a website's favorites categories and their folders are kept the same, which folder each
+/// category has, the category works in other folders are kept in, and a sync on demand.
+private struct SiteFavoritesSyncRows: View {
+    @Environment(AppEnvironment.self) private var env
+    let site: String
+    @State private var categories: [FavoriteCategory] = []
+    @State private var syncing = false
+    @State private var failure: String?
+
+    private var state: SiteFavoriteFolders.State? { _ = env.favoriteFoldersRevision; return SiteFavoriteFolders.shared.state(for: site) }
+    private func name(_ category: Int) -> String {
+        if let name = categories.first(where: { $0.id == category })?.name { return name }
+        return state?.exclusive == false ? "fav:\(category)" : L10n.text("Category %@", String(category + 1))
+    }
+    private func folderName(_ identity: String) -> String? {
+        guard let id = try? env.database.folderID(identity: identity) else { return nil }
+        return (try? env.database.listFolders())?.first { $0.id == id }?.displayName
+    }
+
+    var body: some View {
+        let state = state
+        Toggle(isOn: Binding(get: { state != nil }, set: { on in
+            if on { run { await env.setUpSiteFavorites(site: site, requested: true) } }
+            else { env.stopSyncingSiteFavorites(site: site) }
+        })) {
+            SettingsHelpLabel("Sync Favorites with Folders",
+                              help: state?.exclusive == false
+                                ? "Each favorites list on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the list chosen below, and favorites in a list without a folder come to Unfiled."
+                                : "Each favorites category on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the category chosen below, and favorites in a category without a folder come to Unfiled.")
+        }.disabled(syncing).accessibilityIdentifier("settings.siteAccount.syncFavorites")
+        .task(id: "\(site)-\(state != nil)") {
+            guard state != nil, categories.isEmpty else { return }
+            categories = (try? await SiteContent.for(site).favoriteCategories()) ?? []
+        }
+        if let state {
+            ForEach(state.folders.keys.sorted(), id: \.self) { category in
+                if let identity = state.folders[category], let folder = folderName(identity) {
+                    LabeledContent(name(category), value: folder)
+                }
+            }
+            let free = categories.map(\.id).filter { state.folders[$0] == nil }
+            if !free.isEmpty {
+                Picker(selection: Binding(get: { state.unassigned.flatMap { free.contains($0) ? $0 : nil } ?? free[0] },
+                                          set: { env.setUnassignedFavoriteCategory($0, site: site) })) {
+                    ForEach(free, id: \.self) { Text(name($0)).tag($0) }
+                } label: {
+                    if state.exclusive == false {
+                        SettingsHelpLabel("List for Other Folders",
+                                          help: "Works you save in folders that are not a favorites list are added to this list on the website.")
+                    } else {
+                        SettingsHelpLabel("Category for Other Folders",
+                                          help: "Works you save in folders that are not a favorites category are added to this category on the website.")
+                    }
+                }.accessibilityIdentifier("settings.siteAccount.otherCategory")
+            }
+            Button { run { _ = try await env.syncSiteFavorites(site: site) } } label: {
+                HStack {
+                    Label(L10n.text("Sync Now"), systemImage: "arrow.triangle.2.circlepath")
+                    Spacer()
+                    if syncing { ProgressView() }
+                }
+            }.disabled(syncing).accessibilityIdentifier("settings.siteAccount.syncNow")
+            .alert(L10n.text("Sync Favorites with Folders"), isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button(L10n.text("OK"), role: .cancel) {}
+            } message: { Text(failure ?? "") }
+        }
+    }
+
+    private func run(_ body: @escaping () async throws -> Void) {
+        syncing = true
+        Task {
+            do { try await body() } catch { failure = ContentError.message(error) }
+            syncing = false
+        }
+    }
+}
+

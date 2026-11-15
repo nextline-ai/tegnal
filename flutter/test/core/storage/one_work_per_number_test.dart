@@ -110,6 +110,26 @@ void main() {
       expect(again.items, rest.items, reason: 'A page asked for again is answered again the same way');
     });
 
+    test('a work shared by two websites shows from the higher one', () async {
+      // The lower website reaches the shared work first in its own list.
+      final sources = {
+        'a.example.org': _Source([work(1, 'One'), work(7, 'Shared')]),
+        'b.example.org': _Source([work(7, 'Shared, listed first'), work(9001, 'Elsewhere')]),
+      };
+      final catalog = CombinedCatalog(pageSize: 2, sourceFor: (site) => sources[site]!);
+      final page = await catalog.list(const GalleryQuery(), sites: const ['a.example.org', 'b.example.org'], offset: 0, count: 10);
+      expect(page.items, const [
+        FeedItem(1, 'a.example.org'),
+        FeedItem(9001, 'b.example.org'),
+        FeedItem(7, 'a.example.org'),
+      ], reason: 'The higher website in Website Priority keeps the shared work');
+      final reversed = await CombinedCatalog(
+        pageSize: 2,
+        sourceFor: (site) => sources[site]!,
+      ).list(const GalleryQuery(), sites: const ['b.example.org', 'a.example.org'], offset: 0, count: 10);
+      expect(reversed.items.firstWhere((item) => item.id == 7).site, 'b.example.org', reason: 'Changing the order changes which copy shows');
+    });
+
     test('one website failing leaves the others showing', () async {
       final failing = _Source(const [], failure: ContentError.signInRequired);
       final sources = {

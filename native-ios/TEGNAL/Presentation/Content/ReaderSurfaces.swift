@@ -10,10 +10,14 @@ enum GalleryPreviewLoading {
     }
 }
 
-/// Where text sits on the work information: boxes and buttons reach the page margin, and text and
-/// tags start this far inside it, in line with the text in the boxes, so they never look as if
-/// they stick out past the rounded buttons.
+/// Where text sits on the work information. Tags, buttons and boxes reach the page margin; a
+/// label over them starts a little inside it, because their rounded ends begin inside their
+/// edge and a label flush with them looks as if it sticks out. Text inside a box, and the
+/// header of a box, line up with the box's own text.
 enum GalleryDetailInset {
+    /// Labels over rounded tags and buttons.
+    static let label: CGFloat = 6
+    /// Text inside boxes, and box headers.
     static let text: CGFloat = 16
     /// Boxes of rows: their corners, row height and the column their titles start at.
     static let boxRadius: CGFloat = 26
@@ -44,7 +48,7 @@ struct GalleryDetailPreviews: View {
                 if enabled {
                     GalleryPreviewPagePicker(count: pageCount, selection: $selectedPage)
                 }
-            }.padding(.horizontal, GalleryDetailInset.text)
+            }.padding(.leading, GalleryDetailInset.label)
             if enabled {
                 TabView(selection: $selectedPage) {
                     ForEach(0..<pageCount, id: \.self) { page in
