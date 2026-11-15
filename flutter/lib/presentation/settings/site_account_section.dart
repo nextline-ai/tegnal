@@ -214,8 +214,8 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
         title: L10n.text('Sync Favorites with Folders'),
         help: L10n.text(
           lists
-              ? "Each favorites list on the website that holds works becomes a folder of the same name, and the two hold the same works. Such a folder stays while you're signed in. Works you save in other folders go to the list chosen below, or stay in the app only."
-              : "Each favorites category on the website that holds works becomes a folder of the same name, and the two hold the same works. Such a folder stays while you're signed in. Works you save in other folders go to the category chosen below, or stay in the app only.",
+              ? "Each favorites list on the website that holds works becomes a folder of the same name, and the two hold the same works; when a list is emptied, its folder goes too. You can't delete such a folder yourself while you're signed in. Works you save in other folders go to the list chosen below, or stay in the app only."
+              : "Each favorites category on the website that holds works becomes a folder of the same name, and the two hold the same works; when a category is emptied, its folder goes too. You can't delete such a folder yourself while you're signed in. Works you save in other folders go to the category chosen below, or stay in the app only.",
         ),
         value: state != null,
         onChanged: _syncingFavorites

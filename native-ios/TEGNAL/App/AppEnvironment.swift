@@ -978,6 +978,19 @@ public final class AppEnvironment: @unchecked Sendable {
         return linked
     }
 
+    /// A category and its folder come and go together: once a sync that read the website leaves a
+    /// category without favorites and its folder empty, whichever side emptied it, the folder goes
+    /// too. A smart folder stays, since its tags would be lost; an empty category is free again.
+    private func dropEmptiedCategoryFolders(state: inout SiteFavoriteFolders.State, settled: [Int64: Set<Int>]) throws {
+        let used = settled.values.reduce(into: Set<Int>()) { $0.formUnion($1) }
+        for (category, identity) in state.folders where !used.contains(category) {
+            guard let id = try database.folderID(identity: identity), try database.galleryIDs(inFolder: id).isEmpty,
+                  try database.rule(forFolder: identity)?.isActive != true else { continue }
+            try database.deleteFolder(id: id)
+            state.folders[category] = nil
+        }
+    }
+
     /// Whether a folder stands for a signed-in website's favorites category. Such a folder can't be
     /// deleted while the website keeps its account and the sync is on.
     func isSiteFavoritesFolder(_ id: Int64) -> Bool {
@@ -1101,6 +1114,7 @@ public final class AppEnvironment: @unchecked Sendable {
         }
         // A work the website won't keep stays in the app only.
         for id in refused { state.localOnly.insert(id); settled[id] = remote[id] }
+        if favorites != nil { try dropEmptiedCategoryFolders(state: &state, settled: settled) }
         state.baseline = settled
         store.setState(state, for: site)
         if plan.local.contains(where: { if case .place = $0 { return true } else { return false } }) { startCoverQueue() }

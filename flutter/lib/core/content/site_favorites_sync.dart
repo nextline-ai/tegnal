@@ -342,6 +342,20 @@ class SiteFavoritesSync extends ChangeNotifier {
     return linked;
   }
 
+  /// A category and its folder come and go together: once a sync that read the website leaves a
+  /// category without favorites and its folder empty, whichever side emptied it, the folder goes too.
+  /// A smart folder stays, since its tags would be lost; an empty category is free again.
+  void _dropEmptiedCategoryFolders(SiteFavoriteState state, Map<int, Set<int>> settled) {
+    final used = {for (final categories in settled.values) ...categories};
+    for (final MapEntry(key: category, value: identity) in {...state.folders}.entries) {
+      if (used.contains(category)) continue;
+      final id = database.folderIDForIdentity(identity);
+      if (id == null || database.galleryIDsInFolder(id).isNotEmpty || (database.rule(identity)?.isActive ?? false)) continue;
+      database.deleteFolder(id);
+      state.folders.remove(category);
+    }
+  }
+
   /// Whether a folder stands for a signed-in website's favorites category. Such a folder can't be
   /// deleted while the website keeps its account and the sync is on.
   bool isSiteFavoritesFolder(int id) {
@@ -525,6 +539,7 @@ class SiteFavoritesSync extends ChangeNotifier {
           settled.remove(id);
         }
       }
+      if (favorites != null) _dropEmptiedCategoryFolders(state, settled);
       state.baseline = settled;
       store.setState(state, site);
       if (placed) startCoverQueue?.call();
