@@ -435,8 +435,8 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
               FormRow(
                 child: Row(
                   children: [
-                    Icon(CupertinoIcons.sparkles, size: 20, color: tint),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 24, child: Icon(CupertinoIcons.sparkles, size: 20, color: tint)),
+                    const SizedBox(width: 16),
                     Expanded(child: Text(L10n.text('Smart Folder'))),
                     Transform.translate(
                       offset: const Offset(2, 0),
@@ -456,6 +456,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
           if (_usesTags) ...[
             const SizedBox(height: 23),
             FormSection(
+              prominentHeader: true,
               header: Text(L10n.text(widget.booru ? 'Which Images Go In' : 'Which Works Go In')),
               footer: footer(_matchFooter),
               children: [
@@ -494,18 +495,20 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
                         AnimatedRotation(
                           turns: _showsMore ? 0.25 : 0,
                           duration: const Duration(milliseconds: 200),
-                          child: Icon(CupertinoIcons.chevron_right, size: 15, color: tint),
+                          child: Icon(CupertinoIcons.chevron_right, size: 15, color: label),
                         ),
                       ],
                     ),
                   ),
                 ),
                 if (_showsMore) ...[
+                  // Rows inside a disclosure group sit 20 pt further in, as the native form shows them.
                   Builder(
                     builder: (context) => FormRow(
                       onTap: () => _openSources(context),
+                      separatorInset: 36,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.fromLTRB(20, 10, 0, 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -534,8 +537,9 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
                     ),
                   ),
                   FormRow(
+                    separatorInset: 36,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.fromLTRB(20, 10, 0, 10),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
