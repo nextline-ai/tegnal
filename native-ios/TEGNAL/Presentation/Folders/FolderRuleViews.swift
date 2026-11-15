@@ -15,6 +15,8 @@ struct FolderRuleEditor: View {
     @Environment(\.dismiss) private var dismiss
     private let booru: Bool
     private let creatingFolder: Bool
+    /// Told the new folder's identity once it is saved.
+    private let onCreated: ((String) -> Void)?
     private let fixedFolder: Bool
     @State private var name: String
     @State private var tag: String
@@ -38,8 +40,9 @@ struct FolderRuleEditor: View {
     @FocusState private var nameFocused: Bool
 
     /// A new folder, filled from the tag a search already holds or kept filling as a smart folder.
-    init(booru: Bool = false, name: String = "", tag: String = "", smart: Bool = true) {
+    init(booru: Bool = false, name: String = "", tag: String = "", smart: Bool = true, onCreated: ((String) -> Void)? = nil) {
         self.booru = booru
+        self.onCreated = onCreated
         creatingFolder = true
         fixedFolder = false
         _name = State(initialValue: name)
@@ -51,6 +54,7 @@ struct FolderRuleEditor: View {
     /// An existing folder, or a choice of folders when none is given.
     init(booru: Bool = false, folder: String?) {
         self.booru = booru
+        onCreated = nil
         creatingFolder = false
         fixedFolder = folder != nil
         _name = State(initialValue: "")
@@ -95,6 +99,7 @@ struct FolderRuleEditor: View {
         return L10n.text(copies ? "A matching work is added here and also stays in the folder it came from, so it appears in both."
                                 : "A matching work leaves the folder it came from, so it appears only here.")
             + " " + L10n.text("Unfiled always lets a work go once it is in a folder.")
+
     }
     /// The toggle files works already saved once, when Save is tapped; a smart folder alone
     /// only takes works saved after it.
@@ -239,6 +244,7 @@ struct FolderRuleEditor: View {
             if !saved.workQuery.isEmpty, !creatingFolder || isSmart { try library.saveRule(saved) }
             else if !creatingFolder { try library.deleteRule(forFolder: target) }
             if usesTags, fillsSavedWorks { try library.fill(saved) }
+            if creatingFolder { onCreated?(target) }
             dismiss()
         } catch { self.error = error.localizedDescription }
     }
@@ -354,11 +360,11 @@ struct FolderPickerSheet: View {
     let rows: [FolderPickerRow]
     let identifier: String
     let pick: (FolderPickerRow) -> Void
-    /// Makes a folder and files the work in it.
+    /// Files the work in a folder just made, by its identity.
     let create: (String) -> Void
+    var booru = false
     @Environment(\.dismiss) private var dismiss
     @State private var creating = false
-    @State private var newName = ""
 
     var body: some View {
         NavigationStack {
@@ -383,10 +389,8 @@ struct FolderPickerSheet: View {
             }
             .navigationTitle(L10n.text("Save to Folder")).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } } }
-            .background {
-                FolderNameAlert(isPresented: $creating, name: $newName) { name in
-                    create(name); dismiss()
-                }.frame(width: 0, height: 0)
+            .newFolderPrompt(isPresented: $creating, booru: booru) { identity in
+                create(identity); dismiss()
             }
         }
         .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
@@ -404,8 +408,9 @@ struct WorkFolderSheet: View {
             folder.id.map { FolderPickerRow(id: String($0), name: folder.displayName, color: folder.color, isCurrent: $0 == env.savedFolders[galleryID]) }
         }, identifier: "workFolder", pick: { row in
             if let folder = folders.first(where: { $0.id.map(String.init) == row.id }) { file(in: folder) }
-        }, create: { name in
-            if let folder = try? env.database.createFolder(name: name) { file(in: folder) }
+        }, create: { identity in
+            folders = (try? env.database.listFolders()) ?? []
+            if let id = try? env.database.folderID(identity: identity), let folder = folders.first(where: { $0.id == id }) { file(in: folder) }
         })
         .task { folders = (try? env.database.listFolders()) ?? [] }
     }

@@ -55,6 +55,7 @@ struct SiteAccountSection: View {
                         } label: { Label(L10n.text("Refresh Website Access"), systemImage: "arrow.triangle.2.circlepath") }
                             .accessibilityIdentifier("settings.siteAccount.refreshAccess")
                     }
+                    if keyed { SiteFavoritesFolderRows(site: site, categories: categories) }
                     if isChecked && keyed {
                         Toggle(isOn: Binding(get: { _ = revision; return KeyedCatalogSource.loadsOriginals(host: host) },
                                              set: { KeyedCatalogSource.setLoadsOriginals($0, host: host); revision += 1 })) {
@@ -68,17 +69,6 @@ struct SiteAccountSection: View {
                                 SettingsHelpLabel("Settings Profile",
                                                   help: "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings.")
                             }.accessibilityIdentifier("settings.siteAccount.profile")
-                        }
-                        Toggle(isOn: $env.syncsAccountFavorites) {
-                            SettingsHelpLabel("Sync Bookmarks with Account Favorites",
-                                              help: "Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.")
-                        }.accessibilityIdentifier("settings.siteAccount.syncFavorites")
-                        if env.syncsAccountFavorites {
-                            Picker(L10n.text("Favorites Category"), selection: $env.accountFavoriteCategory) {
-                                ForEach(0..<10, id: \.self) { number in
-                                    Text(categories.first { $0.id == number }?.name ?? L10n.text("Category %@", String(number + 1))).tag(number)
-                                }
-                            }.accessibilityIdentifier("settings.siteAccount.category")
                         }
                         Menu {
                             Button(L10n.text("Into the Default Folder"), systemImage: "tray.and.arrow.down") {
@@ -161,8 +151,8 @@ struct SiteAccountSection: View {
             guard isChecked, signedIn, keyed else { profiles = []; return }
             profiles = (try? await MangaContentSource.shared.settingsProfiles()) ?? []
         }
-        .task(id: env.syncsAccountFavorites) {
-            guard isChecked, env.syncsAccountFavorites, categories.isEmpty else { return }
+        .task(id: "\(signedIn)-\(isChecked)-\(keyed)-categories") {
+            guard isChecked, signedIn, keyed, categories.isEmpty else { return }
             categories = (try? await MangaContentSource.shared.favoriteCategories()) ?? []
         }
     }
@@ -491,3 +481,58 @@ private struct SiteSignInWebView: UIViewRepresentable {
         }
     }
 }
+
+/// The folder a website's favorites are kept the same as: whether it is on, which folder, the
+/// category works added in the app go to, and a sync on demand.
+private struct SiteFavoritesFolderRows: View {
+    @Environment(AppEnvironment.self) private var env
+    let site: String
+    let categories: [FavoriteCategory]
+    @State private var syncing = false
+    @State private var failure: String?
+
+    private var folderName: String? {
+        _ = env.favoriteFoldersRevision
+        guard let identity = SiteFavoriteFolders.shared.folder(for: site), let id = try? env.database.folderID(identity: identity) else { return nil }
+        return (try? env.database.listFolders())?.first { $0.id == id }?.displayName
+    }
+
+    var body: some View {
+        @Bindable var env = env
+        let folderName = folderName
+        Toggle(isOn: Binding(get: { folderName != nil }, set: { on in
+            if on { run { await env.setUpSiteFavoritesFolder(site: site, requested: true) } }
+            else { env.stopSyncingSiteFavorites(site: site) }
+        })) {
+            SettingsHelpLabel("Sync Favorites with a Folder",
+                              help: "Your favorites on the website and a folder named after it hold the same works: adding a work to either, or removing it, does the same on the other.")
+        }.disabled(syncing).accessibilityIdentifier("settings.siteAccount.syncFavorites")
+        if let folderName {
+            LabeledContent(L10n.text("Folder"), value: folderName)
+            Picker(L10n.text("Favorites Category"), selection: $env.accountFavoriteCategory) {
+                ForEach(0..<10, id: \.self) { number in
+                    Text(categories.first { $0.id == number }?.name ?? L10n.text("Category %@", String(number + 1))).tag(number)
+                }
+            }.accessibilityIdentifier("settings.siteAccount.category")
+            Button { run { _ = try await env.syncSiteFavorites(site: site) } } label: {
+                HStack {
+                    Label(L10n.text("Sync Now"), systemImage: "arrow.triangle.2.circlepath")
+                    Spacer()
+                    if syncing { ProgressView() }
+                }
+            }.disabled(syncing).accessibilityIdentifier("settings.siteAccount.syncNow")
+            .alert(L10n.text("Sync Favorites with a Folder"), isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button(L10n.text("OK"), role: .cancel) {}
+            } message: { Text(failure ?? "") }
+        }
+    }
+
+    private func run(_ body: @escaping () async throws -> Void) {
+        syncing = true
+        Task {
+            do { try await body() } catch { failure = ContentError.message(error) }
+            syncing = false
+        }
+    }
+}
+

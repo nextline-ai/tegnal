@@ -599,6 +599,12 @@ abstract final class ComicSites {
     _preferences.set(_listKey, sites);
   }
 
+  /// Puts the connected sites in a new order of priority. Sites the order leaves out keep their place at the end.
+  static void reorder(List<String> order) {
+    final current = all;
+    _preferences.set(_listKey, [...order.where(current.contains), ...current.where((site) => !order.contains(site))]);
+  }
+
   /// Forgets a site and what was learned about it.
   static void remove(String site) {
     _preferences.set(_listKey, all.where((value) => value != site).toList());

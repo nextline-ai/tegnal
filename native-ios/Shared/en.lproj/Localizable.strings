@@ -1521,7 +1521,6 @@
 "Saved to folder '%@'" = "Saved to folder '%@'";
 "Smart Folder" = "Smart Folder";
 "Smart Folders" = "Smart Folders";
-"Make a Smart Folder" = "Make a Smart Folder";
 "Use Smart Folders" = "Use Smart Folders";
 "Add Smart Folder" = "Add Smart Folder";
 "No smart folders yet." = "No smart folders yet.";
@@ -1568,8 +1567,6 @@
 "This website’s image allowance for you has run out. Try again later." = "This website’s image allowance for you has run out. Try again later.";
 "Website Account" = "Website Account";
 "Signed In" = "Signed In";
-"Sync Bookmarks with Account Favorites" = "Sync Bookmarks with Account Favorites";
-"Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there." = "Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.";
 "Import Account Favorites" = "Import Account Favorites";
 "Sign Out" = "Sign Out";
 "Sign out of this website?" = "Sign out of this website?";
@@ -1656,7 +1653,6 @@
 "An image is in one folder at a time, so a matching image moves here from the folder it was in." = "An image is in one folder at a time, so a matching image moves here from the folder it was in.";
 "A matching work is added here and also stays in the folder it came from, so it appears in both." = "A matching work is added here and also stays in the folder it came from, so it appears in both.";
 "A matching work leaves the folder it came from, so it appears only here." = "A matching work leaves the folder it came from, so it appears only here.";
-"Unfiled always lets a work go once it is in a folder." = "Unfiled always lets a work go once it is in a folder.";
 "When you tap Save, matching images in the folders it looks in move here once." = "When you tap Save, matching images in the folders it looks in move here once.";
 "When you tap Save, matching works in the folders it looks in are copied here once." = "When you tap Save, matching works in the folders it looks in are copied here once.";
 "When you tap Save, matching works in the folders it looks in move here once." = "When you tap Save, matching works in the folders it looks in move here once.";
@@ -1827,3 +1823,9 @@
 "Works Deleted on a Website" = "Works Deleted on a Website";
 "Forget Deleted Works" = "Forget Deleted Works";
 "Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again." = "Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again.";
+"Files works that match its tags here on their own. You choose the tags next." = "Files works that match its tags here on their own. You choose the tags next.";
+"Website Priority" = "Website Priority";
+"When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order." = "When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order.";
+"Sync Favorites with a Folder" = "Sync Favorites with a Folder";
+"Your favorites on the website and a folder named after it hold the same works: adding a work to either, or removing it, does the same on the other." = "Your favorites on the website and a folder named after it hold the same works: adding a work to either, or removing it, does the same on the other.";
+"Unfiled always lets a work go once it is in a folder." = "Unfiled always lets a work go once it is in a folder.";

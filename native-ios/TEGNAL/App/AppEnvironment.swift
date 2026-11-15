@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import GRDB
 
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     case dark = "dark"
@@ -357,7 +358,6 @@ public final class AppEnvironment: @unchecked Sendable {
     var showsMangaCategories: Bool { didSet { browserPreferences.set(showsMangaCategories, forKey: "manga.grid.showCategories") } }
     /// Signed in to the connected website, for sites that use accounts.
     var siteAccountSignedIn = SiteAccount.isSignedIn(host: MangaUrls.configuredHost)
-    var syncsAccountFavorites: Bool { didSet { browserPreferences.set(syncsAccountFavorites, forKey: "manga.syncAccountFavorites") } }
     private var mangaFolderColumns: Int
     private var booruFolderColumns: Int
 
@@ -624,6 +624,13 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     /// Forgets a site; forgetting the active one moves to the next, or disconnects.
+    /// Website priority: lists that show several websites keep the copy of a shared work from the
+    /// higher one, and saved works try them in this order after the checked website.
+    @MainActor public func reorderComicSites(_ order: [String]) {
+        ComicSites.reorder(order)
+        comicSitesRevision += 1
+    }
+
     @MainActor public func removeComicsSite(_ site: String) {
         let remaining = ComicSites.all.filter { $0 != site }
         if site == mangaSiteAddress {
@@ -694,7 +701,6 @@ public final class AppEnvironment: @unchecked Sendable {
         self.showsMangaTitles = browserPreferences.object(forKey: "manga.grid.showTitles") as? Bool ?? true
         self.showsMangaArtists = browserPreferences.object(forKey: "manga.grid.showArtists") as? Bool ?? true
         self.showsMangaCategories = browserPreferences.bool(forKey: "manga.grid.showCategories")
-        self.syncsAccountFavorites = browserPreferences.bool(forKey: "manga.syncAccountFavorites")
         self.mangaFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "folder_columns")))
         self.booruFolderColumns = min(5, max(0, browserPreferences.integer(forKey: "booru.folder_columns")))
         self.allowsMangaLanguageExceptions = browserPreferences.bool(forKey: "manga.languageExceptions")
@@ -818,6 +824,9 @@ public final class AppEnvironment: @unchecked Sendable {
     /// A website's account changed: what was learned about the website is looked up again with it.
     /// [site] is a connected website; nil is the checked one.
     @MainActor func siteSignInFinished(site: String? = nil) {
+        // A first sign-in brings the website's favorites into a folder named after it.
+        let signedIn = site ?? mangaSiteAddress
+        defer { Task { await setUpSiteFavoritesFolder(site: signedIn) } }
         if let site, site != mangaSiteAddress {
             SiteScope.$site.withValue(site) { MangaUrls.resetResolvedBackend() }
             comicSitesRevision += 1
@@ -836,10 +845,7 @@ public final class AppEnvironment: @unchecked Sendable {
         }
         guard !host.isEmpty else { return }
         SiteAccount.signOut(host: host)
-        if site == mangaSiteAddress {
-            siteAccountSignedIn = false
-            if !session { syncsAccountFavorites = false }
-        }
+        if site == mangaSiteAddress { siteAccountSignedIn = false }
         siteSignInFinished(site: site)
         // The sign-in pages share the website's browser profile; it must not sign the account back in.
         Task {
@@ -917,18 +923,140 @@ public final class AppEnvironment: @unchecked Sendable {
         set { withMutation(keyPath: \.accountFavoriteCategory) { browserPreferences.set(min(9, max(0, newValue)), forKey: "manga.accountFavoriteCategory") } }
     }
 
-    /// Mirrors a bookmark change to the account's favorites when that is turned on.
-    @MainActor func syncAccountFavorite(_ id: Int64, saved: Bool) {
-        syncAccountFavorites([id], saved: saved)
+    // MARK: Website favorites folders
+
+    /// Websites whose favorites sync is running, so two runs never cross.
+    @ObservationIgnored private var syncingFavorites = Set<String>()
+    /// Changes when a website's favorites folder is set up or synced, so settings redraw.
+    public private(set) var favoriteFoldersRevision = 0
+
+    /// A website's signed-in account that can keep favorites, by host; nil without one.
+    func favoritesAccountHost(_ site: String) -> String? {
+        let host = SiteScope.$site.withValue(site) { MangaUrls.configuredHost }
+        guard !host.isEmpty, SiteAccount.isSignedIn(host: host), !SiteAccount.refusesAccess(host: host) else { return nil }
+        return host
     }
 
-    /// Mirrors several bookmark changes one after another, so a long list never bursts the website.
-    @MainActor func syncAccountFavorites(_ ids: [Int64], saved: Bool) {
-        guard !ids.isEmpty, syncsAccountFavorites, siteAccountSignedIn, MangaUrls.hasResolvedBackend, MangaUrls.backend == .keyed else { return }
-        let category = accountFavoriteCategory
-        Task {
-            for id in ids { try? await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category) }
+    /// The first time a signed-in website's favorites can be read, a folder named after the website
+    /// is made, or the one already named so is used, and filled with them; from then on the two are
+    /// kept the same. Turning the sync off in the website's settings keeps it from being set up
+    /// again, unless it is turned back on there (`requested`).
+    @MainActor func setUpSiteFavoritesFolder(site: String, requested: Bool = false) async {
+        let links = SiteFavoriteFolders.shared
+        guard links.folder(for: site) == nil, requested || !links.isDeclined(site), favoritesAccountHost(site) != nil else { return }
+        // Read before anything is made, so a website that keeps the account out gets no folder.
+        guard let remote = try? await allAccountFavorites(site: site) else { return }
+        do {
+            let folder = try database.listFolders().first { $0.name == site } ?? database.createFolder(name: site)
+            guard let id = folder.id else { return }
+            links.link(site, folder: try database.identity(ofFolder: id))
+            favoriteFoldersRevision += 1
+            try await syncSiteFavorites(site: site, remote: remote)
+        } catch {}
+    }
+
+    /// Stops keeping a website's favorites and its folder the same; both keep what they hold.
+    @MainActor func stopSyncingSiteFavorites(site: String) {
+        SiteFavoriteFolders.shared.unlink(site, declined: true)
+        favoriteFoldersRevision += 1
+    }
+
+    /// Every page of a website's favorites, across its categories.
+    private func allAccountFavorites(site: String) async throws -> Set<Int64> {
+        let content = SiteContent.for(site)
+        var ids = Set<Int64>(), next: String?, pages = 0
+        repeat {
+            let page = try await content.accountFavorites(after: next)
+            try Task.checkCancellation()
+            ids.formUnion(page.ids)
+            next = page.next
+            pages += 1
+        } while next != nil && pages < 500
+        return ids
+    }
+
+    /// Brings a website's favorites and its folder into step: what was added or removed on one side
+    /// since the last sync is added or removed on the other. `pull` reads the website's favorites
+    /// again; without it only changes made in the app are sent.
+    @MainActor @discardableResult
+    func syncSiteFavorites(site: String, pull: Bool = true, remote fetched: Set<Int64>? = nil) async throws -> FavoriteSyncPlan? {
+        let links = SiteFavoriteFolders.shared
+        guard let identity = links.folder(for: site), favoritesAccountHost(site) != nil else { return nil }
+        guard let folderID = try database.folderID(identity: identity) else {
+            // The folder was deleted: syncing stops, and the website's favorites stay as they are.
+            stopSyncingSiteFavorites(site: site)
+            return nil
         }
+        guard syncingFavorites.insert(site).inserted else { return nil }
+        defer { syncingFavorites.remove(site) }
+        let base = links.baseline(for: site)
+        let remote: Set<Int64>
+        if let fetched { remote = fetched; links.notePull(for: site) }
+        else if pull || base == nil { remote = try await allAccountFavorites(site: site); links.notePull(for: site) }
+        else { remote = base ?? [] }
+        // Read after the website answers, so a change made meanwhile is not lost.
+        let local = Set(try database.galleryIDs(inFolder: folderID))
+        let plan = FavoriteSyncPlan.make(local: local, remote: remote, base: base)
+        var settled = plan.settled
+        // Recorded first, so the folder changes below are not taken for new ones made by hand.
+        links.setBaseline(settled, for: site)
+        let content = SiteContent.for(site)
+        for id in plan.addLocally {
+            if try database.getWork(galleryId: id) != nil { try database.addWork(galleryId: id, folderID: folderID); continue }
+            let work = content.cachedPreview(id)
+            _ = try database.upsertWork(galleryId: id, folderId: folderID, title: work?.title, artists: work?.artists.joined(separator: ", "),
+                                        language: work?.language, type: work?.type, tags: work?.tags.joined(separator: ", "), metadataSource: "remote", site: site,
+                                        pageCount: work?.displayedPageCount)
+        }
+        for id in plan.removeLocally { try database.removeWork(galleryId: id, fromFolder: folderID) }
+        // A failed request leaves the rest for the next sync instead of asking again and again.
+        var failed = false
+        let category = accountFavoriteCategory
+        for id in plan.addOnSite {
+            if !failed {
+                do { try await content.setAccountFavorite(id, saved: true, category: category); continue } catch { failed = true }
+            }
+            settled.remove(id)
+        }
+        for id in plan.removeFromSite {
+            if !failed {
+                do { try await content.setAccountFavorite(id, saved: false, category: category); continue } catch { failed = true }
+            }
+            settled.insert(id)
+        }
+        links.setBaseline(settled, for: site)
+        if !plan.addLocally.isEmpty { startCoverQueue() }
+        favoriteFoldersRevision += 1
+        return plan
+    }
+
+    /// While the app is open: sets up folders for websites signed in since, reads each website's
+    /// favorites again when it has not for half an hour, and sends folder changes made in the app.
+    @MainActor func runSiteFavoritesSync() async {
+        let links = SiteFavoriteFolders.shared
+        for site in ComicSites.all where favoritesAccountHost(site) != nil {
+            if links.folder(for: site) == nil { await setUpSiteFavoritesFolder(site: site) }
+            else if (links.lastPull(for: site) ?? .distantPast) < Date().addingTimeInterval(-30 * 60) { _ = try? await syncSiteFavorites(site: site) }
+            if Task.isCancelled { return }
+        }
+        let observation = ValueObservation.tracking { db -> [String: Set<Int64>] in
+            var folders: [String: Set<Int64>] = [:]
+            for site in links.linkedSites {
+                guard let identity = links.folder(for: site),
+                      let id = try Int64.fetchOne(db, sql: "SELECT id FROM folders WHERE sync_id = ?", arguments: [identity]) else { continue }
+                folders[site] = Set(try Int64.fetchAll(db, sql: "SELECT w.gallery_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE fw.folder_id = ?", arguments: [id]))
+            }
+            return folders
+        }
+        do {
+            for try await folders in observation.values(in: database.dbWriter) {
+                for (site, ids) in folders where links.baseline(for: site).map({ $0 != ids }) == true {
+                    // A moment's wait gathers a burst of changes into one sync.
+                    try await Task.sleep(for: .seconds(1))
+                    _ = try? await syncSiteFavorites(site: site, pull: false)
+                }
+            }
+        } catch {}
     }
 
     /// Fetches every saved work's information again through the background queue.

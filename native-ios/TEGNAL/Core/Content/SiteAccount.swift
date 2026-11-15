@@ -550,3 +550,98 @@ enum SiteClearance {
         }
     }
 }
+
+/// The app folder each signed-in website's favorites are kept in step with, named after the
+/// website, and what both held after the last sync, which tells a change on one side from a change
+/// on the other.
+final class SiteFavoriteFolders: @unchecked Sendable {
+    static let shared = SiteFavoriteFolders(defaults: ContentPreferences.defaults)
+    private let defaults: UserDefaults
+    private let lock = NSLock()
+    private static let linksKey = "manga.siteFavoriteFolders"
+    private static let baselinesKey = "manga.siteFavoriteBaselines"
+    private static let declinedKey = "manga.siteFavoriteFoldersDeclined"
+    private static let pulledKey = "manga.siteFavoritePulled"
+
+    init(defaults: UserDefaults) { self.defaults = defaults }
+
+    /// The linked folder's sync identity.
+    func folder(for site: String) -> String? { lock.withLock { links[site] } }
+    var linkedSites: [String] { lock.withLock { links.keys.sorted() } }
+
+    /// Links a folder; its first sync takes both sides as they are.
+    func link(_ site: String, folder: String) {
+        lock.withLock {
+            var links = links; links[site] = folder
+            defaults.set(links, forKey: Self.linksKey)
+            var baselines = baselines; baselines[site] = nil
+            defaults.set(baselines, forKey: Self.baselinesKey)
+            defaults.set(declined.subtracting([site]).sorted(), forKey: Self.declinedKey)
+        }
+    }
+
+    /// Stops syncing a website. Turned off by hand, it is not set up again on its own.
+    func unlink(_ site: String, declined decline: Bool) {
+        lock.withLock {
+            var links = links; links[site] = nil
+            defaults.set(links, forKey: Self.linksKey)
+            var baselines = baselines; baselines[site] = nil
+            defaults.set(baselines, forKey: Self.baselinesKey)
+            if decline { defaults.set(declined.union([site]).sorted(), forKey: Self.declinedKey) }
+        }
+    }
+
+    func isDeclined(_ site: String) -> Bool { lock.withLock { declined.contains(site) } }
+
+    /// The works both sides held after the last sync; nil before the first.
+    func baseline(for site: String) -> Set<Int64>? {
+        lock.withLock { baselines[site].map { Set($0.compactMap { Int64($0) }) } }
+    }
+
+    func setBaseline(_ ids: Set<Int64>, for site: String) {
+        lock.withLock {
+            var baselines = baselines; baselines[site] = ids.sorted().map(String.init)
+            defaults.set(baselines, forKey: Self.baselinesKey)
+        }
+    }
+
+    /// When the website's favorites were last read, so reading them again waits a while.
+    func lastPull(for site: String) -> Date? { lock.withLock { (defaults.dictionary(forKey: Self.pulledKey)?[site] as? Double).map(Date.init(timeIntervalSince1970:)) } }
+    func notePull(for site: String, at date: Date = Date()) {
+        lock.withLock {
+            var pulled = defaults.dictionary(forKey: Self.pulledKey) ?? [:]
+            pulled[site] = date.timeIntervalSince1970
+            defaults.set(pulled, forKey: Self.pulledKey)
+        }
+    }
+
+    private var links: [String: String] { defaults.dictionary(forKey: Self.linksKey) as? [String: String] ?? [:] }
+    private var baselines: [String: [String]] { defaults.dictionary(forKey: Self.baselinesKey) as? [String: [String]] ?? [:] }
+    private var declined: Set<String> { Set(defaults.stringArray(forKey: Self.declinedKey) ?? []) }
+}
+
+/// What one sync changes on each side. A work in the baseline that one side no longer has was
+/// removed there; one that is new on a side was added there. The other side follows.
+struct FavoriteSyncPlan: Equatable, Sendable {
+    var addLocally: [Int64] = []
+    var removeLocally: [Int64] = []
+    var addOnSite: [Int64] = []
+    var removeFromSite: [Int64] = []
+    /// Both sides once the plan is carried out.
+    var settled: Set<Int64> = []
+
+    var isEmpty: Bool { addLocally.isEmpty && removeLocally.isEmpty && addOnSite.isEmpty && removeFromSite.isEmpty }
+
+    /// `remote` is what the website holds now; passing the baseline instead only sends local changes.
+    /// Without a baseline nothing is removed: the first sync adds each side's works to the other.
+    static func make(local: Set<Int64>, remote: Set<Int64>, base: Set<Int64>?) -> FavoriteSyncPlan {
+        let base = base ?? []
+        var plan = FavoriteSyncPlan()
+        plan.addLocally = remote.subtracting(base).subtracting(local).sorted()
+        plan.removeLocally = base.subtracting(remote).intersection(local).sorted()
+        plan.addOnSite = local.subtracting(base).subtracting(remote).sorted()
+        plan.removeFromSite = base.subtracting(local).intersection(remote).sorted()
+        plan.settled = local.union(plan.addLocally).subtracting(plan.removeLocally)
+        return plan
+    }
+}

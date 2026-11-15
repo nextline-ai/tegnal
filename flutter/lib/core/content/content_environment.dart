@@ -34,7 +34,6 @@ class ContentEnvironment extends ChangeNotifier {
       _mangaPreviewColumns = browserPreferences.integer('manga.preview.columns').clamp(0, 10),
       _mangaPreviewRows = (browserPreferences.integerOrNull('manga.preview.rows') ?? 5).clamp(1, 10),
       _mangaRemovesGridPadding = browserPreferences.boolean('manga.grid.noPadding') ?? false,
-      _syncsAccountFavorites = browserPreferences.boolean('manga.syncAccountFavorites') ?? false,
       _siteAccountSignedIn = SiteAccount.isSignedInAt(MangaUrls.configuredHost),
       _isSiteVerified = (browserPreferences.boolean('site_verified') ?? false) && supportsComicsAddress(browserPreferences.string('manga.site_address') ?? ''),
       // Like Swift's initializer, restoring the address does not reset what was discovered for it.
@@ -90,6 +89,13 @@ class ContentEnvironment extends ChangeNotifier {
     if (site == _mangaSiteAddress || !ComicSites.all.contains(site)) return;
     isSiteVerified = true;
     mangaSiteAddress = site;
+  }
+
+  /// Website priority: lists that show several websites keep the copy of a shared work from the
+  /// higher one, and saved works try them in this order after the checked website.
+  void reorderComicSites(List<String> order) {
+    ComicSites.reorder(order);
+    notifyListeners();
   }
 
   /// Forgets a site; forgetting the active one moves to the next, or disconnects.
@@ -260,10 +266,6 @@ class ContentEnvironment extends ChangeNotifier {
   bool _mangaRemovesGridPadding;
   bool get mangaRemovesGridPadding => _mangaRemovesGridPadding;
   set mangaRemovesGridPadding(bool value) => _mangaRemovesGridPadding = _store('manga.grid.noPadding', value);
-
-  bool _syncsAccountFavorites;
-  bool get syncsAccountFavorites => _syncsAccountFavorites;
-  set syncsAccountFavorites(bool value) => _syncsAccountFavorites = _store('manga.syncAccountFavorites', value);
 
   /// The account favorites category new bookmarks are added to when syncing, from 0.
   int get accountFavoriteCategory => browserPreferences.integer('manga.accountFavoriteCategory').clamp(0, 9);

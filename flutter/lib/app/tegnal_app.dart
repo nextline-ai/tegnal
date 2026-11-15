@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -6,6 +7,7 @@ import '../core/booru/booru_client.dart';
 import '../core/booru/booru_image_cache.dart';
 import '../core/booru/booru_store.dart';
 import '../core/content/content_environment.dart';
+import '../core/content/site_favorites_sync.dart';
 import '../core/content/cover_queue.dart';
 import '../core/downloads/download_store.dart';
 import '../core/support/mode_settings.dart';
@@ -86,6 +88,8 @@ class AppServices {
             isSiteVerified: () => content.isSiteVerified,
           );
     bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting, startCoverQueue: coverQueue.start);
+    favorites = SiteFavoritesSync(database: database, content: content, startCoverQueue: coverQueue.start);
+    if (!isTesting) SiteFavoritesSync.shared = favorites;
     downloads = DownloadStore(directory: downloadsDirectory, manga: content.source, booru: booruDownloads);
     sync = LibraryDriveSync(
       // Without Google's mobile sign-in the backend stays unconfigured and sync never starts.
@@ -133,6 +137,9 @@ class AppServices {
   /// Kept out of device backups, so a restored phone starts its own sync baseline.
   final Directory syncDirectory;
   late final CoverQueue coverQueue;
+
+  /// Keeps each signed-in website's favorites and the folder named after it the same.
+  late final SiteFavoritesSync favorites;
   late final BookmarkSession bookmarks;
   late final DownloadStore downloads;
   late final LibraryDriveSync sync;
@@ -259,8 +266,10 @@ class _RootState extends State<_Root> {
         services.sync.setActive(active);
         services.downloads.setBackground(!active);
         if (!services.isTesting) services.coverQueue.setActive(active);
+        if (!services.isTesting) unawaited(services.favorites.setActive(active));
       },
     );
+    if (!services.isTesting) unawaited(services.favorites.setActive(true));
     if (!services.isTesting) services.sync.restore().then((_) => services.sync.setActive(true));
   }
 

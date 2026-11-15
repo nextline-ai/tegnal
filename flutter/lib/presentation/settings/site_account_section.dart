@@ -14,6 +14,7 @@ import '../../core/content/manga_content_source.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/content/site_account.dart';
 import '../../core/content/site_account_actions.dart';
+import '../../core/content/site_favorites_sync.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../design/alert_dialog.dart';
@@ -55,6 +56,7 @@ class SiteAccountSection extends StatefulWidget {
 
 class _SiteAccountSectionState extends State<SiteAccountSection> {
   bool _importing = false;
+  bool _syncingFavorites = false;
   List<FavoriteCategory> _categories = [];
   List<SiteSettingsProfile> _profiles = [];
   (int, int)? _allowance;
@@ -74,6 +76,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     super.initState();
     SiteClearance.listeners.add(_changed);
     SiteAccount.listeners.add(_changed);
+    SiteFavoritesSync.shared?.addListener(_changed);
     _refresh();
   }
 
@@ -92,6 +95,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
   void dispose() {
     SiteClearance.listeners.remove(_changed);
     SiteAccount.listeners.remove(_changed);
+    SiteFavoritesSync.shared?.removeListener(_changed);
     super.dispose();
   }
 
@@ -119,7 +123,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     } on Object {
       // Without the settings page the app reads with the account's own profile.
     }
-    if (!_content.syncsAccountFavorites || _categories.isNotEmpty) return;
+    if (_categories.isNotEmpty) return;
     try {
       final categories = await MangaContentSource.shared.favoriteCategories();
       if (mounted) setState(() => _categories = categories);
@@ -179,6 +183,78 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
     } on Object {
       // The choice stays as picked; the next page read shows whether the website took it.
     }
+  }
+
+  /// `SiteFavoritesFolderRows`: the folder the website's favorites are kept the same as: whether it
+  /// is on, which folder, the category works added in the app go to, and a sync on demand.
+  List<Widget> _favoritesFolderRows() {
+    final sync = SiteFavoritesSync.shared;
+    if (sync == null) return const [];
+    final folderID = sync.folderID(widget.site);
+    final folderName = folderID == null ? null : widget.database.listFolders().where((folder) => folder.id == folderID).firstOrNull?.displayName;
+    return [
+      SettingsToggleRow(
+        title: L10n.text('Sync Favorites with a Folder'),
+        help: L10n.text(
+          'Your favorites on the website and a folder named after it hold the same works: adding a work to either, or removing it, does the same on the other.',
+        ),
+        value: folderName != null,
+        onChanged: _syncingFavorites
+            ? null
+            : (on) {
+                if (on) {
+                  _runFavoritesSync(() => sync.setUp(widget.site, requested: true));
+                } else {
+                  sync.stop(widget.site);
+                }
+              },
+      ),
+      if (folderName != null) ...[
+        SettingsValueRow(title: L10n.text('Folder'), value: folderName),
+        SettingsPickerRow<int>(
+          title: L10n.text('Favorites Category'),
+          options: [
+            for (var number = 0; number < 10; number++)
+              (number, _categories.where((category) => category.id == number).firstOrNull?.name ?? L10n.text('Category %@', ['${number + 1}'])),
+          ],
+          selected: _content.accountFavoriteCategory,
+          onSelected: (value) => setState(() => _content.accountFavoriteCategory = value),
+        ),
+        FormRow(
+          separatorInset: settingsIconInset,
+          onTap: _syncingFavorites ? null : () => _runFavoritesSync(() => sync.sync(widget.site)),
+          child: Row(
+            children: [
+              SizedBox(width: 24, child: Icon(CupertinoIcons.arrow_2_circlepath, size: 22, color: TegnalColors.tint.resolveFrom(context))),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(L10n.text('Sync Now'), style: TegnalType.style(17, color: TegnalColors.tint.resolveFrom(context))),
+              ),
+              if (_syncingFavorites) const CupertinoActivityIndicator(),
+            ],
+          ),
+        ),
+      ],
+    ];
+  }
+
+  Future<void> _runFavoritesSync(Future<void> Function() body) async {
+    setState(() => _syncingFavorites = true);
+    try {
+      await body();
+    } on Object catch (error) {
+      if (mounted) {
+        await showCupertinoDialog<void>(
+          context: context,
+          builder: (context) => TegnalAlertDialog(
+            title: Text(L10n.text('Sync Favorites with a Folder')),
+            content: Text(ContentError.message(error)),
+            actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _syncingFavorites = false);
   }
 
   Future<void> _chooseImport() async {
@@ -260,6 +336,7 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                   SiteAccountActions.signInChanged(_content, site: widget.site);
                 }),
               ),
+            if (_keyed) ..._favoritesFolderRows(),
             if (checked && _keyed) ...[
               SettingsToggleRow(
                 title: L10n.text('Load Original Images'),
@@ -278,25 +355,6 @@ class _SiteAccountSectionState extends State<SiteAccountSection> {
                   options: [for (final profile in _profiles) (profile.id, profile.name)],
                   selected: (_profiles.where((profile) => profile.selected).firstOrNull ?? _profiles.first).id,
                   onSelected: _useProfile,
-                ),
-              SettingsToggleRow(
-                title: L10n.text('Sync Bookmarks with Account Favorites'),
-                help: L10n.text('Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there.'),
-                value: _content.syncsAccountFavorites,
-                onChanged: (value) {
-                  setState(() => _content.syncsAccountFavorites = value);
-                  if (value) _loadAccountDetails();
-                },
-              ),
-              if (_content.syncsAccountFavorites)
-                SettingsPickerRow<int>(
-                  title: L10n.text('Favorites Category'),
-                  options: [
-                    for (var number = 0; number < 10; number++)
-                      (number, _categories.where((category) => category.id == number).firstOrNull?.name ?? L10n.text('Category %@', ['${number + 1}'])),
-                  ],
-                  selected: _content.accountFavoriteCategory,
-                  onSelected: (value) => setState(() => _content.accountFavoriteCategory = value),
                 ),
               FormRow(
                 separatorInset: settingsIconInset,

@@ -15,7 +15,6 @@ public struct FoldersView: View {
     @State private var reloadGeneration = 0
     @State private var previews: [Int64: [Work]] = [:]
     @State private var showCreateAlert = false
-    @State private var newFolderName = ""
     @State private var showAddSheet = false
     @State private var editingColorFolder: Folder?
     @State private var folderPendingDelete: Folder?
@@ -25,7 +24,6 @@ public struct FoldersView: View {
     @State private var editError: String?
     @State private var reordering = false
     @State private var folderMessage: String?
-    @State private var composing: SmartFolderDraft?
     @State private var smartFolder: SmartFolderTarget?
     @State private var searchText = ""
     @State private var searchResults: SavedWorksSearch?
@@ -74,9 +72,10 @@ public struct FoldersView: View {
                                     Button(L10n.text("Rename Folder"), systemImage: "pencil") {
                                         renamingFolder = folder; renameDraft = folder.name; showRename = true
                                     }
-                                    Button(L10n.text("Smart Folder"), systemImage: "sparkles") {
-                                        smartFolder = (folder.id.flatMap { try? env.database.identity(ofFolder: $0) }).map(SmartFolderTarget.init)
-                                    }
+                                }
+                                // Unfiled can be a smart folder like any other.
+                                Button(L10n.text("Smart Folder"), systemImage: "sparkles") {
+                                    smartFolder = (folder.id.flatMap { try? env.database.identity(ofFolder: $0) }).map(SmartFolderTarget.init)
                                 }
                                 Button(role: .destructive) {
                                     if folder.name == "미분류", let id = folder.id { deleteFolder(id) }
@@ -129,13 +128,7 @@ public struct FoldersView: View {
                 }
             }
         }
-        .background {
-            FolderNameAlert(isPresented: $showCreateAlert, name: $newFolderName, alternateTitle: "Make a Smart Folder", onAlternate: { composing = SmartFolderDraft(name: $0) }) { name in
-                newFolderName = name
-                createFolder()
-            }.frame(width: 0, height: 0)
-        }
-        .appSheet(item: $composing, onDismiss: loadFolders) { FolderRuleEditor(name: $0.name) }
+        .newFolderPrompt(isPresented: $showCreateAlert, identifier: "folder.name") { _ in loadFolders() }
         .appSheet(item: $smartFolder, onDismiss: loadFolders) { FolderRuleEditor(folder: $0.id) }
         .alert(
             L10n.text("Delete the folder '%@'?", String(describing: folderPendingDelete?.name ?? "")),
@@ -214,14 +207,6 @@ public struct FoldersView: View {
         reloadGeneration += 1
     }
 
-    private func createFolder() {
-        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        _ = try? env.database.createFolder(name: trimmed)
-        newFolderName = ""
-        loadFolders()
-    }
-
     private func deleteFolder(_ id: Int64) {
         do { try env.database.deleteFolder(id: id) }
         catch { folderMessage = error.localizedDescription }
@@ -278,6 +263,45 @@ struct NativeColorPickerSheet: UIViewControllerRepresentable {
     }
 }
 
+/// Every place that makes a folder asks with this prompt: a name, and a switch that makes it a smart
+/// folder, set up on the next screen. `created` gets the new folder's identity: a comics folder's
+/// sync identity, or an image folder's id.
+struct NewFolderPromptModifier: ViewModifier {
+    @Environment(AppEnvironment.self) private var env
+    @Binding var isPresented: Bool
+    var booru = false
+    var title = "New Folder"
+    var actionTitle = "Create"
+    var identifier = "folder.name"
+    let created: (String) -> Void
+    @State private var name = ""
+    @State private var draft: SmartFolderDraft?
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                FolderNameAlert(isPresented: $isPresented, name: $name, identifier: identifier, title: title, actionTitle: actionTitle,
+                                onSmart: { draft = SmartFolderDraft(name: $0) }) { name in
+                    if let identity = try? create(name) { created(identity) }
+                }.frame(width: 0, height: 0)
+            }
+            .appSheet(item: $draft) { FolderRuleEditor(booru: booru, name: $0.name, onCreated: created) }
+    }
+
+    private func create(_ name: String) throws -> String {
+        if booru { return try env.booru.saveFolder(name: name) }
+        guard let id = try env.database.createFolder(name: name).id else { throw BooruError.storage }
+        return try env.database.identity(ofFolder: id)
+    }
+}
+
+extension View {
+    func newFolderPrompt(isPresented: Binding<Bool>, booru: Bool = false, title: String = "New Folder", actionTitle: String = "Create",
+                         identifier: String = "folder.name", created: @escaping (String) -> Void) -> some View {
+        modifier(NewFolderPromptModifier(isPresented: isPresented, booru: booru, title: title, actionTitle: actionTitle, identifier: identifier, created: created))
+    }
+}
+
 /// A shared modal prompt keeps the input inside equal horizontal margins.
 /// Present above navigation chrome and sheets without changing system alert internals.
 struct FolderNameAlert: UIViewControllerRepresentable {
@@ -286,8 +310,8 @@ struct FolderNameAlert: UIViewControllerRepresentable {
     var identifier = "folder.name"
     var title = "New Folder"
     var actionTitle = "Create"
-    var alternateTitle: String? = nil
-    var onAlternate: (String) -> Void = { _ in }
+    /// Shows the smart folder switch; a name confirmed with it on comes here instead of `onCreate`.
+    var onSmart: ((String) -> Void)? = nil
     let onCreate: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -322,17 +346,13 @@ struct FolderNameAlert: UIViewControllerRepresentable {
                 return
             }
             guard prompt == nil, host.view.window != nil, host.presentedViewController == nil else { return }
-            let content = FolderNamePrompt(name: parent.$name, identifier: parent.identifier, title: parent.title, actionTitle: parent.actionTitle, alternateTitle: parent.alternateTitle, alternate: { [weak self] in
-                guard let self else { return }
-                let name = self.parent.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                self.parent.isPresented = false
-                self.parent.name = ""
-                self.parent.onAlternate(name)
-            }) { [weak self] name in
+            let content = FolderNamePrompt(name: parent.$name, identifier: parent.identifier, title: parent.title, actionTitle: parent.actionTitle,
+                                           offersSmart: parent.onSmart != nil) { [weak self] name, smart in
                 guard let self else { return }
                 self.parent.isPresented = false
                 self.parent.name = ""
-                if let name { self.parent.onCreate(name) }
+                guard let name else { return }
+                if smart, let onSmart = self.parent.onSmart { onSmart(name) } else { self.parent.onCreate(name) }
             }
             let prompt = UIHostingController(rootView: content)
             prompt.modalPresentationStyle = .overFullScreen
@@ -350,44 +370,55 @@ private struct FolderNamePrompt: View {
     let identifier: String
     let title: String
     let actionTitle: String
-    let alternateTitle: String?
-    let alternate: () -> Void
-    let finish: (String?) -> Void
+    let offersSmart: Bool
+    let finish: (String?, Bool) -> Void
+    @State private var smart = false
     @FocusState private var focused: Bool
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.3).ignoresSafeArea().accessibilityHidden(true)
-            VStack(spacing: 20) {
+            // Darker than a sheet's dimming, so the prompt stands out from whatever is behind it.
+            Color.black.opacity(0.55).ignoresSafeArea().accessibilityHidden(true)
+            VStack(spacing: 16) {
                 Text(L10n.text(title)).font(.headline)
                 TextField(L10n.text("Folder Name"), text: $name)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.leading)
                     .padding(.horizontal, 16).frame(minHeight: 48)
-                    .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                    .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .focused($focused).submitLabel(.done)
-                    .onSubmit { if !trimmedName.isEmpty { finish(trimmedName) } }
+                    .onSubmit { if !trimmedName.isEmpty { finish(trimmedName, smart) } }
                     .accessibilityIdentifier(identifier)
+                if offersSmart {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle(isOn: $smart) { Label(L10n.text("Smart Folder"), systemImage: "sparkles") }
+                            .padding(.horizontal, 16).frame(minHeight: 48)
+                            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .accessibilityIdentifier("folder.smart")
+                        Text(L10n.text("Files works that match its tags here on their own. You choose the tags next."))
+                            .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 16)
+                    }
+                }
                 HStack(spacing: 12) {
-                    Button { finish(nil) } label: {
+                    Button { finish(nil, false) } label: {
                         Text(L10n.text("Cancel")).frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.bordered).buttonBorderShape(.capsule)
-                    Button { finish(trimmedName) } label: {
-                        Text(L10n.text(actionTitle)).frame(maxWidth: .infinity, minHeight: 44)
+                    Button { finish(trimmedName, smart) } label: {
+                        Text(L10n.text(smart ? "Next" : actionTitle)).frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).disabled(trimmedName.isEmpty)
-                }
-                if let alternateTitle {
-                    Button(L10n.text(alternateTitle), action: alternate).font(.subheadline).accessibilityIdentifier("folder.fromTag")
+                    .accessibilityIdentifier("folder.create")
                 }
             }
-            .padding(24).frame(maxWidth: 340)
-            .glassSurface(cornerRadius: 32)
+            .padding(24).frame(maxWidth: 360)
+            // A solid card rather than glass, so the field and the switch read clearly on any background.
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("folder.namePrompt")
             .padding(24)
         }
         .task { focused = true }
-        .accessibilityAction(.escape) { finish(nil) }
+        .accessibilityAction(.escape) { finish(nil, false) }
     }
 }

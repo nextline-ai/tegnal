@@ -468,7 +468,6 @@ enum ContentBookmarkAction {
             let folders = try env.database.folderIDs(galleryId: id)
             try env.database.deleteWork(galleryId: id)
             env.removedBookmarks[id] = RemovedBookmark(folders: folders, note: work.note)
-            if site == ComicSites.active { env.syncAccountFavorite(id, saved: false) }
             return .removed(.comics)
         }
         return try save(id: id, gallery: gallery, env: env, images: images, context: context, site: site)
@@ -487,7 +486,6 @@ enum ContentBookmarkAction {
             pageCount: gallery?.displayedPageCount, discoveryContext: context)
         for folder in restored.dropFirst() { try env.database.addWork(galleryId: id, folderID: folder) }
         if let note = removed?.note { try env.database.setNote(galleryId: id, note: note) }
-        if site == ComicSites.active { env.syncAccountFavorite(id, saved: true) }
         if let gallery, let page = gallery.pages.first, let images {
             Task {
                 do {

@@ -545,6 +545,12 @@ enum ComicSites {
         preferences.set(sites, forKey: listKey)
     }
 
+    /// Puts the connected sites in a new order of priority. Sites the order leaves out keep their place at the end.
+    static func reorder(_ order: [String]) {
+        let current = all
+        preferences.set(order.filter(current.contains) + current.filter { !order.contains($0) }, forKey: listKey)
+    }
+
     /// Forgets a site and what was learned about it.
     static func remove(_ site: String) {
         ScopedPreferences.lock.lock(); defer { ScopedPreferences.lock.unlock() }

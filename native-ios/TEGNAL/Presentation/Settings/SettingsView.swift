@@ -87,6 +87,7 @@ struct ComicsSetupView: View {
 struct ComicSitesView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var adding = false
+    @State private var ordering = false
     @State private var editing: String?
     var body: some View {
         List {
@@ -112,6 +113,14 @@ struct ComicSitesView: View {
             } footer: {
                 Text(L10n.text("Lists, searches and new saves use the checked website. Saved works remember where they were saved, and a website that numbers its works the same way can open them too."))
             }
+            if env.comicSites.count > 1 {
+                Section {
+                    Button { ordering = true } label: { Label(L10n.text("Website Priority"), systemImage: "arrow.up.arrow.down") }
+                        .accessibilityIdentifier("settings.sitePriority")
+                } footer: {
+                    Text(L10n.text("When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order."))
+                }
+            }
             Section {
                 Button { adding = true } label: { Label(L10n.text("Add Website"), systemImage: "plus") }
                     .accessibilityIdentifier("settings.addSite")
@@ -120,6 +129,41 @@ struct ComicSitesView: View {
         .navigationTitle(L10n.text("Website Connection")).navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $editing) { site in ComicSiteSettingsView(site: site) }
         .appSheet(isPresented: $adding) { WebsiteConnectionEditor(server: nil) }
+        .appSheet(isPresented: $ordering) { SitePriorityView() }
+    }
+}
+
+/// Drags the connected websites into the order lists prefer them in.
+struct SitePriorityView: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.dismiss) private var dismiss
+    @State private var sites: [String] = []
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(sites, id: \.self) { site in
+                        HStack {
+                            Text(site)
+                            Spacer()
+                            if site == env.mangaSiteAddress { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }
+                    .onMove { from, to in sites.move(fromOffsets: from, toOffset: to) }
+                } footer: {
+                    Text(L10n.text("When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order."))
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle(L10n.text("Website Priority")).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.text("Save")) { env.reorderComicSites(sites); dismiss() }.accessibilityIdentifier("settings.sitePriority.save")
+                }
+            }
+            .onAppear { sites = env.comicSites }
+        }
     }
 }
 

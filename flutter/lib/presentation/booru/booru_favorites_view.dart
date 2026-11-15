@@ -81,16 +81,12 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
   }
 
   Future<void> _createFolder() async {
-    final result = await showFolderNamePrompt(context, alternateTitle: L10n.text('Make a Smart Folder'));
-    if (!mounted || result == null || result.name.isEmpty) return;
-    if (result.alternate) {
-      await showAppSheet<void>(
-        context,
-        builder: (context, controller) => FolderRuleEditor.create(library: _booru.store, booru: true, name: result.name, scrollController: controller),
-      );
-    } else {
-      _perform(() => _booru.store.saveFolder(name: result.name));
+    try {
+      await createFolderWithPrompt(context, library: _booru.store, booru: true);
+    } on Object catch (error) {
+      if (mounted) showTransientMessage(context, '$error', bottom: tabBarClearance(context) + 8);
     }
+    if (mounted) setState(() {});
   }
 
   void _perform(void Function() action) {
@@ -140,17 +136,16 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
             ),
           ),
         ),
-        if (!unsorted) ...[
-          ContextMenuAction(title: L10n.text('Rename Folder'), icon: CupertinoIcons.pencil, onSelected: () => _rename(folder)),
-          ContextMenuAction(
-            title: L10n.text('Smart Folder'),
-            icon: CupertinoIcons.sparkles,
-            onSelected: () => showAppSheet<void>(
-              context,
-              builder: (context, controller) => FolderRuleEditor.existing(library: _booru.store, booru: true, folder: folder.id, scrollController: controller),
-            ),
+        if (!unsorted) ContextMenuAction(title: L10n.text('Rename Folder'), icon: CupertinoIcons.pencil, onSelected: () => _rename(folder)),
+        // Uncategorized can be a smart folder like any other.
+        ContextMenuAction(
+          title: L10n.text('Smart Folder'),
+          icon: CupertinoIcons.sparkles,
+          onSelected: () => showAppSheet<void>(
+            context,
+            builder: (context, controller) => FolderRuleEditor.existing(library: _booru.store, booru: true, folder: folder.id, scrollController: controller),
           ),
-        ],
+        ),
         ContextMenuAction(
           title: L10n.text('Delete Folder'),
           icon: CupertinoIcons.trash,
@@ -787,14 +782,9 @@ class _BooruFolderPickerState extends State<BooruFolderPicker> {
         for (final folder in store.folders()) FolderPickerRow(id: folder.id, name: folder.displayName, color: folder.color, isCurrent: folder.id == current),
       ],
       pick: (row) => _file(row.id, row.name),
-      create: (name) {
-        try {
-          final id = store.saveFolder(name: name);
-          _file(id, name.trim());
-        } on Object catch (error) {
-          setState(() => _error = '$error');
-        }
-      },
+      library: store,
+      booru: true,
+      create: (id) => _file(id, store.folders().where((folder) => folder.id == id).firstOrNull?.displayName ?? ''),
     );
   }
 }

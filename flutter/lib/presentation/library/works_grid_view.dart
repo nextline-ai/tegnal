@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/content/site_fallback_content.dart';
 import '../../core/content/gallery_content.dart';
+import '../../core/storage/folder_rules.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
 import '../content/gallery_preview_models.dart';
@@ -150,15 +151,19 @@ class _WorksGridViewState extends State<WorksGridView> {
   }
 
   Future<void> _moveToNewFolder(Work work) async {
-    final result = await showFolderNamePrompt(
-      context,
-      title: 'Create Folder and Move',
-      actionTitle: 'Create and Move',
-      placeholder: L10n.text('New Folder Name'),
-    );
-    if (!mounted || result == null || result.name.isEmpty) return;
     try {
-      _move(work, widget.routes.database.createFolder(name: result.name));
+      final database = widget.routes.database;
+      final identity = await createFolderWithPrompt(
+        context,
+        library: database,
+        title: 'Create Folder and Move',
+        actionTitle: 'Create and Move',
+        placeholder: L10n.text('New Folder Name'),
+      );
+      final id = identity == null ? null : database.folderIDForIdentity(identity);
+      final folder = id == null ? null : database.listFolders().where((folder) => folder.id == id).firstOrNull;
+      if (!mounted || folder == null) return;
+      _move(work, folder);
     } on Object catch (error) {
       _toast('$error');
     }

@@ -148,6 +148,66 @@ final class CombinedCatalogTests: XCTestCase {
         XCTAssertEqual(again.items, rest.items)
     }
 
+    func testAWorkSharedByTwoWebsitesShowsFromTheHigherOne() async throws {
+        // The lower website reaches the shared work first in its own list.
+        let higher = Source([Self.work(1, "One"), Self.work(7, "Shared")])
+        let lower = Source([Self.work(7, "Shared, listed first"), Self.work(9001, "Elsewhere")])
+        let sources: [String: Source] = ["a.example.org": higher, "b.example.org": lower]
+        let catalog = CombinedCatalog(pageSize: 2, sourceFor: { sources[$0]! })
+        let page = try await catalog.list(GalleryQuery(), sites: ["a.example.org", "b.example.org"], offset: 0, count: 10)
+        XCTAssertEqual(page.items, [FeedItem(id: 1, site: "a.example.org"), FeedItem(id: 9001, site: "b.example.org"), FeedItem(id: 7, site: "a.example.org")],
+                       "The higher website in Website Priority keeps the shared work")
+        let swapped = CombinedCatalog(pageSize: 2, sourceFor: { sources[$0]! })
+        let reversed = try await swapped.list(GalleryQuery(), sites: ["b.example.org", "a.example.org"], offset: 0, count: 10)
+        XCTAssertEqual(reversed.items.first { $0.id == 7 }?.site, "b.example.org", "Changing the order changes which copy shows")
+    }
+
+    func testWebsitePriorityReordersTheConnectedWebsites() {
+        let defaults = ContentPreferences.defaults
+        defaults.set(["a.example.org", "b.example.org", "c.example.org"], forKey: "manga.sites")
+        defer { defaults.removeObject(forKey: "manga.sites") }
+        ComicSites.reorder(["c.example.org", "a.example.org"])
+        XCTAssertEqual(Array(ComicSites.all.prefix(3)), ["c.example.org", "a.example.org", "b.example.org"], "A site the order leaves out keeps its place at the end")
+    }
+
+    func testFavoritesSyncFollowsTheSideThatChanged() {
+        let first = FavoriteSyncPlan.make(local: [1], remote: [1, 2, 3], base: nil)
+        XCTAssertEqual(first.addLocally, [2, 3], "The first sync brings the website's favorites into the folder")
+        XCTAssertEqual(first.addOnSite, [], "A work already on both sides needs nothing")
+        XCTAssertEqual(first.removeLocally + first.removeFromSite, [], "The first sync never removes")
+        XCTAssertEqual(first.settled, [1, 2, 3])
+
+        let plan = FavoriteSyncPlan.make(local: [1, 2, 4], remote: [1, 3, 5], base: [1, 2, 3])
+        XCTAssertEqual(plan.addLocally, [5], "Added on the website")
+        XCTAssertEqual(plan.removeLocally, [2], "Removed on the website")
+        XCTAssertEqual(plan.addOnSite, [4], "Added to the folder")
+        XCTAssertEqual(plan.removeFromSite, [3], "Removed from the folder")
+        XCTAssertEqual(plan.settled, [1, 4, 5])
+
+        let push = FavoriteSyncPlan.make(local: [1, 4], remote: [1, 2], base: [1, 2])
+        XCTAssertEqual(push.addOnSite, [4])
+        XCTAssertEqual(push.removeFromSite, [2])
+        XCTAssertTrue(push.addLocally.isEmpty && push.removeLocally.isEmpty, "Sending changes alone never changes the folder")
+        XCTAssertTrue(FavoriteSyncPlan.make(local: [1, 2], remote: [1, 2], base: [1, 2]).isEmpty)
+    }
+
+    func testFavoriteFoldersRememberLinksBaselinesAndATurnedOffSync() {
+        let defaults = UserDefaults(suiteName: "site-favorites-\(UUID().uuidString)")!
+        let folders = SiteFavoriteFolders(defaults: defaults)
+        XCTAssertNil(folders.folder(for: "a.example.org"))
+        folders.link("a.example.org", folder: "folder-1")
+        XCTAssertEqual(folders.folder(for: "a.example.org"), "folder-1")
+        XCTAssertNil(folders.baseline(for: "a.example.org"), "A new link has no baseline, so nothing is removed on its first sync")
+        folders.setBaseline([3, 1], for: "a.example.org")
+        XCTAssertEqual(SiteFavoriteFolders(defaults: defaults).baseline(for: "a.example.org"), [1, 3])
+        folders.unlink("a.example.org", declined: true)
+        XCTAssertNil(folders.folder(for: "a.example.org"))
+        XCTAssertNil(folders.baseline(for: "a.example.org"))
+        XCTAssertTrue(folders.isDeclined("a.example.org"), "Turned off by hand, it is not set up again on its own")
+        folders.link("a.example.org", folder: "folder-2")
+        XCTAssertFalse(folders.isDeclined("a.example.org"), "Turning it back on clears that")
+    }
+
     func testOneWebsiteFailingLeavesTheOthersShowing() async throws {
         let working = Source([Self.work(1, "One")])
         let failing = Source([], failure: ContentError.signInRequired)

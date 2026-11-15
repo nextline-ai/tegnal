@@ -5,7 +5,6 @@ import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_store.dart';
 import '../../core/content/content_environment.dart';
 import '../../core/content/gallery_content.dart';
-import '../../core/content/manga_content_source.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/storage/app_storage.dart';
@@ -40,25 +39,6 @@ class BookmarkSession {
 
   /// The folder each work saved this session went to, which Change Folder moves it out of.
   final Map<int, int> savedFolders = {};
-
-  /// Mirrors a bookmark change to the account's favorites when that is turned on.
-  void syncAccountFavorite(int id, {required bool saved}) => syncAccountFavorites(content, [id], saved: saved);
-}
-
-/// Mirrors several bookmark changes one after another, so a long list never bursts the website.
-void syncAccountFavorites(ContentEnvironment content, List<int> ids, {required bool saved}) {
-  final keyed = MangaUrls.hasResolvedBackend && MangaUrls.backend == MangaBackend.keyed;
-  if (ids.isEmpty || !content.syncsAccountFavorites || !content.siteAccountSignedIn || !keyed) return;
-  final category = content.accountFavoriteCategory;
-  unawaited(() async {
-    for (final id in ids) {
-      try {
-        await MangaContentSource.shared.setAccountFavorite(id, saved: saved, category: category);
-      } on Object {
-        // The bookmark stays; the website's favorites catch up the next time they're imported.
-      }
-    }
-  }());
 }
 
 /// Bookmarking a comic from Explore, work information or the reader.
@@ -80,7 +60,6 @@ abstract final class ContentBookmarkAction {
       final folders = database.folderIDs(id);
       database.deleteWork(id);
       session.removedBookmarks[id] = RemovedBookmark(folders: folders, note: work.note);
-      if (website == ComicSites.active) session.syncAccountFavorite(id, saved: false);
       return const WorkSaveResult.removed(TasteMode.comics);
     }
     return save(id, gallery: gallery, session: session, images: images, context: context, site: website);
@@ -120,7 +99,6 @@ abstract final class ContentBookmarkAction {
     }
     final note = removed?.note;
     if (note != null) database.setNote(id, note);
-    if (website == ComicSites.active) session.syncAccountFavorite(id, saved: true);
     final page = gallery?.pages.firstOrNull;
     if (page != null && images != null) unawaited(_storeCover(id, page, session: session, images: images));
     if (!session.isTesting) session.startCoverQueue?.call();

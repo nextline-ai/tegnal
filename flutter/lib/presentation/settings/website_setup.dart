@@ -12,6 +12,7 @@ import '../../core/content/manga_urls.dart';
 import '../../core/support/l10n.dart';
 import '../design/app_sheet.dart';
 import '../design/grouped_form.dart';
+import '../library/folder_order_view.dart';
 import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import 'settings_page.dart';
@@ -642,6 +643,8 @@ class ComicSitesPage extends StatefulWidget {
 }
 
 class _ComicSitesPageState extends State<ComicSitesPage> {
+  static const _priorityFooter =
+      'When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order.';
   ContentEnvironment get _content => widget.content;
 
   @override
@@ -713,6 +716,30 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
               ),
           ],
         ),
+        if (_content.comicSites.length > 1) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            footer: Text(L10n.text(_priorityFooter)),
+            children: [
+              SettingsLinkRow(
+                title: L10n.text('Website Priority'),
+                icon: CupertinoIcons.arrow_up_arrow_down,
+                tinted: true,
+                chevron: false,
+                onTap: () => showAppSheet<void>(
+                  context,
+                  builder: (context, controller) => FolderOrderView<String>(
+                    title: 'Website Priority',
+                    footer: L10n.text(_priorityFooter),
+                    folders: [for (final site in _content.comicSites) (id: site, name: site)],
+                    save: _content.reorderComicSites,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         settingsSectionGap,
         FormSection(
           rowColor: row,

@@ -279,37 +279,31 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
         children: [
           Container(height: 0.5, color: TegnalColors.separator.resolveFrom(context)),
           const SizedBox(height: 14),
-          // Text sits inside the page margin, in line with the text in the boxes.
+          // The rating line sits a little inside the rounded stats under it; the stats keep the margin.
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (canRate)
-                  Builder(
+            padding: const EdgeInsets.symmetric(horizontal: galleryLabelInset),
+            child: canRate
+                ? Builder(
                     builder: (anchor) => Semantics(
                       button: true,
                       label: L10n.text('Rate This Work'),
                       child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _rate(anchor), child: ratingRow),
                     ),
                   )
-                else
-                  ratingRow,
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    if (extras.favorited case final favorited?) _stat(context, L10n.text('%@ favorites', [_count(favorited)]), CupertinoIcons.heart),
-                    if (extras.favoriteName case final name? when extras.favoriteCategory != null)
-                      _stat(context, name, CupertinoIcons.heart_fill, tint: CupertinoColors.systemPink.resolveFrom(context)),
-                    if (extras.fileSize case final size?) _stat(context, size, CupertinoIcons.archivebox),
-                    if (extras.posted case final posted?) _stat(context, _shortDate(posted), CupertinoIcons.calendar),
-                    if (extras.uploader case final uploader?) _stat(context, uploader, CupertinoIcons.person),
-                  ],
-                ),
-              ],
-            ),
+                : ratingRow,
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (extras.favorited case final favorited?) _stat(context, L10n.text('%@ favorites', [_count(favorited)]), CupertinoIcons.heart),
+              if (extras.favoriteName case final name? when extras.favoriteCategory != null)
+                _stat(context, name, CupertinoIcons.heart_fill, tint: CupertinoColors.systemPink.resolveFrom(context)),
+              if (extras.fileSize case final size?) _stat(context, size, CupertinoIcons.archivebox),
+              if (extras.posted case final posted?) _stat(context, _shortDate(posted), CupertinoIcons.calendar),
+              if (extras.uploader case final uploader?) _stat(context, uploader, CupertinoIcons.person),
+            ],
           ),
           if (previews.isNotEmpty) ...[
             const SizedBox(height: 14),

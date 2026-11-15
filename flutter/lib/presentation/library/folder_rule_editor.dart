@@ -258,7 +258,8 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
         widget.library.deleteRule(target);
       }
       if (_usesTags && _fillsSavedWorks) widget.library.fill(saved);
-      Navigator.of(context).pop();
+      // A new folder hands its identity back to whoever asked for it.
+      Navigator.of(context).pop(widget.creatingFolder ? target : null);
     } on Object catch (error) {
       showCupertinoDialog<void>(
         context: context,

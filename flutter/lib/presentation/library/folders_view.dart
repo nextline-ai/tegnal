@@ -83,13 +83,7 @@ class _FoldersViewState extends State<FoldersView> {
   }
 
   Future<void> _createFolder() async {
-    final result = await showFolderNamePrompt(context, alternateTitle: L10n.text('Make a Smart Folder'));
-    if (!mounted || result == null) return;
-    if (result.alternate) {
-      await widget.routes.composeSmartFolder(context, name: result.name);
-    } else if (result.name.isNotEmpty) {
-      _database.createFolder(name: result.name);
-    }
+    await createFolderWithPrompt(context, library: _database);
     widget.routes.notifyChanged();
   }
 
@@ -112,10 +106,9 @@ class _FoldersViewState extends State<FoldersView> {
           icon: CupertinoIcons.arrow_up_arrow_down,
           onSelected: () => widget.routes.reorderFolders(context),
         ),
-        if (!unfiled) ...[
-          ContextMenuAction(title: L10n.text('Rename Folder'), icon: CupertinoIcons.pencil, onSelected: () => _rename(folder)),
-          ContextMenuAction(title: L10n.text('Smart Folder'), icon: CupertinoIcons.sparkles, onSelected: () => widget.routes.editSmartFolder(context, folder)),
-        ],
+        if (!unfiled) ContextMenuAction(title: L10n.text('Rename Folder'), icon: CupertinoIcons.pencil, onSelected: () => _rename(folder)),
+        // Unfiled can be a smart folder like any other.
+        ContextMenuAction(title: L10n.text('Smart Folder'), icon: CupertinoIcons.sparkles, onSelected: () => widget.routes.editSmartFolder(context, folder)),
         ContextMenuAction(
           title: L10n.text('Delete Folder'),
           icon: CupertinoIcons.trash,

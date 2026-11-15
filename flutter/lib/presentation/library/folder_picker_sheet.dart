@@ -1,5 +1,6 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/storage/folder_rules.dart';
 import '../../core/support/l10n.dart';
 import '../design/app_sheet.dart';
 import '../design/grouped_form.dart';
@@ -20,19 +21,32 @@ class FolderPickerRow {
 /// folder first, then every folder with its color, the current one checked. Tapping a folder is
 /// the whole action.
 class FolderPickerSheet extends StatelessWidget {
-  const FolderPickerSheet({super.key, required this.rows, required this.pick, required this.create, this.error, this.scrollController});
+  const FolderPickerSheet({
+    super.key,
+    required this.rows,
+    required this.pick,
+    required this.library,
+    required this.create,
+    this.booru = false,
+    this.error,
+    this.scrollController,
+  });
   final List<FolderPickerRow> rows;
   final ValueChanged<FolderPickerRow> pick;
 
-  /// Makes a folder and files the work in it.
+  /// Where a new folder is made, with the same prompt as everywhere else.
+  final SmartFolderLibrary library;
+  final bool booru;
+
+  /// Files the work in a folder just made, by its identity.
   final ValueChanged<String> create;
   final String? error;
   final ScrollController? scrollController;
 
   Future<void> _create(BuildContext context) async {
-    final result = await showFolderNamePrompt(context);
-    if (!context.mounted || result == null || result.name.isEmpty) return;
-    create(result.name);
+    final identity = await createFolderWithPrompt(context, library: library, booru: booru);
+    if (!context.mounted || identity == null) return;
+    create(identity);
   }
 
   @override

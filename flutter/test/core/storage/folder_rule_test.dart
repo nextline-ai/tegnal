@@ -361,7 +361,7 @@ void main() {
     final choices = database.folderChoices();
     expect(choices.firstWhere((choice) => choice.id == database.identityOfFolder(korean.id!)).name.endsWith('✦'), isTrue);
     expect(choices.firstWhere((choice) => choice.id == database.identityOfFolder(plain.id!)).name.endsWith('✦'), isFalse);
-    expect(choices.where((choice) => !choice.canBeSmart).map((choice) => choice.id), ['unsorted']);
+    expect(choices.every((choice) => choice.canBeSmart), isTrue, reason: 'Every folder, Unfiled included, can be a smart folder');
   });
 
   test('a work moved by hand stays in a folder it does not fit', () {

@@ -116,6 +116,26 @@ extension AppDatabase {
         try dbWriter.write { try Self.folderIdentity(id, db: $0) }
     }
 
+    /// The saved works in a folder, by number.
+    func galleryIDs(inFolder folderID: Int64) throws -> [Int64] {
+        try dbWriter.read { try Int64.fetchAll($0, sql: "SELECT w.gallery_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE fw.folder_id = ?", arguments: [folderID]) }
+    }
+
+    /// Takes a work out of a folder. A work no other folder holds leaves the library, as removing
+    /// its bookmark would.
+    func removeWork(galleryId: Int64, fromFolder folderID: Int64) throws {
+        let others = try dbWriter.write { db -> Int in
+            guard let workID = try Int64.fetchOne(db, sql: "SELECT id FROM works WHERE gallery_id = ?", arguments: [galleryId]) else { return -1 }
+            try db.execute(sql: "DELETE FROM folder_works WHERE folder_id = ? AND work_id = ?", arguments: [folderID, workID])
+            return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder_works WHERE work_id = ?", arguments: [workID]) ?? 0
+        }
+        if others == 0 { try deleteWork(galleryId: galleryId) }
+    }
+
+    func folderID(identity: String) throws -> Int64? {
+        try dbWriter.read { try Int64.fetchOne($0, sql: "SELECT id FROM folders WHERE sync_id = ?", arguments: [identity]) }
+    }
+
     func folderRules() throws -> [(rule: FolderRule, folder: Folder)] {
         try dbWriter.read { db in
             let folders = try Self.fetchFolders(db)
@@ -182,7 +202,8 @@ extension AppDatabase {
     }
 
     /// Files saved works in a folder. A copying rule leaves them where they were too; a moving
-    /// rule takes them out of the folders it looked in. Either way they leave Unfiled.
+    /// rule takes them out of the folders it looked in. Either way they leave Unfiled, which holds
+    /// only works in no other folder.
     func addMatchingWorks(_ rule: FolderRule, toFolder folderID: Int64) throws {
         guard !rule.workQuery.isEmpty else { return }
         let now = ISO8601DateFormatter().string(from: Date())
@@ -281,7 +302,7 @@ extension AppDatabase: SmartFolderLibrary {
         try dbWriter.write { db in
             try Self.fetchFolders(db).compactMap { folder in
                 guard let id = folder.id else { return nil }
-                return SmartFolderChoice(id: try Self.folderIdentity(id, db: db), name: folder.displayName, canBeSmart: folder.name != "미분류")
+                return SmartFolderChoice(id: try Self.folderIdentity(id, db: db), name: folder.displayName, canBeSmart: true)
             }
         }
     }
@@ -354,7 +375,7 @@ extension BooruStore: SmartFolderLibrary {
     }
 
     func folderChoices() throws -> [SmartFolderChoice] {
-        folders().map { SmartFolderChoice(id: $0.id, name: $0.displayName, canBeSmart: $0.id != "unsorted") }
+        folders().map { SmartFolderChoice(id: $0.id, name: $0.displayName, canBeSmart: true) }
     }
 
     func defaultRuleSources() throws -> Set<String> { Set(folders().map(\.id).filter(Self.isLanding)) }

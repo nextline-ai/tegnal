@@ -8,8 +8,6 @@ struct BooruFavoritesView: View {
     @State private var width: CGFloat = 390
     @Environment(BooruStore.self) private var store
     @State private var creating = false
-    @State private var newFolderName = ""
-    @State private var composing: SmartFolderDraft?
     @State private var smartFolder: SmartFolderTarget?
     @State private var editing: BooruFolderEdit?
     @State private var deleting: BooruFolder?
@@ -54,8 +52,9 @@ struct BooruFavoritesView: View {
                                 Button(L10n.text("Reorder Folders"), systemImage: "arrow.up.arrow.down") { reordering = true }
                                 if folder.id != "unsorted" {
                                     Button(L10n.text("Rename Folder"), systemImage: "pencil") { renaming = folder; renameDraft = folder.plainName; showRename = true }
-                                    Button(L10n.text("Smart Folder"), systemImage: "sparkles") { smartFolder = .init(id: folder.id) }
                                 }
+                                // Uncategorized can be a smart folder like any other.
+                                Button(L10n.text("Smart Folder"), systemImage: "sparkles") { smartFolder = .init(id: folder.id) }
                                 Button(L10n.text("Delete Folder"), systemImage: "trash", role: .destructive) {
                                     if folder.id == "unsorted" {
                                         do { try store.deleteFolder(folder.id) }
@@ -76,8 +75,7 @@ struct BooruFavoritesView: View {
             }
         } }
         .transientMessage($folderMessage)
-        .booruCreateFolderAlert(isPresented: $creating, name: $newFolderName, onSmart: { composing = SmartFolderDraft(name: $0) })
-        .appSheet(item: $composing) { FolderRuleEditor(booru: true, name: $0.name) }
+        .newFolderPrompt(isPresented: $creating, booru: true, identifier: "booru.folderName") { _ in }
         .appSheet(item: $smartFolder) { FolderRuleEditor(booru: true, folder: $0.id) }
         .appSheet(isPresented: $reordering) { FolderOrderView(booru: true) }
         .appSheet(item: $editing) { item in
@@ -258,12 +256,9 @@ struct BooruFolderPicker: View {
             FolderPickerRow(id: $0.id, name: $0.displayName, color: $0.color, isCurrent: $0.id == current)
         }, identifier: "booru.pickFolder", pick: { row in
             file(in: row.id, name: row.name)
-        }, create: { name in
-            store.perform {
-                let id = try store.saveFolder(name: name)
-                file(in: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-        })
+        }, create: { id in
+            file(in: id, name: store.folders().first { $0.id == id }?.displayName ?? "")
+        }, booru: true)
     }
     private func file(in id: String, name: String) {
         store.perform {
@@ -273,22 +268,3 @@ struct BooruFolderPicker: View {
     }
 }
 
-private struct BooruCreateFolderModifier: ViewModifier {
-    @Environment(BooruStore.self) private var store
-    @Binding var isPresented: Bool
-    @Binding var name: String
-    var onSmart: ((String) -> Void)?
-    func body(content: Content) -> some View {
-        content.background {
-            FolderNameAlert(isPresented: $isPresented, name: $name, identifier: "booru.folderName", alternateTitle: onSmart == nil ? nil : "Make a Smart Folder", onAlternate: { onSmart?($0) }) { folderName in
-                store.perform { try store.saveFolder(name: folderName) }
-            }.frame(width: 0, height: 0)
-        }
-    }
-}
-
-private extension View {
-    func booruCreateFolderAlert(isPresented: Binding<Bool>, name: Binding<String>, onSmart: ((String) -> Void)? = nil) -> some View {
-        modifier(BooruCreateFolderModifier(isPresented: isPresented, name: name, onSmart: onSmart))
-    }
-}

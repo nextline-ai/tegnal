@@ -1521,7 +1521,6 @@
 "Saved to folder '%@'" = "%@フォルダに保存しました";
 "Smart Folder" = "スマートフォルダ";
 "Smart Folders" = "スマートフォルダ";
-"Make a Smart Folder" = "スマートフォルダにする";
 "Use Smart Folders" = "スマートフォルダを使用";
 "Add Smart Folder" = "スマートフォルダを追加";
 "No smart folders yet." = "スマートフォルダはまだありません。";
@@ -1568,8 +1567,6 @@
 "This website’s image allowance for you has run out. Try again later." = "このウェブサイトで画像を表示できる上限に達しました。しばらくしてからもう一度お試しください。";
 "Website Account" = "ウェブサイトのアカウント";
 "Signed In" = "ログイン済み";
-"Sync Bookmarks with Account Favorites" = "ブックマークをアカウントのお気に入りと同期";
-"Bookmarking a work also adds it to your favorites on the website, and removing the bookmark removes it there." = "作品をブックマークするとウェブサイトのお気に入りにも追加され、ブックマークを外すとそこからも削除されます。";
 "Import Account Favorites" = "アカウントのお気に入りを読み込む";
 "Sign Out" = "ログアウト";
 "Sign out of this website?" = "このウェブサイトからログアウトしますか？";
@@ -1656,7 +1653,6 @@
 "An image is in one folder at a time, so a matching image moves here from the folder it was in." = "画像は一度に1つのフォルダにしか入らないため、一致する画像は元のフォルダからここへ移動します。";
 "A matching work is added here and also stays in the folder it came from, so it appears in both." = "一致する作品をここに入れ、元のフォルダにも残すため、両方に表示されます。";
 "A matching work leaves the folder it came from, so it appears only here." = "一致する作品を元のフォルダから移すため、ここにだけ表示されます。";
-"Unfiled always lets a work go once it is in a folder." = "未分類の作品は、フォルダに入ると常に未分類から外れます。";
 "When you tap Save, matching images in the folders it looks in move here once." = "保存をタップすると、探すフォルダにある一致する画像を一度ここへ移動します。";
 "When you tap Save, matching works in the folders it looks in are copied here once." = "保存をタップすると、探すフォルダにある一致する作品を一度ここへコピーします。";
 "When you tap Save, matching works in the folders it looks in move here once." = "保存をタップすると、探すフォルダにある一致する作品を一度ここへ移動します。";
@@ -1827,3 +1823,9 @@
 "Works Deleted on a Website" = "ウェブサイトで削除された作品";
 "Forget Deleted Works" = "削除された作品の記録を消去";
 "Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again." = "作品は常にチェックしたウェブサイトで先に開きます。チェックしたウェブサイトにもうない作品は、接続しているほかのウェブサイトで開き、チェックしたウェブサイトで削除されたことを記憶します。記録を消去すると、すべてのウェブサイトにもう一度確認します。";
+"Files works that match its tags here on their own. You choose the tags next." = "タグに合う作品を自動でこのフォルダに入れます。タグは次の画面で選びます。";
+"Website Priority" = "ウェブサイトの優先順位";
+"When lists show several websites, a work they share shows from the one higher in this order. Saved works open from the checked website first, then in this order." = "複数のウェブサイトをまとめて表示するとき、同じ作品はこの順番で上にあるウェブサイトのものを表示します。保存した作品はチェックしたウェブサイトで先に開き、次にこの順番で開きます。";
+"Sync Favorites with a Folder" = "お気に入りをフォルダと同期";
+"Your favorites on the website and a folder named after it hold the same works: adding a work to either, or removing it, does the same on the other." = "ウェブサイトのお気に入りと、ウェブサイト名のフォルダが同じ作品を持ちます。片方に作品を入れたり外したりすると、もう片方も同じように変わります。";
+"Unfiled always lets a work go once it is in a folder." = "未分類の作品は、フォルダに入ると常に未分類から外れます。";

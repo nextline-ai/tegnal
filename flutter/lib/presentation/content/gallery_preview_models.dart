@@ -321,9 +321,12 @@ class GalleryWorkLinks {
   final void Function(int id) openRelated;
 }
 
-/// Where text sits on the work information: boxes and buttons reach the page margin, and text and
-/// tags start this far inside it, in line with the text in the boxes, so they never look as if
-/// they stick out past the rounded buttons.
+/// Where text sits on the work information. Tags, buttons and boxes reach the page margin; a
+/// label over them starts a little inside it, because their rounded ends begin inside their
+/// edge and a label flush with them looks as if it sticks out.
+const double galleryLabelInset = 6;
+
+/// Text inside boxes, and box headers, line up with the box's own text.
 const double galleryTextInset = 16;
 
 /// Boxes of rows on the work information: their corners, row height and the column their titles start at.

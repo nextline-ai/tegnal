@@ -85,6 +85,31 @@ import GRDB
         XCTAssertEqual(try folderNames(3), ["미분류"])
     }
 
+    func testUnfiledCanBeASmartFolderLikeAnyOther() throws {
+        XCTAssertTrue(try database.folderChoices().allSatisfy(\.canBeSmart), "Unfiled can be a smart folder too")
+        let unfiled = try XCTUnwrap(database.listFolders().first { $0.name == "미분류" })
+        let other = try database.createFolder(name: "Other")
+        try database.saveFolderRule(folderID: unfiled.id!, query: "language:japanese", excluded: "", keepsOriginal: false)
+        try save(1, language: "japanese")
+        try database.moveWorkToFolder(galleryId: 1, targetFolderId: other.id!)
+        try database.addMatchingWorks(try XCTUnwrap(database.rule(forFolder: database.identity(ofFolder: unfiled.id!))), toFolder: unfiled.id!)
+        XCTAssertEqual(try folderNames(1), ["Other"], "Its own rule never pulls works out of folders it does not look in")
+    }
+
+    func testRemovingAWorkFromItsOnlyFolderTakesItOutOfTheLibrary() throws {
+        let one = try database.createFolder(name: "One"), two = try database.createFolder(name: "Two")
+        try save(1)
+        try database.addWork(galleryId: 1, folderID: one.id!)
+        try database.addWork(galleryId: 1, folderID: two.id!)
+        XCTAssertEqual(Set(try database.galleryIDs(inFolder: one.id!)), [1])
+        try database.removeWork(galleryId: 1, fromFolder: one.id!)
+        XCTAssertEqual(try folderNames(1), ["Two"])
+        try database.removeWork(galleryId: 1, fromFolder: two.id!)
+        XCTAssertNil(try database.getWork(galleryId: 1), "Like removing its bookmark")
+        let identity = try database.identity(ofFolder: two.id!)
+        XCTAssertEqual(try database.folderID(identity: identity), two.id)
+    }
+
     func testRuleAppliesToNewSavesAndRespectsItsExclusions() throws {
         let korean = try database.createFolder(name: "Korean")
         try database.saveFolderRule(folderID: korean.id!, query: "language:korean", excluded: "tag:spoiler")
@@ -398,7 +423,7 @@ import GRDB
         let choices = try database.folderChoices()
         XCTAssertTrue(try XCTUnwrap(choices.first { $0.id == (try? database.identity(ofFolder: korean.id!)) }).name.hasSuffix("✦"))
         XCTAssertFalse(try XCTUnwrap(choices.first { $0.id == (try? database.identity(ofFolder: plain.id!)) }).name.hasSuffix("✦"))
-        XCTAssertEqual(choices.filter { !$0.canBeSmart }.map(\.id), ["unsorted"])
+        XCTAssertTrue(choices.allSatisfy(\.canBeSmart), "Every folder, Unfiled included, can be a smart folder")
     }
 
     func testAWorkMovedByHandStaysInAFolderItDoesNotFit() throws {
