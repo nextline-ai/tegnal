@@ -520,6 +520,10 @@ final class BooruUITests: XCTestCase {
             let name = element(app, "folderRule.name")
             XCTAssertTrue(name.waitForExistence(timeout: 5))
             XCTAssertEqual(name.value as? String, "Named", "The name typed in the prompt carries over")
+            let editorSmart = element(app, "folderRule.smart")
+            editorSmart.switches.firstMatch.exists ? editorSmart.switches.firstMatch.tap() : editorSmart.tap()
+            XCTAssertTrue(element(app, "folderRule.tag").waitForNonExistence(timeout: 2), "A folder that is not smart asks for no tags")
+            XCTAssertTrue(element(app, "folderRule.save").isEnabled, "and saves with just its name")
             app.buttons["Cancel"].firstMatch.tap()
         }
     }

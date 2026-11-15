@@ -319,6 +319,16 @@ import GRDB
         XCTAssertTrue(try database.folderRules().isEmpty)
     }
 
+    func testDeletingAFolderMovesOnlyWorksNoOtherFolderHoldsToUnfiled() throws {
+        let first = try database.createFolder(name: "First"), second = try database.createFolder(name: "Second")
+        _ = try database.upsertWork(galleryId: 1, folderId: first.id!)
+        _ = try database.upsertWork(galleryId: 2, folderId: first.id!)
+        try database.addWork(galleryId: 2, folderID: second.id!)
+        try database.deleteFolder(id: first.id!)
+        XCTAssertEqual(try folderNames(1), ["미분류"])
+        XCTAssertEqual(try folderNames(2), ["Second"], "A work another folder holds stays only there")
+    }
+
     func testDefaultSaveFolderFallsBackAfterDeletion() throws {
         let favorites = try database.createFolder(name: "Favorites")
         try setDefaultFolder(favorites)

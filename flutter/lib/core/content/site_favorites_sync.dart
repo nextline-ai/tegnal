@@ -43,7 +43,8 @@ class SiteFavoriteState {
   /// Favorites category or list → the sync identity of its folder.
   final Map<int, String> folders;
 
-  /// Where works in other folders are kept on the website; null when every category has a folder.
+  /// Where works in other folders are kept on the website: a category the account left empty, or
+  /// one chosen in settings. Null keeps them in the app only.
   int? unassigned;
 
   /// The categories holding each work after the last sync; null before the first.
@@ -226,13 +227,13 @@ class FavoriteSyncPlan {
       // The categories the website should hold the work in.
       var wanted = {for (final place in result) ?place.category};
       if (setEquals(result, {FavoritePlace.unassigned})) {
+        // Without a category kept for other folders the work stays in the app, rather than being
+        // mixed into a category the account uses for something else.
         final elsewhere = rawRemote.difference(folders);
         if (elsewhere.isNotEmpty) {
           wanted = elsewhere;
         } else if (unassigned != null) {
           wanted = {unassigned};
-        } else {
-          plan.keepLocal.add(id);
         }
       } else if (!exclusive && result.isNotEmpty) {
         // Lists without folders keep what they hold; only a work taken away leaves them too.
@@ -319,7 +320,7 @@ class SiteFavoritesSync extends ChangeNotifier {
       if (id == null) continue;
       state.folders[category.id] = database.identityOfFolder(id);
     }
-    state.unassigned = favorites.categories.map((category) => category.id).where((id) => !state.folders.containsKey(id)).firstOrNull;
+    state.unassigned = favorites.spareCategory(besides: state.folders.keys.toSet());
     store.setState(state, site);
     notifyListeners();
     await sync(site, remote: favorites);
@@ -331,7 +332,8 @@ class SiteFavoritesSync extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setUnassigned(int category, String site) {
+  /// The category works in other folders are kept in on the website; null keeps them in the app only.
+  void setUnassigned(int? category, String site) {
     final state = store.state(site);
     if (state == null) return;
     state.unassigned = category;
@@ -389,7 +391,7 @@ class SiteFavoritesSync extends ChangeNotifier {
           folders.remove(category);
         }
         if (state.unassigned case final unassigned? when !existing.contains(unassigned)) {
-          state.unassigned = favorites.categories.map((category) => category.id).where((id) => !state.folders.containsKey(id)).firstOrNull;
+          state.unassigned = favorites.spareCategory(besides: state.folders.keys.toSet());
         }
       } else {
         answer = state.baseline ?? const {};

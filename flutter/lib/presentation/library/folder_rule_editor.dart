@@ -124,7 +124,16 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
 
   bool get _fixedFolder => !widget.creatingFolder && widget.folder != null;
   WorkQuery get _query => WorkQuery(_tag.text, excluding: _excluded.text);
-  bool get _usesTags => widget.creatingFolder || _isSmart;
+
+  /// A folder made from the tag a search holds: its tags fill it once even when it is not smart.
+  bool get _startsFromTag => widget.creatingFolder && widget.tag.isNotEmpty;
+
+  /// A folder that is not smart holds only what is put in it, so its tags are hidden.
+  bool get _usesTags => _isSmart || _startsFromTag;
+
+  /// Unfiled lets a work go once it is in another folder, so a folder that looks only there always
+  /// moves; copying matters only where it also looks elsewhere.
+  bool get _copyMatters => !widget.booru && (_everyFolder || _selected.any((id) => id != 'unsorted'));
 
   /// What the tags do, said as a sentence a newcomer can check: which works go in, how many
   /// already saved match, and how many more sit where the folder does not look.
@@ -157,6 +166,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
             : 'Works you save that have the tags below are put here on their own. A work you move yourself stays where you put it.',
       );
     }
+    if (_startsFromTag) return L10n.text('Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too.');
     return L10n.text(widget.booru ? 'This folder holds only the images you put in it.' : 'This folder holds only the works you put in it.');
   }
 
@@ -178,6 +188,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
 
   String get _actionFooter {
     if (widget.booru) return L10n.text('An image is in one folder at a time, so a matching image moves here from the folder it was in.');
+    if (!_copyMatters) return L10n.text('It looks only in Unfiled, and a work leaves Unfiled once it is in a folder, so a matching work always moves here.');
     return L10n.text(
       _copies
           ? 'A matching work is added here and also stays in the folder it came from, so it appears in both.'
@@ -191,7 +202,9 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
     if (_fillsSavedWorks || !_isSmart) {
       if (widget.booru) return L10n.text('When you tap Save, matching images you already saved move here.');
       return L10n.text(
-        _copies ? 'When you tap Save, matching works you already saved are copied here.' : 'When you tap Save, matching works you already saved move here.',
+        _copies && _copyMatters
+            ? 'When you tap Save, matching works you already saved are copied here.'
+            : 'When you tap Save, matching works you already saved move here.',
       );
     }
     return L10n.text(widget.booru ? 'Only images you save from now on come here.' : 'Only works you save from now on come here.');
@@ -216,11 +229,11 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
     isEnabled: _isSmart ? null : false,
     sources: _sources == null ? null : (_sources!.toList()..sort()),
     includesOtherFolders: _everyFolder ? true : null,
-    keepsOriginal: widget.booru ? null : _copies,
+    keepsOriginal: widget.booru ? null : _copies && _copyMatters,
   );
 
   bool get _canSave {
-    if (widget.creatingFolder) return !_query.isEmpty && _name.text.trim().isNotEmpty;
+    if (widget.creatingFolder) return _name.text.trim().isNotEmpty && (!_usesTags || !_query.isEmpty);
     return _folder != null && (!_query.isEmpty || !_isSmart);
   }
 
@@ -280,7 +293,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
     _copies = rule.copies;
     final existing = rule.sources?.toSet().intersection(_choices.map((choice) => choice.id).toSet());
     _sources = existing != null && existing.isNotEmpty ? existing : null;
-    _showsMore = _sources != null || _everyFolder || _copies;
+    _showsMore = _sources != null || _everyFolder || _copies || _excluded.text.isNotEmpty;
   }
 
   void _save() {
@@ -331,9 +344,10 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
   }
 
   /// A tag entry under a short label, as a form row that holds a longer entry shows it.
-  Widget _tagField(String title, TextEditingController controller, String prompt) => FormRow(
+  Widget _tagField(String title, TextEditingController controller, String prompt, {double indent = 0, String? note}) => FormRow(
+    separatorInset: 16 + indent,
     child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: EdgeInsets.fromLTRB(indent, 10, 0, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -355,6 +369,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
             placeholderStyle: TegnalType.style(17, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
             style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)),
           ),
+          if (note != null) ...[const SizedBox(height: 6), _caption(note)],
         ],
       ),
     ),
@@ -458,16 +473,9 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
             FormSection(
               prominentHeader: true,
               header: Text(L10n.text(widget.booru ? 'Which Images Go In' : 'Which Works Go In')),
-              footer: footer(_matchFooter),
+              footer: footer('$_matchFooter $_fillFooter'),
               children: [
                 _tagField(L10n.text('Include'), _tag, widget.booru ? 'landscape' : 'language:korean'),
-                _tagField(L10n.text('Leave Out'), _excluded, L10n.text('Optional')),
-              ],
-            ),
-            const SizedBox(height: 23),
-            FormSection(
-              footer: footer(_fillFooter),
-              children: [
                 FormRow(
                   child: Row(
                     children: [
@@ -503,6 +511,13 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
                 ),
                 if (_showsMore) ...[
                   // Rows inside a disclosure group sit 20 pt further in, as the native form shows them.
+                  _tagField(
+                    L10n.text('Leave Out'),
+                    _excluded,
+                    widget.booru ? 'monochrome' : 'tag:example',
+                    indent: 20,
+                    note: L10n.text(widget.booru ? 'Images with any of these tags stay out.' : 'Works with any of these tags stay out.'),
+                  ),
                   Builder(
                     builder: (context) => FormRow(
                       onTap: () => _openSources(context),
@@ -551,18 +566,25 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
                               ],
                             )
                           else ...[
-                            Text(L10n.text('Matching Works')),
+                            Text(L10n.text('Matching Works'), style: _copyMatters ? null : TegnalType.style(17, color: secondary)),
                             const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: CupertinoSlidingSegmentedControl<bool>(
-                                groupValue: _copies,
-                                children: {false: Text(L10n.text('Move Here')), true: Text(L10n.text('Copy Here'))},
-                                onValueChanged: (value) {
-                                  if (value == null) return;
-                                  setState(() => _copies = value);
-                                  _changed();
-                                },
+                            // Looking only in Unfiled, it always moves, so the choice is shown but off.
+                            IgnorePointer(
+                              ignoring: !_copyMatters,
+                              child: Opacity(
+                                opacity: _copyMatters ? 1 : 0.4,
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: CupertinoSlidingSegmentedControl<bool>(
+                                    groupValue: _copies && _copyMatters,
+                                    children: {false: Text(L10n.text('Move Here')), true: Text(L10n.text('Copy Here'))},
+                                    onValueChanged: (value) {
+                                      if (value == null) return;
+                                      setState(() => _copies = value);
+                                      _changed();
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                           ],

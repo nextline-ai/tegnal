@@ -18,6 +18,8 @@ struct FolderRuleEditor: View {
     /// Told the new folder's identity once it is saved.
     private let onCreated: ((String) -> Void)?
     private let fixedFolder: Bool
+    /// A folder made from the tag a search holds: its tags fill it once even when it is not smart.
+    private let startsFromTag: Bool
     @State private var name: String
     @State private var tag: String
     @State private var excluded = ""
@@ -48,6 +50,7 @@ struct FolderRuleEditor: View {
         self.onCreated = onCreated
         creatingFolder = true
         fixedFolder = false
+        startsFromTag = !tag.isEmpty
         _name = State(initialValue: name)
         _tag = State(initialValue: tag)
         _isSmart = State(initialValue: smart)
@@ -60,6 +63,7 @@ struct FolderRuleEditor: View {
         onCreated = nil
         creatingFolder = false
         fixedFolder = folder != nil
+        startsFromTag = false
         _name = State(initialValue: "")
         _tag = State(initialValue: "")
         _folder = State(initialValue: folder)
@@ -69,7 +73,8 @@ struct FolderRuleEditor: View {
 
     private var library: any SmartFolderLibrary { booru ? env.booru : env.database }
     private var query: WorkQuery { WorkQuery(tag, excluding: excluded) }
-    private var usesTags: Bool { creatingFolder || isSmart }
+    /// A folder that is not smart holds only what is put in it, so its tags are hidden.
+    private var usesTags: Bool { isSmart || startsFromTag }
     private var sourceChoices: [SmartFolderChoice] { choices.filter { $0.id != folder } }
     private var selected: Set<String> { (sources ?? defaultSources).subtracting(folder.map { [$0] } ?? []) }
     private var sourceSummary: String {
@@ -77,10 +82,13 @@ struct FolderRuleEditor: View {
         let names = sourceChoices.filter { selected.contains($0.id) }.map(\.name)
         return names.count > 2 ? L10n.text("%@ Folders", String(names.count)) : names.joined(separator: ", ")
     }
+    /// Unfiled lets a work go once it is in another folder, so a folder that looks only there
+    /// always moves; copying matters only where it also looks elsewhere.
+    private var copyMatters: Bool { !booru && (everyFolder || selected.contains { $0 != "unsorted" }) }
     private var rule: FolderRule {
         FolderRule(folder: folder ?? "", query: tag, excluded: excluded, isEnabled: isSmart ? nil : false,
                    sources: sources.map { $0.sorted() }, includesOtherFolders: everyFolder ? true : nil,
-                   keepsOriginal: booru ? nil : copies)
+                   keepsOriginal: booru ? nil : copies && copyMatters)
     }
     /// What the tags do, said as a sentence a newcomer can check: which works go in, how many
     /// already saved match, and how many more sit where the folder does not look.
@@ -109,6 +117,7 @@ struct FolderRuleEditor: View {
             return L10n.text(booru ? "Images you save that have the tags below are put here on their own. An image you move yourself stays where you put it."
                                    : "Works you save that have the tags below are put here on their own. A work you move yourself stays where you put it.")
         }
+        if startsFromTag { return L10n.text("Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too.") }
         return L10n.text(booru ? "This folder holds only the images you put in it." : "This folder holds only the works you put in it.")
     }
     private var sourceFooter: String {
@@ -121,6 +130,7 @@ struct FolderRuleEditor: View {
     }
     private var actionFooter: String {
         if booru { return L10n.text("An image is in one folder at a time, so a matching image moves here from the folder it was in.") }
+        if !copyMatters { return L10n.text("It looks only in Unfiled, and a work leaves Unfiled once it is in a folder, so a matching work always moves here.") }
         return L10n.text(copies ? "A matching work is added here and also stays in the folder it came from, so it appears in both."
                                 : "A matching work leaves the folder it came from, so it appears only here.")
     }
@@ -129,13 +139,13 @@ struct FolderRuleEditor: View {
     private var fillFooter: String {
         if fillsSavedWorks || !isSmart {
             if booru { return L10n.text("When you tap Save, matching images you already saved move here.") }
-            return L10n.text(copies ? "When you tap Save, matching works you already saved are copied here."
+            return L10n.text(copies && copyMatters ? "When you tap Save, matching works you already saved are copied here."
                                     : "When you tap Save, matching works you already saved move here.")
         }
         return L10n.text(booru ? "Only images you save from now on come here." : "Only works you save from now on come here.")
     }
     private var canSave: Bool {
-        if creatingFolder { return !query.isEmpty && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if creatingFolder { return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (!usesTags || !query.isEmpty) }
         return folder != nil && (!query.isEmpty || !isSmart)
     }
 
@@ -165,23 +175,23 @@ struct FolderRuleEditor: View {
                             .tagInput().accessibilityIdentifier("folderRule.tag")
                             .accessibilityLabel(L10n.text("Tags to Include"))
                             .labeled(L10n.text("Include"))
-                        TextField(L10n.text("Tags to Leave Out"), text: $excluded, prompt: Text(L10n.text("Optional")), axis: .vertical)
-                            .tagInput().accessibilityIdentifier("folderRule.excluded")
-                            .accessibilityLabel(L10n.text("Tags to Leave Out"))
-                            .labeled(L10n.text("Leave Out"))
+                        Toggle(L10n.text(booru ? "Also Bring In Saved Images" : "Also Bring In Saved Works"), isOn: $fillsSavedWorks)
+                            .accessibilityIdentifier("folderRule.extends")
                     } header: {
                         Text(L10n.text(booru ? "Which Images Go In" : "Which Works Go In"))
                     } footer: {
-                        Text(matchFooter).accessibilityIdentifier("folderRule.matches")
-                    }
-                    Section {
-                        Toggle(L10n.text(booru ? "Also Bring In Saved Images" : "Also Bring In Saved Works"), isOn: $fillsSavedWorks)
-                            .accessibilityIdentifier("folderRule.extends")
-                    } footer: {
-                        Text(fillFooter)
+                        Text(matchFooter + " " + fillFooter).accessibilityIdentifier("folderRule.matches")
                     }
                     Section {
                         DisclosureGroup(isExpanded: $showsMore) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                TextField(L10n.text("Tags to Leave Out"), text: $excluded, prompt: Text(verbatim: booru ? "monochrome" : "tag:example"), axis: .vertical)
+                                    .tagInput().accessibilityIdentifier("folderRule.excluded")
+                                    .accessibilityLabel(L10n.text("Tags to Leave Out"))
+                                    .labeled(L10n.text("Leave Out"))
+                                Text(L10n.text(booru ? "Images with any of these tags stay out." : "Works with any of these tags stay out."))
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
                             VStack(alignment: .leading, spacing: 6) {
                                 LabeledContent(L10n.text("Look In")) { sourceMenu }
                                 Text(sourceFooter).font(.footnote).foregroundStyle(.secondary)
@@ -190,11 +200,11 @@ struct FolderRuleEditor: View {
                                 if booru {
                                     LabeledContent(L10n.text("Matching Images"), value: L10n.text("Move Here"))
                                 } else {
-                                    Text(L10n.text("Matching Works"))
-                                    Picker(L10n.text("Matching Works"), selection: $copies) {
+                                    Text(L10n.text("Matching Works")).foregroundStyle(copyMatters ? .primary : .secondary)
+                                    Picker(L10n.text("Matching Works"), selection: Binding(get: { copies && copyMatters }, set: { copies = $0 })) {
                                         Text(L10n.text("Move Here")).tag(false)
                                         Text(L10n.text("Copy Here")).tag(true)
-                                    }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("folderRule.copies")
+                                    }.pickerStyle(.segmented).labelsHidden().disabled(!copyMatters).accessibilityIdentifier("folderRule.copies")
                                 }
                                 Text(actionFooter).font(.footnote).foregroundStyle(.secondary)
                             }
@@ -261,7 +271,7 @@ struct FolderRuleEditor: View {
         copies = rule.copies
         let existing = rule.sources.map { Set($0).intersection(choices.map(\.id)) }
         sources = existing?.isEmpty == false ? existing : nil
-        showsMore = sources != nil || everyFolder || copies
+        showsMore = sources != nil || everyFolder || copies || !excluded.isEmpty
     }
 
     private func save() {

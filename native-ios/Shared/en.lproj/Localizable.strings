@@ -277,7 +277,6 @@
 "Work Details" = "Work Details";
 "Work Number" = "Work Number";
 "Work Number or Link" = "Work Number or Link";
-"Works in this folder will be moved to Unfiled." = "Works in this folder will be moved to Unfiled.";
 "You can reopen this guide in Reader Settings or Settings." = "You can reopen this guide in Reader Settings or Settings.";
 "Your Library Is Empty" = "Your Library Is Empty";
 "Zoom & Translate" = "Zoom & Translate";
@@ -1810,16 +1809,13 @@
 "Each favorites category on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the category chosen below, and favorites in a category without a folder come to Unfiled." = "Each favorites category on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the category chosen below, and favorites in a category without a folder come to Unfiled.";
 "Each favorites list on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the list chosen below, and favorites in a list without a folder come to Unfiled." = "Each favorites list on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the list chosen below, and favorites in a list without a folder come to Unfiled.";
 "Category for Other Folders" = "Category for Other Folders";
-"Works you save in folders that are not a favorites category are added to this category on the website." = "Works you save in folders that are not a favorites category are added to this category on the website.";
 "List for Other Folders" = "List for Other Folders";
-"Works you save in folders that are not a favorites list are added to this list on the website." = "Works you save in folders that are not a favorites list are added to this list on the website.";
 "Which Works Go In" = "Which Works Go In";
 "Which Images Go In" = "Which Images Go In";
 "Tags to Include" = "Tags to Include";
 "Tags to Leave Out" = "Tags to Leave Out";
 "Include" = "Include";
 "Leave Out" = "Leave Out";
-"Optional" = "Optional";
 "Enter tags separated by spaces, such as language:korean. A work needs every tag to go in." = "Enter tags separated by spaces, such as language:korean. A work needs every tag to go in.";
 "Enter tags separated by spaces, such as landscape. An image needs every tag to go in." = "Enter tags separated by spaces, such as landscape. An image needs every tag to go in.";
 "Works tagged %@ go in." = "Works tagged %@ go in.";
@@ -1841,3 +1837,11 @@
 "Only works you save from now on come here." = "Only works you save from now on come here.";
 "Only images you save from now on come here." = "Only images you save from now on come here.";
 "More Options" = "More Options";
+"Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too." = "Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too.";
+"It looks only in Unfiled, and a work leaves Unfiled once it is in a folder, so a matching work always moves here." = "It looks only in Unfiled, and a work leaves Unfiled once it is in a folder, so a matching work always moves here.";
+"Works with any of these tags stay out." = "Works with any of these tags stay out.";
+"Images with any of these tags stay out." = "Images with any of these tags stay out.";
+"Keep in App Only" = "Keep in App Only";
+"Works you save in folders that are not a favorites category are added to this category on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a category you use yourself. With every category in use, this is the only choice." = "Works you save in folders that are not a favorites category are added to this category on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a category you use yourself. With every category in use, this is the only choice.";
+"Works you save in folders that are not a favorites list are added to this list on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a list you use yourself." = "Works you save in folders that are not a favorites list are added to this list on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a list you use yourself.";
+"Works only in this folder move to Unfiled. Works also in other folders stay there." = "Works only in this folder move to Unfiled. Works also in other folders stay there.";

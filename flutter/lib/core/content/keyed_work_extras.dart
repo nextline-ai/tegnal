@@ -38,6 +38,10 @@ class AccountFavorites {
   /// A favorite sits in one category at a time, and adding it to another moves it there. Lists an
   /// account makes can each hold the same work.
   final bool exclusive;
+
+  /// A category or list the account doesn't use and no folder stands for, to keep works from other
+  /// folders in; null when there is none, as when all ten fixed categories hold favorites.
+  int? spareCategory({required Set<int> besides}) => categories.where((category) => category.count == 0 && !besides.contains(category.id)).firstOrNull?.id;
 }
 
 /// A work's tag on an account-based catalog, as the website spells it, with the account's vote.

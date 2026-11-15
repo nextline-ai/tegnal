@@ -277,7 +277,6 @@
 "Work Details" = "作品情報";
 "Work Number" = "作品番号";
 "Work Number or Link" = "作品番号またはリンク";
-"Works in this folder will be moved to Unfiled." = "このフォルダの作品は未分類フォルダに移動します。";
 "You can reopen this guide in Reader Settings or Settings." = "読書設定と基本設定から再表示できます。";
 "Your Library Is Empty" = "ライブラリが空です";
 "Zoom & Translate" = "拡大・翻訳";
@@ -1810,16 +1809,13 @@
 "Each favorites category on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the category chosen below, and favorites in a category without a folder come to Unfiled." = "サイトのお気に入りカテゴリごとに同じ名前のフォルダができ、両方が同じ作品を持ちます。ほかのフォルダに保存した作品はサイトの下で選んだカテゴリに入り、フォルダのないカテゴリのお気に入りは未分類に入ります。";
 "Each favorites list on the website becomes a folder of the same name, and the two hold the same works. Works you save in other folders are kept on the website in the list chosen below, and favorites in a list without a folder come to Unfiled." = "サイトのお気に入りリストごとに同じ名前のフォルダができ、両方が同じ作品を持ちます。ほかのフォルダに保存した作品はサイトの下で選んだリストに入り、フォルダのないリストのお気に入りは未分類に入ります。";
 "Category for Other Folders" = "ほかのフォルダ用のカテゴリ";
-"Works you save in folders that are not a favorites category are added to this category on the website." = "お気に入りカテゴリではないフォルダに保存した作品は、サイトのこのカテゴリに入ります。";
 "List for Other Folders" = "ほかのフォルダ用のリスト";
-"Works you save in folders that are not a favorites list are added to this list on the website." = "お気に入りリストではないフォルダに保存した作品は、サイトのこのリストに入ります。";
 "Which Works Go In" = "どの作品を入れるか";
 "Which Images Go In" = "どの画像を入れるか";
 "Tags to Include" = "含めるタグ";
 "Tags to Leave Out" = "除くタグ";
 "Include" = "含める";
 "Leave Out" = "除く";
-"Optional" = "任意";
 "Enter tags separated by spaces, such as language:korean. A work needs every tag to go in." = "language:korean のようにタグをスペースで区切って入力します。すべてのタグが付いた作品だけが入ります。";
 "Enter tags separated by spaces, such as landscape. An image needs every tag to go in." = "landscape のようにタグをスペースで区切って入力します。すべてのタグが付いた画像だけが入ります。";
 "Works tagged %@ go in." = "%@ のタグが付いた作品が入ります。";
@@ -1841,3 +1837,11 @@
 "Only works you save from now on come here." = "これから保存する作品だけが入ります。";
 "Only images you save from now on come here." = "これから保存する画像だけが入ります。";
 "More Options" = "その他のオプション";
+"Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too." = "オフにすると、保存をタップしたときに下のタグでこのフォルダを一度だけ埋めます。オンにすると、これから保存する作品のうちこのタグが付いたものも入ります。";
+"It looks only in Unfiled, and a work leaves Unfiled once it is in a folder, so a matching work always moves here." = "未分類だけを探します。未分類の作品はフォルダに入ると未分類から外れるので、当てはまる作品はいつもここに移ります。";
+"Works with any of these tags stay out." = "これらのタグのどれかが付いた作品は入りません。";
+"Images with any of these tags stay out." = "これらのタグのどれかが付いた画像は入りません。";
+"Keep in App Only" = "アプリにだけ保存";
+"Works you save in folders that are not a favorites category are added to this category on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a category you use yourself. With every category in use, this is the only choice." = "お気に入りカテゴリではないフォルダに保存した作品は、サイトのこのカテゴリに入ります。「アプリにだけ保存」を選ぶとサイトには送らないので、自分で使っているカテゴリのお気に入りと混ざりません。すべてのカテゴリを使っているときは、これしか選べません。";
+"Works you save in folders that are not a favorites list are added to this list on the website. Keep in App Only leaves them off the website, so they never mix with favorites in a list you use yourself." = "お気に入りリストではないフォルダに保存した作品は、サイトのこのリストに入ります。「アプリにだけ保存」を選ぶとサイトには送らないので、自分で使っているリストのお気に入りと混ざりません。";
+"Works only in this folder move to Unfiled. Works also in other folders stay there." = "このフォルダだけにあった作品は未分類に入り、ほかのフォルダにもある作品はそのまま残ります。";
