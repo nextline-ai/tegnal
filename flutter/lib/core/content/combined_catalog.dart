@@ -34,8 +34,6 @@ class SiteContent extends ContentProviding implements WorkExtrasProviding {
   @override
   Future<List<WorkComment>> allComments(int id) => SiteScope.run(site, () => _inner.allComments(id));
   @override
-  Future<List<WorkTorrent>> torrents(int id) => SiteScope.run(site, () => _inner.torrents(id));
-  @override
   Future<(double, int)> rate(int id, int halfStars) => SiteScope.run(site, () => _inner.rate(id, halfStars));
   @override
   Future<List<WorkTagVote>> voteTag(int id, {required String tag, required int vote}) => SiteScope.run(site, () => _inner.voteTag(id, tag: tag, vote: vote));

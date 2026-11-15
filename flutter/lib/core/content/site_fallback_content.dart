@@ -11,9 +11,10 @@ import 'keyed_work_extras.dart';
 import 'manga_content_source.dart';
 import 'manga_urls.dart';
 
-/// Which connected website last opened a work after the checked one could not. Every connected
-/// website numbers works the same way, so a work missing on one may still open on another; once it
-/// does, it opens there first from then on.
+/// Which connected websites no longer carry a work. Every connected website numbers works the same
+/// way, so a work deleted on one may still open on another. The checked website is always asked
+/// first, unless it has already said it no longer has the work; switching websites to use what
+/// another one offers then opens works there.
 class WorkSiteMemory {
   WorkSiteMemory({this.file, this.limit = 20000});
 
@@ -22,53 +23,65 @@ class WorkSiteMemory {
 
   final File? file;
   final int limit;
-  final _sites = <int, String>{};
+  final _missing = <int, Set<String>>{};
   final _order = <int>[];
   bool _loaded = false;
   bool _saving = false;
 
-  String? site(int id) {
+  /// The websites that said they no longer have the work.
+  Set<String> missingSites(int id) {
     _loadIfNeeded();
-    return _sites[id];
+    return {...?_missing[id]};
   }
 
+  /// Works some website no longer has.
   int get count {
     _loadIfNeeded();
-    return _sites.length;
+    return _missing.length;
   }
 
-  /// Remembers the website that opened a work, or forgets it when [site] is null.
-  void remember(int id, String? site) {
+  /// Notes that [site] answered it no longer has the work.
+  void markMissing(int id, String site) {
     _loadIfNeeded();
-    if (_sites[id] == site) return;
-    if (site != null) {
-      if (!_sites.containsKey(id)) _order.add(id);
-      _sites[id] = site;
-    } else {
-      _sites.remove(id);
-      _order.remove(id);
-    }
+    if (_missing[id]?.contains(site) ?? false) return;
+    if (!_missing.containsKey(id)) _order.add(id);
+    (_missing[id] ??= {}).add(site);
     if (_order.length > limit) {
       final dropped = _order.length - limit * 9 ~/ 10;
       for (final id in _order.take(dropped)) {
-        _sites.remove(id);
+        _missing.remove(id);
       }
       _order.removeRange(0, dropped);
     }
     _scheduleSave();
   }
 
-  /// Forgets every work remembered on [site], as when the website is removed.
+  /// Notes that [site] carries the work again.
+  void markFound(int id, String site) {
+    _loadIfNeeded();
+    final sites = _missing[id];
+    if (sites == null || !sites.remove(site)) return;
+    if (sites.isEmpty) {
+      _missing.remove(id);
+      _order.remove(id);
+    }
+    _scheduleSave();
+  }
+
+  /// Forgets what [site] said, as when the website is removed.
   void forget(String site) {
     _loadIfNeeded();
-    final before = _sites.length;
-    _sites.removeWhere((_, value) => value == site);
-    _order.removeWhere((id) => !_sites.containsKey(id));
-    if (_sites.length != before) _scheduleSave();
+    var changed = false;
+    for (final sites in _missing.values) {
+      changed = sites.remove(site) || changed;
+    }
+    _missing.removeWhere((_, sites) => sites.isEmpty);
+    _order.removeWhere((id) => !_missing.containsKey(id));
+    if (changed) _scheduleSave();
   }
 
   void removeAll() {
-    _sites.clear();
+    _missing.clear();
     _order.clear();
     _loaded = true;
     final file = this.file;
@@ -86,12 +99,12 @@ class WorkSiteMemory {
       for (final row in rows) {
         if (row is! List || row.length != 2 || row[0] is! String || row[1] is! String) continue;
         final id = int.tryParse(row[0] as String);
-        if (id == null || id <= 0 || (row[1] as String).isEmpty || _sites.containsKey(id)) continue;
-        _sites[id] = row[1] as String;
-        _order.add(id);
+        if (id == null || id <= 0 || (row[1] as String).isEmpty) continue;
+        if (!_missing.containsKey(id)) _order.add(id);
+        (_missing[id] ??= {}).add(row[1] as String);
       }
     } on Object {
-      // A damaged list is rebuilt as works open elsewhere again.
+      // A damaged list is rebuilt as websites answer again.
     }
   }
 
@@ -103,14 +116,14 @@ class WorkSiteMemory {
       _saving = false;
       final rows = [
         for (final id in _order)
-          if (_sites[id] case final site?) ['$id', site],
+          for (final site in (_missing[id]?.toList() ?? const <String>[])..sort()) ['$id', site],
       ];
       try {
         file.parent.createSync(recursive: true);
         final temporary = File('${file.path}.tmp')..writeAsStringSync(jsonEncode(rows), flush: true);
         temporary.renameSync(file.path);
       } on FileSystemException {
-        // The list only saves a detour; losing it costs one failed request later.
+        // The list only saves a request; losing it costs one failed request later.
       }
     });
   }
@@ -156,8 +169,9 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
     _origins[id] = site;
   }
 
-  /// Websites to try for a work, in order: where it last opened after the checked website could
-  /// not, the checked website, then the other connected websites.
+  /// Websites to try for a work, in order: the checked website, the one named for it, the one it
+  /// was saved from, then the other connected websites. Websites that said they no longer have
+  /// it go last, in case they carry it again.
   List<String> candidates(int id, {String? preferring}) {
     final (active, all) = _sites();
     final order = <String>[];
@@ -166,12 +180,12 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
       order.add(site);
     }
 
-    add(memory.site(id));
-    add(preferring);
     add(active);
+    add(preferring);
     add(_origins[id]);
     all.forEach(add);
-    return order;
+    final missing = memory.missingSites(id);
+    return [...order.where((site) => !missing.contains(site)), ...order.where(missing.contains)];
   }
 
   /// The website a work was last read from in this session, when it is not the checked one.
@@ -209,11 +223,12 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
       if (blocking) _blockingReads.add(id);
       try {
         final gallery = await body(_source(site));
-        _record(id, site, afterFailure: firstError != null);
+        _record(id, site);
         return gallery;
       } on CancellationError {
         rethrow;
       } catch (error, trace) {
+        if (ContentError.isMissingWork(error)) memory.markMissing(id, site);
         if (!ContentError.allowsOtherSite(error)) {
           if (firstError != null) Error.throwWithStackTrace(firstError, firstTrace!);
           rethrow;
@@ -236,16 +251,11 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
   /// next read waits longer. Asking forgets it.
   bool tookBlockingRead(int id) => _blockingReads.remove(id);
 
-  void _record(int id, String site, {required bool afterFailure}) {
+  void _record(int id, String site) {
     if (_serving.length > 4096) _serving.clear();
     _serving[id] = site;
-    final remembered = memory.site(id);
-    if (site == _sites().$1) {
-      // The checked website carries it again; it no longer needs a detour.
-      if (remembered != null) memory.remember(id, null);
-    } else if (afterFailure && remembered != site) {
-      memory.remember(id, site);
-    }
+    // A website that carries the work again is asked in its turn from now on.
+    memory.markFound(id, site);
   }
 
   @override
@@ -269,7 +279,7 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
 
   @override
   NativeGallery? cachedGallery(int id) {
-    final site = _serving[id] ?? memory.site(id);
+    final site = _serving[id] ?? candidates(id).firstOrNull;
     if (site != null && site != _sites().$1) {
       final cached = _sourceFor(site).cachedGallery(id);
       if (cached != null) return cached;
@@ -279,7 +289,7 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
 
   @override
   NativeGallery? cachedPreview(int id) {
-    final site = _serving[id] ?? memory.site(id);
+    final site = _serving[id] ?? candidates(id).firstOrNull;
     if (site != null && site != _sites().$1) {
       final cached = _sourceFor(site).cachedPreview(id);
       if (cached != null) return cached;
@@ -287,7 +297,7 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
     return primary.cachedPreview(id);
   }
 
-  /// Ratings, comments and torrents come from the website the work was read from.
+  /// Ratings and comments come from the website the work was read from.
   WorkExtrasProviding? _extrasSource(int id) {
     final source = _source(_serving[id] ?? _sites().$1);
     return source is WorkExtrasProviding ? source as WorkExtrasProviding : null;
@@ -297,8 +307,6 @@ class SiteFallbackContent extends ContentProviding implements WorkExtrasProvidin
   Future<WorkExtras?> extras(int id) async => _extrasSource(id)?.extras(id);
   @override
   Future<List<WorkComment>> allComments(int id) async => await _extrasSource(id)?.allComments(id) ?? const [];
-  @override
-  Future<List<WorkTorrent>> torrents(int id) async => await _extrasSource(id)?.torrents(id) ?? const [];
   @override
   Future<(double, int)> rate(int id, int halfStars) {
     final source = _extrasSource(id);

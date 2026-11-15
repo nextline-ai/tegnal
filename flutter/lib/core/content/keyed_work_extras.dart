@@ -13,26 +13,6 @@ class WorkComment {
   bool get isUploader => id == 0;
 }
 
-/// A torrent a catalog offers for a work.
-class WorkTorrent {
-  const WorkTorrent({required this.name, required this.url, this.size, this.seeds, this.peers, this.downloads, this.posted, this.uploader, this.hash});
-  final String name;
-  final Uri url;
-  final String? size;
-  final int? seeds;
-  final int? peers;
-  final int? downloads;
-  final String? posted;
-  final String? uploader;
-  final String? hash;
-
-  Uri? get magnet {
-    final hash = this.hash;
-    if (hash == null) return null;
-    return Uri(scheme: 'magnet', queryParameters: {'xt': 'urn:btih:$hash', 'dn': name});
-  }
-}
-
 /// One of the account's favorites categories on a catalog that keeps them.
 class FavoriteCategory {
   const FavoriteCategory({required this.id, required this.name, required this.count});
@@ -135,8 +115,6 @@ class WorkExtras {
     this.parentID,
     this.favoriteCategory,
     this.favoriteName,
-    this.torrentCount = 0,
-    this.torrentsURL,
     this.comments = const [],
     this.hasMoreComments = false,
     this.canRate = false,
@@ -156,8 +134,6 @@ class WorkExtras {
   /// The account's favorites category holding this work, from 0, when it is a favorite.
   int? favoriteCategory;
   String? favoriteName;
-  int torrentCount;
-  Uri? torrentsURL;
   List<WorkComment> comments;
 
   /// The page shows only the newest comments until asked for all of them.
@@ -175,7 +151,7 @@ class WorkExtras {
   /// The work's archive page, when the page links one.
   Uri? archiveURL;
 
-  bool get hasContent => rating != null || favorited != null || uploader != null || fileSize != null || comments.isNotEmpty || torrentCount > 0;
+  bool get hasContent => rating != null || favorited != null || uploader != null || fileSize != null || comments.isNotEmpty || canComment || canRate;
 }
 
 /// The signed-in account's id and key the page hands its own scripts for rating.
@@ -218,10 +194,6 @@ abstract final class KeyedWorkPage {
       final name = plain(uploader);
       extras.uploader = name.isEmpty ? null : name;
     }
-    final torrents = firstCapture(r'>\s*Torrent Download\s*\(\s*([0-9]+)\s*\)', html);
-    if (torrents != null) extras.torrentCount = int.tryParse(torrents) ?? 0;
-    final address = firstCapture(r'''['"]([^'"]*gallerytorrents\.php\?[^'"]*)['"]''', html);
-    if (address != null) extras.torrentsURL = Uri.tryParse(NativeGallery.decodeEntities(address));
     final favorite = favoriteState(html);
     extras.favoriteCategory = favorite.$1;
     extras.favoriteName = favorite.$2;
@@ -353,35 +325,6 @@ abstract final class KeyedWorkPage {
     return result;
   }
 
-  static List<WorkTorrent> torrents(String html) {
-    final result = <WorkTorrent>[];
-    final seen = <String>{};
-    for (final form in html.split('<form').skip(1)) {
-      final match = RegExp(r'<a\b[^>]*\bhref="([^"]+\.torrent[^"]*)"[^>]*>([^<]+)</a>', caseSensitive: false, dotAll: true).firstMatch(form);
-      final url = match == null ? null : Uri.tryParse(NativeGallery.decodeEntities(match.group(1)!));
-      if (url == null || url.scheme != 'https' || !seen.add(url.toString())) continue;
-      String? field(String name) {
-        final value = firstCapture('$name:\\s*</span>\\s*(?:<span[^>]*>)?\\s*([^<]+?)\\s*<', form);
-        final text = value == null ? '' : plain(value);
-        return text.isEmpty ? null : text;
-      }
-
-      result.add(
-        WorkTorrent(
-          name: plain(match!.group(2)!),
-          url: url,
-          size: field('Size'),
-          seeds: int.tryParse(field('Seeds') ?? ''),
-          peers: int.tryParse(field('Peers') ?? ''),
-          downloads: int.tryParse(field('Downloads') ?? ''),
-          posted: field('Posted'),
-          uploader: field('Uploader'),
-          hash: firstCapture(r'([0-9a-fA-F]{40})', url.path)?.toLowerCase(),
-        ),
-      );
-    }
-    return result;
-  }
 
   /// The text of each innermost `div`, in order.
   static List<String> textsInDivs(String html) => [
@@ -434,12 +377,11 @@ abstract final class KeyedWorkPage {
   static String? firstCapture(String pattern, String text) => RegExp(pattern, caseSensitive: false, dotAll: true).firstMatch(text)?.group(1);
 }
 
-/// Catalogs that keep ratings, comments and torrents for their works.
+/// Catalogs that keep ratings and comments for their works.
 abstract interface class WorkExtrasProviding {
   /// Null when the website keeps none of this for its works.
   Future<WorkExtras?> extras(int id);
   Future<List<WorkComment>> allComments(int id);
-  Future<List<WorkTorrent>> torrents(int id);
 
   /// Rates a work from 1 to 10 half-stars; returns the new average and count.
   Future<(double, int)> rate(int id, int halfStars);

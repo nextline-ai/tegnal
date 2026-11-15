@@ -35,15 +35,15 @@ struct ComicsCacheSettingsView: View {
                 Text(L10n.text("Pages and previews you’ve viewed are kept so they open without downloading again. When the cache is full, the least recently viewed images are removed first. Saved works and their covers are not affected."))
             }
             Section {
-                LabeledContent(L10n.text("Works Opened Elsewhere"), value: String(remembered))
+                LabeledContent(L10n.text("Works Deleted on a Website"), value: String(remembered))
                     .accessibilityIdentifier("settings.cache.remembered")
-                Button(L10n.text("Forget Where Works Opened")) { confirmForget = true }
+                Button(L10n.text("Forget Deleted Works")) { confirmForget = true }
                     .disabled(remembered == 0)
                     .accessibilityIdentifier("settings.cache.forgetSites")
             } header: {
                 Text(L10n.text("Other Websites"))
             } footer: {
-                Text(L10n.text("When the checked website no longer has a work, the app opens it from another connected website and opens it there first next time. Forgetting this tries the checked website first again."))
+                Text(L10n.text("Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again."))
             }
         }
         .navigationTitle(L10n.text("Image Cache"))
@@ -59,7 +59,7 @@ struct ComicsCacheSettingsView: View {
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
         } message: { Text(L10n.text("Saved works are kept. Images will be downloaded again when needed.")) }
-        .confirmationDialog(L10n.text("Forget Where Works Opened"), isPresented: $confirmForget, titleVisibility: .visible) {
+        .confirmationDialog(L10n.text("Forget Deleted Works"), isPresented: $confirmForget, titleVisibility: .visible) {
             Button(L10n.text("Forget"), role: .destructive) {
                 WorkSiteMemory.shared.removeAll()
                 remembered = 0

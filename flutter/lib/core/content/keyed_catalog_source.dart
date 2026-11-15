@@ -543,7 +543,7 @@ class KeyedCatalogSource {
     return detail;
   }
 
-  // MARK: Ratings, comments and torrents
+  // MARK: Ratings and comments
 
   Future<WorkExtras> extras(int id, {required String site}) async {
     _prepare(site);
@@ -563,18 +563,6 @@ class KeyedCatalogSource {
     final url = ContentURL.parse('${site}g/$id/$key/?hc=1');
     if (url == null) throw ContentError.invalidQuery;
     return KeyedWorkPage.comments(await _page(url, site));
-  }
-
-  Future<List<WorkTorrent>> torrents(int id, {required String site}) async {
-    final info = await extras(id, site: site);
-    if (info.torrentCount <= 0) return [];
-    final key = await keyFor(id, site: site);
-    // The work page names the torrent page; only a page on the connected website is followed.
-    final named = info.torrentsURL;
-    final url = named != null && named.host.toLowerCase() == ContentURL.parse(site)?.host.toLowerCase()
-        ? named
-        : ContentURL.withQueryItems('${site}gallerytorrents.php', [('gid', '$id'), ('t', key)]);
-    return KeyedWorkPage.torrents(await _page(url, site));
   }
 
   Future<(double, int)> rate(int id, int halfStars, {required String site}) async {

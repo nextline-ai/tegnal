@@ -26,6 +26,22 @@ import 'content_test_support.dart';
 
 const _hash = '0123456789abcdef0123456789abcdef';
 
+/// The checked website's own source, following whichever website is checked.
+class _CheckedSite extends ContentProviding {
+  _CheckedSite(this.target);
+  final ContentProviding Function() target;
+
+  @override
+  Future<NativeGallery> gallery(int id) => target().gallery(id);
+
+  @override
+  Future<GalleryBatch> list(GalleryQuery query, {required int offset, required int count}) => target().list(query, offset: offset, count: count);
+
+  @override
+  Future<Uint8List> image(GalleryPage page, {required int galleryID, required bool thumbnail}) =>
+      target().image(page, galleryID: galleryID, thumbnail: thumbnail);
+}
+
 class _FakeSite extends ContentProviding {
   _FakeSite(this.name, this.works, {this.refusal});
   final String name;
@@ -367,30 +383,32 @@ void main() {
   });
 
   group('other connected websites', () {
-    test('a work missing on the checked website opens elsewhere and goes there first next time', () async {
+    test('works open on the checked website, and elsewhere only where it deleted them', () async {
       final memory = WorkSiteMemory();
-      final active = _FakeSite('a.example', {1: 'one'});
+      var checked = 'a.example';
+      final first = _FakeSite('a.example', {1: 'one'});
       final mirror = _FakeSite('b.example', {1: 'one', 2: 'two'});
-      final third = _FakeSite('c.example', {3: 'three'});
-      final sources = {'b.example': mirror, 'c.example': third};
+      final third = _FakeSite('c.example', {2: 'two', 3: 'three'});
+      final sources = {'a.example': first, 'b.example': mirror, 'c.example': third};
       final content = SiteFallbackContent(
-        primary: active,
+        // The checked website's own source follows the checked website, as the app's does.
+        primary: _CheckedSite(() => sources[checked]!),
         sourceFor: (site) => sources[site]!,
-        sites: () => ('a.example', ['a.example', 'b.example', 'c.example']),
+        sites: () => (checked, ['a.example', 'b.example', 'c.example']),
         memory: memory,
       );
 
       expect((await content.gallery(1)).title, 'one');
-      expect(memory.site(1), isNull, reason: 'A work the checked website still has needs no detour');
+      expect(memory.missingSites(1), isEmpty, reason: 'A work the checked website still has needs no detour');
       expect(content.servingSite(1), isNull);
 
       expect((await content.gallery(2)).title, 'two');
-      expect(memory.site(2), 'b.example');
+      expect(memory.missingSites(2), {'a.example'}, reason: 'The website that deleted it is remembered');
       expect(content.servingSite(2), 'b.example');
-      expect(content.candidates(2).first, 'b.example');
-      final before = active.calls;
+      expect(content.candidates(2), ['b.example', 'c.example', 'a.example']);
+      final before = first.calls;
       await content.gallery(2);
-      expect(active.calls, before, reason: 'Once remembered, the checked website is not asked again first');
+      expect(first.calls, before, reason: 'A website that deleted the work is not asked first again');
 
       final image = await content.image(
         const GalleryPage(hash: 'h', name: '1', width: 1, height: 1, hasAVIF: false, index: 0, sourceSite: 'https://b.example/'),
@@ -399,12 +417,23 @@ void main() {
       );
       expect(utf8.decode(image), 'b.example', reason: 'Pages load from the website their work was read from');
 
+      // Switching websites to use what another one offers opens works there, wherever they opened before.
+      checked = 'c.example';
+      expect((await content.gallery(2)).title, 'two');
+      expect(content.servingSite(2), isNull, reason: 'The newly checked website serves the work');
+      checked = 'b.example';
+      await content.gallery(1);
+      expect(content.servingSite(1), isNull, reason: 'A work that opened on the first website opens on the checked one after a switch');
+      checked = 'a.example';
+
       content.prefer('c.example', 3);
       expect(content.candidates(3), ['a.example', 'c.example', 'b.example']);
       expect((await content.gallery(3)).title, 'three');
+      expect(memory.missingSites(3), {'a.example'});
       await expectLater(content.gallery(9), throwsA(ContentError.galleryNotFound));
-      memory.forget('b.example');
-      expect(memory.site(2), isNull);
+      memory.forget('a.example');
+      expect(memory.missingSites(2), isEmpty);
+      expect(content.candidates(2).first, 'a.example', reason: 'Forgetting asks the checked website first again');
     });
 
     test('a fill reads a blocking website only for works the others no longer have', () async {
@@ -608,21 +637,23 @@ void main() {
       expect(blocking.calls, 20);
     });
 
-    test('work sites are kept across launches', () async {
-      final directory = Directory.systemTemp.createTempSync('work-sites');
+    test('deleted works are kept across launches', () async {
+      final directory = Directory.systemTemp.createTempSync('work-missing');
       addTearDown(() => directory.deleteSync(recursive: true));
-      final file = File('${directory.path}/work-sites.json');
+      final file = File('${directory.path}/work-missing-sites.json');
       final memory = WorkSiteMemory(file: file, limit: 3);
       for (var id = 1; id <= 4; id++) {
-        memory.remember(id, 'b.example');
+        memory.markMissing(id, 'b.example');
       }
-      expect(memory.site(1), isNull, reason: 'The oldest entries make room for new ones');
-      expect(memory.site(4), 'b.example');
-      memory.remember(4, null);
+      expect(memory.missingSites(1), isEmpty, reason: 'The oldest entries make room for new ones');
+      memory.markMissing(3, 'c.example');
+      expect(memory.missingSites(3), {'b.example', 'c.example'});
+      memory.markFound(4, 'b.example');
+      expect(memory.missingSites(4), isEmpty);
       await Future<void>.delayed(const Duration(milliseconds: 2500));
       final reloaded = WorkSiteMemory(file: file, limit: 3);
-      expect(reloaded.site(3), 'b.example');
-      expect(reloaded.site(4), isNull);
+      expect(reloaded.missingSites(3), {'b.example', 'c.example'});
+      expect(reloaded.missingSites(4), isEmpty);
     });
   });
 
@@ -639,8 +670,6 @@ void main() {
       expect(extras.posted, DateTime.utc(2024, 3, 5, 10, 20));
       expect(extras.favoriteCategory, 2);
       expect(extras.favoriteName, 'Reading');
-      expect(extras.torrentCount, 2);
-      expect(extras.torrentsURL?.query, 'gid=3000&t=0000000bb8');
       expect(extras.hasMoreComments, isTrue);
       expect(extras.canRate, isTrue);
       expect(KeyedWorkPage.apiKey(_workPage), const WorkAPIKey(1234567, '0123456789abcdef'));
@@ -662,19 +691,7 @@ void main() {
       expect(unrated.canRate, isFalse);
     });
 
-    test('torrents, favorites categories and image allowance', () {
-      final torrents = KeyedWorkPage.torrents(_torrentPage);
-      expect(torrents, hasLength(1));
-      final torrent = torrents.single;
-      expect(torrent.name, 'Sample Work.zip');
-      expect(torrent.size, '45.6 MiB');
-      expect(torrent.seeds, 3);
-      expect(torrent.peers, 1);
-      expect(torrent.downloads, 120);
-      expect(torrent.posted, '2024-03-05 12:00');
-      expect(torrent.uploader, 'seeder');
-      expect(torrent.magnet.toString(), startsWith('magnet:?xt=urn%3Abtih%3A0123456789abcdef0123456789abcdef01234567'));
-
+    test('favorites categories and image allowance', () {
       final categories = KeyedCatalogSource.favoriteCategoriesIn(_favoritesPage);
       expect([for (final category in categories) category.id], [0, 1, 9]);
       expect([for (final category in categories) category.name], ['Favorites 0', 'Reading', 'Later']);
@@ -835,22 +852,12 @@ const _workPage = '''
 <tr><td class="grt1">Rating:</td><td><span id="rating_count">321</span></td></tr></table></div>
 <div id="gdf"><div id="fav"><div class="i" style="background-image:url(https://media.example/fav.png); background-position:0px -40px; margin-left:16px" title="Reading"></div></div>
 <a id="favoritelink" href="#" onclick="return popUp('https://keyed.example/gallerypopups.php?gid=3000&amp;t=0000000bb8&amp;act=addfav',675,415)">Reading</a></div>
-<p class="g2 gsp"><a href="#" onclick="return popUp('https://keyed.example/gallerytorrents.php?gid=3000&amp;t=0000000bb8',610,590)">Torrent Download (2)</a></p>
 <script>var apiuid = 1234567; var apikey = "0123456789abcdef";</script>
 <div id="cdiv" class="gm">
 <div class="c1"><div class="c2"><div class="c3">Posted on 05 March 2024, 10:21 by: &nbsp; <a href="https://keyed.example/uploader/someone">someone</a></div><div class="c4 nosel">Uploader Comment</div><div class="c"></div></div><div class="c6" id="comment_0">Thanks for reading<br>Part 2 soon</div></div>
 <div class="c1"><div class="c2"><div class="c3">Posted on 06 March 2024, 11:00 by: &nbsp; <a href="https://keyed.example/index.php?showuser=42">reader</a>&nbsp; &nbsp; <a href="https://keyed.example/index.php?act=Msg">[PM]</a></div><div class="c5 nosel">Score <span id="comment_score_123">+15</span></div><div class="c"></div></div><div class="c6" id="comment_123">Great &amp; fun</div></div>
 </div>
 <div id="chd"><p>There are 12 more comments - <a href="https://keyed.example/g/3000/0000000bb8/?hc=1#comments">click to show all</a>.</p></div>
-''';
-
-const _torrentPage = '''
-<form method="post" action="https://keyed.example/gallerytorrents.php?gid=3000&amp;t=0000000bb8">
-<div><table style="width:99%">
-<tr><td style="width:190px"><span style="font-weight:bold">Posted:</span> <span>2024-03-05 12:00</span></td><td><span style="font-weight:bold">Size:</span> 45.6 MiB</td><td><span style="font-weight:bold">Seeds:</span> 3</td><td><span style="font-weight:bold">Peers:</span> 1</td><td><span style="font-weight:bold">Downloads:</span> 120</td></tr>
-<tr><td colspan="5"><span style="font-weight:bold">Uploader:</span> seeder</td></tr>
-<tr><td colspan="5"> &nbsp; <a href="https://tracker.example/get/3000/0123456789abcdef0123456789abcdef01234567.torrent?p=x">Sample Work.zip</a></td></tr>
-</table></div></form>
 ''';
 
 const _favoritesPage = '''

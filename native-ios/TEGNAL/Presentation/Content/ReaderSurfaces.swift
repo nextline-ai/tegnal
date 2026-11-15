@@ -10,6 +10,17 @@ enum GalleryPreviewLoading {
     }
 }
 
+/// Where text sits on the work information: boxes and buttons reach the page margin, and text and
+/// tags start this far inside it, in line with the text in the boxes, so they never look as if
+/// they stick out past the rounded buttons.
+enum GalleryDetailInset {
+    static let text: CGFloat = 16
+    /// Boxes of rows: their corners, row height and the column their titles start at.
+    static let boxRadius: CGFloat = 26
+    static let rowHeight: CGFloat = 52
+    static let iconColumn: CGFloat = 56
+}
+
 struct GalleryDetailPreviews: View {
     @Environment(AppEnvironment.self) private var env
     @State private var width: CGFloat = 350
@@ -33,7 +44,7 @@ struct GalleryDetailPreviews: View {
                 if enabled {
                     GalleryPreviewPagePicker(count: pageCount, selection: $selectedPage)
                 }
-            }
+            }.padding(.horizontal, GalleryDetailInset.text)
             if enabled {
                 TabView(selection: $selectedPage) {
                     ForEach(0..<pageCount, id: \.self) { page in
@@ -112,6 +123,30 @@ enum GalleryPreviewLayout {
 
 /// Both detail and reader previews use the source's thumbnail route. The lazy
 /// grid starts only visible/nearby cells instead of downloading the whole work.
+/// Every page of the work at a glance from the reader's quick menu; choosing one turns to it.
+struct ReaderPagePreviewsView: View {
+    @Environment(\.dismiss) private var dismiss
+    let gallery: NativeGallery
+    let images: PageImageStore
+    @Binding var current: Int
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    GalleryPagePreviewGrid(gallery: gallery, images: images, current: current, identifier: "reader.previews.page") { index in
+                        current = index
+                        dismiss()
+                    }
+                }
+                .onAppear { proxy.scrollTo(current, anchor: .center) }
+            }
+            .navigationTitle(L10n.text("Preview")).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() } } }
+        }
+        .presentationDetents([.large]).presentationDragIndicator(.visible)
+    }
+}
+
 struct GalleryPagePreviewGrid: View {
     @Environment(AppEnvironment.self) private var env
     @State private var width: CGFloat = 390

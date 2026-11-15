@@ -1696,13 +1696,10 @@
 "All Comments" = "All Comments";
 "Category %@" = "Category %@";
 "Comments" = "Comments";
-"Copy Magnet Link" = "Copy Magnet Link";
 "Copy the cookies from a browser where you’re signed in to the website, such as a cookie list or a shortcut’s output, then paste them here." = "Copy the cookies from a browser where you’re signed in to the website, such as a cookie list or a shortcut’s output, then paste them here.";
-"Downloads %@" = "Downloads %@";
 "Favorites Category" = "Favorites Category";
 "Finish any check the website shows. The app keeps the result for this website." = "Finish any check the website shows. The app keeps the result for this website.";
 "Forget" = "Forget";
-"Forget Where Works Opened" = "Forget Where Works Opened";
 "Image Allowance" = "Image Allowance";
 "Image Cache" = "Image Cache";
 "In Use" = "In Use";
@@ -1712,7 +1709,6 @@
 "Maximum Size" = "Maximum Size";
 "Member ID" = "Member ID";
 "No Comments" = "No Comments";
-"No Torrents" = "No Torrents";
 "No sign-in cookies were found in what you pasted." = "No sign-in cookies were found in what you pasted.";
 "Not Rated Yet" = "Not Rated Yet";
 "Opened from %@" = "Opened from %@";
@@ -1720,12 +1716,10 @@
 "Other Websites" = "Other Websites";
 "Pages and previews you’ve viewed are kept so they open without downloading again. When the cache is full, the least recently viewed images are removed first. Saved works and their covers are not affected." = "Pages and previews you’ve viewed are kept so they open without downloading again. When the cache is full, the least recently viewed images are removed first. Saved works and their covers are not affected.";
 "Pass Hash" = "Pass Hash";
-"Peers %@" = "Peers %@";
 "Popular of All Time" = "Popular of All Time";
 "Rate This Work" = "Rate This Work";
 "Refresh Website Access" = "Refresh Website Access";
 "Saved works are kept. Images will be downloaded again when needed." = "Saved works are kept. Images will be downloaded again when needed.";
-"Seeds %@" = "Seeds %@";
 "Sign In" = "Sign In";
 "Sign In with Cookies" = "Sign In with Cookies";
 "Signed in, but the website still didn’t show your account. Check the cookies, including the access cookie, or try again later." = "Signed in, but the website still didn’t show your account. Check the cookies, including the access cookie, or try again later.";
@@ -1735,15 +1729,11 @@
 "This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again." = "This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again.";
 "This website has paused access from your network for a while. Try again later, or change networks." = "This website has paused access from your network for a while. Try again later, or change networks.";
 "This website’s check and the browser data kept for it are removed. Your account sign-in in the app is kept." = "This website’s check and the browser data kept for it are removed. Your account sign-in in the app is kept.";
-"Torrents" = "Torrents";
-"Torrents (%@)" = "Torrents (%@)";
 "Unable to Rate" = "Unable to Rate";
 "Uploader" = "Uploader";
 "Use This Account on This Website" = "Use This Account on This Website";
 "Viewer and Preview Images" = "Viewer and Preview Images";
 "Watched Tags" = "Watched Tags";
-"When the checked website no longer has a work, the app opens it from another connected website and opens it there first next time. Forgetting this tries the checked website first again." = "When the checked website no longer has a work, the app opens it from another connected website and opens it there first next time. Forgetting this tries the checked website first again.";
-"Works Opened Elsewhere" = "Works Opened Elsewhere";
 "%@ pages" = "%@ pages";
 "iCloud Sync is off. Your library is saved only on this device." = "iCloud Sync is off. Your library is saved only on this device.";
 "Keep iCloud Sync On" = "Keep iCloud Sync On";
@@ -1834,3 +1824,6 @@
 "Loads each page’s original file instead of the resized one. The website may charge GP for originals; a page it won’t send is shown resized." = "Loads each page’s original file instead of the resized one. The website may charge GP for originals; a page it won’t send is shown resized.";
 "Settings Profile" = "Settings Profile";
 "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings." = "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings.";
+"Works Deleted on a Website" = "Works Deleted on a Website";
+"Forget Deleted Works" = "Forget Deleted Works";
+"Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again." = "Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again.";

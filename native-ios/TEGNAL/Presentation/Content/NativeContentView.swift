@@ -1163,7 +1163,7 @@ private struct GalleryRelatedWorks: View {
             if visible?.isEmpty != true {
                 VStack(alignment: .leading, spacing: 16) {
                     Divider()
-                    Text(L10n.text("Related Works")).font(.headline)
+                    Text(L10n.text("Related Works")).font(.headline).padding(.horizontal, GalleryDetailInset.text)
                     ScrollView(.horizontal) {
                         HStack(alignment: .top, spacing: 12) {
                             if let visible {
@@ -1207,8 +1207,9 @@ private struct GalleryVersionSuggestion: View {
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right").font(.caption.bold()).opacity(0.6)
             }
-            .foregroundStyle(color).padding(.horizontal, 14).padding(.vertical, 11)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            .foregroundStyle(color).padding(.horizontal, GalleryDetailInset.text).padding(.vertical, 11)
+            // A capsule like the buttons it sits under.
+            .background(color.opacity(0.12), in: Capsule())
         }.buttonStyle(.plain).accessibilityIdentifier("content.detail.versionSuggestion")
     }
 }
@@ -1262,6 +1263,7 @@ private struct GalleryInformation: View {
         VStack(alignment: .leading, spacing: 22) {
             if showsCover { WorkDetailCover(image: cover, loading: !coverFinished) }
             GalleryDetailHeading(title: gallery.title, metadata: gallery.headingMetadata)
+                .padding(.horizontal, GalleryDetailInset.text)
             VStack(spacing: 11) {
                 GalleryDetailActions(read: read, bookmark: bookmark)
                 if let openVersion, let suggestion {
@@ -1269,6 +1271,7 @@ private struct GalleryInformation: View {
                 }
             }
             GalleryDetailMetadata(gallery: gallery, search: search, openVersion: openVersion, savedIDs: savedIDs)
+                .padding(.horizontal, GalleryDetailInset.text)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -1562,7 +1565,7 @@ private struct MangaContentControls: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     /// An inset grouped list's row: icons in a column, titles after it.
-    private static let iconColumn: CGFloat = 56
+    private static let iconColumn = GalleryDetailInset.iconColumn
     private func row(_ title: String, icon: String, color: Color = .accentColor, chevron: Bool = false) -> some View {
         HStack(spacing: 0) {
             Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: Self.iconColumn)
@@ -1572,12 +1575,12 @@ private struct MangaContentControls: View {
                 Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(uiColor: .tertiaryLabel))
             }
         }
-        .padding(.trailing, 16).frame(minHeight: 52).contentShape(Rectangle())
+        .padding(.trailing, GalleryDetailInset.text).frame(minHeight: GalleryDetailInset.rowHeight).contentShape(Rectangle())
     }
-    private var divider: some View { Divider().padding(.leading, Self.iconColumn).padding(.trailing, 16) }
+    private var divider: some View { Divider().padding(.leading, Self.iconColumn).padding(.trailing, GalleryDetailInset.text) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.text("Content Controls")).foregroundStyle(.secondary).padding(.horizontal, 17)
+            Text(L10n.text("Content Controls")).foregroundStyle(.secondary).padding(.horizontal, GalleryDetailInset.text)
             VStack(spacing: 0) {
                 if let page = URL(string: MangaUrls.galleryUrl(for: gallery.id)) {
                     NavigationLink { ContentReportView(page: page) } label: {
@@ -1602,7 +1605,8 @@ private struct MangaContentControls: View {
                     }.accessibilityIdentifier("content.blockArtist")
                 }
             }.buttonStyle(.plain)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .background(Color(uiColor: .secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: GalleryDetailInset.boxRadius, style: .continuous))
         }.accessibilityIdentifier("content.controls")
     }
 }

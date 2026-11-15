@@ -454,7 +454,7 @@ class GalleryWorkInformation extends StatefulWidget {
   final AppDatabase database;
   final GalleryDetailActions actions;
 
-  /// Where ratings, comments and torrents come from, on websites that keep them.
+  /// Where ratings and comments come from, on websites that keep them.
   final ContentProviding? source;
   final ui.Image? cover;
   final bool coverFinished;
@@ -549,7 +549,10 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (widget.showsCover) ...[WorkDetailCover(image: widget.cover, loading: !widget.coverFinished), const SizedBox(height: 22)],
-                GalleryDetailHeading(title: gallery.title, metadata: galleryHeadingMetadata(gallery)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
+                  child: GalleryDetailHeading(title: gallery.title, metadata: galleryHeadingMetadata(gallery)),
+                ),
                 const SizedBox(height: 22),
                 if (widget.showsRead) ...[
                   _ActionButton(prominent: true, icon: Symbols.book, label: L10n.text('Read'), onPressed: () => widget.actions.read(0, resume: true)),
@@ -566,18 +569,22 @@ class _GalleryWorkInformationState extends State<GalleryWorkInformation> {
                   _VersionSuggestion(version: suggestion, open: () => widget.actions.openVersion!(suggestion.id)),
                 ],
                 const SizedBox(height: 22),
-                _GalleryDetailMetadata(
-                  gallery: gallery,
-                  content: widget.content,
-                  savedIDs: _savedIDs,
-                  savedQueries: _savedQueries,
-                  favoriteArtists: {
-                    for (final value in _savedTags)
-                      if (value.kind == 0) MangaArtistFavorite.key(value.name),
-                  },
-                  search: widget.actions.search,
-                  openVersion: widget.actions.openVersion,
-                  toggleSaved: _toggleSaved,
+                // Text sits inside the page margin, in line with the text in the boxes.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: galleryTextInset),
+                  child: _GalleryDetailMetadata(
+                    gallery: gallery,
+                    content: widget.content,
+                    savedIDs: _savedIDs,
+                    savedQueries: _savedQueries,
+                    favoriteArtists: {
+                      for (final value in _savedTags)
+                        if (value.kind == 0) MangaArtistFavorite.key(value.name),
+                    },
+                    search: widget.actions.search,
+                    openVersion: widget.actions.openVersion,
+                    toggleSaved: _toggleSaved,
+                  ),
                 ),
               ],
             ),
@@ -770,10 +777,11 @@ class _VersionSuggestion extends StatelessWidget {
     return GestureDetector(
       onTap: open,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: galleryTextInset, vertical: 11),
         decoration: ShapeDecoration(
           color: color.withValues(alpha: 0.12),
-          shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(12)),
+          // A capsule like the buttons it sits under.
+          shape: const StadiumBorder(),
         ),
         child: Row(
           children: [
@@ -1124,6 +1132,7 @@ class _GalleryDetailPreviewsState extends State<GalleryDetailPreviews> {
             const SizedBox(height: 16),
             Row(
               children: [
+                const SizedBox(width: galleryTextInset),
                 Text(
                   L10n.text('Preview'),
                   style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
@@ -1271,7 +1280,30 @@ class GalleryPagePreviewGrid extends StatelessWidget {
     );
   }
 
-  Widget _thumbnail(BuildContext context, int index, ArtworkCellStyle style) => Semantics(
+  Widget _thumbnail(BuildContext context, int index, ArtworkCellStyle style) =>
+      GalleryPageThumbnail(gallery: gallery, images: images, index: index, style: style, current: current == index, select: select);
+}
+
+/// A page's thumbnail that opens it; the current page gets a tint border.
+class GalleryPageThumbnail extends StatelessWidget {
+  const GalleryPageThumbnail({
+    super.key,
+    required this.gallery,
+    required this.images,
+    required this.index,
+    required this.style,
+    required this.select,
+    this.current = false,
+  });
+  final NativeGallery gallery;
+  final PageImageStore images;
+  final int index;
+  final ArtworkCellStyle style;
+  final ValueChanged<int> select;
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
     button: true,
     label: L10n.text('Pages: %@', ['${index + 1}']),
     child: GestureDetector(
@@ -1279,7 +1311,7 @@ class GalleryPagePreviewGrid extends StatelessWidget {
       child: AspectRatio(
         aspectRatio: 0.72,
         child: Container(
-          foregroundDecoration: current == index
+          foregroundDecoration: current
               ? ShapeDecoration(
                   shape: RoundedSuperellipseBorder(
                     borderRadius: BorderRadius.circular(style.radius(12)),
@@ -1294,6 +1326,90 @@ class GalleryPagePreviewGrid extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+/// Every page of a work at a glance from the reader's quick menu, laid out as the work
+/// information's previews. Thumbnails load as they scroll into view.
+class GalleryAllPagesGrid extends StatefulWidget {
+  const GalleryAllPagesGrid({
+    super.key,
+    required this.gallery,
+    required this.images,
+    required this.content,
+    required this.current,
+    required this.select,
+    this.controller,
+    this.topInset = 0,
+  });
+  final NativeGallery gallery;
+  final PageImageStore images;
+  final ContentEnvironment content;
+  final int current;
+  final ValueChanged<int> select;
+  final ScrollController? controller;
+  final double topInset;
+
+  @override
+  State<GalleryAllPagesGrid> createState() => _GalleryAllPagesGridState();
+}
+
+class _GalleryAllPagesGridState extends State<GalleryAllPagesGrid> {
+  bool _placed = false;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final content = widget.content;
+      final columns = GalleryPreviewLayout.columns(
+        width: constraints.maxWidth,
+        artworkColumns: content.mangaColumns,
+        previewColumns: content.mangaPreviewColumns,
+        removesArtworkPadding: content.mangaRemovesGridPadding,
+      );
+      final geometry = ArtworkGridGeometry(
+        width: constraints.maxWidth,
+        columns: columns,
+        removesPadding: content.mangaRemovesGridPadding,
+        maximumColumns: columns < 10 ? 10 : columns,
+      );
+      final style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: content.mangaRemovesGridPadding);
+      if (!_placed) {
+        _placed = true;
+        // Opens on the row of the page being read.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final controller = widget.controller;
+          if (!mounted || controller == null || !controller.hasClients) return;
+          final row = widget.current ~/ columns;
+          final offset = row * (geometry.cellWidth / 0.72 + geometry.spacing) - constraints.maxHeight / 3;
+          controller.jumpTo(offset.clamp(0, controller.position.maxScrollExtent));
+        });
+      }
+      return GridView.builder(
+        controller: widget.controller,
+        padding: EdgeInsets.fromLTRB(
+          geometry.margin,
+          widget.topInset + geometry.margin,
+          geometry.margin,
+          geometry.margin + MediaQuery.paddingOf(context).bottom,
+        ),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          mainAxisSpacing: geometry.spacing,
+          crossAxisSpacing: geometry.spacing,
+          childAspectRatio: 0.72,
+        ),
+        itemCount: widget.gallery.pages.length,
+        itemBuilder: (context, index) => GalleryPageThumbnail(
+          gallery: widget.gallery,
+          images: widget.images,
+          index: index,
+          style: style,
+          current: index == widget.current,
+          select: widget.select,
+        ),
+      );
+    },
   );
 }
 

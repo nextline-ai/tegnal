@@ -1696,13 +1696,10 @@
 "All Comments" = "すべてのコメント";
 "Category %@" = "カテゴリ %@";
 "Comments" = "コメント";
-"Copy Magnet Link" = "マグネットリンクをコピー";
 "Copy the cookies from a browser where you’re signed in to the website, such as a cookie list or a shortcut’s output, then paste them here." = "ウェブサイトにログインしているブラウザからCookieをコピーして、ここに貼り付けてください。Cookieの一覧やショートカットの出力をそのまま貼り付けることもできます。";
-"Downloads %@" = "ダウンロード %@";
 "Favorites Category" = "お気に入りのカテゴリ";
 "Finish any check the website shows. The app keeps the result for this website." = "ウェブサイトに表示される確認を完了してください。結果はこのウェブサイト用にアプリが保管します。";
 "Forget" = "消去";
-"Forget Where Works Opened" = "作品を開いたウェブサイトの記録を消去";
 "Image Allowance" = "画像の上限";
 "Image Cache" = "画像キャッシュ";
 "In Use" = "使用中";
@@ -1712,7 +1709,6 @@
 "Maximum Size" = "最大サイズ";
 "Member ID" = "メンバーID";
 "No Comments" = "コメントはありません";
-"No Torrents" = "トレントはありません";
 "No sign-in cookies were found in what you pasted." = "貼り付けた内容にログイン用のCookieが見つかりませんでした。";
 "Not Rated Yet" = "まだ評価がありません";
 "Opened from %@" = "%@で開きました";
@@ -1720,12 +1716,10 @@
 "Other Websites" = "ほかのウェブサイト";
 "Pages and previews you’ve viewed are kept so they open without downloading again. When the cache is full, the least recently viewed images are removed first. Saved works and their covers are not affected." = "表示したページとプレビューを保管し、再ダウンロードせずにすぐ開けるようにします。キャッシュがいっぱいになると、最後に表示してから時間がたった画像から削除されます。保存した作品と表紙には影響しません。";
 "Pass Hash" = "パスハッシュ";
-"Peers %@" = "ピア %@";
 "Popular of All Time" = "歴代人気順";
 "Rate This Work" = "この作品を評価";
 "Refresh Website Access" = "ウェブサイトのアクセス権を再取得";
 "Saved works are kept. Images will be downloaded again when needed." = "保存した作品はそのまま残ります。画像は必要なときに再度ダウンロードされます。";
-"Seeds %@" = "シード %@";
 "Sign In" = "ログイン";
 "Sign In with Cookies" = "Cookieでログイン";
 "Signed in, but the website still didn’t show your account. Check the cookies, including the access cookie, or try again later." = "ログインしましたが、ウェブサイトにまだアカウントが表示されません。アクセスCookieを含めてCookieを確認するか、しばらくしてからもう一度お試しください。";
@@ -1735,15 +1729,11 @@
 "This website asks to check that you’re not a bot. Open Validate Client, finish the check, then try again." = "このウェブサイトがボットでないかの確認を求めています。クライアント認証を開いて確認を完了してから、もう一度お試しください。";
 "This website has paused access from your network for a while. Try again later, or change networks." = "このウェブサイトは、お使いのネットワークからのアクセスを一時的に止めています。しばらくしてからもう一度試すか、別のネットワークをお使いください。";
 "This website’s check and the browser data kept for it are removed. Your account sign-in in the app is kept." = "このウェブサイトの確認結果と保管したブラウザデータを削除します。アプリのアカウントのログインはそのまま残ります。";
-"Torrents" = "トレント";
-"Torrents (%@)" = "トレント(%@)";
 "Unable to Rate" = "評価できません";
 "Uploader" = "アップローダー";
 "Use This Account on This Website" = "このウェブサイトでもこのアカウントを使う";
 "Viewer and Preview Images" = "ビューアとプレビューの画像";
 "Watched Tags" = "ウォッチ中のタグ";
-"When the checked website no longer has a work, the app opens it from another connected website and opens it there first next time. Forgetting this tries the checked website first again." = "チェックしたウェブサイトにもうない作品は、接続しているほかのウェブサイトで開き、次回からはそのウェブサイトで先に開きます。記録を消去すると、再びチェックしたウェブサイトから試します。";
-"Works Opened Elsewhere" = "ほかのウェブサイトで開いた作品";
 "%@ pages" = "%@ページ";
 "iCloud Sync is off. Your library is saved only on this device." = "iCloud同期はオフです。ライブラリはこのデバイスにのみ保存されます。";
 "Keep iCloud Sync On" = "iCloud同期をオンのままにする";
@@ -1834,3 +1824,6 @@
 "Loads each page’s original file instead of the resized one. The website may charge GP for originals; a page it won’t send is shown resized." = "縮小版の代わりに各ページのオリジナルファイルを読み込みます。ウェブサイトがオリジナルにGPを請求することがあり、送られないページは縮小版で表示します。";
 "Settings Profile" = "設定プロファイル";
 "Which of your website settings profiles the app reads with, such as one made for the app. Create profiles in the website’s settings." = "アプリがウェブサイトを読むときに使う設定プロファイルです。アプリ用に作ったプロファイルなどを選べます。プロファイルはウェブサイトの設定で作成してください。";
+"Works Deleted on a Website" = "ウェブサイトで削除された作品";
+"Forget Deleted Works" = "削除された作品の記録を消去";
+"Works always open from the checked website first. When it no longer has a work, the app opens it from another connected website and remembers that the checked website deleted it. Forgetting this asks every website again." = "作品は常にチェックしたウェブサイトで先に開きます。チェックしたウェブサイトにもうない作品は、接続しているほかのウェブサイトで開き、チェックしたウェブサイトで削除されたことを記憶します。記録を消去すると、すべてのウェブサイトにもう一度確認します。";

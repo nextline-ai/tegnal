@@ -208,7 +208,7 @@ actor MangaContentSource: ContentProviding, WorkExtrasProviding {
         try await keyed.setFavorite(id, saved: saved, category: category, site: site)
     }
 
-    // MARK: Ratings, comments and torrents
+    // MARK: Ratings and comments
 
     func extras(_ id: Int64) async throws -> WorkExtras? {
         let site = try prepareSite()
@@ -220,12 +220,6 @@ actor MangaContentSource: ContentProviding, WorkExtrasProviding {
         let site = try prepareSite()
         guard try await resolve(site) == .keyed else { return [] }
         return try await keyed.allComments(id, site: site)
-    }
-
-    func torrents(_ id: Int64) async throws -> [WorkTorrent] {
-        let site = try prepareSite()
-        guard try await resolve(site) == .keyed else { return [] }
-        return try await keyed.torrents(id, site: site)
     }
 
     func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int) {

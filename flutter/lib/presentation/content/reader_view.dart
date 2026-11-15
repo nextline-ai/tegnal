@@ -33,6 +33,7 @@ import 'content_bookmark.dart';
 import 'reading_queue_views.dart';
 import 'viewer_quick_menu.dart';
 import '../../core/content/recent_works.dart';
+import '../../core/content/site_fallback_content.dart';
 import '../../core/content/manga_urls.dart';
 import '../../core/support/app_platform.dart';
 import '../design/desktop_input.dart';
@@ -263,6 +264,10 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
           _current = ReaderLayout.initialPage(_opening.initialPage, saved: 0, total: gallery.pages.length, count: _pagesPerSpread);
           _gallery = gallery;
         });
+        // Opened straight into the reader, the work information that says so was skipped.
+        final source = widget.source;
+        final site = source is SiteFallbackContent ? source.servingSite(widget.galleryID) : null;
+        if (site != null) _showToast(L10n.text('Opened from %@', [site]));
       }
       if (_opening.needsConfirmation) {
         final first = gallery.pages.firstOrNull;
@@ -521,6 +526,32 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
                     },
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Every page of the work at a glance; choosing one turns to it.
+  void _openPreviews() {
+    final gallery = _gallery;
+    if (gallery == null) return;
+    _sheet(
+      (sheetContext, controller) => ScrollEdgeSheet(
+        bar: SheetNavigationBar(
+          title: L10n.text('Preview'),
+          trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(sheetContext).pop()),
+        ),
+        child: GalleryAllPagesGrid(
+          gallery: gallery,
+          images: widget.images,
+          content: widget.content,
+          current: _current,
+          controller: controller,
+          topInset: 76,
+          select: (page) {
+            Navigator.of(sheetContext).pop();
+            _pageChanged(page);
+          },
         ),
       ),
     );
@@ -909,7 +940,7 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
         (color) => saved ? Icon(CupertinoIcons.bookmark_fill, size: 24, color: savedColor) : Icon(CupertinoIcons.bookmark, size: 24, color: color),
         hasGallery ? _bookmark : null,
       ),
-      (L10n.text('Exit'), (color) => ExitSymbol(color: color), _close),
+      (L10n.text('Preview'), (color) => Icon(CupertinoIcons.square_grid_2x2, size: 24, color: color), hasGallery ? _openPreviews : null),
       if (AppPlatform.hasImageTranslation)
         (
           L10n.text(_translation.isOn ? 'Stop Translating' : 'Translate'),

@@ -300,46 +300,60 @@ final class SiteAccessTests: XCTestCase {
 
     // MARK: Opening works on other connected websites
 
-    func testAWorkMissingOnTheCheckedWebsiteOpensElsewhereAndGoesThereFirstNextTime() async throws {
-        let memory = WorkSiteMemory(file: nil)
-        let active = FakeSite(name: "a.example", works: [1: "one"])
+    func testWorksOpenOnTheCheckedWebsiteAndElsewhereOnlyWhereItDeletedThem() async throws {
+        final class Checked: @unchecked Sendable { var site = "a.example" }
+        let memory = WorkSiteMemory(file: nil), checked = Checked()
+        let first = FakeSite(name: "a.example", works: [1: "one"])
         let mirror = FakeSite(name: "b.example", works: [1: "one", 2: "two"])
-        let third = FakeSite(name: "c.example", works: [3: "three"])
-        let sources: [String: FakeSite] = ["b.example": mirror, "c.example": third]
-        let content = SiteFallbackContent(primary: active, sourceFor: { sources[$0]! },
-                                          sites: { ("a.example", ["a.example", "b.example", "c.example"]) }, memory: memory)
+        let third = FakeSite(name: "c.example", works: [2: "two", 3: "three"])
+        let sources: [String: FakeSite] = ["a.example": first, "b.example": mirror, "c.example": third]
+        // The checked website's own source follows the checked website, as the app's does.
+        let content = SiteFallbackContent(primary: CheckedSiteSource { sources[checked.site]! }, sourceFor: { sources[$0]! },
+                                          sites: { (checked.site, ["a.example", "b.example", "c.example"]) }, memory: memory)
 
-        let first = try await content.gallery(1)
-        XCTAssertEqual(first.title, "one")
-        XCTAssertNil(memory.site(for: 1), "A work the checked website still has needs no detour")
+        let one = try await content.gallery(1)
+        XCTAssertEqual(one.title, "one")
+        XCTAssertTrue(memory.missingSites(for: 1).isEmpty, "A work the checked website still has needs no detour")
         XCTAssertNil(content.servingSite(for: 1))
 
         let moved = try await content.gallery(2)
         XCTAssertEqual(moved.title, "two")
-        XCTAssertEqual(memory.site(for: 2), "b.example")
+        XCTAssertEqual(memory.missingSites(for: 2), ["a.example"], "The website that deleted it is remembered")
         XCTAssertEqual(content.servingSite(for: 2), "b.example")
-        XCTAssertEqual(content.candidates(for: 2).first, "b.example")
-        let checkedBefore = await active.calls
+        XCTAssertEqual(content.candidates(for: 2), ["b.example", "c.example", "a.example"])
+        let checkedBefore = await first.calls
         _ = try await content.gallery(2)
-        let checkedAfter = await active.calls
-        XCTAssertEqual(checkedBefore, checkedAfter, "Once remembered, the checked website is not asked again first")
+        let checkedAfter = await first.calls
+        XCTAssertEqual(checkedBefore, checkedAfter, "A website that deleted the work is not asked first again")
 
         let image = try await content.image(GalleryPage(hash: "h", name: "1", width: 1, height: 1, hasAVIF: false, index: 0, sourceSite: "https://b.example/"),
                                             galleryID: 2, thumbnail: true)
         XCTAssertEqual(String(decoding: image, as: UTF8.self), "b.example", "Pages load from the website their work was read from")
 
+        // Switching websites to use what another one offers opens works there, wherever they opened before.
+        checked.site = "c.example"
+        let switched = try await content.gallery(2)
+        XCTAssertEqual(switched.title, "two")
+        XCTAssertNil(content.servingSite(for: 2), "The newly checked website serves the work")
+        checked.site = "b.example"
+        _ = try await content.gallery(1)
+        XCTAssertNil(content.servingSite(for: 1), "A work that opened on the first website opens on the checked one after a switch")
+        checked.site = "a.example"
+
         content.prefer("c.example", for: 3)
         XCTAssertEqual(content.candidates(for: 3), ["a.example", "c.example", "b.example"])
-        let third3 = try await content.gallery(3)
-        XCTAssertEqual(third3.title, "three")
+        let three = try await content.gallery(3)
+        XCTAssertEqual(three.title, "three")
+        XCTAssertEqual(memory.missingSites(for: 3), ["a.example"])
 
         do {
             _ = try await content.gallery(9)
             XCTFail("A work no website has stays missing")
         } catch { XCTAssertEqual(error as? ContentError, .galleryNotFound) }
 
-        memory.forget(site: "b.example")
-        XCTAssertNil(memory.site(for: 2))
+        memory.forget(site: "a.example")
+        XCTAssertTrue(memory.missingSites(for: 2).isEmpty)
+        XCTAssertEqual(content.candidates(for: 2).first, "a.example", "Forgetting asks the checked website first again")
     }
 
     // MARK: Filling from websites that block bulk reading
@@ -492,21 +506,22 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertEqual(CoverFillGuard.decision(in: defaults).0, .none)
     }
 
-    func testWorkSitesAreKeptAcrossLaunches() throws {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("work-sites-\(UUID().uuidString).plist")
+    func testDeletedWorksAreKeptAcrossLaunches() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("work-missing-\(UUID().uuidString).plist")
         defer { try? FileManager.default.removeItem(at: file) }
         let memory = WorkSiteMemory(file: file, limit: 3)
-        for id in 1...4 { memory.remember(Int64(id), site: "b.example") }
-        XCTAssertNil(memory.site(for: 1), "The oldest entries make room for new ones")
-        XCTAssertEqual(memory.site(for: 4), "b.example")
-        memory.remember(4, site: nil)
-        XCTAssertNil(memory.site(for: 4))
+        for id in 1...4 { memory.markMissing(Int64(id), on: "b.example") }
+        XCTAssertTrue(memory.missingSites(for: 1).isEmpty, "The oldest entries make room for new ones")
+        memory.markMissing(3, on: "c.example")
+        XCTAssertEqual(memory.missingSites(for: 3), ["b.example", "c.example"])
+        memory.markFound(4, on: "b.example")
+        XCTAssertTrue(memory.missingSites(for: 4).isEmpty)
         let saved = expectation(description: "saved")
         DispatchQueue.global().asyncAfter(deadline: .now() + 2.5) { saved.fulfill() }
         wait(for: [saved], timeout: 5)
         let reloaded = WorkSiteMemory(file: file, limit: 3)
-        XCTAssertEqual(reloaded.site(for: 3), "b.example")
-        XCTAssertNil(reloaded.site(for: 4))
+        XCTAssertEqual(reloaded.missingSites(for: 3), ["b.example", "c.example"])
+        XCTAssertTrue(reloaded.missingSites(for: 4).isEmpty)
     }
 
     // MARK: Work pages
@@ -524,8 +539,6 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertNotNil(extras.posted)
         XCTAssertEqual(extras.favoriteCategory, 2)
         XCTAssertEqual(extras.favoriteName, "Reading")
-        XCTAssertEqual(extras.torrentCount, 2)
-        XCTAssertEqual(extras.torrentsURL?.query, "gid=3000&t=0000000bb8")
         XCTAssertTrue(extras.hasMoreComments)
         XCTAssertTrue(extras.canRate)
         XCTAssertEqual(KeyedWorkPage.apiKey(in: Self.workPage), .init(uid: 1234567, key: "0123456789abcdef"))
@@ -547,19 +560,7 @@ final class SiteAccessTests: XCTestCase {
         XCTAssertFalse(unrated.canRate)
     }
 
-    func testTorrentsFavoritesCategoriesAndImageAllowance() throws {
-        let torrents = KeyedWorkPage.torrents(from: Self.torrentPage)
-        XCTAssertEqual(torrents.count, 1)
-        let torrent = try XCTUnwrap(torrents.first)
-        XCTAssertEqual(torrent.name, "Sample Work.zip")
-        XCTAssertEqual(torrent.size, "45.6 MiB")
-        XCTAssertEqual(torrent.seeds, 3)
-        XCTAssertEqual(torrent.peers, 1)
-        XCTAssertEqual(torrent.downloads, 120)
-        XCTAssertEqual(torrent.posted, "2024-03-05 12:00")
-        XCTAssertEqual(torrent.uploader, "seeder")
-        XCTAssertEqual(torrent.magnet?.absoluteString.hasPrefix("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"), true)
-
+    func testFavoritesCategoriesAndImageAllowance() throws {
         let categories = KeyedCatalogSource.favoriteCategories(in: Self.favoritesPage)
         XCTAssertEqual(categories.map(\.id), [0, 1, 9])
         XCTAssertEqual(categories.map(\.name), ["Favorites 0", "Reading", "Later"])
@@ -719,22 +720,12 @@ final class SiteAccessTests: XCTestCase {
     <tr><td class="grt1">Rating:</td><td><span id="rating_count">321</span></td></tr></table></div>
     <div id="gdf"><div id="fav"><div class="i" style="background-image:url(https://media.example/fav.png); background-position:0px -40px; margin-left:16px" title="Reading"></div></div>
     <a id="favoritelink" href="#" onclick="return popUp('https://keyed.example/gallerypopups.php?gid=3000&amp;t=0000000bb8&amp;act=addfav',675,415)">Reading</a></div>
-    <p class="g2 gsp"><a href="#" onclick="return popUp('https://keyed.example/gallerytorrents.php?gid=3000&amp;t=0000000bb8',610,590)">Torrent Download (2)</a></p>
     <script>var apiuid = 1234567; var apikey = "0123456789abcdef";</script>
     <div id="cdiv" class="gm">
     <div class="c1"><div class="c2"><div class="c3">Posted on 05 March 2024, 10:21 by: &nbsp; <a href="https://keyed.example/uploader/someone">someone</a></div><div class="c4 nosel">Uploader Comment</div><div class="c"></div></div><div class="c6" id="comment_0">Thanks for reading<br>Part 2 soon</div></div>
     <div class="c1"><div class="c2"><div class="c3">Posted on 06 March 2024, 11:00 by: &nbsp; <a href="https://keyed.example/index.php?showuser=42">reader</a>&nbsp; &nbsp; <a href="https://keyed.example/index.php?act=Msg">[PM]</a></div><div class="c5 nosel">Score <span id="comment_score_123">+15</span></div><div class="c"></div></div><div class="c6" id="comment_123">Great &amp; fun</div></div>
     </div>
     <div id="chd"><p>There are 12 more comments - <a href="https://keyed.example/g/3000/0000000bb8/?hc=1#comments">click to show all</a>.</p></div>
-    """#
-
-    static let torrentPage = #"""
-    <form method="post" action="https://keyed.example/gallerytorrents.php?gid=3000&amp;t=0000000bb8">
-    <div><table style="width:99%">
-    <tr><td style="width:190px"><span style="font-weight:bold">Posted:</span> <span>2024-03-05 12:00</span></td><td><span style="font-weight:bold">Size:</span> 45.6 MiB</td><td><span style="font-weight:bold">Seeds:</span> 3</td><td><span style="font-weight:bold">Peers:</span> 1</td><td><span style="font-weight:bold">Downloads:</span> 120</td></tr>
-    <tr><td colspan="5"><span style="font-weight:bold">Uploader:</span> seeder</td></tr>
-    <tr><td colspan="5"> &nbsp; <a href="https://tracker.example/get/3000/0123456789abcdef0123456789abcdef01234567.torrent?p=x">Sample Work.zip</a></td></tr>
-    </table></div></form>
     """#
 
     static let favoritesPage = #"""
@@ -753,6 +744,13 @@ private final class Recorder: @unchecked Sendable {
     private var recorded: [URLRequest] = []
     var requests: [URLRequest] { lock.withLock { recorded } }
     func add(_ request: URLRequest) { lock.withLock { recorded.append(request) } }
+}
+
+private struct CheckedSiteSource: ContentProviding {
+    let target: @Sendable () -> any ContentProviding
+    func gallery(_ id: Int64) async throws -> NativeGallery { try await target().gallery(id) }
+    func list(_ query: GalleryQuery, offset: Int, count: Int) async throws -> GalleryBatch { try await target().list(query, offset: offset, count: count) }
+    func image(_ page: GalleryPage, galleryID: Int64, thumbnail: Bool) async throws -> Data { try await target().image(page, galleryID: galleryID, thumbnail: thumbnail) }
 }
 
 private actor FakeSite: ContentProviding {

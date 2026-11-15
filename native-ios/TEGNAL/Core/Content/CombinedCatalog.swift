@@ -34,9 +34,6 @@ final class SiteContent: ContentProviding, WorkExtrasProviding, Sendable {
     func allComments(_ id: Int64) async throws -> [WorkComment] {
         try await SiteScope.$site.withValue(site) { try await inner.allComments(id) }
     }
-    func torrents(_ id: Int64) async throws -> [WorkTorrent] {
-        try await SiteScope.$site.withValue(site) { try await inner.torrents(id) }
-    }
     func rate(_ id: Int64, halfStars: Int) async throws -> (average: Double, count: Int) {
         try await SiteScope.$site.withValue(site) { try await inner.rate(id, halfStars: halfStars) }
     }

@@ -320,3 +320,13 @@ class GalleryWorkLinks {
   final void Function(int id) openVersion;
   final void Function(int id) openRelated;
 }
+
+/// Where text sits on the work information: boxes and buttons reach the page margin, and text and
+/// tags start this far inside it, in line with the text in the boxes, so they never look as if
+/// they stick out past the rounded buttons.
+const double galleryTextInset = 16;
+
+/// Boxes of rows on the work information: their corners, row height and the column their titles start at.
+const double galleryBoxRadius = 26;
+const double galleryRowHeight = 52;
+const double galleryIconColumn = 56;

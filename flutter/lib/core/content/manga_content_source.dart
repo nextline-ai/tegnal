@@ -239,7 +239,7 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
     await keyed.setFavorite(id, saved: saved, category: category, site: site);
   }
 
-  // MARK: Ratings, comments and torrents
+  // MARK: Ratings and comments
 
   @override
   Future<WorkExtras?> extras(int id) async {
@@ -253,13 +253,6 @@ class MangaContentSource extends ContentProviding implements WorkExtrasProviding
     final site = _prepareSite();
     if (await _resolve(site) != MangaBackend.keyed) return [];
     return keyed.allComments(id, site: site);
-  }
-
-  @override
-  Future<List<WorkTorrent>> torrents(int id) async {
-    final site = _prepareSite();
-    if (await _resolve(site) != MangaBackend.keyed) return [];
-    return keyed.torrents(id, site: site);
   }
 
   @override
