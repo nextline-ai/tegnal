@@ -18,8 +18,6 @@ struct FolderRuleEditor: View {
     /// Told the new folder's identity once it is saved.
     private let onCreated: ((String) -> Void)?
     private let fixedFolder: Bool
-    /// A folder made from the tag a search holds: its tags fill it once even when it is not smart.
-    private let startsFromTag: Bool
     @State private var name: String
     @State private var tag: String
     @State private var excluded = ""
@@ -44,13 +42,12 @@ struct FolderRuleEditor: View {
     @State private var error: String?
     @FocusState private var nameFocused: Bool
 
-    /// A new folder, filled from the tag a search already holds or kept filling as a smart folder.
+    /// A new folder, as a smart folder unless switched off; a search's tag comes filled in.
     init(booru: Bool = false, name: String = "", tag: String = "", smart: Bool = true, onCreated: ((String) -> Void)? = nil) {
         self.booru = booru
         self.onCreated = onCreated
         creatingFolder = true
         fixedFolder = false
-        startsFromTag = !tag.isEmpty
         _name = State(initialValue: name)
         _tag = State(initialValue: tag)
         _isSmart = State(initialValue: smart)
@@ -63,7 +60,6 @@ struct FolderRuleEditor: View {
         onCreated = nil
         creatingFolder = false
         fixedFolder = folder != nil
-        startsFromTag = false
         _name = State(initialValue: "")
         _tag = State(initialValue: "")
         _folder = State(initialValue: folder)
@@ -74,7 +70,7 @@ struct FolderRuleEditor: View {
     private var library: any SmartFolderLibrary { booru ? env.booru : env.database }
     private var query: WorkQuery { WorkQuery(tag, excluding: excluded) }
     /// A folder that is not smart holds only what is put in it, so its tags are hidden.
-    private var usesTags: Bool { isSmart || startsFromTag }
+    private var usesTags: Bool { isSmart }
     private var sourceChoices: [SmartFolderChoice] { choices.filter { $0.id != folder } }
     private var selected: Set<String> { (sources ?? defaultSources).subtracting(folder.map { [$0] } ?? []) }
     private var sourceSummary: String {
@@ -117,7 +113,6 @@ struct FolderRuleEditor: View {
             return L10n.text(booru ? "Images you save that have the tags below are put here on their own. An image you move yourself stays where you put it."
                                    : "Works you save that have the tags below are put here on their own. A work you move yourself stays where you put it.")
         }
-        if startsFromTag { return L10n.text("Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too.") }
         return L10n.text(booru ? "This folder holds only the images you put in it." : "This folder holds only the works you put in it.")
     }
     private var sourceFooter: String {
@@ -137,7 +132,7 @@ struct FolderRuleEditor: View {
     /// The switch files works already saved once, when Save is tapped; a smart folder alone
     /// only takes works saved after it.
     private var fillFooter: String {
-        if fillsSavedWorks || !isSmart {
+        if fillsSavedWorks {
             if booru { return L10n.text("When you tap Save, matching images you already saved move here.") }
             return L10n.text(copies && copyMatters ? "When you tap Save, matching works you already saved are copied here."
                                     : "When you tap Save, matching works you already saved move here.")

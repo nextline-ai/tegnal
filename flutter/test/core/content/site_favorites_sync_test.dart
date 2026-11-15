@@ -264,7 +264,7 @@ void main() {
     await sync.sync(host);
     expect(worksIn('Favorites 0'), [3]);
     expect(worksIn('Favorites 1'), [1]);
-    expect(database.folderIDs(5), [unfiled], reason: 'A favorite in a category without a folder comes to Unfiled');
+    expect(database.folderIDs(5), [folderNamed('Favorites 7')], reason: 'A category filled on the website later gets its own folder');
 
     // Nothing changed: nothing is sent.
     final writes = site.writes;
@@ -294,6 +294,44 @@ void main() {
       1: {10},
       2: {10, 11},
     });
+  });
+
+  test('a category folder that went missing comes back with its works, and the website keeps them', () async {
+    await sync.setUp(host);
+    database.deleteFolder(folderNamed('Favorites 0'));
+    expect(database.folderIDs(1), [database.unfiledFolderID()]);
+    await sync.sync(host, pull: false);
+    expect(worksIn('Favorites 0'), [1, 2]);
+    expect(database.folderIDs(1), [folderNamed('Favorites 0')], reason: 'It leaves Unfiled again');
+    expect(site.members, {
+      1: {0},
+      2: {0},
+      3: {1},
+    }, reason: "The website's favorites stay as they were");
+  });
+
+  test('a category filled on the website later gets its own folder', () async {
+    await sync.setUp(host);
+    expect(sync.store.state(host)?.unassigned, 2);
+    site.members[7] = {3};
+    await sync.sync(host);
+    expect(worksIn('Favorites 3'), [7]);
+  });
+
+  test('a synced folder is kept only while signed in, and signing in again sets the sync up afresh', () async {
+    await sync.setUp(host);
+    final folder = folderNamed('Favorites 0');
+    expect(sync.isSiteFavoritesFolder(folder), isTrue);
+    expect(sync.isSiteFavoritesFolder(database.unfiledFolderID()), isFalse);
+    SiteAccount.signOutAt(host);
+    sync.forget(host);
+    expect(sync.isSiteFavoritesFolder(folder), isFalse);
+    expect(sync.store.state(host), isNull);
+    expect(sync.store.isDeclined(host), isFalse, reason: 'Signing out is not turning the sync off');
+    expect(SiteAccount.signIn(const [SiteCookie(name: 'ipb_member_id', value: '7'), SiteCookie(name: 'ipb_pass_hash', value: 'x')], host: host), isTrue);
+    await sync.setUp(host);
+    expect(database.listFolders().where((folder) => folder.name == 'Favorites 0'), hasLength(1), reason: 'The folder of the same name is used again');
+    expect(sync.isSiteFavoritesFolder(folder), isTrue);
   });
 
   test('a website that keeps the account out gets no folders, and turning the sync off keeps it off', () async {

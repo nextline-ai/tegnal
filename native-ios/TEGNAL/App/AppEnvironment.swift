@@ -845,6 +845,9 @@ public final class AppEnvironment: @unchecked Sendable {
         }
         guard !host.isEmpty else { return }
         SiteAccount.signOut(host: host)
+        // The folders stay as plain folders; signing in again sets them up afresh.
+        SiteFavoriteFolders.shared.remove(site, declined: false)
+        favoriteFoldersRevision += 1
         if site == mangaSiteAddress { siteAccountSignedIn = false }
         siteSignInFinished(site: site)
         // The sign-in pages share the website's browser profile; it must not sign the account back in.
@@ -946,17 +949,44 @@ public final class AppEnvironment: @unchecked Sendable {
         guard let favorites = try? await SiteContent.for(site).accountFavoriteLists() else { return }
         do {
             var state = SiteFavoriteFolders.State(exclusive: favorites.exclusive)
-            let folders = try database.listFolders()
-            for category in favorites.categories where category.count > 0 {
-                let folder = try folders.first { $0.name == category.name } ?? database.createFolder(name: category.name)
-                guard let id = folder.id else { continue }
-                state.folders[category.id] = try database.identity(ofFolder: id)
-            }
+            _ = try linkCategoryFolders(favorites, state: &state)
             state.unassigned = favorites.spareCategory(besides: Set(state.folders.keys))
             store.setState(state, for: site)
             favoriteFoldersRevision += 1
             try await syncSiteFavorites(site: site, remote: favorites)
         } catch {}
+    }
+
+    /// Gives each favorites category that holds works a folder of its name, or the unlinked folder
+    /// already named so, apart from the category kept for other folders. Returns the categories
+    /// linked now, whose works the next merge takes from the website.
+    private func linkCategoryFolders(_ favorites: AccountFavorites, state: inout SiteFavoriteFolders.State) throws -> Set<Int> {
+        var linked = Set<Int>()
+        var folders = try database.listFolders()
+        let taken = Set(state.folders.values)
+        for category in favorites.categories where category.count > 0 && state.folders[category.id] == nil && category.id != state.unassigned {
+            let reusable = try folders.first { folder in
+                guard folder.name == category.name, let id = folder.id else { return false }
+                return try !taken.contains(database.identity(ofFolder: id))
+            }
+            let folder = try reusable ?? database.createFolder(name: category.name)
+            guard let id = folder.id else { continue }
+            if reusable == nil { folders.append(folder) }
+            state.folders[category.id] = try database.identity(ofFolder: id)
+            linked.insert(category.id)
+        }
+        return linked
+    }
+
+    /// Whether a folder stands for a signed-in website's favorites category. Such a folder can't be
+    /// deleted while the website keeps its account and the sync is on.
+    func isSiteFavoritesFolder(_ id: Int64) -> Bool {
+        _ = favoriteFoldersRevision
+        guard let identity = try? database.identity(ofFolder: id) else { return false }
+        let store = SiteFavoriteFolders.shared
+        return store.syncedSites.contains { site in
+            favoritesAccountHost(site) != nil && store.state(for: site)?.folders.values.contains(identity) == true
+        }
     }
 
     /// Stops keeping a website's favorites and its folders the same; both keep what they hold.
@@ -991,26 +1021,34 @@ public final class AppEnvironment: @unchecked Sendable {
         guard var state = store.state(for: site), favoritesAccountHost(site) != nil else { return nil }
         guard syncingFavorites.insert(site).inserted else { return nil }
         defer { syncingFavorites.remove(site) }
-        // A deleted category folder lets its category go; its works were moved to Unfiled.
-        var folders: [Int: Int64] = [:]
-        for (category, identity) in state.folders {
-            if let id = try database.folderID(identity: identity) { folders[category] = id } else { state.folders[category] = nil }
+        // A category folder that went missing is made again from the website's favorites, so the
+        // website is read even when only app changes were to be sent.
+        var missing = false
+        for (category, identity) in state.folders where try database.folderID(identity: identity) == nil {
+            state.folders[category] = nil
+            missing = true
         }
         let content = SiteContent.for(site)
         let remote: [Int64: Set<Int>]
         var favorites = fetched
-        if favorites == nil, pull || state.baseline == nil { favorites = try await content.accountFavoriteLists() }
+        if favorites == nil, pull || missing || state.baseline == nil { favorites = try await content.accountFavoriteLists() }
         if let favorites {
             remote = favorites.members
             state.exclusive = favorites.exclusive
             state.lastPull = Date()
             // A category or list removed on the website lets its folder go; the folder keeps its works.
             let existing = Set(favorites.categories.map(\.id))
-            for category in state.folders.keys where !existing.contains(category) { state.folders[category] = nil; folders[category] = nil }
+            for category in state.folders.keys where !existing.contains(category) { state.folders[category] = nil }
             if let unassigned = state.unassigned, !existing.contains(unassigned) {
                 state.unassigned = favorites.spareCategory(besides: Set(state.folders.keys))
             }
+            // Every category holding favorites keeps a folder: one filled on the website later, or one
+            // whose folder went missing, gets one now and takes its works from the website.
+            let linked = try linkCategoryFolders(favorites, state: &state)
+            if !linked.isEmpty, let baseline = state.baseline { state.baseline = baseline.mapValues { $0.subtracting(linked) } }
         } else { remote = state.baseline ?? [:] }
+        var folders: [Int: Int64] = [:]
+        for (category, identity) in state.folders { folders[category] = try database.folderID(identity: identity) }
         let exclusive = state.exclusive ?? true
         // Read after the website answers, so a change made meanwhile is not lost.
         let plan = FavoriteSyncPlan.make(local: try savedFavoritePlaces(folders: folders), remote: remote, base: state.baseline,

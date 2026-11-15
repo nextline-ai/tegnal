@@ -369,7 +369,7 @@ class _WorksGridViewState extends State<WorksGridView> {
             label: L10n.text('Create Folder from Results'),
             icon: CupertinoIcons.folder_badge_plus,
             size: 24,
-            onPressed: _works.isEmpty ? null : () => widget.routes.composeSmartFolder(context, tag: _search.text, smart: false),
+            onPressed: _works.isEmpty ? null : () => widget.routes.composeSmartFolder(context, tag: _search.text),
           ),
         Builder(
           builder: (context) => ToolbarIconButton(

@@ -96,6 +96,8 @@ abstract final class SiteAccountActions {
   static void signOut(ContentEnvironment content, {String? site}) {
     final host = scoped(site, () => MangaUrls.configuredHost);
     SiteAccount.signOutAt(host);
+    // The folders stay as plain folders; signing in again sets them up afresh.
+    SiteFavoritesSync.shared?.forget(site ?? ComicSites.active);
     signInChanged(content, site: site);
   }
 

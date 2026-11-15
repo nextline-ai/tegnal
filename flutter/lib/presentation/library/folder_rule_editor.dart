@@ -125,11 +125,8 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
   bool get _fixedFolder => !widget.creatingFolder && widget.folder != null;
   WorkQuery get _query => WorkQuery(_tag.text, excluding: _excluded.text);
 
-  /// A folder made from the tag a search holds: its tags fill it once even when it is not smart.
-  bool get _startsFromTag => widget.creatingFolder && widget.tag.isNotEmpty;
-
   /// A folder that is not smart holds only what is put in it, so its tags are hidden.
-  bool get _usesTags => _isSmart || _startsFromTag;
+  bool get _usesTags => _isSmart;
 
   /// Unfiled lets a work go once it is in another folder, so a folder that looks only there always
   /// moves; copying matters only where it also looks elsewhere.
@@ -166,7 +163,6 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
             : 'Works you save that have the tags below are put here on their own. A work you move yourself stays where you put it.',
       );
     }
-    if (_startsFromTag) return L10n.text('Off, the tags below fill this folder once when you tap Save. On, works you save later with them come here too.');
     return L10n.text(widget.booru ? 'This folder holds only the images you put in it.' : 'This folder holds only the works you put in it.');
   }
 
@@ -199,7 +195,7 @@ class _FolderRuleEditorState extends State<FolderRuleEditor> {
   /// The switch files works already saved once, when Save is tapped; a smart folder alone
   /// only takes works saved after it.
   String get _fillFooter {
-    if (_fillsSavedWorks || !_isSmart) {
+    if (_fillsSavedWorks) {
       if (widget.booru) return L10n.text('When you tap Save, matching images you already saved move here.');
       return L10n.text(
         _copies && _copyMatters

@@ -313,17 +313,47 @@ class SiteFavoritesSync extends ChangeNotifier {
       return;
     }
     final state = SiteFavoriteState(exclusive: favorites.exclusive);
-    final folders = database.listFolders();
-    for (final category in favorites.categories.where((category) => category.count > 0)) {
-      final folder = folders.where((folder) => folder.name == category.name).firstOrNull ?? database.createFolder(name: category.name);
-      final id = folder.id;
-      if (id == null) continue;
-      state.folders[category.id] = database.identityOfFolder(id);
-    }
+    _linkCategoryFolders(favorites, state);
     state.unassigned = favorites.spareCategory(besides: state.folders.keys.toSet());
     store.setState(state, site);
     notifyListeners();
     await sync(site, remote: favorites);
+  }
+
+  /// Gives each favorites category that holds works a folder of its name, or the unlinked folder
+  /// already named so, apart from the category kept for other folders. Returns the categories linked
+  /// now, whose works the next merge takes from the website.
+  Set<int> _linkCategoryFolders(AccountFavorites favorites, SiteFavoriteState state) {
+    final linked = <int>{};
+    final folders = database.listFolders();
+    final taken = state.folders.values.toSet();
+    for (final category in favorites.categories) {
+      if (category.count == 0 || state.folders.containsKey(category.id) || category.id == state.unassigned) continue;
+      final reusable = folders
+          .where((folder) => folder.name == category.name && folder.id != null && !taken.contains(database.identityOfFolder(folder.id!)))
+          .firstOrNull;
+      final folder = reusable ?? database.createFolder(name: category.name);
+      final id = folder.id;
+      if (id == null) continue;
+      if (reusable == null) folders.add(folder);
+      state.folders[category.id] = database.identityOfFolder(id);
+      linked.add(category.id);
+    }
+    return linked;
+  }
+
+  /// Whether a folder stands for a signed-in website's favorites category. Such a folder can't be
+  /// deleted while the website keeps its account and the sync is on.
+  bool isSiteFavoritesFolder(int id) {
+    final identity = database.identityOfFolder(id);
+    return store.syncedSites.any((site) => accountHost(site) != null && (store.state(site)?.folders.containsValue(identity) ?? false));
+  }
+
+  /// Forgets a website's sync when it signs out: the folders stay as plain folders, and signing in
+  /// again sets them up afresh.
+  void forget(String site) {
+    store.remove(site, declined: false);
+    notifyListeners();
   }
 
   /// Stops keeping a website's favorites and its folders the same; both keep what they hold.
@@ -365,19 +395,17 @@ class SiteFavoritesSync extends ChangeNotifier {
     if (state == null || accountHost(site) == null) return null;
     if (!_syncing.add(site)) return null;
     try {
-      // A deleted category folder lets its category go; its works were moved to Unfiled.
-      final folders = <int, int>{};
+      // A category folder that went missing is made again from the website's favorites, so the
+      // website is read even when only app changes were to be sent.
+      var missing = false;
       for (final MapEntry(key: category, value: identity) in {...state.folders}.entries) {
-        final id = database.folderIDForIdentity(identity);
-        if (id != null) {
-          folders[category] = id;
-        } else {
-          state.folders.remove(category);
-        }
+        if (database.folderIDForIdentity(identity) != null) continue;
+        state.folders.remove(category);
+        missing = true;
       }
       final source = _siteContent(site);
       var favorites = remote;
-      if (favorites == null && (pull || state.baseline == null)) favorites = await source.accountFavoriteLists();
+      if (favorites == null && (pull || missing || state.baseline == null)) favorites = await source.accountFavoriteLists();
       final Map<int, Set<int>> answer;
       if (favorites != null) {
         answer = favorites.members;
@@ -385,17 +413,22 @@ class SiteFavoritesSync extends ChangeNotifier {
         state.lastPull = DateTime.now();
         // A category or list removed on the website lets its folder go; the folder keeps its works.
         final existing = {for (final category in favorites.categories) category.id};
-        for (final category in state.folders.keys.toList()) {
-          if (existing.contains(category)) continue;
-          state.folders.remove(category);
-          folders.remove(category);
-        }
+        state.folders.removeWhere((category, _) => !existing.contains(category));
         if (state.unassigned case final unassigned? when !existing.contains(unassigned)) {
           state.unassigned = favorites.spareCategory(besides: state.folders.keys.toSet());
+        }
+        // Every category holding favorites keeps a folder: one filled on the website later, or one
+        // whose folder went missing, gets one now and takes its works from the website.
+        final linked = _linkCategoryFolders(favorites, state);
+        if (linked.isNotEmpty && state.baseline != null) {
+          state.baseline = state.baseline!.map((id, categories) => MapEntry(id, categories.difference(linked)));
         }
       } else {
         answer = state.baseline ?? const {};
       }
+      final folders = <int, int>{
+        for (final MapEntry(key: category, value: identity) in state.folders.entries) category: ?database.folderIDForIdentity(identity),
+      };
       // Read after the website answers, so a change made meanwhile is not lost.
       final plan = FavoriteSyncPlan.make(
         local: _savedPlaces(folders),
