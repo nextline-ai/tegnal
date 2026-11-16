@@ -9,6 +9,7 @@ import '../storage/work_query.dart';
 import '../support/preferences.dart';
 import 'gallery_content.dart';
 import 'reading_queue.dart';
+import '../support/privacy_settings.dart';
 
 /// How many recently opened works or images a list keeps: none, or up to 500 in steps of ten,
 /// 50 unless changed.
@@ -166,7 +167,7 @@ class RecentWorks extends ChangeNotifier {
   );
 
   void opened(RecentWork work, {Future<Uint8List?>? cover}) {
-    if (_limit == 0) return;
+    if (_limit == 0 || PrivacySettings.isIncognito) return;
     _entries = [work, ..._entries.where((entry) => entry.id != work.id)];
     _trim();
     _save();
@@ -347,7 +348,7 @@ class RecentImages extends ChangeNotifier {
   }
 
   void opened(BooruPost post, {DateTime? at}) {
-    if (_limit == 0) return;
+    if (_limit == 0 || PrivacySettings.isIncognito) return;
     _entries = [RecentImage(post: post, openedAt: at ?? DateTime.now()), ..._entries.where((entry) => entry.id != post.id)];
     _trim();
     _save();

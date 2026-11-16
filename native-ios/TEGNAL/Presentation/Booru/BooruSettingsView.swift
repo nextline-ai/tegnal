@@ -361,6 +361,7 @@ struct BooruMoreView: View {
                     SettingsInfoButton(title: "Clear Image Cache", message: "Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed.")
                 }
             } header: { Text(L10n.text("Data & Storage")) }
+            PrivacySecuritySection()
             SettingsSupportSection(showOnboarding: $showOnboarding, booru: true)
             DeveloperInfoSection()
         }

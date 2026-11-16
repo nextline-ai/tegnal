@@ -103,7 +103,7 @@ extension RecentWork {
         opened(RecentWork(item: item, openedAt: date, language: gallery.language, type: gallery.type, tags: gallery.tags))
     }
     func opened(_ work: RecentWork) {
-        guard limit > 0 else { return }
+        guard limit > 0, !PrivacySettings.isIncognito else { return }
         entries.removeAll { $0.id == work.id }
         entries.insert(work, at: 0)
         trim()
@@ -212,6 +212,7 @@ extension RecentImage {
         save()
     }
     func opened(_ post: BooruPost, at date: Date = Date()) {
+        guard !PrivacySettings.isIncognito else { return }
         guard limit > 0 else { return }
         entries.removeAll { $0.id == post.id }
         entries.insert(RecentImage(post: post, openedAt: date), at: 0)

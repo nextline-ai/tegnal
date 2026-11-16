@@ -92,7 +92,7 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
     func get(_ url: URL, limit: Int, range: Range<Int>? = nil, galleryID: Int64? = nil, timeout: TimeInterval = 20) async throws -> (Data, HTTPURLResponse) {
         guard Self.allows(url), limit > 0 else { throw URLError(.unsupportedURL) }
         let site = MangaUrls.home
-        var attempt = 0
+        var attempt = 0, triedCheck = false
         while true {
             try Task.checkCancellation()
             guard MangaUrls.home == site else { throw CancellationError() }
@@ -101,6 +101,11 @@ final class ContentTransport: NSObject, URLSessionDataDelegate, @unchecked Senda
                 try Task.checkCancellation()
                 guard MangaUrls.home == site else { throw CancellationError() }
                 return result
+            } catch ContentError.verificationRequired where !triedCheck {
+                // The bot check is tried once out of sight before the person is asked to open it.
+                triedCheck = true
+                guard await BotCheckAutoPass.attempt(url) else { throw ContentError.verificationRequired }
+                try Task.checkCancellation()
             } catch {
                 try Task.checkCancellation()
                 guard MangaUrls.home == site else { throw CancellationError() }

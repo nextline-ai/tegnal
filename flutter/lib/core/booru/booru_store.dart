@@ -13,6 +13,7 @@ import '../taste/taste_models.dart';
 import '../taste/taste_store.dart';
 import 'booru_models.dart';
 import '../storage/folder_palette.dart';
+import '../support/privacy_settings.dart';
 
 class FavoriteRecord {
   const FavoriteRecord({required this.post, required this.folderID, required this.savedAt});
@@ -608,7 +609,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
 
   void recordSearch(String query, {required String serverID}) {
     final value = query.trim();
-    if (value.isEmpty) return;
+    if (value.isEmpty || PrivacySettings.isIncognito) return;
     database.write((db) {
       db.execute('DELETE FROM history WHERE used_at < ?', [SearchRetention.cutoff(preferences.booruDefaults)]);
       db.execute('INSERT OR REPLACE INTO history VALUES (?, ?, ?)', [serverID, value, unixSeconds()]);

@@ -58,6 +58,7 @@ public struct SettingsView: View {
                     Label(L10n.text("Image Cache"), systemImage: "photo.stack")
                 }.accessibilityIdentifier("settings.imageCache")
             } header: { Text(L10n.text("Data & Storage")) }
+            PrivacySecuritySection()
             SettingsSupportSection(showOnboarding: $showOnboarding)
             DeveloperInfoSection()
         }

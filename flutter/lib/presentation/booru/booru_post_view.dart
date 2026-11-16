@@ -38,6 +38,7 @@ import '../content/viewer_quick_menu.dart';
 import '../../core/content/recent_works.dart';
 import '../../core/support/app_platform.dart';
 import '../design/desktop_input.dart';
+import '../../core/support/privacy_settings.dart';
 
 /// The next page of a feed, handed to an open viewer.
 class BooruViewerBatch {
@@ -717,7 +718,7 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
 
   Future<void> _share() async {
     try {
-      await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('share', {'text': _server.pageURLFor(_post)});
+      await AppAway.run(() => const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('share', {'text': _server.pageURLFor(_post)}));
     } on Object {
       await Clipboard.setData(ClipboardData(text: _server.pageURLFor(_post)));
     }

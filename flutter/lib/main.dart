@@ -41,6 +41,8 @@ import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
 import 'core/content/recent_works.dart';
 import 'core/support/app_platform.dart';
+import 'core/support/privacy_settings.dart';
+import 'presentation/settings/site_account_section.dart';
 
 /// `--dart-define=TEGNAL_FIXTURE=on` (or a comma-separated list of [FixtureOption] names,
 /// plus `setup` to start without a connected website) runs offline with the native UI
@@ -164,6 +166,7 @@ Future<AppServices> _launch() async {
   final preparingStorage = PerfTrace.span('launch storage', AppStorage.prepare);
   final preferences = await PerfTrace.span('launch preferences', AppPreferences.load);
   ContentPreferences.defaults = preferences.defaults;
+  PrivacySettings.load();
   ReaderPreferences.install(preferences);
   // Whether AI translation can be on; asked early, as Translate needs the answer.
   unawaited(AITranslationModel.check());
@@ -183,6 +186,7 @@ Future<AppServices> _launch() async {
   ContentTransport.defaultFetcher = () => network;
   if (AppPlatform.hasWebView) {
     ContentTransport.shared = ContentTransport(browserFetch: ContentBrowserTransport.get, browserPost: ContentBrowserTransport.post);
+    if (AppPlatform.hasWebView) ContentTransport.botCheckSolver = BotCheckAutoPass.attempt;
     SiteAccount.listeners.add(ContentBrowserTransport.reset);
   }
   // Image servers' API keys and validated cookies stay in the same keystore.

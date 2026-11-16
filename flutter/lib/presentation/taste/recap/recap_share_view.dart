@@ -21,6 +21,7 @@ import 'recap_cover_art.dart';
 import 'recap_style.dart';
 import '../../../core/support/app_platform.dart';
 import '../../../core/support/document_files.dart';
+import '../../../core/support/privacy_settings.dart';
 
 enum _ShareFormat {
   story(Size(360, 640)),
@@ -69,7 +70,7 @@ class _RecapShareViewState extends State<RecapShareView> {
           // A computer has no share sheet; the card is saved where the person chooses.
           await const DocumentFiles().createDocument(name: 'TEGNAL Recap.png', source: file, mimeType: 'image/png');
         } else {
-          await _screen.invokeMethod<void>('shareImage', {'path': file.path, 'title': L10n.text('My TEGNAL Recap')});
+          await AppAway.run(() => _screen.invokeMethod<void>('shareImage', {'path': file.path, 'title': L10n.text('My TEGNAL Recap')}));
         }
       }
     } on Object catch (error) {

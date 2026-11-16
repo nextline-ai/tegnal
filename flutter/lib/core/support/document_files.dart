@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_platform.dart';
+import 'privacy_settings.dart';
 
 /// The system document picker: on the phone through `work.nextline.tegnal/files` in
 /// `MainActivity`, on a computer through its own save and open dialogs. Saving and opening
@@ -27,7 +28,7 @@ class DocumentFiles {
       await source.copy(location.path);
       return true;
     }
-    return await _channel.invokeMethod<bool>('createDocument', {'name': name, 'mimeType': mimeType, 'sourcePath': source.path}) ?? false;
+    return AppAway.run(() async => await _channel.invokeMethod<bool>('createDocument', {'name': name, 'mimeType': mimeType, 'sourcePath': source.path}) ?? false);
   }
 
   /// A copy of the picked document, or null when cancelled. Callers delete the copy when done,
@@ -39,7 +40,7 @@ class DocumentFiles {
       final folder = await Directory.systemTemp.createTemp('tegnal-open-');
       return File(file.path).copy('${folder.path}/${file.name}');
     }
-    final path = await _channel.invokeMethod<String>('openDocument', {'mimeTypes': mimeTypes});
+    final path = await AppAway.run(() => _channel.invokeMethod<String>('openDocument', {'mimeTypes': mimeTypes}));
     return path == null ? null : File(path);
   }
 
@@ -66,7 +67,7 @@ class DocumentFiles {
       final path = await FileSelectorPlatform.instance.getDirectoryPathWithOptions(const FileDialogOptions(canCreateDirectories: true));
       return path == null ? null : (path: path, name: path.split(Platform.pathSeparator).where((part) => part.isNotEmpty).lastOrNull ?? path);
     }
-    final picked = await _channel.invokeMapMethod<String, Object?>('pickFolder');
+    final picked = await AppAway.run(() => _channel.invokeMapMethod<String, Object?>('pickFolder'));
     if (picked == null) return null;
     return (path: picked['path']! as String, name: picked['name']! as String);
   }

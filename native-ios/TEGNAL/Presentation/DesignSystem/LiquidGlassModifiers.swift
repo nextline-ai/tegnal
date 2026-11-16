@@ -104,13 +104,23 @@ public extension Color {
 
 public struct LiquidGlassTitleCapsule: View {
     public let title: String
+    @SwiftUI.AppStorage(PrivacySettings.incognitoKey, store: ContentPreferences.defaults) private var incognito = false
 
     public init(_ title: String) {
         self.title = title
     }
 
     public var body: some View {
-        Text(title)
+        HStack(spacing: 5) {
+            // Every root title shows when nothing is being recorded.
+            if incognito {
+                Image(systemName: "eye.slash")
+                    .font(.system(size: 13, weight: .bold))
+                    .accessibilityLabel(L10n.text("Incognito Mode"))
+                    .accessibilityIdentifier("header.incognito")
+            }
+            Text(title)
+        }
             .font(.system(size: 15, weight: .bold))
             .foregroundColor(.primary)
             .padding(.horizontal, 16)

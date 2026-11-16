@@ -55,6 +55,8 @@ struct TasteStore: Sendable {
         }
     }
     static func record(_ kind: TasteEvent.Kind, item: TasteItem, context: DiscoveryContext = .unknown, db: Database, at: Date = Date()) throws {
+        // Incognito keeps browsing out of taste learning; saves and library changes still count.
+        if [.open, .search].contains(kind), PrivacySettings.isIncognito { return }
         let control = try control(db)
         guard control.enabled else { return }
         if kind == .metadata {
@@ -73,6 +75,7 @@ struct TasteStore: Sendable {
     }
     /// Each viewing is its own open event, so existing peers count it as the open it is.
     static func recordDwell(_ dwell: TasteDwell, item: TasteItem, context: DiscoveryContext, db: Database, at: Date = Date()) throws {
+        guard !PrivacySettings.isIncognito else { return }
         let control = try control(db)
         guard control.enabled else { return }
         var event = TasteEvent(kind: .open, item: item, context: context, dwell: dwell)

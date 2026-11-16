@@ -5,6 +5,7 @@ import '../design/glass.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import 'app_state.dart';
+import '../../core/support/privacy_settings.dart';
 
 /// Height of the root navigation bar below the status bar.
 const double rootBarHeight = 54;
@@ -114,9 +115,22 @@ class TitleCapsule extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20.5),
         child: Center(
           widthFactor: 1,
-          child: Text(
-            title,
-            style: TegnalType.style(15, weight: FontWeight.w700, color: TegnalColors.label.resolveFrom(context)),
+          // Every root title shows when nothing is being recorded.
+          child: ValueListenableBuilder<bool>(
+            valueListenable: PrivacySettings.incognito,
+            builder: (context, incognito, _) {
+              final label = TegnalColors.label.resolveFrom(context);
+              final text = Text(title, style: TegnalType.style(15, weight: FontWeight.w700, color: label));
+              if (!incognito) return text;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Semantics(label: L10n.text('Incognito Mode'), child: Icon(CupertinoIcons.eye_slash, size: 15, color: label)),
+                  const SizedBox(width: 5),
+                  text,
+                ],
+              );
+            },
           ),
         ),
       ),

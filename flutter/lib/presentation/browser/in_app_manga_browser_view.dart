@@ -14,6 +14,7 @@ import '../design/tegnal_theme.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import '../../core/support/privacy_settings.dart';
 
 /// Which addresses the website fallback opens (`EmbeddedBrowserModel.allows`).
 abstract final class EmbeddedBrowserPolicy {
@@ -34,7 +35,7 @@ abstract final class EmbeddedBrowserPolicy {
 /// Shares an address through the system share sheet, or copies it when sharing is unavailable.
 Future<void> shareBrowserAddress(String address) async {
   try {
-    await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('share', {'text': address});
+    await AppAway.run(() => const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('share', {'text': address}));
   } on Object {
     await Clipboard.setData(ClipboardData(text: address));
   }

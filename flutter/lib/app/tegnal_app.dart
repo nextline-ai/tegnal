@@ -60,6 +60,7 @@ import 'privacy_cover.dart';
 import '../core/content/recent_works.dart';
 import '../core/support/app_platform.dart';
 import '../presentation/design/desktop_input.dart';
+import 'app_lock.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
@@ -191,7 +192,10 @@ class _TegnalAppState extends State<TegnalApp> {
           theme: tegnalTheme(brightness),
           builder: (context, child) => ReadingQueueScope(
             queue: widget.services.readingQueue,
-            child: PrivacyCoverSync(preferences: widget.services.preferences.defaults, child: child!),
+            child: PrivacyCoverSync(
+              preferences: widget.services.preferences.defaults,
+              child: AppLockGate(child: child!),
+            ),
           ),
           home: _Root(state: _state, services: widget.services),
         );

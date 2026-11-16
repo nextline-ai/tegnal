@@ -24,7 +24,7 @@ extension AppDatabase {
     }
     func recordSearch(_ query: String) throws {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
+        guard !value.isEmpty, !PrivacySettings.isIncognito else { return }
         try dbWriter.write { db in
             try db.execute(sql: "INSERT OR REPLACE INTO search_history VALUES (?, ?)", arguments: [value, Date().timeIntervalSince1970])
             try db.execute(sql: "DELETE FROM search_history WHERE used_at < ?", arguments: [SearchRetention.cutoff(booru: false)])
