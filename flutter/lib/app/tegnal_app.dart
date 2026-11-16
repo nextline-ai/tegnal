@@ -11,7 +11,6 @@ import '../core/content/site_favorites_sync.dart';
 import '../core/content/cover_queue.dart';
 import '../core/downloads/download_store.dart';
 import '../core/support/mode_settings.dart';
-import '../core/booru/booru_models.dart' show BooruSafeRating;
 import '../core/taste/taste_controller.dart';
 import '../core/sync/library_drive_sync.dart';
 import '../core/storage/app_database.dart';
@@ -107,14 +106,7 @@ class AppServices {
       },
     );
     invitation = DiscordInvitation(preferences.defaults);
-    taste = TasteController(library: database, images: booru, content: content, booruSource: booruSource, comicSource: content.source, booruQuery: _booruQuery);
-  }
-
-  /// `booruQuery`: Safe Mode adds its rating tag to recommendation searches too.
-  String _booruQuery(String query) {
-    final defaults = preferences.defaults;
-    if (!(defaults.boolean('booru.safeMode') ?? false) || !booru.needsSafeRating) return query;
-    return (BooruSafeRating.fromRawValue(defaults.string('booru.safeRating')) ?? BooruSafeRating.general).applyingDefault(query);
+    taste = TasteController(library: database, images: booru, content: content, booruSource: booruSource, comicSource: content.source);
   }
 
   final AppPreferences preferences;
@@ -237,9 +229,9 @@ class _RootState extends State<_Root> {
   @override
   void initState() {
     super.initState();
-    state.keepsImageMode = () => _booru.safeMode;
-    // Saved images that do not fit Safe Mode's age guide stay hidden.
-    services.booru.safeRating = () => _booru.safeMode ? _booru.safeRating : null;
+    // Safe Mode keeps Saved and Explore to Safebooru; images saved from other servers stay hidden.
+    services.booru.safeMode = () => _booru.safeMode;
+    services.booru.applySafeMode();
     // The reader adds to Recently Opened Works from the first work it opens.
     services.recentWorks;
     services.recentImages;
@@ -365,8 +357,11 @@ class _RootState extends State<_Root> {
         ),
       ),
       resetSettings: () {
+        final wasSafe = _booru.safeMode;
         ModeSettingsReset.reset(booru: true, content: services.content, preferences: services.preferences);
+        if (wasSafe) services.booru.leaveSafeMode();
         services.booru.safeModeChanged();
+        state.appearanceChanged();
       },
       sync: AppPlatform.hasDriveSync ? (context) => DriveSyncSection(sync: services.sync) : null,
       invitation: (context) => DiscordInvitationBanner(invitation: services.invitation),
@@ -433,6 +428,7 @@ class _RootState extends State<_Root> {
       ),
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
+    safeMode: (context) => SafeModeSection(booru: _booru),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
@@ -461,12 +457,12 @@ class _RootState extends State<_Root> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ImportReminderBanner(imports: _imports),
-                  TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
+                  if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
                 ],
               ),
               height:
                   (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
-                  (services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
+                  (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
               child: IndexedStack(
                 index: state.mode == AppMode.manga ? 0 : 1,
                 children: [
@@ -524,38 +520,58 @@ class _RootState extends State<_Root> {
     ),
   );
 
-  Widget _mangaTabs() => RootTabView(
-    state: state,
-    queue: services.readingQueue,
-    readQueued: _readQueued,
-    showQueue: _showQueue,
-    pages: {
-      AppTab.folders: TabNavigator(
-        active: state.mode == AppMode.manga && state.tab == AppTab.folders,
-        builder: (context) => FoldersView(state: state, routes: _library),
-      ),
-      AppTab.works: TabNavigator(
-        active: state.mode == AppMode.manga && state.tab == AppTab.works,
-        builder: (context) => _ExploreRoot(
-          state: state,
-          services: services,
-          importLinks: WebsiteImportLinks(imports: _imports),
+  /// Safe Mode keeps Comics Mode to Safebooru's pools, so what comes from comics websites stays out of sight.
+  bool get _hidesComics => state.mode == AppMode.manga && _booru.safeMode;
+
+  Widget _mangaTabs() {
+    final safe = _booru.safeMode;
+    // Each tab's navigator starts afresh when Safe Mode swaps its root screen.
+    Key key(AppTab tab) => ValueKey('manga.${tab.name}.$safe');
+    return RootTabView(
+      state: state,
+      queue: safe ? null : services.readingQueue,
+      readQueued: _readQueued,
+      showQueue: _showQueue,
+      pages: {
+        AppTab.folders: TabNavigator(
+          key: key(AppTab.folders),
+          active: state.mode == AppMode.manga && state.tab == AppTab.folders,
+          builder: (context) => safe ? SafeModeComicsPlaceholder(state: state, title: 'Saved') : FoldersView(state: state, routes: _library),
         ),
-      ),
-      AppTab.artists: TabNavigator(
-        active: state.mode == AppMode.manga && state.tab == AppTab.artists,
-        builder: (context) => CollectionsView(state: state, routes: _library, preferences: services.preferences.defaults),
-      ),
-      AppTab.settings: TabNavigator(
-        active: state.mode == AppMode.manga && state.tab == AppTab.settings,
-        builder: (context) => SettingsView(dependencies: _settings),
-      ),
-      AppTab.insights: TabNavigator(
-        active: state.mode == AppMode.manga && state.tab == AppTab.insights,
-        builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.comics, isRoot: true),
-      ),
-    },
-  );
+        AppTab.works: TabNavigator(
+          key: key(AppTab.works),
+          active: state.mode == AppMode.manga && state.tab == AppTab.works,
+          builder: (context) {
+            // Safe Mode browses Safebooru's pools, as before a comics website is connected.
+            final server = _booru.store.selectedServers.firstOrNull;
+            if (safe && server != null) return BooruPoolsView(booru: _booru, server: server, root: state);
+            return _ExploreRoot(
+              state: state,
+              services: services,
+              importLinks: WebsiteImportLinks(imports: _imports),
+            );
+          },
+        ),
+        AppTab.artists: TabNavigator(
+          key: key(AppTab.artists),
+          active: state.mode == AppMode.manga && state.tab == AppTab.artists,
+          builder: (context) => safe
+              ? SafeModeComicsPlaceholder(state: state, title: 'Tags')
+              : CollectionsView(state: state, routes: _library, preferences: services.preferences.defaults),
+        ),
+        AppTab.settings: TabNavigator(
+          active: state.mode == AppMode.manga && state.tab == AppTab.settings,
+          builder: (context) => SettingsView(dependencies: _settings),
+        ),
+        AppTab.insights: TabNavigator(
+          key: key(AppTab.insights),
+          active: state.mode == AppMode.manga && state.tab == AppTab.insights,
+          builder: (context) =>
+              safe ? SafeModeComicsPlaceholder(state: state, title: 'Smart') : TasteDashboard(taste: _taste, mode: TasteMode.comics, isRoot: true),
+        ),
+      },
+    );
+  }
 }
 
 /// Explore, or the website setup until a comics website is connected.

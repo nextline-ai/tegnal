@@ -19,8 +19,8 @@ struct BooruFavoritesView: View {
     private var posts: [BooruPost] { store.visibleFavorites() }
     var body: some View {
         let geometry = ArtworkGridGeometry(width: width,
-            columns: typeSize.isAccessibilitySize ? 1 : env.folderColumns(for: .booru),
-            minimum: sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: .booru))
+            columns: typeSize.isAccessibilitySize ? 1 : ArtworkGridGeometry.columns(chosen: env.folderColumns(for: .booru), width: width, minimum: sizeClass == .regular ? 240 : 160),
+            minimum: sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: .booru), maximumColumns: 12)
         ScrollView {
             VStack(spacing: 0) {
                 NavigationLink { BooruFolderContentsView(source: source) } label: {

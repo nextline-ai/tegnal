@@ -47,6 +47,7 @@ class SettingsDependencies {
     this.sync,
     this.invitation,
     this.tasteSettings,
+    this.safeMode,
     this.recentWorks,
     this.openWork,
   });
@@ -59,6 +60,9 @@ class SettingsDependencies {
 
   /// The Taste Analysis row, between search history and sync.
   final Widget Function(BuildContext context)? tasteSettings;
+
+  /// The Safe Mode switch, reachable from Comics Mode too, which Safe Mode keeps to Safebooru's pools.
+  final Widget Function(BuildContext context)? safeMode;
 
   final AppState state;
   final ContentEnvironment content;
@@ -128,7 +132,8 @@ class _SettingsViewState extends State<SettingsView> {
     final theme = _defaults.string('app_theme') ?? 'dark';
     const automatic = 0;
     final columnOptions = [(automatic, L10n.text('Automatic')), for (var count = 1; count <= 5; count++) (count, '$count')];
-    const columnHelp = 'Automatic fits the columns to the screen width. Choose a number to keep the layout fixed.';
+    const columnHelp =
+        'Automatic fits the columns to the screen, and cards grow a little on larger screens such as tablets. A number sets the columns on a phone; larger screens add columns in proportion.';
     return ColoredBox(
       color: FormColors.listBackground.resolveFrom(context),
       child: Stack(
@@ -391,6 +396,7 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                 ),
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
+                if (_deps.safeMode != null) ...[settingsSectionGap, _deps.safeMode!(context)],
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
                 settingsSectionGap,
                 section(

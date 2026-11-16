@@ -90,6 +90,58 @@ void main() {
     expect(session.balloons(gallery.pages[0].hash), isNull);
   });
 
+  test('zoomed reading places, merges and skips areas already read', () {
+    TranslatedRegion region(double left, double top, {String text = 'x'}) => TranslatedRegion(text: text, left: left, top: top, width: 0.2, height: 0.1);
+    const area = Rect.fromLTWH(0.5, 0.25, 0.5, 0.5);
+    final placed = ZoomedText.place([region(0.2, 0.2), region(0.0, 0.4), region(0.8, 0.5)], area);
+    expect(placed, hasLength(2), reason: 'Text cut by the left edge of a zoomed area is read from elsewhere');
+    expect(placed.first.left, closeTo(0.6, 0.0001));
+    expect(placed.first.top, closeTo(0.35, 0.0001));
+    expect(placed.first.width, closeTo(0.1, 0.0001));
+    expect(placed.last.left + placed.last.width, closeTo(1.0, 0.0001), reason: 'The image edge itself is not a cut');
+    final merged = ZoomedText.merge([region(0.1, 0.1, text: 'A'), region(0.6, 0.6, text: 'B')], [region(0.65, 0.62, text: 'small')]);
+    expect([for (final item in merged) item.text], ['A', 'small']);
+    const zoomed = Rect.fromLTWH(0.2, 0.2, 0.4, 0.4);
+    expect(ZoomedText.needsReading(zoomed, const []), isTrue);
+    expect(ZoomedText.needsReading(const Rect.fromLTWH(0.25, 0.25, 0.35, 0.35), [zoomed]), isFalse, reason: 'Covered at a similar zoom');
+    expect(ZoomedText.needsReading(const Rect.fromLTWH(0.3, 0.3, 0.1, 0.1), [zoomed]), isTrue, reason: 'Zooming further reads again');
+    expect(ZoomedText.needsReading(const Rect.fromLTWH(0.5, 0.5, 0.4, 0.4), [zoomed]), isTrue, reason: 'Moving elsewhere reads again');
+    const size = Size(400, 800);
+    const image = Rect.fromLTWH(0, 100, 400, 600);
+    expect(ZoomedText.visibleArea(Matrix4.identity(), size, image), isNull, reason: 'Not zoomed in');
+    final twice = Matrix4.identity()..scaleByDouble(2, 2, 1, 1);
+    final visible = ZoomedText.visibleArea(twice, size, image)!;
+    expect(visible.left, closeTo(0, 0.0001));
+    expect(visible.top, closeTo(0, 0.0001));
+    expect(visible.width, closeTo(0.5, 0.0001));
+    expect(visible.height, closeTo(300 / 600, 0.0001));
+  });
+
+  test('a zoom before the page is translated is read once it is, and keeps its balloons', () async {
+    final source = FixtureContentSource();
+    final gallery = await source.gallery(1001);
+    final images = PageImageStore(source: source, allowsPrefetch: () => false);
+    final session = ReaderTranslationSession(MemoryPreferences())..toggle();
+    final page = gallery.pages[0];
+    Future<Uint8List> load() => images.data(page, galleryID: gallery.id);
+    const area = Rect.fromLTWH(0.5, 0.5, 0.4, 0.4);
+    session.readZoomed(key: page.hash, index: 0, area: area, load: load);
+    expect(calls, isEmpty, reason: 'The page-wide reading goes first');
+    session.follow(gallery, index: 0, count: 1, images: images);
+    await settle(session);
+    for (var i = 0; i < 300 && session.isWorking(page.hash); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    final balloons = session.balloons(page.hash)!;
+    expect(balloons, hasLength(2), reason: 'The page-wide balloon and the one the zoom found');
+    expect(balloons.last.left, closeTo(0.54, 0.0001));
+    expect(balloons.last.top, closeTo(0.54, 0.0001));
+    final read = calls.length;
+    session.readZoomed(key: page.hash, index: 0, area: area, load: load);
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(calls.length, read, reason: 'An area already read is not read again');
+  });
+
   test('a page without text is quiet; a real failure is reported once', () async {
     final source = FixtureContentSource();
     final gallery = await source.gallery(1001);

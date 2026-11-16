@@ -43,10 +43,17 @@ abstract final class GalleryPreviewLayout {
     return count * geometry.cellWidth / 0.72 + (count - 1) * geometry.spacing + geometry.margin * 2;
   }
 
-  /// Automatic shows twice the artwork columns; a chosen number is kept, up to 10.
+  /// Automatic shows twice the artwork columns, up to 16; a chosen number is kept, up to 10.
   static int columns({required double width, required int artworkColumns, required int previewColumns, required bool removesArtworkPadding}) {
     if (previewColumns > 0) return math.min(10, previewColumns);
-    return ArtworkGridGeometry(width: width, columns: artworkColumns, removesPadding: removesArtworkPadding).count * 2;
+    final artwork = ArtworkGridGeometry(
+      width: width,
+      columns: ArtworkGridGeometry.columnsFor(chosen: artworkColumns, width: width),
+      minimum: ArtworkGridGeometry.artworkMinimum(width),
+      removesPadding: removesArtworkPadding,
+      maximumColumns: 12,
+    );
+    return math.min(16, artwork.count * 2);
   }
 }
 

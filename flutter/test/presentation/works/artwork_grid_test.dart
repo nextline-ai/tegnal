@@ -6,6 +6,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/presentation/works/artwork_grid.dart';
 
 void main() {
+  test('artwork grows gently on larger screens and chosen columns follow it', () {
+    int automatic(double width) =>
+        ArtworkGridGeometry(width: width, columns: 0, minimum: ArtworkGridGeometry.artworkMinimum(width), removesPadding: false).count;
+    // Phones and foldables either way up keep their two or three phone-sized columns.
+    expect(automatic(382), 2);
+    expect(automatic(402), 2);
+    expect(automatic(440), 2);
+    expect(automatic(600), 3);
+    // A tablet shows three larger cards upright, three beside a side panel and four on its side.
+    expect(automatic(744), 3);
+    expect(automatic(1032), 3);
+    expect(automatic(1056), 3);
+    expect(automatic(1376), 4);
+    final tablet = ArtworkGridGeometry(width: 1032, columns: 0, minimum: ArtworkGridGeometry.artworkMinimum(1032), removesPadding: false);
+    final phone = ArtworkGridGeometry(width: 402, columns: 0, removesPadding: false);
+    expect(tablet.cellWidth, greaterThan(phone.cellWidth * 1.5));
+    // A chosen number stays as chosen up to a foldable on its side.
+    for (final width in [320.0, 390.0, 440.0, 466.0, 600.0]) {
+      for (var chosen = 1; chosen <= 5; chosen++) {
+        expect(ArtworkGridGeometry.columnsFor(chosen: chosen, width: width), chosen);
+      }
+    }
+    expect(ArtworkGridGeometry.columnsFor(chosen: 0, width: 1376), 0);
+    // Wider, it keeps its balance against Automatic, which shows two on a phone.
+    expect(ArtworkGridGeometry.columnsFor(chosen: 2, width: 1032), 3);
+    expect(ArtworkGridGeometry.columnsFor(chosen: 3, width: 1032), 5);
+    expect(ArtworkGridGeometry.columnsFor(chosen: 1, width: 1376), 2);
+    expect(ArtworkGridGeometry.columnsFor(chosen: 4, width: 1376), 8);
+    expect(ArtworkGridGeometry.columnsFor(chosen: 5, width: 2400), 12);
+    // Folders keep their own, larger minimum.
+    expect(ArtworkGridGeometry.folderMinimum(402), 160);
+    expect(ArtworkGridGeometry.columnsFor(chosen: 2, width: 1032, minimum: ArtworkGridGeometry.folderMinimum(1032)), 3);
+  });
+
   test('dense preview uses the same proportional spacing and corners as artwork', () {
     final regular = ArtworkGridGeometry(width: 390, columns: 2, removesPadding: false);
     final preview = ArtworkGridGeometry(width: 390, columns: 6, removesPadding: false, maximumColumns: 10);

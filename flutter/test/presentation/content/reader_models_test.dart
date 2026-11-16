@@ -19,7 +19,7 @@
 //   testPager… tests: zoom and paging behavior of the page views.
 // - Translation, Live Text and Mac tests (Apple frameworks), and testChunkedTransportEnforcesBodyLimitAndStatus
 //   (URLSession; the transport is covered in test/core/content).
-import 'dart:ui' show Offset, Rect;
+import 'dart:ui' show Offset, Rect, Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content/gallery_content.dart';
@@ -29,6 +29,20 @@ import 'package:tegnal/core/taste/taste_models.dart';
 import 'package:tegnal/presentation/content/reader_models.dart';
 
 void main() {
+  test('automatic pages per view shows two pages when the viewer is wider than tall', () {
+    final paged = ReaderMode.horizontal.rawValue;
+    expect(ReaderLayout.automatic, 0);
+    expect(ReaderLayout.resolved(0, size: const Size(402, 874), mode: paged), 1);
+    expect(ReaderLayout.resolved(0, size: const Size(1032, 1376), mode: paged), 1);
+    expect(ReaderLayout.resolved(0, size: const Size(1376, 1032), mode: paged), 2);
+    expect(ReaderLayout.resolved(0, size: const Size(678, 466), mode: ReaderMode.vertical.rawValue), 2);
+    expect(ReaderLayout.resolved(0, size: const Size(1376, 1032), mode: ReaderMode.continuous.rawValue), 1);
+    expect(ReaderLayout.resolved(0, size: Size.zero, mode: paged), 1);
+    expect(ReaderLayout.resolved(1, size: const Size(1376, 1032), mode: paged), 1);
+    expect(ReaderLayout.resolved(3, size: const Size(402, 874), mode: paged), 3);
+    expect(ReaderLayout.resolved(9, size: const Size(402, 874), mode: paged), 4);
+  });
+
   test('reader guide matches the modes gesture settings without changing reading progress', () {
     final defaults = MemoryPreferences();
     defaults.set('reader_page_101', 23);

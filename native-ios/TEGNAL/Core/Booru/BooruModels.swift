@@ -369,7 +369,7 @@ struct BooruBlacklist {
                 let value = negative ? String(term.dropFirst()) : term
                 let matches: Bool
                 if value.hasPrefix("rating:") {
-                    matches = BooruSafeRating.normalized(String(value.dropFirst(7))) == BooruSafeRating.normalized(post.rating)
+                    matches = BooruRating.normalized(String(value.dropFirst(7))) == BooruRating.normalized(post.rating)
                 } else if value.hasPrefix("artist:") {
                     matches = post.artists.contains { $0.lowercased() == String(value.dropFirst(7)) }
                 } else if value.hasPrefix("id:") {
@@ -446,11 +446,7 @@ enum BooruSortValidation {
     }
 }
 
-/// An optional default search condition, not a content restriction.
-enum BooruSafeRating: String, CaseIterable, Identifiable {
-    case general = "g", sensitive = "s", questionable = "q"
-    var id: String { rawValue }
-    var tag: String { "rating:" + rawValue }
+enum BooruRating {
     /// Each server names ratings its own way; this is the one-letter form the rating tag uses.
     static func normalized(_ value: String) -> String {
         switch value.lowercased() {
@@ -460,22 +456,5 @@ enum BooruSafeRating: String, CaseIterable, Identifiable {
         case "e", "explicit": return "e"
         default: return value.lowercased()
         }
-    }
-    /// A saved image fits when its rating is the one the rating tag searches for.
-    func allows(_ rating: String) -> Bool { Self.normalized(rating) == rawValue }
-    var title: String {
-        switch self {
-        case .general: L10n.text("All Ages")
-        case .sensitive: "12+"
-        case .questionable: "15+"
-        }
-    }
-    func applyingDefault(to query: String) -> String {
-        // An explicitly entered rating overrides this optional default.
-        let hasRating = query.split(whereSeparator: \.isWhitespace).contains {
-            $0.trimmingCharacters(in: CharacterSet(charactersIn: "-~")).lowercased().hasPrefix("rating:")
-        }
-        guard !hasRating else { return query }
-        return query.isEmpty ? tag : query + " " + tag
     }
 }

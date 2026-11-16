@@ -242,7 +242,14 @@ class _TasteDashboardState extends State<TasteDashboard> {
         showTransientMessage(context, message, bottom: tabBarClearance(context) + 8);
       });
     }
-    final geometry = ArtworkGridGeometry(width: media.size.width, columns: _grid.columns, removesPadding: _grid.removesPadding);
+    final width = media.size.width;
+    final geometry = ArtworkGridGeometry(
+      width: width,
+      columns: ArtworkGridGeometry.columnsFor(chosen: _grid.columns, width: width),
+      minimum: ArtworkGridGeometry.artworkMinimum(width),
+      removesPadding: _grid.removesPadding,
+      maximumColumns: 12,
+    );
     Widget padded(Widget child, {double bottom = SmartSpacing.section}) => Padding(padding: EdgeInsets.fromLTRB(20, 0, 20, bottom), child: child);
     final slivers = <Widget>[
       SliverToBoxAdapter(child: SizedBox(height: top + 16)),

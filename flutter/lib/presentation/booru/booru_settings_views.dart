@@ -159,10 +159,9 @@ class _BooruMoreViewState extends State<BooruMoreView> {
     );
     const automatic = 0;
     final columnOptions = [(automatic, L10n.text('Automatic')), for (var count = 1; count <= 5; count++) (count, '$count')];
-    const columnHelp = 'Automatic fits the columns to the screen width. Choose a number to keep the layout fixed.';
+    const columnHelp =
+        'Automatic fits the columns to the screen, and cards grow a little on larger screens such as tablets. A number sets the columns on a phone; larger screens add columns in proportion.';
     final remember = viewer.boolean('booru.rememberHistory') ?? true;
-    final safeMode = preferences.boolean('booru.safeMode') ?? false;
-    final safeRating = BooruSafeRating.fromRawValue(preferences.string('booru.safeRating')) ?? BooruSafeRating.general;
     return ColoredBox(
       color: FormColors.listBackground.resolveFrom(context),
       child: Stack(
@@ -354,42 +353,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
                 settingsSectionGap,
-                section(
-                  header: L10n.text('Safe Mode'),
-                  children: [
-                    SettingsToggleRow(
-                      title: L10n.text('Safe Mode'),
-                      help: L10n.text(
-                        'Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.',
-                      ),
-                      value: safeMode,
-                      onChanged: (value) {
-                        _setBrowser('booru.safeMode', value);
-                        _booru.store.safeModeChanged();
-                        if (value) {
-                          _booru.state.mode = AppMode.booru;
-                          // Turning it on goes straight to Safebooru, whose images are all ages.
-                          _booru.store.selectSafebooru();
-                        }
-                      },
-                    ),
-                    if (safeMode) ...[
-                      SettingsPickerRow<BooruSafeRating>(
-                        title: L10n.text('Age Guide'),
-                        options: [for (final rating in BooruSafeRating.values) (rating, rating.title)],
-                        selected: safeRating,
-                        onSelected: (value) {
-                          _setBrowser('booru.safeRating', value.rawValue);
-                          _booru.store.safeModeChanged();
-                        },
-                      ),
-                      SettingsValueRow(
-                        title: L10n.text('Default Search Tag'),
-                        value: _booru.store.needsSafeRating ? safeRating.tag : L10n.text('None (Safebooru)'),
-                      ),
-                    ],
-                  ],
-                ),
+                SafeModeSection(booru: _booru, rowColor: row),
                 settingsSectionGap,
                 section(
                   header: L10n.text('Data & Storage'),
@@ -535,7 +499,8 @@ class _BooruServersViewState extends State<BooruServersView> {
                   child: Text(L10n.text('Delete'), style: TegnalType.style(17, color: const Color(0xFFFFFFFF))),
                 ),
                 child: FormRow(
-                  onTap: () => _booru.store.toggleServer(server),
+                  // Safe Mode browses Safebooru alone; the other servers stay, unchosen, until it is off.
+                  onTap: _booru.safeMode && !server.isSafebooru ? null : () => _booru.store.toggleServer(server),
                   separatorInset: 48,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 11),
@@ -1032,9 +997,13 @@ class _BooruCookiesViewState extends State<BooruCookiesView> {
 
 /// `BooruPoolsView`: a server's pools, searchable, each opening its posts in order.
 class BooruPoolsView extends StatefulWidget {
-  const BooruPoolsView({super.key, required this.booru, required this.server});
+  const BooruPoolsView({super.key, required this.booru, required this.server, this.root});
   final BooruContext booru;
   final BooruServer server;
+
+  /// Shown as Comics Mode's Explore, which Safe Mode keeps to Safebooru's pools: the root header
+  /// with the mode switch instead of a back button.
+  final AppState? root;
 
   @override
   State<BooruPoolsView> createState() => _BooruPoolsViewState();
@@ -1109,86 +1078,109 @@ class _BooruPoolsViewState extends State<BooruPoolsView> {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
     final row = FormColors.listRow.resolveFrom(context);
-    return SettingsPage(
-      title: L10n.text('Pools'),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: CupertinoSearchTextField(
-            controller: _search,
-            placeholder: L10n.text(_server.engine.usesGelbooruPages ? 'Pool ID' : 'Search Pools'),
-            onSubmitted: (text) {
-              _query = text;
-              _load(reset: true);
-            },
-          ),
+    final children = [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: CupertinoSearchTextField(
+          controller: _search,
+          placeholder: L10n.text(_server.engine.usesGelbooruPages ? 'Pool ID' : 'Search Pools'),
+          onSubmitted: (text) {
+            _query = text;
+            _load(reset: true);
+          },
         ),
-        FormSection(
-          rowColor: row,
-          children: [
-            if (_server.engine.usesGelbooruPages)
-              FormRow(
-                child: Text(L10n.text('Browse pools or enter a pool ID to open it.'), style: TegnalType.style(13, color: secondary)),
-              ),
-            for (final pool in _pools)
-              FormRow(
-                onTap: () => BooruFeedView.push(context, booru: widget.booru, server: _server, pool: pool),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(width: 36, child: Icon(CupertinoIcons.rectangle_stack_fill, size: 26, color: tint)),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              pool.name.replaceAll('_', ' '),
-                              maxLines: 2,
-                              style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              pool.hasKnownCount || pool.count > 0 ? '#${pool.id} · ${L10n.text('%@ posts', ['${pool.count}'])}' : '#${pool.id}',
-                              style: TegnalType.style(12, color: secondary),
-                            ),
-                            if (pool.description.isNotEmpty) Text(pool.description, maxLines: 2, style: TegnalType.style(12, color: secondary)),
-                          ],
-                        ),
+      ),
+      FormSection(
+        rowColor: row,
+        children: [
+          if (_server.engine.usesGelbooruPages)
+            FormRow(
+              child: Text(L10n.text('Browse pools or enter a pool ID to open it.'), style: TegnalType.style(13, color: secondary)),
+            ),
+          for (final pool in _pools)
+            FormRow(
+              onTap: () => BooruFeedView.push(context, booru: widget.booru, server: _server, pool: pool),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    SizedBox(width: 36, child: Icon(CupertinoIcons.rectangle_stack_fill, size: 26, color: tint)),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            pool.name.replaceAll('_', ' '),
+                            maxLines: 2,
+                            style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            pool.hasKnownCount || pool.count > 0 ? '#${pool.id} · ${L10n.text('%@ posts', ['${pool.count}'])}' : '#${pool.id}',
+                            style: TegnalType.style(12, color: secondary),
+                          ),
+                          if (pool.description.isNotEmpty) Text(pool.description, maxLines: 2, style: TegnalType.style(12, color: secondary)),
+                        ],
                       ),
-                      Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
-                    ],
-                  ),
+                    ),
+                    Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                  ],
                 ),
               ),
-            if (_loading)
-              const FormRow(child: Center(child: CupertinoActivityIndicator()))
-            else if (_error != null) ...[
+            ),
+          if (_loading)
+            const FormRow(child: Center(child: CupertinoActivityIndicator()))
+          else if (_error != null) ...[
+            FormRow(
+              child: Text(_error!, style: TegnalType.style(15, color: secondary)),
+            ),
+            FormRow(
+              onTap: () => _load(reset: true),
+              child: Text(L10n.text('Try Again'), style: TegnalType.style(17, color: tint)),
+            ),
+            if (AppPlatform.hasWebView)
               FormRow(
-                child: Text(_error!, style: TegnalType.style(15, color: secondary)),
+                onTap: () => showBooruValidation(context, booru: widget.booru, server: _server),
+                child: Text(L10n.text('Validate Client'), style: TegnalType.style(17, color: tint)),
               ),
-              FormRow(
-                onTap: () => _load(reset: true),
-                child: Text(L10n.text('Try Again'), style: TegnalType.style(17, color: tint)),
-              ),
-              if (AppPlatform.hasWebView)
-                FormRow(
-                  onTap: () => showBooruValidation(context, booru: widget.booru, server: _server),
-                  child: Text(L10n.text('Validate Client'), style: TegnalType.style(17, color: tint)),
-                ),
-            ] else if (_pools.isEmpty && !_hasMore)
-              FormRow(
-                child: Text(L10n.text('No Results'), style: TegnalType.style(17, color: secondary)),
-              ),
-            if (_hasMore && !_loading && _error == null)
-              FormRow(
-                onTap: () => _load(reset: false),
-                child: Text(L10n.text('Load More'), style: TegnalType.style(17, color: tint)),
-              ),
-          ],
-        ),
-      ],
+          ] else if (_pools.isEmpty && !_hasMore)
+            FormRow(
+              child: Text(L10n.text('No Results'), style: TegnalType.style(17, color: secondary)),
+            ),
+          if (_hasMore && !_loading && _error == null)
+            FormRow(
+              onTap: () => _load(reset: false),
+              child: Text(L10n.text('Load More'), style: TegnalType.style(17, color: tint)),
+            ),
+        ],
+      ),
+    ];
+    final root = widget.root;
+    if (root == null) return SettingsPage(title: L10n.text('Pools'), children: children);
+    return ColoredBox(
+      color: FormColors.listBackground.resolveFrom(context),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.only(top: rootContentTop(context) + 10, bottom: tabBarClearance(context)),
+              children: children,
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: RootHeader(
+              title: L10n.text('Explore'),
+              state: root,
+              trailing: BooruServerMenuButton(store: widget.booru.store),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1355,5 +1347,74 @@ class BooruSavedServersView extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+/// `BooruSafeModeSettings`: the Safe Mode switch, in both modes' settings. While it is on, Saved
+/// and Explore keep to Safebooru, whose images are all ages, and Comics Mode browses its pools.
+class SafeModeSection extends StatefulWidget {
+  const SafeModeSection({super.key, required this.booru, this.rowColor});
+  final BooruContext booru;
+  final Color? rowColor;
+
+  @override
+  State<SafeModeSection> createState() => _SafeModeSectionState();
+}
+
+class _SafeModeSectionState extends State<SafeModeSection> {
+  @override
+  Widget build(BuildContext context) => FormSection(
+    prominentHeader: true,
+    rowColor: widget.rowColor ?? FormColors.listRow.resolveFrom(context),
+    header: Text(L10n.text('Safe Mode')),
+    children: [
+      SettingsToggleRow(
+        title: L10n.text('Safe Mode'),
+        help: L10n.text(
+          'Turning this on shows only Safebooru, where every image is all ages, in Saved and Explore. Comics Mode browses Safebooru’s pools as it does before a comics website is connected, and saved comics stay hidden. Turning it off brings back your servers and library.',
+        ),
+        value: widget.booru.safeMode,
+        onChanged: (value) => setState(() => widget.booru.safeMode = value),
+      ),
+    ],
+  );
+}
+
+/// `SafeModeComicsPlaceholder`: what Comics Mode's library tabs show in Safe Mode. Saved comics
+/// come from comics websites, so they stay saved but out of sight, and Explore offers
+/// Safebooru's pools instead.
+class SafeModeComicsPlaceholder extends StatelessWidget {
+  const SafeModeComicsPlaceholder({super.key, required this.state, required this.title});
+  final AppState state;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: TegnalColors.background.resolveFrom(context),
+    child: Stack(
+      children: [
+        Positioned.fill(
+          child: Padding(
+            padding: EdgeInsets.only(top: rootContentTop(context), bottom: tabBarClearance(context)),
+            child: Center(
+              child: SingleChildScrollView(
+                child: ContentUnavailable(
+                  icon: CupertinoIcons.eye_slash,
+                  title: L10n.text('Hidden in Safe Mode'),
+                  message: L10n.text('Safe Mode shows only Safebooru. Your saved comics come back when you turn it off in Settings.'),
+                  action: (L10n.text('Browse Pools'), () => state.tab = AppTab.works),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: RootHeader(title: L10n.text(title), state: state),
+        ),
+      ],
+    ),
   );
 }

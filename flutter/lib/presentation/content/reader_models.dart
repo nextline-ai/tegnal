@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show Offset, Rect;
+import 'dart:ui' show Offset, Rect, Size;
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
 
@@ -274,6 +274,20 @@ class ReaderOpening {
 
 /// Spread arithmetic: zero-based page indices grouped by 1–4 pages per view.
 abstract final class ReaderLayout {
+  static const pagesKey = 'reader.pagesPerSpread';
+
+  /// Pages per View's Automatic choice, the default.
+  static const automatic = 0;
+
+  /// How many pages a spread shows. Automatic shows two side by side when the viewer is wider than
+  /// tall, as on a tablet or a foldable turned on its side: a portrait page is as tall as the
+  /// screen either way, so the second page fills space that would otherwise be black. Continuous
+  /// Scroll fits pages to the width, so it keeps one per row for long strips.
+  static int resolved(int preference, {required Size size, required String mode}) {
+    if (preference != automatic) return count(preference);
+    return mode != ReaderMode.continuous.rawValue && size.width > size.height ? 2 : 1;
+  }
+
   static int count(int value) => math.min(4, math.max(1, value));
   static int start(int page, {required int count}) => math.max(0, page) ~/ ReaderLayout.count(count) * ReaderLayout.count(count);
 

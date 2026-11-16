@@ -53,6 +53,27 @@ class ArtworkGridGeometry {
   final double cellWidth;
   final double spacing;
   final double margin;
+
+  /// `artworkMinimum(width:)`: the narrowest an artwork card may be before Automatic drops a
+  /// column. Phones and foldables held either way keep 160 pt; wider windows let cards grow a
+  /// little with the screen, so a tablet shows three columns upright and four on its side rather
+  /// than rows of phone-sized cards.
+  static double artworkMinimum(double width) => math.min(300, 160 + math.max(0, width - 600) * 0.2);
+
+  /// Folders are larger cards: 240 pt once the window is wider than a phone.
+  static double folderMinimum(double width) => width > wideWidth ? 240 : 160;
+
+  /// Wider than any phone, or a foldable on its side.
+  static const wideWidth = 602.0;
+
+  /// A chosen column count describes a phone held upright, where Automatic shows two. A wider
+  /// window keeps that choice relative to its own Automatic count: four chosen shows twice as many
+  /// columns as Automatic there, two the same number, so cards grow with the screen too.
+  static int columnsFor({required int chosen, required double width, double? minimum}) {
+    if (chosen <= 0 || width <= wideWidth) return chosen;
+    final automatic = ArtworkGridGeometry(width: width, columns: 0, minimum: minimum ?? artworkMinimum(width), removesPadding: false).count;
+    return math.min(12, math.max(1, (chosen * automatic / 2).round()));
+  }
 }
 
 /// Grid preferences that live in Settings; the defaults match a fresh native install.
@@ -80,6 +101,7 @@ class ArtworkGridSliver extends StatelessWidget {
     required this.itemBuilder,
     this.preferences = const ArtworkGridPreferences(),
     this.topMarginScale = 1,
+    this.folders = false,
   });
 
   final int itemCount;
@@ -87,15 +109,22 @@ class ArtworkGridSliver extends StatelessWidget {
   final ArtworkGridPreferences preferences;
   final double topMarginScale;
 
+  /// Folder cards, which keep their own larger minimum on wide screens.
+  final bool folders;
+
   @override
   Widget build(BuildContext context) {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final width = constraints.crossAxisExtent;
+        final minimum = folders ? ArtworkGridGeometry.folderMinimum(width) : ArtworkGridGeometry.artworkMinimum(width);
         final geometry = ArtworkGridGeometry(
-          width: constraints.crossAxisExtent,
-          columns: textScale >= 1.35 ? 1 : preferences.columns,
+          width: width,
+          columns: textScale >= 1.35 ? 1 : ArtworkGridGeometry.columnsFor(chosen: preferences.columns, width: width, minimum: minimum),
+          minimum: minimum,
           removesPadding: preferences.removesPadding,
+          maximumColumns: 12,
         );
         final style = ArtworkCellStyle(
           width: geometry.cellWidth,

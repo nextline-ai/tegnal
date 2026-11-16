@@ -117,7 +117,7 @@ struct ReaderSettingsView: View {
     @SwiftUI.AppStorage("booru.reducedData", store: ReaderPreferences.booruDefaults) private var reducedData = false
     @SwiftUI.AppStorage("booru.original", store: ReaderPreferences.booruDefaults) private var original = false
     @SwiftUI.AppStorage("booru.showNotes", store: ReaderPreferences.booruDefaults) private var showNotes = true
-    @SwiftUI.AppStorage("reader.pagesPerSpread", store: ReaderPreferences.defaults) private var pagesPerSpread = 1
+    @SwiftUI.AppStorage(ReaderLayout.pagesKey, store: ReaderPreferences.defaults) private var pagesPerSpread = ReaderLayout.automatic
     @SwiftUI.AppStorage("reader.autoAdvance", store: ReaderPreferences.defaults) private var autoAdvance = false
     @SwiftUI.AppStorage("reader.autoSeconds", store: ReaderPreferences.defaults) private var autoSeconds = 10.0
     @SwiftUI.AppStorage("reader.mode", store: ReaderPreferences.defaults) private var mode = ReaderMode.horizontal.rawValue
@@ -141,7 +141,7 @@ struct ReaderSettingsView: View {
         self.booru = booru
         self.onShowGuide = onShowGuide
         let preferences = booru ? ReaderPreferences.booruDefaults : ReaderPreferences.defaults
-        _pagesPerSpread = SwiftUI.AppStorage(wrappedValue: 1, "reader.pagesPerSpread", store: preferences)
+        _pagesPerSpread = SwiftUI.AppStorage(wrappedValue: ReaderLayout.automatic, ReaderLayout.pagesKey, store: preferences)
         _autoAdvance = SwiftUI.AppStorage(wrappedValue: false, "reader.autoAdvance", store: preferences)
         _autoSeconds = SwiftUI.AppStorage(wrappedValue: 10.0, "reader.autoSeconds", store: preferences)
         _mode = SwiftUI.AppStorage(wrappedValue: ReaderMode.horizontal.rawValue, "reader.mode", store: preferences)
@@ -183,9 +183,14 @@ struct ReaderSettingsView: View {
                                 SettingsHelpLabel("Swipe Up for Work Information", help: "Swipe up from the bottom of a page to open its work information. Off by default in Continuous Scroll so you can scroll without opening a sheet.")
                             }.accessibilityIdentifier("reader.settings.continuousInformationSwipe")
                         }
-                        Picker(L10n.text("Pages per View"), selection: $pagesPerSpread) {
-                            ForEach(1...4, id: \.self) { Text(L10n.text("Pages: %@", String(describing: $0))).tag($0) }
-                        }.accessibilityIdentifier("reader.settings.spread")
+                        HStack {
+                            SettingsHelpLabel("Pages per View", help: "Automatic shows two pages side by side when the screen is wider than it is tall, such as an iPad or iPhone Duo on its side, and one page otherwise. Continuous Scroll shows one page per row.")
+                            Spacer()
+                            Picker(L10n.text("Pages per View"), selection: $pagesPerSpread) {
+                                Text(L10n.text("Automatic")).tag(ReaderLayout.automatic)
+                                ForEach(1...4, id: \.self) { Text(L10n.text("Pages: %@", String(describing: $0))).tag($0) }
+                            }.labelsHidden().pickerStyle(.menu).accessibilityIdentifier("reader.settings.spread")
+                        }
                     }
                     Toggle(L10n.text("Read Right to Left"), isOn: $rtl).accessibilityIdentifier("reader.settings.rtl")
                     Toggle(L10n.text("Tap the Sides to Turn Pages"), isOn: $tapNavigation)
@@ -441,6 +446,23 @@ private struct ReaderGuideTip: View {
 }
 
 enum ReaderLayout {
+    static let pagesKey = "reader.pagesPerSpread"
+    /// Pages per View's Automatic choice, the default.
+    static let automatic = 0
+    /// How many pages a spread shows. Automatic shows two side by side when the viewer is wider
+    /// than tall, as on an iPad or an iPhone Duo turned on its side: a portrait page is as tall as
+    /// the screen either way, so the second page fills space that would otherwise be black.
+    /// Continuous Scroll fits pages to the width, so it keeps one per row for long strips.
+    static func resolved(_ preference: Int, size: CGSize, mode: String) -> Int {
+        guard preference == automatic else { return count(preference) }
+        return mode != ReaderMode.continuous.rawValue && size.width > size.height ? 2 : 1
+    }
+    /// The foreground window's size, for the first layout before the viewer measures itself.
+    @MainActor static var windowSize: CGSize {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.windows.first(where: \.isKeyWindow)?.bounds.size ?? scene?.screen.bounds.size ?? .zero
+    }
     static func count(_ value: Int) -> Int { min(4, max(1, value)) }
     static func start(_ page: Int, count: Int) -> Int { max(0, page) / Self.count(count) * Self.count(count) }
     static func next(_ page: Int, delta: Int, count: Int, total: Int) -> Int {

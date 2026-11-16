@@ -251,15 +251,12 @@ void main() {
     expect(BooruSort.trending.metric(restored), isNull);
   });
 
-  test('safe rating defaults never override an explicit rating', () {
-    for (final rating in BooruSafeRating.values) {
-      expect(rating.applyingDefault(''), rating.tag);
-      expect(rating.applyingDefault('scenery -spoilers'), 'scenery -spoilers ${rating.tag}');
-      expect(rating.applyingDefault('scenery rating:q'), 'scenery rating:q');
-      expect(rating.applyingDefault('-rating:e scenery'), '-rating:e scenery');
-      expect(rating.applyingDefault(rating.applyingDefault('scenery')), 'scenery ${rating.tag}');
-    }
-    expect(BooruSafeRating.questionable.title, '15+');
+  test('a rating search matches however a server names its ratings', () {
+    expect(BooruRating.normalized('safe'), 'g');
+    expect(BooruRating.normalized('General'), 'g');
+    expect(BooruRating.normalized('questionable'), 'q');
+    expect(BooruRating.normalized('explicit'), 'e');
+    expect(BooruRating.normalized('custom'), 'custom');
     expect(Uri.parse(a.browsingURL('rating:q')).queryParameters['tags'], 'rating:q');
   });
 

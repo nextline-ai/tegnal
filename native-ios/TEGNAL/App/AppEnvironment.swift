@@ -279,7 +279,7 @@ public final class AppEnvironment: @unchecked Sendable {
     var mode: AppMode {
         get { selectedMode }
         set {
-            selectedMode = booruSafeMode ? .booru : newValue
+            selectedMode = newValue
             browserPreferences.set(selectedMode.rawValue, forKey: "content_mode")
             // Observation notifies before storing, and SwiftUI can reevaluate the root
             // inside that notification. Notify again so it cannot keep the old mode.
@@ -291,27 +291,12 @@ public final class AppEnvironment: @unchecked Sendable {
         didSet {
             guard booruSafeMode != oldValue else { return }
             browserPreferences.set(booruSafeMode, forKey: "booru.safeMode")
-            booru.safeRating = booruSafeMode ? booruSafeRating : nil
-            if booruSafeMode {
-                mode = .booru
-                // Turning it on goes straight to Safebooru, whose images are all ages.
-                booru.perform { try booru.selectSafebooru() }
-            }
+            // Saved and Explore keep to Safebooru, whose images are all ages, in both modes: Comics
+            // Mode browses its pools. Turning it off chooses the servers chosen before again.
+            if booruSafeMode { booru.perform { try booru.enterSafeMode() } }
+            else { booru.perform { try booru.leaveSafeMode() } }
             booruSearchRevision += 1
         }
-    }
-    var booruSafeRating: BooruSafeRating {
-        didSet {
-            guard booruSafeRating != oldValue else { return }
-            browserPreferences.set(booruSafeRating.rawValue, forKey: "booru.safeRating")
-            booru.safeRating = booruSafeMode ? booruSafeRating : nil
-            booruSearchRevision += 1
-        }
-    }
-    /// Safe Mode adds its rating tag only when a server other than Safebooru is chosen; Safebooru
-    /// has no rating tags to search by, and every image there is all ages.
-    func booruQuery(_ query: String) -> String {
-        booruSafeMode && booru.selectedServers.contains(where: { !$0.isSafebooru }) ? booruSafeRating.applyingDefault(to: query) : query
     }
     private(set) var discordInvitationVisible = false
     @ObservationIgnored private var discordInvitationRecorded = false
@@ -543,7 +528,7 @@ public final class AppEnvironment: @unchecked Sendable {
     @MainActor func resetModeSettings(booru: Bool) {
         if booru {
             booruTheme = .dark; booruColumns = 0; booruFolderColumns = 0; booruRemovesGridPadding = false
-            booruSafeMode = false; booruSafeRating = .general
+            booruSafeMode = false
         } else {
             mangaTheme = .dark; mangaColumns = 0; mangaFolderColumns = 0; mangaRemovesGridPadding = false
             mangaPreviewColumns = 0; mangaPreviewRows = 5; showsMangaTitles = true; showsMangaArtists = true; showsMangaCategories = false
@@ -679,10 +664,13 @@ public final class AppEnvironment: @unchecked Sendable {
         self.booru = booru
         let safeMode = browserPreferences.bool(forKey: "booru.safeMode")
         self.booruSafeMode = safeMode
-        let safeRating = BooruSafeRating(rawValue: browserPreferences.string(forKey: "booru.safeRating") ?? "") ?? .general
-        self.booruSafeRating = safeRating
-        booru.safeRating = safeMode ? safeRating : nil
-        self.selectedMode = safeMode ? .booru : AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
+        if safeMode {
+            booru.safeMode = true
+            // A backup or another device may have chosen other servers meanwhile.
+            try? booru.reload()
+            if booru.selectedServers.isEmpty { try? booru.selectSafebooru() }
+        }
+        self.selectedMode = AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
         self.database = database
         self.coverQueueActor = coverQueue ?? CoverQueueActor(database: database)
         self.coverQueueState = CoverQueueState()

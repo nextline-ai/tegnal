@@ -789,6 +789,12 @@ class _BooruPostViewState extends State<BooruPostView> with TickerProviderStateM
                       onRemoved: () => _removedPost(_post.id),
                       translation: _translation.balloons(_post.id) ?? const [],
                       translationStyle: _translation.style,
+                      // AI translation reads a zoomed-in area again, for text too small to read on the whole image.
+                      onViewport: (area) {
+                        if (!_translation.isOn) return;
+                        final post = _post;
+                        _translation.readZoomed(key: post.id, index: _index, area: area, load: () => _booru.viewerImages.load(url, server));
+                      },
                     ),
                   ),
                 if (!_removed && (_mediaStatus == 'error' || url == null && !_resolvesMissingMedia || _mediaStatus == 'unavailable'))

@@ -344,14 +344,17 @@ class _ReadingQueueCarryOverlayState extends State<ReadingQueueCarryOverlay> {
       child: Builder(
         builder: (context) {
           final location = queue.carryLocation - _origin;
+          // As wide as the Up Next bar it replaces: no wider than on the largest phone.
+          final inset = (MediaQuery.sizeOf(context).width - 560) / 2;
+          final side = inset > 16 ? inset : 16.0;
           return Stack(
             clipBehavior: Clip.none,
             children: [
               // Both stay in place and only fade and scale, so an interrupted animation never
               // leaves them frozen on screen.
               Positioned(
-                left: 16,
-                right: 16,
+                left: side,
+                right: side,
                 bottom: widget.bottom,
                 child: AnimatedSlide(
                   offset: active ? Offset.zero : const Offset(0, 0.3),

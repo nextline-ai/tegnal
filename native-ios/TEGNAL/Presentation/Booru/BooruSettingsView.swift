@@ -23,6 +23,8 @@ struct BooruServersView: View {
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }.buttonStyle(.plain)
+                            // Safe Mode browses Safebooru alone; the other servers stay, unchosen, until it is off.
+                            .disabled(store.safeMode && !server.isSafebooru)
                         Button { editing = .init(server: server) } label: { Image(systemName: "slider.horizontal.3") }
                             .buttonStyle(.borderless).accessibilityLabel(L10n.text("Edit") + " " + server.displayName)
                     }.padding(.vertical, 4).swipeActions {

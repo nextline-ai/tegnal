@@ -15,6 +15,7 @@ import '../../core/support/l10n.dart';
 import '../design/tegnal_theme.dart';
 import '../content/image_translation.dart';
 import '../content/reader_models.dart';
+import '../content/reader_translation.dart' show ZoomedText;
 import 'booru_common.dart';
 
 /// What the media reports to the viewer, as the native document's messages do.
@@ -72,6 +73,7 @@ class BooruMediaView extends StatefulWidget {
     required this.onRemoved,
     this.translation = const [],
     this.translationStyle = const TranslationStyle(),
+    this.onViewport,
   });
 
   final BooruContext booru;
@@ -96,6 +98,10 @@ class BooruMediaView extends StatefulWidget {
   /// Translated balloons over the image, as the comics reader draws them.
   final List<TranslatedRegion> translation;
   final TranslationStyle translationStyle;
+
+  /// The part of the image on screen once a zoom or a move settles, zoomed in far enough for a
+  /// closer reading; normalized to the image with a top-left origin.
+  final ValueChanged<Rect>? onViewport;
 
   @override
   State<BooruMediaView> createState() => _BooruMediaViewState();
@@ -139,6 +145,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   void initState() {
     super.initState();
     _transform.addListener(_transformChanged);
+    _transform.addListener(_scheduleViewport);
     _zoomAnimation.addListener(() {
       final tween = _zoomTween;
       if (tween != null) _transform.value = tween.evaluate(CurvedAnimation(parent: _zoomAnimation, curve: Curves.easeInOut));
@@ -161,6 +168,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   @override
   void dispose() {
     _reset();
+    _viewportTimer?.cancel();
     _transform.dispose();
     _zoomAnimation.dispose();
     super.dispose();
@@ -427,6 +435,21 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   }
 
   /// Where the fitted media sits in a viewer of `size`.
+  Size _size = Size.zero;
+  Timer? _viewportTimer;
+
+  /// Pinches, pans and double tap zooms all move the transform; the area is reported once it has
+  /// stayed still for a moment.
+  void _scheduleViewport() {
+    if (widget.onViewport == null || _isVideo) return;
+    _viewportTimer?.cancel();
+    _viewportTimer = Timer(ZoomedText.settle, () {
+      if (!mounted) return;
+      final area = ZoomedText.visibleArea(_transform.value, _size, _mediaRect(_size));
+      if (area != null) widget.onViewport?.call(area);
+    });
+  }
+
   Rect _mediaRect(Size size) {
     final media = _imageSize ?? Size(math.max(1, widget.post.width).toDouble(), math.max(1, widget.post.height).toDouble());
     final scale = math.min(size.width / media.width, size.height / media.height);
@@ -445,6 +468,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
       child: LayoutBuilder(
         builder: (context, constraints) {
           final size = constraints.biggest;
+          _size = size;
           final rect = _mediaRect(size);
           final media = _media(rect.size);
           if (media == null) return const SizedBox.expand();

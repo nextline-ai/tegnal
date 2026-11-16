@@ -172,6 +172,7 @@
 "Page Number" = "페이지 번호";
 "Page image" = "페이지 이미지";
 "Pages per View" = "페이지 수";
+"Automatic shows two pages side by side when the screen is wider than it is tall, such as an iPad or iPhone Duo on its side, and one page otherwise. Continuous Scroll shows one page per row." = "자동은 iPad나 iPhone Duo를 가로로 두었을 때처럼 화면의 가로가 세로보다 길면 두 페이지를 나란히 보여 주고, 그 밖에는 한 페이지를 보여 줍니다. 스크롤로 보기에서는 한 줄에 한 페이지를 보여 줍니다.";
 "Pages: %@" = "%@페이지";
 "Pauses while menus, settings, translation, or zoom are active. Stops at the last page." = "메뉴·설정·번역·확대 중에는 멈추며, 마지막 페이지에서는 종료됩니다.";
 "Popular This Month" = "월간 인기순";
@@ -1180,14 +1181,13 @@
 "Preview Rows per Page" = "페이지당 프리뷰 줄 수";
 
 "Safe Mode" = "세이프 모드";
+"Hidden in Safe Mode" = "세이프 모드에서 숨겨짐";
+"Safe Mode shows only Safebooru. Your saved comics come back when you turn it off in Settings." = "세이프 모드에서는 Safebooru만 보입니다. 설정에서 세이프 모드를 끄면 저장한 만화가 다시 보입니다.";
+"Browse Pools" = "풀 둘러보기";
 
-"All Ages" = "전체 이용가";
 
-"Age Guide" = "연령 가이드";
 
-"Default Search Tag" = "기본 검색 태그";
 
-"Turn off Safe Mode in More to use Comics Mode." = "만화 모드를 사용하려면 더보기에서 세이프 모드를 꺼주세요.";
 
 "Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches." = "선택한 등급 태그 하나만 이미지 검색에 기본으로 추가합니다. 연령은 탐색을 돕는 가이드이며, 언제든 끄거나 등급을 직접 입력할 수 있습니다. 만화 사이트에 따라 등급 검색을 지원하지 않을 수 있어, 켜져 있는 동안 만화 모드는 비활성화됩니다.";
 
@@ -1243,7 +1243,7 @@
 "Removes the gaps and outer margins around artwork and folder thumbnails." = "작품과 폴더 썸네일 사이의 간격, 화면 가장자리 여백을 없앱니다.";
 "Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges." = "썸네일에서 이미지 전체를 보여줍니다. 끄면 카드에 꽉 채워 표시해 가장자리가 잘릴 수 있습니다.";
 "Automatic shows twice as many columns as the artwork grid. Choose a number to keep the preview layout fixed." = "자동은 작품 목록 열 수의 두 배로 프리뷰를 표시합니다. 숫자를 선택하면 해당 열 수로 고정합니다.";
-"Automatic fits the columns to the screen width. Choose a number to keep the layout fixed." = "자동은 화면 너비에 맞춰 열 수를 조절합니다. 숫자를 선택하면 해당 열 수로 고정합니다.";
+"Automatic fits the columns to the screen, and cards grow a little on larger screens such as iPad. A number sets the columns on a phone; larger screens add columns in proportion." = "자동은 화면에 맞춰 열 수를 조절하며, iPad처럼 큰 화면에서는 카드가 조금 더 커집니다. 숫자를 선택하면 휴대폰 화면의 열 수가 되고, 큰 화면에서는 그에 비례해 열이 늘어납니다.";
 "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "이미지 검색에 선택한 등급 태그 하나를 추가합니다. 검색창에서 직접 바꾸거나 지워도 됩니다. 만화 사이트에는 등급 검색이 없는 경우가 있어, 켜져 있는 동안 만화 모드는 사용할 수 없습니다.";
 "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer." = "작품을 누르면 제목·태그·프리뷰가 있는 작품 정보를 먼저 보여줍니다. 끄면 바로 뷰어에서 열립니다.";
 "Finds missing covers, titles and tags for works in your library. You can pause and resume the background task." = "보관한 작품에서 빠진 표지·제목·태그를 찾아 채웁니다. 백그라운드 작업은 일시정지했다가 이어서 진행할 수 있습니다.";
@@ -1627,8 +1627,7 @@
 "Clear recently opened images?" = "최근 열었던 이미지를 모두 지울까요?";
 "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting." = "작품 정보의 작가나 작가 하나만 검색했을 때처럼 작가를 열면 이 언어로 작품을 보여 줍니다. 작가 화면에서 언어를 바꾸면 이 설정도 함께 바뀝니다.";
 "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All." = "작품 정보의 태그처럼 태그 하나를 열면 이 언어로 작품을 보여 줍니다. 태그 화면에서 언어를 바꾸면 이 설정도 함께 바뀝니다. 여러 단어로 검색할 때는 전체로 보여 줍니다.";
-"Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "켜면 이미지 모드의 서버가 모든 이미지가 전체 연령인 Safebooru로 바로 바뀝니다. 다른 서버를 선택하면 그 서버 검색에 연령 태그 하나가 추가되며, 검색어에서 바꾸거나 지울 수 있습니다. 일부 만화 사이트가 연령 필터를 지원하지 않아 켜져 있는 동안 만화 모드는 사용할 수 없습니다.";
-"None (Safebooru)" = "없음 (Safebooru)";
+"Turning this on shows only Safebooru, where every image is all ages, in Saved and Explore. Comics Mode browses Safebooru’s pools as it does before a comics website is connected, and saved comics stay hidden. Turning it off brings back your servers and library." = "켜면 저장과 탐색에 모든 이미지가 전체 연령인 Safebooru만 보입니다. 만화 모드는 만화 사이트를 연결하기 전처럼 Safebooru의 풀을 보여 주고, 저장한 만화는 보이지 않습니다. 끄면 원래 서버와 보관함이 다시 보입니다.";
 "Show as Folder in Saved" = "저장 탭에 폴더로 표시";
 "Recent Works" = "최근 열었던 작품";
 "Recent Images" = "최근 열었던 이미지";

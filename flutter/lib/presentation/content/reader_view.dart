@@ -184,7 +184,23 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
   Preferences get _defaults => widget.preferences;
   String get _mode => _defaults.string('reader.mode') ?? ReaderMode.horizontal.rawValue;
   bool get _rtl => _defaults.boolean('reader.rtl') ?? false;
-  int get _pagesPerSpread => _defaults.integerOrNull('reader.pagesPerSpread') ?? 1;
+
+  /// The Pages per View setting; Automatic (0) follows the viewer's shape.
+  int get _pagesPreference => _defaults.integerOrNull(ReaderLayout.pagesKey) ?? ReaderLayout.automatic;
+  Size _viewerSize = _windowSize();
+  int? _shownSpread;
+
+  /// Pages shown side by side right now.
+  int get _pagesPerSpread => ReaderLayout.resolved(_pagesPreference, size: _viewerSize, mode: _mode);
+
+  /// The window's size, for the first layout before the reader measures itself.
+  static Size _windowSize() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return Size.zero;
+    final view = views.first;
+    return view.physicalSize / view.devicePixelRatio;
+  }
+
   bool get _bottomMenu => _defaults.boolean('reader.bottomMenu') ?? false;
   bool get _pageNumber => _defaults.boolean('reader.pageNumber') ?? false;
   bool get _keepAwake => _defaults.boolean('reader.keepAwake') ?? true;
@@ -582,9 +598,22 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    // Turning a tablet or a foldable on its side changes how many pages Automatic shows, and a
+    // spread always starts on a page that lines up with it.
+    if (media.size.width > 0 && media.size.height > 0) _viewerSize = media.size;
+    final spread = _pagesPerSpread;
+    if (_shownSpread != null && _shownSpread != spread) {
+      final aligned = ReaderLayout.start(_current, count: spread);
+      if (aligned != _current) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _current = ReaderLayout.start(_current, count: _pagesPerSpread));
+        });
+      }
+    }
+    _shownSpread = spread;
     _syncPrefetch();
     final gallery = _gallery;
-    final media = MediaQuery.of(context);
     return ViewerKeys(
       move: _move,
       close: _close,
@@ -1165,7 +1194,7 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
   @override
   Widget build(BuildContext context) {
     final mode = _defaults.string('reader.mode') ?? ReaderMode.horizontal.rawValue;
-    final pagesPerSpread = _defaults.integerOrNull('reader.pagesPerSpread') ?? 1;
+    final pagesPerSpread = _defaults.integerOrNull(ReaderLayout.pagesKey) ?? ReaderLayout.automatic;
     final resume = _defaults.string('reader.resumeBehavior') ?? ReaderResumeBehavior.ask.rawValue;
     final autoAdvance = _bool('reader.autoAdvance', false);
     final seconds = ((_defaults.object('reader.autoSeconds') as num?)?.toDouble() ?? 10).round();
@@ -1229,11 +1258,13 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
                 ],
                 _PickerRow<int>(
                   title: L10n.text('Pages per View'),
+                  help: 'Automatic shows two pages side by side when the screen is wider than it is tall, such as a tablet or foldable on its side, and one page otherwise. Continuous Scroll shows one page per row.',
                   options: [
+                    (ReaderLayout.automatic, L10n.text('Automatic')),
                     for (var count = 1; count <= 4; count++) (count, L10n.text('Pages: %@', ['$count'])),
                   ],
                   selected: pagesPerSpread,
-                  onSelected: (value) => _set('reader.pagesPerSpread', value),
+                  onSelected: (value) => _set(ReaderLayout.pagesKey, value),
                 ),
               ],
               _ToggleRow(title: L10n.text('Read Right to Left'), value: _bool('reader.rtl', false), onChanged: (value) => _set('reader.rtl', value)),
