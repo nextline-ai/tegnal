@@ -28,6 +28,7 @@ import 'core/content/site_fallback_content.dart';
 import 'core/downloads/download_store.dart';
 import 'core/storage/app_database.dart';
 import 'core/storage/app_storage.dart';
+import 'core/support/document_files.dart';
 import 'core/support/perf_trace.dart';
 import 'core/support/preferences.dart';
 import 'core/support/secure_secret_store.dart';
@@ -216,6 +217,7 @@ Future<AppServices> _launch() async {
     // Saved works open from whichever connected website still carries them.
     content: ContentEnvironment(browserPreferences: preferences.defaults, source: SiteFallbackContent.shared),
     downloadsDirectory: DownloadStore.defaultDirectory,
+    downloadsFilesRoot: await const DocumentFiles().downloadRoot(),
     syncDirectory: Directory('${support.path}/drive-sync'),
     version: await loadingVersion,
   );

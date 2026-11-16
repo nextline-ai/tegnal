@@ -17,7 +17,7 @@ import '../library/folder_color_sheet.dart';
 import '../library/folder_name_prompt.dart';
 import '../library/folder_order_view.dart';
 import '../library/folder_rule_editor.dart';
-import '../library/folders_view.dart' show ContentUnavailable, FolderCardCaption, PressableCard, anchorOf, recentFolderColor;
+import '../library/folders_view.dart' show ContentUnavailable, FolderBentoFrame, FolderCardCaption, PressableCard, anchorOf, recentFolderColor;
 import '../library/library_routes.dart' show showTransientMessage;
 import '../navigation/app_header.dart';
 import '../navigation/root_tab_view.dart';
@@ -120,9 +120,23 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
           symbol: (color) => PaletteSymbol(color: color),
           onSelected: () => showAppSheet<void>(
             context,
-            grabber: true,
-            builder: (context, controller) =>
-                FolderColorSheet(title: folder.displayName, color: folder.color, onSelected: (color) => _booru.store.setFolderColor(folder.id, color)),
+            medium: true,
+            builder: (context, controller) => FolderColorSheet(
+              title: folder.displayName,
+              color: folder.color,
+              others: [
+                for (final other in _booru.store.folders())
+                  if (other.id != folder.id) other.color,
+              ],
+              onSelected: (color) => _booru.store.setFolderColor(folder.id, color),
+              preview: (color) => BooruFolderCard(
+                booru: _booru,
+                folder: folder,
+                posts: _booru.store.visibleFavorites(folderID: folder.id),
+                style: const ArtworkCellStyle(width: 132),
+                color: color,
+              ),
+            ),
           ),
         ),
         ContextMenuAction(
@@ -297,12 +311,13 @@ class _AllFavoritesRow extends StatelessWidget {
   }
 }
 
-/// `BooruFolderCard`: the folder's color with four favorites on white cells and its caption.
+/// `BooruFolderCard`: the folder's color with four favorites on tinted cells and its caption.
 class BooruFolderCard extends StatelessWidget {
-  BooruFolderCard({super.key, required this.booru, required BooruFolder folder, required this.posts, required this.style})
+  /// `color` draws the card in another color, as the color sheet previews it.
+  BooruFolderCard({super.key, required this.booru, required BooruFolder folder, required this.posts, required this.style, int? color})
     : title = folder.plainName,
       isSmart = folder.isSmart,
-      color = folder.color;
+      color = color ?? folder.color;
 
   /// Recently opened images as a folder card in Saved.
   BooruFolderCard.recent({super.key, required this.booru, required this.posts, required this.style})
@@ -320,7 +335,8 @@ class BooruFolderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(style.radius(16));
-    const white = Color(0xFFFFFFFF);
+    // Light colors such as yellow take dark text, as comics folders do.
+    final text = FolderBentoFrame.textColor(color);
     final inset = style.inset(4);
     return Semantics(
       button: true,
@@ -350,7 +366,7 @@ class BooruFolderCard extends StatelessWidget {
                         Expanded(
                           child: Row(
                             children: [
-                              for (final index in [row, row + 1]) ...[if (index > row) SizedBox(width: inset), Expanded(child: _cell(context, index))],
+                              for (final index in [row, row + 1]) ...[if (index > row) SizedBox(width: inset), Expanded(child: _cell(context, index, text))],
                             ],
                           ),
                         ),
@@ -359,7 +375,7 @@ class BooruFolderCard extends StatelessWidget {
                   ),
                 ),
               ),
-              FolderCardCaption(title: title, isSmart: isSmart, count: posts.length, color: white, style: style),
+              FolderCardCaption(title: title, isSmart: isSmart, count: posts.length, color: text, style: style),
             ],
           ),
         ),
@@ -367,15 +383,15 @@ class BooruFolderCard extends StatelessWidget {
     );
   }
 
-  Widget _cell(BuildContext context, int index) {
+  Widget _cell(BuildContext context, int index, Color text) {
     final server = index < posts.length ? booru.server(posts[index].serverID) : null;
     return ClipRSuperellipse(
       borderRadius: BorderRadius.circular(style.radius(8)),
       child: ColoredBox(
-        color: const Color(0x1FFFFFFF),
+        color: text.withValues(alpha: 0.12),
         child: SizedBox.expand(
           child: server == null
-              ? Icon(Symbols.photo, size: style.fontSize(20), color: const Color(0x4DFFFFFF))
+              ? Icon(Symbols.photo, size: style.fontSize(20), color: text.withValues(alpha: 0.3))
               : BooruThumbnail(post: posts[index], server: server, booru: booru),
         ),
       ),

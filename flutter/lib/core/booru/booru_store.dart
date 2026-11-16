@@ -12,6 +12,7 @@ import '../support/swift_json.dart';
 import '../taste/taste_models.dart';
 import '../taste/taste_store.dart';
 import 'booru_models.dart';
+import '../storage/folder_palette.dart';
 
 class FavoriteRecord {
   const FavoriteRecord({required this.post, required this.folderID, required this.savedAt});
@@ -267,6 +268,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     migrations.registerMigration('booru_v11_optional_unsorted', (db) {
       db.execute("DELETE FROM folders WHERE id = 'unsorted' AND color = 4284922736 AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')");
     });
+    migrations.registerMigration('booru_v12_vivid_folder_colors', AppDatabase.adoptVividFolderColors);
     return migrations;
   }
 
@@ -525,7 +527,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     return folderID;
   }
 
-  static void ensureUnsorted(SqlDatabase db) => db.execute("INSERT OR IGNORE INTO folders VALUES ('unsorted', '', 4284922736, 0)");
+  static void ensureUnsorted(SqlDatabase db) => db.execute("INSERT OR IGNORE INTO folders VALUES ('unsorted', '', ?, 0)", [FolderPalette.unsorted]);
 
   void deleteFolder(String id) {
     database.write((db) {

@@ -15,6 +15,7 @@ import '../taste/taste_models.dart';
 import '../taste/taste_store.dart';
 import 'app_database.dart';
 import 'folder_rules.dart';
+import 'folder_palette.dart';
 
 class LibraryBackupError implements Exception {
   const LibraryBackupError();
@@ -532,8 +533,17 @@ class MangaBackup {
     final mapping = <String, int>{};
     for (final record in folders) {
       final row = db.row('SELECT * FROM folders WHERE name = ?', [record.name]);
-      final folder = row == null ? Folder(name: record.name) : Folder.fromRow(row);
-      folder.color = record.color ?? folder.color;
+      // A new folder from a backup that kept no color takes the next one, as a new folder does.
+      final folder = row == null
+          ? Folder(
+              name: record.name,
+              color: AppDatabase.nextFolderColor(existingColors: db.column<int>('SELECT color FROM folders')),
+            )
+          : Folder.fromRow(row);
+      folder.color = switch (record.color) {
+        final color? => FolderPalette.vivid(color),
+        null => folder.color,
+      };
       folder.description = record.description ?? folder.description;
       folder.sourceGroupId = record.sourceGroupId ?? folder.sourceGroupId;
       AppDatabase.saveFolder(folder, db);
@@ -577,7 +587,10 @@ class MangaBackup {
         destinations = [AppDatabase.unfiledFolder(db).id!];
       }
       for (final id in destinations) {
-        db.execute('INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)', [id, work.id, work.bookmarkedAt]);
+        db.execute(
+          'INSERT INTO folder_works (folder_id, work_id, added_at) VALUES (?, ?, ?) ON CONFLICT(folder_id, work_id) DO UPDATE SET added_at = MAX(added_at, excluded.added_at)',
+          [id, work.id, work.bookmarkedAt],
+        );
       }
       TasteStore.record(existing == null ? TasteEventKind.imported : TasteEventKind.metadata, library.comicItem(work.galleryId, work.tags), db);
     }

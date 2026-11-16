@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 
 import '../support/swift_json.dart';
+import '../storage/folder_palette.dart';
 
 enum SyncValueKind { text, integer, real, blob, null_ }
 
@@ -100,8 +101,15 @@ class LibrarySyncRow {
 
   bool get isFactoryDefault {
     return switch (table) {
-      'booru.folders' => values['id']?.string == 'unsorted' && values['color']?.integer == 4284922736 && values['position']?.integer == 0,
-      'manga.folders' => values['sync_id']?.string == 'unsorted' && values['color']?.integer == 4280391411 && values['sort_order']?.integer == 1,
+      // Either palette's first color counts, so devices on both versions agree.
+      'booru.folders' =>
+        values['id']?.string == 'unsorted' &&
+            const [FolderPalette.unsorted, FolderPalette.earlierUnsorted].contains(values['color']?.integer) &&
+            values['position']?.integer == 0,
+      'manga.folders' =>
+        values['sync_id']?.string == 'unsorted' &&
+            const [FolderPalette.unfiled, FolderPalette.earlierUnfiled].contains(values['color']?.integer) &&
+            values['sort_order']?.integer == 1,
       _ => false,
     };
   }

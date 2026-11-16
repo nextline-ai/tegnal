@@ -3,6 +3,7 @@ import '../storage/app_database.dart';
 import '../support/l10n.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
+import '../storage/folder_palette.dart';
 
 /// What an import brought in.
 class ImportSummary {
@@ -147,8 +148,9 @@ class MangaViewerImportService {
       var name = _string(group, 'Name') ?? _string(group, 'name') ?? L10n.text('Folders');
       final rawColor = _int(group, 'Color') ?? _int(group, 'color');
       if ((sourceGroupId == 0 || sourceGroupId == 1) && name.endsWith('_default')) name = '미분류';
-      final color = rawColor != null && rawColor != 4294940672 && rawColor != 0 && !assignedColors.contains(rawColor)
-          ? rawColor
+      final vivid = rawColor == null ? null : FolderPalette.vivid(rawColor);
+      final color = vivid != null && rawColor != 4294940672 && rawColor != 0 && !assignedColors.contains(vivid)
+          ? vivid
           : database.nextUniqueFolderColor(excluding: assignedColors);
       assignedColors.add(color);
       final folder = database.createFolder(name: name, description: _string(group, 'Description'), color: color, sourceGroupId: sourceGroupId);

@@ -12,6 +12,7 @@ import '../taste/taste_models.dart';
 import '../taste/taste_store.dart';
 import 'booru_models.dart';
 import 'booru_store.dart';
+import '../storage/folder_palette.dart';
 
 class BooruBackupFolder {
   BooruBackupFolder({required this.id, required this.name, required this.color});
@@ -268,7 +269,7 @@ extension BooruStoreBackup on BooruStore {
     for (final (position, folder) in backup.folders.indexed) {
       db.execute(
         'INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position',
-        [folder.id, folder.id == 'unsorted' ? '' : folder.name, folder.color, position],
+        [folder.id, folder.id == 'unsorted' ? '' : folder.name, FolderPalette.vivid(folder.color), position],
       );
     }
     for (final (position, id) in [...incomingOrder, ...remaining].indexed) {

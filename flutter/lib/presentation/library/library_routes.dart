@@ -74,13 +74,19 @@ class LibraryRoutes {
     notifyChanged();
   }
 
-  Future<void> changeColor(BuildContext context, Folder folder) async {
+  /// `preview` draws the folder's card in a color.
+  Future<void> changeColor(BuildContext context, Folder folder, {required Widget Function(int color) preview}) async {
     await showAppSheet<void>(
       context,
-      grabber: true,
+      medium: true,
       builder: (context, controller) => FolderColorSheet(
         title: folder.displayName,
         color: folder.color,
+        others: [
+          for (final other in database.listFolders())
+            if (other.id != folder.id) other.color,
+        ],
+        preview: preview,
         onSelected: (color) {
           final id = folder.id;
           if (id == null) return;

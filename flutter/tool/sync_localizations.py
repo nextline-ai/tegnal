@@ -134,6 +134,19 @@ ANDROID = {
         "ko": "Google 계정을 연결할 수 없습니다: %@",
         "ja": "Google アカウントを接続できません: %@",
     },
+    # Where downloads go on Android: the device's Download folder or a folder picked through
+    # the system picker, which must be on the device's own storage.
+    "On This Device": {"en": "On This Device", "ko": "이 기기", "ja": "このデバイス"},
+    "Each work gets its own folder inside a Comics or Images folder, so the Files app and other apps can open it. A folder you choose must be on this device.": {
+        "en": "Each work gets its own folder inside a Comics or Images folder, so the Files app and other apps can open it. A folder you choose must be on this device.",
+        "ko": "작품마다 만화 또는 이미지 폴더 안에 따로 폴더가 생겨, 파일 앱과 다른 앱에서 열 수 있습니다. 직접 고르는 폴더는 이 기기 저장 공간에 있어야 합니다.",
+        "ja": "作品ごとに「漫画」または「画像」フォルダの中にフォルダが作られ、ファイルアプリやほかのアプリで開けます。選ぶフォルダはこのデバイスの保存領域にある必要があります。",
+    },
+    "TEGNAL can't save files in this folder. Choose a folder in Download, Documents or Pictures on this device.": {
+        "en": "TEGNAL can't save files in this folder. Choose a folder in Download, Documents or Pictures on this device.",
+        "ko": "TEGNAL이 이 폴더에 파일을 저장할 수 없습니다. 이 기기의 Download, Documents, Pictures 안에 있는 폴더를 고르세요.",
+        "ja": "TEGNALはこのフォルダにファイルを保存できません。このデバイスのDownload、Documents、Pictures内のフォルダを選んでください。",
+    },
     # Violet's Android bookmark backup, which the native app does not import.
     "Import from Violet": {"en": "Import from Violet", "ko": "Violet에서 데이터 가져오기", "ja": "Violetから読み込む"},
     "Bookmarks, folders and artists": {"en": "Bookmarks, folders and artists", "ko": "북마크, 폴더, 작가", "ja": "ブックマーク、フォルダ、作家"},

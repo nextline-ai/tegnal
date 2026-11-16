@@ -9,6 +9,7 @@ import '../support/swift_json.dart';
 import '../taste/taste_models.dart';
 import '../taste/taste_store.dart';
 import 'app_storage.dart';
+import 'folder_palette.dart';
 import 'local_thumbnail_cache.dart';
 import 'folder_rules.dart';
 import 'work_query.dart';
@@ -112,6 +113,8 @@ class AppDatabase implements SmartFolderLibrary {
     migrator.registerMigration('v15_work_page_count', (db) {
       if (!db.columns('works').contains('page_count')) db.execute('ALTER TABLE works ADD COLUMN page_count INTEGER');
     });
+    // Folder colors from the earlier, quieter palette or the old color picker become the closest vivid color.
+    migrator.registerMigration('v16_vivid_folder_colors', adoptVividFolderColors);
     return migrator;
   }
 
@@ -176,38 +179,8 @@ class AppDatabase implements SmartFolderLibrary {
 
   // MARK: - Folders & Color Generation
 
-  static const curatedFolderColors = [
-    0xFF2563EB, // Royal Blue
-    0xFF059669, // Emerald Green
-    0xFFEA580C, // Bright Orange
-    0xFFE11D48, // Rose Red
-    0xFF7C3AED, // Deep Purple
-    0xFF0891B2, // Ocean Cyan
-    0xFFD97706, // Amber Gold
-    0xFFDB2777, // Vibrant Pink
-    0xFF4F46E5, // Indigo
-    0xFF0D9488, // Teal
-    0xFF65A30D, // Lime Green
-    0xFFC026D3, // Fuchsia
-    0xFFDC2626, // Crimson
-    0xFF9333EA, // Purple
-    0xFF0284C7, // Sky Blue
-    0xFFB45309, // Warm Brown
-    0xFF16A34A, // Forest Green
-    0xFFF97316, // Tangerine
-    0xFF6366F1, // Periwinkle
-    0xFF14B8A6, // Turquoise
-    0xFF84CC16, // Lime
-    0xFFEC4899, // Pink
-    0xFFA855F7, // Purple
-    0xFF3B82F6, // Blue
-    0xFF10B981, // Mint
-    0xFFF59E0B, // Yellow Orange
-    0xFFEF4444, // Light Red
-    0xFF64748B, // Slate
-  ];
-
-  static List<int> get presetColors => curatedFolderColors;
+  static List<int> get curatedFolderColors => FolderPalette.colors;
+  static List<int> get presetColors => FolderPalette.colors;
 
   static int colorFromHSV({required double h, required double s, required double v}) {
     final c = v * s;
@@ -232,30 +205,30 @@ class AppDatabase implements SmartFolderLibrary {
   int nextUniqueFolderColorIn(SqlDatabase db, {Set<int> excluding = const {}}) =>
       nextFolderColor(existingColors: db.column<int>('SELECT color FROM folders'), excluding: excluding);
 
-  /// Shared by both libraries: unused palette colors first, then golden-angle hues.
-  static int nextFolderColor({required List<int> existingColors, Set<int> excluding = const {}}) {
-    final used = {...existingColors, ...excluding};
-    for (final color in curatedFolderColors) {
-      if (!used.contains(color)) return color;
+  /// Shared by both libraries: the first palette color no folder uses, then generated hues.
+  static int nextFolderColor({required List<int> existingColors, Set<int> excluding = const {}}) => FolderPalette.next({...existingColors, ...excluding});
+
+  /// Moves every folder onto the current palette, keeping folders apart where the palette allows.
+  static void adoptVividFolderColors(SqlDatabase db) {
+    final colors = db.column<int>('SELECT DISTINCT color FROM folders');
+    for (final MapEntry(key: old, value: color) in FolderPalette.replacing(colors).entries) {
+      if (old != color) db.execute('UPDATE folders SET color = ? WHERE color = ?', [color, old]);
     }
-    const goldenRatio = 0.618033988749895;
-    final count = existingColors.length + excluding.length;
-    final hue = (count * goldenRatio) % 1.0;
-    return colorFromHSV(h: hue, s: 0.75, v: 0.88);
   }
 
   int nextUniqueFolderColor({Set<int> excluding = const {}}) {
     try {
       return dbWriter.read((db) => nextUniqueFolderColorIn(db, excluding: excluding));
     } on Object {
-      return curatedFolderColors.first;
+      return FolderPalette.colors.first;
     }
   }
 
   static Folder unfiledFolder(SqlDatabase db) {
     final existing = db.row("SELECT * FROM folders WHERE sync_id = 'unsorted' OR name = '미분류' LIMIT 1");
     if (existing != null) return Folder.fromRow(existing);
-    db.execute("INSERT INTO folders (name, description, color, sort_order, created_at, sync_id) VALUES ('미분류', '기본 폴더', 4280391411, 1, ?, 'unsorted')", [
+    db.execute("INSERT INTO folders (name, description, color, sort_order, created_at, sync_id) VALUES ('미분류', '기본 폴더', ?, 1, ?, 'unsorted')", [
+      FolderPalette.unfiled,
       iso8601(),
     ]);
     return Folder.fromRow(db.row('SELECT * FROM folders WHERE id = ?', [db.lastInsertedRowID])!);
@@ -273,7 +246,7 @@ class AppDatabase implements SmartFolderLibrary {
       folder = Folder.fromRow(existing);
     } else {
       final now = iso8601();
-      folder = Folder(name: '미분류', description: '기본 폴더', color: 4280391411, sortOrder: 1, createdAt: now);
+      folder = Folder(name: '미분류', description: '기본 폴더', color: FolderPalette.unfiled, sortOrder: 1, createdAt: now);
       _insertFolder(folder, db);
     }
 

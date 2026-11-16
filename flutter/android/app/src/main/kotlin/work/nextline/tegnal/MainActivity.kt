@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.view.WindowManager
 import android.webkit.CookieManager
@@ -30,6 +32,7 @@ class MainActivity : FlutterActivity() {
     private var launchSplashPending = true
     private var pendingCreate: Pair<File, MethodChannel.Result>? = null
     private var pendingOpen: MethodChannel.Result? = null
+    private var pendingFolder: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge to edge on every Android version, as Android 15 and later draw an app targeting
@@ -174,6 +177,9 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "createDocument" -> createDocument(call.argument<String>("name"), call.argument<String>("mimeType"), call.argument<String>("sourcePath"), result)
                 "openDocument" -> openDocument(call.argument<List<String>>("mimeTypes"), result)
+                // Downloads go where the Files app can open them without a storage permission.
+                "downloadRoot" -> result.success(downloadRoot())
+                "pickFolder" -> pickFolder(result)
                 else -> result.notImplemented()
             }
         }
@@ -216,6 +222,51 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(intent, CREATE_DOCUMENT)
     }
 
+    /// Download/TEGNAL from Android 11, where an app may add files to the shared Download folder
+    /// without a permission; before that, the app's own folder on shared storage, which file
+    /// managers show under Android/data and which also needs no permission.
+    private fun downloadRoot(): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            @Suppress("DEPRECATION")
+            val shared = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "TEGNAL")
+            if (writable(shared)) return shared.absolutePath
+        }
+        val own = getExternalFilesDir(null)?.let { File(it, "TEGNAL") }
+        return own?.takeIf(::writable)?.absolutePath
+    }
+
+    private fun writable(directory: File): Boolean = try {
+        directory.mkdirs()
+        val probe = File(directory, ".tegnal-" + UUID.randomUUID())
+        probe.writeText("")
+        probe.delete()
+        true
+    } catch (error: Exception) {
+        false
+    }
+
+    /// The system folder picker. The folder comes back as a path on this device's shared storage,
+    /// which Dart then tries writing to; other providers aren't folders the app can save into.
+    private fun pickFolder(result: MethodChannel.Result) {
+        if (pendingCreate != null || pendingOpen != null || pendingFolder != null) {
+            result.error("busy", "Another document request is open.", null)
+            return
+        }
+        pendingFolder = result
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK_FOLDER)
+    }
+
+    private fun folderPath(tree: Uri): String? {
+        val id = DocumentsContract.getTreeDocumentId(tree) ?: return null
+        if (id.startsWith("raw:")) return id.removePrefix("raw:")
+        if (tree.authority != "com.android.externalstorage.documents") return null
+        val volume = id.substringBefore(':')
+        val relative = id.substringAfter(':', "")
+        @Suppress("DEPRECATION")
+        val base = if (volume.equals("primary", ignoreCase = true)) Environment.getExternalStorageDirectory() else File("/storage", volume)
+        return if (relative.isEmpty()) base.absolutePath else File(base, relative).absolutePath
+    }
+
     private fun openDocument(mimeTypes: List<String>?, result: MethodChannel.Result) {
         if (pendingCreate != null || pendingOpen != null) {
             result.error("busy", "Another document request is open.", null)
@@ -249,6 +300,18 @@ class MainActivity : FlutterActivity() {
                     return
                 }
                 copyInBackground(result, { copyToCache(uri) })
+            }
+            PICK_FOLDER -> {
+                val result = pendingFolder ?: return
+                pendingFolder = null
+                val tree = data?.data
+                if (resultCode != Activity.RESULT_OK || tree == null) {
+                    result.success(null)
+                    return
+                }
+                val path = folderPath(tree)
+                if (path == null) result.error("unsupported", "This folder isn't on this device's storage.", null)
+                else result.success(mapOf("path" to path, "name" to File(path).name))
             }
             else -> super.onActivityResult(requestCode, resultCode, data)
         }
@@ -285,5 +348,6 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val CREATE_DOCUMENT = 41001
         const val OPEN_DOCUMENT = 41002
+        const val PICK_FOLDER = 41003
     }
 }

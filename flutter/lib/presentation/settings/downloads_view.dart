@@ -20,8 +20,8 @@ import '../navigation/root_tab_view.dart';
 import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import '../works/works_models.dart';
+import 'download_location_view.dart';
 import 'settings_page.dart';
-import '../design/alert_dialog.dart';
 
 /// What opening a download offline needs.
 class DownloadsContext {
@@ -102,15 +102,7 @@ class _DownloadsViewState extends State<DownloadsView> {
     if (delete == true) _store.remove(item.id);
   }
 
-  void _showInfo() => showCupertinoDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (context) => TegnalAlertDialog(
-      title: Text(L10n.text('Downloads')),
-      content: Text(L10n.text('Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here.')),
-      actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],
-    ),
-  );
+  void _openLocation() => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => DownloadLocationView(store: _store)));
 
   void _open(WorkDownload item) => Navigator.of(context).push(
     CupertinoPageRoute<void>(
@@ -238,6 +230,15 @@ class _DownloadsViewState extends State<DownloadsView> {
                     ),
                   ),
                 ),
+                if ([
+                      for (final item in _store.movable)
+                        if (item.mode == (widget.booru ? WorkDownloadMode.booru : WorkDownloadMode.manga)) item,
+                    ]
+                    case final movable when movable.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    sliver: SliverToBoxAdapter(child: _moveHint(movable)),
+                  ),
                 if (_store.storageError != null)
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -288,13 +289,65 @@ class _DownloadsViewState extends State<DownloadsView> {
               title: L10n.text('Downloads'),
               back: !widget.inSheet,
               trailing: widget.inSheet
-                  ? GlassTextButton(label: L10n.text('Done'), prominent: true, elevated: false, onPressed: () => Navigator.of(context).pop())
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ToolbarGroup(
+                          children: [ToolbarIconButton(label: L10n.text('Download Location'), icon: CupertinoIcons.folder, size: 22, onPressed: _openLocation)],
+                        ),
+                        const SizedBox(width: 8),
+                        GlassTextButton(label: L10n.text('Done'), prominent: true, elevated: false, onPressed: () => Navigator.of(context).pop()),
+                      ],
+                    )
                   : ToolbarGroup(
-                      children: [ToolbarIconButton(label: L10n.text('Storage Used'), icon: CupertinoIcons.info_circle, size: 22, onPressed: _showInfo)],
+                      children: [ToolbarIconButton(label: L10n.text('Download Location'), icon: CupertinoIcons.folder, size: 22, onPressed: _openLocation)],
                     ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+extension on _DownloadsViewState {
+  /// Downloads outside the current location, most often from versions that kept them where
+  /// the Files app can't open them, with a way to move them.
+  Widget _moveHint(List<WorkDownload> movable) {
+    final tint = TegnalColors.tint.resolveFrom(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openLocation,
+      child: Semantics(
+        button: true,
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            color: FormColors.listRow.resolveFrom(context),
+            shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(18)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(CupertinoIcons.folder_badge_minus, size: 22, color: tint),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    movable.any((item) => item.location == null)
+                        ? L10n.text("%@ downloads are in the app's own storage, where the Files app can't open them.", ['${movable.length}'])
+                        : L10n.text('%@ downloads are saved in another folder.', ['${movable.length}']),
+                    style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  L10n.text('Move'),
+                  style: TegnalType.style(15, weight: FontWeight.w600, color: tint),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

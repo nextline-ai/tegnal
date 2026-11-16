@@ -100,7 +100,11 @@ class _FoldersViewState extends State<FoldersView> {
         ContextMenuAction(
           title: L10n.text('Change Color'),
           symbol: (color) => PaletteSymbol(color: color),
-          onSelected: () => widget.routes.changeColor(context, folder),
+          onSelected: () => widget.routes.changeColor(
+            context,
+            folder,
+            preview: (color) => FolderBentoCard(folder: folder, previews: _previews[id] ?? const [], style: const ArtworkCellStyle(width: 132), color: color),
+          ),
         ),
         ContextMenuAction(
           title: L10n.text('Reorder Folders'),
@@ -330,14 +334,17 @@ class PressableCardState extends State<PressableCard> {
 
 /// `FolderBentoCard`: the folder's color with its four newest covers and a caption.
 class FolderBentoCard extends StatelessWidget {
-  const FolderBentoCard({super.key, required this.folder, required this.previews, required this.style});
+  const FolderBentoCard({super.key, required this.folder, required this.previews, required this.style, this.color});
   final Folder folder;
   final List<Work> previews;
   final ArtworkCellStyle style;
 
+  /// Draws the card in another color, as the color sheet previews it.
+  final int? color;
+
   @override
   Widget build(BuildContext context) => FolderBentoFrame(
-    color: folder.color,
+    color: color ?? folder.color,
     title: folder.plainName,
     isSmart: folder.isSmart,
     count: folder.workCount,

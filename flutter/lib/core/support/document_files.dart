@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app_platform.dart';
 
@@ -40,6 +41,34 @@ class DocumentFiles {
     }
     final path = await _channel.invokeMethod<String>('openDocument', {'mimeTypes': mimeTypes});
     return path == null ? null : File(path);
+  }
+
+  /// Where downloads go unless the person picks a folder: on the phone Download/TEGNAL (or, before
+  /// Android 11, the app's folder on shared storage), which needs no storage permission; on a
+  /// computer TEGNAL in the Downloads folder. Null when there is no such place.
+  Future<Directory?> downloadRoot() async {
+    try {
+      if (AppPlatform.isDesktop) {
+        final downloads = await getDownloadsDirectory();
+        return downloads == null ? null : Directory('${downloads.path}${Platform.pathSeparator}TEGNAL');
+      }
+      final path = await _channel.invokeMethod<String>('downloadRoot');
+      return path == null ? null : Directory(path);
+    } on Object {
+      return null;
+    }
+  }
+
+  /// A folder the person picks for downloads, or null when cancelled. Throws a
+  /// [PlatformException] when the folder isn't on this device's storage.
+  Future<({String path, String name})?> pickFolder() async {
+    if (AppPlatform.isDesktop) {
+      final path = await FileSelectorPlatform.instance.getDirectoryPathWithOptions(const FileDialogOptions(canCreateDirectories: true));
+      return path == null ? null : (path: path, name: path.split(Platform.pathSeparator).where((part) => part.isNotEmpty).lastOrNull ?? path);
+    }
+    final picked = await _channel.invokeMapMethod<String, Object?>('pickFolder');
+    if (picked == null) return null;
+    return (path: picked['path']! as String, name: picked['name']! as String);
   }
 
   /// Desktop dialogs filter by extension; Linux also by MIME type.

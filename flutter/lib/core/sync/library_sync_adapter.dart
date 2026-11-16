@@ -14,6 +14,7 @@ import '../support/preferences.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
 import 'library_sync_record.dart';
+import '../storage/folder_palette.dart';
 
 /// Cheap change tokens avoid re-reading the entire library on idle sync polls.
 /// `total_changes()` counts this connection's edits and `PRAGMA data_version` other
@@ -536,7 +537,10 @@ class LibrarySyncAdapter {
   }
 
   static void _upsert(LibrarySyncRow incoming, SqlDatabase db) {
-    final row = incoming.table == 'manga.folders' ? LibrarySyncRow(table: incoming.table, values: MangaImportMetadata.normalized(incoming.values)) : incoming;
+    var row = incoming.table == 'manga.folders' ? LibrarySyncRow(table: incoming.table, values: MangaImportMetadata.normalized(incoming.values)) : incoming;
+    // A device still on the earlier palette sends its colors as they were.
+    final color = row.table.endsWith('.folders') ? row.values['color']?.integer : null;
+    if (color != null) row = LibrarySyncRow(table: row.table, values: {...row.values, 'color': SyncValue.integer(FolderPalette.vivid(color))});
     final allowed = columns[row.table], keys = LibrarySyncRow.keys[row.table];
     if (allowed == null || keys == null || !keys.every(row.values.containsKey)) {
       throw const BooruError(BooruErrorKind.invalidResponse);
