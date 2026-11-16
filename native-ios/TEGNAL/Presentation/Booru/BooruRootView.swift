@@ -130,7 +130,8 @@ struct BooruServerMenu: View {
     @Environment(BooruStore.self) private var store
     var body: some View {
         Menu {
-            ForEach(store.servers) { server in
+            // Safe Mode offers Safebooru alone.
+            ForEach(store.selectableServers) { server in
                 Toggle(server.displayName, isOn: Binding(get: { store.selectedServerIDs.contains(server.id) }, set: { selected in
                     guard selected != store.selectedServerIDs.contains(server.id) else { return }
                     store.perform { try store.toggleServer(server) }
@@ -531,7 +532,7 @@ struct BooruFeedView: View {
             store.perform { for server in servers { try store.clearHistory(serverID: server.id) } }
         }
     }
-    private var effectiveQuery: String { env.booruQuery(query) }
+    private var effectiveQuery: String { query }
     private var requestKey: String { effectiveQuery + "|\(sort.rawValue)|\(retry)|\(env.booruSearchRevision)|" + servers.map { $0.id + $0.canonicalAddress + $0.engine.rawValue }.joined(separator: ",") }
     private var sortOptions: [BooruSort] { BooruSort.options(for: servers, local: challenge?.session.sourceKind == "folder") }
     private var filters: some View {

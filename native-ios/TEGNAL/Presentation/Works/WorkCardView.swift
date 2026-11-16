@@ -38,6 +38,22 @@ struct ArtworkGridGeometry: Equatable {
         spacing = removesPadding ? 0 : 14 * scale
         margin = removesPadding ? 0 : 16 * scale
     }
+
+    /// The narrowest an artwork card may be before Automatic drops a column. Phones and an
+    /// iPhone Duo keep 160 pt; wider windows let cards grow a little with the screen, so an iPad
+    /// shows three columns upright and four on its side rather than rows of phone-sized cards.
+    static func artworkMinimum(width: CGFloat) -> CGFloat { min(300, 160 + max(0, width - 600) * 0.2) }
+
+    /// Wider than any phone or an iPhone Duo on its side.
+    static let wideWidth: CGFloat = 602
+    /// A chosen column count describes a phone held upright, where Automatic shows two. A wider
+    /// window keeps that choice relative to its own Automatic count: four chosen shows twice as
+    /// many columns as Automatic there, two the same number, so cards grow with the screen too.
+    static func columns(chosen: Int, width: CGFloat, minimum: CGFloat? = nil) -> Int {
+        guard chosen > 0, width > wideWidth else { return chosen }
+        let automatic = ArtworkGridGeometry(width: width, columns: 0, minimum: minimum ?? artworkMinimum(width: width), removesPadding: false).count
+        return min(12, max(1, Int((CGFloat(chosen) * CGFloat(automatic) / 2).rounded())))
+    }
 }
 
 private struct ArtworkCellStyleKey: EnvironmentKey { static let defaultValue = ArtworkCellStyle() }
@@ -62,9 +78,11 @@ struct ArtworkGrid<Content: View>: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var width: CGFloat = 390
     var body: some View {
-        let columns = typeSize.isAccessibilitySize ? 1 : kind == .folders ? env.folderColumns(for: mode) : env.gridColumns(for: mode)
-        let geometry = ArtworkGridGeometry(width: width, columns: columns,
-            minimum: kind == .folders && sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: mode))
+        let chosen = kind == .folders ? env.folderColumns(for: mode) : env.gridColumns(for: mode)
+        let minimum = kind == .folders ? (sizeClass == .regular ? 240 : 160) : ArtworkGridGeometry.artworkMinimum(width: width)
+        let columns = typeSize.isAccessibilitySize ? 1 : ArtworkGridGeometry.columns(chosen: chosen, width: width, minimum: minimum)
+        let geometry = ArtworkGridGeometry(width: width, columns: columns, minimum: minimum,
+            removesPadding: env.removesGridPadding(for: mode), maximumColumns: 12)
         let style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: env.removesGridPadding(for: mode),
             showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists,
             showsCategory: mode == .manga && env.showsMangaCategories, columns: geometry.count)

@@ -150,7 +150,7 @@ struct AppModeSwitch: View {
     @State private var hintPhase = 0
     private let hintColors: [Color] = [.cyan, .purple, .pink, .orange, .green]
     private var isActiveControl: Bool { previewMode != nil || displayedAppMode == nil || displayedAppMode == env.mode }
-    private var animatesHint: Bool { !env.booruSafeMode && env.modeSwitchHintPending && visible && isActiveControl && scenePhase == .active && !reduceMotion }
+    private var animatesHint: Bool { env.modeSwitchHintPending && visible && isActiveControl && scenePhase == .active && !reduceMotion }
     private var activeMode: AppMode { previewMode?.wrappedValue ?? env.mode }
     private var current: AppMode { activeMode }
     private var motion: AppModeSwitchMotion { previewMode == nil ? env.modeSwitchMotion : previewMotion }
@@ -169,10 +169,9 @@ struct AppModeSwitch: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(previewMode == nil && env.booruSafeMode)
         .glassCapsule()
         .overlay {
-            if env.modeSwitchHintPending && !env.booruSafeMode {
+            if env.modeSwitchHintPending {
                 Capsule().strokeBorder(hintColors[hintPhase], lineWidth: 2.5)
                     .background(Capsule().fill(hintColors[hintPhase].opacity(0.12)))
                     .opacity(hintPhase.isMultiple(of: 2) ? 1 : 0.45)
@@ -196,7 +195,7 @@ struct AppModeSwitch: View {
         .highPriorityGesture(DragGesture(minimumDistance: 12)
             .updating($dragging) { _, state, _ in state = true }
             .onChanged { value in
-                guard isActiveControl, previewMode != nil || !env.booruSafeMode else { return }
+                guard isActiveControl else { return }
                 var transaction = Transaction(); transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     if dragOrigin == nil { dragOrigin = motion.position(for: current) }
@@ -230,7 +229,7 @@ struct AppModeSwitch: View {
             dragOrigin = nil
         }
         .accessibilityLabel(L10n.text("Switch Modes"))
-        .accessibilityHint(L10n.text(env.booruSafeMode ? "Turn off Safe Mode in More to use Comics Mode." : "Tap or swipe to switch between comics and images."))
+        .accessibilityHint(L10n.text("Tap or swipe to switch between comics and images."))
         .accessibilityValue(current.title)
         .accessibilityIdentifier("app.mode")
     }
@@ -246,7 +245,7 @@ struct AppModeSwitch: View {
     }
     private func position(_ mode: AppMode) -> CGFloat { mode == .manga ? 0 : 44 }
     private func change(_ mode: AppMode) {
-        guard isActiveControl, previewMode != nil || !env.booruSafeMode else { return }
+        guard isActiveControl else { return }
         guard mode != current, motion.acceptInteraction() else { settle(current); return }
         env.acknowledgeModeSwitch()
         // The shared selection is authoritative immediately. A disappearing

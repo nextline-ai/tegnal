@@ -172,6 +172,7 @@
 "Page Number" = "Page Number";
 "Page image" = "Page image";
 "Pages per View" = "Pages per View";
+"Automatic shows two pages side by side when the screen is wider than it is tall, such as an iPad or iPhone Duo on its side, and one page otherwise. Continuous Scroll shows one page per row." = "Automatic shows two pages side by side when the screen is wider than it is tall, such as an iPad or iPhone Duo on its side, and one page otherwise. Continuous Scroll shows one page per row.";
 "Pages: %@" = "Pages: %@";
 "Pauses while menus, settings, translation, or zoom are active. Stops at the last page." = "Pauses while menus, settings, translation, or zoom are active. Stops at the last page.";
 "Popular This Month" = "Popular This Month";
@@ -1180,14 +1181,13 @@
 "Preview Rows per Page" = "Preview Rows per Page";
 
 "Safe Mode" = "Safe Mode";
+"Hidden in Safe Mode" = "Hidden in Safe Mode";
+"Safe Mode shows only Safebooru. Your saved comics come back when you turn it off in Settings." = "Safe Mode shows only Safebooru. Your saved comics come back when you turn it off in Settings.";
+"Browse Pools" = "Browse Pools";
 
-"All Ages" = "All Ages";
 
-"Age Guide" = "Age Guide";
 
-"Default Search Tag" = "Default Search Tag";
 
-"Turn off Safe Mode in More to use Comics Mode." = "Turn off Safe Mode in More to use Comics Mode.";
 
 "Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches." = "Adds only the selected rating tag to image searches. Age labels are a browsing guide; you can turn this off or enter a rating yourself. Comics Mode is unavailable while enabled because some comics websites do not support rating searches.";
 
@@ -1243,7 +1243,7 @@
 "Removes the gaps and outer margins around artwork and folder thumbnails." = "Removes the gaps and outer margins around artwork and folder thumbnails.";
 "Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges." = "Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges.";
 "Automatic shows twice as many columns as the artwork grid. Choose a number to keep the preview layout fixed." = "Automatic shows twice as many columns as the artwork grid. Choose a number to keep the preview layout fixed.";
-"Automatic fits the columns to the screen width. Choose a number to keep the layout fixed." = "Automatic fits the columns to the screen width. Choose a number to keep the layout fixed.";
+"Automatic fits the columns to the screen, and cards grow a little on larger screens such as iPad. A number sets the columns on a phone; larger screens add columns in proportion." = "Automatic fits the columns to the screen, and cards grow a little on larger screens such as iPad. A number sets the columns on a phone; larger screens add columns in proportion.";
 "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "Adds one rating tag to image searches. You can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.";
 "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer." = "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.";
 "Finds missing covers, titles and tags for works in your library. You can pause and resume the background task." = "Finds missing covers, titles and tags for works in your library. You can pause and resume the background task.";
@@ -1627,8 +1627,7 @@
 "Clear recently opened images?" = "Clear recently opened images?";
 "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting." = "The language works start in when you open an artist, such as from a work's artist or a search for one artist. Changing the language there also changes this setting.";
 "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All." = "The language works start in when you open a single tag, such as from a work's tags. Changing the language there also changes this setting. Searches with several words keep All.";
-"Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters." = "Turning this on switches image mode to Safebooru, where every image is all ages. If you choose another server, one rating tag is added to its searches; you can change or remove it in your search. Comics Mode is unavailable while this is on because some comics websites do not support rating filters.";
-"None (Safebooru)" = "None (Safebooru)";
+"Turning this on shows only Safebooru, where every image is all ages, in Saved and Explore. Comics Mode browses Safebooru’s pools as it does before a comics website is connected, and saved comics stay hidden. Turning it off brings back your servers and library." = "Turning this on shows only Safebooru, where every image is all ages, in Saved and Explore. Comics Mode browses Safebooru’s pools as it does before a comics website is connected, and saved comics stay hidden. Turning it off brings back your servers and library.";
 "Show as Folder in Saved" = "Show as Folder in Saved";
 "Recent Works" = "Recent Works";
 "Recent Images" = "Recent Images";

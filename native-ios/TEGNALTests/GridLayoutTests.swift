@@ -201,13 +201,62 @@ final class GridLayoutTests: XCTestCase {
     func testPreviewColumnsFollowTwiceTheResolvedArtworkColumnsOrAnExplicitChoice() {
         for width: CGFloat in [280, 390, 678, 1024, 1280] {
             for columns in 0...5 {
-                let artwork = ArtworkGridGeometry(width: width, columns: columns, removesPadding: false)
+                let artwork = ArtworkGridGeometry(width: width, columns: ArtworkGridGeometry.columns(chosen: columns, width: width),
+                                                  minimum: ArtworkGridGeometry.artworkMinimum(width: width), removesPadding: false, maximumColumns: 12)
                 XCTAssertEqual(GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 0,
-                                                            removesArtworkPadding: false), artwork.count * 2)
+                                                            removesArtworkPadding: false), min(16, artwork.count * 2))
                 XCTAssertEqual(GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 6,
                                                             removesArtworkPadding: false), 6)
             }
         }
+    }
+
+    func testAutomaticPagesPerViewShowsTwoPagesWhenTheViewerIsWiderThanTall() {
+        let paged = ReaderMode.horizontal.rawValue
+        XCTAssertEqual(ReaderLayout.automatic, 0)
+        XCTAssertEqual(ReaderLayout.resolved(0, size: CGSize(width: 402, height: 874), mode: paged), 1, "A phone held upright")
+        XCTAssertEqual(ReaderLayout.resolved(0, size: CGSize(width: 1032, height: 1376), mode: paged), 1, "An iPad held upright")
+        XCTAssertEqual(ReaderLayout.resolved(0, size: CGSize(width: 1376, height: 1032), mode: paged), 2, "An iPad on its side")
+        XCTAssertEqual(ReaderLayout.resolved(0, size: CGSize(width: 678, height: 466), mode: ReaderMode.vertical.rawValue), 2, "An iPhone Duo on its side")
+        XCTAssertEqual(ReaderLayout.resolved(0, size: CGSize(width: 1376, height: 1032), mode: ReaderMode.continuous.rawValue), 1,
+                       "Continuous Scroll keeps long strips one to a row")
+        XCTAssertEqual(ReaderLayout.resolved(0, size: .zero, mode: paged), 1)
+        // A chosen number stays as chosen.
+        XCTAssertEqual(ReaderLayout.resolved(1, size: CGSize(width: 1376, height: 1032), mode: paged), 1)
+        XCTAssertEqual(ReaderLayout.resolved(3, size: CGSize(width: 402, height: 874), mode: paged), 3)
+        XCTAssertEqual(ReaderLayout.resolved(9, size: CGSize(width: 402, height: 874), mode: paged), 4)
+    }
+
+    func testArtworkGrowsGentlyOnLargerScreensAndChosenColumnsFollowIt() {
+        func automatic(_ width: CGFloat) -> Int {
+            ArtworkGridGeometry(width: width, columns: 0, minimum: ArtworkGridGeometry.artworkMinimum(width: width), removesPadding: false).count
+        }
+        // Phones and an iPhone Duo either way up keep their two or three phone-sized columns.
+        XCTAssertEqual(automatic(382), 2)
+        XCTAssertEqual(automatic(402), 2)
+        XCTAssertEqual(automatic(440), 2)
+        XCTAssertEqual(automatic(600), 3)
+        // An iPad shows three larger cards upright, three beside its sidebar and four on its side.
+        XCTAssertEqual(automatic(744), 3)
+        XCTAssertEqual(automatic(1032), 3)
+        XCTAssertEqual(automatic(1056), 3)
+        XCTAssertEqual(automatic(1376), 4)
+        let tablet = ArtworkGridGeometry(width: 1032, columns: 0, minimum: ArtworkGridGeometry.artworkMinimum(width: 1032), removesPadding: false)
+        let phone = ArtworkGridGeometry(width: 402, columns: 0, removesPadding: false)
+        XCTAssertGreaterThan(tablet.cellWidth, phone.cellWidth * 1.5, "Cards grow with the screen")
+        // A chosen number stays as chosen up to an iPhone Duo on its side.
+        for width: CGFloat in [320, 390, 440, 466, 600] {
+            for chosen in 1...5 { XCTAssertEqual(ArtworkGridGeometry.columns(chosen: chosen, width: width), chosen) }
+        }
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 0, width: 1376), 0, "Automatic already fits the width")
+        // Wider, it keeps its balance against Automatic, which shows two on a phone.
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 2, width: 1032), 3)
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 3, width: 1032), 5)
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 1, width: 1376), 2)
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 4, width: 1376), 8)
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 5, width: 2400), 12, "Never more than twelve columns")
+        // Folders keep their own, larger minimum.
+        XCTAssertEqual(ArtworkGridGeometry.columns(chosen: 2, width: 1032, minimum: 240), 3)
     }
 
     func testDensePreviewUsesTheSameProportionalSpacingAndCornersAsArtwork() {

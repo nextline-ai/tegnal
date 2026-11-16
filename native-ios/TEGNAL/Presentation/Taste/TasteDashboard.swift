@@ -28,8 +28,8 @@ struct TasteDashboard: View {
 
     var body: some View {
         let layout = ArtworkGridGeometry(width: viewportWidth,
-            columns: typeSize.isAccessibilitySize ? 1 : env.gridColumns(for: mode == .booru ? .booru : .manga),
-            removesPadding: env.removesGridPadding(for: mode == .booru ? .booru : .manga))
+            columns: typeSize.isAccessibilitySize ? 1 : ArtworkGridGeometry.columns(chosen: env.gridColumns(for: mode == .booru ? .booru : .manga), width: viewportWidth),
+            minimum: ArtworkGridGeometry.artworkMinimum(width: viewportWidth), removesPadding: env.removesGridPadding(for: mode == .booru ? .booru : .manga), maximumColumns: 12)
         ScrollViewReader { scrollProxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {

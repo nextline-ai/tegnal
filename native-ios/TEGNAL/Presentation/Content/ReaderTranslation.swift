@@ -145,6 +145,9 @@ enum ReaderZoomedText {
     static let minimumScale: CGFloat = 1.3
     /// How long the viewport stays still before it is read.
     static let settle: Duration = .milliseconds(600)
+    /// AI translation hears only of finished gestures, so it waits just long enough to skip a
+    /// viewport the reader is already moving on from.
+    static let coalesce: Duration = .milliseconds(250)
 
     /// The image area on screen, normalized with a top-left origin; nil when not zoomed in enough.
     @MainActor static func visibleRect(of scroll: PageScrollView) -> CGRect? {

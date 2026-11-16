@@ -44,7 +44,7 @@ struct ModeAppearanceSettings: View {
     }
     private func columnPicker(_ title: String, selection: Binding<Int>, identifier: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            SettingsHelpLabel(title, help: "Automatic fits the columns to the screen width. Choose a number to keep the layout fixed.").font(.subheadline)
+            SettingsHelpLabel(title, help: "Automatic fits the columns to the screen, and cards grow a little on larger screens such as iPad. A number sets the columns on a phone; larger screens add columns in proportion.").font(.subheadline)
             Picker(L10n.text(title), selection: selection) {
                 Text(L10n.text("Automatic")).tag(0)
                 ForEach(1...5, id: \.self) { Text(String($0)).tag($0) }

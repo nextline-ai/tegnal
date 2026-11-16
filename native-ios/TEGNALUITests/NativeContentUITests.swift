@@ -887,7 +887,9 @@ final class NativeContentUITests: XCTestCase {
         element(app, "reader.settings").tap()
         element(app, "reader.settings.spread").tap()
         app.buttons["2페이지"].tap()
-        let auto = element(app, "reader.settings.auto")
+        // Auto Advance sits below the translation settings.
+        let auto = app.descendants(matching: .any)["reader.settings.auto"]
+        for _ in 0..<4 where !auto.exists { app.swipeUp() }
         auto.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         element(app, "reader.settings.done").tap()
         element(app, "reader.menu.close").tap()

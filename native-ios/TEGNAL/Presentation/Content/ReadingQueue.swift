@@ -298,6 +298,7 @@ private struct WorkHoldGesture: UIGestureRecognizerRepresentable {
 /// The large panel a carried work is let go on, with the card following the finger above it.
 struct ReadingQueueCarryOverlay: View {
     let queue: ReadingQueue
+    @Environment(\.horizontalSizeClass) private var sizeClass
     /// The last carried work, kept so the card can fade where it was let go.
     @State private var shown: ReadingQueueItem?
     @State private var shownCover: UIImage?
@@ -311,8 +312,9 @@ struct ReadingQueueCarryOverlay: View {
                 if shown != nil {
                     ReadingQueueDropPanel(over: queue.isOverDropZone, count: queue.items.count)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { queue.dropZone = $0 }
+                        .frame(maxWidth: ReadingQueueAccessory.maximumWidth)
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 64)
+                        .padding(.bottom, ReadingQueueAccessory.tabsAtBottom(sizeClass) ? 64 : 12)
                         .opacity(active ? 1 : 0)
                         .offset(y: active ? 0 : 40)
                 }

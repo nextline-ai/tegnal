@@ -120,8 +120,9 @@ enum GalleryPreviewLayout {
     }
     static func columns(width: CGFloat, artworkColumns: Int, previewColumns: Int, removesArtworkPadding: Bool) -> Int {
         if previewColumns > 0 { return min(10, previewColumns) }
-        let artwork = ArtworkGridGeometry(width: width, columns: artworkColumns, removesPadding: removesArtworkPadding)
-        return artwork.count * 2
+        let artwork = ArtworkGridGeometry(width: width, columns: ArtworkGridGeometry.columns(chosen: artworkColumns, width: width),
+                                          minimum: ArtworkGridGeometry.artworkMinimum(width: width), removesPadding: removesArtworkPadding, maximumColumns: 12)
+        return min(16, artwork.count * 2)
     }
 }
 

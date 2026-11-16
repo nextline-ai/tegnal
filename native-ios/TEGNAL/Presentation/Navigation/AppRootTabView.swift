@@ -398,21 +398,26 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     private var collectionsIcon: String { "tag" }
     private var settingsTitle: String { L10n.text(mode == .booru ? "More" : "Settings") }
     private var settingsIcon: String { mode == .booru ? "ellipsis" : "gearshape" }
+    /// Safe Mode keeps Comics Mode to Safebooru's pools, so what comes from comics websites stays out of sight.
+    private var hidesComics: Bool { mode == .manga && env.booruSafeMode }
     private var insights: some View {
-        NavigationStack { TasteDashboard(mode: mode == .booru ? .booru : .comics, isRoot: true, explore: { selection = .works }).readingQueueClearance() }
+        NavigationStack {
+            if hidesComics { SafeModeComicsPlaceholder { selection = .works }.appRootHeader("Smart") }
+            else { TasteDashboard(mode: mode == .booru ? .booru : .comics, isRoot: true, explore: { selection = .works }).readingQueueClearance() }
+        }
     }
     var body: some View {
         VStack(spacing: 0) {
             if env.coverQueueState.showsHeatBanner {
                 CoverFillHeatBanner(state: env.coverQueueState)
             }
-            if let date = env.taste.pendingRecap(tasteMode) {
+            if !hidesComics, let date = env.taste.pendingRecap(tasteMode) {
                 TasteRecapBanner(mode: tasteMode, date: date, open: { showingRecap = true }, dismiss: { env.taste.dismissRecap(tasteMode) })
                     .environment(\.timeZone, TimeZone(identifier: env.taste.control.timeZone) ?? .gmt)
                     .fixedSize(horizontal: false, vertical: true)
             }
             tabContent
-                .modifier(ReadingQueueAccessory(enabled: mode == .manga, read: readQueued, showList: { showingReadingQueue = true }))
+                .modifier(ReadingQueueAccessory(enabled: mode == .manga && !hidesComics, read: readQueued, showList: { showingReadingQueue = true }))
         }
         .appSheet(isPresented: $showingReadingQueue) {
             ReadingQueueView(read: { id in showingReadingQueue = false; readQueued(id) })
@@ -452,7 +457,7 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     }
 
     private var tasteMode: TasteMode { mode == .booru ? .booru : .comics }
-    private var queueInset: ReadingQueueInset { ReadingQueueInset(enabled: mode == .manga) }
+    private var queueInset: ReadingQueueInset { ReadingQueueInset(enabled: mode == .manga && !hidesComics) }
     /// Opens a waiting work; its number names the same work on every connected site.
     private func readQueued(_ id: Int64) {
         readingQueued = IdentifiableInt64(id: id)
@@ -557,18 +562,26 @@ private struct ComicsRootTabs: View {
     var body: some View {
         AppTabLayout(selection: $selection, mode: .manga,
             saved: NavigationStack {
-                FoldersView()
-                    .safeAreaInset(edge: .top) { if !env.isSiteVerified { ComicsConnectionCard().padding(.horizontal) } }
-                    .readingQueueClearance()
+                if env.booruSafeMode { SafeModeComicsPlaceholder { selection = .works }.appRootHeader("Saved") }
+                else {
+                    FoldersView()
+                        .safeAreaInset(edge: .top) { if !env.isSiteVerified { ComicsConnectionCard().padding(.horizontal) } }
+                        .readingQueueClearance()
+                }
             },
             explore: exploration,
-            collections: NavigationStack { ArtistsListView().readingQueueClearance() },
+            collections: NavigationStack {
+                if env.booruSafeMode { SafeModeComicsPlaceholder { selection = .works }.appRootHeader("Tags") }
+                else { ArtistsListView().readingQueueClearance() }
+            },
             settings: NavigationStack { SettingsView().readingQueueClearance() })
         .environment(\.isDisplayedAppModeActive, env.mode == .manga)
     }
 
     @ViewBuilder private var exploration: some View {
-        if env.isSiteVerified { ContentEntryView(embedded: true) }
+        // Safe Mode browses Safebooru's pools, as before a comics website is connected.
+        if env.booruSafeMode { NavigationStack { ComicsPoolsView(connects: false).appRootHeader("Explore") } }
+        else if env.isSiteVerified { ContentEntryView(embedded: true) }
         else {
             NavigationStack {
                 Group {
@@ -584,14 +597,20 @@ private struct ComicsRootTabs: View {
 /// Up Next sits above the tabs, where a music app keeps what plays next, and shows while works
 /// wait. It is drawn here rather than as the tab bar's accessory, which the system keeps at a
 /// fixed height. A carried work is let go on the larger panel drawn over the screen.
-private struct ReadingQueueAccessory: ViewModifier {
+struct ReadingQueueAccessory: ViewModifier {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let enabled: Bool
     let read: (Int64) -> Void
     let showList: () -> Void
     /// Half again the height of the system's accessory bar.
     static let height: CGFloat = 72
+    /// About as wide as on the largest iPhone, so on an iPad it reads as a player, not a banner.
+    static let maximumWidth: CGFloat = 560
     private var visible: Bool { enabled && !env.readingQueue.items.isEmpty && env.readingQueue.carried == nil }
+    /// A wide iPad window puts the tabs along the top or in a sidebar, leaving the bottom free.
+    static func tabsAtBottom(_ sizeClass: UserInterfaceSizeClass?) -> Bool { !(UIDevice.current.userInterfaceIdiom == .pad && sizeClass == .regular) }
+    private var tabsAtBottom: Bool { Self.tabsAtBottom(sizeClass) }
 
     func body(content: Content) -> some View {
         content
@@ -604,9 +623,10 @@ private struct ReadingQueueAccessory: ViewModifier {
                         ReadingQueueBar(read: read, showList: showList)
                             .frame(height: Self.height)
                             .modifier(ReadingQueueBarBackground())
+                            .frame(maxWidth: Self.maximumWidth)
                             .padding(.horizontal, 21)
-                            // Just above the tab bar.
-                            .padding(.bottom, 57)
+                            // Just above the tab bar, or just above the screen's bottom edge when the tabs are at the top.
+                            .padding(.bottom, tabsAtBottom ? 57 : 12)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
@@ -628,3 +648,20 @@ private struct ReadingQueueInset: ViewModifier {
     }
 }
 
+/// What Comics Mode's library tabs show in Safe Mode. Saved comics come from comics websites, so
+/// they stay saved but out of sight, and Explore offers Safebooru's pools instead.
+struct SafeModeComicsPlaceholder: View {
+    let explore: () -> Void
+    var body: some View {
+        ContentUnavailableView {
+            Label(L10n.text("Hidden in Safe Mode"), systemImage: "eye.slash")
+        } description: {
+            Text(L10n.text("Safe Mode shows only Safebooru. Your saved comics come back when you turn it off in Settings."))
+        } actions: {
+            Button(L10n.text("Browse Pools"), systemImage: "rectangle.stack", action: explore)
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("comics.safeMode.pools")
+        }
+        .accessibilityIdentifier("comics.safeMode.hidden")
+    }
+}

@@ -37,7 +37,11 @@ struct NativeReaderView: View {
     @State private var showResume = false
     @State private var resumeReady = false
     @State private var pendingSearch: String?
-    @SwiftUI.AppStorage("reader.pagesPerSpread", store: ReaderPreferences.defaults) private var pagesPerSpread = 1
+    /// The Pages per View setting; Automatic (0) follows the viewer's shape.
+    @SwiftUI.AppStorage(ReaderLayout.pagesKey, store: ReaderPreferences.defaults) private var pagesPreference = ReaderLayout.automatic
+    @State private var viewerSize: CGSize = ReaderLayout.windowSize
+    /// Pages shown side by side right now.
+    private var pagesPerSpread: Int { ReaderLayout.resolved(pagesPreference, size: viewerSize, mode: mode) }
     @SwiftUI.AppStorage("reader.autoAdvance", store: ReaderPreferences.defaults) private var autoAdvance = false
     @SwiftUI.AppStorage("reader.autoSeconds", store: ReaderPreferences.defaults) private var autoSeconds = 10.0
     @SwiftUI.AppStorage("reader.helpHidden", store: ReaderPreferences.defaults) private var helpHidden = false
@@ -90,14 +94,17 @@ struct NativeReaderView: View {
         _opening = State(initialValue: opening)
         if let cached = source.cachedGallery(galleryID) {
             _gallery = State(initialValue: cached)
-            _currentPage = State(initialValue: ReaderLayout.initialPage(opening.initialPage, saved: 0, total: cached.pages.count,
-                                                                     count: ReaderPreferences.defaults.integer(forKey: "reader.pagesPerSpread")))
+            let pages = ReaderLayout.resolved(ReaderPreferences.defaults.object(forKey: ReaderLayout.pagesKey) as? Int ?? ReaderLayout.automatic,
+                                              size: ReaderLayout.windowSize, mode: ReaderPreferences.defaults.string(forKey: "reader.mode") ?? ReaderMode.horizontal.rawValue)
+            _currentPage = State(initialValue: ReaderLayout.initialPage(opening.initialPage, saved: 0, total: cached.pages.count, count: pages))
         }
     }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+                // Turning an iPad or an iPhone Duo on its side changes how many pages Automatic shows.
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { if $0.width > 0, $0.height > 0 { viewerSize = $0 } }
             if let gallery, !opening.needsConfirmation || resumeReady {
                 reader(gallery).ignoresSafeArea()
                     .environment(translation)

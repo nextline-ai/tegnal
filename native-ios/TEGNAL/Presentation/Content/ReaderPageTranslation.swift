@@ -296,10 +296,18 @@ struct ReaderTranslationJob {
     private var source: String?
     private var worker: Task<Void, Never>?
     private var history: [Int: [(String, String)]] = [:]
+    /// Each page's balloons from its page-wide reading, and from the zoomed areas read again. They
+    /// are kept apart so the on-device model's page-wide reply, which can arrive after a zoom, never
+    /// takes back what a closer reading found.
+    private var pageWide: [String: [ReaderTextRegion]] = [:]
+    private var zoomedBalloons: [String: [ReaderTextRegion]] = [:]
     /// Zoomed areas of each page already read again, and the reading in progress.
     private var readAreas: [String: [CGRect]] = [:]
     private var zoomWorker: Task<Void, Never>?
     private var zoomWorking: String?
+    private var zoomArea: CGRect?
+    /// A zoom made before its page had any translation, read as soon as the page has one.
+    private var pendingZoom: (key: String, index: Int, area: CGRect, crop: @MainActor (CGRect) async throws -> UIImage)?
     private var continues = true
 
     /// Apple Translation needs iOS 18; the language model, iOS 26.
@@ -323,37 +331,78 @@ struct ReaderTranslationJob {
     func stop() {
         isOn = false; showsOriginal = false
         worker?.cancel(); worker = nil; queue = []; working = []
-        zoomWorker?.cancel(); zoomWorker = nil; zoomWorking = nil
+        zoomWorker?.cancel(); zoomWorker = nil; zoomWorking = nil; zoomArea = nil; pendingZoom = nil
     }
 
-    /// Once a zoom settles on a translated page, the part on screen is read again from the original
-    /// pixels, so small text the page-wide reading missed is translated; its balloons replace the
-    /// page-wide ones where it found text. `area` is normalized with a top-left origin.
+    /// Once a zoom or a move settles on a translated page, only the part on screen is read again
+    /// from the original pixels, so small text the page-wide reading missed is translated; its
+    /// balloons replace the page-wide ones where it found text. `area` is normalized with a
+    /// top-left origin.
     func readZoomed(_ page: GalleryPage, index: Int, galleryID: Int64, area: CGRect, images: PageImageStore) {
         readZoomed(key: page.hash, index: index, area: area) { try await images.translationCrop(page, galleryID: galleryID, rect: $0) }
     }
 
     /// `crop` reads the part of the image at a normalized, top-left-origin rectangle.
     func readZoomed(key: String, index: Int, area: CGRect, crop: @escaping @MainActor (CGRect) async throws -> UIImage) {
-        // A page still being read whole is read first; zooming again after that reads the area.
-        guard isOn, pages[key] != nil, ReaderZoomedText.needsReading(area, after: readAreas[key] ?? []) else { return }
+        guard isOn, ReaderZoomedText.needsReading(area, after: readAreas[key] ?? []) else { return }
+        // The area being read already covers this one, as after a small nudge.
+        if zoomWorking == key, let zoomArea, !ReaderZoomedText.needsReading(area, after: [zoomArea]) { return }
         zoomWorker?.cancel()
+        // Zoomed before the page had any translation: the area is read once the page has one,
+        // rather than racing the page-wide reading for the same pixels.
+        guard pages[key] != nil else {
+            pendingZoom = (key, index, area, crop)
+            zoomWorker = nil; zoomWorking = nil; zoomArea = nil
+            return
+        }
+        pendingZoom = nil
         zoomWorking = key
+        zoomArea = area
         zoomWorker = Task {
-            defer { if zoomWorking == key, !Task.isCancelled { zoomWorking = nil } }
+            defer { if zoomWorking == key, !Task.isCancelled { zoomWorking = nil; zoomArea = nil } }
             do {
+                // A quick run of moves reads only where the screen stops.
+                try await Task.sleep(for: ReaderZoomedText.coalesce)
                 let crop = try await crop(area)
                 let found = ReaderZoomedText.place(try await foreignBalloons(in: crop), readIn: area)
                 try Task.checkCancellation()
-                readAreas[key, default: []].append(area)
-                guard isOn, !found.isEmpty else { return }
-                let texts = try await translate(found.map(\.text), index: index, addingTo: true)
+                guard isOn else { return }
+                guard !found.isEmpty else { readAreas[key, default: []].append(area); return }
+                // Lines this page already translated keep their translation; only new text is translated.
+                let known = Dictionary((history[index] ?? []).map { ($0.0, $0.1) }, uniquingKeysWith: { _, last in last })
+                let fresh = found.filter { known[$0.text] == nil }
+                @MainActor func show(_ texts: [String: String]) {
+                    let translated = found.map { region in
+                        ReaderTextRegion(text: texts[region.text] ?? known[region.text] ?? region.text, bounds: region.bounds, lines: region.lines, vertical: region.vertical)
+                    }
+                    zoomedBalloons[key] = ReaderZoomedText.merge(zoomedBalloons[key] ?? [], with: translated)
+                    pages[key] = ReaderZoomedText.merge(pageWide[key] ?? pages[key] ?? [], with: zoomedBalloons[key] ?? [])
+                    // Shown once: moving back here later keeps it rather than reading it again.
+                    if !(readAreas[key] ?? []).contains(area) { readAreas[key, default: []].append(area) }
+                }
+                guard !fresh.isEmpty else { show([:]); return }
+                let sources = fresh.map(\.text)
+                // Apple's quick translation shows at once; the on-device model's replaces it.
+                let texts = try await translate(sources, index: index, addingTo: true) { [weak self] quick in
+                    guard let self, isOn, !Task.isCancelled else { return }
+                    show(Dictionary(zip(sources, quick), uniquingKeysWith: { first, _ in first }))
+                }
                 try Task.checkCancellation()
                 guard isOn else { return }
-                let translated = zip(found, texts).map { ReaderTextRegion(text: $1, bounds: $0.bounds, lines: $0.lines, vertical: $0.vertical) }
-                pages[key] = ReaderZoomedText.merge(pages[key] ?? [], with: translated)
+                show(Dictionary(zip(sources, texts), uniquingKeysWith: { first, _ in first }))
             } catch is CancellationError {
             } catch { if isOn, message == nil { message = ContentError.message(error) } }
+        }
+    }
+
+    /// Sets a page's page-wide balloons, keeping what zoomed readings found on top, and reads a
+    /// zoom that was waiting for this page.
+    private func setPageWide(_ balloons: [ReaderTextRegion], key: String) {
+        pageWide[key] = balloons
+        pages[key] = ReaderZoomedText.merge(balloons, with: zoomedBalloons[key] ?? [])
+        if let pending = pendingZoom, pending.key == key {
+            pendingZoom = nil
+            readZoomed(key: key, index: pending.index, area: pending.area, crop: pending.crop)
         }
     }
 
@@ -384,7 +433,7 @@ struct ReaderTranslationJob {
             working.insert(job.key)
             do {
                 let balloons = try await translate(job)
-                if isOn { pages[job.key] = balloons }
+                if isOn { setPageWide(balloons, key: job.key) }
             } catch is CancellationError {
             } catch { if isOn, message == nil { message = ContentError.message(error) } }
             working.remove(job.key)
@@ -402,7 +451,7 @@ struct ReaderTranslationJob {
         }
         let texts = try await translate(foreign.map(\.text), index: index, addingTo: false) { [weak self] quick in
             guard let self, isOn else { return }
-            pages[job.key] = regions(quick)
+            setPageWide(regions(quick), key: job.key)
         }
         return regions(texts)
     }

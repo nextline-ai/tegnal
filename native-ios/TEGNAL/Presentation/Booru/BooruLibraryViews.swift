@@ -117,6 +117,8 @@ struct BooruPoolServersView: View {
 
 /// Comics browsing falls back to ordered image pools until a comics site is connected.
 struct ComicsPoolsView: View {
+    /// Offers to connect a comics website above the pools; Safe Mode leaves it out.
+    var connects = true
     @Environment(BooruStore.self) private var store
     private var source: any BooruProviding {
         #if DEBUG
@@ -127,7 +129,7 @@ struct ComicsPoolsView: View {
     var body: some View {
         Group {
             if store.selectedServers.isEmpty { BooruNoSelectionView() }
-            else if store.selectedServers.count == 1, let server = store.selectedServer { BooruPoolsView(server: server, source: source, comicsMode: true).id(server.id) }
+            else if store.selectedServers.count == 1, let server = store.selectedServer { BooruPoolsView(server: server, source: source, comicsMode: connects).id(server.id) }
             else { BooruPoolServersView(source: source) }
         }.toolbar { ToolbarItem(placement: .topBarTrailing) { BooruServerMenu() } }
             .environment(\.booruBrowsingMode, .manga)

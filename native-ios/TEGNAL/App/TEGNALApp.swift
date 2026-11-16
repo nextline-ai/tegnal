@@ -244,7 +244,7 @@ struct TEGNALApp: App {
         let servers = env.booru.selectedServers
         return LaunchRequest(active: enabled && scenePhase == .active && launchThermalAllowed && env.isOnboardingCompleted,
                              query: env.isSiteVerified && !env.booruSafeMode ? env.launchMangaQuery : nil, site: env.mangaSiteAddress,
-                             servers: servers, booruQuery: env.booruQuery(""))
+                             servers: servers, booruQuery: "")
     }
     private var splashEnabled: Bool { !isContentUITest || ProcessInfo.processInfo.arguments.contains("--splash-ui-test") }
 

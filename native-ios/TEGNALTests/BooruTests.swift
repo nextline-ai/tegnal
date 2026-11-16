@@ -38,87 +38,53 @@ final class BooruTests: XCTestCase {
         XCTAssertNil(BooruViewerReturn.targetID(openedID: "first:101", viewedID: "second:103", availableIDs: initial))
     }
 
-    @MainActor func testSafeModeDefaultsPersistAndReachWarmupPaginationWithoutExtraFilters() async throws {
+    @MainActor func testSafeModeKeepsSavedAndExploreToSafebooruAndLeavesComicsModeOpen() throws {
         let suite = "safe-mode-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let database = try AppDatabase.inMemory(), store = try BooruStore()
         let env = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
         XCTAssertFalse(env.booruSafeMode)
-        XCTAssertEqual(env.booruQuery("scenery"), "scenery")
         XCTAssertEqual(env.booruSearchRevision, 0)
+        let other = BooruServer(id: "other", name: "Other", baseURL: URL(string: "https://images.example")!, engine: .danbooru)
+        try store.saveServer(other)
+        try store.select(other)
         env.mode = .manga
         env.booruSafeMode = true
         XCTAssertEqual(env.booruSearchRevision, 1)
         env.booruSafeMode = true
         XCTAssertEqual(env.booruSearchRevision, 1, "An unchanged switch must not schedule another refresh")
-        XCTAssertEqual(env.mode, .booru)
+        XCTAssertEqual(env.mode, .manga, "Comics Mode stays open and browses Safebooru's pools")
         XCTAssertEqual(store.selectedServers.map(\.isSafebooru), [true], "Safe Mode goes straight to Safebooru")
-        XCTAssertEqual(env.booruQuery("scenery"), "scenery", "Safebooru is searched without a rating tag")
-        env.booruSafeMode = false
-        env.booruSafeMode = true
-        XCTAssertEqual(store.servers.filter(\.isSafebooru).count, 1, "An existing Safebooru is reused")
-        let other = BooruServer(id: "other", name: "Other", baseURL: URL(string: "https://images.example")!, engine: .danbooru)
-        try store.saveServer(other)
+        XCTAssertEqual(store.selectableServers.map(\.isSafebooru), [true], "Explore offers Safebooru alone")
         try store.select(other)
-        // Saved images show only when their rating fits; Safebooru's always do.
+        try store.toggleServer(other)
+        XCTAssertEqual(store.selectedServers.map(\.isSafebooru), [true], "Another server can't be chosen while it is on")
+        // Saved shows only what came from Safebooru, whatever the other server's rating says.
         let safebooruID = try XCTUnwrap(store.servers.first(where: \.isSafebooru)?.id)
         func post(_ server: String, _ id: Int64, _ rating: String) -> BooruPost {
             BooruPost(serverID: server, postID: id, width: 1, height: 1, tags: ["scenery"], artists: [], rating: rating, score: 0, fileExtension: "jpg")
         }
-        for saved in [post("other", 1, "g"), post("other", 2, "explicit"), post("other", 3, "general"), post(safebooruID, 4, "q")] { try store.saveFavorite(saved) }
-        env.booruSafeRating = .general
-        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 3, 4])
-        env.booruSafeRating = .questionable
+        let saved = [post("other", 1, "g"), post("other", 2, "explicit"), post("other", 3, "general"), post(safebooruID, 4, "q")]
+        for item in saved { try store.saveFavorite(item) }
         XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [4])
-        env.booruSafeMode = false
-        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 2, 3, 4], "Without Safe Mode every saved image shows")
-        env.booruSafeMode = true
-        try store.select(other)
-        env.mode = .manga
-        XCTAssertEqual(env.mode, .booru)
-        for rating in BooruSafeRating.allCases {
-            let previous = env.booruSafeRating, revision = env.booruSearchRevision
-            env.booruSafeRating = rating
-            XCTAssertEqual(env.booruSearchRevision, revision + (previous == rating ? 0 : 1))
-            XCTAssertEqual(env.booruQuery(""), rating.tag)
-            XCTAssertEqual(env.booruQuery("scenery -spoilers"), "scenery -spoilers " + rating.tag)
-            XCTAssertEqual(env.booruQuery("scenery rating:q"), "scenery rating:q")
-            XCTAssertEqual(env.booruQuery("-rating:e scenery"), "-rating:e scenery")
-            XCTAssertEqual(env.booruQuery(env.booruQuery("scenery")), "scenery " + rating.tag)
-        }
-        XCTAssertEqual(BooruSafeRating.questionable.title, "15+")
+        XCTAssertEqual(saved.map(store.isShownInSafeMode), [false, false, false, true])
+        // A restart keeps it, even when another device or a backup chose other servers meanwhile.
+        try store.setSetting("selected_servers", value: "[\"other\"]")
         defaults.set("manga", forKey: "content_mode")
         let restored = AppEnvironment(database: database, browserPreferences: defaults, booru: store)
         XCTAssertTrue(restored.booruSafeMode)
-        XCTAssertEqual(restored.booruSafeRating, .questionable)
-        XCTAssertEqual(restored.mode, .booru)
-        for engine in BooruEngine.allCases {
-            let server = BooruServer(id: engine.rawValue, name: "Custom", baseURL: URL(string: "https://images.example")!, engine: engine)
-            let source = LaunchBooruSource(nativeCounts: [server.id: 2])
-            let warmup = LaunchFeedWarmup(manga: FixtureContentSource(), booru: source, thumbnail: { _, _ in })
-            let query = restored.booruQuery("")
-            await warmup.run(mangaQuery: nil, site: "", servers: [server], preferredMode: .booru, booruQuery: query)
-            let loader = BooruFeedLoader()
-            await loader.load(servers: [server], source: source, query: query, reset: true, startup: warmup, useLaunchPage: true)
-            await loader.load(servers: [server], source: source, query: query, reset: false)
-            await loader.load(servers: [server], source: source, query: query, reset: true)
-            let requests = await source.requests
-            XCTAssertEqual(requests.map(\.query), ["rating:q", "rating:q", "rating:q"])
-            XCTAssertEqual(requests.map(\.page), [0, 1, 0])
-            let items = URLComponents(url: server.browsingURL(query: query), resolvingAgainstBaseURL: false)?.queryItems
-            XCTAssertEqual(items?.first { $0.name == "tags" }?.value, "rating:q")
-        }
-        let explicit = "scenery rating:q"
-        let revision = restored.booruSearchRevision
-        restored.booruSafeMode = false
-        XCTAssertEqual(restored.booruSearchRevision, revision + 1)
-        XCTAssertEqual(restored.booruQuery(explicit), explicit, "Refreshes must also happen when the query text is unchanged")
-        restored.booruSafeRating = .sensitive
-        XCTAssertEqual(restored.booruSearchRevision, revision + 2)
-        XCTAssertEqual(restored.booruQuery("scenery"), "scenery")
-        restored.mode = .manga
         XCTAssertEqual(restored.mode, .manga)
+        XCTAssertEqual(store.selectedServers.map(\.isSafebooru), [true])
+        restored.booruSafeMode = false
+        XCTAssertEqual(store.selectedServerIDs, ["other"], "Turning it off chooses the servers chosen before")
+        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 2, 3, 4], "Without Safe Mode every saved image shows")
+        XCTAssertEqual(store.selectableServers.count, 2)
+        restored.booruSafeMode = true
+        XCTAssertEqual(store.servers.filter(\.isSafebooru).count, 1, "An existing Safebooru is reused")
+        restored.resetModeSettings(booru: true)
+        XCTAssertFalse(restored.booruSafeMode)
+        XCTAssertEqual(store.selectedServerIDs, ["other"])
     }
 
     @MainActor func testManualServerQueriesSurviveWarmupPaginationAndRefresh() async throws {
