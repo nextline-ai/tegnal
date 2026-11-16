@@ -82,7 +82,8 @@ void main() {
     final rain = folders.firstWhere((folder) => folder.name == 'Rain');
     final later = folders.firstWhere((folder) => folder.name == 'Later');
     expect(rain.description, 'Wet days');
-    expect(rain.color, 4280391411);
+    // An earlier palette color becomes its vivid counterpart.
+    expect(rain.color, 0xFF2FA8FF);
     expect(later.description, isNull, reason: "Violet's placeholder description is not kept");
     expect(later.color, isNot(4294940672), reason: "Violet's new-group color takes the next folder color");
 

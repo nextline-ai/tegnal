@@ -85,7 +85,7 @@
       ],
       "folders" : [
         {
-          "color" : 4292943176,
+          "color" : 4293071404,
           "description" : "Best of / 최고",
           "name" : "Favorites ★",
           "sort_order" : 0,
@@ -94,7 +94,7 @@
           "sync_id_present" : true
         },
         {
-          "color" : 4279383126,
+          "color" : 4278208470,
           "description" : "Currently reading",
           "name" : "Reading",
           "sort_order" : 1,
@@ -103,7 +103,7 @@
           "sync_id_present" : true
         },
         {
-          "color" : 4280391411,
+          "color" : 4281313535,
           "description" : "기본 폴더",
           "name" : "미분류",
           "sort_order" : 2,
@@ -112,7 +112,7 @@
           "sync_id_present" : true
         },
         {
-          "color" : 4286331629,
+          "color" : 4285144032,
           "description" : "Rule driven \"smart\" folder",
           "name" : "Smart Glasses",
           "sort_order" : 3,
@@ -121,7 +121,7 @@
           "sync_id_present" : true
         },
         {
-          "color" : 4279080072,
+          "color" : 4278225275,
           "description" : null,
           "name" : "Archive",
           "sort_order" : 4,
@@ -728,31 +728,31 @@
       ],
       "folders" : [
         {
-          "color" : 4278355143,
+          "color" : 4278879487,
           "id" : "folder-sky",
           "name" : "Sky",
           "position" : 0
         },
         {
-          "color" : 4289449455,
+          "color" : 4278239976,
           "id" : "folder-refs",
           "name" : "References",
           "position" : 1
         },
         {
-          "color" : 4281549909,
+          "color" : 4284246912,
           "id" : "unsorted",
           "name" : "",
           "position" : 2
         },
         {
-          "color" : 4280640491,
+          "color" : 4280249343,
           "id" : "site:https://beta.example/sub",
           "name" : "beta.example/sub",
           "position" : 3
         },
         {
-          "color" : 4278556265,
+          "color" : 4278233195,
           "id" : "folder-poses",
           "name" : "Poses / 포즈",
           "position" : 4
@@ -1014,7 +1014,7 @@
         ],
         "folders" : [
           {
-            "color" : 4279383126,
+            "color" : 4278208470,
             "description" : "Imported from an older app",
             "name" : "Old Reading",
             "sort_order" : 0,
@@ -1023,7 +1023,7 @@
             "sync_id_present" : true
           },
           {
-            "color" : 4280391411,
+            "color" : 4281313535,
             "description" : "기본 폴더",
             "name" : "미분류",
             "sort_order" : 1,
@@ -1032,7 +1032,7 @@
             "sync_id_present" : true
           },
           {
-            "color" : 4288585374,
+            "color" : 4280249343,
             "description" : null,
             "name" : "No Color",
             "sort_order" : 2,
@@ -1222,7 +1222,7 @@
         ],
         "folders" : [
           {
-            "color" : 4292943176,
+            "color" : 4293071404,
             "description" : "Best of / 최고",
             "name" : "Favorites ★",
             "sort_order" : 0,
@@ -1231,7 +1231,7 @@
             "sync_id_present" : true
           },
           {
-            "color" : 4279383126,
+            "color" : 4278208470,
             "description" : "Currently reading",
             "name" : "Reading",
             "sort_order" : 1,
@@ -1240,7 +1240,7 @@
             "sync_id_present" : true
           },
           {
-            "color" : 4280391411,
+            "color" : 4281313535,
             "description" : "기본 폴더",
             "name" : "미분류",
             "sort_order" : 2,
@@ -1249,7 +1249,7 @@
             "sync_id_present" : true
           },
           {
-            "color" : 4286331629,
+            "color" : 4285144032,
             "description" : "Rule driven \"smart\" folder",
             "name" : "Smart Glasses",
             "sort_order" : 3,
@@ -1258,7 +1258,7 @@
             "sync_id_present" : true
           },
           {
-            "color" : 4279080072,
+            "color" : 4278225275,
             "description" : null,
             "name" : "Archive",
             "sort_order" : 4,
@@ -1475,7 +1475,7 @@
       ],
       "folders" : [
         {
-          "color" : 4280391411,
+          "color" : 4281313535,
           "description" : "기본 폴더",
           "name" : "미분류",
           "sort_order" : 1,

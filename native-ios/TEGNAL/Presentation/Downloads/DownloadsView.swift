@@ -12,7 +12,6 @@ struct DownloadsView: View {
     @State private var query = ""
     @State private var isSearchBarVisible = true
     @State private var searchScroll = ScrollSearchVisibility()
-    @State private var showStorageInfo = false
     @FocusState private var searchFocused: Bool
     private var items: [WorkDownload] { store.items.filter { $0.mode == mode } }
     private var results: [WorkDownload] { items.filter { $0.matches(query) } }
@@ -27,6 +26,25 @@ struct DownloadsView: View {
                         Text(ByteCountFormatter.string(fromByteCount: items.reduce(0) { $0 + $1.bytes }, countStyle: .file))
                     }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18).padding(.top, 12)
                     if let error = store.storageError { Text(error).foregroundStyle(.red).padding(.horizontal, 16) }
+                    let movable = store.movable.filter { $0.mode == mode }
+                    if !movable.isEmpty {
+                        NavigationLink { DownloadSettingsView(store: store) } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "folder.badge.questionmark").font(.title3).foregroundStyle(.tint)
+                                Text(movable.contains { $0.location == nil }
+                                     ? L10n.text("%@ downloads are in the app's own storage, where the Files app can't open them.", String(movable.count))
+                                     : L10n.text("%@ downloads are saved in another folder.", String(movable.count)))
+                                    .font(.subheadline).foregroundStyle(.primary).multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
+                                Text(L10n.text("Move")).font(.subheadline.weight(.semibold)).foregroundStyle(.tint)
+                            }
+                            .padding(14)
+                            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16).padding(.top, 10)
+                        .accessibilityIdentifier("downloads.moveHint")
+                    }
                     if results.isEmpty {
                         ContentUnavailableView(L10n.text(items.isEmpty ? "No Downloads" : "No Works"),
                             systemImage: items.isEmpty ? "arrow.down.circle" : "magnifyingglass",
@@ -62,13 +80,11 @@ struct DownloadsView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showStorageInfo = true } label: { Image(systemName: "info.circle") }
-                    .accessibilityLabel(L10n.text("Storage Used"))
+                NavigationLink { DownloadSettingsView(store: store) } label: { Image(systemName: "folder.badge.gearshape") }
+                    .accessibilityLabel(L10n.text("Download Location"))
+                    .accessibilityIdentifier("downloads.location")
             }
         }
-        .alert(L10n.text("Downloads"), isPresented: $showStorageInfo) {
-            Button(L10n.text("Done"), role: .cancel) {}
-        } message: { Text(L10n.text("Downloads are stored on this device. Keep the app open while downloading. Interrupted downloads can be resumed here.")) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(mode == .manga ? "manga.downloads" : "booru.downloads")
         .confirmationDialog(L10n.text("Delete Download?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
@@ -219,6 +235,96 @@ private struct OfflineMangaReader: View {
             NativeReaderView(galleryID: gallery.id, initialPage: 1, source: source, images: images,
                              savesProgress: true, offline: true, search: { _ in }, exit: { dismiss() })
         }
+    }
+}
+
+/// Where downloads are saved, and moving the ones saved elsewhere, such as in the app's own
+/// storage where versions before 1.5.2 kept them, without downloading them again.
+struct DownloadSettingsView: View {
+    let store: DownloadStore
+    @State private var choosing = false
+
+    static var deviceName: String {
+        if ProcessInfo.processInfo.isiOSAppOnMac || ProcessInfo.processInfo.isMacCatalystApp { return L10n.text("On My Mac") }
+        return L10n.text(UIDevice.current.userInterfaceIdiom == .pad ? "On My iPad" : "On My iPhone")
+    }
+    static var deviceSymbol: String {
+        if ProcessInfo.processInfo.isiOSAppOnMac || ProcessInfo.processInfo.isMacCatalystApp { return "laptopcomputer" }
+        return UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone"
+    }
+    static func title(_ location: DownloadLocation) -> String { location.isFiles ? deviceName : location.name }
+
+    var body: some View {
+        let movable = store.movable
+        Form {
+            Section {
+                ForEach(store.locations) { location in
+                    let selected = store.currentLocation.id == location.id
+                    Button { store.setLocation(location.id) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: location.isFiles ? Self.deviceSymbol : "folder").foregroundStyle(.tint).frame(width: 26)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(Self.title(location)).foregroundStyle(.primary)
+                                Text(location.isFiles ? L10n.text("TEGNAL folder in the Files app") : L10n.text("Folder you chose"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            if selected { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.tint) }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier(location.isFiles ? "downloads.location.files" : "downloads.location.folder")
+                    .swipeActions {
+                        if !location.isFiles, !store.items.contains(where: { $0.location == location.id }) {
+                            Button(L10n.text("Remove"), role: .destructive) { store.removeFolder(location.id) }
+                        }
+                    }
+                }
+                Button { choosing = true } label: { Label(L10n.text("Choose Folder…"), systemImage: "folder.badge.plus") }
+                    .accessibilityIdentifier("downloads.chooseFolder")
+            } header: {
+                Text(L10n.text("Save Downloads To"))
+            } footer: {
+                Text(L10n.text("Each work gets its own folder inside a Comics or Images folder, so the Files app and other apps can open it. A folder you choose can be in iCloud Drive or on another drive."))
+            }
+            if store.currentLocation.isFiles, let url = store.filesAppURL {
+                Section {
+                    Button { UIApplication.shared.open(url) } label: { Label(L10n.text("Show in Files"), systemImage: "folder") }
+                }
+            }
+            Section {
+                if let moving = store.moving {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ProgressView(value: Double(moving.done), total: Double(max(1, moving.total)))
+                        Text(L10n.text("Moving %@ of %@…", String(moving.done + 1), String(moving.total))).font(.footnote).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button { Task { await store.moveElsewhereHere() } } label: {
+                        Label(L10n.text("Move to Selected Location"), systemImage: "tray.and.arrow.down")
+                    }
+                    .disabled(movable.isEmpty)
+                    .accessibilityIdentifier("downloads.move")
+                }
+                if let error = store.locationError { Text(error).font(.footnote).foregroundStyle(.red) }
+            } header: {
+                Text(L10n.text("Downloaded Files"))
+            } footer: {
+                Text(movable.isEmpty
+                     ? L10n.text("Every download is in the folder above.")
+                     : L10n.text("%@ downloads are saved elsewhere, such as in the app's own storage where earlier versions kept them. Moving them doesn't download them again.", String(movable.count)))
+            }
+            Section {} footer: {
+                Text(L10n.text("Keep the app open while downloading. Interrupted downloads can be resumed in Downloads."))
+            }
+        }
+        .navigationTitle(L10n.text("Download Location"))
+        .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $choosing, allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result { store.addFolder(url) }
+        }
+        .accessibilityIdentifier("downloads.settings")
     }
 }
 

@@ -80,9 +80,12 @@ struct BooruFavoritesView: View {
         .appSheet(isPresented: $reordering) { FolderOrderView(booru: true) }
         .appSheet(item: $editing) { item in
             if let folder = item.folder {
-                NativeColorPickerSheet(title: folder.displayName, color: folder.color, onColorSelected: { color in
-                    store.perform { try store.setFolderColor(folder.id, color: NativeColorPickerSheet.argb(color)) }
-                }, onDismiss: { editing = nil })
+                let posts = store.visibleFavorites(folderID: folder.id)
+                FolderColorSheet(title: folder.displayName, color: folder.color, others: store.folders().filter { $0.id != folder.id }.map(\.color)) { color in
+                    store.perform { try store.setFolderColor(folder.id, color: color) }
+                } preview: { color in
+                    BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: color, posts: posts, count: posts.count)
+                }
             }
         }
         .background {
@@ -104,6 +107,8 @@ private struct BooruFolderCard: View {
     let posts: [BooruPost]
     let count: Int
     @Environment(BooruStore.self) private var store
+    /// Light colors such as yellow take dark text, as comics folders do.
+    private var text: Color { FolderBentoFrame<EmptyView>.textColor(color) }
     var body: some View {
         VStack(spacing: 0) {
             Color.clear.aspectRatio(1.25, contentMode: .fit).overlay {
@@ -112,18 +117,18 @@ private struct BooruFolderCard: View {
                         HStack(spacing: style.inset(4)) {
                             ForEach(0..<2) { col in
                                 let index = row * 2 + col
-                                Color.white.opacity(0.12).overlay {
+                                text.opacity(0.12).overlay {
                                     if posts.indices.contains(index), let server = store.servers.first(where: { $0.id == posts[index].serverID }) {
                                         BooruThumbnail(post: posts[index], server: server)
-                                    } else { Image(systemName: "photo").font(.system(size: style.fontSize(20))).foregroundStyle(.white.opacity(0.3)) }
+                                    } else { Image(systemName: "photo").font(.system(size: style.fontSize(20))).foregroundStyle(text.opacity(0.3)) }
                                 }.clipped().clipShape(RoundedRectangle(cornerRadius: style.radius(8)))
                             }
                         }
                     }
                 }.padding(style.inset(6))
             }.clipped()
-            FolderCardCaption(title: title, isSmart: isSmart, count: count, color: .white)
-        }.foregroundStyle(.white).background(Color(argb: color))
+            FolderCardCaption(title: title, isSmart: isSmart, count: count, color: text)
+        }.foregroundStyle(text).background(Color(argb: color))
             .clipShape(RoundedRectangle(cornerRadius: style.radius(16))).overlay(RoundedRectangle(cornerRadius: style.radius(16)).stroke(.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5))
     }
 }

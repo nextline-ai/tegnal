@@ -1,128 +1,130 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/storage/folder_palette.dart';
 import '../../core/support/l10n.dart';
-import '../content/gallery_detail_view.dart';
+import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 
-/// `NativeColorPickerSheet` (`UIColorPickerViewController` in its grid style, without opacity):
-/// twelve hues by nine shades under a row of grays. Each tap recolors the folder at once.
+/// `FolderColorSheet`: ten colors no other folder in the library uses, in the palette's order.
+/// A pick recolors the folder at once, and a color nobody uses yet takes its place, so each pick
+/// brings a new one.
 class FolderColorSheet extends StatefulWidget {
-  const FolderColorSheet({super.key, required this.title, required this.color, required this.onSelected});
+  const FolderColorSheet({super.key, required this.title, required this.color, required this.others, required this.onSelected, required this.preview});
 
   /// The folder's display name.
   final String title;
   final int color;
 
+  /// The colors of the library's other folders.
+  final Iterable<int> others;
+
   /// Saves the chosen opaque ARGB color.
   final ValueChanged<int> onSelected;
 
-  /// Hues of the grid's columns, from cyan through green, as the system grid orders them.
-  static const hues = [196.0, 214.0, 248.0, 280.0, 325.0, 355.0, 12.0, 28.0, 40.0, 52.0, 62.0, 84.0];
-
-  /// Saturation and brightness of the grid's rows, from deep to pale.
-  static const shades = [(1.0, 0.24), (1.0, 0.38), (1.0, 0.53), (1.0, 0.70), (1.0, 0.87), (0.78, 1.0), (0.58, 1.0), (0.40, 1.0), (0.22, 1.0)];
-
-  static List<List<Color>> get grid => [
-    [for (var column = 0; column < 12; column++) HSVColor.fromAHSV(1, 0, 0, 1 - column / 11).toColor()],
-    for (final (saturation, value) in shades) [for (final hue in hues) HSVColor.fromAHSV(1, hue, saturation, value).toColor()],
-  ];
-
-  /// `NativeColorPickerSheet.argb`: opaque, rounded to whole channels.
-  static int argb(Color color) => 0xFF000000 | ((color.r * 255).round() << 16) | ((color.g * 255).round() << 8) | (color.b * 255).round();
+  /// The folder's card in a color.
+  final Widget Function(int color) preview;
 
   @override
   State<FolderColorSheet> createState() => _FolderColorSheetState();
 }
 
 class _FolderColorSheetState extends State<FolderColorSheet> {
-  late int _color = widget.color;
+  late int _current = widget.color;
+  late final Set<int> _others = widget.others.toSet();
+  late final List<int> _choices = FolderPalette.unused({..._others, widget.color}, 10);
 
-  void _select(Color color) {
-    final value = FolderColorSheet.argb(color);
+  /// Colors this sheet has shown or the folder had, never offered again while it is open.
+  late final Set<int> _shown = {..._choices, widget.color};
+
+  void _pick(int color) {
+    final index = _choices.indexOf(color);
+    if (index < 0) return;
     HapticFeedback.selectionClick();
-    widget.onSelected(value);
-    setState(() => _color = value);
+    widget.onSelected(color);
+    final replacement = FolderPalette.unused({..._others, ..._shown}, 1);
+    setState(() {
+      _current = color;
+      if (replacement.isEmpty) {
+        _choices.removeAt(index);
+      } else {
+        _choices[index] = replacement.first;
+        _shown.add(replacement.first);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final label = TegnalColors.label.resolveFrom(context);
-    final grid = FolderColorSheet.grid;
-    return ColoredBox(
-      color: TegnalColors.secondaryBackground.resolveFrom(context),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            SizedBox(
-              height: 76,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Text(
-                    L10n.text('%@ color', [widget.title]),
-                    style: TegnalType.style(17, weight: FontWeight.w600, color: label),
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final edge = TegnalColors.label.resolveFrom(context).withValues(alpha: 0.1);
+    Widget swatch(int index) {
+      if (index >= _choices.length) return const SizedBox(width: 50, height: 50);
+      final color = _choices[index];
+      return Semantics(
+        button: true,
+        label: L10n.text('Color %@', ['${index + 1}']),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _pick(color),
+          child: SizedBox(
+            height: 50,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOutBack,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(scale: Tween(begin: 0.3, end: 1.0).animate(animation), child: child),
+                ),
+                child: DecoratedBox(
+                  key: ValueKey(color),
+                  decoration: ShapeDecoration(
+                    color: Color(color),
+                    shape: CircleBorder(side: BorderSide(color: edge, width: 0.5)),
                   ),
-                  Positioned(
-                    right: 16,
-                    child: GlassIconButton(icon: CupertinoIcons.xmark, label: L10n.text('Close'), onPressed: () => Navigator.of(context).pop()),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Column(
-                  children: [
-                    for (final row in grid)
-                      Row(
-                        children: [
-                          for (final color in row)
-                            Expanded(
-                              child: Semantics(
-                                button: true,
-                                selected: FolderColorSheet.argb(color) == _color,
-                                child: GestureDetector(
-                                  onTap: () => _select(color),
-                                  child: AspectRatio(
-                                    aspectRatio: 1,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: color,
-                                        border: FolderColorSheet.argb(color) == _color ? Border.all(color: const Color(0xFFFFFFFF), width: 3) : null,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                  ],
+                  child: const SizedBox(width: 50, height: 50),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: ShapeDecoration(
-                      color: Color(_color),
-                      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ],
-              ),
+          ),
+        ),
+      );
+    }
+
+    return ScrollEdgeSheet(
+      bar: SheetNavigationBar(
+        title: L10n.text('%@ color', [widget.title]),
+        trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 76 + 8, 20, 16),
+        children: [
+          Center(
+            child: SizedBox(
+              width: 132,
+              child: IgnorePointer(child: ExcludeSemantics(child: widget.preview(_current))),
+            ),
+          ),
+          const SizedBox(height: 24),
+          for (final row in [0, 5]) ...[
+            if (row > 0) const SizedBox(height: 16),
+            Row(
+              children: [
+                for (var index = row; index < row + 5; index++) ...[if (index > row) const SizedBox(width: 12), Expanded(child: swatch(index))],
+              ],
             ),
           ],
-        ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              L10n.text('These are colors no other folder uses. Each color you pick is replaced by a new one.'),
+              textAlign: TextAlign.center,
+              style: TegnalType.style(13, color: secondary),
+            ),
+          ),
+        ],
       ),
     );
   }

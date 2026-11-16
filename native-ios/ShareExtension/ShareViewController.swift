@@ -230,7 +230,7 @@ final class ShareViewController: UIViewController, UITableViewDataSource, UITabl
                 for item in list {
                     if let id = (item["id"] as? NSNumber)?.int64Value,
                        let name = item["name"] as? String {
-                        let color = (item["color"] as? NSNumber)?.int64Value ?? 4280391411
+                        let color = (item["color"] as? NSNumber)?.int64Value ?? 0xFF2FA8FF
                         res.append(FolderItem(id: id, name: name, color: color))
                     }
                 }
@@ -244,13 +244,13 @@ final class ShareViewController: UIViewController, UITableViewDataSource, UITabl
             for item in list {
                 if let id = (item["id"] as? NSNumber)?.int64Value,
                    let name = item["name"] as? String {
-                    let color = (item["color"] as? NSNumber)?.int64Value ?? 4280391411
+                    let color = (item["color"] as? NSNumber)?.int64Value ?? 0xFF2FA8FF
                     res.append(FolderItem(id: id, name: name, color: color))
                 }
             }
         }
 
-        return res.isEmpty ? [FolderItem(id: 1, name: "미분류", color: 4280391411)] : res
+        return res.isEmpty ? [FolderItem(id: 1, name: "미분류", color: 0xFF2FA8FF)] : res
     }
 
     @objc private func promptNewFolder() {

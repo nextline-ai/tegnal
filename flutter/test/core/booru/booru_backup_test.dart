@@ -52,9 +52,9 @@ void main() {
     final server = presetServer();
     source.saveServer(server);
     final a = source.saveFolder(name: 'Landscapes'), b = source.saveFolder(name: 'Rooms');
-    source.setFolderColor(a, 0xFF112233);
+    source.setFolderColor(a, 0xFF4A3DFF);
     source.database.write(BooruStore.ensureUnsorted);
-    source.setFolderColor('unsorted', 0xFF334455);
+    source.setFolderColor('unsorted', 0xFF00BFA0);
     source.reorderFolders([b, 'unsorted', a]);
     final post = fixturePost(5194309, server);
     source.saveFavorite(post, folderID: a);
@@ -71,8 +71,8 @@ void main() {
     destination.restoreBackup(backup);
     expect(destination.servers.map((server) => server.id), [local.id]);
     expect(destination.folders().map((folder) => folder.id), [b, 'unsorted', a, extra]);
-    expect(destination.folders().firstWhere((folder) => folder.id == a).color, 0xFF112233);
-    expect(destination.folders().firstWhere((folder) => folder.id == 'unsorted').color, 0xFF334455);
+    expect(destination.folders().firstWhere((folder) => folder.id == a).color, 0xFF4A3DFF);
+    expect(destination.folders().firstWhere((folder) => folder.id == 'unsorted').color, 0xFF00BFA0);
     final mapped = post.onServer(local.id);
     expect(destination.favoriteIDs, {mapped.id});
     expect(destination.folderIDFor(mapped), a);

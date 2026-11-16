@@ -2,17 +2,17 @@
 
 <p align="center">
   <a href="https://apps.apple.com/app/id6825935560">
-    <img src="docs/assets/readme/info.webp" alt="TEGNAL" width="100%">
+    <img src=".github/assets/info.webp" alt="TEGNAL" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_KR_RGB_blk_100317.svg" alt="App Store에서 TEGNAL 다운로드" width="350"></a>
-  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" width="364"></a>
+  <a href="https://apps.apple.com/app/id6825935560"><img src=".github/assets/Download_on_the_App_Store_Badge_KR_RGB_blk_100317.svg" alt="App Store에서 TEGNAL 다운로드" width="350"></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=ko"><img src=".github/assets/GetItOnGooglePlay_Badge_Web_color_Korean.svg" alt="Google Play에서 TEGNAL 다운로드" width="364"></a>
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_kr_mobile.svg"><img src="docs/assets/readme/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
+  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset=".github/assets/Discord_button_kr_mobile.svg"><img src=".github/assets/Discord_button_kr.svg" alt="Discord 커뮤니티 참여하기"></picture></a>
 </p>
 
 # TEGNAL
@@ -90,8 +90,8 @@ iOS 앱은 `native-ios/TEGNAL`에 있습니다. `native-ios/TEGNAL.xcodeproj`를
 ## 문의
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nextline-logo-dark.svg">
-  <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/nextline-logo-dark.svg">
+  <img src=".github/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
 </picture>
 
 버그 제보와 기능 제안은 [Discord](https://discord.gg/DFT9Hm66Gz)에 남겨 주세요.

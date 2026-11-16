@@ -642,6 +642,19 @@ final class LibrarySyncTests: XCTestCase {
         XCTAssertNil(b.mangaDefaults.object(forKey: "app.language"))
     }
 
+    func testAFolderColorFromADeviceOnTheEarlierPaletteArrivesVivid() throws {
+        let a = try adapter(), b = try adapter()
+        let folder = try XCTUnwrap(a.manga.createFolder(name: "Older").id)
+        let image = try a.booru.saveFolder(name: "Older images")
+        // A device still on 1.5.1 keeps the earlier palette's colors.
+        try a.manga.setFolderColor(id: folder, color: 0xFF0D9488)
+        try a.booru.setFolderColor(image, color: 0xFFE11D48)
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        try exchange(a, b, &la, &lb)
+        XCTAssertEqual(try b.manga.listFolders().first { $0.name == "Older" }?.color, 0xFF00897B)
+        XCTAssertEqual(b.booru.folders().first { $0.id == image }?.color, 0xFFE3122C)
+    }
+
     func testComicsFolderRenameColorAndOrderConvergeAcrossDevices() throws {
         let a = try adapter(), b = try adapter()
         let first = try XCTUnwrap(a.manga.createFolder(name: "First").id)
@@ -649,12 +662,12 @@ final class LibrarySyncTests: XCTestCase {
         var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
         try exchange(a, b, &la, &lb)
         try a.manga.renameFolder(id: first, name: "Renamed")
-        try a.manga.setFolderColor(id: first, color: 0xFF123456)
+        try a.manga.setFolderColor(id: first, color: 0xFF8E4BFF)
         try a.manga.reorderFolders([second, first])
         try exchange(a, b, &la, &lb)
         let names = try b.manga.listFolders().map(\.name)
         XCTAssertEqual(Array(names.prefix(2)), ["Second", "Renamed"])
-        XCTAssertEqual(try b.manga.listFolders().first { $0.name == "Renamed" }?.color, 0xFF123456)
+        XCTAssertEqual(try b.manga.listFolders().first { $0.name == "Renamed" }?.color, 0xFF8E4BFF)
         let before = lb.changes
         lb.capture(try b.snapshot(), device: "B")
         XCTAssertEqual(lb.changes, before)
@@ -821,7 +834,7 @@ final class LibrarySyncTests: XCTestCase {
         let sa = BooruServer(id: "a", name: "Gelbooru", baseURL: URL(string: "https://gelbooru.com")!, engine: .gelbooru)
         let sb = BooruServer(id: "b", name: "Gelbooru", baseURL: URL(string: "https://www.gelbooru.com/")!, engine: .gelbooru)
         try a.booru.saveServer(sa); try b.booru.saveServer(sb)
-        let folder = try a.booru.saveFolder(name: "Favorites", color: 0xFF112233)
+        let folder = try a.booru.saveFolder(name: "Favorites", color: 0xFF4A3DFF)
         try a.booru.database.write { try BooruStore.ensureUnsorted(in: $0) }
         try a.booru.reorderFolders([folder, "unsorted"])
         let post = BooruPost(serverID: sa.id, postID: 123, width: 100, height: 100, tags: ["landscape"], artists: [], rating: "g", score: 1, fileExtension: "jpg")
@@ -842,13 +855,13 @@ final class LibrarySyncTests: XCTestCase {
     func testFreshDeviceDoesNotOverwriteExistingDefaultFolderColor() throws {
         let a = try adapter(), b = try adapter()
         try a.booru.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try a.booru.setFolderColor("unsorted", color: 0xFFABCDEF)
+        try a.booru.setFolderColor("unsorted", color: 0xFF00C2E8)
         let folder = try XCTUnwrap(a.manga.listFolders().first?.id)
-        try a.manga.setFolderColor(id: folder, color: 0xFF123456)
+        try a.manga.setFolderColor(id: folder, color: 0xFF8E4BFF)
         var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
         try exchange(a, b, &la, &lb)
-        XCTAssertEqual(b.booru.folders().first?.color, 0xFFABCDEF)
-        XCTAssertEqual(try b.manga.listFolders().first?.color, 0xFF123456)
+        XCTAssertEqual(b.booru.folders().first?.color, 0xFF00C2E8)
+        XCTAssertEqual(try b.manga.listFolders().first?.color, 0xFF8E4BFF)
     }
 
     func testFileRoundTripAndDeleteTombstoneDoesNotRetainWorkMetadata() throws {

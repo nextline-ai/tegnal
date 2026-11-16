@@ -166,6 +166,9 @@ public final class AppDatabase: Sendable {
         migrator.registerMigration("v15_work_page_count") { db in
             if try !db.columns(in: "works").map(\.name).contains("page_count") { try db.execute(sql: "ALTER TABLE works ADD COLUMN page_count INTEGER") }
         }
+        // Folder colors from the earlier, quieter palette or the old color picker become the
+        // closest vivid color.
+        migrator.registerMigration("v16_vivid_folder_colors") { try Self.adoptVividFolderColors($0) }
         return migrator
     }
 
@@ -231,38 +234,8 @@ public final class AppDatabase: Sendable {
 
     // MARK: - Folders & Color Generation
 
-    public static let curatedFolderColors: [Int64] = [
-        0xFF2563EB, // Royal Blue
-        0xFF059669, // Emerald Green
-        0xFFEA580C, // Bright Orange
-        0xFFE11D48, // Rose Red
-        0xFF7C3AED, // Deep Purple
-        0xFF0891B2, // Ocean Cyan
-        0xFFD97706, // Amber Gold
-        0xFFDB2777, // Vibrant Pink
-        0xFF4F46E5, // Indigo
-        0xFF0D9488, // Teal
-        0xFF65A30D, // Lime Green
-        0xFFC026D3, // Fuchsia
-        0xFFDC2626, // Crimson
-        0xFF9333EA, // Purple
-        0xFF0284C7, // Sky Blue
-        0xFFB45309, // Warm Brown
-        0xFF16A34A, // Forest Green
-        0xFFF97316, // Tangerine
-        0xFF6366F1, // Periwinkle
-        0xFF14B8A6, // Turquoise
-        0xFF84CC16, // Lime
-        0xFFEC4899, // Pink
-        0xFFA855F7, // Purple
-        0xFF3B82F6, // Blue
-        0xFF10B981, // Mint
-        0xFFF59E0B, // Yellow Orange
-        0xFFEF4444, // Light Red
-        0xFF64748B  // Slate
-    ]
-
-    public static var presetColors: [Int64] { curatedFolderColors }
+    public static var curatedFolderColors: [Int64] { FolderPalette.colors }
+    public static var presetColors: [Int64] { FolderPalette.colors }
 
     public static func colorFromHSV(h: Double, s: Double, v: Double) -> Int64 {
         let c = v * s
@@ -289,31 +262,27 @@ public final class AppDatabase: Sendable {
         return Self.nextFolderColor(existingColors: existingColors, excluding: excluding)
     }
 
-    /// Shared by both libraries: unused palette colors first, then golden-angle hues.
+    /// Shared by both libraries: the first palette color no folder uses, then generated hues.
     public static func nextFolderColor(existingColors: [Int64], excluding: Set<Int64> = []) -> Int64 {
-        var used = Set(existingColors)
-        used.formUnion(excluding)
-
-        for color in Self.curatedFolderColors {
-            if !used.contains(color) {
-                return color
-            }
-        }
-
-        let goldenRatio = 0.618033988749895
-        let count = existingColors.count + excluding.count
-        let hue = (Double(count) * goldenRatio).truncatingRemainder(dividingBy: 1.0)
-        return Self.colorFromHSV(h: hue, s: 0.75, v: 0.88)
+        FolderPalette.next(used: Set(existingColors).union(excluding))
     }
 
     public func nextUniqueFolderColor(excluding: Set<Int64> = []) -> Int64 {
         (try? dbWriter.read { db in nextUniqueFolderColor(in: db, excluding: excluding) })
-            ?? Self.curatedFolderColors.first!
+            ?? FolderPalette.colors[0]
+    }
+
+    /// Moves every folder onto the current palette, keeping folders apart where the palette allows.
+    static func adoptVividFolderColors(_ db: Database, table: String = "folders") throws {
+        let colors = try Int64.fetchAll(db, sql: "SELECT DISTINCT color FROM \(table)")
+        for (old, new) in FolderPalette.replacing(colors) where old != new {
+            try db.execute(sql: "UPDATE \(table) SET color = ? WHERE color = ?", arguments: [new, old])
+        }
     }
 
     static func unfiledFolder(in db: Database) throws -> Folder {
         if let existing = try Folder.fetchOne(db, sql: "SELECT * FROM folders WHERE sync_id = 'unsorted' OR name = '미분류' LIMIT 1") { return existing }
-        try db.execute(sql: "INSERT INTO folders (name, description, color, sort_order, created_at, sync_id) VALUES ('미분류', '기본 폴더', 4280391411, 1, ?, 'unsorted')", arguments: [ISO8601DateFormatter().string(from: Date())])
+        try db.execute(sql: "INSERT INTO folders (name, description, color, sort_order, created_at, sync_id) VALUES ('미분류', '기본 폴더', ?, 1, ?, 'unsorted')", arguments: [FolderPalette.unfiled, ISO8601DateFormatter().string(from: Date())])
         return try Folder.fetchOne(db, key: db.lastInsertedRowID)!
     }
 
@@ -331,7 +300,7 @@ public final class AppDatabase: Sendable {
                 folder = existing
             } else {
                 let now = ISO8601DateFormatter().string(from: Date())
-                var newFolder = Folder(name: "미분류", description: "기본 폴더", color: 4280391411, sortOrder: 1, createdAt: now)
+                var newFolder = Folder(name: "미분류", description: "기본 폴더", color: FolderPalette.unfiled, sortOrder: 1, createdAt: now)
                 try newFolder.insert(db)
                 if newFolder.id == nil { newFolder.id = db.lastInsertedRowID }
                 folder = newFolder

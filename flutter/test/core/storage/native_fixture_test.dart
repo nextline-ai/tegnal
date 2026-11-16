@@ -10,6 +10,7 @@ import 'package:tegnal/core/booru/booru_backup.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/challenge/challenge_models.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/storage/folder_palette.dart';
 import 'package:tegnal/core/storage/library_backup.dart';
 
 import '../../support/native_dump.dart';
@@ -96,8 +97,10 @@ void main() {
       ..remove('exported_at');
     Map<String, Object?> comicsOf(Map<String, Object?> backup) {
       final value = section(backup, 'comics');
+      // Restoring brings an earlier backup's folder colors onto the current palette.
       value['folders'] = [
-        for (final folder in (value['folders'] as List).cast<Map>()) {...folder}..remove('id'),
+        for (final folder in (value['folders'] as List).cast<Map>())
+          {...folder, if (folder['color'] case final int color) 'color': FolderPalette.vivid(color)}..remove('id'),
       ];
       value['folder_rules'] = [...(value['folder_rules'] as List).cast<Map>()]..sort((a, b) => (a['folder'] as String).compareTo(b['folder'] as String));
       return value;
@@ -110,6 +113,9 @@ void main() {
     };
     Map<String, Object?> imagesOf(Map<String, Object?> backup) {
       final value = section(backup, 'images');
+      value['folders'] = [
+        for (final folder in (value['folders'] as List).cast<Map>()) {...folder, if (folder['color'] case final int color) 'color': FolderPalette.vivid(color)},
+      ];
       value['favorites'] = [
         for (final favorite in (value['favorites'] as List).cast<Map>())
           {

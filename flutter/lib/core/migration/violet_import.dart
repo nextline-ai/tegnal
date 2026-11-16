@@ -2,6 +2,7 @@ import '../storage/app_database.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
 import 'manga_viewer_import.dart';
+import '../storage/folder_palette.dart';
 
 /// What a Violet backup brought in.
 class VioletImportResult {
@@ -115,8 +116,9 @@ class VioletImportService {
         continue;
       }
       final rawColor = _int(group['Color']);
-      final color = rawColor != null && rawColor != _newGroupColor && rawColor != 0 && !assignedColors.contains(rawColor)
-          ? rawColor
+      final vivid = rawColor == null ? null : FolderPalette.vivid(rawColor);
+      final color = vivid != null && rawColor != _newGroupColor && rawColor != 0 && !assignedColors.contains(vivid)
+          ? vivid
           : database.nextUniqueFolderColor(excluding: assignedColors);
       assignedColors.add(color);
       final description = _string(group['Description'])?.trim();

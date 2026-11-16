@@ -1,10 +1,10 @@
-import 'dart:ui';
-
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/domain/models.dart';
 import 'package:tegnal/presentation/library/collections_view.dart';
+import 'package:tegnal/core/storage/folder_palette.dart';
 import 'package:tegnal/presentation/library/folder_color_sheet.dart';
 
 void main() {
@@ -57,9 +57,17 @@ void main() {
     expect(model.names(SavedCollectionKind.history), ['tag:example']);
   });
 
-  test('a picked color is stored opaque, one byte per channel', () {
-    expect(FolderColorSheet.argb(const Color(0x80FF8000)), 0xFFFF8000);
-    expect(FolderColorSheet.grid, hasLength(10));
-    expect(FolderColorSheet.grid.every((row) => row.length == 12), isTrue);
+  test('the color sheet offers ten colors no other folder uses, a new one in place of each pick', () {
+    final picked = <int>[];
+    final sheet = FolderColorSheet(
+      title: 'Folder',
+      color: FolderPalette.colors[1],
+      others: [FolderPalette.colors[0]],
+      onSelected: picked.add,
+      preview: (color) => const SizedBox(),
+    );
+    expect(sheet.others, [FolderPalette.colors[0]]);
+    final choices = FolderPalette.unused({FolderPalette.colors[0], FolderPalette.colors[1]}, 10);
+    expect(choices, FolderPalette.colors.sublist(2, 12));
   });
 }

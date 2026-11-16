@@ -152,6 +152,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v11_optional_unsorted") { db in
             try db.execute(sql: "DELETE FROM folders WHERE id = 'unsorted' AND color = 4284922736 AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')")
         }
+        migrations.registerMigration("booru_v12_vivid_folder_colors") { try AppDatabase.adoptVividFolderColors($0) }
         try migrations.migrate(database)
         try reload()
     }
@@ -388,7 +389,7 @@ final class BooruStore: @unchecked Sendable {
     }
 
     static func ensureUnsorted(in db: Database) throws {
-        try db.execute(sql: "INSERT OR IGNORE INTO folders VALUES ('unsorted', '', 4284922736, 0)")
+        try db.execute(sql: "INSERT OR IGNORE INTO folders VALUES ('unsorted', '', ?, 0)", arguments: [FolderPalette.unsorted])
     }
 
     func deleteFolder(_ id: String) throws {

@@ -69,6 +69,7 @@ class AppServices {
     required this.booru,
     required this.content,
     required this.downloadsDirectory,
+    this.downloadsFilesRoot,
     required this.syncDirectory,
     required this.booruSource,
     required this.booruThumbnails,
@@ -89,7 +90,7 @@ class AppServices {
     bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting, startCoverQueue: coverQueue.start);
     favorites = SiteFavoritesSync(database: database, content: content, startCoverQueue: coverQueue.start);
     if (!isTesting) SiteFavoritesSync.shared = favorites;
-    downloads = DownloadStore(directory: downloadsDirectory, manga: content.source, booru: booruDownloads);
+    downloads = DownloadStore(directory: downloadsDirectory, filesRoot: downloadsFilesRoot, manga: content.source, booru: booruDownloads);
     sync = LibraryDriveSync(
       // Without Google's mobile sign-in the backend stays unconfigured and sync never starts.
       backend: GoogleDriveBackend(serverClientID: AppPlatform.hasDriveSync ? null : ''),
@@ -125,6 +126,9 @@ class AppServices {
   /// The installed version name shown in Settings.
   final String version;
   final Directory downloadsDirectory;
+
+  /// The device folder the Files app shows, where downloads go unless a folder is picked.
+  final Directory? downloadsFilesRoot;
 
   /// Kept out of device backups, so a restored phone starts its own sync baseline.
   final Directory syncDirectory;

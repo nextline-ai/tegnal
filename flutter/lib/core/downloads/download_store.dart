@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
@@ -8,6 +10,7 @@ import '../content/content_errors.dart';
 import '../content/gallery_content.dart';
 import '../content/manga_urls.dart';
 import '../storage/app_storage.dart';
+import '../support/l10n.dart';
 import '../support/swift_json.dart';
 
 enum WorkDownloadMode {
@@ -98,6 +101,8 @@ class WorkDownload {
     List<String>? files,
     this.bytes = 0,
     this.error,
+    this.location,
+    this.path,
   }) : id = id ?? uuidString(),
        files = files ?? [];
 
@@ -113,6 +118,11 @@ class WorkDownload {
   List<String> files;
   int bytes;
   String? error;
+
+  /// Where the files are: null for the app's own storage (every download before 1.5.2), else a
+  /// `DownloadLocation` id. `path` is the folder inside it; null means the download's id.
+  String? location;
+  String? path;
 
   int get total => gallery?.pages.length ?? 1;
   List<String> get tags => gallery?.tags ?? post?.tags ?? const [];
@@ -159,6 +169,8 @@ class WorkDownload {
     files: json.strings('files'),
     bytes: json.integer('bytes'),
     error: json.stringOrNull('error'),
+    location: json.stringOrNull('location'),
+    path: json.stringOrNull('path'),
   );
 
   JsonObject toJson() => <String, Object?>{'id': id, 'key': key, 'mode': mode.name, 'title': title, 'origin': origin}
@@ -166,7 +178,56 @@ class WorkDownload {
     ..putIfPresent('server', server?.toJson())
     ..putIfPresent('post', post?.toJson())
     ..addAll({'status': status.name, 'files': files, 'bytes': bytes})
-    ..putIfPresent('error', error);
+    ..putIfPresent('error', error)
+    ..putIfPresent('location', location)
+    ..putIfPresent('path', path);
+}
+
+/// `DownloadLocation`: a place downloads can be saved, the device's TEGNAL folder that the Files
+/// app shows, or a folder the person chose.
+class DownloadLocation {
+  const DownloadLocation({required this.id, required this.name, this.path});
+  static const files = 'files';
+  static const onDevice = DownloadLocation(id: files, name: '');
+
+  final String id;
+  final String name;
+
+  /// A chosen folder's place on this device.
+  final String? path;
+
+  bool get isFiles => id == files;
+
+  factory DownloadLocation.fromJson(Map<String, Object?> json) =>
+      DownloadLocation(id: json['id'] as String, name: json['name'] as String, path: json['path'] as String?);
+  Map<String, Object?> toJson() => {'id': id, 'name': name, if (path != null) 'path': path};
+}
+
+/// Moves a folder, copying it when the destination is on other storage, as a rename can't cross it.
+void moveDownloadFolder(String from, String to) {
+  final source = Directory(from);
+  try {
+    source.renameSync(to);
+    return;
+  } on FileSystemException {
+    // Another file system: copy, then remove the original once every file is there.
+  }
+  final target = Directory(to)..createSync(recursive: true);
+  try {
+    for (final entity in source.listSync(recursive: true, followLinks: false)) {
+      final destination = '${target.path}${entity.path.substring(source.path.length)}';
+      if (entity is Directory) {
+        Directory(destination).createSync(recursive: true);
+      } else if (entity is File) {
+        File(destination).parent.createSync(recursive: true);
+        entity.copySync(destination);
+      }
+    }
+  } on Object {
+    if (target.existsSync()) target.deleteSync(recursive: true);
+    rethrow;
+  }
+  source.deleteSync(recursive: true);
 }
 
 /// `String.folding(options: [.caseInsensitive, .diacriticInsensitive])` for the Latin
@@ -223,9 +284,30 @@ class _Run {
 
 /// `DownloadStore`: durable downloads live outside the evictable viewer cache. One worker
 /// per mode keeps large galleries from blocking image downloads or exhausting memory.
+/// The record of downloads stays in the app's own storage; the files go to the chosen location,
+/// in a folder named after the work, so the Files app and other apps can open them.
 class DownloadStore extends ChangeNotifier {
-  DownloadStore({required this.directory, required this.manga, this.booru, String Function()? configuredHost, this.pageDelay = const Duration(seconds: 1)})
-    : _configuredHost = configuredHost ?? (() => MangaUrls.configuredHost) {
+  /// `filesRoot` is the device folder the Files app shows (Download/TEGNAL); tests and runs
+  /// without one use a folder beside `directory`.
+  DownloadStore({
+    required this.directory,
+    Directory? filesRoot,
+    required this.manga,
+    this.booru,
+    String Function()? configuredHost,
+    this.pageDelay = const Duration(seconds: 1),
+  }) : filesRoot = filesRoot ?? Directory('${directory.path}-files'),
+       _configuredHost = configuredHost ?? (() => MangaUrls.configuredHost) {
+    try {
+      final saved = File('${directory.path}/settings.json');
+      if (saved.existsSync()) {
+        final json = jsonDecode(saved.readAsStringSync()) as Map<String, Object?>;
+        _current = json['current'] as String? ?? DownloadLocation.files;
+        _folders = [for (final value in json['folders'] as List<Object?>? ?? const []) DownloadLocation.fromJson(value! as Map<String, Object?>)];
+      }
+    } on Object {
+      // Unreadable settings fall back to the device folder.
+    }
     try {
       directory.createSync(recursive: true);
       // The native store excludes this folder from device backups; the Android backup
@@ -253,6 +335,7 @@ class DownloadStore extends ChangeNotifier {
   static Directory get defaultDirectory => Directory('${AppStorage.container.path}/Downloads');
 
   final Directory directory;
+  final Directory filesRoot;
   final ContentProviding manga;
   final BooruMediaDownloading? booru;
   final Duration pageDelay;
@@ -261,6 +344,12 @@ class DownloadStore extends ChangeNotifier {
   List<WorkDownload> items = [];
   String? storageError;
   final Map<String, double> transferProgress = {};
+
+  /// The move to the current location in progress: how many are done of how many.
+  ({int done, int total})? moving;
+  String? locationError;
+  String _current = DownloadLocation.files;
+  List<DownloadLocation> _folders = [];
 
   final _workers = <WorkDownloadMode, Future<void>>{};
   final _active = <WorkDownloadMode, (String, _Run)>{};
@@ -289,13 +378,14 @@ class DownloadStore extends ChangeNotifier {
     final existing = items.where((other) => other.mode == item.mode && other.key == item.key).firstOrNull;
     if (existing != null) return existing.id;
     if (storageError != null) return item.id;
+    _place(item);
     items.insert(0, item);
     if (_persist()) _schedule(item.mode);
     notifyListeners();
     return item.id;
   }
 
-  Directory folder(WorkDownload item) => Directory('${directory.path}/${item.id}');
+  Directory folder(WorkDownload item) => Directory('${(root(item.location) ?? directory).path}/${item.path ?? item.id}');
   List<File> urls(WorkDownload item) => [for (final name in item.files) File('${folder(item).path}/$name')];
 
   WorkDownload? _item(String id) => items.where((item) => item.id == id).firstOrNull;
@@ -358,6 +448,164 @@ class DownloadStore extends ChangeNotifier {
     }
   }
 
+  // MARK: - Location
+
+  List<DownloadLocation> get locations => [DownloadLocation.onDevice, ..._folders];
+  DownloadLocation get currentLocation => locations.firstWhere((location) => location.id == _current, orElse: () => DownloadLocation.onDevice);
+
+  /// Downloads saved somewhere other than the current location, which a move can bring over.
+  List<WorkDownload> get elsewhere => [
+    for (final item in items)
+      if (item.location != _current) item,
+  ];
+
+  /// The ones a move takes now: everything elsewhere except running downloads.
+  List<WorkDownload> get movable => [
+    for (final item in elsewhere)
+      if (!item.status.canPause) item,
+  ];
+
+  Directory? root(String? location) {
+    if (location == null) return directory;
+    if (location == DownloadLocation.files) return filesRoot;
+    final path = _folders.where((folder) => folder.id == location).firstOrNull?.path;
+    return path == null ? null : Directory(path);
+  }
+
+  void setLocation(String id) {
+    if (!locations.any((location) => location.id == id)) return;
+    _current = id;
+    locationError = null;
+    _saveSettings();
+    notifyListeners();
+  }
+
+  /// Adds a folder the person picked and saves new downloads there, once a file can be written in it.
+  void addFolder(String path, String name) {
+    try {
+      final probe = File('$path/.tegnal-${uuidString()}');
+      probe.writeAsBytesSync(const [], flush: true);
+      probe.deleteSync();
+      final known = _folders.where((folder) => folder.path == path).firstOrNull;
+      if (known != null) {
+        _current = known.id;
+      } else {
+        final location = DownloadLocation(id: 'folder:${uuidString()}', name: name, path: path);
+        _folders = [..._folders, location];
+        _current = location.id;
+      }
+      locationError = null;
+      _saveSettings();
+    } on Object {
+      refuseFolder();
+    }
+    notifyListeners();
+  }
+
+  /// Says a picked folder can't take downloads.
+  void refuseFolder() {
+    locationError = L10n.text("TEGNAL can't save files in this folder. Choose a folder in Download, Documents or Pictures on this device.");
+    notifyListeners();
+  }
+
+  /// Forgets a chosen folder that no download is saved in.
+  void removeFolder(String id) {
+    if (id == DownloadLocation.files || items.any((item) => item.location == id)) return;
+    _folders = [
+      for (final folder in _folders)
+        if (folder.id != id) folder,
+    ];
+    if (_current == id) _current = DownloadLocation.files;
+    _saveSettings();
+    notifyListeners();
+  }
+
+  void _saveSettings() {
+    try {
+      File('${directory.path}/settings.json').writeAsStringSync(
+        jsonEncode({
+          'current': _current,
+          'folders': [for (final folder in _folders) folder.toJson()],
+        }),
+        flush: true,
+      );
+    } on Object catch (error) {
+      locationError = '$error';
+    }
+  }
+
+  /// Gives a download a folder named after the work in the current location.
+  void _place(WorkDownload item) {
+    final root = this.root(_current);
+    if (root == null) {
+      item.location = null;
+      item.path = null;
+      return;
+    }
+    final group = L10n.text(item.mode == WorkDownloadMode.manga ? 'Comics' : 'Images');
+    final gallery = item.gallery;
+    final name = gallery != null ? '${fileName(gallery.title, 60)} [${gallery.id}]' : fileName(item.title, 80);
+    final taken = {
+      for (final other in items)
+        if (other.location == _current && other.path != null) other.path!,
+    };
+    var candidate = name;
+    for (
+      var number = 2;
+      taken.contains('$group/$candidate') || FileSystemEntity.typeSync('${root.path}/$group/$candidate') != FileSystemEntityType.notFound;
+      number++
+    ) {
+      candidate = '$name ($number)';
+    }
+    item.location = _current;
+    item.path = '$group/$candidate';
+  }
+
+  /// A name the file system and file managers accept: no slashes or colons, no leading dot.
+  static String fileName(String text, int limit) {
+    final cleaned = text.replaceAll(RegExp(r'[/\\:*?"<>|\x00-\x1F\x7F]'), ' ');
+    var name = splitWhitespace(cleaned).join(' ');
+    while (name.startsWith('.')) {
+      name = name.substring(1);
+    }
+    final characters = name.runes.toList();
+    if (characters.length > limit) name = String.fromCharCodes(characters.take(limit)).trim();
+    return name.isEmpty ? 'Download' : name;
+  }
+
+  /// Moves downloads saved elsewhere, including the app's own storage, into the current location
+  /// without downloading them again. Running downloads are left where they are.
+  Future<void> moveElsewhereHere() async {
+    final targets = [for (final item in movable) item.id];
+    if (moving != null || targets.isEmpty) return;
+    locationError = null;
+    for (final (done, id) in targets.indexed) {
+      moving = (done: done, total: targets.length);
+      notifyListeners();
+      final item = _item(id);
+      if (item == null) continue;
+      final source = folder(item);
+      final placed = WorkDownload(id: item.id, key: item.key, mode: item.mode, title: item.title, origin: item.origin, gallery: item.gallery);
+      _place(placed);
+      final destination = folder(placed);
+      try {
+        if (source.existsSync()) {
+          destination.parent.createSync(recursive: true);
+          final from = source.path, to = destination.path;
+          await Isolate.run(() => moveDownloadFolder(from, to));
+        }
+        item.location = placed.location;
+        item.path = placed.path;
+        _persist();
+      } on Object catch (error) {
+        locationError = '$error';
+        break;
+      }
+    }
+    moving = null;
+    notifyListeners();
+  }
+
   void _schedule(WorkDownloadMode mode) {
     if (_suspended || _workers.containsKey(mode)) return;
     final item = items.lastWhere((item) => item.mode == mode && item.status == WorkDownloadStatus.queued, orElse: () => _none);
@@ -388,6 +636,15 @@ class DownloadStore extends ChangeNotifier {
 
   Future<void> _run(WorkDownload item, _Run run) async {
     try {
+      // Not started yet: it goes wherever downloads are saved now.
+      if (item.files.isEmpty && item.location != _current && !folder(item).existsSync()) {
+        final placed = WorkDownload(id: item.id, key: item.key, mode: item.mode, title: item.title, origin: item.origin, gallery: item.gallery);
+        _place(placed);
+        _update(item.id, run, (item) {
+          item.location = placed.location;
+          item.path = placed.path;
+        });
+      }
       _update(item.id, run, (item) {
         item.status = WorkDownloadStatus.downloading;
         item.error = null;
