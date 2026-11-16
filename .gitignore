@@ -53,35 +53,22 @@ migrate_working_dir/
 # Local tool configuration and generated Python caches
 /.codex/
 /.github/*
-# The desktop builds run on GitHub Actions, so only their workflow is kept.
+# README images live in .github/assets/. The desktop builds run on GitHub Actions, so only their workflow is kept.
+!/.github/assets/
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/flutter-desktop-builds.yml
 __pycache__/
 
-# Local research and working records; GitHub Pages publishes all of docs/
-/research/
-/docs/app-store/
-/docs/app-store-review.md
-/docs/challenge-example.json
-/docs/challenges/
-/docs/google-play/
-/docs/implementation/
-/flutter/docs/android-beta*-validation.md
-/flutter/docs/android-play-bundle-*.md
-/flutter/docs/android-release-1.0.0-beta.*.md
-/flutter/docs/flutter-*-validation.md
-
-# Brand originals; published assets live in docs/assets/
+# Brand originals; README images live in .github/assets/
 /design-output/
 
 # Local OCR benchmark harness for comic translation (kept out of the repository)
 /native-ios/scripts/ocr-bench/
 
-# Kept on this Mac, never published: files taken out of the repository, and documentation.
+# Kept on this Mac, never published: all documentation and agent notes (index: docs/README.md),
+# and files taken out of the repository.
+/docs/
+/CLAUDE.md
+/AGENTS.md
 /archive/
-/native-ios/docs/
-/flutter/docs/
-/flutter/CLAUDE.md
-/flutter/REBUILD.md
-/flutter/test/fixtures/native/README.md

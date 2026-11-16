@@ -2,17 +2,17 @@
 
 <p align="center">
   <a href="https://apps.apple.com/app/id6825935560">
-    <img src="docs/assets/readme/info.webp" alt="TEGNAL" width="100%">
+    <img src=".github/assets/info.webp" alt="TEGNAL" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://apps.apple.com/app/id6825935560"><img src="docs/assets/readme/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download TEGNAL on the App Store" width="323"></a>
-  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src="docs/assets/readme/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" width="364"></a>
+  <a href="https://apps.apple.com/app/id6825935560"><img src=".github/assets/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download TEGNAL on the App Store" width="323"></a>
+  <a href="https://play.google.com/store/apps/details?id=work.nextline.tegnal&hl=en"><img src=".github/assets/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get TEGNAL on Google Play" width="364"></a>
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset="docs/assets/readme/Discord_button_en_mobile.svg"><img src="docs/assets/readme/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
+  <a href="https://discord.gg/DFT9Hm66Gz"><picture><source media="(max-width: 767px)" srcset=".github/assets/Discord_button_en_mobile.svg"><img src=".github/assets/Discord_button_en.svg" alt="Join the TEGNAL Discord community"></picture></a>
 </p>
 
 # TEGNAL
@@ -90,8 +90,8 @@ Signing and distributing to devices takes an Apple Developer setup and provision
 ## Contact
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nextline-logo-dark.svg">
-  <img src="docs/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/nextline-logo-dark.svg">
+  <img src=".github/assets/nextline-logo-light.svg" alt="NextLine" width="160" align="right">
 </picture>
 
 Bug reports and ideas are welcome on [Discord](https://discord.gg/DFT9Hm66Gz).
