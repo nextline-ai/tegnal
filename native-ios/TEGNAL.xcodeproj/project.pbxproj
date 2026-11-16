@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0A23656E44874587F92D4E2F /* TEGNALTests/FolderPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323ABA62CE24245E9FFCBC6F /* TEGNALTests/FolderPaletteTests.swift */; };
-		152DA8AC9A936CC48C51F4BB /* TEGNAL/Core/Storage/FolderPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135B1A038B2FB3CB2A36DD5 /* TEGNAL/Core/Storage/FolderPalette.swift */; };
 		08D5209D38C894CD9B51E8A9 /* TEGNAL/Presentation/Taste/Recap/RecapDemoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CFBA255F6DC6A5C0A610388 /* TEGNAL/Presentation/Taste/Recap/RecapDemoLibrary.swift */; };
 		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
 		096DD821E1D6B54E59D7B23B /* TEGNAL/Presentation/Taste/Recap/RecapCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113D3F97D499E8F01770CDEF /* TEGNAL/Presentation/Taste/Recap/RecapCover.swift */; };
@@ -235,8 +233,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		323ABA62CE24245E9FFCBC6F /* TEGNALTests/FolderPaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/FolderPaletteTests.swift; sourceTree = SOURCE_ROOT; };
-		F135B1A038B2FB3CB2A36DD5 /* TEGNAL/Core/Storage/FolderPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Storage/FolderPalette.swift; sourceTree = SOURCE_ROOT; };
 		000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteRecap.swift; sourceTree = SOURCE_ROOT; };
 		009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaBackendTests.swift; sourceTree = "<group>"; };
 		00A3D8D9E5D6B186E154E5DE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -550,7 +546,6 @@
 				5477A779D5A0815A8DABAD2F /* TEGNALTests/TasteTests.swift */,
 				6EB7F719B8EB17FEC39FC684 /* TEGNALTests/FolderRuleTests.swift */,
 				7D1C78D4F7557350C975E911 /* TEGNALTests/CombinedCatalogTests.swift */,
-				323ABA62CE24245E9FFCBC6F /* TEGNALTests/FolderPaletteTests.swift */,
 				E46D0D914ADDA5BBAE69625A /* TEGNALTests/SiteAccessTests.swift */,
 				B3291A41034E600887DB1CAF /* TEGNALTests/TasteLearningTests.swift */,
 				9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */,
@@ -722,7 +717,6 @@
 			children = (
 				CE0ADBD40B2D48C09439A7DE /* LibraryBackup.swift */,
 				A015BE1F0830B18B98744C46 /* AppDatabase.swift */,
-				F135B1A038B2FB3CB2A36DD5 /* TEGNAL/Core/Storage/FolderPalette.swift */,
 				5F36E537BD5CCBBECC0C7D91 /* AppStorage.swift */,
 				BA5BA3974651F205FFFCE3AD /* SearchLibrary.swift */,
 			);
@@ -1068,7 +1062,6 @@
 				34D1FBBE82C4EB270E58DAC7 /* AnimeBoxesImport.swift in Sources */,
 				73458B3FBC56D64BF1F57DD4 /* AnimeBoxesImportView.swift in Sources */,
 				A98D1BE5CD53F4CFE2AF73A7 /* AppDatabase.swift in Sources */,
-				152DA8AC9A936CC48C51F4BB /* TEGNAL/Core/Storage/FolderPalette.swift in Sources */,
 				A8DEA1F1E17A02BB561A1CD2 /* TEGNAL/Core/Taste/TasteStore.swift in Sources */,
 				57AC0AB5821EE9EC714E179D /* TEGNAL/Core/Taste/TasteAnalyzer.swift in Sources */,
 				4288EA3863FB4AFDEE4F0C41 /* TEGNAL/Presentation/Taste/Recap/RecapCoverArt.swift in Sources */,
@@ -1216,7 +1209,6 @@
 				09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */,
 				A43254566954AE0472A2ECB5 /* TEGNALTests/FolderRuleTests.swift in Sources */,
 				76B0AA58439BBD62BB95DEA2 /* TEGNALTests/CombinedCatalogTests.swift in Sources */,
-				0A23656E44874587F92D4E2F /* TEGNALTests/FolderPaletteTests.swift in Sources */,
 				22F93165A4C48C30DE7DF431 /* TEGNALTests/SiteAccessTests.swift in Sources */,
 				4007874F595BF8034395DA15 /* TEGNALTests/TasteLearningTests.swift in Sources */,
 				29D634933AAA5D8400EAFF61 /* TEGNALTests/TasteRecapTests.swift in Sources */,
