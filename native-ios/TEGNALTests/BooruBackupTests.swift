@@ -42,9 +42,9 @@ final class BooruBackupTests: XCTestCase {
         let server = BooruServer.presets[0]
         try source.saveServer(server)
         let a = try source.saveFolder(name: "Landscapes"), b = try source.saveFolder(name: "Rooms")
-        try source.setFolderColor(a, color: 0xFF112233)
+        try source.setFolderColor(a, color: 0xFF4A3DFF)
         try source.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try source.setFolderColor("unsorted", color: 0xFF334455)
+        try source.setFolderColor("unsorted", color: 0xFF00BFA0)
         try source.reorderFolders([b, "unsorted", a])
         let post = BooruFixtureSource.post(5194309, server: server)
         try source.saveFavorite(post, folderID: a)
@@ -59,8 +59,8 @@ final class BooruBackupTests: XCTestCase {
         try destination.restoreBackup(backup)
         XCTAssertEqual(destination.servers.map(\.id), [local.id])
         XCTAssertEqual(destination.folders().map(\.id), [b, "unsorted", a, extra])
-        XCTAssertEqual(destination.folders().first { $0.id == a }?.color, 0xFF112233)
-        XCTAssertEqual(destination.folders().first { $0.id == "unsorted" }?.color, 0xFF334455)
+        XCTAssertEqual(destination.folders().first { $0.id == a }?.color, 0xFF4A3DFF)
+        XCTAssertEqual(destination.folders().first { $0.id == "unsorted" }?.color, 0xFF00BFA0)
         let mapped = post.onServer(local.id)
         XCTAssertEqual(destination.favoriteIDs, [mapped.id])
         XCTAssertEqual(destination.folderID(for: mapped), a)
@@ -89,9 +89,9 @@ final class BooruBackupTests: XCTestCase {
     func testRestoredFolderColorsAndOrderReachAnotherSyncLibrary() throws {
         let source = try BooruStore()
         let id = try source.saveFolder(name: "Synced folder")
-        try source.setFolderColor(id, color: 0xFFABCDEF)
+        try source.setFolderColor(id, color: 0xFF00C2E8)
         try source.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try source.setFolderColor("unsorted", color: 0xFF102030)
+        try source.setFolderColor("unsorted", color: 0xFFFF6A3D)
         try source.reorderFolders([id, "unsorted"])
         let restored = try BooruStore()
         try restored.restoreBackup(BooruBackup.decode(source.exportBackup().encoded()))
@@ -104,11 +104,11 @@ final class BooruBackupTests: XCTestCase {
         ledger.capture(try a.snapshot(), device: "A")
         try b.apply(ledger.changes)
         XCTAssertEqual(b.booru.folders().map(\.id), [id, "unsorted"])
-        XCTAssertEqual(b.booru.folders().map(\.color), [0xFFABCDEF, 0xFF102030])
-        try restored.setFolderColor(id, color: 0xFF765432)
+        XCTAssertEqual(b.booru.folders().map(\.color), [0xFF00C2E8, 0xFFFF6A3D])
+        try restored.setFolderColor(id, color: 0xFFB5651D)
         ledger.capture(try a.snapshot(), device: "A")
         try b.apply(ledger.changes)
-        XCTAssertEqual(b.booru.folders().first?.color, 0xFF765432)
+        XCTAssertEqual(b.booru.folders().first?.color, 0xFFB5651D)
     }
 }
 

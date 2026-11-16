@@ -173,7 +173,7 @@ public final class MangaViewerImportService: Sendable {
             if [0, 1].contains(sourceGroupId), name.hasSuffix("_default") { name = "미분류" }
 
             let colorInt: Int64
-            if let raw = rawColor, raw != 4294940672, raw != 0, !assignedColors.contains(raw) {
+            if let raw = rawColor.map(FolderPalette.vivid), rawColor != 4294940672, rawColor != 0, !assignedColors.contains(raw) {
                 colorInt = raw
             } else {
                 colorInt = appDb.nextUniqueFolderColor(excluding: assignedColors)

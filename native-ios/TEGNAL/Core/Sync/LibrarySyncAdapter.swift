@@ -360,6 +360,8 @@ struct LibrarySyncAdapter {
     private static func upsert(_ incoming: LibrarySyncRow, db: Database) throws {
         var row = incoming
         if row.table == "manga.folders" { row.values = MangaImportMetadata.normalized(row.values) }
+        // A device still on the earlier palette sends its colors as they were.
+        if row.table.hasSuffix(".folders"), let color = row.values["color"]?.integer { row.values["color"] = .integer(FolderPalette.vivid(color)) }
         guard let allowed = columns[row.table], let keys = LibrarySyncRow.keys[row.table], keys.allSatisfy({ row.values[$0] != nil }) else { throw BooruError.invalidResponse }
         // Columns this version does not know yet, sent by a newer one, are left out rather than
         // turning the whole row away; the record itself still carries them on to other devices.

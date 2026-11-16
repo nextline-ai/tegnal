@@ -30,7 +30,8 @@ for item in manifest:
 resources=stage/'TEGNAL'/'MarketingAssets'; resources.mkdir()
 folder_names=['미분류','풍경','공간','식물','계절','여행의 순간']
 folder_ids={name:'unsorted' if name=='미분류' else next(m['folder_id'] for m in manifest if m['folder_name']==name) for name in folder_names}
-colors=[4284922736,0xFF2563EB,0xFF059669,0xFFEA580C,0xFFE11D48,0xFF7C3AED]
+# Uncategorized's color, then the palette colors a new image library gives its folders (FolderPalette).
+colors=[0xFF00C853,0xFF1F6BFF,0xFFFF3B30,0xFFFF9500,0xFF8E4BFF,0xFFFF2D87]
 folders=[dict(id=folder_ids[name],name='' if name=='미분류' else name,color=colors[i]) for i,name in enumerate(folder_names)]
 # Interleave groups so the feed shows varied colors and subjects.
 groups={name:[m for m in manifest if m['folder_name']==name] for name in folder_names}

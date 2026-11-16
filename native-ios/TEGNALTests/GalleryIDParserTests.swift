@@ -129,7 +129,7 @@ final class GalleryIDParserTests: XCTestCase {
 
     func testBackgroundBackupExportPreservesLibraryFieldsAndSeparateOutputs() async throws {
         let database = try AppDatabase.inMemory()
-        let folder = try database.createFolder(name: "Backup folder", color: 0xFF123456)
+        let folder = try database.createFolder(name: "Backup folder", color: 0xFF8E4BFF)
         _ = try database.upsertWork(galleryId: 1234, folderId: folder.id, title: "Backup title", artists: "Artist", tags: "tag:test")
         try database.setNote(galleryId: 1234, note: "My note")
         try database.setThumbPage(galleryId: 1234, page: 3)

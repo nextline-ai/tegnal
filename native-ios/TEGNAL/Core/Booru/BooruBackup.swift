@@ -117,7 +117,7 @@ extension BooruStore {
         let incomingOrder = backup.folders.map(\.id)
         let remaining = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name").filter { !incomingOrder.contains($0) }
         for (position, folder) in backup.folders.enumerated() {
-            try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position", arguments: [folder.id, folder.id == "unsorted" ? "" : folder.name, folder.color, position])
+            try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position", arguments: [folder.id, folder.id == "unsorted" ? "" : folder.name, FolderPalette.vivid(folder.color), position])
         }
         for (position, id) in (incomingOrder + remaining).enumerated() {
             try db.execute(sql: "UPDATE folders SET position = ? WHERE id = ?", arguments: [position, id])

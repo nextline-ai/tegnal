@@ -219,9 +219,10 @@ struct MangaBackup: Codable, Sendable {
     func restore(in db: Database) throws {
         var mapping: [String: Int64] = [:]
         for record in folders {
+            // A new folder from a backup that kept no color takes the next one, as a new folder does.
             var folder = try Folder.filter(Folder.Columns.name == record.name).fetchOne(db)
-                ?? Folder(name: record.name)
-            folder.color = record.color ?? folder.color
+                ?? Folder(name: record.name, color: AppDatabase.nextFolderColor(existingColors: Int64.fetchAll(db, sql: "SELECT color FROM folders")))
+            folder.color = record.color.map(FolderPalette.vivid) ?? folder.color
             folder.description = record.description ?? folder.description
             folder.sourceGroupId = record.source_group_id ?? folder.sourceGroupId
             try folder.save(db)

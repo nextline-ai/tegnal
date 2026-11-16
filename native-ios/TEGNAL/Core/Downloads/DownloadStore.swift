@@ -18,6 +18,10 @@ struct WorkDownload: Codable, Identifiable {
     var files: [String] = []
     var bytes: Int64 = 0
     var error: String?
+    /// Where the files are: nil for the app's own storage (every download before 1.5.2), else a
+    /// `DownloadLocation` key. `path` is the folder inside it; nil means the download's id.
+    var location: String?
+    var path: String?
     var total: Int { gallery?.pages.count ?? 1 }
     var tags: [String] { gallery?.tags ?? post?.tags ?? [] }
     var artists: [String] { gallery?.artists ?? post?.artists ?? [] }
@@ -35,8 +39,26 @@ struct WorkDownload: Codable, Identifiable {
 
 }
 
+/// A place downloads can be saved: the app's folder in the Files app, or a folder the person
+/// chose, kept as a security-scoped bookmark.
+struct DownloadLocation: Codable, Equatable, Identifiable {
+    static let files = "files"
+    var id: String
+    var name: String
+    var bookmark: Data?
+    static let onDevice = DownloadLocation(id: files, name: "", bookmark: nil)
+    var isFiles: Bool { id == Self.files }
+}
+
+private struct DownloadSettings: Codable {
+    var current = DownloadLocation.files
+    var folders: [DownloadLocation] = []
+}
+
 /// Durable downloads live outside the evictable viewer cache. One worker per mode
 /// keeps large galleries from blocking image downloads or exhausting memory.
+/// The record of downloads stays in the app's own storage; the files go to the chosen location,
+/// in a folder named after the work, so the Files app and other apps can open them.
 @MainActor @Observable final class DownloadStore {
     static let shared: DownloadStore = {
         #if DEBUG
@@ -50,16 +72,32 @@ struct WorkDownload: Codable, Identifiable {
     private(set) var items: [WorkDownload] = []
     private(set) var storageError: String?
     private(set) var transferProgress: [UUID: Double] = [:]
+    /// The move to the current location in progress: how many are done of how many.
+    private(set) var moving: (done: Int, total: Int)?
+    private(set) var locationError: String?
+    private var settings = DownloadSettings()
     private let directory: URL
+    /// The app's Documents folder, which the Files app shows as the app's folder on the device.
+    private let filesRoot: URL
+    @ObservationIgnored private var resolvedFolders: [String: URL] = [:]
     private let manga: any ContentProviding
     private let booru: any BooruProviding
     @ObservationIgnored private var workers: [WorkDownload.Mode: Task<Void, Never>] = [:]
     @ObservationIgnored private var active: [WorkDownload.Mode: UUID] = [:]
     @ObservationIgnored private var suspended = false
 
-    init(directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads"),
+    static let appDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads")
+
+    /// `filesRoot` defaults to Documents for the app's own store, and to a folder beside a test's
+    /// directory otherwise, so tests never write into the Files app.
+    init(directory: URL = DownloadStore.appDirectory, filesRoot: URL? = nil,
          manga: any ContentProviding = SiteFallbackContent.shared, booru: any BooruProviding = BooruClient.shared) {
         self.directory = directory; self.manga = manga; self.booru = booru
+        self.filesRoot = filesRoot ?? (directory == Self.appDirectory
+            ? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            : directory.deletingLastPathComponent().appendingPathComponent(directory.lastPathComponent + "-files"))
+        let settingsFile = directory.appendingPathComponent("settings.json")
+        if let data = try? Data(contentsOf: settingsFile), let saved = try? JSONDecoder().decode(DownloadSettings.self, from: data) { settings = saved }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             var location = directory
@@ -70,7 +108,7 @@ struct WorkDownload: Codable, Identifiable {
                 items = try JSONDecoder().decode([WorkDownload].self, from: Data(contentsOf: manifest))
                 for index in items.indices {
                     let item = items[index]
-                    let files = item.files.map { directory.appendingPathComponent(item.id.uuidString).appendingPathComponent($0) }
+                    let files = urls(item)
                     if [.queued, .downloading].contains(item.status) || (item.status == .completed &&
                         (item.files.count != item.total || files.contains { !FileManager.default.fileExists(atPath: $0.path) })) {
                         items[index].status = .paused
@@ -91,11 +129,15 @@ struct WorkDownload: Codable, Identifiable {
     private func add(_ item: WorkDownload) -> UUID {
         if let existing = items.first(where: { $0.mode == item.mode && $0.key == item.key }) { return existing.id }
         guard storageError == nil else { return item.id }
+        var item = item
+        place(&item)
         items.insert(item, at: 0)
         if persist() { schedule(item.mode) }
         return item.id
     }
-    func folder(_ item: WorkDownload) -> URL { directory.appendingPathComponent(item.id.uuidString) }
+    func folder(_ item: WorkDownload) -> URL {
+        (root(item.location) ?? directory).appendingPathComponent(item.path ?? item.id.uuidString, isDirectory: true)
+    }
     func urls(_ item: WorkDownload) -> [URL] { item.files.map { folder(item).appendingPathComponent($0) } }
     func pause(_ id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }), [.queued, .downloading].contains(items[index].status) else { return }
@@ -128,6 +170,147 @@ struct WorkDownload: Codable, Identifiable {
             storageError = nil; return true
         } catch { storageError = error.localizedDescription; return false }
     }
+    // MARK: - Location
+
+    var locations: [DownloadLocation] { [.onDevice] + settings.folders }
+    var currentLocation: DownloadLocation { locations.first { $0.id == settings.current } ?? .onDevice }
+    /// Downloads saved somewhere other than the current location, which a move can bring over.
+    var elsewhere: [WorkDownload] { items.filter { $0.location != settings.current } }
+    /// The ones a move takes now: everything elsewhere except running downloads.
+    var movable: [WorkDownload] { elsewhere.filter { ![.queued, .downloading].contains($0.status) } }
+    var isDownloading: Bool { items.contains { [.queued, .downloading].contains($0.status) } }
+    /// The Files app's address of the app's own folder, to open it there.
+    var filesAppURL: URL? { URL(string: "shareddocuments://" + filesRoot.path) }
+
+    func root(_ location: String?) -> URL? {
+        guard let location else { return directory }
+        if location == DownloadLocation.files { return filesRoot }
+        if let url = resolvedFolders[location] { return url }
+        guard let saved = settings.folders.first(where: { $0.id == location }), let bookmark = saved.bookmark else { return nil }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &stale) else { return nil }
+        // Access stays open while the app runs, as downloads and the offline reader use it at any time.
+        _ = url.startAccessingSecurityScopedResource()
+        if stale, let index = settings.folders.firstIndex(where: { $0.id == location }),
+           let fresh = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+            settings.folders[index].bookmark = fresh
+            saveSettings()
+        }
+        resolvedFolders[location] = url
+        return url
+    }
+
+    func setLocation(_ id: String) {
+        guard locations.contains(where: { $0.id == id }) else { return }
+        settings.current = id
+        locationError = nil
+        saveSettings()
+    }
+
+    /// Adds a folder picked in the document picker and saves new downloads there.
+    func addFolder(_ url: URL) {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let probe = url.appendingPathComponent(".tegnal-\(UUID().uuidString)")
+            try Data().write(to: probe)
+            try? FileManager.default.removeItem(at: probe)
+            let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            if let known = settings.folders.first(where: { root($0.id)?.standardizedFileURL == url.standardizedFileURL }) {
+                settings.current = known.id
+            } else {
+                let location = DownloadLocation(id: "folder:" + UUID().uuidString, name: url.lastPathComponent, bookmark: bookmark)
+                settings.folders.append(location)
+                settings.current = location.id
+            }
+            locationError = nil
+            saveSettings()
+        } catch { locationError = error.localizedDescription }
+    }
+
+    /// Forgets a chosen folder. Downloads saved there stay listed only while it can still be opened.
+    func removeFolder(_ id: String) {
+        guard id != DownloadLocation.files, !items.contains(where: { $0.location == id }) else { return }
+        settings.folders.removeAll { $0.id == id }
+        if settings.current == id { settings.current = DownloadLocation.files }
+        if let url = resolvedFolders.removeValue(forKey: id) { url.stopAccessingSecurityScopedResource() }
+        saveSettings()
+    }
+
+    private func saveSettings() {
+        do { try JSONEncoder().encode(settings).write(to: directory.appendingPathComponent("settings.json"), options: .atomic) }
+        catch { locationError = error.localizedDescription }
+    }
+
+    /// Gives a new download a folder named after the work in the current location.
+    private func place(_ item: inout WorkDownload) {
+        guard let root = root(settings.current) else { item.location = nil; item.path = nil; return }
+        let group = L10n.text(item.mode == .manga ? "Comics" : "Images")
+        let name: String
+        if let gallery = item.gallery { name = "\(Self.fileName(gallery.title, limit: 60)) [\(gallery.id)]" }
+        else { name = Self.fileName(item.title, limit: 80) }
+        let parent = root.appendingPathComponent(group, isDirectory: true)
+        var candidate = name, number = 2
+        let taken = Set(items.filter { $0.location == settings.current }.compactMap(\.path))
+        while taken.contains(group + "/" + candidate) || FileManager.default.fileExists(atPath: parent.appendingPathComponent(candidate).path) {
+            candidate = "\(name) (\(number))"; number += 1
+        }
+        item.location = settings.current
+        item.path = group + "/" + candidate
+    }
+
+    /// A name the file system and the Files app accept: no slashes or colons, no leading dot.
+    static func fileName(_ text: String, limit: Int) -> String {
+        let forbidden = CharacterSet(charactersIn: "/\\:*?\"<>|").union(.controlCharacters).union(.newlines)
+        var name = String(text.unicodeScalars.map { forbidden.contains($0) ? " " : Character($0) })
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        while name.hasPrefix(".") { name.removeFirst() }
+        if name.count > limit { name = String(name.prefix(limit)).trimmingCharacters(in: .whitespaces) }
+        return name.isEmpty ? "Download" : name
+    }
+
+    /// Makes the folder that holds a download's folder. Mode folders in the Files app are left out
+    /// of device backups, as downloads can be fetched again.
+    private func prepareParent(of item: WorkDownload) throws {
+        var parent = folder(item).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        guard item.location == DownloadLocation.files else { return }
+        var values = URLResourceValues(); values.isExcludedFromBackup = true
+        try? parent.setResourceValues(values)
+    }
+
+    /// Moves downloads saved elsewhere, including the app's own storage, into the current location
+    /// without downloading them again. Running downloads are left where they are.
+    func moveElsewhereHere() async {
+        let targets = movable.map(\.id)
+        guard moving == nil, !targets.isEmpty else { return }
+        moving = (0, targets.count)
+        locationError = nil
+        for (done, id) in targets.enumerated() {
+            moving = (done, targets.count)
+            await Task.yield()
+            guard let index = items.firstIndex(where: { $0.id == id }) else { continue }
+            let source = folder(items[index])
+            var moved = items[index]
+            place(&moved)
+            let destination = folder(moved)
+            do {
+                if FileManager.default.fileExists(atPath: source.path) {
+                    try prepareParent(of: moved)
+                    try await Task.detached(priority: .userInitiated) { try FileManager.default.moveItem(at: source, to: destination) }.value
+                }
+                guard let current = items.firstIndex(where: { $0.id == id }) else { continue }
+                items[current].location = moved.location
+                items[current].path = moved.path
+                persist()
+            } catch {
+                locationError = error.localizedDescription
+                break
+            }
+        }
+        moving = nil
+    }
+
     private func schedule(_ mode: WorkDownload.Mode) {
         guard !suspended, workers[mode] == nil, let item = items.last(where: { $0.mode == mode && $0.status == .queued }) else { return }
         active[mode] = item.id
@@ -146,7 +329,16 @@ struct WorkDownload: Codable, Identifiable {
     }
     private func run(_ item: WorkDownload) async {
         do {
+            // Not started yet: it goes wherever downloads are saved now.
+            if item.files.isEmpty, item.location != settings.current, !FileManager.default.fileExists(atPath: folder(item).path) {
+                var placed = item
+                place(&placed)
+                try update(item.id) { $0.location = placed.location; $0.path = placed.path }
+            }
             try update(item.id) { $0.status = .downloading; $0.error = nil }
+            guard let current = items.first(where: { $0.id == item.id }) else { throw CancellationError() }
+            let item = current
+            try prepareParent(of: item)
             try FileManager.default.createDirectory(at: folder(item), withIntermediateDirectories: true)
             if let gallery = item.gallery {
                 // Do not silently resume a gallery against a different configured site.

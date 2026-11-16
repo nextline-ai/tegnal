@@ -36,8 +36,9 @@ struct LibrarySyncRow: Codable, Equatable, Sendable {
         return table + ":" + ((try? encoder.encode(keys.map { values[$0] ?? .null })) ?? Data()).base64EncodedString()
     }
     var isFactoryDefault: Bool {
-        if table == "booru.folders" { return values["id"]?.string == "unsorted" && values["color"]?.integer == 4284922736 && values["position"]?.integer == 0 }
-        if table == "manga.folders" { return values["sync_id"]?.string == "unsorted" && values["color"]?.integer == 4280391411 && values["sort_order"]?.integer == 1 }
+        // Either palette's first color counts, so devices on both versions agree.
+        if table == "booru.folders" { return values["id"]?.string == "unsorted" && [FolderPalette.unsorted, FolderPalette.earlierUnsorted].contains(values["color"]?.integer) && values["position"]?.integer == 0 }
+        if table == "manga.folders" { return values["sync_id"]?.string == "unsorted" && [FolderPalette.unfiled, FolderPalette.earlierUnfiled].contains(values["color"]?.integer) && values["sort_order"]?.integer == 1 }
         return false
     }
     static let keys: [String: [String]] = [

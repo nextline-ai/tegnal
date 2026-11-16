@@ -163,17 +163,11 @@ public struct FoldersView: View {
         }
         .appSheet(isPresented: $reordering, onDismiss: loadFolders) { FolderOrderView(booru: false) }
         .appSheet(item: $editingColorFolder) { folder in
-            NativeColorPickerSheet(
-                title: folder.displayName, color: folder.color,
-                onColorSelected: { newColor in
-                    if let id = folder.id {
-                        saveColor(folderId: id, color: newColor)
-                    }
-                },
-                onDismiss: {
-                    editingColorFolder = nil
-                }
-            )
+            FolderColorSheet(title: folder.displayName, color: folder.color, others: folders.filter { $0.id != folder.id }.map(\.color)) { color in
+                if let id = folder.id { saveColor(folderId: id, color: color) }
+            } preview: { color in
+                FolderBentoCardView(folder: folder.recolored(color), previews: folder.id.flatMap { previews[$0] } ?? [])
+            }
         }
         .background {
             FolderNameAlert(isPresented: $showRename, name: $renameDraft, identifier: "folder.rename", title: "Rename Folder", actionTitle: "Save") { value in
@@ -221,53 +215,105 @@ public struct FoldersView: View {
         loadFolders()
     }
 
-    private func saveColor(folderId: Int64, color: Color) {
-        try? env.database.setFolderColor(id: folderId, color: NativeColorPickerSheet.argb(color))
-        loadFolders()
+    private func saveColor(folderId: Int64, color: Int64) {
+        do { try env.database.setFolderColor(id: folderId, color: color) }
+        catch { editError = error.localizedDescription }
     }
 }
 
-struct NativeColorPickerSheet: UIViewControllerRepresentable {
+/// Ten colors no other folder in the library uses, in the palette's order. A pick recolors the
+/// folder at once, and a color nobody uses yet takes its place, so each pick brings a new one.
+struct FolderColorSheet<Preview: View>: View {
     let title: String
-    let color: Int64
-    let onColorSelected: (Color) -> Void
-    let onDismiss: () -> Void
+    let others: Set<Int64>
+    let apply: (Int64) -> Void
+    let preview: (Int64) -> Preview
+    @State private var current: Int64
+    @State private var choices: [Int64]
+    /// Colors this sheet has shown or the folder had, never offered again while it is open.
+    @State private var shown: Set<Int64>
+    @Environment(\.dismiss) private var dismiss
 
-    static func argb(_ color: Color) -> Int64 {
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        return 0xFF000000 | (Int64((red * 255).rounded()) << 16) | (Int64((green * 255).rounded()) << 8) | Int64((blue * 255).rounded())
+    init(title: String, color: Int64, others: [Int64], apply: @escaping (Int64) -> Void, @ViewBuilder preview: @escaping (Int64) -> Preview) {
+        self.title = title
+        self.others = Set(others)
+        self.apply = apply
+        self.preview = preview
+        let choices = FolderPalette.unused(Set(others).union([color]), count: 10)
+        _current = State(initialValue: color)
+        _choices = State(initialValue: choices)
+        _shown = State(initialValue: Set(choices).union([color]))
     }
 
-    func makeUIViewController(context: Context) -> UIColorPickerViewController {
-        let picker = UIColorPickerViewController()
-        picker.selectedColor = UIColor(Color(argb: color))
-        picker.supportsAlpha = false
-        picker.title = L10n.text("%@ color", title)
-        picker.delegate = context.coordinator
-        return picker
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    preview(current)
+                        .frame(maxWidth: 132)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 16) {
+                        ForEach(Array(choices.enumerated()), id: \.element) { index, color in
+                            Button { pick(color) } label: {
+                                Circle()
+                                    .fill(Color(argb: color))
+                                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+                                    .frame(width: 50, height: 50)
+                                    .frame(maxWidth: .infinity)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.scale(scale: 0.3).combined(with: .opacity))
+                            .accessibilityLabel(L10n.text("Color %@", String(index + 1)))
+                            .accessibilityIdentifier("folder.color.\(index)")
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    Text(L10n.text("These are colors no other folder uses. Each color you pick is replaced by a new one."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .navigationTitle(L10n.text("%@ color", title))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.text("Done")) { dismiss() }.accessibilityIdentifier("folder.color.done")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .sensoryFeedback(.selection, trigger: current)
+        .accessibilityIdentifier("folder.colorSheet")
     }
 
-    func updateUIViewController(_ uiViewController: UIColorPickerViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+    private func pick(_ color: Int64) {
+        guard let index = choices.firstIndex(of: color) else { return }
+        apply(color)
+        let replacement = FolderPalette.unused(others.union(shown), count: 1).first
+        withAnimation(.snappy) {
+            current = color
+            if let replacement {
+                choices[index] = replacement
+                shown.insert(replacement)
+            } else {
+                choices.remove(at: index)
+            }
+        }
     }
+}
 
-    class Coordinator: NSObject, UIColorPickerViewControllerDelegate {
-        let parent: NativeColorPickerSheet
-
-        init(_ parent: NativeColorPickerSheet) {
-            self.parent = parent
-        }
-
-        func colorPickerViewController(_ viewController: UIColorPickerViewController, didSelect color: UIColor, continuously: Bool) {
-            parent.onColorSelected(Color(uiColor: color))
-        }
-
-        func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
-            parent.onDismiss()
-        }
+extension Folder {
+    func recolored(_ color: Int64) -> Folder {
+        var folder = self
+        folder.color = color
+        return folder
     }
 }
 
