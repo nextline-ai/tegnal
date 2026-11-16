@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -248,6 +249,7 @@ class ReaderSpreadView extends StatelessWidget {
             Expanded(
               child: ReaderPageView(
                 key: ValueKey(gallery.pages[index].hash),
+                index: index,
                 page: gallery.pages[index],
                 galleryID: gallery.id,
                 images: images,
@@ -268,6 +270,7 @@ class ReaderSpreadView extends StatelessWidget {
 class ReaderPageView extends StatefulWidget {
   const ReaderPageView({
     super.key,
+    this.index = 0,
     required this.page,
     required this.galleryID,
     required this.images,
@@ -277,6 +280,8 @@ class ReaderPageView extends StatefulWidget {
     this.isActive = true,
   });
 
+  /// Where the page sits in the work, for the lines AI translation reads on from.
+  final int index;
   final GalleryPage page;
   final int galleryID;
   final PageImageStore images;
@@ -347,6 +352,17 @@ class _ReaderPageViewState extends State<ReaderPageView> {
             bookmark: widget.bookmark,
             onZoomChanged: widget.onZoomChanged,
             translation: ReaderTranslationScope.of(context)?.balloons(widget.page.hash) ?? const [],
+            // AI translation reads a zoomed-in area again, for text too small to read on the whole page.
+            onViewport: (area) {
+              final session = ReaderTranslationScope.of(context);
+              if (session == null || !session.isOn) return;
+              session.readZoomed(
+                key: widget.page.hash,
+                index: widget.index,
+                area: area,
+                load: () => widget.images.data(widget.page, galleryID: widget.galleryID),
+              );
+            },
           ),
         ),
         if (_error != null)
@@ -395,8 +411,20 @@ class _PageError extends StatelessWidget {
 /// `ZoomablePageView`: the page fitted to the screen, pinch or double tap to zoom up to 5×.
 /// A single tap reports where it landed (the center while zoomed); holding bookmarks.
 class ZoomablePageView extends StatefulWidget {
-  const ZoomablePageView({super.key, required this.image, required this.tap, required this.bookmark, required this.onZoomChanged, this.translation = const []});
+  const ZoomablePageView({
+    super.key,
+    required this.image,
+    required this.tap,
+    required this.bookmark,
+    required this.onZoomChanged,
+    this.translation = const [],
+    this.onViewport,
+  });
   final ui.Image image;
+
+  /// The part of the page on screen once a zoom or a move settles, when zoomed in far enough for
+  /// a closer reading; normalized to the image with a top-left origin.
+  final ValueChanged<Rect>? onViewport;
 
   /// Translated balloons laid over the page, zooming and panning with it.
   final List<TranslatedRegion> translation;
@@ -414,6 +442,8 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
   Animation<Matrix4>? _zoom;
   Offset? _doubleTapPosition;
   bool _zoomed = false;
+  Size _size = Size.zero;
+  Timer? _viewportTimer;
 
   /// Read on every build, so a change in the viewer settings reaches pages already open.
   bool get _doubleTapZooms => ReaderPreferences.doubleTapZooms;
@@ -422,6 +452,7 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
   void initState() {
     super.initState();
     _transform.addListener(_reportZoom);
+    _transform.addListener(_scheduleViewport);
     _animation.addListener(() {
       if (_zoom != null) _transform.value = _zoom!.value;
     });
@@ -430,6 +461,7 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
   @override
   void dispose() {
     if (_zoomed) widget.onZoomChanged(false);
+    _viewportTimer?.cancel();
     _transform.dispose();
     _animation.dispose();
     super.dispose();
@@ -444,6 +476,18 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
       widget.onZoomChanged(zoomed);
       setState(() {});
     }
+  }
+
+  /// Pinches, pans, their glide and double tap zooms all move the transform; the area is reported
+  /// once it has stayed still for a moment.
+  void _scheduleViewport() {
+    if (widget.onViewport == null) return;
+    _viewportTimer?.cancel();
+    _viewportTimer = Timer(ZoomedText.settle, () {
+      if (!mounted) return;
+      final area = ZoomedText.visibleArea(_transform.value, _size, _imageRect(_size));
+      if (area != null) widget.onViewport?.call(area);
+    });
   }
 
   void _animateTo(Matrix4 target) {
@@ -476,6 +520,7 @@ class _ZoomablePageViewState extends State<ZoomablePageView> with SingleTickerPr
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
+        _size = size;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: (details) => widget.tap(_zoomed ? 0.5 : details.localPosition.dx / math.max(1, size.width)),

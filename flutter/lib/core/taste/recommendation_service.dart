@@ -139,8 +139,7 @@ class TasteEnvironment {
     required this.content,
     required this.booruSource,
     required this.comicSource,
-    String Function(String query)? booruQuery,
-  }) : booruQuery = booruQuery ?? ((query) => query);
+  });
 
   /// The current taste settings; read each time because they change.
   final TasteControl Function() control;
@@ -149,9 +148,6 @@ class TasteEnvironment {
   final ContentEnvironment content;
   final BooruProviding booruSource;
   final ContentProviding comicSource;
-
-  /// `booruQuery`: Safe Mode's rating tag added to image searches.
-  final String Function(String query) booruQuery;
 }
 
 /// Saved works, matched by number and also as the same work under another number: a
@@ -554,7 +550,7 @@ abstract final class RecommendationService {
         var candidates = cursor.pendingPosts[key] ?? const <BooruPost>[];
         if (candidates.isEmpty) {
           final page = cursor.pages[key] ?? 0;
-          final query = env.booruQuery([seed.name, ...preferences.includedTags].where((term) => term.isNotEmpty).join(' '));
+          final query = [seed.name, ...preferences.includedTags].where((term) => term.isNotEmpty).join(' ');
           final sort = preferences.sort.booruSort ?? BooruSort.latest;
           // Give each listing the same document-loading allowance as Explore.
           final batch = await _deadline(

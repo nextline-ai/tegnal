@@ -100,7 +100,6 @@ abstract final class ModeSettingsReset {
     final browser = content.browserPreferences;
     if (booru) {
       browser.set('booru.safeMode', false);
-      browser.set('booru.safeRating', 'general');
     } else {
       content.mangaColumns = 0;
       content.mangaFolderColumns = 0;

@@ -238,6 +238,7 @@ class _FoldersViewState extends State<FoldersView> {
                     )
                   else
                     ArtworkGridSliver(
+                      folders: true,
                       itemCount: _folders.length + (_showsRecents ? 1 : 0),
                       preferences: widget.routes.folderGrid,
                       topMarginScale: 26 / 16,

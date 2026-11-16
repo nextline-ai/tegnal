@@ -122,7 +122,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
     return DiscoveryContext(origin: _query.isEmpty ? DiscoveryOrigin.feed : DiscoveryOrigin.search, query: _query, session: _session);
   }
 
-  String get _effectiveQuery => _booru.query(_query);
+  String get _effectiveQuery => _query;
 
   String get _requestKey =>
       '$_effectiveQuery|${_sort.rawValue}|$_retry|${_servers.map((server) => server.id + server.canonicalAddress + server.engine.rawValue).join(',')}';

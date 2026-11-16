@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 // Work information logic from native-ios/TEGNALTests/ReaderUXTests.swift and the preview
 // layout tests of GridLayoutTests.swift.
 import 'dart:ui' show Rect;
@@ -126,8 +128,17 @@ void main() {
   test('preview columns follow twice the resolved artwork columns or an explicit choice', () {
     for (final width in [280.0, 390.0, 678.0, 1024.0, 1280.0]) {
       for (var columns = 0; columns <= 5; columns++) {
-        final artwork = ArtworkGridGeometry(width: width, columns: columns, removesPadding: false);
-        expect(GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 0, removesArtworkPadding: false), artwork.count * 2);
+        final artwork = ArtworkGridGeometry(
+          width: width,
+          columns: ArtworkGridGeometry.columnsFor(chosen: columns, width: width),
+          minimum: ArtworkGridGeometry.artworkMinimum(width),
+          removesPadding: false,
+          maximumColumns: 12,
+        );
+        expect(
+          GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 0, removesArtworkPadding: false),
+          math.min(16, artwork.count * 2),
+        );
         expect(GalleryPreviewLayout.columns(width: width, artworkColumns: columns, previewColumns: 6, removesArtworkPadding: false), 6);
       }
     }

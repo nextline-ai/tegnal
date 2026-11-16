@@ -26,7 +26,6 @@ class TasteController extends ChangeNotifier {
     required ContentEnvironment content,
     required BooruProviding booruSource,
     required ContentProviding comicSource,
-    String Function(String query)? booruQuery,
     Set<int> Function()? hiddenComics,
     TasteSyncBackend? syncBackend,
   }) : comics = library.tasteStore,
@@ -40,7 +39,6 @@ class TasteController extends ChangeNotifier {
       content: content,
       booruSource: booruSource,
       comicSource: comicSource,
-      booruQuery: booruQuery,
     );
     try {
       control = comics.control();

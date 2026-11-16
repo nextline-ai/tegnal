@@ -228,6 +228,8 @@ Future<AppServices> _launchFixture() async {
   if (_language.isNotEmpty) preferences.defaults.set('app.language', _language);
   if (_theme.isNotEmpty) preferences.defaults.set('app_theme', _theme);
   if (_details) preferences.defaults.set('manga.showInformationBeforeReading', true);
+  // `--safe-mode-test`: Safe Mode on, so Comics Mode browses Safebooru's pools.
+  if (_fixture.split(',').map((name) => name.trim()).contains('safeMode')) preferences.defaults.set('booru.safeMode', true);
   // As the native UI tests do, the reader guide stays hidden unless `readerHelp` asks for it.
   ReaderPreferences.defaults.set('reader.helpHidden', !_fixture.split(',').map((name) => name.trim()).contains('readerHelp'));
   ReaderPreferences.install(preferences);

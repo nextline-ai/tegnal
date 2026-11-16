@@ -103,7 +103,6 @@ void main() {
     expect(content.mangaColumns, 3);
     expect(preferences.defaults.object('booru.grid_columns'), isNull);
     expect(preferences.defaults.boolean('booru.safeMode'), isFalse);
-    expect(preferences.defaults.string('booru.safeRating'), 'general');
     expect(preferences.booruDefaults.object('booru.fitThumbnails'), isNull);
     expect(SearchHistoryPreferences.remembers(preferences.booruDefaults, booru: true), isTrue);
   });

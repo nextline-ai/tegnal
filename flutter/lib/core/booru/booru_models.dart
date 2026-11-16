@@ -353,7 +353,7 @@ class BooruBlacklist {
         final value = negative ? term.substring(1) : term;
         final bool matches;
         if (value.startsWith('rating:')) {
-          matches = BooruSafeRating.normalized(value.substring(7)) == BooruSafeRating.normalized(post.rating);
+          matches = BooruRating.normalized(value.substring(7)) == BooruRating.normalized(post.rating);
         } else if (value.startsWith('artist:')) {
           matches = post.artists.any((artist) => artist.toLowerCase() == value.substring(7));
         } else if (value.startsWith('id:')) {
@@ -630,20 +630,7 @@ class BooruCompletion {
   int get hashCode => Object.hash(prefix, token, negative);
 }
 
-/// An optional default search condition, not a content restriction.
-enum BooruSafeRating {
-  general('g'),
-  sensitive('s'),
-  questionable('q');
-
-  const BooruSafeRating(this.rawValue);
-  final String rawValue;
-
-  static BooruSafeRating? fromRawValue(String? value) => values.where((rating) => rating.rawValue == value).firstOrNull;
-
-  String get id => rawValue;
-  String get tag => 'rating:$rawValue';
-
+abstract final class BooruRating {
   /// Each server names ratings its own way; this is the one-letter form the rating tag uses.
   static String normalized(String value) => switch (value.toLowerCase()) {
     'g' || 'general' || 'safe' => 'g',
@@ -652,19 +639,4 @@ enum BooruSafeRating {
     'e' || 'explicit' => 'e',
     final other => other,
   };
-
-  /// A saved image fits when its rating is the one the rating tag searches for.
-  bool allows(String rating) => normalized(rating) == rawValue;
-  String get title => switch (this) {
-    general => L10n.text('All Ages'),
-    sensitive => '12+',
-    questionable => '15+',
-  };
-
-  String applyingDefault(String query) {
-    // An explicitly entered rating overrides this optional default.
-    final hasRating = splitWhitespace(query).any((term) => term.replaceAll(RegExp(r'^[-~]+|[-~]+$'), '').toLowerCase().startsWith('rating:'));
-    if (hasRating) return query;
-    return query.isEmpty ? tag : '$query $tag';
-  }
 }

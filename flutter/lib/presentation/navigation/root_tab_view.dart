@@ -21,6 +21,11 @@ double tabBarClearance(BuildContext context) => tabBarHeight + _bottomGap(contex
 
 double _bottomGap(BuildContext context) => math.max(_tabBarGap, MediaQuery.paddingOf(context).bottom - 13);
 
+/// The Up Next bar is about as wide as on the largest phone, so on a tablet it reads as a player
+/// rather than a banner across the screen.
+const double _queueBarMaximumWidth = 560;
+double _queueBarInset(BuildContext context) => math.max(_tabBarGap, (MediaQuery.sizeOf(context).width - _queueBarMaximumWidth) / 2);
+
 /// The root of each library: five destinations kept alive while switching, under
 /// the iOS 26 floating tab bar with Smart in its own circle.
 class RootTabView extends StatelessWidget {
@@ -56,8 +61,8 @@ class RootTabView extends StatelessWidget {
             ),
             if (queue != null)
               Positioned(
-                left: _tabBarGap,
-                right: _tabBarGap,
+                left: _queueBarInset(context),
+                right: _queueBarInset(context),
                 bottom: _bottomGap(context) + tabBarHeight + 8,
                 child: IgnorePointer(
                   ignoring: !showsBar,

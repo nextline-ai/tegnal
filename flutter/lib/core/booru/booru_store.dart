@@ -86,13 +86,14 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   (int, List<FavoriteRecord>)? _cachedFavorites;
   (int, List<BooruFolder>)? _cachedFolders;
   int _visibleFavoritesRevision = -1;
-  final _visibleFavoritesCache = <(String?, String, BooruSafeRating?), List<BooruPost>>{};
+  final _visibleFavoritesCache = <(String?, String, bool), List<BooruPost>>{};
 
-  /// Safe Mode's age guide, read from the app's settings: saved images from servers other than
-  /// Safebooru show only when their rating fits it, and the rest are not shown at all.
-  BooruSafeRating? Function() safeRating = () => null;
+  /// Safe Mode, read from the app's settings. Safebooru carries only all-ages images, so it is the
+  /// one server browsed, and only images saved from it are shown; everything else stays saved,
+  /// out of sight.
+  bool Function() safeMode = () => false;
 
-  /// Saved screens show the change at once when Safe Mode or its age guide changes.
+  /// Saved screens show the change at once when Safe Mode changes.
   void safeModeChanged() {
     _visibleFavoritesCache.clear();
     _visibleFavoritesRevision = -1;
@@ -100,11 +101,15 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   }
 
   /// Whether a saved image may be shown under Safe Mode.
-  bool isShownInSafeMode(BooruPost post) {
-    final rating = safeRating();
-    if (rating == null) return true;
-    return servers.where((server) => server.id == post.serverID).firstOrNull?.isSafebooru == true || rating.allows(post.rating);
-  }
+  bool isShownInSafeMode(BooruPost post) => !safeMode() || isSafebooru(post.serverID);
+
+  bool isSafebooru(String serverID) => servers.where((server) => server.id == serverID).firstOrNull?.isSafebooru == true;
+
+  /// The servers that can be chosen to browse: Safebooru alone in Safe Mode.
+  List<BooruServer> get selectableServers => safeMode() ? servers.where((server) => server.isSafebooru).toList() : servers;
+
+  /// What was chosen before Safe Mode, chosen again when it is turned off.
+  static const _presafeSelectionKey = 'safe_mode.previous_servers';
 
   /// Warms a newly saved post's preview (the native visual fingerprint prefetch). The app
   /// sets it with the thumbnail cache; the store only reports which post to warm.
@@ -288,7 +293,12 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     final legacy = setting('selected_server') ?? servers.firstOrNull?.id ?? '';
     final raw = setting('selected_servers');
     final saved = (raw == null ? null : _decodeStrings(raw)) ?? [legacy];
-    selectedServerIDs = servers.map((server) => server.id).where(saved.contains).toList();
+    // Another device or a restored backup may have chosen other servers; Safe Mode keeps to Safebooru.
+    final safe = safeMode();
+    selectedServerIDs = [
+      for (final server in servers)
+        if (saved.contains(server.id) && (!safe || server.isSafebooru)) server.id,
+    ];
     selectedServerID = selectedServerIDs.firstOrNull ?? '';
   }
 
@@ -311,13 +321,47 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   }
 
   void setSelectedServers(List<String> ids) {
-    final valid = servers.map((server) => server.id).where(ids.contains).toList();
+    final safe = safeMode();
+    final valid = [
+      for (final server in servers)
+        if (ids.contains(server.id) && (!safe || server.isSafebooru)) server.id,
+    ];
+    // In Safe Mode, choosing only other servers leaves Safebooru chosen rather than nothing.
+    if (safe && valid.isEmpty && selectedServerIDs.isNotEmpty) return;
     setSetting('selected_servers', encodeSwiftJsonString(valid));
     selectedServerIDs = valid;
     selectedServerID = valid.firstOrNull ?? '';
   }
 
-  /// Safe Mode browses Safebooru alone, adding it first when it is not among the servers.
+  /// `enterSafeMode`: Safe Mode browses Safebooru alone, adding it first when it is not among the
+  /// servers. The servers chosen until then are remembered for when it is turned off. The app
+  /// has already stored the switch, so [safeMode] reads true.
+  void enterSafeMode() {
+    final chosen = setting('selected_servers') ?? '';
+    if (setting(_presafeSelectionKey) == null && chosen.isNotEmpty) setSetting(_presafeSelectionKey, chosen);
+    selectSafebooru();
+    safeModeChanged();
+  }
+
+  /// `leaveSafeMode`: chooses again what was chosen before Safe Mode, or keeps Safebooru when
+  /// that is gone.
+  void leaveSafeMode() {
+    final raw = setting(_presafeSelectionKey);
+    if (raw != null) {
+      removeSetting(_presafeSelectionKey);
+      final previous = _decodeStrings(raw) ?? const <String>[];
+      if (previous.any((id) => servers.any((server) => server.id == id))) setSelectedServers(previous);
+    }
+    safeModeChanged();
+  }
+
+  /// At launch with Safe Mode on, a selection another device or a backup made keeps to Safebooru.
+  void applySafeMode() {
+    if (!safeMode()) return;
+    reload();
+    if (selectedServers.isEmpty) selectSafebooru();
+  }
+
   void selectSafebooru() {
     final existing = servers.where((server) => server.isSafebooru).firstOrNull;
     if (existing != null) return setSelectedServers([existing.id]);
@@ -325,9 +369,6 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     saveServer(server);
     setSelectedServers([server.id]);
   }
-
-  /// Safe Mode's rating tag applies only when a server other than Safebooru is chosen.
-  bool get needsSafeRating => selectedServers.any((server) => !server.isSafebooru);
 
   void saveServer(BooruServer server) {
     if (servers.any((other) => other.id != server.id && other.canonicalAddress == server.canonicalAddress)) {
@@ -426,8 +467,8 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       query.isEmpty || post.tags.join(' ').toLowerCase().contains(lowered ?? query.toLowerCase()) || '${post.postID}'.contains(query);
 
   List<BooruPost> visibleFavorites({String? folderID, String query = ''}) {
-    final rating = safeRating();
-    final version = _snapshotVersion, key = (folderID, query, rating);
+    final safe = safeMode();
+    final version = _snapshotVersion, key = (folderID, query, safe);
     List<BooruPost> shown(List<BooruPost> value) => _goldRestrictedIDs.isEmpty ? value : value.where((post) => !_goldRestrictedIDs.contains(post.id)).toList();
     if (_visibleFavoritesRevision == version) {
       final cached = _visibleFavoritesCache[key];
@@ -441,7 +482,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     final lowered = query.toLowerCase();
     final value = favorites(servers.map((server) => server.id).toList(), folderID: folderID).where((post) {
       if (filters[post.serverID]?.contains(post) ?? false) return false;
-      if (rating != null && !safebooru.contains(post.serverID) && !rating.allows(post.rating)) return false;
+      if (safe && !safebooru.contains(post.serverID)) return false;
       return matches(post, query, lowered: lowered);
     }).toList();
     if (_visibleFavoritesRevision != version || _visibleFavoritesCache.length >= 32) {

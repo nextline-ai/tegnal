@@ -195,6 +195,7 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
                   ),
                 ),
                 ArtworkGridSliver(
+                  folders: true,
                   itemCount: folders.length + (recents != null ? 1 : 0),
                   preferences: ArtworkGridPreferences(columns: _booru.folderColumns, removesPadding: _booru.gridPreferences.removesPadding),
                   itemBuilder: (context, index, style) {

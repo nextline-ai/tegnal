@@ -76,33 +76,45 @@ void main() {
     expect(RecentImages(preferences).limit, 0);
   });
 
-  test('Safe Mode goes to Safebooru and rates only other servers', () {
+  test('Safe Mode keeps Saved and Explore to Safebooru and brings the servers back when it is off', () {
     final store = BooruStore.inMemory();
-    store.selectSafebooru();
-    expect(store.selectedServers.map((server) => server.isSafebooru), [true]);
-    expect(store.needsSafeRating, isFalse, reason: 'Safebooru is searched without a rating tag');
-    store.selectSafebooru();
-    expect(store.servers.where((server) => server.isSafebooru).length, 1, reason: 'An existing Safebooru is reused');
+    var safe = false;
+    store.safeMode = () => safe;
     final other = BooruServer(id: 'other', name: 'Other', baseURL: 'https://images.example', engine: BooruEngine.danbooru);
     store.saveServer(other);
     store.select(other);
-    expect(store.needsSafeRating, isTrue);
+    safe = true;
+    store.enterSafeMode();
+    expect(store.selectedServers.map((server) => server.isSafebooru), [true], reason: 'Safe Mode goes straight to Safebooru');
+    expect(store.selectableServers.map((server) => server.isSafebooru), [true], reason: 'Explore offers Safebooru alone');
+    store.select(other);
+    store.toggleServer(other);
+    expect(store.selectedServers.map((server) => server.isSafebooru), [true], reason: "Another server can't be chosen while it is on");
 
-    // Saved images show only when their rating fits; Safebooru's always do.
+    // Saved shows only what came from Safebooru, whatever the other server's rating says.
     final safebooruID = store.servers.firstWhere((server) => server.isSafebooru).id;
     BooruPost post(String server, int id, String rating) =>
         BooruPost(serverID: server, postID: id, width: 1, height: 1, tags: ['scenery'], artists: const [], rating: rating, score: 0, fileExtension: 'jpg');
-    for (final saved in [post('other', 1, 'g'), post('other', 2, 'explicit'), post('other', 3, 'general'), post(safebooruID, 4, 'q')]) {
-      store.saveFavorite(saved);
+    final saved = [post('other', 1, 'g'), post('other', 2, 'explicit'), post('other', 3, 'general'), post(safebooruID, 4, 'q')];
+    for (final item in saved) {
+      store.saveFavorite(item);
     }
-    BooruSafeRating? rating = BooruSafeRating.general;
-    store.safeRating = () => rating;
-    expect(store.visibleFavorites().map((post) => post.postID).toSet(), {1, 3, 4});
-    rating = BooruSafeRating.questionable;
-    store.safeModeChanged();
     expect(store.visibleFavorites().map((post) => post.postID).toSet(), {4});
-    rating = null;
-    store.safeModeChanged();
+    expect(saved.map(store.isShownInSafeMode), [false, false, false, true]);
+
+    // A launch keeps it, even when another device or a backup chose other servers meanwhile.
+    store.setSetting('selected_servers', '["other"]');
+    store.reload();
+    store.applySafeMode();
+    expect(store.selectedServers.map((server) => server.isSafebooru), [true]);
+
+    safe = false;
+    store.leaveSafeMode();
+    expect(store.selectedServerIDs, ['other'], reason: 'Turning it off chooses the servers chosen before');
     expect(store.visibleFavorites().map((post) => post.postID).toSet(), {1, 2, 3, 4}, reason: 'Without Safe Mode every saved image shows');
+    expect(store.selectableServers, hasLength(2));
+    safe = true;
+    store.enterSafeMode();
+    expect(store.servers.where((server) => server.isSafebooru).length, 1, reason: 'An existing Safebooru is reused');
   });
 }

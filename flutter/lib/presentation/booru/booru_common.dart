@@ -84,11 +84,21 @@ class BooruContext {
   final embeddedBrowserChanges = ValueNotifier<int>(0);
 
   bool get safeMode => preferences.boolean('booru.safeMode') ?? false;
-  BooruSafeRating get safeRating => BooruSafeRating.fromRawValue(preferences.string('booru.safeRating')) ?? BooruSafeRating.general;
 
-  /// `booruQuery`: Safe Mode adds its rating tag unless the search names one, and only when a
-  /// server other than Safebooru is chosen; Safebooru has no rating tags and is all ages.
-  String query(String query) => safeMode && store.needsSafeRating ? safeRating.applyingDefault(query) : query;
+  /// `booruSafeMode`'s switch: Saved and Explore keep to Safebooru, whose images are all ages,
+  /// in both modes, and Comics Mode browses its pools. Turning it off chooses the servers chosen
+  /// before again.
+  set safeMode(bool value) {
+    if (value == safeMode) return;
+    preferences.set('booru.safeMode', value);
+    if (value) {
+      store.enterSafeMode();
+    } else {
+      store.leaveSafeMode();
+    }
+    // The comics tabs swap between the library and Safebooru's pools.
+    state.appearanceChanged();
+  }
 
   BooruServer? server(String id) {
     for (final server in store.servers) {
@@ -459,7 +469,10 @@ class BooruServerMenuButton extends StatelessWidget {
     final id = await showPullDownMenu<String>(
       context,
       anchor: anchorRectOf(context),
-      items: [for (final server in store.servers) PullDownMenuItem(value: server.id, title: server.displayName, checked: selected.contains(server.id))],
+      // Safe Mode offers Safebooru alone.
+      items: [
+        for (final server in store.selectableServers) PullDownMenuItem(value: server.id, title: server.displayName, checked: selected.contains(server.id)),
+      ],
     );
     if (id == null) return;
     final server = store.servers.where((server) => server.id == id).firstOrNull;
