@@ -8,6 +8,7 @@ import 'keyed_catalog_source.dart';
 import 'manga_urls.dart';
 import 'site_account.dart';
 import '../support/perf_trace.dart';
+import '../support/privacy_settings.dart';
 
 /// A received response. Header names are lower case.
 class ContentResponse {
@@ -105,6 +106,10 @@ class ContentTransport {
 
   static final _challenged = <String, Uri>{};
 
+  /// Tries a website's bot check once out of sight and reports whether it passed. The app sets
+  /// it where a web view is available; until then a check goes straight to the person.
+  static Future<bool> Function(Uri url)? botCheckSolver;
+
   /// The page a website's bot check stopped last, so the check can be passed on that page.
   static Uri? challengedPage(String host) => _challenged[SiteClearance.domain(host)];
 
@@ -141,6 +146,7 @@ class ContentTransport {
     if (!allows(url) || limit <= 0) throw const NetworkError(NetworkErrorCode.unsupportedURL);
     final site = MangaUrls.home;
     var attempt = 0;
+    var triedCheck = false;
     while (true) {
       if (MangaUrls.home != site) throw const CancellationError();
       try {
@@ -149,6 +155,13 @@ class ContentTransport {
         return result;
       } catch (error) {
         if (MangaUrls.home != site) throw const CancellationError();
+        // The bot check is tried once out of sight before the person is asked to open it.
+        final solver = botCheckSolver;
+        if (error is ContentError && error.kind == ContentErrorKind.verificationRequired && !triedCheck && solver != null && !ContentPreferences.isIsolated) {
+          triedCheck = true;
+          if (await solver(url)) continue;
+          rethrow;
+        }
         if (attempt >= 2 || !isTransient(error)) rethrow;
         attempt += 1;
         await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
@@ -358,7 +371,10 @@ class IoHttpFetcher implements HttpFetcher {
   IoHttpFetcher()
     : _client = HttpClient()
         ..maxConnectionsPerHost = 6
-        ..autoUncompress = true;
+        ..autoUncompress = true {
+    // The device's proxy and the app's encrypted DNS, as URLSession has them on iOS.
+    NetworkPrivacy.configure(_client);
+  }
 
   final HttpClient _client;
 

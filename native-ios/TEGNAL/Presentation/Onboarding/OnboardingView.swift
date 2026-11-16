@@ -113,6 +113,19 @@ public struct OnboardingView: View {
                 else if !importStatus.isEmpty { Text(importStatus).foregroundStyle(.red) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+            VStack(alignment: .leading, spacing: 12) {
+                Label(L10n.text("Other Apps"), systemImage: "square.and.arrow.down.on.square.fill").font(.headline)
+                Text(".db · .json · .tachibk · .html").font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    NavigationLink { OtherAppImportView() } label: {
+                        Label(L10n.text("Comics"), systemImage: AppMode.manga.icon)
+                    }.buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.otherComicsApp")
+                    NavigationLink { AnimeBoxesImportView(otherApps: true) } label: {
+                        Label(L10n.text("Images"), systemImage: AppMode.booru.icon)
+                    }.buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.otherImageApp")
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
         }
     }
 

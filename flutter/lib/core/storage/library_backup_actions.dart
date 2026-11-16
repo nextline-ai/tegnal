@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import '../booru/booru_store.dart';
 import '../content/recent_works.dart';
@@ -48,22 +49,41 @@ class LibraryBackupActions {
     recentImages: recentImages?.entries ?? const [],
   );
 
-  /// Writes the backup and asks where to keep it. False when the person cancels.
-  Future<bool> export() async {
-    final file = exportFile();
+  /// Writes the backup and asks where to keep it. False when the person cancels. With a password
+  /// the file is locked ([LockedBackup]) and named so people can tell it apart.
+  Future<bool> export({String? password}) async {
+    var file = exportFile();
     try {
+      if (password != null) {
+        final plain = file.readAsBytesSync();
+        // Deriving the key takes a moment; it runs away from the interface.
+        final locked = await Isolate.run(() => LockedBackup.lock(plain, password));
+        final lockedFile = File('${file.parent.path}/tegnal-backup-locked.json')..writeAsBytesSync(locked, flush: true);
+        file.deleteSync();
+        file = lockedFile;
+      }
       return await files.createDocument(name: file.uri.pathSegments.last, source: file);
     } finally {
       _discard(file);
     }
   }
 
-  /// A picked backup, read and validated; null when nothing was picked.
-  Future<LibraryBackupImport?> pick() async {
+  /// A picked backup, read and validated; null when nothing was picked or the person gave no
+  /// password for a locked one. A wrong password throws [LockedBackupError.wrongPassword].
+  Future<LibraryBackupImport?> pick({Future<String?> Function()? password}) async {
     final file = await files.openDocument(mimeTypes: importTypes);
     if (file == null) return null;
     try {
-      return LibraryBackupImport.read(file);
+      try {
+        return LibraryBackupImport.read(file);
+      } on LockedBackupError catch (error) {
+        if (error != LockedBackupError.passwordRequired || password == null) rethrow;
+        final entered = await password();
+        if (entered == null) return null;
+        final data = file.readAsBytesSync();
+        final plain = await Isolate.run(() => LockedBackup.unlock(data, entered));
+        return LibraryBackupImport.decode(plain);
+      }
     } finally {
       _discard(file);
     }

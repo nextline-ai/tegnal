@@ -18,6 +18,7 @@ import '../design/pull_down_menu.dart';
 import '../design/tegnal_theme.dart';
 import 'gallery_preview_models.dart';
 import '../library/folders_view.dart' show ContentUnavailable;
+import '../../core/support/privacy_settings.dart';
 
 String _shortDate(DateTime date, {bool time = false}) {
   final local = date.toLocal();
@@ -873,6 +874,7 @@ abstract final class ArchiveFile {
   static Future<File> download(Uri url, {required String name}) async {
     if (url.scheme != 'https' || !KeyedCatalogSource.safeMediaURL(url)) throw ContentError.unsupportedFormat;
     final client = HttpClient()..userAgent = ContentTransport.userAgent;
+    NetworkPrivacy.configure(client);
     try {
       final request = await client.getUrl(url);
       final response = await request.close();

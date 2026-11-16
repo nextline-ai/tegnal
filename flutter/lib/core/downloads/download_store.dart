@@ -303,6 +303,7 @@ class DownloadStore extends ChangeNotifier {
       if (saved.existsSync()) {
         final json = jsonDecode(saved.readAsStringSync()) as Map<String, Object?>;
         _current = json['current'] as String? ?? DownloadLocation.files;
+        hidesFromGallery = json['hidesFromGallery'] == true;
         _folders = [for (final value in json['folders'] as List<Object?>? ?? const []) DownloadLocation.fromJson(value! as Map<String, Object?>)];
       }
     } on Object {
@@ -349,6 +350,36 @@ class DownloadStore extends ChangeNotifier {
   ({int done, int total})? moving;
   String? locationError;
   String _current = DownloadLocation.files;
+
+  /// "Hide from Gallery Apps": a `.nomedia` file in each download folder keeps the images out of
+  /// the photo gallery and other media apps; file managers still show them.
+  bool hidesFromGallery = false;
+
+  void setHidesFromGallery(bool hides) {
+    hidesFromGallery = hides;
+    _saveSettings();
+    for (final location in locations) {
+      _markGalleryHidden(root(location.id));
+    }
+    notifyListeners();
+  }
+
+  void _markGalleryHidden(Directory? folder) {
+    if (folder == null) return;
+    final marker = File('${folder.path}/.nomedia');
+    try {
+      if (hidesFromGallery) {
+        if (!marker.existsSync()) {
+          folder.createSync(recursive: true);
+          marker.writeAsBytesSync(const [], flush: true);
+        }
+      } else if (marker.existsSync()) {
+        marker.deleteSync();
+      }
+    } on FileSystemException {
+      // A folder that can't be written keeps its images visible; nothing else depends on it.
+    }
+  }
   List<DownloadLocation> _folders = [];
 
   final _workers = <WorkDownloadMode, Future<void>>{};
@@ -526,6 +557,7 @@ class DownloadStore extends ChangeNotifier {
         jsonEncode({
           'current': _current,
           'folders': [for (final folder in _folders) folder.toJson()],
+          'hidesFromGallery': hidesFromGallery,
         }),
         flush: true,
       );
@@ -650,6 +682,7 @@ class DownloadStore extends ChangeNotifier {
         item.error = null;
       });
       folder(item).createSync(recursive: true);
+      if (hidesFromGallery) _markGalleryHidden(root(item.location));
       final gallery = item.gallery;
       final server = item.server, post = item.post;
       if (gallery != null) {

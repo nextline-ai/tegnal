@@ -10,6 +10,10 @@ struct LibraryBackupSection: View {
     @State private var pending: LibraryBackupImport?
     @State private var sharing: BackupFile?
     @State private var message: String?
+    @State private var lockingExport = false
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var lockedFile: URL?
 
     var body: some View {
         Section {
@@ -20,11 +24,34 @@ struct LibraryBackupSection: View {
                 }
             }.accessibilityIdentifier("backup.export")
                 .sheet(item: $sharing) { BackupShareSheet(url: $0.url) }
+            Button { password = ""; confirmation = ""; lockingExport = true } label: {
+                Label(L10n.text("Export with Password…"), systemImage: "lock.doc")
+            }.accessibilityIdentifier("backup.exportLocked")
+                .alert(L10n.text("Lock Backup with a Password"), isPresented: $lockingExport) {
+                    SecureField(L10n.text("Password"), text: $password)
+                    SecureField(L10n.text("Confirm Password"), text: $confirmation)
+                    Button(L10n.text("Cancel"), role: .cancel) {}
+                    Button(L10n.text("Export")) {
+                        guard password.count >= 4, password == confirmation else {
+                            message = L10n.text("The passwords must match and have at least 4 characters."); return
+                        }
+                        export(password: password)
+                    }
+                } message: {
+                    Text(L10n.text("Anyone with this password can open the backup. A forgotten password can’t be recovered."))
+                }
             Button(L10n.text("Import / Restore JSON Backup"), systemImage: "square.and.arrow.down") { picking = true }
                 .accessibilityIdentifier("backup.import")
                 .fileImporter(isPresented: $picking, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
                     if case .success(let urls) = result, let url = urls.first { load(url) }
                     else if case .failure(let error) = result, (error as NSError).code != CocoaError.userCancelled.rawValue { message = error.localizedDescription }
+                }
+                .alert(L10n.text("Enter Backup Password"), isPresented: Binding(get: { lockedFile != nil }, set: { if !$0 { lockedFile = nil } })) {
+                    SecureField(L10n.text("Password"), text: $password)
+                    Button(L10n.text("Cancel"), role: .cancel) { lockedFile = nil }
+                    Button(L10n.text("Open")) { if let url = lockedFile { lockedFile = nil; load(url, password: password) } }
+                } message: {
+                    Text(L10n.text("This backup is locked with a password."))
                 }
                 .alert(L10n.text("Restore Backup?"), isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
                     Button(L10n.text("Cancel"), role: .cancel) { pending = nil }
@@ -45,25 +72,29 @@ struct LibraryBackupSection: View {
         .disabled(busy)
     }
 
-    private func export() {
+    private func export(password: String? = nil) {
         busy = true; message = nil
         let database = env.database, images = env.booru
         let recentWorks = env.recentWorks.entries, recentImages = env.recentImages.entries
         Task {
-            defer { busy = false }
+            defer { busy = false; self.password = ""; confirmation = "" }
             do {
-                let url = try await Task.detached(priority: .userInitiated) { try LibraryBackup.export(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages) }.value
+                let url = try await Task.detached(priority: .userInitiated) {
+                    try LibraryBackup.export(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages, password: password)
+                }.value
                 sharing = BackupFile(url: url)
                 BackupReminder.saved()
             } catch { message = L10n.text("Unable to create backup: %@", error.localizedDescription) }
         }
     }
 
-    private func load(_ url: URL) {
+    private func load(_ url: URL, password: String? = nil) {
         busy = true; message = nil
         Task {
-            defer { busy = false }
-            do { pending = try await Task.detached(priority: .userInitiated) { try LibraryBackupImport.read(url) }.value }
+            defer { busy = false; self.password = "" }
+            do { pending = try await Task.detached(priority: .userInitiated) { try LibraryBackupImport.read(url, password: password) }.value }
+            catch LockedBackupError.passwordRequired { lockedFile = url }
+            catch LockedBackupError.wrongPassword { message = L10n.text("The password is incorrect.") }
             catch { message = L10n.text("Unable to restore backup: %@", error.localizedDescription) }
         }
     }

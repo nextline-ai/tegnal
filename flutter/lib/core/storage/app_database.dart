@@ -13,6 +13,7 @@ import 'folder_palette.dart';
 import 'local_thumbnail_cache.dart';
 import 'folder_rules.dart';
 import 'work_query.dart';
+import '../support/privacy_settings.dart';
 
 class FolderDeletionError implements Exception {
   const FolderDeletionError();
@@ -965,7 +966,7 @@ class AppDatabase implements SmartFolderLibrary {
 
   void recordSearch(String query) {
     final value = query.trim();
-    if (value.isEmpty) return;
+    if (value.isEmpty || PrivacySettings.isIncognito) return;
     dbWriter.write((db) {
       db.execute('INSERT OR REPLACE INTO search_history VALUES (?, ?)', [value, unixSeconds()]);
       db.execute('DELETE FROM search_history WHERE used_at < ?', [SearchRetention.cutoff(preferences.defaults)]);

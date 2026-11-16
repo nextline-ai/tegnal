@@ -1,5 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
+
+import 'package:pointycastle/export.dart';
 
 import '../../domain/models.dart';
 import '../booru/booru_backup.dart';
@@ -22,6 +26,93 @@ class LibraryBackupError implements Exception {
   String get errorDescription => L10n.text('This backup is invalid, too large, or uses an unsupported version.');
   @override
   String toString() => 'LibraryBackupError.invalid';
+}
+
+/// `LockedBackupError`.
+enum LockedBackupError implements Exception {
+  passwordRequired,
+  wrongPassword;
+
+  String get message => switch (this) {
+    passwordRequired => L10n.text('This backup is locked with a password.'),
+    wrongPassword => L10n.text('The password is incorrect.'),
+  };
+
+  @override
+  String toString() => message;
+}
+
+/// `LockedBackup`: a backup locked with a password. The usual backup JSON is sealed with
+/// AES-256-GCM under a key derived from the password with PBKDF2-HMAC-SHA256, inside a plain JSON
+/// envelope both apps read, so a locked file moves between Android and iPhone like any backup.
+/// Nothing about the password is kept; a forgotten one cannot be recovered.
+abstract final class LockedBackup {
+  static const format = 'tegnal-locked-backup';
+  static const iterations = 210000;
+
+  static bool isLocked(List<int> data) {
+    if (data.length > LibraryBackup.maximumBytes * 2) return false;
+    try {
+      final object = jsonDecode(utf8.decode(data, allowMalformed: true));
+      return object is Map && object['format'] == format;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  static Uint8List lock(List<int> plain, String password, {int iterations = iterations}) {
+    final random = Random.secure();
+    final salt = Uint8List.fromList([for (var i = 0; i < 16; i++) random.nextInt(256)]);
+    final nonce = Uint8List.fromList([for (var i = 0; i < 12; i++) random.nextInt(256)]);
+    final cipher = GCMBlockCipher(AESEngine())..init(true, AEADParameters(KeyParameter(key(password, salt, iterations)), 128, nonce, Uint8List(0)));
+    final sealed = cipher.process(Uint8List.fromList(plain));
+    final envelope = {
+      'cipher': 'AES-256-GCM',
+      'data': base64Encode(sealed),
+      'format': format,
+      'iterations': iterations,
+      'kdf': 'PBKDF2-SHA256',
+      'nonce': base64Encode(nonce),
+      'salt': base64Encode(salt),
+      'version': 1,
+    };
+    return Uint8List.fromList(utf8.encode(const JsonEncoder.withIndent('  ').convert(envelope)));
+  }
+
+  static Uint8List unlock(List<int> data, String password) {
+    final Object? object;
+    try {
+      object = jsonDecode(utf8.decode(data, allowMalformed: true));
+    } on FormatException {
+      throw const LibraryBackupError();
+    }
+    if (object is! Map ||
+        object['format'] != format ||
+        object['version'] != 1 ||
+        object['kdf'] != 'PBKDF2-SHA256' ||
+        object['cipher'] != 'AES-256-GCM') {
+      throw const LibraryBackupError();
+    }
+    final rounds = object['iterations'];
+    final Uint8List salt, nonce, sealed;
+    try {
+      salt = base64Decode(object['salt'] as String);
+      nonce = base64Decode(object['nonce'] as String);
+      sealed = base64Decode(object['data'] as String);
+    } on Object {
+      throw const LibraryBackupError();
+    }
+    if (rounds is! int || rounds < 1000 || rounds > 10000000 || nonce.length != 12 || sealed.length < 16) throw const LibraryBackupError();
+    final cipher = GCMBlockCipher(AESEngine())..init(false, AEADParameters(KeyParameter(key(password, salt, rounds)), 128, nonce, Uint8List(0)));
+    try {
+      return cipher.process(sealed);
+    } on InvalidCipherTextException {
+      throw LockedBackupError.wrongPassword;
+    }
+  }
+
+  static Uint8List key(String password, Uint8List salt, int iterations) =>
+      (PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))..init(Pbkdf2Parameters(salt, iterations, 32))).process(Uint8List.fromList(utf8.encode(password)));
 }
 
 /// One portable document for both libraries. Media, caches and credentials stay local.
@@ -115,9 +206,16 @@ class LibraryBackupImport {
   int get workCount => (comics?.works.length ?? 0) + (images?.favorites.length ?? 0);
   int get folderCount => (comics?.folders.length ?? 0) + (images?.folders.length ?? 0);
 
-  static LibraryBackupImport read(File file) {
-    if (file.lengthSync() > LibraryBackup.maximumBytes) throw const LibraryBackupError();
-    return decode(file.readAsBytesSync());
+  /// A locked backup needs its password: without one this throws [LockedBackupError.passwordRequired].
+  static LibraryBackupImport read(File file, {String? password}) {
+    // Sealing grows the file by its base64 text, so a locked file may be a third larger.
+    if (file.lengthSync() > LibraryBackup.maximumBytes * 2) throw const LibraryBackupError();
+    List<int> data = file.readAsBytesSync();
+    if (LockedBackup.isLocked(data)) {
+      if (password == null) throw LockedBackupError.passwordRequired;
+      data = LockedBackup.unlock(data, password);
+    }
+    return decode(data);
   }
 
   static LibraryBackupImport decode(List<int> data) {

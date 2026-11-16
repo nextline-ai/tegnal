@@ -88,17 +88,66 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
     _missing = database.missingTitleCount();
   }
 
-  Future<void> _export() async {
+  Future<void> _export({String? password}) async {
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      if (await _backup.export()) BackupReminder.saved();
+      if (await _backup.export(password: password)) BackupReminder.saved();
     } on Object catch (error) {
       _message = L10n.text('Unable to create backup: %@', ['$error']);
     }
     if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _exportLocked() async {
+    final password = await _askPassword(confirm: true);
+    if (password != null && mounted) await _export(password: password);
+  }
+
+  /// `.alert` with secure fields: one to open a locked backup, two to lock a new one.
+  Future<String?> _askPassword({required bool confirm}) async {
+    final first = TextEditingController(), second = TextEditingController();
+    try {
+      final entered = await showCupertinoDialog<String>(
+        context: context,
+        builder: (context) => TegnalAlertDialog(
+          title: Text(L10n.text(confirm ? 'Lock Backup with a Password' : 'Enter Backup Password')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                L10n.text(confirm ? 'Anyone with this password can open the backup. A forgotten password can’t be recovered.' : 'This backup is locked with a password.'),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(controller: first, obscureText: true, autofocus: true, placeholder: L10n.text('Password')),
+              if (confirm) ...[
+                const SizedBox(height: 8),
+                CupertinoTextField(controller: second, obscureText: true, placeholder: L10n.text('Confirm Password')),
+              ],
+            ],
+          ),
+          actions: [
+            CupertinoDialogAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(context, first.text),
+              child: Text(L10n.text(confirm ? 'Export' : 'Open')),
+            ),
+          ],
+        ),
+      );
+      if (entered == null) return null;
+      if (confirm && (entered.length < 4 || entered != second.text)) {
+        if (mounted) setState(() => _message = L10n.text('The passwords must match and have at least 4 characters.'));
+        return null;
+      }
+      return entered;
+    } finally {
+      first.dispose();
+      second.dispose();
+    }
   }
 
   Future<void> _import() async {
@@ -108,7 +157,9 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
     });
     LibraryBackupImport? backup;
     try {
-      backup = await _backup.pick();
+      backup = await _backup.pick(password: () => _askPassword(confirm: false));
+    } on LockedBackupError catch (error) {
+      _message = error.message;
     } on Object catch (error) {
       _message = L10n.text('Unable to restore backup: %@', ['$error']);
     }
@@ -221,6 +272,13 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
                     if (_busy) const CupertinoActivityIndicator(),
                   ],
                 ),
+              ),
+              SettingsLinkRow(
+                title: L10n.text('Export with Password…'),
+                icon: CupertinoIcons.lock,
+                tinted: true,
+                chevron: false,
+                onTap: _exportLocked,
               ),
               SettingsLinkRow(
                 title: L10n.text('Import / Restore JSON Backup'),

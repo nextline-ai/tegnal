@@ -11,6 +11,7 @@ import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
+import '../../core/support/app_platform.dart';
 
 /// `DownloadSettingsView`: where downloads are saved, and moving the ones saved elsewhere, such
 /// as in the app's own storage where versions before 1.5.2 kept them, without downloading them again.
@@ -144,6 +145,20 @@ class _DownloadLocationViewState extends State<DownloadLocationView> {
             SettingsLinkRow(title: L10n.text('Choose Folder…'), icon: CupertinoIcons.folder_badge_plus, tinted: true, chevron: false, onTap: _choose),
           ],
         ),
+        if (!AppPlatform.isDesktop) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: rowColor,
+            footer: Text(L10n.text('Downloaded images stay out of the photo gallery and other media apps. File managers still show them.')),
+            children: [
+              SettingsToggleRow(
+                title: L10n.text('Hide from Gallery Apps'),
+                value: _store.hidesFromGallery,
+                onChanged: _store.setHidesFromGallery,
+              ),
+            ],
+          ),
+        ],
         settingsSectionGap,
         FormSection(
           prominentHeader: true,

@@ -1,6 +1,11 @@
 package work.nextline.tegnal
 
 import android.app.Activity
+import android.app.KeyguardManager
+import android.hardware.biometrics.BiometricManager
+import android.hardware.biometrics.BiometricPrompt
+import android.net.ConnectivityManager
+import android.os.CancellationSignal
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -33,6 +38,7 @@ class MainActivity : FlutterActivity() {
     private var pendingCreate: Pair<File, MethodChannel.Result>? = null
     private var pendingOpen: MethodChannel.Result? = null
     private var pendingFolder: MethodChannel.Result? = null
+    private var pendingUnlock: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge to edge on every Android version, as Android 15 and later draw an app targeting
@@ -160,6 +166,22 @@ class MainActivity : FlutterActivity() {
                     call.argument<Boolean>("resumeAnimation")?.let { privacyCover.resumeAnimation = it }
                     result.success(null)
                 }
+                // "Block Screenshots and Recording": the window is left out of captures and recordings.
+                "secure" -> {
+                    if (call.arguments == true) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    result.success(null)
+                }
+                // The HTTP proxy the current network names, which dart:io does not read on its own.
+                "proxy" -> {
+                    val proxy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) getSystemService(ConnectivityManager::class.java)?.defaultProxy else null
+                    result.success(proxy?.takeIf { !it.host.isNullOrEmpty() && it.port > 0 }?.let {
+                        mapOf("host" to it.host, "port" to it.port, "exclusions" to (it.exclusionList?.toList() ?: emptyList<String>()))
+                    })
+                }
+                // App lock: only offered when the device itself has a screen lock.
+                "canAuthenticate" -> result.success(getSystemService(KeyguardManager::class.java)?.isKeyguardSecure == true)
+                "authenticate" -> authenticate(call.argument<String>("title") ?: "", call.argument<String>("subtitle"), result)
                 // Screen comparison runs start without the splash, as the native UI tests do.
                 "skipLaunchSplash" -> {
                     if (launchSplashPending) {
@@ -279,7 +301,39 @@ class MainActivity : FlutterActivity() {
     }
 
     @Deprecated("Deprecated in Java")
+    /// The device's own unlock: fingerprint, face or the screen lock. Android 10 and later show the
+    /// system prompt; older versions show the screen lock confirmation.
+    private fun authenticate(title: String, subtitle: String?, result: MethodChannel.Result) {
+        if (pendingUnlock != null) { result.success(false); return }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val builder = BiometricPrompt.Builder(this).setTitle(title)
+            if (!subtitle.isNullOrEmpty()) builder.setSubtitle(subtitle)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+            } else {
+                @Suppress("DEPRECATION") builder.setDeviceCredentialAllowed(true)
+            }
+            pendingUnlock = result
+            builder.build().authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) { finishUnlock(true) }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { finishUnlock(false) }
+            })
+            return
+        }
+        @Suppress("DEPRECATION")
+        val intent = getSystemService(KeyguardManager::class.java)?.createConfirmDeviceCredentialIntent(title, subtitle)
+        if (intent == null) { result.success(true); return }
+        pendingUnlock = result
+        @Suppress("DEPRECATION") startActivityForResult(intent, CONFIRM_CREDENTIAL)
+    }
+
+    private fun finishUnlock(passed: Boolean) {
+        pendingUnlock?.success(passed)
+        pendingUnlock = null
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == CONFIRM_CREDENTIAL) { finishUnlock(resultCode == Activity.RESULT_OK); return }
         when (requestCode) {
             CREATE_DOCUMENT -> {
                 val (source, result) = pendingCreate ?: return
@@ -349,5 +403,6 @@ class MainActivity : FlutterActivity() {
         const val CREATE_DOCUMENT = 41001
         const val OPEN_DOCUMENT = 41002
         const val PICK_FOLDER = 41003
+        const val CONFIRM_CREDENTIAL = 41004
     }
 }

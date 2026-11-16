@@ -2,6 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct AnimeBoxesImportView: View {
+    /// Opened for the other image apps: bookmark exports and app databases instead of `.abbj`.
+    /// Either screen reads every supported file.
+    var otherApps = false
     @Environment(BooruStore.self) private var store
     @State private var picking = false
     @State private var backup: AnimeBoxesBackup?
@@ -13,9 +16,15 @@ struct AnimeBoxesImportView: View {
     var body: some View {
         Form {
             Section {
-                Label(L10n.text("Import from Anime Boxes"), systemImage: "shippingbox.fill").font(.headline)
-                Text(L10n.text("Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing."))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                if otherApps {
+                    Label(L10n.text("Import from Another Image App"), systemImage: "square.and.arrow.down.on.square.fill").font(.headline)
+                    Text(L10n.text("Choose a bookmark export (.json) or a database backup (.db) from another image app. Review its contents before importing."))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                } else {
+                    Label(L10n.text("Import from Anime Boxes"), systemImage: "shippingbox.fill").font(.headline)
+                    Text(L10n.text("Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing."))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
                 Button(L10n.text(backup == nil ? "Choose Backup File" : "Choose Another File"), systemImage: "doc.badge.plus") { picking = true }
                     .accessibilityIdentifier("booru.import.choose").disabled(loading)
             }
@@ -46,12 +55,18 @@ struct AnimeBoxesImportView: View {
                 Section(L10n.text("Import Options")) {
                     Picker(L10n.text("Destination Folder"), selection: $options.folderID) {
                         Text(L10n.text("Site Folders")).tag("by-site")
-                        if !store.folders().contains(where: { $0.id == "anime-boxes" }) { Text("Anime Boxes").tag("anime-boxes") }
+                        if backup.source != .animeBoxes {
+                            if !store.folders().contains(where: { $0.id == AnimeBoxesBackup.importedFolderID }) { Text(L10n.text("Imported")).tag(AnimeBoxesBackup.importedFolderID) }
+                        } else if !store.folders().contains(where: { $0.id == "anime-boxes" }) { Text("Anime Boxes").tag("anime-boxes") }
                         ForEach(store.folders()) { Text($0.displayName).tag($0.id) }
                     }
-                    Toggle(L10n.text("Import Search History"), isOn: $options.history)
-                    Toggle(L10n.text("Import Tag Blacklist"), isOn: $options.blacklist)
-                    Toggle(L10n.text("Use Server Selection from Backup"), isOn: $options.selection)
+                    if backup.source == .animeBoxes || !backup.history.isEmpty {
+                        Toggle(L10n.text("Import Search History"), isOn: $options.history)
+                    }
+                    if backup.source == .animeBoxes {
+                        Toggle(L10n.text("Import Tag Blacklist"), isOn: $options.blacklist)
+                        Toggle(L10n.text("Use Server Selection from Backup"), isOn: $options.selection)
+                    }
                 }
                 Section {
                     Button(L10n.text("Import"), systemImage: "square.and.arrow.down", action: commit)
@@ -61,7 +76,7 @@ struct AnimeBoxesImportView: View {
                 }
             }
         }
-        .navigationTitle("Anime Boxes").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(otherApps ? L10n.text("Another App") : "Anime Boxes").navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $picking, allowedContentTypes: [.item]) { outcome in
             if case .success(let url) = outcome { read(url) }
             else if case .failure(let failure) = outcome { error = failure.localizedDescription }

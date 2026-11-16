@@ -248,6 +248,11 @@ struct TEGNALApp: App {
     }
     private var splashEnabled: Bool { !isContentUITest || ProcessInfo.processInfo.arguments.contains("--splash-ui-test") }
 
+    init() {
+        // Encrypted DNS is the first thing set, before any request leaves the app.
+        EncryptedDNS.applyStored()
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -314,6 +319,8 @@ struct TEGNALApp: App {
             .onChange(of: scenePhase, initial: true) { _, phase in
                 if phase != .inactive { DownloadStore.shared.setBackground(phase == .background) }
                 guard !isContentUITest else { return }
+                // A recording that is still running keeps its cover after the return animation.
+                if phase == .active { ScreenCaptureGuard.shared.start(); ScreenCaptureGuard.shared.update() }
                 env.setCoverQueueActive(phase == .active)
                 if phase == .active { backgroundSync.cancel() }
                 else if phase == .background, env.sync.enabled { backgroundSync.start(env: env) }

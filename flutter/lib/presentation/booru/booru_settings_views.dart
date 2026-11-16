@@ -36,6 +36,7 @@ import '../content/image_translation.dart';
 import '../../core/content/recent_works.dart';
 import '../settings/recent_works_page.dart';
 import '../../core/support/app_platform.dart';
+import '../settings/privacy_security_view.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -374,6 +375,8 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                     ),
                   ],
                 ),
+                settingsSectionGap,
+                const PrivacySecuritySection(),
                 settingsSectionGap,
                 section(
                   header: L10n.text('Help & Privacy'),

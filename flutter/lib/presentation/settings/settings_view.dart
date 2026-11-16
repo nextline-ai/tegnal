@@ -29,6 +29,7 @@ import '../content/image_translation.dart';
 import '../../core/content/recent_works.dart';
 import 'recent_works_page.dart';
 import '../../core/support/app_platform.dart';
+import 'privacy_security_view.dart';
 
 /// What the Settings screens read and change.
 class SettingsDependencies {
@@ -414,6 +415,8 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                   ],
                 ),
+                settingsSectionGap,
+                const PrivacySecuritySection(),
                 ..._deps.extraSections,
                 settingsSectionGap,
                 section(

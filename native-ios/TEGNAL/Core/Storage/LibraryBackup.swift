@@ -1,9 +1,80 @@
+import CommonCrypto
+import CryptoKit
 import Foundation
 import GRDB
 
 enum LibraryBackupError: LocalizedError {
     case invalid
     var errorDescription: String? { L10n.text("This backup is invalid, too large, or uses an unsupported version.") }
+}
+
+enum LockedBackupError: LocalizedError, Equatable {
+    case passwordRequired, wrongPassword
+    var errorDescription: String? {
+        switch self {
+        case .passwordRequired: return L10n.text("This backup is locked with a password.")
+        case .wrongPassword: return L10n.text("The password is incorrect.")
+        }
+    }
+}
+
+/// A backup locked with a password: the usual backup JSON, sealed with AES-256-GCM under a key
+/// derived from the password with PBKDF2-HMAC-SHA256. The envelope is plain JSON both apps read,
+/// so a locked file moves between iPhone and Android like any backup. Nothing about the password
+/// is kept; a forgotten one cannot be recovered.
+enum LockedBackup {
+    static let format = "tegnal-locked-backup"
+    static let iterations = 210_000
+
+    struct Envelope: Codable {
+        var format = LockedBackup.format
+        var version = 1
+        var kdf = "PBKDF2-SHA256"
+        var iterations: Int
+        var salt: String
+        var cipher = "AES-256-GCM"
+        var nonce: String
+        /// The ciphertext followed by its 16-byte tag.
+        var data: String
+    }
+
+    static func isLocked(_ data: Data) -> Bool {
+        guard data.count < LibraryBackup.maximumBytes * 2,
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return false }
+        return object["format"] as? String == format
+    }
+
+    static func lock(_ plain: Data, password: String, iterations: Int = iterations) throws -> Data {
+        let salt = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
+        let box = try AES.GCM.seal(plain, using: key(password, salt: salt, iterations: iterations))
+        let envelope = Envelope(iterations: iterations, salt: salt.base64EncodedString(), nonce: Data(box.nonce).base64EncodedString(),
+                                data: (box.ciphertext + box.tag).base64EncodedString())
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(envelope)
+    }
+
+    static func unlock(_ data: Data, password: String) throws -> Data {
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data), envelope.format == format, envelope.version == 1,
+              envelope.kdf == "PBKDF2-SHA256", envelope.cipher == "AES-256-GCM", (1_000...10_000_000).contains(envelope.iterations),
+              let salt = Data(base64Encoded: envelope.salt), let nonceData = Data(base64Encoded: envelope.nonce),
+              let sealed = Data(base64Encoded: envelope.data), sealed.count >= 16 else { throw LibraryBackupError.invalid }
+        let box = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: nonceData), ciphertext: sealed.dropLast(16), tag: sealed.suffix(16))
+        do { return try AES.GCM.open(box, using: key(password, salt: salt, iterations: envelope.iterations)) }
+        catch { throw LockedBackupError.wrongPassword }
+    }
+
+    static func key(_ password: String, salt: Data, iterations: Int) -> SymmetricKey {
+        let secret = Array(password.utf8)
+        var derived = [UInt8](repeating: 0, count: 32)
+        _ = salt.withUnsafeBytes { saltBytes in
+            secret.withUnsafeBufferPointer { passwordBytes in
+                CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), passwordBytes.baseAddress.map { UnsafeRawPointer($0).assumingMemoryBound(to: Int8.self) }, secret.count,
+                                     saltBytes.bindMemory(to: UInt8.self).baseAddress, salt.count, CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+                                     UInt32(iterations), &derived, derived.count)
+            }
+        }
+        return SymmetricKey(data: derived)
+    }
 }
 
 /// One portable document for both libraries. Media, caches and credentials stay local.
@@ -45,11 +116,14 @@ struct LibraryBackup: Codable, Sendable {
         return data
     }
 
-    static func export(database: AppDatabase, images: BooruStore, recentWorks: [RecentWork] = [], recentImages: [RecentImage] = []) throws -> URL {
+    /// With a password the file is locked (`LockedBackup`) and named so people can tell it apart.
+    static func export(database: AppDatabase, images: BooruStore, recentWorks: [RecentWork] = [], recentImages: [RecentImage] = [], password: String? = nil) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("tegnal-backup.json")
-        try capture(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages).encoded().write(to: url, options: .atomic)
+        let url = directory.appendingPathComponent(password == nil ? "tegnal-backup.json" : "tegnal-backup-locked.json")
+        var data = try capture(database: database, images: images, recentWorks: recentWorks, recentImages: recentImages).encoded()
+        if let password { data = try LockedBackup.lock(data, password: password) }
+        try data.write(to: url, options: .atomic)
         return url
     }
 }
@@ -62,11 +136,18 @@ struct LibraryBackupImport: Sendable {
     var workCount: Int { (comics?.works.count ?? 0) + (images?.favorites.count ?? 0) }
     var folderCount: Int { (comics?.folders.count ?? 0) + (images?.folders.count ?? 0) }
 
-    static func read(_ url: URL) throws -> Self {
+    /// A locked backup needs its password: without one this throws `LockedBackupError.passwordRequired`.
+    static func read(_ url: URL, password: String? = nil) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
-        guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= LibraryBackup.maximumBytes else { throw LibraryBackupError.invalid }
-        return try decode(Data(contentsOf: url))
+        // Sealing grows the file by its base64 text, so a locked file may be a third larger.
+        guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= LibraryBackup.maximumBytes * 2 else { throw LibraryBackupError.invalid }
+        var data = try Data(contentsOf: url)
+        if LockedBackup.isLocked(data) {
+            guard let password else { throw LockedBackupError.passwordRequired }
+            data = try LockedBackup.unlock(data, password: password)
+        }
+        return try decode(data)
     }
 
     static func decode(_ data: Data) throws -> Self {

@@ -468,7 +468,7 @@ final class BooruStore: @unchecked Sendable {
 
     func recordSearch(_ query: String, serverID: String) throws {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
+        guard !value.isEmpty, !PrivacySettings.isIncognito else { return }
         try database.write { db in
             try db.execute(sql: "DELETE FROM history WHERE used_at < ?", arguments: [SearchRetention.cutoff(booru: true)])
             try db.execute(sql: "INSERT OR REPLACE INTO history VALUES (?, ?, ?)", arguments: [serverID, value, Date().timeIntervalSince1970])

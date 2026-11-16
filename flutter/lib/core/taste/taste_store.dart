@@ -5,6 +5,7 @@ import '../content/manga_urls.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
 import 'taste_models.dart';
+import '../support/privacy_settings.dart';
 
 /// Analysis tables live beside each mode's library, so a save and its evidence commit together.
 class TasteStore {
@@ -50,6 +51,8 @@ class TasteStore {
   }
 
   static void record(TasteEventKind kind, TasteItem item, SqlDatabase db, {DiscoveryContext? context, DateTime? at}) {
+    // Incognito keeps browsing out of taste learning; saves and library changes still count.
+    if ((kind == TasteEventKind.open || kind == TasteEventKind.search) && PrivacySettings.isIncognito) return;
     final control = TasteStore.control(db);
     if (!control.enabled) return;
     if (kind == TasteEventKind.metadata) {
@@ -83,6 +86,7 @@ class TasteStore {
 
   /// Each viewing is its own open event, so existing peers count it as the open it is.
   static void recordDwell(TasteDwell dwell, TasteItem item, DiscoveryContext context, SqlDatabase db, {DateTime? at}) {
+    if (PrivacySettings.isIncognito) return;
     final control = TasteStore.control(db);
     if (!control.enabled) return;
     final event = TasteEvent(

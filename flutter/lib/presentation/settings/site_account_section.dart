@@ -39,6 +39,59 @@ const _challengeScript =
 
 bool _scriptTrue(Object? result) => result == true || result == 'true';
 
+/// `BotCheckAutoPass`: most bot checks pass on their own once a real browser runs them. Before
+/// asking the person to open the check, it is loaded once, out of sight, in the app's browser;
+/// when it hands out its cookies they are kept exactly as the visible check keeps them. A check
+/// that needs a tap still ends up on the visible screen.
+abstract final class BotCheckAutoPass {
+  static final _attempts = <String, DateTime>{};
+  static final _running = <String, Future<bool>>{};
+
+  static Future<bool> attempt(Uri url) {
+    if (url.scheme != 'https' || url.host.isEmpty) return Future.value(false);
+    final host = url.host.toLowerCase();
+    final running = _running[host];
+    if (running != null) return running;
+    // One quiet try per website every two minutes; a check that keeps failing is the person's to see.
+    final last = _attempts[host];
+    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 2)) return Future.value(false);
+    _attempts[host] = DateTime.now();
+    final task = _run(url, host).whenComplete(() => _running.remove(host));
+    _running[host] = task;
+    return task;
+  }
+
+  static Future<bool> _run(Uri url, String host) async {
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) => SiteAccountActions.allowsSignInNavigation(Uri.parse(request.url), mainFrame: request.isMainFrame)
+              ? NavigationDecision.navigate
+              : NavigationDecision.prevent,
+        ),
+      );
+    try {
+      await controller.loadRequest(url);
+      for (var second = 0; second < 12; second++) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        if (_scriptTrue(await controller.runJavaScriptReturningResult(_challengeScript))) continue;
+        final page = Uri.tryParse(await controller.currentUrl() ?? '');
+        if (page == null || page.host.isEmpty) continue;
+        final cookies = SiteAccountActions.parseCookieHeader(await WebCookies.header(page));
+        if (!cookies.any((cookie) => cookie.name == 'cf_clearance')) continue;
+        final agent = await controller.getUserAgent();
+        if (agent == null || !SiteClearance.save(cookies, userAgent: agent, host: host)) continue;
+        ContentTransport.clearChallenge(host);
+        return true;
+      }
+    } on Object {
+      return false;
+    }
+    return false;
+  }
+}
+
 /// `SiteAccountSection`: one connected website's account, in that website's own settings. The
 /// person signs in on the website itself or pastes the cookies of a browser where they are signed
 /// in; the app keeps only the sign-in cookies it is handed, for this website alone.

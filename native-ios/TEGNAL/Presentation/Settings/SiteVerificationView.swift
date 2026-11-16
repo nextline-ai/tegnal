@@ -3,6 +3,47 @@ import WebKit
 
 extension Notification.Name { static let comicsClientValidated = Notification.Name("comicsClientValidated") }
 
+/// Most bot checks pass on their own once a real browser runs them. Before asking the person to
+/// open Validate Client, the check is loaded once, out of sight, in the website's own browser
+/// profile; when it hands out its cookies they are kept exactly as the visible check keeps them.
+/// A check that needs a tap still ends up on the visible screen.
+@MainActor enum BotCheckAutoPass {
+    private static var attempts: [String: Date] = [:]
+    private static var running: [String: Task<Bool, Never>] = [:]
+
+    static func attempt(_ url: URL) async -> Bool {
+        guard !ContentPreferences.isIsolated, url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        if let task = running[host] { return await task.value }
+        // One quiet try per website every two minutes; a check that keeps failing is the person's to see.
+        if let last = attempts[host], Date().timeIntervalSince(last) < 120 { return false }
+        attempts[host] = Date()
+        let task = Task { @MainActor () -> Bool in
+            guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .flatMap(\.windows).first(where: \.isKeyWindow) else { return false }
+            let model = SiteVerificationModel(host: host, startURL: url)
+            let view = model.webView
+            view.frame = window.bounds
+            view.isUserInteractionEnabled = false
+            view.accessibilityElementsHidden = true
+            // Behind the app's own view: part of a window, so the page runs, but never seen.
+            window.insertSubview(view, at: 0)
+            defer { model.stop(); view.stopLoading(); view.removeFromSuperview() }
+            model.begin()
+            for _ in 0..<12 where !model.verified {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return false }
+            }
+            guard model.verified else { return false }
+            ContentTransport.clearChallenge(forHost: host)
+            NotificationCenter.default.post(name: .comicsClientValidated, object: host)
+            return true
+        }
+        running[host] = task
+        let passed = await task.value
+        running[host] = nil
+        return passed
+    }
+}
+
 /// A comics website's bot check, passed in the website's own browser profile. The cookies it
 /// hands out are kept with this browser's identity, and the app's requests to the website use both.
 struct SiteVerificationView: View {
