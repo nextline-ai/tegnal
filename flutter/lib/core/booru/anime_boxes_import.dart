@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../storage/folder_rules.dart';
+import '../support/sql_database.dart';
 import '../support/l10n.dart';
 import '../support/swift_json.dart';
 import '../taste/taste_models.dart';
@@ -13,10 +14,12 @@ import 'booru_store.dart';
 enum AnimeBoxesImportError implements Exception {
   format,
   tooLarge,
-  noServers;
+  noServers,
+  comicsBackup;
 
   String get message => switch (this) {
     format => L10n.text('Choose an Anime Boxes .abbj backup (version 1.0).'),
+    comicsBackup => L10n.text('This is a comics app backup. Import it in Comics mode.'),
     tooLarge => L10n.text('This backup exceeds the 64 MB import limit.'),
     noServers => L10n.text('This backup contains no supported servers.'),
   };
@@ -38,10 +41,15 @@ class AnimeBoxesSearch {
   final bool starred;
 }
 
+/// Which app's file a backup was read from. Every kind merges the same way.
+enum AnimeBoxesSource { animeBoxes, bookmarkExport, imageAppDatabase }
+
 /// An Anime Boxes `.abbj` backup, read without trusting its addresses: servers must be
-/// valid HTTPS sites and media addresses are upgraded to HTTPS.
+/// valid HTTPS sites and media addresses are upgraded to HTTPS. Other image apps' bookmark
+/// exports and databases are read into the same shape.
 class AnimeBoxesBackup {
   const AnimeBoxesBackup({
+    this.source = AnimeBoxesSource.animeBoxes,
     required this.servers,
     required this.selectedIDs,
     required this.favorites,
@@ -55,6 +63,10 @@ class AnimeBoxesBackup {
 
   static const maximumBytes = 64 * 1024 * 1024;
 
+  /// The folder the other image apps' favorites may go to instead of the site folders.
+  static const importedFolderID = 'imported';
+
+  final AnimeBoxesSource source;
   final List<BooruServer> servers;
   final List<String> selectedIDs;
   final List<AnimeBoxesFavorite> favorites;
@@ -66,8 +78,136 @@ class AnimeBoxesBackup {
   final int skippedRules;
 
   static AnimeBoxesBackup read(File file) {
+    final handle = file.openSync();
+    final head = handle.readSync(16);
+    handle.closeSync();
+    if (utf8.decode(head, allowMalformed: true).startsWith('SQLite format 3')) return readDatabase(file.path);
     if (file.lengthSync() > maximumBytes) throw AnimeBoxesImportError.tooLarge;
-    return parse(file.readAsBytesSync());
+    final data = file.readAsBytesSync();
+    return parseBookmarks(data) ?? parse(data);
+  }
+
+  /// A post page address, such as `/posts/1`, `/post/show/1` or `index.php?page=post&s=view&id=1`,
+  /// as the server it belongs to and the post's number. The engine comes from the page's shape;
+  /// it can't tell the old gallery engine from the new one, so an import maps onto a server
+  /// already added with the same address, which keeps its own engine.
+  static (BooruServer, int)? postPage(String raw) {
+    final parts = Uri.tryParse(raw.trim());
+    if (parts == null || !const {'http', 'https'}.contains(parts.scheme.toLowerCase()) || parts.host.isEmpty) return null;
+    final path = parts.path;
+    final BooruEngine engine;
+    final int? postID;
+    final String base;
+    if (RegExp(r'^(.*?)/posts/([0-9]+)/?$').firstMatch(path) case final match?) {
+      engine = BooruEngine.danbooru;
+      postID = int.tryParse(match[2]!);
+      base = match[1]!;
+    } else if (RegExp(r'^(.*?)/post/show/([0-9]+)(?:/.*)?$').firstMatch(path) case final match?) {
+      engine = BooruEngine.moebooru;
+      postID = int.tryParse(match[2]!);
+      base = match[1]!;
+    } else if (path.endsWith('index.php') && parts.queryParameters['page'] == 'post' && parts.queryParameters['s'] == 'view') {
+      engine = BooruEngine.gelbooru;
+      postID = int.tryParse(parts.queryParameters['id'] ?? '');
+      base = path.substring(0, path.length - 'index.php'.length);
+    } else {
+      return null;
+    }
+    if (postID == null || postID <= 0) return null;
+    final String url;
+    try {
+      url = BooruServer.validatedURL('https://${parts.host.toLowerCase()}$base');
+    } on Object {
+      return null;
+    }
+    return (BooruServer(name: BooruServer.bareHost(Uri.parse(url).host), baseURL: url, engine: engine), postID);
+  }
+
+  /// Bookmarks exported as `{version, data: [...]}` or a bare list, each with the post's page
+  /// address and its media addresses. Null when the data isn't such an export.
+  static AnimeBoxesBackup? parseBookmarks(Uint8List data) {
+    Object? json;
+    try {
+      json = jsonDecode(utf8.decode(data, allowMalformed: true));
+    } on FormatException {
+      return null;
+    }
+    final List<Map> rows;
+    if (json is Map) {
+      if (json['backupVersion'] != null || json['data'] is! List) return null;
+      rows = (json['data'] as List).whereType<Map>().toList();
+    } else if (json is List) {
+      if (json.any((row) => row is Map && row['config'] is String && row['type'] != null)) throw AnimeBoxesImportError.comicsBackup;
+      rows = json.whereType<Map>().toList();
+    } else {
+      return null;
+    }
+    if (!rows.any((row) => row['sourceUrl'] is String && (row['originalUrl'] != null || row['thumbnailUrl'] != null))) return null;
+    final builder = _Builder(AnimeBoxesSource.bookmarkExport);
+    for (final row in rows) {
+      final created = row['createdAt'] is String ? DateTime.tryParse(row['createdAt'] as String) : null;
+      builder.add(
+        page: row['sourceUrl'] is String ? row['sourceUrl'] as String : null,
+        preview: row['thumbnailUrl'],
+        sample: row['sampleUrl'],
+        file: row['originalUrl'],
+        width: row['width'],
+        height: row['height'],
+        tags: row['tags'],
+        format: row['format'] is String ? row['format'] as String : null,
+        savedAt: created == null ? 0 : created.microsecondsSinceEpoch / 1e6,
+      );
+    }
+    return builder.backup();
+  }
+
+  /// An image app's own database: favorite items with their page and media addresses, their
+  /// tags, and the search history.
+  static AnimeBoxesBackup readDatabase(String path) {
+    final SqlDatabase db;
+    try {
+      db = SqlDatabase.openReadOnly(path);
+    } on Object {
+      throw AnimeBoxesImportError.format;
+    }
+    try {
+      if (db.tableExists('LOCAL_FAVORITES') || db.tableExists('BookmarkArticle') || db.tableExists('MangaColumnModel')) {
+        throw AnimeBoxesImportError.comicsBackup;
+      }
+      if (!db.tableExists('BooruItem')) throw AnimeBoxesImportError.format;
+      final tags = <int, List<String>>{};
+      if (db.tableExists('ImageTag') && db.tableExists('Tag')) {
+        for (final row in db.rows(
+          'SELECT it.booruItemID AS item, t.name AS name FROM ImageTag it JOIN Tag t ON t.id = it.tagID WHERE it.booruItemID IN (SELECT id FROM BooruItem WHERE isFavourite = 1)',
+        )) {
+          if ((row['item'], row['name']) case (final int item, final String name) when name.isNotEmpty) tags.putIfAbsent(item, () => []).add(name);
+        }
+      }
+      final builder = _Builder(AnimeBoxesSource.imageAppDatabase);
+      for (final row in db.rows('SELECT * FROM BooruItem WHERE isFavourite = 1 ORDER BY id DESC')) {
+        builder.add(
+          page: row['postURL'] is String ? row['postURL'] as String : null,
+          preview: row['thumbnailURL'],
+          sample: row['sampleURL'],
+          file: row['fileURL'],
+          width: null,
+          height: null,
+          tags: tags[row['id']] ?? const <String>[],
+          format: null,
+          savedAt: 0,
+        );
+      }
+      if (db.tableExists('SearchHistory')) {
+        for (final row in db.rows('SELECT * FROM SearchHistory ORDER BY id DESC')) {
+          final text = row['searchText'] is String ? row['searchText'] as String : '';
+          final date = row['timestamp'] is String ? DateTime.tryParse(row['timestamp'] as String) : null;
+          builder.search(text, date == null ? 0 : date.microsecondsSinceEpoch / 1e6, row['isFavourite'] == 1);
+        }
+      }
+      return builder.backup();
+    } finally {
+      db.close();
+    }
   }
 
   static AnimeBoxesBackup parse(Uint8List data) {
@@ -208,13 +348,82 @@ class AnimeBoxesBackup {
   }
 }
 
+/// Collects posts by the server their page belongs to.
+class _Builder {
+  _Builder(this.source);
+  final AnimeBoxesSource source;
+  final servers = <BooruServer>[];
+  final favorites = <AnimeBoxesFavorite>[];
+  final history = <AnimeBoxesSearch>[];
+  final _seen = <String>{};
+  var skippedFavorites = 0;
+  var skippedHistory = 0;
+
+  void add({
+    required String? page,
+    required Object? preview,
+    required Object? sample,
+    required Object? file,
+    required Object? width,
+    required Object? height,
+    required Object? tags,
+    required String? format,
+    required double savedAt,
+  }) {
+    final found = page == null ? null : AnimeBoxesBackup.postPage(page);
+    if (found == null) {
+      skippedFavorites += 1;
+      return;
+    }
+    final (candidate, postID) = found;
+    final server = servers.where((server) => server.canonicalAddress == candidate.canonicalAddress).firstOrNull ?? (servers..add(candidate)).last;
+    final fileURL = AnimeBoxesBackup._mediaURL(file, server.baseURL);
+    final post = BooruPost(
+      serverID: server.id,
+      postID: postID,
+      previewURL: AnimeBoxesBackup._mediaURL(preview, server.baseURL),
+      sampleURL: AnimeBoxesBackup._mediaURL(sample, server.baseURL),
+      fileURL: fileURL,
+      width: (AnimeBoxesBackup._integer(width) ?? 0).clamp(0, 1 << 31),
+      height: (AnimeBoxesBackup._integer(height) ?? 0).clamp(0, 1 << 31),
+      tags: AnimeBoxesBackup._tokens(tags),
+      artists: const [],
+      rating: '',
+      score: 0,
+      fileExtension: ((format != null && format.isNotEmpty) ? format : (fileURL == null ? '' : urlPathExtension(fileURL))).toLowerCase(),
+    );
+    if (_seen.add(post.id)) favorites.add(AnimeBoxesFavorite(post, savedAt));
+  }
+
+  void search(String text, double date, bool starred) {
+    if (text.trim().isEmpty) {
+      skippedHistory += 1;
+      return;
+    }
+    history.add(AnimeBoxesSearch(text: text, date: date, starred: starred));
+  }
+
+  AnimeBoxesBackup backup() => AnimeBoxesBackup(
+    source: source,
+    servers: servers,
+    selectedIDs: const [],
+    favorites: favorites,
+    history: history,
+    blacklist: const [],
+    skippedServers: 0,
+    skippedFavorites: skippedFavorites,
+    skippedHistory: skippedHistory,
+    skippedRules: 0,
+  );
+}
+
 class AnimeBoxesImportOptions {
   const AnimeBoxesImportOptions({this.history = true, this.blacklist = true, this.selection = true, this.folderID = 'by-site'});
   final bool history;
   final bool blacklist;
   final bool selection;
 
-  /// `by-site`, `anime-boxes`, or an existing folder's ID.
+  /// `by-site`, `anime-boxes`, `imported`, or an existing folder's ID.
   final String folderID;
 }
 
@@ -246,6 +455,11 @@ extension BooruStoreAnimeBoxes on BooruStore {
       }
       if (options.folderID == 'anime-boxes') {
         db.execute("INSERT OR IGNORE INTO folders VALUES ('anime-boxes', 'Anime Boxes', 4287784115, (SELECT COUNT(*) FROM folders))");
+      } else if (options.folderID == AnimeBoxesBackup.importedFolderID) {
+        db.execute('INSERT OR IGNORE INTO folders VALUES (?, ?, 4287784115, (SELECT COUNT(*) FROM folders))', [
+          AnimeBoxesBackup.importedFolderID,
+          L10n.text('Imported'),
+        ]);
       }
       if (options.folderID != 'by-site' && !db.exists('SELECT EXISTS(SELECT 1 FROM folders WHERE id = ?)', [options.folderID])) {
         throw const BooruError(BooruErrorKind.invalidResponse);

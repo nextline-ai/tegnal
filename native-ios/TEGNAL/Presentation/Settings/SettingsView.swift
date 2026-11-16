@@ -298,6 +298,17 @@ struct MangaLibraryToolsView: View {
                 }
                 .disabled(isImporting || isExporting)
             }
+            Section {
+                NavigationLink { OtherAppImportView() } label: {
+                    Label(L10n.text("Import from Another Comics App"), systemImage: "square.and.arrow.down.on.square")
+                }
+                .disabled(isImporting || isExporting)
+                .accessibilityIdentifier("comics.importOtherApp")
+            } header: {
+                Text(L10n.text("Other Comics Apps"))
+            } footer: {
+                Text(L10n.text("Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks."))
+            }
 
             if isImporting || statusMessage != nil {
                 Section(header: Text(L10n.text("Task Status"))) {

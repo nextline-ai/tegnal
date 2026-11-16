@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/booru/anime_boxes_import.dart';
 import '../../core/migration/manga_viewer_import.dart';
+import '../../core/migration/other_app_import.dart';
 import '../../core/migration/violet_import.dart';
 import '../../core/storage/app_database.dart';
 import '../../core/support/document_files.dart';
@@ -33,8 +34,12 @@ class ImportContext {
 
 /// `AnimeBoxesImportView`: reads an Anime Boxes backup, shows what it holds and merges it.
 class AnimeBoxesImportView extends StatefulWidget {
-  const AnimeBoxesImportView({super.key, required this.booru, this.inSheet = false});
+  const AnimeBoxesImportView({super.key, required this.booru, this.inSheet = false, this.otherApps = false});
   final BooruContext booru;
+
+  /// Opened for the other image apps: bookmark exports and app databases instead of `.abbj`.
+  /// Either screen reads every supported file.
+  final bool otherApps;
 
   /// Pushed inside the import sheet, the page keeps the sheet's colors.
   final bool inSheet;
@@ -64,9 +69,12 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
     try {
       final file = await const DocumentFiles().openDocument();
       if (file != null) {
-        if (await file.length() > AnimeBoxesBackup.maximumBytes) throw AnimeBoxesImportError.tooLarge;
-        final backup = AnimeBoxesBackup.read(file);
-        if (mounted) setState(() => _backup = backup);
+        try {
+          final backup = AnimeBoxesBackup.read(file);
+          if (mounted) setState(() => _backup = backup);
+        } finally {
+          file.delete().ignore();
+        }
       }
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -105,8 +113,9 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
     final backup = _backup;
     final result = _result;
     final folders = widget.booru.store.folders();
+    final otherApps = widget.otherApps;
     return SettingsPage(
-      title: 'Anime Boxes',
+      title: otherApps ? L10n.text('Another App') : 'Anime Boxes',
       sheet: widget.inSheet,
       children: [
         FormSection(
@@ -116,11 +125,11 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
               separatorInset: settingsIconInset,
               child: Row(
                 children: [
-                  Icon(CupertinoIcons.cube_box_fill, size: 22, color: tint),
+                  Icon(otherApps ? CupertinoIcons.square_arrow_down_on_square_fill : CupertinoIcons.cube_box_fill, size: 22, color: tint),
                   const SizedBox(width: 18),
                   Expanded(
                     child: Text(
-                      L10n.text('Import from Anime Boxes'),
+                      L10n.text(otherApps ? 'Import from Another Image App' : 'Import from Anime Boxes'),
                       style: TegnalType.style(17, weight: FontWeight.w600, color: label),
                     ),
                   ),
@@ -129,7 +138,11 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
             ),
             FormRow(
               child: Text(
-                L10n.text('Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing.'),
+                L10n.text(
+                  otherApps
+                      ? 'Choose a bookmark export (.json) or a database backup (.db) from another image app. Review its contents before importing.'
+                      : 'Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing.',
+                ),
                 style: TegnalType.style(15, color: secondary),
               ),
             ),
@@ -238,15 +251,21 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
                 title: L10n.text('Destination Folder'),
                 options: [
                   ('by-site', L10n.text('Site Folders')),
-                  if (!folders.any((folder) => folder.id == 'anime-boxes')) ('anime-boxes', 'Anime Boxes'),
+                  if (backup.source != AnimeBoxesSource.animeBoxes) ...[
+                    if (!folders.any((folder) => folder.id == AnimeBoxesBackup.importedFolderID)) (AnimeBoxesBackup.importedFolderID, L10n.text('Imported')),
+                  ] else if (!folders.any((folder) => folder.id == 'anime-boxes'))
+                    ('anime-boxes', 'Anime Boxes'),
                   for (final folder in folders) (folder.id, folder.displayName),
                 ],
                 selected: _folderID,
                 onSelected: (value) => setState(() => _folderID = value),
               ),
-              _Toggle(title: L10n.text('Import Search History'), value: _history, onChanged: (value) => setState(() => _history = value)),
-              _Toggle(title: L10n.text('Import Tag Blacklist'), value: _blacklist, onChanged: (value) => setState(() => _blacklist = value)),
-              _Toggle(title: L10n.text('Use Server Selection from Backup'), value: _selection, onChanged: (value) => setState(() => _selection = value)),
+              if (backup.source == AnimeBoxesSource.animeBoxes || backup.history.isNotEmpty)
+                _Toggle(title: L10n.text('Import Search History'), value: _history, onChanged: (value) => setState(() => _history = value)),
+              if (backup.source == AnimeBoxesSource.animeBoxes) ...[
+                _Toggle(title: L10n.text('Import Tag Blacklist'), value: _blacklist, onChanged: (value) => setState(() => _blacklist = value)),
+                _Toggle(title: L10n.text('Use Server Selection from Backup'), value: _selection, onChanged: (value) => setState(() => _selection = value)),
+              ],
             ],
           ),
           settingsSectionGap,
@@ -264,6 +283,280 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
                 tinted: true,
                 chevron: false,
                 onTap: _loading || backup.servers.isEmpty ? null : _commit,
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// `OtherAppImportView`: reads a backup, export, download folder or link list from another
+/// comics app, shows what it holds, and merges it into the library when the person confirms.
+class OtherAppImportView extends StatefulWidget {
+  const OtherAppImportView({super.key, required this.database, this.startCoverQueue, this.libraryChanged, this.inSheet = false});
+  final AppDatabase database;
+  final VoidCallback? startCoverQueue;
+  final VoidCallback? libraryChanged;
+
+  /// Pushed inside the import sheet, the page keeps the sheet's colors.
+  final bool inSheet;
+
+  @override
+  State<OtherAppImportView> createState() => _OtherAppImportViewState();
+}
+
+class _OtherAppImportViewState extends State<OtherAppImportView> {
+  /// The picker's value for the file's own folders.
+  static const _fromFile = -1;
+
+  OtherAppLibrary? _library;
+  var _includeHistory = false;
+  var _destination = _fromFile;
+  var _loading = false;
+  var _foldersOpen = false;
+  OtherAppImportResult? _result;
+  String? _error;
+
+  Future<void> _read(Future<OtherAppLibrary?> Function() pick) async {
+    setState(() {
+      _loading = true;
+      _result = null;
+      _error = null;
+      _library = null;
+    });
+    try {
+      final library = await pick();
+      if (library != null && mounted) {
+        setState(() {
+          _library = library;
+          _destination = _fromFile;
+          // A file that only remembers what was read imports that history by default.
+          _includeHistory = library.workCount == 0 && library.history.isNotEmpty;
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<OtherAppLibrary?> _chooseFile() async {
+    final file = await const DocumentFiles().openDocument();
+    if (file == null) return null;
+    try {
+      return OtherAppImport.read(file);
+    } finally {
+      file.delete().ignore();
+    }
+  }
+
+  Future<OtherAppLibrary?> _chooseFolder() async {
+    final folder = await const DocumentFiles().pickFolder();
+    return folder == null ? null : OtherAppImport.readDownloadFolder(Directory(folder.path));
+  }
+
+  Future<void> _commit() async {
+    final library = _library;
+    if (library == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    // Let the progress row appear before the import holds the database.
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    try {
+      final result = widget.database.importOtherApp(
+        library,
+        options: OtherAppImportOptions(includeHistory: _includeHistory, destination: _destination == _fromFile ? null : _destination),
+      );
+      widget.startCoverQueue?.call();
+      if (mounted) setState(() => _result = result);
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    }
+    widget.libraryChanged?.call();
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = (widget.inSheet ? FormColors.row : FormColors.listRow).resolveFrom(context);
+    final tint = TegnalColors.tint.resolveFrom(context);
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final label = TegnalColors.label.resolveFrom(context);
+    final library = _library;
+    final result = _result;
+    return SettingsPage(
+      title: L10n.text('Another App'),
+      sheet: widget.inSheet,
+      children: [
+        FormSection(
+          rowColor: row,
+          footer: Text(
+            L10n.text(
+              'Supported: database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html).',
+            ),
+          ),
+          children: [
+            FormRow(
+              separatorInset: settingsIconInset,
+              child: Row(
+                children: [
+                  Icon(CupertinoIcons.square_arrow_down_on_square_fill, size: 22, color: tint),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Text(L10n.text('Import from Another Comics App'), style: TegnalType.style(17, weight: FontWeight.w600, color: label)),
+                  ),
+                ],
+              ),
+            ),
+            FormRow(
+              child: Text(
+                L10n.text('Choose a backup, export or link list from another comics app. TEGNAL recognizes what the file holds and shows it before importing.'),
+                style: TegnalType.style(15, color: secondary),
+              ),
+            ),
+            SettingsLinkRow(
+              title: L10n.text(library == null ? 'Choose File' : 'Choose Another File'),
+              symbol: (color) => _DocumentBadgePlus(color: color),
+              tinted: true,
+              chevron: false,
+              onTap: _loading ? null : () => _read(_chooseFile),
+            ),
+            SettingsLinkRow(
+              title: L10n.text('Choose Download Folder'),
+              icon: CupertinoIcons.folder_badge_plus,
+              tinted: true,
+              chevron: false,
+              onTap: _loading ? null : () => _read(_chooseFolder),
+            ),
+          ],
+        ),
+        if (_loading) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            children: [
+              FormRow(
+                child: Row(
+                  children: [
+                    const CupertinoActivityIndicator(),
+                    const SizedBox(width: 10),
+                    Text(L10n.text('Importing…'), style: TegnalType.style(17, color: secondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (_error case final error?) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            children: [
+              FormRow(
+                child: Text(error, style: TegnalType.style(17, color: SystemColors.red.resolveFrom(context))),
+              ),
+            ],
+          ),
+        ],
+        if (result != null) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            footer: Text(L10n.text('Titles, tags and covers are filled in from the connected website in the background.')),
+            children: [
+              FormRow(
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.checkmark_circle_fill, size: 22, color: SystemColors.green.resolveFrom(context)),
+                    const SizedBox(width: 12),
+                    Text(L10n.text('Import Complete'), style: TegnalType.style(17, color: SystemColors.green.resolveFrom(context))),
+                  ],
+                ),
+              ),
+              FormRow(
+                child: Text(
+                  L10n.text('%@ works added · %@ already saved · %@ folders created', ['${result.added}', '${result.existing}', '${result.folders}']),
+                ),
+              ),
+            ],
+          ),
+        ] else if (library != null) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            header: Text(L10n.text('File Contents')),
+            children: [
+              SettingsValueRow(title: L10n.text('Kind'), value: library.format.title),
+              SettingsValueRow(title: L10n.text('Works'), value: '${library.workCount}'),
+              if (library.history.isNotEmpty) SettingsValueRow(title: L10n.text('Reading History'), value: '${library.history.length}'),
+              if (library.shelves.isNotEmpty) ...[
+                FormRow(
+                  onTap: () => setState(() => _foldersOpen = !_foldersOpen),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(L10n.text('Folders'))),
+                      AnimatedRotation(
+                        turns: _foldersOpen ? 0.25 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(CupertinoIcons.chevron_right, size: 15, color: tint),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_foldersOpen)
+                  for (final shelf in library.shelves) SettingsValueRow(title: shelf.displayName, value: '${shelf.entries.length}'),
+              ],
+              if (library.skipped > 0)
+                FormRow(
+                  child: Text(
+                    L10n.text('%@ entries that aren’t works of a supported catalog will be skipped.', ['${library.skipped}']),
+                    style: TegnalType.style(17, color: SystemColors.orange.resolveFrom(context)),
+                  ),
+                ),
+            ],
+          ),
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            header: Text(L10n.text('Import Options')),
+            children: [
+              SettingsPickerRow<int>(
+                title: L10n.text('Destination Folder'),
+                options: [
+                  (_fromFile, L10n.text(library.shelves.length > 1 || library.shelves.firstOrNull?.name != null ? 'Folders from the File' : 'Unfiled')),
+                  for (final folder in widget.database.listFolders())
+                    if (folder.id case final id?) (id, folder.displayName),
+                ],
+                selected: _destination,
+                onSelected: (value) => setState(() => _destination = value),
+              ),
+              if (library.history.isNotEmpty)
+                _Toggle(
+                  title: L10n.text('Import Reading History as a Folder'),
+                  value: _includeHistory,
+                  onChanged: (value) => setState(() => _includeHistory = value),
+                ),
+            ],
+          ),
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            footer: Text(
+              L10n.text(
+                'Works already in your library keep their information and folders. Covers and missing information are read from the connected website afterwards, following the bulk reading limits.',
+              ),
+            ),
+            children: [
+              SettingsLinkRow(
+                title: L10n.text('Import'),
+                icon: CupertinoIcons.square_arrow_down,
+                tinted: true,
+                chevron: false,
+                onTap: _loading || (library.workCount == 0 && !_includeHistory) ? null : _commit,
               ),
             ],
           ),
@@ -453,6 +746,31 @@ class _MangaViewerImportViewState extends State<MangaViewerImportView> {
             ),
           ],
         ),
+        settingsSectionGap,
+        FormSection(
+          rowColor: row,
+          prominentHeader: true,
+          header: Text(L10n.text('Other Comics Apps')),
+          footer: Text(L10n.text('Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks.')),
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Import from Another Comics App'),
+              icon: CupertinoIcons.square_arrow_down_on_square,
+              onTap: _importing
+                  ? null
+                  : () => Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => OtherAppImportView(
+                          database: widget.database,
+                          startCoverQueue: widget.startCoverQueue,
+                          libraryChanged: widget.libraryChanged,
+                          inSheet: widget.inSheet,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
         if (_importing || _status != null) ...[
           settingsSectionGap,
           FormSection(
@@ -569,7 +887,7 @@ class _ImportDataViewState extends State<ImportDataView> {
     child: child,
   );
 
-  Widget _bordered(String title, VoidCallback? onTap) {
+  Widget _bordered(String title, VoidCallback? onTap, {IconData? icon}) {
     final tint = TegnalColors.tint.resolveFrom(context);
     return GestureDetector(
       onTap: onTap,
@@ -583,7 +901,7 @@ class _ImportDataViewState extends State<ImportDataView> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _DocumentBadgePlus(color: tint),
+              if (icon != null) Icon(icon, size: 20, color: tint) else _DocumentBadgePlus(color: tint),
               const SizedBox(width: 6),
               Text(title, style: TegnalType.style(17, color: tint)),
             ],
@@ -670,6 +988,57 @@ class _ImportDataViewState extends State<ImportDataView> {
                         const SizedBox(height: 12),
                         Text(_status, style: TegnalType.style(15, color: SystemColors.red.resolveFrom(context))),
                       ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(CupertinoIcons.square_arrow_down_on_square_fill, size: 22, color: label),
+                          const SizedBox(width: 8),
+                          Text(L10n.text('Other Apps'), style: TegnalType.style(17, weight: FontWeight.w600, color: label)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text('.db · .json · .tachibk · .html', style: TegnalType.style(15, color: secondary)),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _bordered(
+                            L10n.text('Comics'),
+                            _importing
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    CupertinoPageRoute<void>(
+                                      builder: (_) => OtherAppImportView(
+                                        database: widget.imports.database,
+                                        startCoverQueue: widget.imports.startCoverQueue,
+                                        libraryChanged: widget.imports.libraryChanged,
+                                        inSheet: true,
+                                      ),
+                                    ),
+                                  ),
+                            icon: CupertinoIcons.book,
+                          ),
+                          _bordered(
+                            L10n.text('Images'),
+                            _importing
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    CupertinoPageRoute<void>(
+                                      builder: (_) => AnimeBoxesImportView(booru: widget.imports.booru, inSheet: true, otherApps: true),
+                                    ),
+                                  ),
+                            icon: CupertinoIcons.photo,
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

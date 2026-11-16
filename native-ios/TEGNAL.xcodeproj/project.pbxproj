@@ -29,6 +29,7 @@
 		2034B4997F3BC0351EF797F4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A43CD02402545179DA392A4 /* Assets.xcassets */; };
 		20E010B24BD47E4A667BA0C3 /* Acknowledgments.txt in Resources */ = {isa = PBXBuildFile; fileRef = DAFB6A5CB9259D10CE5EE14B /* Acknowledgments.txt */; };
 		239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */; };
+		6956B8456C5B4B35A3530846 /* OtherAppImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DF5A2EF9002417F8E3E3C61 /* OtherAppImportView.swift */; };
 		2596329E9AE3000223F509E8 /* PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = CB9AA4105588A79DD21DDEAA /* PrivacyPolicy.txt */; };
 		29D634933AAA5D8400EAFF61 /* TEGNALTests/TasteRecapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */; };
 		29F36067686258194ABE38F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D4058D8DF59DB2ABCD4E32CC /* PrivacyInfo.xcprivacy */; };
@@ -56,6 +57,7 @@
 		4E3053C5D521D804853182BA /* TEGNAL/Presentation/Taste/TasteTagDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEF57ABE07C1BB394AB5FF9 /* TEGNAL/Presentation/Taste/TasteTagDetail.swift */; };
 		522B1CD77F3A9AC3EC37E13A /* SearchLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5BA3974651F205FFFCE3AD /* SearchLibrary.swift */; };
 		528F7B9571CC74D0D47C7C8E /* BooruLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */; };
+		A97DC1CE4A50489BB10BBEAB /* OtherAppImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B9B6207DB92412482200D49 /* OtherAppImportTests.swift */; };
 		545411A0C8D7E98E33A2FD7C /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359FBFE88552D6096DB9342B /* TEGNAL/Presentation/Taste/Smart/SmartViews.swift */; };
 		558B9BC856132F232BB2AE8E /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8346FCB8EB53E1B5E6D5B20 /* AppTab.swift */; };
 		56D47365E51EC209EFAD362B /* PageImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80B56E655528C707020F8BD7 /* PageImageStore.swift */; };
@@ -173,6 +175,7 @@
 		DFF9E986805DDE834086C1C5 /* TEGNALTests/TasteFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C7B7E6E50ACC442C7E4B8D /* TEGNALTests/TasteFeedTests.swift */; };
 		E0887C6AD31219179BF8E12C /* DocumentCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9A0777820B3E3AF969A391 /* DocumentCatalogTests.swift */; };
 		E1BD068B22E9A786A6E25819 /* MangaViewerImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBA1E27FC02DDAE5A92D408 /* MangaViewerImportService.swift */; };
+		D4AA86091F7945049D14BCCB /* OtherAppImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863D8499DA39489797FDD0E5 /* OtherAppImport.swift */; };
 		E1D8BE93D1E5C204FC27FE25 /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268D24A55619AF97E4EEEF85 /* LiquidGlassModifiers.swift */; };
 		E5CBAA3ADBF94E51181BB966 /* ReaderSurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5224D62AC2255AFD822F973D /* ReaderSurfaces.swift */; };
 		E64ACF1BAF90ADF12C578886 /* TEGNAL/Presentation/Taste/Recap/RecapPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F2FD9BB3E4D100BA6BFA8CA /* TEGNAL/Presentation/Taste/Recap/RecapPalette.swift */; };
@@ -349,6 +352,7 @@
 		98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteAccountSettings.swift; sourceTree = "<group>"; };
 		98B27C1D9B72147F9520E6B5 /* KeyedCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyedCatalogTests.swift; sourceTree = "<group>"; };
 		9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLibraryTests.swift; sourceTree = "<group>"; };
+		2B9B6207DB92412482200D49 /* OtherAppImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OtherAppImportTests.swift; sourceTree = "<group>"; };
 		9C28345455B47C17788E823A /* TEGNALTests/TasteRecapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/TasteRecapTests.swift; sourceTree = SOURCE_ROOT; };
 		A015BE1F0830B18B98744C46 /* AppDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDatabase.swift; sourceTree = "<group>"; };
 		A22D8647630A782E540D7EF8 /* BooruBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackupView.swift; sourceTree = "<group>"; };
@@ -364,6 +368,7 @@
 		ACF09107ABCD200000000001 /* TEGNAL/Core/Taste/VisualSimilarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/VisualSimilarity.swift; sourceTree = SOURCE_ROOT; };
 		ACF09107ABCD200000000002 /* TEGNAL/Presentation/Works/VisualSimilarityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Works/VisualSimilarityView.swift; sourceTree = SOURCE_ROOT; };
 		AEBA1E27FC02DDAE5A92D408 /* MangaViewerImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaViewerImportService.swift; sourceTree = "<group>"; };
+		863D8499DA39489797FDD0E5 /* OtherAppImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OtherAppImport.swift; sourceTree = "<group>"; };
 		AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRevisionTests.swift; sourceTree = "<group>"; };
 		B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruBackup.swift; sourceTree = "<group>"; };
 		B2DDB937D61C4DA69694A2AD /* AppPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPresentationTests.swift; sourceTree = "<group>"; };
@@ -377,6 +382,7 @@
 		C0D758D11EBEE724973FC43F /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10245435081F97BDB212F1F /* BooruRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruRootView.swift; sourceTree = "<group>"; };
 		C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBackupSection.swift; sourceTree = "<group>"; };
+		4DF5A2EF9002417F8E3E3C61 /* OtherAppImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OtherAppImportView.swift; sourceTree = "<group>"; };
 		C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLegacyHTML.swift; sourceTree = "<group>"; };
 		C3563D5B3248F319CCDA8D86 /* BooruClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruClient.swift; sourceTree = "<group>"; };
 		CA0062A4C5A44F103420CB63 /* CDNRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CDNRouting.swift; sourceTree = "<group>"; };
@@ -462,6 +468,7 @@
 			isa = PBXGroup;
 			children = (
 				AEBA1E27FC02DDAE5A92D408 /* MangaViewerImportService.swift */,
+				863D8499DA39489797FDD0E5 /* OtherAppImport.swift */,
 			);
 			path = Migration;
 			sourceTree = "<group>";
@@ -556,6 +563,7 @@
 				F54BA7BC72DC41D3BDB95CF5 /* LibraryBackupTests.swift */,
 				F2A824088835743E484646A8 /* BooruBackupTests.swift */,
 				9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */,
+				2B9B6207DB92412482200D49 /* OtherAppImportTests.swift */,
 				A688C07943C20ABCE3EE27BA /* BooruReleaseLiveTests.swift */,
 				AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */,
 				F9A5E549BC3A992CAE3BE32D /* BooruTests.swift */,
@@ -574,6 +582,7 @@
 			isa = PBXGroup;
 			children = (
 				C1ADDF326A204327B07DB5C6 /* LibraryBackupSection.swift */,
+				4DF5A2EF9002417F8E3E3C61 /* OtherAppImportView.swift */,
 				5A1E0C7D2B9F4E6A8C3D1F04 /* BackupReminder.swift */,
 				D4C14F8DB9B15B1EF5094844 /* CloudSyncSection.swift */,
 				8EFDA2AA361D3555687C162C /* DeveloperInfoSection.swift */,
@@ -1166,6 +1175,7 @@
 				767EAEE31B2A8121A3534E33 /* NativeReaderView.swift in Sources */,
 				09F96FACC7155FD7B5D16E12 /* TEGNALApp.swift in Sources */,
 				239965F24CFB4838B4446015 /* LibraryBackupSection.swift in Sources */,
+				6956B8456C5B4B35A3530846 /* OtherAppImportView.swift in Sources */,
 				5A1E0C7D2B9F4E6A8C3D1F03 /* BackupReminder.swift in Sources */,
 				DC27734E34274E7E9EE48548 /* LibraryBackup.swift in Sources */,
 				8566DB33557D57EE38DE08D8 /* OnboardingView.swift in Sources */,
@@ -1184,6 +1194,7 @@
 				1BD03E8E869F045D4923249E /* SettingsView.swift in Sources */,
 				AC66C1A66E68133540CA4AA5 /* TargetedTranslationCanvas.swift in Sources */,
 				E1BD068B22E9A786A6E25819 /* MangaViewerImportService.swift in Sources */,
+				D4AA86091F7945049D14BCCB /* OtherAppImport.swift in Sources */,
 				8826DE8461CAEDE1F2881F0A /* WorkCardView.swift in Sources */,
 				4689FFAC40180CE1BDA56211 /* WorkDetailView.swift in Sources */,
 				C2A3F752D9BA1F762F086A08 /* WorksGridView.swift in Sources */,
@@ -1201,6 +1212,7 @@
 				6A330EBB789C4DB7B7F655D8 /* LibraryBackupTests.swift in Sources */,
 				A44973D3E3DC1CA4DF985E73 /* BooruBackupTests.swift in Sources */,
 				528F7B9571CC74D0D47C7C8E /* BooruLibraryTests.swift in Sources */,
+				A97DC1CE4A50489BB10BBEAB /* OtherAppImportTests.swift in Sources */,
 				9AE4AA3721DEDE1610B8B5A0 /* BooruReleaseLiveTests.swift in Sources */,
 				C4E563AAFF6C1AF00B6FF425 /* BooruRevisionTests.swift in Sources */,
 				9222CF5DF347B12600C8154F /* BooruTests.swift in Sources */,

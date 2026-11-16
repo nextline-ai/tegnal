@@ -353,6 +353,11 @@ class _RootState extends State<_Root> {
                       icon: CupertinoIcons.cube_box,
                       onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: _booru))),
                     ),
+                    SettingsLinkRow(
+                      title: L10n.text('Import from Another Image App'),
+                      icon: CupertinoIcons.square_arrow_down_on_square,
+                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: _booru, otherApps: true))),
+                    ),
                   ],
                 ),
               ),
@@ -417,6 +422,29 @@ class _RootState extends State<_Root> {
                     onTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
                         builder: (_) => MangaViewerImportView(
+                          database: services.database,
+                          startCoverQueue: services.coverQueue.start,
+                          libraryChanged: _library.notifyChanged,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Builder(
+              builder: (context) => FormSection(
+                prominentHeader: true,
+                rowColor: FormColors.listRow.resolveFrom(context),
+                header: Text(L10n.text('Other Comics Apps')),
+                footer: Text(L10n.text('Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks.')),
+                children: [
+                  SettingsLinkRow(
+                    title: L10n.text('Import from Another Comics App'),
+                    icon: CupertinoIcons.square_arrow_down_on_square,
+                    onTap: () => Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => OtherAppImportView(
                           database: services.database,
                           startCoverQueue: services.coverQueue.start,
                           libraryChanged: _library.notifyChanged,
