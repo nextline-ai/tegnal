@@ -134,7 +134,7 @@ class LibrarySyncAdapter {
     'manga.saved_searches': ['query'],
     'booru.challenges': ['id', 'payload'],
     'booru.servers': ['id', 'payload', 'position'],
-    'booru.folders': ['id', 'name', 'color', 'position'],
+    'booru.folders': ['id', 'name', 'color', 'position', 'server_id'],
     'booru.favorites': ['server_id', 'post_id', 'payload', 'saved_at', 'folder_id'],
     'booru.history': ['server_id', 'query', 'used_at'],
     'booru.saved_tags': ['server_id', 'name', 'kind'],
@@ -376,7 +376,8 @@ class LibrarySyncAdapter {
         for (final change in values) {
           if (change.row.table != 'booru.$table') continue;
           final row = change.row.copy();
-          if (table == 'folders' && row.values['id']?.string == 'unsorted' && change.deleted) continue;
+          // The shared Uncategorized from before folder ownership never comes back; its images go to their servers' own.
+          if (table == 'folders' && row.values['id']?.string == 'unsorted') continue;
           final address = row.values['server_id']?.string;
           if (address != null) {
             final id = mapping[address];
@@ -402,25 +403,16 @@ class LibrarySyncAdapter {
           if (change.deleted) {
             final id = row.values['id']?.string;
             if (table == 'challenges' && id != null) db.execute('DELETE FROM challenge_sessions WHERE id = ?', [id]);
-            if (table == 'folders' && id != null && db.exists('SELECT EXISTS(SELECT 1 FROM favorites WHERE folder_id = ?)', [id])) {
-              BooruStore.ensureUnsorted(db);
-              db.execute("UPDATE favorites SET folder_id = 'unsorted' WHERE folder_id = ?", [id]);
-            }
+            if (table == 'folders' && id != null) BooruStore.moveImagesOutOf(id, db);
             _delete(row, db);
           } else {
-            final folder = row.values['folder_id']?.string;
-            if (table == 'favorites' && folder != null && db.value<String>('SELECT id FROM folders WHERE id = ?', [folder]) == null) {
-              BooruStore.ensureUnsorted(db);
-              row.values['folder_id'] = const SyncValue.text('unsorted');
-            }
             _upsert(row, db);
           }
         }
       }
-      // Apply default-folder deletion after favorite changes; concurrent saves take precedence.
-      if (values.any((change) => change.deleted && change.row.table == 'booru.folders' && change.row.values['id']?.string == 'unsorted')) {
-        db.execute("DELETE FROM folders WHERE id = 'unsorted' AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')");
-      }
+      // An image in a folder gone, or put by an older version into another server's folder,
+      // goes to its own server's folder of that name; each server keeps its Uncategorized.
+      BooruStore.settleFolders(db);
       final text = db.value<String>("SELECT value FROM settings WHERE key = 'folder_order'");
       final order = text == null ? null : _decodeStrings(utf8.encode(text));
       if (order != null) {

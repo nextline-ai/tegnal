@@ -190,7 +190,8 @@ abstract final class LibraryMaintenance {
           if (id != null) database.addWorkToFolder(id, folderID);
         }
       } else if (images != null && group.posts.isNotEmpty) {
-        final folderID = images.folders().where((folder) => folder.name == name).firstOrNull?.id ?? images.saveFolder(name: name);
+        // A group gathers images of any server, so its folder is global.
+        final folderID = images.folders().where((folder) => folder.name == name && folder.isGlobal).firstOrNull?.id ?? images.saveFolder(name: name);
         images.moveFavorites(group.posts, folderID);
       }
     }

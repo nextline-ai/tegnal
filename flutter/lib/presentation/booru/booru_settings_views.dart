@@ -495,7 +495,20 @@ class _BooruServersViewState extends State<BooruServersView> {
                         Icon(selected.contains(server.id) ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle, size: 22, color: tint),
                         const SizedBox(width: 12),
                         // The address alone: a name that repeats it says nothing more.
-                        Expanded(child: Text(Uri.tryParse(server.baseURL)?.host ?? server.displayName)),
+                        // The name the app uses for the server everywhere, over its address.
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(server.displayName),
+                              Text(
+                                Uri.tryParse(server.baseURL)?.host ?? server.baseURL,
+                                style: TegnalType.style(13, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                              ),
+                            ],
+                          ),
+                        ),
                         Semantics(
                           button: true,
                           label: '${L10n.text('Edit')} ${server.displayName}',

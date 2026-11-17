@@ -111,7 +111,11 @@ void main() {
     safe = false;
     store.leaveSafeMode();
     expect(store.selectedServerIDs, ['other'], reason: 'Turning it off chooses the servers chosen before');
-    expect(store.visibleFavorites().map((post) => post.postID).toSet(), {1, 2, 3, 4}, reason: 'Without Safe Mode every saved image shows');
+    expect(store.visibleFavorites().map((post) => post.postID).toSet(), {
+      1,
+      2,
+      3,
+    }, reason: "Without Safe Mode the chosen server's saved images show, whatever their rating");
     expect(store.selectableServers, hasLength(2));
     safe = true;
     store.enterSafeMode();

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:tegnal/core/booru/booru_models.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
+import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/support/swift_json.dart';
 
@@ -30,7 +31,7 @@ void main() {
       store.saveServer(value);
     }
     store.database.write((db) {
-      db.execute("INSERT INTO folders VALUES ('anime-boxes', 'Anime Boxes', 1, 99)");
+      db.execute("INSERT INTO folders (id, name, color, position) VALUES ('anime-boxes', 'Anime Boxes', 1, 99)");
       for (final (index, value) in servers.indexed) {
         final imported = post(201, value);
         db.execute('INSERT INTO favorites VALUES (?, ?, ?, ?, ?)', [value.id, 201, encodeSwiftJson(imported.toJson()), 1000.0 + index, 'anime-boxes']);
@@ -52,10 +53,12 @@ void main() {
     expect(dates(upgraded), before);
     // A backup imported later into the former shared folder is repaired on reimport too.
     upgraded.database.write((db) {
-      db.execute("INSERT INTO folders VALUES ('anime-boxes', 'Anime Boxes', 1, 99)");
+      db.execute("INSERT INTO folders (id, name, color, position) VALUES ('anime-boxes', 'Anime Boxes', 1, 99)");
       db.execute("UPDATE favorites SET folder_id = 'anime-boxes' WHERE post_id = 201");
     });
     upgraded.organizeLegacyImports();
+    // Saved shows the chosen servers' folders, so both are chosen to see every image.
+    upgraded.setSelectedServers([for (final value in servers) value.id]);
     expect(upgraded.visibleFavorites().length, 3);
     expect(upgraded.folderIDFor(preserved), custom);
     expect(upgraded.folders().any((folder) => folder.id == 'anime-boxes'), isFalse);
@@ -67,7 +70,9 @@ void main() {
     store.saveServer(alpha);
     store.saveFavorite(post(42, alpha));
     expect(alpha.displayName, 'alpha.example');
-    expect(store.folders().firstWhere((folder) => folder.id.startsWith('site:')).displayName, 'alpha.example');
+    // The server's own folder is its Uncategorized, keeping the server's name for older versions.
+    expect(store.folders().firstWhere((folder) => folder.id.startsWith('site:')).name, 'alpha.example');
+    expect(store.folders().firstWhere((folder) => folder.id.startsWith('site:')).displayName, L10n.text('Uncategorized'));
     expect(store.servers[0].baseURL, 'https://alpha.example');
     expect(BooruServer.displayNameOf('My collection'), 'My collection');
     expect(BooruServer.displayNameOf('https://media.example/booru'), 'media.example/booru');
@@ -103,7 +108,7 @@ void main() {
     restored.setBlacklist('scenery', serverID: a.id);
     expect(restored.visibleFavorites().map((value) => value.id), [second.id]);
     restored.deleteFolder(folder);
-    expect(restored.folderIDFor(first), 'unsorted');
+    expect(restored.folderIDFor(first), 'site:${a.canonicalAddress}');
     expect(restored.isFavorite(first), isTrue);
     restored.toggleServer(a);
     restored.toggleServer(b);
@@ -158,7 +163,7 @@ void main() {
     }
   });
 
-  test('saved library ignores server selection and defaults to site folders', () {
+  test("saved follows the server selection and defaults to each server's uncategorized", () {
     final store = BooruStore.inMemory();
     final a = server('alpha'), b = server('beta', engine: BooruEngine.gelbooru);
     store.saveServer(a);
@@ -167,9 +172,11 @@ void main() {
     store.toggleFavorite(first);
     store.saveFavorite(second);
     store.setSelectedServers([a.id]);
+    expect(store.visibleFavorites().map((value) => value.id).toSet(), {first.id}, reason: "each server's images are in its own folders");
+    store.setSelectedServers([a.id, b.id]);
     expect(store.visibleFavorites().map((value) => value.id).toSet(), {first.id, second.id});
     store.setSelectedServers([]);
-    expect(store.visibleFavorites().map((value) => value.id).toSet(), {first.id, second.id});
+    expect(store.visibleFavorites(), isEmpty);
     expect(store.favorites([a.id, b.id]).length, 2);
     expect(store.folderIDFor(first), 'site:${a.canonicalAddress}');
     expect(store.folderIDFor(second), 'site:${b.canonicalAddress}');

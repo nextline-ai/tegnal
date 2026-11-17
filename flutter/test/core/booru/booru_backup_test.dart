@@ -36,8 +36,8 @@ void main() {
   test('automatic colors use comics palette and fallback without changing renames', () {
     final comics = AppDatabase.inMemory(), images = BooruStore.inMemory();
     final initial = comics.listFolders().first.color;
-    images.database.write(BooruStore.ensureUnsorted);
-    images.setFolderColor('unsorted', initial);
+    // A folder already in the first color, as Uncategorized is in comics.
+    images.saveFolder(name: 'First', color: initial);
     for (var index = 0; index < AppDatabase.presetColors.length + 3; index++) {
       final comic = comics.createFolder(name: 'Folder $index');
       final id = images.saveFolder(name: 'Folder $index');
@@ -53,9 +53,9 @@ void main() {
     source.saveServer(server);
     final a = source.saveFolder(name: 'Landscapes'), b = source.saveFolder(name: 'Rooms');
     source.setFolderColor(a, 0xFF4A3DFF);
-    source.database.write(BooruStore.ensureUnsorted);
-    source.setFolderColor('unsorted', 0xFF00BFA0);
-    source.reorderFolders([b, 'unsorted', a]);
+    final uncategorized = 'site:${server.canonicalAddress}';
+    source.setFolderColor(uncategorized, 0xFF00BFA0);
+    source.reorderFolders([b, uncategorized, a]);
     final post = fixturePost(5194309, server);
     source.saveFavorite(post, folderID: a);
     source.recordSearch('scenery sky', serverID: server.id);
@@ -70,9 +70,11 @@ void main() {
     destination.restoreBackup(backup);
     destination.restoreBackup(backup);
     expect(destination.servers.map((server) => server.id), [local.id]);
-    expect(destination.folders().map((folder) => folder.id), [b, 'unsorted', a, extra]);
+    expect(destination.folders().map((folder) => folder.id), [b, uncategorized, a, extra]);
     expect(destination.folders().firstWhere((folder) => folder.id == a).color, 0xFF4A3DFF);
-    expect(destination.folders().firstWhere((folder) => folder.id == 'unsorted').color, 0xFF00BFA0);
+    expect(destination.folders().firstWhere((folder) => folder.id == uncategorized).color, 0xFF00BFA0);
+    expect(destination.folder(uncategorized)?.serverID, local.id, reason: "the server's Uncategorized stays its own");
+    expect(destination.folder(a)?.serverID, isNull, reason: 'a global folder stays global');
     final mapped = post.onServer(local.id);
     expect(destination.favoriteIDs, {mapped.id});
     expect(destination.folderIDFor(mapped), a);
@@ -99,25 +101,26 @@ void main() {
     expect(() => BooruBackup.decode(utf8.encode('{"version":2,"works":[]}')), throwsA(anything));
   });
 
-  test('uncategorized is optional and nonempty deletion is atomic', () {
+  test('each server keeps its uncategorized and a deleted folder empties into it', () {
     final images = BooruStore.inMemory(), server = presetServer();
     expect(images.folders(), isEmpty);
     images.exportBackup().validate();
     images.saveServer(server);
-    final folder = images.saveFolder(name: 'References');
+    final uncategorized = 'site:${server.canonicalAddress}';
+    expect(images.folders().map((folder) => folder.id), [uncategorized], reason: 'a server has its Uncategorized from the start');
+    final folder = images.saveFolder(name: 'References', serverID: server.id);
     final post = fixturePost(72, server);
     images.saveFavorite(post, folderID: folder);
     images.deleteFolder(folder);
-    expect(images.folderIDFor(post), 'unsorted');
-    expect(() => images.deleteFolder('unsorted'), throwsA(isA<FolderDeletionError>()));
-    expect(images.isFavorite(post), isTrue);
-    expect(images.folders().map((folder) => folder.id), ['unsorted']);
+    expect(images.folderIDFor(post), uncategorized);
+    expect(() => images.deleteFolder(uncategorized), throwsA(isA<FolderDeletionError>()));
     images.toggleFavorite(post);
-    images.deleteFolder('unsorted');
-    expect(images.folders(), isEmpty);
+    expect(() => images.deleteFolder(uncategorized), throwsA(isA<FolderDeletionError>()), reason: 'even empty, it stays while the server does');
     final restored = BooruStore.inMemory();
     restored.restoreBackup(BooruBackup.decode(images.exportBackup().encoded()));
-    expect(restored.folders(), isEmpty);
+    expect(restored.folders().map((folder) => folder.id), [uncategorized]);
+    images.deleteServer(server);
+    expect(images.folders(), isEmpty, reason: "a server's folders go with it");
   });
 
   test('empty comic default can be deleted and stays deleted after reopen', () {

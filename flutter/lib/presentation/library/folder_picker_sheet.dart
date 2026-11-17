@@ -10,11 +10,14 @@ import 'folder_name_prompt.dart';
 
 /// One folder in a picker, from either library.
 class FolderPickerRow {
-  const FolderPickerRow({required this.id, required this.name, required this.color, required this.isCurrent});
+  const FolderPickerRow({required this.id, required this.name, required this.color, required this.isCurrent, this.isGlobal = false});
   final String id;
   final String name;
   final int color;
   final bool isCurrent;
+
+  /// An image folder of every server, marked beside one of the image's own server.
+  final bool isGlobal;
 }
 
 /// `FolderPickerSheet`: the folder list both modes show when a saved work changes folder. A new
@@ -83,7 +86,15 @@ class FolderPickerSheet extends StatelessWidget {
                       children: [
                         SizedBox(width: 28, child: Icon(CupertinoIcons.folder_fill, size: 22, color: Color(row.color))),
                         const SizedBox(width: 12),
-                        Expanded(child: Text(row.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Flexible(child: Text(row.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        if (row.isGlobal) ...[
+                          const SizedBox(width: 6),
+                          Semantics(
+                            label: L10n.text('Global Folder'),
+                            child: Icon(CupertinoIcons.globe, size: 15, color: CupertinoColors.secondaryLabel.resolveFrom(context)),
+                          ),
+                        ],
+                        const Spacer(),
                         if (row.isCurrent) Icon(Symbols.checkmark, size: 20, color: tint),
                       ],
                     ),

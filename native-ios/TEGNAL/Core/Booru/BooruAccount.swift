@@ -948,9 +948,10 @@ final class BooruAccountSync {
         var linked = Set<Int>()
         let taken = Set(store.servers.flatMap { accounts.favorites.state(for: $0.id)?.folders.values.map { $0 } ?? [] }).union(state.folders.values)
         for list in favorites.categories where list.count > 0 && state.folders[list.id] == nil && list.id != state.unassigned {
+            // Only this server's own folders: another server's folder of the same name is its own.
             let name = listFolderName(list, server: server)
-            let id = try store.folders().first { $0.plainName == name && $0.id != "unsorted" && !taken.contains($0.id) }?.id
-                ?? store.saveFolder(name: name)
+            let id = try store.folders().first { $0.serverID == server.id && $0.plainName == name && !$0.isUncategorized && !taken.contains($0.id) }?.id
+                ?? store.saveFolder(name: name, serverID: server.id)
             state.folders[list.id] = id
             linked.insert(list.id)
         }

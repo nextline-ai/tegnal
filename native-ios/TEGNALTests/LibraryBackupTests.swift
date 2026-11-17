@@ -207,7 +207,7 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(try destination.savedSearches(), ["favorite query"])
         XCTAssertEqual(try destination.dbWriter.read { try String.fetchOne($0, sql: "SELECT note FROM artists WHERE name = 'Artist'") }, "Artist note")
         XCTAssertEqual(images.favoriteIDs.count, 1)
-        XCTAssertEqual(images.folders().first?.color, 0xFF00C2E8)
+        XCTAssertEqual(images.folders().first { $0.name == "References" }?.color, 0xFF00C2E8)
         XCTAssertEqual(images.blacklist(serverID: images.servers[0].id), "gore")
         XCTAssertEqual(try ChallengeStore(images).definitions(), [game])
     }

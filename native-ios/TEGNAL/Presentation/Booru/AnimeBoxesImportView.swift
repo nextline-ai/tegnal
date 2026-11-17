@@ -54,11 +54,12 @@ struct AnimeBoxesImportView: View {
                 }
                 Section(L10n.text("Import Options")) {
                     Picker(L10n.text("Destination Folder"), selection: $options.folderID) {
-                        Text(L10n.text("Site Folders")).tag("by-site")
+                        // Each server's Uncategorized, or the folder it saves to.
+                        Text(L10n.text("Uncategorized")).tag("by-site")
                         if backup.source != .animeBoxes {
                             if !store.folders().contains(where: { $0.id == AnimeBoxesBackup.importedFolderID }) { Text(L10n.text("Imported")).tag(AnimeBoxesBackup.importedFolderID) }
                         } else if !store.folders().contains(where: { $0.id == "anime-boxes" }) { Text("Anime Boxes").tag("anime-boxes") }
-                        ForEach(store.folders()) { Text($0.displayName).tag($0.id) }
+                        ForEach(store.folders().filter { !$0.isUncategorized }) { Text(store.labeledName($0)).tag($0.id) }
                     }
                     if backup.source == .animeBoxes || !backup.history.isEmpty {
                         Toggle(L10n.text("Import Search History"), isOn: $options.history)

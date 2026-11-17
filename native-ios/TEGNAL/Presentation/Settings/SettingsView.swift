@@ -774,7 +774,8 @@ struct LibraryOrganizationView: View {
                         let folder = try database.listFolders().first { $0.name == name } ?? database.createFolder(name: name)
                         if let folderID = folder.id { for work in group.works { if let id = work.id { try database.addWorkToFolder(workId: id, folderId: folderID) } } }
                     } else {
-                        let folderID = try images.folders().first { $0.name == name }?.id ?? images.saveFolder(name: name)
+                        // A group gathers images of any server, so its folder is global.
+                        let folderID = try images.folders().first { $0.name == name && $0.isGlobal }?.id ?? images.saveFolder(name: name)
                         try images.moveFavorites(group.posts, folderID: folderID)
                     }
                 }

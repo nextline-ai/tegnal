@@ -584,6 +584,7 @@
  "Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in.": "Gelbooru: API 키로는 즐겨찾기와 댓글을 읽기만 할 수 있습니다. 즐겨찾기 추가·삭제, 투표, 댓글 작성은 웹사이트 로그인이 있어야 하며, 투표는 추천만 가능하고 취소할 수 없습니다. 둘 다 있으면 앱은 웹사이트 로그인을 사용합니다.",
  "Gesture Guide": "조작 안내",
  "Get Started": "시작하기",
+ "Global Folder": "전역 폴더",
  "Go": "이동",
  "Go to Page": "페이지 이동",
  "Goal": "목표",

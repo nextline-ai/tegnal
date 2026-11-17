@@ -4,6 +4,7 @@ import '../../core/booru/booru_account.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_store.dart';
 import '../../core/content/recent_works.dart';
+import '../../core/storage/folder_rules.dart';
 import '../../core/support/l10n.dart';
 import '../../core/taste/taste_models.dart';
 import '../content/content_bookmark.dart';
@@ -18,7 +19,8 @@ import '../library/folder_color_sheet.dart';
 import '../library/folder_name_prompt.dart';
 import '../library/folder_order_view.dart';
 import '../library/folder_rule_editor.dart';
-import '../library/folders_view.dart' show ContentUnavailable, FolderBentoFrame, FolderCardCaption, PressableCard, anchorOf, recentFolderColor;
+import '../library/folders_view.dart'
+    show ContentUnavailable, FolderBentoFrame, FolderCardCaption, LibrarySearchField, PressableCard, anchorOf, recentFolderColor;
 import '../library/library_routes.dart' show showTransientMessage;
 import '../navigation/app_header.dart';
 import '../navigation/root_tab_view.dart';
@@ -29,7 +31,9 @@ import 'booru_post_view.dart';
 import '../design/alert_dialog.dart';
 import '../library/folder_picker_sheet.dart';
 
-/// `BooruFavoritesView`: All Favorites above the folders as bento cards.
+/// `BooruFavoritesView`: Saved in image mode, laid out as comics mode's: the chosen servers' folders
+/// and the global ones as bento cards, with a search of everything they hold. With several servers
+/// chosen, each folder names its server.
 class BooruFavoritesView extends StatefulWidget {
   const BooruFavoritesView({super.key, required this.booru});
   final BooruContext booru;
@@ -39,6 +43,8 @@ class BooruFavoritesView extends StatefulWidget {
 }
 
 class _BooruFavoritesViewState extends State<BooruFavoritesView> {
+  final _search = TextEditingController();
+  final _searchFocus = FocusNode();
   BooruContext get _booru => widget.booru;
 
   /// The app's recent images, which Saved can show as a folder.
@@ -55,7 +61,19 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
   void dispose() {
     _booru.store.removeListener(_changed);
     _recents?.removeListener(_changed);
+    _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  void _submitSearch(String text) {
+    final query = text.trim();
+    if (query.isEmpty) return;
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (context) => BooruFolderContentsView(booru: _booru, initialQuery: query),
+      ),
+    );
   }
 
   List<BooruPost> _recentPosts(RecentImages recents) => [
@@ -81,9 +99,32 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _createFolder() async {
+  /// One server chosen, a new folder is that server's; with several, the menu asks which, or global.
+  void _createMenu(BuildContext buttonContext) {
+    final chosen = _booru.store.selectedServers;
+    if (chosen.length < 2) {
+      _createFolder(chosen.firstOrNull?.id);
+      return;
+    }
+    showActionMenu(
+      buttonContext,
+      anchor: anchorOf(buttonContext),
+      actions: [
+        for (final server in chosen)
+          ContextMenuAction(
+            title: server.displayName,
+            symbol: (color) => ServerRackSymbol(color: color),
+            onSelected: () => _createFolder(server.id),
+          ),
+        ContextMenuAction(title: L10n.text('Global Folder'), icon: CupertinoIcons.globe, onSelected: () => _createFolder(null)),
+      ],
+    );
+  }
+
+  /// A new folder of the server, or a global one without it.
+  Future<void> _createFolder(String? serverID) async {
     try {
-      await createFolderWithPrompt(context, library: _booru.store, booru: true);
+      await createFolderWithPrompt(context, library: BooruServerFolders(_booru.store, serverID), booru: true);
     } on Object catch (error) {
       if (mounted) showTransientMessage(context, '$error', bottom: tabBarClearance(context) + 8);
     }
@@ -104,8 +145,10 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
     ),
   );
 
+  bool get _showsServerNames => _booru.store.selectedServerIDs.length > 1;
+
   void _openMenu(BuildContext cardContext, BooruFolder folder) {
-    final unsorted = folder.id == 'unsorted';
+    final uncategorized = folder.isUncategorized;
     showContextMenu(
       cardContext,
       anchor: anchorOf(cardContext),
@@ -114,6 +157,7 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
         folder: folder,
         posts: _booru.store.visibleFavorites(folderID: folder.id),
         style: ArtworkCellStyle(width: anchorOf(cardContext).width),
+        server: _showsServerNames ? _booru.store.serverNameOfFolder(folder) : null,
       ),
       actions: [
         ContextMenuAction(
@@ -125,9 +169,10 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
             builder: (context, controller) => FolderColorSheet(
               title: folder.displayName,
               color: folder.color,
+              // Colors differ among the folders shown beside it: its server's and the global ones.
               others: [
                 for (final other in _booru.store.folders())
-                  if (other.id != folder.id) other.color,
+                  if (other.id != folder.id && (folder.serverID == null || other.serverID == null || other.serverID == folder.serverID)) other.color,
               ],
               onSelected: (color) => _booru.store.setFolderColor(folder.id, color),
               preview: (color) => BooruFolderCard(
@@ -146,41 +191,61 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
           onSelected: () => showAppSheet<void>(
             context,
             builder: (context, controller) => FolderOrderView<String>(
-              folders: [for (final folder in _booru.store.folders()) (id: folder.id, name: folder.displayName)],
+              // The folders Saved shows, each named with its server when several share a name.
+              folders: [for (final folder in _booru.store.visibleFolders()) (id: folder.id, name: _booru.store.labeledName(folder))],
               save: _booru.store.reorderFolders,
             ),
           ),
         ),
-        if (!unsorted) ContextMenuAction(title: L10n.text('Rename Folder'), icon: CupertinoIcons.pencil, onSelected: () => _rename(folder)),
+        if (!uncategorized) ContextMenuAction(title: L10n.text('Rename Folder'), icon: CupertinoIcons.pencil, onSelected: () => _rename(folder)),
         // Uncategorized can be a smart folder like any other.
         ContextMenuAction(
           title: L10n.text('Smart Folder'),
           icon: CupertinoIcons.sparkles,
           onSelected: () => showAppSheet<void>(
             context,
-            builder: (context, controller) => FolderRuleEditor.existing(library: _booru.store, booru: true, folder: folder.id, scrollController: controller),
+            // An image folder sees its own server's folders and the global ones.
+            builder: (context, controller) => FolderRuleEditor.existing(
+              library: BooruServerFolders(_booru.store, folder.serverID),
+              booru: true,
+              folder: folder.id,
+              scrollController: controller,
+            ),
           ),
         ),
-        ContextMenuAction(
-          title: L10n.text('Delete Folder'),
-          icon: CupertinoIcons.trash,
-          destructive: true,
-          onSelected: () {
-            if (BooruAccountSync.shared?.isListFolder(folder.id) ?? false) {
-              showTransientMessage(
-                context,
-                L10n.text(
-                  "This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.",
-                ),
-                bottom: tabBarClearance(context) + 8,
-              );
-            } else if (unsorted) {
-              _perform(() => _booru.store.deleteFolder(folder.id));
-            } else {
-              _confirmDelete(folder);
-            }
-          },
-        ),
+        // Each server keeps its own Uncategorized.
+        if (!uncategorized) ...[
+          ContextMenuAction(
+            title: L10n.text('Global Folder'),
+            icon: CupertinoIcons.globe,
+            checked: folder.isGlobal,
+            onSelected: () => _perform(
+              () => _booru.store.setGlobal(
+                folder.id,
+                !folder.isGlobal,
+                emptyServer: _booru.store.selectedServerID.isEmpty ? null : _booru.store.selectedServerID,
+              ),
+            ),
+          ),
+          ContextMenuAction(
+            title: L10n.text('Delete Folder'),
+            icon: CupertinoIcons.trash,
+            destructive: true,
+            onSelected: () {
+              if (BooruAccountSync.shared?.isListFolder(folder.id) ?? false) {
+                showTransientMessage(
+                  context,
+                  L10n.text(
+                    "This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.",
+                  ),
+                  bottom: tabBarClearance(context) + 8,
+                );
+              } else {
+                _confirmDelete(folder);
+              }
+            },
+          ),
+        ],
       ],
     );
   }
@@ -207,57 +272,75 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
   @override
   Widget build(BuildContext context) {
     final top = rootContentTop(context);
-    final folders = _booru.store.folders();
-    final count = _booru.store.visibleFavorites().length;
+    final folders = _booru.store.visibleFolders();
     final recents = _recents?.showsInSaved ?? false ? _recents : null;
+    // Without a server chosen there are no folders but global ones, as Explore shows nothing.
+    final noSelection = _booru.store.selectedServers.isEmpty && folders.isEmpty;
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
       child: Stack(
         children: [
           Positioned.fill(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, top + 16, 16, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: _AllFavoritesRow(count: count, onTap: () => _openFolder(null)),
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => _searchFocus.unfocus(),
+              child: CustomScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.only(top: top),
+                    sliver: SliverToBoxAdapter(
+                      child: LibrarySearchField(
+                        controller: _search,
+                        focusNode: _searchFocus,
+                        prompt: L10n.text('Search Favorites'),
+                        onSubmitted: _submitSearch,
+                      ),
+                    ),
                   ),
-                ),
-                ArtworkGridSliver(
-                  folders: true,
-                  itemCount: folders.length + (recents != null ? 1 : 0),
-                  preferences: ArtworkGridPreferences(columns: _booru.folderColumns, removesPadding: _booru.gridPreferences.removesPadding),
-                  itemBuilder: (context, index, style) {
-                    if (recents != null) {
-                      if (index == 0) {
+                  if (noSelection)
+                    const SliverToBoxAdapter(
+                      child: Padding(padding: EdgeInsets.only(top: 60), child: BooruNoSelectionView()),
+                    )
+                  else
+                    ArtworkGridSliver(
+                      folders: true,
+                      topMarginScale: 26 / 16,
+                      itemCount: folders.length + (recents != null ? 1 : 0),
+                      preferences: ArtworkGridPreferences(columns: _booru.folderColumns, removesPadding: _booru.gridPreferences.removesPadding),
+                      itemBuilder: (context, index, style) {
+                        if (recents != null) {
+                          if (index == 0) {
+                            return Builder(
+                              builder: (cardContext) => PressableCard(
+                                key: const ValueKey('booru.recentFolder'),
+                                onTap: () => _openRecents(recents),
+                                onLongPress: () => _openRecentsMenu(cardContext, recents),
+                                child: BooruFolderCard.recent(booru: _booru, posts: _recentPosts(recents), style: style),
+                              ),
+                            );
+                          }
+                          index -= 1;
+                        }
+                        final folder = folders[index];
                         return Builder(
                           builder: (cardContext) => PressableCard(
-                            key: const ValueKey('booru.recentFolder'),
-                            onTap: () => _openRecents(recents),
-                            onLongPress: () => _openRecentsMenu(cardContext, recents),
-                            child: BooruFolderCard.recent(booru: _booru, posts: _recentPosts(recents), style: style),
+                            onTap: () => _openFolder(folder),
+                            onLongPress: () => _openMenu(cardContext, folder),
+                            child: BooruFolderCard(
+                              booru: _booru,
+                              folder: folder,
+                              posts: _booru.store.visibleFavorites(folderID: folder.id),
+                              style: style,
+                              server: _showsServerNames ? _booru.store.serverNameOfFolder(folder) : null,
+                            ),
                           ),
                         );
-                      }
-                      index -= 1;
-                    }
-                    final folder = folders[index];
-                    return Builder(
-                      builder: (cardContext) => PressableCard(
-                        onTap: () => _openFolder(folder),
-                        onLongPress: () => _openMenu(cardContext, folder),
-                        child: BooruFolderCard(
-                          booru: _booru,
-                          folder: folder,
-                          posts: _booru.store.visibleFavorites(folderID: folder.id),
-                          style: style,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                SliverToBoxAdapter(child: SizedBox(height: tabBarClearance(context))),
-              ],
+                      },
+                    ),
+                  SliverToBoxAdapter(child: SizedBox(height: tabBarClearance(context))),
+                ],
+              ),
             ),
           ),
           Positioned(
@@ -269,7 +352,14 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
               state: _booru.state,
               trailing: ToolbarGroup(
                 children: [
-                  ToolbarIconButton(label: L10n.text('Create Folder'), icon: CupertinoIcons.folder_badge_plus, size: 24, onPressed: _createFolder),
+                  Builder(
+                    builder: (buttonContext) => ToolbarIconButton(
+                      label: L10n.text('Create Folder'),
+                      icon: CupertinoIcons.folder_badge_plus,
+                      size: 24,
+                      onPressed: () => _createMenu(buttonContext),
+                    ),
+                  ),
                   BooruServerMenuButton(store: _booru.store, grouped: true),
                 ],
               ),
@@ -281,68 +371,29 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
   }
 }
 
-/// The All Favorites row: a grid symbol, the title and the count, on a rounded card.
-class _AllFavoritesRow extends StatelessWidget {
-  const _AllFavoritesRow({required this.count, required this.onTap});
-  final int count;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // A navigation link in a scroll view takes the accent color, secondary styles included.
-    final tint = TegnalColors.tint.resolveFrom(context);
-    final secondary = tint.withValues(alpha: 0.6);
-    return Semantics(
-      button: true,
-      label: '${L10n.text('All Favorites')}, $count',
-      excludeSemantics: true,
-      child: PressableCard(
-        onTap: onTap,
-        onLongPress: () {},
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: ShapeDecoration(
-            color: TegnalColors.secondaryBackground.resolveFrom(context),
-            shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(18)),
-          ),
-          child: Row(
-            children: [
-              Icon(CupertinoIcons.square_grid_2x2_fill, size: 24, color: tint),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  L10n.text('All Favorites'),
-                  style: TegnalType.style(17, weight: FontWeight.w600, color: tint),
-                ),
-              ),
-              Text('$count', style: TegnalType.style(17, color: secondary)),
-              const SizedBox(width: 14),
-              Icon(CupertinoIcons.chevron_right, size: 13, color: secondary),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// `BooruFolderCard`: the folder's color with four favorites on tinted cells and its caption.
 class BooruFolderCard extends StatelessWidget {
   /// `color` draws the card in another color, as the color sheet previews it.
-  BooruFolderCard({super.key, required this.booru, required BooruFolder folder, required this.posts, required this.style, int? color})
+  /// `server` takes the count's place, naming the folder's server when several are chosen.
+  BooruFolderCard({super.key, required this.booru, required BooruFolder folder, required this.posts, required this.style, int? color, this.server})
     : title = folder.plainName,
       isSmart = folder.isSmart,
+      isGlobal = folder.isGlobal,
       color = color ?? folder.color;
 
   /// Recently opened images as a folder card in Saved.
   BooruFolderCard.recent({super.key, required this.booru, required this.posts, required this.style})
     : title = L10n.text('Recent Images'),
       isSmart = false,
+      isGlobal = false,
+      server = null,
       color = recentFolderColor;
 
   final BooruContext booru;
   final String title;
   final bool isSmart;
+  final bool isGlobal;
+  final String? server;
   final int color;
   final List<BooruPost> posts;
   final ArtworkCellStyle style;
@@ -355,7 +406,7 @@ class BooruFolderCard extends StatelessWidget {
     final inset = style.inset(4);
     return Semantics(
       button: true,
-      label: '$title${isSmart ? ' ${L10n.text('Smart Folder')}' : ''}, ${posts.length}',
+      label: '$title${isSmart ? ' ${L10n.text('Smart Folder')}' : ''}${isGlobal ? ', ${L10n.text('Global Folder')}' : ''}, ${server ?? posts.length}',
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: ShapeDecoration(
@@ -390,7 +441,7 @@ class BooruFolderCard extends StatelessWidget {
                   ),
                 ),
               ),
-              FolderCardCaption(title: title, isSmart: isSmart, count: posts.length, color: text, style: style),
+              FolderCardCaption(title: title, isSmart: isSmart, count: posts.length, color: text, style: style, detail: server, isGlobal: isGlobal),
             ],
           ),
         ),
@@ -417,9 +468,12 @@ class BooruFolderCard extends StatelessWidget {
 /// `BooruFolderContentsView`: a folder's favorites, or all of them, with search,
 /// selection to move or delete, and quick jumps.
 class BooruFolderContentsView extends StatefulWidget {
-  const BooruFolderContentsView({super.key, required this.booru, this.folderID, this.recents = false});
+  const BooruFolderContentsView({super.key, required this.booru, this.folderID, this.recents = false, this.initialQuery = ''});
   final BooruContext booru;
   final String? folderID;
+
+  /// Saved's search: every folder shown there, searched for this.
+  final String initialQuery;
 
   /// Recently opened images, shown the way a folder shows its favorites.
   final bool recents;
@@ -429,7 +483,7 @@ class BooruFolderContentsView extends StatefulWidget {
 }
 
 class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
-  final _search = TextEditingController();
+  late final _search = TextEditingController(text: widget.initialQuery);
   final _searchFocus = FocusNode();
   final _scroll = ScrollController();
   final _visibility = ScrollSearchVisibility();
@@ -565,23 +619,29 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
     });
   }
 
-  void _moveMenu(BuildContext buttonContext) => showActionMenu(
-    buttonContext,
-    anchor: anchorOf(buttonContext),
-    actions: [
-      for (final folder in _booru.store.folders())
-        ContextMenuAction(
-          title: folder.displayName,
-          onSelected: () {
-            _booru.store.moveFavorites(_posts.where((post) => _selection.contains(post.id)).toList(), folder.id);
-            setState(() {
-              _selection = {};
-              _selecting = false;
-            });
-          },
-        ),
-    ],
-  );
+  /// Folders that may hold every image chosen: global ones, and one server's own when all are its.
+  void _moveMenu(BuildContext buttonContext) {
+    final chosen = _posts.where((post) => _selection.contains(post.id)).toList();
+    final servers = {for (final post in chosen) post.serverID};
+    showActionMenu(
+      buttonContext,
+      anchor: anchorOf(buttonContext),
+      actions: [
+        for (final folder in _booru.store.folders())
+          if (servers.every(folder.holds))
+            ContextMenuAction(
+              title: folder.displayName,
+              onSelected: () {
+                _booru.store.moveFavorites(chosen, folder.id);
+                setState(() {
+                  _selection = {};
+                  _selecting = false;
+                });
+              },
+            ),
+      ],
+    );
+  }
 
   Future<void> _confirmDelete() async {
     final delete = await showCupertinoDialog<bool>(
@@ -806,15 +866,17 @@ class _BooruFolderPickerState extends State<BooruFolderPicker> {
   @override
   Widget build(BuildContext context) {
     final store = widget.booru.store;
+    // The image's own server's folders and the global ones; a folder made here is its server's.
     final current = store.folderIDFor(widget.post);
     return FolderPickerSheet(
       scrollController: widget.scrollController,
       error: _error,
       rows: [
-        for (final folder in store.folders()) FolderPickerRow(id: folder.id, name: folder.displayName, color: folder.color, isCurrent: folder.id == current),
+        for (final folder in store.foldersForServer(widget.post.serverID))
+          FolderPickerRow(id: folder.id, name: folder.displayName, color: folder.color, isCurrent: folder.id == current, isGlobal: folder.isGlobal),
       ],
       pick: (row) => _file(row.id, row.name),
-      library: store,
+      library: BooruServerFolders(store, widget.post.serverID),
       booru: true,
       create: (id) => _file(id, store.folders().where((folder) => folder.id == id).firstOrNull?.displayName ?? ''),
     );

@@ -9,7 +9,7 @@ final class BooruStore: @unchecked Sendable {
     let database: DatabaseQueue
     private let prefetchSavedPreviews: Bool
     struct FavoriteRecord { let post: BooruPost; let folderID: String; let savedAt: Date }
-    private struct FavoriteQuery: Hashable { let folderID: String?; let query: String; let safeMode: Bool }
+    private struct FavoriteQuery: Hashable { let folderID: String?; let query: String; let safeMode: Bool; let servers: [String] }
     @ObservationIgnored private let snapshotLock = NSLock()
     @ObservationIgnored private var cachedFavoriteIDs: (revision: Int, value: Set<String>)?
     @ObservationIgnored private var cachedFavorites: (revision: Int, value: [FavoriteRecord])?
@@ -137,13 +137,13 @@ final class BooruStore: @unchecked Sendable {
                 let server = try JSONDecoder().decode(BooruServer.self, from: row["payload"] as Data)
                 let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM favorites WHERE server_id = ? AND folder_id = 'unsorted'", arguments: [server.id]) ?? 0
                 if count > 0 {
-                    let folder = try Self.defaultFolder(for: server.id, db: db)
+                    let folder = try Self.legacySiteFolder(for: server.id, db: db)
                     try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE server_id = ? AND folder_id = 'unsorted'", arguments: [folder, server.id])
                 }
             }
         }
         migrations.registerMigration("booru_v6_import_site_folders") { db in
-            try Self.organizeLegacyImports(db: db)
+            try Self.organizeLegacyImports(db: db, legacy: true)
         }
         migrations.registerMigration("booru_v7_taste") { try TasteStore.migrate($0) }
         migrations.registerMigration("booru_v8_visual_fingerprints") { try VisualFingerprintStore.migrate($0) }
@@ -153,6 +153,12 @@ final class BooruStore: @unchecked Sendable {
             try db.execute(sql: "DELETE FROM folders WHERE id = 'unsorted' AND color = 4284922736 AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')")
         }
         migrations.registerMigration("booru_v12_vivid_folder_colors") { try AppDatabase.adoptVividFolderColors($0) }
+        // Each server gets folders of its own; a folder with images of several servers becomes one
+        // folder of the same name and color in each, and a folder holding nothing stays global.
+        migrations.registerMigration("booru_v13_server_folders") { db in
+            try db.execute(sql: "ALTER TABLE folders ADD COLUMN server_id TEXT")
+            try Self.assignFolderServers(db: db)
+        }
         try migrations.migrate(database)
         try reload()
     }
@@ -250,6 +256,8 @@ final class BooruStore: @unchecked Sendable {
         let position = servers.firstIndex(where: { $0.id == server.id }) ?? servers.count
         try database.write { db in
             try db.execute(sql: "INSERT OR REPLACE INTO servers VALUES (?, ?, ?)", arguments: [server.id, try JSONEncoder().encode(server), position])
+            // A server has its Uncategorized from the start.
+            _ = try Self.uncategorized(for: server.id, db: db)
         }
         try reload()
         // Saving also follows a credentials edit, even when the server address
@@ -269,6 +277,11 @@ final class BooruStore: @unchecked Sendable {
                 try db.execute(sql: "DELETE FROM \(table) WHERE server_id = ?", arguments: [server.id])
             }
             try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: ["blacklist." + server.id])
+            // Its folders go with it; global folders stay.
+            for id in try String.fetchAll(db, sql: "SELECT id FROM folders WHERE server_id = ?", arguments: [server.id]) {
+                try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])
+            }
+            try db.execute(sql: "DELETE FROM folders WHERE server_id = ?", arguments: [server.id])
         }
         try reload()
         revision += 1
@@ -338,15 +351,20 @@ final class BooruStore: @unchecked Sendable {
         query.isEmpty || post.tags.joined(separator: " ").localizedCaseInsensitiveContains(query) || String(post.postID).contains(query)
     }
 
+    /// Without a folder, the images of every folder shown in Saved.
     func visibleFavorites(folderID: String? = nil, query: String = "") -> [BooruPost] {
-        let revision = snapshotVersion, safeMode = safeMode, key = FavoriteQuery(folderID: folderID, query: query, safeMode: safeMode)
+        let revision = snapshotVersion, safeMode = safeMode, key = FavoriteQuery(folderID: folderID, query: query, safeMode: safeMode, servers: folderID == nil ? selectedServerIDs : [])
         let hidden = confirmedGoldRestrictedIDs
         if let value = snapshotLock.withLock({ visibleFavoritesRevision == revision ? visibleFavoritesCache[key] : nil }) {
             return hidden.isEmpty ? value : value.filter { !hidden.contains($0.id) }
         }
         let filters = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, BooruBlacklist(blacklist(serverID: $0.id))) })
         let safebooru = Set(servers.filter(\.isSafebooru).map(\.id))
-        let value = favorites(serverIDs: servers.map(\.id), folderID: folderID).filter {
+        let shown = folderID == nil ? Set(visibleFolders().map(\.id)) : nil
+        let value = favoriteRecords().compactMap { record -> BooruPost? in
+            guard folderID.map({ record.folderID == $0 }) ?? shown!.contains(record.folderID) else { return nil }
+            return filters[record.post.serverID] != nil ? record.post : nil
+        }.filter {
             !(filters[$0.serverID]?.contains($0) ?? false) && Self.matches($0, query: query)
                 && (!safeMode || safebooru.contains($0.serverID))
         }
@@ -363,43 +381,81 @@ final class BooruStore: @unchecked Sendable {
         Dictionary(uniqueKeysWithValues: favoriteRecords().map { ($0.post.id, $0.savedAt) })
     }
 
+    /// Every folder of every server, global ones included.
     func folders() -> [BooruFolder] {
         let revision = snapshotVersion
         if let value = snapshotLock.withLock({ cachedFolders?.revision == revision ? cachedFolders?.value : nil }) { return value }
         let value: [BooruFolder] = (try? database.read { db in
             let smart = Set(try Self.fetchFolderRules(db).filter(\.isActive).map(\.folder))
             return try Row.fetchAll(db, sql: "SELECT * FROM folders ORDER BY position, name").map {
-                BooruFolder(id: $0["id"], name: $0["name"], color: $0["color"], isSmart: smart.contains($0["id"] as String))
+                BooruFolder(id: $0["id"], name: $0["name"], color: $0["color"], isSmart: smart.contains($0["id"] as String), serverID: $0["server_id"])
             }
         }) ?? []
         snapshotLock.withLock { cachedFolders = (revision, value) }
         return value
     }
 
-    @discardableResult func saveFolder(id: String = UUID().uuidString, name: String, color: Int64? = nil) throws -> String {
+    /// The folders Saved shows: the chosen servers' and the global ones.
+    func visibleFolders() -> [BooruFolder] {
+        let chosen = Set(selectedServerIDs)
+        return folders().filter { $0.serverID.map(chosen.contains) ?? true }
+    }
+
+    /// The folders an image of the server may go to: its own and the global ones.
+    func folders(forServer serverID: String) -> [BooruFolder] {
+        folders().filter { $0.holds(serverID: serverID) }
+    }
+
+    func folder(_ id: String) -> BooruFolder? { folders().first { $0.id == id } }
+
+    /// The server a folder belongs to, by name, for when several servers' folders are shown together.
+    func serverName(ofFolder folder: BooruFolder) -> String? {
+        folder.serverID.flatMap { id in servers.first { $0.id == id }?.displayName }
+    }
+
+    /// Creates a folder in a server, or a global one when `serverID` is nil; for a folder that
+    /// exists, only its name and color change.
+    @discardableResult func saveFolder(id: String = UUID().uuidString, name: String, color: Int64? = nil, serverID: String? = nil) throws -> String {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, id != "unsorted" else { throw BooruError.invalidResponse }
         try database.write { db in
-            let existing = try Int64.fetchOne(db, sql: "SELECT color FROM folders WHERE id = ?", arguments: [id])
-            let resolved = try color ?? existing ?? AppDatabase.nextFolderColor(existingColors: Int64.fetchAll(db, sql: "SELECT color FROM folders"))
-            try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, (SELECT COUNT(*) FROM folders)) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color", arguments: [id, name, resolved])
+            let existing = try Row.fetchOne(db, sql: "SELECT color, server_id FROM folders WHERE id = ?", arguments: [id])
+            let owner: String? = existing.map { $0["server_id"] as String? } ?? serverID
+            let resolved = try color ?? existing?["color"] ?? Self.nextFolderColor(serverID: owner, db: db)
+            try db.execute(sql: "INSERT INTO folders (id, name, color, position, server_id) VALUES (?, ?, ?, (SELECT COUNT(*) FROM folders), ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color",
+                           arguments: [id, name, resolved, owner])
         }
         revision += 1
         return id
     }
 
-    static func ensureUnsorted(in db: Database) throws {
-        try db.execute(sql: "INSERT OR IGNORE INTO folders VALUES ('unsorted', '', ?, 0)", arguments: [FolderPalette.unsorted])
+    /// A global folder is shown whichever servers are chosen and takes images of any of them. Made
+    /// a server's folder again, it stays in each server it holds images of, with the same name and
+    /// color; a global folder holding nothing goes to `emptyServer`.
+    func setGlobal(_ id: String, _ global: Bool, emptyServer: String?) throws {
+        guard !BooruFolder.isUncategorized(id) else { return }
+        try database.write { db in
+            if global {
+                try db.execute(sql: "UPDATE folders SET server_id = NULL WHERE id = ?", arguments: [id])
+            } else {
+                let addresses = Dictionary(try Self.decodedServers(db).map { ($0.id, $0.canonicalAddress) }, uniquingKeysWith: { first, _ in first })
+                let owners = try String.fetchAll(db, sql: "SELECT DISTINCT server_id FROM favorites WHERE folder_id = ?", arguments: [id])
+                    .filter { addresses[$0] != nil }.sorted { addresses[$0]! < addresses[$1]! }
+                guard let owner = owners.first ?? emptyServer.flatMap({ addresses[$0] != nil ? $0 : nil }) else { return }
+                try db.execute(sql: "UPDATE folders SET server_id = ? WHERE id = ?", arguments: [owner, id])
+                try Self.settleFolders(db: db)
+            }
+        }
+        try refresh()
     }
 
+    /// A server's Uncategorized stays while the server does. Images of a deleted folder go where
+    /// their server saves by default, or to its Uncategorized when that was this folder.
     func deleteFolder(_ id: String) throws {
         try database.write { db in
-            let hasWorks = try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM favorites WHERE folder_id = ?)", arguments: [id]) == true
-            if id == "unsorted", hasWorks { throw FolderDeletionError.containsWorks }
-            if hasWorks {
-                try Self.ensureUnsorted(in: db)
-                try db.execute(sql: "UPDATE favorites SET folder_id = 'unsorted' WHERE folder_id = ?", arguments: [id])
-            }
+            let owner = try String.fetchOne(db, sql: "SELECT server_id FROM folders WHERE id = ?", arguments: [id])
+            if BooruFolder.isUncategorized(id), let owner, try Self.server(owner, db: db) != nil { throw FolderDeletionError.containsWorks }
+            try Self.moveImages(outOf: id, db: db)
             try db.execute(sql: "DELETE FROM folders WHERE id = ?", arguments: [id])
             try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])
         }
@@ -415,7 +471,8 @@ final class BooruStore: @unchecked Sendable {
         try database.write { db in
             let existing = try String.fetchOne(db, sql: "SELECT folder_id FROM favorites WHERE server_id = ? AND post_id = ?", arguments: [post.serverID, post.postID])
             let folderID = try folderID ?? existing ?? Self.smartDestination(for: post, landing: Self.defaultFolder(for: post.serverID, db: db), db: db)
-            guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ?)", arguments: [folderID]) == true else { throw BooruError.invalidResponse }
+            // Another server's folder never takes it; global folders take any image.
+            guard try Self.folder(folderID, holds: post.serverID, db: db) else { throw BooruError.invalidResponse }
             try db.execute(sql: "INSERT INTO favorites (server_id, post_id, payload, saved_at, folder_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(server_id, post_id) DO UPDATE SET payload = excluded.payload, folder_id = excluded.folder_id", arguments: [post.serverID, post.postID, try JSONEncoder().encode(post), Date().timeIntervalSince1970, folderID])
             if existing == nil, let context { try TasteStore.record(.save, item: Self.tasteItem(post, db: db), context: context, db: db) }
             else if existing == nil { try TasteStore.record(.imported, item: Self.tasteItem(post, db: db), db: db) }
@@ -439,24 +496,32 @@ final class BooruStore: @unchecked Sendable {
     }
 
     /// Repair the former shared import destination without moving user-created folders.
-    static func organizeLegacyImports(db: Database) throws {
+    static func organizeLegacyImports(db: Database, legacy: Bool = false) throws {
         for serverID in try String.fetchAll(db, sql: "SELECT DISTINCT server_id FROM favorites WHERE folder_id = 'anime-boxes'") {
-            let folder = try defaultFolder(for: serverID, db: db)
+            let folder = try legacy ? legacySiteFolder(for: serverID, db: db) : defaultFolder(for: serverID, db: db)
             try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE server_id = ? AND folder_id = 'anime-boxes'", arguments: [folder, serverID])
         }
         try db.execute(sql: "DELETE FROM folders WHERE id = 'anime-boxes' AND NOT EXISTS (SELECT 1 FROM favorites WHERE folder_id = 'anime-boxes')")
     }
 
-    static func defaultFolder(for serverID: String, db: Database) throws -> String {
+    /// The server's own folder as the migrations before folder ownership made it.
+    private static func legacySiteFolder(for serverID: String, db: Database) throws -> String {
         guard let data = try Data.fetchOne(db, sql: "SELECT payload FROM servers WHERE id = ?", arguments: [serverID]) else { throw BooruError.invalidServer }
         let server = try JSONDecoder().decode(BooruServer.self, from: data)
-        // Canonical address is stable across devices and server ID remapping.
-        let id = "site:" + server.canonicalAddress
+        let id = BooruFolder.uncategorizedPrefix + server.canonicalAddress
         if try String.fetchOne(db, sql: "SELECT id FROM folders WHERE id = ?", arguments: [id]) == nil {
             let color = try AppDatabase.nextFolderColor(existingColors: Int64.fetchAll(db, sql: "SELECT color FROM folders"))
-            try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, (SELECT COUNT(*) FROM folders))", arguments: [id, server.displayName, color])
+            try db.execute(sql: "INSERT INTO folders (id, name, color, position) VALUES (?, ?, ?, (SELECT COUNT(*) FROM folders))", arguments: [id, server.displayName, color])
         }
         return id
+    }
+
+    /// Where an image of the server is saved when no folder is chosen: the server's chosen folder,
+    /// or its Uncategorized.
+    static func defaultFolder(for serverID: String, db: Database) throws -> String {
+        guard let server = try server(serverID, db: db) else { throw BooruError.invalidServer }
+        if let chosen = server.saveFolder, try folder(chosen, holds: serverID, db: db) { return chosen }
+        return try uncategorized(for: serverID, db: db)
     }
 
     func history(serverID: String, limit: Int? = 500) -> [String] {
@@ -510,6 +575,187 @@ final class BooruStore: @unchecked Sendable {
     func removeSetting(_ key: String) throws {
         try database.write { try $0.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [key]) }
         revision += 1
+    }
+}
+
+// MARK: Folders by server
+
+extension BooruStore {
+    /// A copy of a folder for another server is named `<folder>@<server address>`, the same on every
+    /// device, so devices that split a folder at once agree on the copies.
+    static let copyMarker = "@https://"
+    static func copyID(of id: String, address: String) -> String { baseFolderID(id) + "@" + address }
+    static func baseFolderID(_ id: String) -> String { id.components(separatedBy: copyMarker).first ?? id }
+
+    static func decodedServers(_ db: Database) throws -> [BooruServer] {
+        try Row.fetchAll(db, sql: "SELECT payload FROM servers ORDER BY position").compactMap { try? JSONDecoder().decode(BooruServer.self, from: $0["payload"] as Data) }
+    }
+
+    static func server(_ id: String, db: Database) throws -> BooruServer? {
+        try Data.fetchOne(db, sql: "SELECT payload FROM servers WHERE id = ?", arguments: [id]).map { try JSONDecoder().decode(BooruServer.self, from: $0) }
+    }
+
+    /// Before a folder goes: its images go where their server saves by default, or to the server's
+    /// Uncategorized when that was this folder.
+    static func moveImages(outOf id: String, db: Database) throws {
+        for serverID in try String.fetchAll(db, sql: "SELECT DISTINCT server_id FROM favorites WHERE folder_id = ?", arguments: [id]) where try server(serverID, db: db) != nil {
+            var target = try defaultFolder(for: serverID, db: db)
+            if target == id { target = try uncategorized(for: serverID, db: db) }
+            try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE folder_id = ? AND server_id = ?", arguments: [target, id, serverID])
+        }
+    }
+
+    /// Whether an image of the server may sit in the folder: one of the server's own, or a global one.
+    static func folder(_ id: String, holds serverID: String, db: Database) throws -> Bool {
+        guard id != "unsorted", let row = try Row.fetchOne(db, sql: "SELECT server_id FROM folders WHERE id = ?", arguments: [id]) else { return false }
+        let owner: String? = row["server_id"]
+        return owner == nil || owner == serverID
+    }
+
+    /// A color none of the folders shown beside it uses yet: the server's own and the global ones.
+    static func nextFolderColor(serverID: String?, db: Database) throws -> Int64 {
+        let colors = try serverID.map { try Int64.fetchAll(db, sql: "SELECT color FROM folders WHERE server_id = ? OR server_id IS NULL", arguments: [$0]) }
+            ?? Int64.fetchAll(db, sql: "SELECT color FROM folders")
+        return AppDatabase.nextFolderColor(existingColors: colors)
+    }
+
+    /// The server's Uncategorized, made when missing. It keeps the id the server's own folder had,
+    /// so images already there stay.
+    @discardableResult
+    static func uncategorized(for serverID: String, db: Database) throws -> String {
+        if let id = try String.fetchOne(db, sql: "SELECT id FROM folders WHERE server_id = ? AND id GLOB ? ORDER BY position LIMIT 1", arguments: [serverID, BooruFolder.uncategorizedPrefix + "*"]) { return id }
+        guard let server = try server(serverID, db: db) else { throw BooruError.invalidServer }
+        let id = BooruFolder.uncategorizedPrefix + server.canonicalAddress
+        if try String.fetchOne(db, sql: "SELECT id FROM folders WHERE id = ?", arguments: [id]) != nil {
+            // Left by another device, an older version or a server at this address before.
+            try db.execute(sql: "UPDATE folders SET server_id = ? WHERE id = ?", arguments: [serverID, id])
+        } else {
+            // Named for the server, which is what versions before folder ownership show.
+            try db.execute(sql: "INSERT INTO folders (id, name, color, position, server_id) VALUES (?, ?, ?, (SELECT COUNT(*) FROM folders), ?)",
+                           arguments: [id, server.displayName, try nextFolderColor(serverID: serverID, db: db), serverID])
+        }
+        return id
+    }
+
+    /// The folder of the server that stands for the given one: the folder itself when it may hold
+    /// the server's images, else the server's copy of it with its name, color, place and rule,
+    /// made when missing.
+    static func counterpart(of id: String, serverID: String, db: Database) throws -> String {
+        if try folder(id, holds: serverID, db: db) { return id }
+        if BooruFolder.isUncategorized(id) { return try uncategorized(for: serverID, db: db) }
+        guard let row = try Row.fetchOne(db, sql: "SELECT * FROM folders WHERE id = ?", arguments: [id]),
+              let server = try server(serverID, db: db) else { return try defaultFolder(for: serverID, db: db) }
+        let base = baseFolderID(id)
+        if base != id, try String.fetchOne(db, sql: "SELECT server_id FROM folders WHERE id = ?", arguments: [base]) == serverID { return base }
+        let copy = copyID(of: id, address: server.canonicalAddress)
+        if let owner = try Row.fetchOne(db, sql: "SELECT server_id FROM folders WHERE id = ?", arguments: [copy]) {
+            if (owner["server_id"] as String?) != serverID { try db.execute(sql: "UPDATE folders SET server_id = ? WHERE id = ?", arguments: [serverID, copy]) }
+            return copy
+        }
+        try db.execute(sql: "INSERT INTO folders (id, name, color, position, server_id) VALUES (?, ?, ?, ?, ?)",
+                       arguments: [copy, row["name"] as String, row["color"] as Int64, row["position"] as Int64, serverID])
+        if var rule = try fetchFolderRules(db).first(where: { $0.folder == id }) {
+            rule.folder = copy
+            rule.sources = try rule.sources.map { try resolvedSources($0, serverID: serverID, db: db) }
+            try storeFolderRule(rule, db: db)
+        }
+        return copy
+    }
+
+    /// A rule's folders as the server's own: each of its folders that may hold the server's images,
+    /// its copy for the server, or the server's Uncategorized for another server's.
+    private static func resolvedSources(_ sources: [String], serverID: String, db: Database) throws -> [String] {
+        var result: [String] = []
+        for source in sources {
+            if try folder(source, holds: serverID, db: db) { result.append(source) }
+            else if BooruFolder.isUncategorized(source) { result.append(try uncategorized(for: serverID, db: db)) }
+            else if let server = try server(serverID, db: db), try String.fetchOne(db, sql: "SELECT id FROM folders WHERE id = ?", arguments: [copyID(of: source, address: server.canonicalAddress)]) != nil {
+                result.append(copyID(of: source, address: server.canonicalAddress))
+            }
+        }
+        var seen = Set<String>()
+        return result.filter { seen.insert($0).inserted }
+    }
+
+    /// Gives every folder from before folder ownership a server: each server's own folder becomes
+    /// its Uncategorized, a folder belongs to the server of its images (one folder of the same name
+    /// in each when it holds several servers'), and a folder holding nothing stays global.
+    /// `only` limits it to folders just restored from an older backup.
+    static func assignFolderServers(db: Database, only ids: Set<String>? = nil) throws {
+        let servers = try decodedServers(db)
+        let byAddress = Dictionary(servers.map { ($0.canonicalAddress, $0.id) }, uniquingKeysWith: { first, _ in first })
+        let addresses = Dictionary(servers.map { ($0.id, $0.canonicalAddress) }, uniquingKeysWith: { first, _ in first })
+        for id in try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name") where id != "unsorted" && (ids?.contains(id) ?? true) {
+            if id.hasPrefix(BooruFolder.uncategorizedPrefix), let owner = byAddress[String(id.dropFirst(BooruFolder.uncategorizedPrefix.count))] {
+                try db.execute(sql: "UPDATE folders SET server_id = ? WHERE id = ?", arguments: [owner, id])
+                continue
+            }
+            // The server whose address comes first keeps the folder, so every device picks the same one.
+            let owners = try String.fetchAll(db, sql: "SELECT DISTINCT server_id FROM favorites WHERE folder_id = ?", arguments: [id])
+                .filter { addresses[$0] != nil }.sorted { addresses[$0]! < addresses[$1]! }
+            if let owner = owners.first { try db.execute(sql: "UPDATE folders SET server_id = ? WHERE id = ?", arguments: [owner, id]) }
+        }
+        try settleFolders(db: db)
+        // A rule reads its own server's folders; a global one reads every server's Uncategorized
+        // where it read the shared one.
+        let uncategorized = try String.fetchAll(db, sql: "SELECT id FROM folders WHERE id GLOB ?", arguments: [BooruFolder.uncategorizedPrefix + "*"])
+        for var rule in try fetchFolderRules(db) where ids?.contains(rule.folder) ?? true {
+            guard let sources = rule.sources, let row = try Row.fetchOne(db, sql: "SELECT server_id FROM folders WHERE id = ?", arguments: [rule.folder]) else { continue }
+            if let owner = row["server_id"] as String? { rule.sources = try resolvedSources(sources, serverID: owner, db: db) }
+            else { rule.sources = sources.flatMap { $0 == "unsorted" ? uncategorized : [$0] } }
+            try storeFolderRule(rule, db: db)
+        }
+    }
+
+    /// Puts every image where it may be: in a folder of its own server or a global one. Run after
+    /// anything that brings folders or images from elsewhere: iCloud, a backup, an import, or an
+    /// older version on another device. Each server keeps its Uncategorized.
+    static func settleFolders(db: Database) throws {
+        let servers = try decodedServers(db)
+        let known = Set(servers.map(\.id))
+        for server in servers { try uncategorized(for: server.id, db: db) }
+        // Folders of servers that are gone, and the shared Uncategorized from before: their images
+        // go to their own servers' folders of the same name.
+        let stale = try String.fetchAll(db, sql: "SELECT id FROM folders WHERE id = 'unsorted' OR (server_id IS NULL AND id GLOB ?) OR (server_id IS NOT NULL AND server_id NOT IN (SELECT id FROM servers))",
+                                        arguments: [BooruFolder.uncategorizedPrefix + "*"])
+        for id in stale {
+            for row in try Row.fetchAll(db, sql: "SELECT server_id, post_id FROM favorites WHERE folder_id = ?", arguments: [id]) where known.contains(row["server_id"]) {
+                let serverID: String = row["server_id"]
+                let target = BooruFolder.isUncategorized(id) ? try uncategorized(for: serverID, db: db) : try counterpart(of: id, serverID: serverID, db: db)
+                try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE server_id = ? AND post_id = ?", arguments: [target, serverID, row["post_id"] as Int64])
+            }
+            if id == "unsorted", let rule = try fetchFolderRules(db).first(where: { $0.folder == id }) {
+                let ruled = Set(try fetchFolderRules(db).map(\.folder))
+                for server in servers {
+                    let target = try uncategorized(for: server.id, db: db)
+                    guard !ruled.contains(target) else { continue }
+                    var copy = rule; copy.folder = target; copy.sources = try rule.sources.map { try resolvedSources($0, serverID: server.id, db: db) }
+                    try storeFolderRule(copy, db: db)
+                }
+            }
+            try db.execute(sql: "DELETE FROM folders WHERE id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])
+        }
+        // Images in a folder gone, or in another server's folder.
+        let misplaced = try Row.fetchAll(db, sql: """
+            SELECT f.server_id, f.post_id, f.folder_id FROM favorites f LEFT JOIN folders d ON d.id = f.folder_id
+            WHERE d.id IS NULL OR (d.server_id IS NOT NULL AND d.server_id != f.server_id)
+            """)
+        for row in misplaced where known.contains(row["server_id"]) {
+            let serverID: String = row["server_id"], folderID: String = row["folder_id"]
+            let exists = try String.fetchOne(db, sql: "SELECT id FROM folders WHERE id = ?", arguments: [folderID]) != nil
+            let target = exists ? try counterpart(of: folderID, serverID: serverID, db: db) : try defaultFolder(for: serverID, db: db)
+            try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE server_id = ? AND post_id = ?", arguments: [target, serverID, row["post_id"] as Int64])
+        }
+        // Two devices may each have kept a different server's folder under the first id; a copy
+        // that ended up in the same server as its original goes back into it.
+        for row in try Row.fetchAll(db, sql: "SELECT id, server_id FROM folders WHERE server_id IS NOT NULL AND instr(id, ?) > 0", arguments: [copyMarker]) {
+            let id: String = row["id"], owner: String = row["server_id"], base = baseFolderID(id)
+            guard try String.fetchOne(db, sql: "SELECT server_id FROM folders WHERE id = ?", arguments: [base]) == owner else { continue }
+            try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE folder_id = ?", arguments: [base, id])
+            try db.execute(sql: "DELETE FROM folders WHERE id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])
+        }
     }
 }
 

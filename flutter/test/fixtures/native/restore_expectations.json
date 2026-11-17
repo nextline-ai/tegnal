@@ -601,7 +601,7 @@
             "width" : 1920
           },
           "post_id" : 5001,
-          "saved_at" : 1767323045,
+          "saved_at" : 1767323045.0,
           "server_id" : "server-alpha"
         },
         {
@@ -643,7 +643,7 @@
           "server_id" : "server-alpha"
         },
         {
-          "folder_id" : "unsorted",
+          "folder_id" : "site:https://beta.example/sub",
           "payload" : {
             "artists" : [
 
@@ -664,7 +664,7 @@
             "width" : 0
           },
           "post_id" : 7001,
-          "saved_at" : 1767236645,
+          "saved_at" : 1767236645.0,
           "server_id" : "server-beta"
         },
         {
@@ -692,7 +692,7 @@
             "width" : 2000
           },
           "post_id" : 7002,
-          "saved_at" : 1767150245,
+          "saved_at" : 1767150245.0,
           "server_id" : "server-beta"
         },
         {
@@ -731,31 +731,43 @@
           "color" : 4278879487,
           "id" : "folder-sky",
           "name" : "Sky",
-          "position" : 0
+          "position" : 0,
+          "server_id" : "server-alpha"
         },
         {
           "color" : 4278239976,
           "id" : "folder-refs",
           "name" : "References",
-          "position" : 1
-        },
-        {
-          "color" : 4284246912,
-          "id" : "unsorted",
-          "name" : "",
-          "position" : 2
+          "position" : 1,
+          "server_id" : "server-alpha"
         },
         {
           "color" : 4280249343,
           "id" : "site:https://beta.example/sub",
           "name" : "beta.example/sub",
-          "position" : 3
+          "position" : 3,
+          "server_id" : "server-beta"
         },
         {
           "color" : 4278233195,
           "id" : "folder-poses",
           "name" : "Poses / 포즈",
-          "position" : 4
+          "position" : 4,
+          "server_id" : "server-gamma"
+        },
+        {
+          "color" : 4280249343,
+          "id" : "site:https://alpha.example",
+          "name" : "Alpha Images",
+          "position" : 5,
+          "server_id" : "server-alpha"
+        },
+        {
+          "color" : 4280249343,
+          "id" : "site:https://gamma.example/board",
+          "name" : "Gamma Board",
+          "position" : 6,
+          "server_id" : "server-gamma"
         }
       ],
       "history" : [
@@ -870,7 +882,7 @@
         },
         {
           "key" : "folder_order",
-          "value" : "[\"folder-sky\",\"folder-refs\",\"unsorted\",\"site:https:\\/\\/beta.example\\/sub\",\"folder-poses\"]"
+          "value" : "[\"folder-sky\",\"folder-refs\",\"site:https:\\/\\/beta.example\\/sub\",\"folder-poses\",\"site:https:\\/\\/alpha.example\",\"site:https:\\/\\/gamma.example\\/board\"]"
         },
         {
           "key" : "folder_rule.folder-sky",
@@ -882,7 +894,7 @@
             "query" : "blue_sky",
             "sources" : [
               "folder-refs",
-              "unsorted"
+              "site:https://alpha.example"
             ]
           },
           "value_parsed_from_unsorted_json_string" : true

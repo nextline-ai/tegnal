@@ -456,39 +456,52 @@ extension BooruStoreFolderRules on BooruStore {
   static void storeFolderRule(FolderRule rule, SqlDatabase db) =>
       db.execute('INSERT OR REPLACE INTO settings VALUES (?, ?)', [FolderRule.keyPrefix + rule.folder, encodeSwiftJsonString(rule.toJson())]);
 
-  /// New favorites land in their site's folder, or Uncategorized.
-  static bool isLanding(String folder) => folder == 'unsorted' || folder.startsWith('site:');
+  /// New favorites land in each server's save folder: its Uncategorized unless another is chosen.
+  static Set<String> landingFolders(SqlDatabase db) => {
+    ...db.column<String>("SELECT id FROM folders WHERE id GLOB ? OR id = 'unsorted'", ['${BooruFolder.uncategorizedPrefix}*']),
+    for (final server in BooruStore.decodedServers(db)) ?server.saveFolder,
+  };
 
-  static bool _reads(FolderRule rule, String folder) {
+  static bool _reads(FolderRule rule, String folder, Set<String> landing) {
     if (folder == rule.folder) return false;
     if (rule.includesOtherFolders == true) return true;
-    return rule.sources?.contains(folder) ?? isLanding(folder);
+    return rule.sources?.contains(folder) ?? landing.contains(folder);
   }
 
-  /// An image is in one folder, so the first matching smart folder takes it. Only new
-  /// favorites come through here, so an image a person moves stays where they put it.
+  /// An image is in one folder, so the first matching smart folder takes it: one of its server's
+  /// own or a global one. Only new favorites come through here, so an image a person moves stays
+  /// where they put it.
   static String smartDestination(BooruPost post, String landing, SqlDatabase db, Preferences defaults) {
     if (!LibrarySavePreferences.rulesEnabled(defaults)) return landing;
-    final rules = fetchFolderRules(db).where((rule) => rule.isActive && _reads(rule, landing)).toList();
+    final landingFolders = BooruStoreFolderRules.landingFolders(db);
+    final rules = fetchFolderRules(db).where((rule) => rule.isActive && _reads(rule, landing, landingFolders)).toList();
     if (rules.isEmpty) return landing;
-    for (final id in db.column<String>('SELECT id FROM folders ORDER BY position, name')) {
-      final match = rules.where((rule) => rule.folder == id).firstOrNull;
-      if (match != null && match.postMatcher(post)) return id;
+    for (final row in db.rows('SELECT id, server_id FROM folders ORDER BY position, name')) {
+      final owner = row['server_id'] as String?;
+      if (owner != null && owner != post.serverID) continue;
+      final match = rules.where((rule) => rule.folder == row['id']).firstOrNull;
+      if (match != null && match.postMatcher(post)) return row['id'] as String;
     }
     return landing;
   }
 
+  /// Saved images the rule's folder would take: those it reads, of a server the folder may hold.
   List<BooruPost> _matches(FolderRule rule) {
-    final matcher = rule.postMatcher;
+    final matcher = rule.postMatcher, landing = database.read(landingFolders), target = folder(rule.folder);
     return [
       for (final record in favoriteRecords())
-        if (_reads(rule, record.folderID) && matcher(record.post)) record.post,
+        if (_reads(rule, record.folderID, landing) && (target?.holds(record.post.serverID) ?? true) && matcher(record.post)) record.post,
     ];
   }
 
-  List<SmartFolderChoice> ruleFolderChoices() => [for (final folder in folders()) SmartFolderChoice(id: folder.id, name: folder.displayName, canBeSmart: true)];
+  List<SmartFolderChoice> ruleFolderChoices() => [
+    for (final folder in folders()) SmartFolderChoice(id: folder.id, name: labeledName(folder), canBeSmart: true),
+  ];
 
-  Set<String> ruleDefaultSources() => folders().map((folder) => folder.id).where(isLanding).toSet();
+  Set<String> ruleDefaultSources() {
+    final landing = database.read(landingFolders);
+    return folders().map((folder) => folder.id).where(landing.contains).toSet();
+  }
 
   FolderRule? ruleForFolder(String id) => database.read((db) => fetchFolderRules(db).where((rule) => rule.folder == id).firstOrNull);
 
@@ -500,8 +513,16 @@ extension BooruStoreFolderRules on BooruStore {
   int matchingRuleCount(FolderRule rule) => _matches(rule).length;
 
   int matchingRuleCountElsewhere(FolderRule rule) {
-    final matcher = rule.postMatcher;
-    return favoriteRecords().where((record) => record.folderID != rule.folder && !_reads(rule, record.folderID) && matcher(record.post)).length;
+    final matcher = rule.postMatcher, landing = database.read(landingFolders), target = folder(rule.folder);
+    return favoriteRecords()
+        .where(
+          (record) =>
+              record.folderID != rule.folder &&
+              !_reads(rule, record.folderID, landing) &&
+              (target?.holds(record.post.serverID) ?? true) &&
+              matcher(record.post),
+        )
+        .length;
   }
 
   void saveFolderRule(FolderRule rule) => setSetting(FolderRule.keyPrefix + rule.folder, encodeSwiftJsonString(rule.toJson()));
@@ -509,4 +530,47 @@ extension BooruStoreFolderRules on BooruStore {
   void deleteFolderRule(String id) => removeSetting(FolderRule.keyPrefix + id);
 
   void fillRule(FolderRule rule) => moveFavorites(_matches(rule), rule.folder);
+}
+
+/// Image folders as one server sees them, for a smart folder of that server: its own folders and
+/// the global ones, and a new folder made in it. Without a server, it is every folder and a new
+/// folder is global.
+class BooruServerFolders implements SmartFolderLibrary {
+  BooruServerFolders(this.store, this.serverID);
+  final BooruStore store;
+  final String? serverID;
+
+  bool _shown(String id) => serverID == null || (store.folder(id)?.holds(serverID!) ?? false);
+
+  @override
+  List<SmartFolderChoice> folderChoices() => serverID == null
+      ? store.folderChoices()
+      : [for (final folder in store.foldersForServer(serverID!)) SmartFolderChoice(id: folder.id, name: folder.displayName, canBeSmart: true)];
+
+  @override
+  Set<String> defaultRuleSources() => store.defaultRuleSources().where(_shown).toSet();
+
+  @override
+  FolderRule? rule(String forFolder) => store.rule(forFolder);
+
+  @override
+  List<FolderRule> smartRules() => store.smartRules().where((rule) => _shown(rule.folder)).toList();
+
+  @override
+  int matchingCount(FolderRule rule) => store.matchingCount(rule);
+
+  @override
+  int matchingCountElsewhere(FolderRule rule) => store.matchingCountElsewhere(rule);
+
+  @override
+  String createRuleFolder(String named) => store.saveFolder(name: named, serverID: serverID);
+
+  @override
+  void saveRule(FolderRule rule) => store.saveRule(rule);
+
+  @override
+  void deleteRule(String forFolder) => store.deleteRule(forFolder);
+
+  @override
+  void fill(FolderRule rule) => store.fill(rule);
 }

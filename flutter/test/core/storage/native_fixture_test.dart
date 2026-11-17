@@ -111,15 +111,17 @@ void main() {
       'serverID', 'postID', 'previewURL', 'sampleURL', 'fileURL', 'width', 'height', 'tags', 'artists', 'rating', 'score', 'fileExtension', 'poolIDs', //
       'metadataTags', 'favoriteCount', 'upvoteCount', 'commentCount', 'isDeleted', 'isBanned',
     };
+    // The fixture is from before image folders belonged to servers: restoring gives each folder its
+    // server and each server its own Uncategorized, so folders and where images sit are compared below.
     Map<String, Object?> imagesOf(Map<String, Object?> backup) {
-      final value = section(backup, 'images');
-      value['folders'] = [
-        for (final folder in (value['folders'] as List).cast<Map>()) {...folder, if (folder['color'] case final int color) 'color': FolderPalette.vivid(color)},
-      ];
+      final value = section(backup, 'images')
+        ..remove('folders')
+        ..remove('folderRules');
       value['favorites'] = [
         for (final favorite in (value['favorites'] as List).cast<Map>())
           {
-            ...favorite,
+            for (final entry in favorite.entries)
+              if (entry.key != 'folderID') entry.key as String: entry.value,
             'post': {
               for (final entry in (favorite['post'] as Map).entries)
                 if (kept.contains(entry.key)) entry.key: entry.value,
@@ -134,6 +136,15 @@ void main() {
     expect(comicsOf(exported), comicsOf(original));
     expect(imagesOf(exported), imagesOf(original));
     expect(exported['challenges'], original['challenges']);
+    final restoredFolders = {for (final folder in (section(exported, 'images')['folders'] as List).cast<Map>()) folder['id']: folder};
+    expect(restoredFolders.containsKey('unsorted'), isFalse, reason: 'the shared Uncategorized splits into each server\'s own');
+    for (final folder in (section(original, 'images')['folders'] as List).cast<Map>()) {
+      if (folder['id'] == 'unsorted') continue;
+      final restored = restoredFolders[folder['id']];
+      expect(restored?['name'], folder['name']);
+      expect(restored?['color'], FolderPalette.vivid(folder['color'] as int));
+      expect(restored?['isGlobal'] == true || restored?['serverID'] != null, isTrue, reason: 'every folder names its server or is global');
+    }
   });
 
   test('every native fixture is accepted and the image section keeps its reference-date timestamp', () {

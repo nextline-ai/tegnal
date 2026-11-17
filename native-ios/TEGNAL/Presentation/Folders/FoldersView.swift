@@ -324,6 +324,8 @@ struct NewFolderPromptModifier: ViewModifier {
     @Environment(AppEnvironment.self) private var env
     @Binding var isPresented: Bool
     var booru = false
+    /// The server a new image folder belongs to; nil makes it global.
+    var booruServerID: String? = nil
     var title = "New Folder"
     var actionTitle = "Create"
     var identifier = "folder.name"
@@ -339,20 +341,20 @@ struct NewFolderPromptModifier: ViewModifier {
                     if let identity = try? create(name) { created(identity) }
                 }.frame(width: 0, height: 0)
             }
-            .appSheet(item: $draft) { FolderRuleEditor(booru: booru, name: $0.name, onCreated: created) }
+            .appSheet(item: $draft) { FolderRuleEditor(booru: booru, booruServerID: booruServerID, name: $0.name, onCreated: created) }
     }
 
     private func create(_ name: String) throws -> String {
-        if booru { return try env.booru.saveFolder(name: name) }
+        if booru { return try env.booru.saveFolder(name: name, serverID: booruServerID) }
         guard let id = try env.database.createFolder(name: name).id else { throw BooruError.storage }
         return try env.database.identity(ofFolder: id)
     }
 }
 
 extension View {
-    func newFolderPrompt(isPresented: Binding<Bool>, booru: Bool = false, title: String = "New Folder", actionTitle: String = "Create",
+    func newFolderPrompt(isPresented: Binding<Bool>, booru: Bool = false, booruServerID: String? = nil, title: String = "New Folder", actionTitle: String = "Create",
                          identifier: String = "folder.name", created: @escaping (String) -> Void) -> some View {
-        modifier(NewFolderPromptModifier(isPresented: isPresented, booru: booru, title: title, actionTitle: actionTitle, identifier: identifier, created: created))
+        modifier(NewFolderPromptModifier(isPresented: isPresented, booru: booru, booruServerID: booruServerID, title: title, actionTitle: actionTitle, identifier: identifier, created: created))
     }
 }
 

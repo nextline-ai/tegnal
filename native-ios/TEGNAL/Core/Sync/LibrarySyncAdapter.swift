@@ -71,7 +71,7 @@ struct LibrarySyncAdapter {
         "manga.artists": ["name", "kind", "note", "bookmarked_at"],
         "manga.search_history": ["query", "used_at"], "manga.saved_searches": ["query"],
         "booru.challenges": ["id", "payload"],
-        "booru.servers": ["id", "payload", "position"], "booru.folders": ["id", "name", "color", "position"],
+        "booru.servers": ["id", "payload", "position"], "booru.folders": ["id", "name", "color", "position", "server_id"],
         "booru.favorites": ["server_id", "post_id", "payload", "saved_at", "folder_id"],
         "booru.history": ["server_id", "query", "used_at"], "booru.saved_tags": ["server_id", "name", "kind"],
         "booru.settings": ["key", "value"]
@@ -248,7 +248,8 @@ struct LibrarySyncAdapter {
             for table in ["folders", "favorites", "history", "saved_tags", "settings", "challenges"] {
                 for change in values where change.row.table == "booru." + table {
                     var row = change.row
-                    if table == "folders", row.values["id"]?.string == "unsorted", change.deleted { continue }
+                    // The shared Uncategorized from before folder ownership never comes back; its images go to their servers' own.
+                    if table == "folders", row.values["id"]?.string == "unsorted" { continue }
                     if let address = row.values["server_id"]?.string {
                         guard let id = mapping[address] else { continue }
                         row.values["server_id"] = .text(id)
@@ -270,26 +271,16 @@ struct LibrarySyncAdapter {
                         if table == "challenges", let id = row.values["id"]?.string {
                             try db.execute(sql: "DELETE FROM challenge_sessions WHERE id = ?", arguments: [id])
                         }
-                        if table == "folders", let id = row.values["id"]?.string {
-                            if try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM favorites WHERE folder_id = ?)", arguments: [id]) == true {
-                                try BooruStore.ensureUnsorted(in: db)
-                                try db.execute(sql: "UPDATE favorites SET folder_id = 'unsorted' WHERE folder_id = ?", arguments: [id])
-                            }
-                        }
+                        if table == "folders", let id = row.values["id"]?.string { try BooruStore.moveImages(outOf: id, db: db) }
                         try Self.delete(row, db: db)
                     } else {
-                        if table == "favorites", let id = row.values["folder_id"]?.string, try String.fetchOne(db, sql: "SELECT id FROM folders WHERE id = ?", arguments: [id]) == nil {
-                            try BooruStore.ensureUnsorted(in: db)
-                            row.values["folder_id"] = .text("unsorted")
-                        }
                         try Self.upsert(row, db: db)
                     }
                 }
             }
-            // Apply default-folder deletion after favorite changes; concurrent saves take precedence.
-            if values.contains(where: { $0.deleted && $0.row.table == "booru.folders" && $0.row.values["id"]?.string == "unsorted" }) {
-                try db.execute(sql: "DELETE FROM folders WHERE id = 'unsorted' AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')")
-            }
+            // An image in a folder gone, or put by an older version into another server's folder,
+            // goes to its own server's folder of that name; each server keeps its Uncategorized.
+            try BooruStore.settleFolders(db: db)
             if let text = try String.fetchOne(db, sql: "SELECT value FROM settings WHERE key = 'folder_order'"), let order = try? JSONDecoder().decode([String].self, from: Data(text.utf8)) {
                 let others = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name").filter { !order.contains($0) }
                 for (position, id) in (order + others).enumerated() { try db.execute(sql: "UPDATE folders SET position = ? WHERE id = ?", arguments: [position, id]) }

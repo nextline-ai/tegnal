@@ -14,14 +14,25 @@ import 'booru_models.dart';
 import 'booru_store.dart';
 import '../storage/folder_palette.dart';
 
+/// [serverID] names one of the backup's servers; [isGlobal] marks a folder of every server. Both
+/// absent, it is from before folders belonged to servers, and goes where its images are.
 class BooruBackupFolder {
-  BooruBackupFolder({required this.id, required this.name, required this.color});
+  BooruBackupFolder({required this.id, required this.name, required this.color, this.serverID, this.isGlobal});
   final String id;
   final String name;
   final int color;
+  final String? serverID;
+  final bool? isGlobal;
+  bool get isLegacy => serverID == null && isGlobal == null;
 
-  factory BooruBackupFolder.fromJson(JsonObject json) => BooruBackupFolder(id: json.string('id'), name: json.string('name'), color: json.integer('color'));
-  JsonObject toJson() => {'id': id, 'name': name, 'color': color};
+  factory BooruBackupFolder.fromJson(JsonObject json) => BooruBackupFolder(
+    id: json.string('id'),
+    name: json.string('name'),
+    color: json.integer('color'),
+    serverID: json.stringOrNull('serverID'),
+    isGlobal: json['isGlobal'] as bool?,
+  );
+  JsonObject toJson() => {'id': id, 'name': name, 'color': color, 'serverID': ?serverID, 'isGlobal': ?isGlobal};
 }
 
 class BooruBackupFavorite {
@@ -173,6 +184,7 @@ class BooruBackup {
           return serverIDs.contains(tag.serverID) && tag.name.isNotEmpty && kind != null && kind != SavedCollectionKind.history;
         }) &&
         serverIDs.containsAll(blacklist.keys) &&
+        folders.every((folder) => folder.serverID == null || serverIDs.contains(folder.serverID)) &&
         serverIDs.containsAll(selectedServerIDs) &&
         (folderRules ?? []).every((rule) => folderIDs.contains(rule.folder) && rule.query.isNotEmpty) &&
         (recentImages ?? []).every((recent) => serverIDs.contains(recent.post.serverID) && recent.post.postID > 0 && recent.openedAt.isFinite);
@@ -205,7 +217,13 @@ extension BooruStoreBackup on BooruStore {
         .toList();
     final folders = [
       for (final row in db.rows('SELECT * FROM folders ORDER BY position, name'))
-        BooruBackupFolder(id: row['id'] as String, name: row['name'] as String, color: row['color'] as int),
+        BooruBackupFolder(
+          id: row['id'] as String,
+          name: row['name'] as String,
+          color: row['color'] as int,
+          serverID: row['server_id'] as String?,
+          isGlobal: row['server_id'] == null,
+        ),
     ];
     final favorites = [
       for (final row in db.rows('SELECT * FROM favorites ORDER BY saved_at DESC'))
@@ -267,9 +285,11 @@ extension BooruStoreBackup on BooruStore {
     final incomingOrder = backup.folders.map((folder) => folder.id).toList();
     final remaining = db.column<String>('SELECT id FROM folders ORDER BY position, name').where((id) => !incomingOrder.contains(id)).toList();
     for (final (position, folder) in backup.folders.indexed) {
+      final owner = folder.isGlobal == true || folder.serverID == null ? null : mapping[folder.serverID];
+      // A folder from before folders belonged to servers keeps the server it has here.
       db.execute(
-        'INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position',
-        [folder.id, folder.id == 'unsorted' ? '' : folder.name, FolderPalette.vivid(folder.color), position],
+        'INSERT INTO folders (id, name, color, position, server_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position${folder.isLegacy ? '' : ', server_id = excluded.server_id'}',
+        [folder.id, folder.id == 'unsorted' ? '' : folder.name, FolderPalette.vivid(folder.color), position, owner],
       );
     }
     for (final (position, id) in [...incomingOrder, ...remaining].indexed) {
@@ -311,6 +331,19 @@ extension BooruStoreBackup on BooruStore {
     for (final rule in backup.folderRules ?? <FolderRule>[]) {
       BooruStoreFolderRules.storeFolderRule(rule, db);
     }
+    // Folders of an older backup go where their images are, and every image to a folder of its server.
+    BooruStore.assignFolderServers(
+      db,
+      only: {
+        for (final folder in backup.folders)
+          if (folder.isLegacy) folder.id,
+      },
+    );
+    // The order kept is the one the folders now have, each server's Uncategorized included, so a
+    // second restore of the same backup changes nothing.
+    db.execute("INSERT OR REPLACE INTO settings VALUES ('folder_order', ?)", [
+      encodeSwiftJsonString(db.column<String>('SELECT id FROM folders ORDER BY position, name')),
+    ]);
     if (backup.selectedServerIDs.isNotEmpty) {
       db.execute("INSERT OR REPLACE INTO settings VALUES ('selected_servers', ?)", [
         encodeSwiftJsonString(backup.selectedServerIDs.map((id) => mapping[id]).nonNulls.toList()),
