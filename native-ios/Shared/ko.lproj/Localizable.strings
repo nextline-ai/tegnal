@@ -1942,3 +1942,4 @@
 "Couldn’t reach the website. Check the connection and try again." = "웹사이트에 연결하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.";
 "Stored" = "저장됨";
 "Global Folder" = "전역 폴더";
+"Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key." = "Danbooru: 서버 설정에 API 키를 저장하면 앱은 즐겨찾기, 즐겨찾기 그룹, 투표, 댓글에 API 키를 사용하므로 웹사이트 로그인이 필요 없습니다. API 키가 없으면 웹사이트 로그인을 사용합니다. 둘 다 있으면 앱은 API 키를 사용합니다.";

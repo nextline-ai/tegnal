@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import '../content/content_errors.dart';
 import '../content/site_account.dart';
+import '../content/site_account_actions.dart';
 import '../support/l10n.dart';
 import '../support/preferences.dart';
 import 'booru_html.dart';
@@ -753,10 +754,11 @@ class BooruValidationState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// HTTPS pages (and blank frames) only; a new window opens in place.
-  static BooruNavigationDecision navigation(Uri url, {required bool newWindow}) {
-    final allowed = url.scheme == 'https' && url.userInfo.isEmpty || url.toString() == 'about:blank';
-    if (allowed && newWindow) return BooruNavigationDecision.loadInPlace;
+  /// Secure pages, and the frames a bot check draws itself (`about:srcdoc`, `blob:`, `data:`), as the
+  /// comics sign-in allows; a new window opens in place. A frame always stays in its own frame.
+  static BooruNavigationDecision navigation(Uri url, {required bool newWindow, bool mainFrame = true}) {
+    final allowed = SiteAccountActions.allowsSignInNavigation(url, mainFrame: mainFrame);
+    if (allowed && newWindow && mainFrame) return BooruNavigationDecision.loadInPlace;
     return allowed ? BooruNavigationDecision.allow : BooruNavigationDecision.cancel;
   }
 }

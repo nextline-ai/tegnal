@@ -267,9 +267,12 @@ class BooruAccountClient {
 
   Future<BooruResponse> _transfer(BooruRequest request, BooruServer server) async {
     final browser = browserFallback && BooruWebTransport.isAvailable;
+    // The browser page can't carry an API key without the page's scripts seeing it, so a request
+    // made with one goes directly first: Danbooru uses its API key before the website's sign-in.
+    final carriesKey = request.headers.keys.any((name) => name.toLowerCase() == 'authorization');
     // A server validated in the browser keeps its requests there, as image searches do; when that
     // browser can't reach the server, the direct connection is tried as well.
-    if (browser && (BooruWebTransport.hasSession(server) || BooruWebTransport.prefersBrowser(server))) {
+    if (browser && !carriesKey && (BooruWebTransport.hasSession(server) || BooruWebTransport.prefersBrowser(server))) {
       try {
         return await BooruWebTransport.data(request, server);
       } on NetworkError {

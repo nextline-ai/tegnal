@@ -269,7 +269,8 @@ enum BooruWebTransport {
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = action.request.url else { decisionHandler(.cancel); return }
             if action.targetFrame?.isMainFrame == false {
-                decisionHandler(url.scheme == "https" || url.absoluteString == "about:blank" ? .allow : .cancel)
+                // The frames a bot check draws itself, as the sign-in and the check pages allow.
+                decisionHandler(ComicsBrowserProfile.allows(url, mainFrame: false) ? .allow : .cancel)
             } else { decisionHandler(BooruWebTransport.sameOrigin(url, server.baseURL) ? .allow : .cancel) }
         }
     }

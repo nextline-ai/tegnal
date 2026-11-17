@@ -382,6 +382,7 @@
  "Danbooru limits searches by account level. Regular accounts usually allow up to two tags. For more tags, upgrade on the website and enter your username and API key here. Gelbooru does not have this two-tag limit. Connection errors can have other causes.": "Danbooru는 계정 등급에 따라 검색 태그 수를 제한합니다. 일반 계정은 보통 2개까지 사용할 수 있습니다. 더 많은 태그를 사용하려면 웹사이트에서 유료 회원으로 가입한 뒤 이 앱에 사용자 이름과 API 키를 입력하세요. Gelbooru에는 이 2개 태그 제한이 없습니다. 연결 오류는 다른 원인으로도 발생할 수 있습니다.",
  "Danbooru, Gelbooru and Moebooru compatible servers are supported.": "Danbooru, Gelbooru, Moebooru 호환 서버를 지원합니다.",
  "Danbooru, Gelbooru, Old Gelbooru (v0.1.11) and Moebooru compatible servers are supported.": "Danbooru, Gelbooru, Old Gelbooru(v0.1.11), Moebooru 호환 서버를 지원합니다.",
+ "Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key.": "Danbooru: 서버 설정에 API 키를 저장하면 앱은 즐겨찾기, 즐겨찾기 그룹, 투표, 댓글에 API 키를 사용하므로 웹사이트 로그인이 필요 없습니다. API 키가 없으면 웹사이트 로그인을 사용합니다. 둘 다 있으면 앱은 API 키를 사용합니다.",
  "Dark Mode": "다크 모드",
  "Data & Storage": "데이터와 저장 공간",
  "Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks.": "데이터베이스 내보내기, 앱 데이터 내보내기, 다운로드 폴더, 만화 리더 백업, 링크 목록과 브라우저 북마크.",

@@ -8,7 +8,7 @@ import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_html.dart' show booruSameOrigin;
 import '../../core/booru/booru_models.dart';
 import '../../core/content/keyed_work_extras.dart';
-import '../../core/content/site_account.dart';
+import '../../core/content/site_account_actions.dart';
 import '../../core/support/l10n.dart';
 import '../content/work_extras_views.dart';
 import '../design/alert_dialog.dart';
@@ -184,7 +184,7 @@ class _BooruAccountSectionState extends State<BooruAccountSection> {
     final identity = sync.identity(_server);
     final canChange = identity != null && sync.client.canChange(_server);
     final hasKey = !sync.client.credentials.read(_server.id).isEmpty;
-    final gelbooru = _server.engine == BooruEngine.gelbooru;
+    final gelbooru = _server.engine == BooruEngine.gelbooru, danbooru = _server.engine == BooruEngine.danbooru;
     return FormSection(
       prominentHeader: true,
       rowColor: widget.rowColor,
@@ -202,6 +202,8 @@ class _BooruAccountSectionState extends State<BooruAccountSection> {
               L10n.text(
                 gelbooru
                     ? "Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in."
+                    : danbooru
+                    ? "Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key."
                     : _server.engine.keepsFavoriteLists
                     ? "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password."
                     : "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password.",
@@ -211,10 +213,9 @@ class _BooruAccountSectionState extends State<BooruAccountSection> {
         if (identity != null) ...[
           SettingsValueRow(title: L10n.text('Website Account'), value: identity.displayName.isEmpty ? L10n.text('Signed In') : identity.displayName),
           // Gelbooru keeps two kinds of access apart; both are shown, and the website's is used first.
-          if (gelbooru) ...[
-            SettingsValueRow(title: L10n.text('Website Sign-In'), value: L10n.text(canChange ? 'Signed In' : 'Not Signed In')),
-            SettingsValueRow(title: L10n.text('API Key'), value: L10n.text(hasKey ? 'Stored' : 'Not Saved')),
-          ],
+          if (gelbooru) SettingsValueRow(title: L10n.text('Website Sign-In'), value: L10n.text(canChange ? 'Signed In' : 'Not Signed In')),
+          // Danbooru uses a saved API key first, Gelbooru its website sign-in.
+          if (gelbooru || danbooru) SettingsValueRow(title: L10n.text('API Key'), value: L10n.text(hasKey ? 'Stored' : 'Not Saved')),
           // An API key that only reads, or a sign-in the website stopped accepting.
           if (sync.expired.contains(_server.id) || !canChange)
             SettingsLinkRow(
@@ -330,14 +331,10 @@ class _BooruSignInPageState extends State<BooruSignInPage> {
     if (mounted) setState(() => _controller = controller);
   }
 
-  /// The server's own pages, and any secure frame a sign-in check shows inside them.
-  bool _allows(Uri? url, {required bool mainFrame}) {
-    if (url == null || url.scheme != 'https' && url.toString() != 'about:blank') return false;
-    if (!mainFrame) return true;
-    final site = SiteAccount.registrableDomain(Uri.tryParse(_server.baseURL)?.host.toLowerCase() ?? '');
-    final host = url.host.toLowerCase();
-    return host == site || host.endsWith('.$site');
-  }
+  /// Secure pages, and the frames a bot check such as Cloudflare's draws itself: the rule the comics
+  /// sign-in goes by, which the check lets through. Its frames are often `about:srcdoc`, `blob:` or
+  /// `data:`, and turning them away leaves the check, and the sign-in, stuck.
+  bool _allows(Uri? url, {required bool mainFrame}) => url != null && SiteAccountActions.allowsSignInNavigation(url, mainFrame: mainFrame);
 
   Future<void> _look(WebViewController controller) async {
     if (_done || _checking || !mounted) return;
