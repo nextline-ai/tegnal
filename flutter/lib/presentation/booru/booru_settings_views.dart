@@ -101,29 +101,6 @@ class _BooruMoreViewState extends State<BooruMoreView> {
 
   void _push(Widget Function(BuildContext context) builder) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: builder));
 
-  /// A server's connection and filters, at the bottom of its section.
-  List<Widget> _serverRows(BooruServer server) => [
-    SettingsLinkRow(
-      title: L10n.text('Tag Blacklist'),
-      icon: CupertinoIcons.eye_slash,
-      onTap: () => _push((context) => BooruBlacklistView(booru: _booru, server: server)),
-    ),
-    if (AppPlatform.hasWebView)
-      SettingsLinkRow(
-        title: L10n.text('Validate Client'),
-        help: L10n.text('Opens the website’s connection check. Complete it here if the server blocks searches or image loading.'),
-        icon: CupertinoIcons.checkmark_shield,
-        tinted: true,
-        chevron: false,
-        onTap: () => showBooruValidation(context, booru: _booru, server: server),
-      ),
-    SettingsLinkRow(
-      title: L10n.text('Cookies'),
-      icon: CupertinoIcons.shield_lefthalf_fill,
-      onTap: () => _push((context) => BooruCookiesView(booru: _booru, server: server)),
-    ),
-  ];
-
   Future<void> _setLanguage(String value) async {
     _booru.preferences.set('app.language', value);
     await loadLocalization(_booru.preferences);
@@ -331,14 +308,6 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                     ],
                   ),
                 ],
-                // One section per server: its account, then its connection and filters at the bottom.
-                for (final server in store.selectedServers) ...[
-                  settingsSectionGap,
-                  if (BooruAccountSync.shared != null)
-                    BooruAccountSection(booru: _booru, server: server, header: server.displayName, rowColor: row, rows: _serverRows(server))
-                  else
-                    section(header: server.displayName, children: _serverRows(server)),
-                ],
                 settingsSectionGap,
                 section(
                   header: L10n.text('Search History'),
@@ -462,6 +431,11 @@ class _BooruServersViewState extends State<BooruServersView> {
       ),
     ),
     account: BooruAccountSync.shared == null ? null : (context, server) => BooruAccountSection(booru: _booru, server: server),
+    blacklist: (context, server) => Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (context) => BooruBlacklistView(booru: _booru, server: server),
+      ),
+    ),
   );
 
   Future<void> _delete(BooruServer server) async {
@@ -484,7 +458,6 @@ class _BooruServersViewState extends State<BooruServersView> {
   @override
   Widget build(BuildContext context) {
     final tint = TegnalColors.tint.resolveFrom(context);
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final row = FormColors.listRow.resolveFrom(context);
     final selected = _booru.store.selectedServerIDs.toSet();
     return SettingsPage(
@@ -521,16 +494,8 @@ class _BooruServersViewState extends State<BooruServersView> {
                       children: [
                         Icon(selected.contains(server.id) ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle, size: 22, color: tint),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(server.displayName),
-                              const SizedBox(height: 5),
-                              Text(Uri.tryParse(server.baseURL)?.host ?? '', style: TegnalType.style(12, color: secondary)),
-                            ],
-                          ),
-                        ),
+                        // The address alone: a name that repeats it says nothing more.
+                        Expanded(child: Text(Uri.tryParse(server.baseURL)?.host ?? server.displayName)),
                         Semantics(
                           button: true,
                           label: '${L10n.text('Edit')} ${server.displayName}',

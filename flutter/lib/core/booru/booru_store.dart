@@ -42,7 +42,7 @@ class SecretCredentialStore implements BooruCredentialStore {
     if (raw == null) return const BooruCredentials();
     try {
       final json = jsonDecode(raw) as Map<String, Object?>;
-      return BooruCredentials(account: json['account'] as String? ?? '', apiKey: json['apiKey'] as String? ?? '');
+      return BooruCredentials(account: json['account'] as String? ?? '', apiKey: json['apiKey'] as String? ?? '').normalized;
     } on Object {
       throw const BooruError(BooruErrorKind.storage);
     }
@@ -56,7 +56,7 @@ class SecretCredentialStore implements BooruCredentialStore {
 class MemoryCredentialStore implements BooruCredentialStore {
   final _values = <String, BooruCredentials>{};
   @override
-  BooruCredentials read(String serverID) => _values[serverID] ?? const BooruCredentials();
+  BooruCredentials read(String serverID) => (_values[serverID] ?? const BooruCredentials()).normalized;
   @override
   void save(BooruCredentials credentials, String serverID) => credentials.isEmpty ? _values.remove(serverID) : _values[serverID] = credentials;
 }

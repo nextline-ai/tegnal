@@ -189,12 +189,18 @@ actor BooruAccountClient {
     }
 
     private func transfer(_ request: URLRequest, server: BooruServer) async throws -> (Data, HTTPURLResponse) {
-        // A server validated in the browser keeps its requests there, as image searches do.
-        if browserFallback, await BooruWebTransport.hasSession(for: server) {
-            return try await BooruWebTransport.data(for: request, server: server)
-        }
         var prepared = await BooruBrowserSession.prepare(request, server: server)
         prepared.setValue(nil, forHTTPHeaderField: BooruWebTransport.followsNoRedirect)
+        // A server validated in the browser keeps its requests there, as image searches do; when that
+        // browser can't reach the server, the direct connection is tried as well.
+        if browserFallback, await BooruWebTransport.hasSession(for: server) {
+            do { return try await BooruWebTransport.data(for: request, server: server) }
+            catch let error as URLError where BooruConnectionRetry.isTransient(error) {
+                let (data, response) = try await session.data(for: prepared)
+                guard let http = response as? HTTPURLResponse else { throw BooruError.invalidResponse }
+                return (data, http)
+            }
+        }
         do {
             let (data, response) = try await session.data(for: prepared)
             guard let http = response as? HTTPURLResponse else { throw BooruError.invalidResponse }
@@ -330,8 +336,13 @@ actor BooruAccountClient {
         case .gelbooru, .oldGelbooru:
             guard let user = account.userID else { throw BooruError.authentication }
             var found: [BooruPost] = []
-            if server.engine == .gelbooru, (try? BooruKeychain.read(serverID: server.id).isEmpty) == false,
-               let read = try? await gelbooruAPIFavorites(server, user: user) {
+            // The website's sign-in comes first; the API key reads favorites only without one,
+            // and an empty API answer is checked against the favorites pages.
+            let key = try? BooruKeychain.read(serverID: server.id)
+            let cookies = await BooruBrowserSession.cookies(for: server).filter { BooruBrowserSession.matches($0, url: server.baseURL) }
+            let website = BooruAccountParser.gelbooruIdentity(cookies: cookies)?.userID
+            if server.engine == .gelbooru, website == nil, let key, !key.isEmpty,
+               let read = try? await gelbooruAPIFavorites(server, user: user), !read.isEmpty {
                 found = read
             } else {
                 found = try await favoritesPages(server, user: user)
@@ -370,7 +381,14 @@ actor BooruAccountClient {
         var result: [BooruPost] = [], seen = Set<Int64>(), offset = 0
         for _ in 0..<200 {
             let data = try await send(server, "GET", "index.php", query: [("page", "favorites"), ("s", "view"), ("id", String(user)), ("pid", String(offset))], html: true)
-            let page = try BooruLegacyHTML.posts(data, server: server).filter { seen.insert($0.postID).inserted }
+            let found: [BooruPost]
+            do {
+                found = try BooruLegacyHTML.posts(data, server: server)
+            } catch BooruError.invalidResponse where BooruAccountParser.isEmptyFavoritesPage(data) {
+                // Past the last page, or an account without favorites: the page shows no images at all.
+                break
+            }
+            let page = found.filter { seen.insert($0.postID).inserted }
             if page.isEmpty { break }
             result += page
             offset += page.count
@@ -504,6 +522,17 @@ actor BooruAccountClient {
 
 /// Reads what the account requests answer. Only page structure and response fields are matched.
 enum BooruAccountParser {
+    /// A website page with no image on it, as a favorites page is past its last page or for an account
+    /// without favorites. A bot check's page or a page whose images weren't recognized is not one.
+    static func isEmptyFavoritesPage(_ data: Data) -> Bool {
+        let html = String(decoding: data, as: UTF8.self).lowercased()
+        guard html.contains("<body") else { return false }
+        let checks = ["challenge-form", "cf-chl", "just a moment", "checking your browser"]
+        guard !checks.contains(where: html.contains) else { return false }
+        return html.firstMatch(of: /page=post(&|&amp;)s=view(&|&amp;)id=\d/) == nil
+            && !["class=\"thumb", "thumbnail-preview", "thumbnail-container"].contains(where: html.contains)
+    }
+
     static func csrfToken(_ html: String) -> String? {
         for match in BooruHTML.matches("<meta\\b([^>]*)>", html) {
             let attributes = BooruHTML.attributes(match[1])
@@ -859,10 +888,21 @@ final class BooruAccountSync {
     /// The first time a signed-in server's favorites can be read: each named list that holds images
     /// becomes a folder of the same name, and the account's favorites keep images saved elsewhere.
     func setUp(_ server: BooruServer, requested: Bool = false) async {
+        try? await setUpSync(server, requested: requested)
+    }
+
+    /// [setUp], telling a sync turned on by hand why it couldn't start.
+    func setUpSync(_ server: BooruServer, requested: Bool) async throws {
         let favorites = accounts.favorites
         guard favorites.state(for: server.id) == nil, requested || !favorites.isDeclined(server.id),
               let identity = accounts.identity(serverID: server.id) else { return }
-        guard let fetched = try? await client.favorites(server, account: identity) else { return }
+        let fetched: BooruAccountFavorites
+        do { fetched = try await client.favorites(server, account: identity) }
+        catch {
+            BooruAccountClient.log.error("Favorites read failed for \(server.engine.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+            if requested { throw error }
+            return
+        }
         remember(fetched, server: server)
         do {
             var state = SiteFavoriteFolders.State(unassigned: BooruAccounts.favoritesList, exclusive: false)

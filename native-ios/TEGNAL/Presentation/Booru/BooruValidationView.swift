@@ -178,7 +178,7 @@ final class BooruValidationModel: NSObject, WKNavigationDelegate, WKUIDelegate {
             }
             return
         }
-        cancelRetries(); loading = false; self.error = BooruConnectionMessage.describe(error)
+        cancelRetries(); loading = false; self.error = BooruConnectionMessage.describe(error, inBrowser: true)
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { decisionHandler(.cancel); return }

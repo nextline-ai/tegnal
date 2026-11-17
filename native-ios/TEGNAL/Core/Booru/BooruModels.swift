@@ -211,6 +211,20 @@ struct BooruCredentials: Codable, Equatable, Sendable {
     var account = ""
     var apiKey = ""
     var isEmpty: Bool { account.isEmpty && apiKey.isEmpty }
+
+    /// Gelbooru's account options show API access as one line, `&api_key=…&user_id=…`. Pasted
+    /// into either field, it fills both.
+    var normalized: BooruCredentials {
+        for text in [account, apiKey] { if let pasted = Self.pastedAPIAccess(text) { return pasted } }
+        return BooruCredentials(account: account.trimmingCharacters(in: .whitespacesAndNewlines),
+                                apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    static func pastedAPIAccess(_ text: String) -> BooruCredentials? {
+        let line = text.replacingOccurrences(of: "&amp;", with: "&")
+        guard let key = line.firstMatch(of: /api_key=([^&\s]+)/)?.1, let user = line.firstMatch(of: /user_id=([0-9]+)/)?.1 else { return nil }
+        return BooruCredentials(account: String(user), apiKey: String(key))
+    }
 }
 
 struct BooruPost: Codable, Identifiable, Hashable, Sendable {

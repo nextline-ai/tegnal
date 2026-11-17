@@ -523,7 +523,7 @@ enum BooruKeychain {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return .init() }
         guard status == errSecSuccess, let data = result as? Data else { throw BooruError.storage }
-        return try JSONDecoder().decode(BooruCredentials.self, from: data)
+        return try JSONDecoder().decode(BooruCredentials.self, from: data).normalized
     }
     static func save(_ credentials: BooruCredentials, serverID: String) throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: serverID]

@@ -92,8 +92,11 @@ enum BooruBrowserSession {
 }
 
 enum BooruConnectionMessage {
-    static func describe(_ error: Error) -> String {
-        ContentError.withConnectionHelp(detail(error), for: error)
+    /// `inBrowser` is for the validation browser itself, where sending people to Validate Client goes in a circle.
+    static func describe(_ error: Error, inBrowser: Bool = false) -> String {
+        let browserless = inBrowser && ((error as? URLError).map { [.secureConnectionFailed, .networkConnectionLost].contains($0.code) } ?? false
+            || (error as NSError).domain == WKError.errorDomain)
+        return ContentError.withConnectionHelp(browserless ? L10n.text("Couldn’t reach the website. Check the connection and try again.") : detail(error), for: error)
     }
     private static func detail(_ error: Error) -> String {
         if let error = error as? URLError, error.code == .secureConnectionFailed {

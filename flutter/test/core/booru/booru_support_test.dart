@@ -484,7 +484,8 @@ void main() {
       expect(state.failed(lost), const Duration(milliseconds: 500));
       expect(state.failed(lost), const Duration(milliseconds: 1000));
       expect(state.failed(lost), isNull);
-      expect(state.error, BooruConnectionMessage.describe(lost));
+      expect(state.error, BooruConnectionMessage.describe(lost, inBrowser: true));
+      expect(state.error, isNot(contains('Validate Client')), reason: 'The validation page never sends people to itself');
       expect(state.failed(const NetworkError(NetworkErrorCode.cancelled)), isNull);
       expect(BooruValidationState.navigation(Uri.parse('https://x.example/'), newWindow: true), BooruNavigationDecision.loadInPlace);
       expect(BooruValidationState.navigation(Uri.parse('http://x.example/'), newWindow: false), BooruNavigationDecision.cancel);

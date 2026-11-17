@@ -1932,6 +1932,12 @@
 "This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings." = "このフォルダはログイン中のサイトのお気に入りグループと連携しているため、ログインしている間は削除できません。削除するには、そのサイトからログアウトするか、サイトの設定で「お気に入りをフォルダと同期」をオフにしてください。";
 "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "ウェブサイト自体でログインするか、サーバー設定にAPIキーを保存すると、お気に入り、お気に入りグループ、投票、コメントをウェブサイトに残せます。アプリはログイン情報だけをこのデバイスに保存し、パスワードは保存しません。";
 "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "ウェブサイト自体でログインするか、サーバー設定にAPIキーを保存すると、お気に入り、投票、コメントをウェブサイトに残せます。アプリはログイン情報だけをこのデバイスに保存し、パスワードは保存しません。";
-"Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website." = "APIキーではお気に入りとコメントを読むことができます。アプリからお気に入りを変更したり、投票やコメントをしたりするには、ウェブサイトでもログインしてください。";
 "The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website." = "ウェブサイトが保存したアカウント情報を受け付けませんでした。サーバー設定に、ウェブサイトのアカウントオプションでAPIキーと一緒に表示される数字のユーザーIDとAPIキーを入力してください。";
 "The website didn't accept the saved account details. Check the username and API key in the server's settings." = "ウェブサイトが保存したアカウント情報を受け付けませんでした。サーバー設定でユーザー名とAPIキーを確認してください。";
+"Website Sign-In" = "ウェブサイトのログイン";
+"Not Signed In" = "未ログイン";
+"Not Saved" = "未保存";
+"Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in." = "Gelbooru: APIキーではお気に入りとコメントを読むことしかできません。お気に入りの追加・削除、投票、コメントにはウェブサイトのログインが必要で、投票は高評価のみで取り消せません。両方ある場合、アプリはウェブサイトのログインを使います。";
+"You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field." = "ウェブサイトのアカウントオプションに表示される「&api_key=…&user_id=…」の1行を、そのままどちらの欄に貼り付けても構いません。";
+"Couldn’t reach the website. Check the connection and try again." = "ウェブサイトに接続できませんでした。接続を確認してもう一度お試しください。";
+"Stored" = "保存済み";
