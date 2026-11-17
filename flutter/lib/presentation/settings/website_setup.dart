@@ -235,6 +235,7 @@ Future<void> showWebsiteConnectionEditor(
   void Function(BuildContext context, BooruServer server)? validate,
   void Function(BuildContext context, BooruServer server)? cookies,
   Widget Function(BuildContext context, BooruServer server)? account,
+  void Function(BuildContext context, BooruServer server)? blacklist,
 }) => showAppSheet<void>(
   context,
   builder: (context, controller) => WebsiteConnectionEditor(
@@ -246,6 +247,7 @@ Future<void> showWebsiteConnectionEditor(
     validate: validate,
     cookies: cookies,
     account: account,
+    blacklist: blacklist,
     scrollController: controller,
   ),
 );
@@ -263,6 +265,7 @@ class WebsiteConnectionEditor extends StatefulWidget {
     this.validate,
     this.cookies,
     this.account,
+    this.blacklist,
     this.scrollController,
   });
   final ContentEnvironment content;
@@ -280,6 +283,9 @@ class WebsiteConnectionEditor extends StatefulWidget {
 
   /// The server's account section, where image mode provides one.
   final Widget Function(BuildContext context, BooruServer server)? account;
+
+  /// Opens the server's tag blacklist, which image mode's settings no longer list.
+  final void Function(BuildContext context, BooruServer server)? blacklist;
   final void Function(BuildContext context, BooruServer server)? cookies;
   final ScrollController? scrollController;
 
@@ -330,6 +336,19 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
     }
     _address.addListener(_addressChanged);
     _addressChanged();
+    _account.addListener(_fillPastedAPIAccess);
+    _apiKey.addListener(_fillPastedAPIAccess);
+  }
+
+  /// Gelbooru's API access line, pasted into either field, fills both.
+  void _fillPastedAPIAccess() {
+    for (final text in [_account.text, _apiKey.text]) {
+      final pasted = BooruCredentials.pastedAPIAccess(text);
+      if (pasted == null) continue;
+      if (_account.text != pasted.account) _account.text = pasted.account;
+      if (_apiKey.text != pasted.apiKey) _apiKey.text = pasted.apiKey;
+      return;
+    }
   }
 
   @override
@@ -399,7 +418,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
             engine: engine,
           );
           if (store.servers.any((server) => server.id != value.id && server.baseURL == url)) throw const BooruError(BooruErrorKind.duplicateServer);
-          final credentials = BooruCredentials(account: _account.text.trim(), apiKey: _apiKey.text.trim());
+          final credentials = BooruCredentials(account: _account.text, apiKey: _apiKey.text).normalized;
           if (credentials.account.isEmpty != credentials.apiKey.isEmpty) throw const BooruError(BooruErrorKind.authentication);
           store.credentials.save(credentials, value.id);
           store.saveServer(value);
@@ -582,6 +601,13 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                           if (engine != BooruEngine.oldGelbooru) ...[
                             _field(_account, L10n.text(engine == BooruEngine.gelbooru ? 'User ID' : 'Username')),
                             _field(_apiKey, L10n.text(engine == BooruEngine.moebooru ? 'Password Hash' : 'API Key'), secure: true),
+                            if (engine == BooruEngine.gelbooru)
+                              FormRow(
+                                child: Text(
+                                  L10n.text('You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field.'),
+                                  style: TegnalType.style(13, color: secondary),
+                                ),
+                              ),
                           ],
                         ],
                       ],
@@ -592,6 +618,17 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                     const SizedBox(height: 26),
                     FormSection(
                       children: [
+                        FormRow(
+                          onTap: widget.blacklist == null ? null : () => widget.blacklist!(context, server),
+                          child: Row(
+                            children: [
+                              Icon(CupertinoIcons.eye_slash, size: 22, color: tint),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(L10n.text('Tag Blacklist'))),
+                              Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                            ],
+                          ),
+                        ),
                         FormRow(
                           onTap: widget.validate == null ? null : () => widget.validate!(context, server),
                           child: Row(

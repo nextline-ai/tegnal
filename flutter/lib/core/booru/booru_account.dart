@@ -267,9 +267,15 @@ class BooruAccountClient {
 
   Future<BooruResponse> _transfer(BooruRequest request, BooruServer server) async {
     final browser = browserFallback && BooruWebTransport.isAvailable;
-    // A server validated in the browser keeps its requests there, as image searches do.
+    // A server validated in the browser keeps its requests there, as image searches do; when that
+    // browser can't reach the server, the direct connection is tried as well.
     if (browser && (BooruWebTransport.hasSession(server) || BooruWebTransport.prefersBrowser(server))) {
-      return BooruWebTransport.data(request, server);
+      try {
+        return await BooruWebTransport.data(request, server);
+      } on NetworkError {
+        session.prepare(request, server);
+        return _direct(request, server);
+      }
     }
     session.prepare(request, server);
     try {
@@ -472,9 +478,14 @@ class BooruAccountClient {
         final user = account.userID;
         if (user == null) throw const BooruError(BooruErrorKind.authentication);
         List<BooruPost>? found;
-        if (server.engine == BooruEngine.gelbooru && !credentials.read(server.id).isEmpty) {
+        // The website's sign-in comes first; the API key reads favorites only without one,
+        // and an empty API answer is checked against the favorites pages.
+        final key = credentials.read(server.id);
+        final website = BooruAccountParser.gelbooruIdentity(_cookies(server))?.userID;
+        if (server.engine == BooruEngine.gelbooru && website == null && !key.isEmpty) {
           try {
             found = await _gelbooruAPIFavorites(server, user);
+            if (found.isEmpty) found = null;
           } on Object {
             found = null;
           }
@@ -540,7 +551,15 @@ class BooruAccountClient {
     var offset = 0;
     for (var index = 0; index < 200; index++) {
       final data = await send(server, 'GET', 'index.php', query: [('page', 'favorites'), ('s', 'view'), ('id', '$user'), ('pid', '$offset')], html: true);
-      final page = BooruLegacyHTML.posts(data, server).where((post) => seen.add(post.postID)).toList();
+      final List<BooruPost> found;
+      try {
+        found = BooruLegacyHTML.posts(data, server);
+      } on BooruError catch (error) {
+        // Past the last page, or an account without favorites: the page shows no images at all.
+        if (error.kind == BooruErrorKind.invalidResponse && BooruAccountParser.isEmptyFavoritesPage(data)) break;
+        rethrow;
+      }
+      final page = found.where((post) => seen.add(post.postID)).toList();
       if (page.isEmpty) break;
       result.addAll(page);
       offset += page.length;
@@ -703,6 +722,16 @@ class BooruAccountClient {
 
 /// Reads what the account requests answer. Only page structure and response fields are matched.
 abstract final class BooruAccountParser {
+  /// A website page with no image on it, as a favorites page is past its last page or for an account
+  /// without favorites. A bot check's page or a page whose images weren't recognized is not one.
+  static bool isEmptyFavoritesPage(List<int> data) {
+    final html = utf8.decode(data, allowMalformed: true).toLowerCase();
+    if (!html.contains('<body')) return false;
+    if (['challenge-form', 'cf-chl', 'just a moment', 'checking your browser'].any(html.contains)) return false;
+    return !RegExp(r'page=post(&|&amp;)s=view(&|&amp;)id=\d').hasMatch(html) &&
+        !['class="thumb', 'thumbnail-preview', 'thumbnail-container'].any(html.contains);
+  }
+
   static String? csrfToken(String html) {
     for (final match in BooruHTML.matches(r'<meta\b([^>]*)>', html)) {
       final attributes = BooruHTML.attributes(match[1]);
@@ -1130,7 +1159,10 @@ class BooruAccountSync extends ChangeNotifier {
     BooruAccountFavorites fetched;
     try {
       fetched = await client.favorites(server, identity);
-    } on Object {
+    } on Object catch (error) {
+      debugPrint('Booru favorites read failed for ${server.engine.name}: $error');
+      // Turned on by hand, the person sees why it couldn't start.
+      if (requested) rethrow;
       return;
     }
     _remember(fetched, server);

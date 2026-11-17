@@ -613,7 +613,14 @@ abstract final class BooruConnectionRetry {
 }
 
 abstract final class BooruConnectionMessage {
-  static String describe(Object error) => ContentError.withConnectionHelp(_detail(error), error);
+  /// [inBrowser] is for the validation browser itself, where sending people to Validate Client goes in a circle.
+  static String describe(Object error, {bool inBrowser = false}) {
+    final browserless =
+        inBrowser &&
+        ((error is NetworkError && const [NetworkErrorCode.secureConnectionFailed, NetworkErrorCode.networkConnectionLost].contains(error.code)) ||
+            error is BrowserProcessTerminated);
+    return ContentError.withConnectionHelp(browserless ? L10n.text('Couldn’t reach the website. Check the connection and try again.') : _detail(error), error);
+  }
 
   static String _detail(Object error) {
     if (error is NetworkError && error.code == NetworkErrorCode.secureConnectionFailed) {
@@ -732,7 +739,7 @@ class BooruValidationState extends ChangeNotifier {
     }
     _monitorStart = null;
     loading = false;
-    error = BooruConnectionMessage.describe(failure);
+    error = BooruConnectionMessage.describe(failure, inBrowser: true);
     notifyListeners();
     return null;
   }

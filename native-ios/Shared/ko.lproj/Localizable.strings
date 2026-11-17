@@ -1932,6 +1932,12 @@
 "This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings." = "이 폴더는 로그인한 웹사이트의 즐겨찾기 그룹과 연동되어 있어서, 로그인한 동안에는 삭제할 수 없습니다. 삭제하려면 그 웹사이트에서 로그아웃하거나, 웹사이트 설정에서 즐겨찾기를 폴더와 동기화를 끄세요.";
 "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "웹사이트 자체에서 로그인하거나 서버 설정에 API 키를 저장하면 즐겨찾기, 즐겨찾기 그룹, 투표, 댓글을 웹사이트에 남길 수 있습니다. 앱은 로그인 정보만 이 기기에 보관하며, 비밀번호는 보관하지 않습니다.";
 "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "웹사이트 자체에서 로그인하거나 서버 설정에 API 키를 저장하면 즐겨찾기, 투표, 댓글을 웹사이트에 남길 수 있습니다. 앱은 로그인 정보만 이 기기에 보관하며, 비밀번호는 보관하지 않습니다.";
-"Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website." = "API 키로는 즐겨찾기와 댓글을 읽을 수 있습니다. 앱에서 즐겨찾기를 바꾸거나 투표하고 댓글을 남기려면 웹사이트에서도 로그인하세요.";
 "The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website." = "웹사이트가 저장한 계정 정보를 받아들이지 않았습니다. 서버 설정에 웹사이트 계정 옵션에서 API 키와 함께 표시되는 숫자 사용자 ID와 API 키를 입력하세요.";
 "The website didn't accept the saved account details. Check the username and API key in the server's settings." = "웹사이트가 저장한 계정 정보를 받아들이지 않았습니다. 서버 설정에서 사용자 이름과 API 키를 확인하세요.";
+"Website Sign-In" = "웹사이트 로그인";
+"Not Signed In" = "로그인 안 됨";
+"Not Saved" = "저장 안 됨";
+"Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in." = "Gelbooru: API 키로는 즐겨찾기와 댓글을 읽기만 할 수 있습니다. 즐겨찾기 추가·삭제, 투표, 댓글 작성은 웹사이트 로그인이 있어야 하며, 투표는 추천만 가능하고 취소할 수 없습니다. 둘 다 있으면 앱은 웹사이트 로그인을 사용합니다.";
+"You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field." = "웹사이트 계정 옵션에 표시되는 “&api_key=…&user_id=…” 한 줄을 그대로 어느 칸에든 붙여 넣어도 됩니다.";
+"Couldn’t reach the website. Check the connection and try again." = "웹사이트에 연결하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.";
+"Stored" = "저장됨";

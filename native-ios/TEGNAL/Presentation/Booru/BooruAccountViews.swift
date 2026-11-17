@@ -14,6 +14,7 @@ struct BooruAccountSection<Rows: View>: View {
     @State private var signingIn = false
     @State private var confirmingSignOut = false
     @State private var canChange = true
+    @State private var hasKey = false
 
     init(server: BooruServer, header: String? = nil, @ViewBuilder rows: @escaping () -> Rows) {
         self.server = server
@@ -30,6 +31,13 @@ struct BooruAccountSection<Rows: View>: View {
                     LabeledContent(L10n.text("Website Account"),
                                    value: identity.displayName.isEmpty ? L10n.text("Signed In") : identity.displayName)
                         .accessibilityIdentifier("booru.account.status")
+                    if server.engine == .gelbooru {
+                        // Gelbooru keeps two kinds of access apart; both are shown, and the website's is used first.
+                        LabeledContent(L10n.text("Website Sign-In"), value: L10n.text(canChange ? "Signed In" : "Not Signed In"))
+                            .accessibilityIdentifier("booru.account.website")
+                        LabeledContent(L10n.text("API Key"), value: L10n.text(hasKey ? "Stored" : "Not Saved"))
+                            .accessibilityIdentifier("booru.account.apiKey")
+                    }
                     if sync.expired.contains(server.id) || !canChange {
                         // An API key that only reads, or a sign-in the website stopped accepting.
                         Button { signingIn = true } label: {
@@ -52,6 +60,7 @@ struct BooruAccountSection<Rows: View>: View {
                 // An API key saved in the server's settings, or a sign-in kept from the website, counts too.
                 await sync.discover(server)
                 canChange = await BooruAccountClient.shared.canChange(server)
+                hasKey = (try? BooruKeychain.read(serverID: server.id).isEmpty) == false
             }
             rows()
             if identity != nil {
@@ -71,8 +80,8 @@ struct BooruAccountSection<Rows: View>: View {
                                ? "The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website."
                                : "The website didn't accept the saved account details. Check the username and API key in the server's settings."))
                     .foregroundStyle(.red)
-            } else if identity != nil && !canChange {
-                Text(L10n.text("Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website."))
+            } else if server.engine == .gelbooru {
+                Text(L10n.text("Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in."))
             } else {
                 Text(L10n.text(server.engine.keepsFavoriteLists
                                ? "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password."
@@ -87,6 +96,7 @@ struct BooruAccountSection<Rows: View>: View {
         Task {
             await sync.discover(server, force: true)
             canChange = await BooruAccountClient.shared.canChange(server)
+            hasKey = (try? BooruKeychain.read(serverID: server.id).isEmpty) == false
         }
     }
 }
@@ -110,7 +120,7 @@ private struct BooruFavoritesSyncRows: View {
         let state = sync.state(server)
         let names = sync.listNames[server.id] ?? [:]
         Toggle(isOn: Binding(get: { state != nil }, set: { on in
-            if on { run { await sync.setUp(server, requested: true) } } else { sync.stop(server) }
+            if on { run { try await sync.setUpSync(server, requested: true) } } else { sync.stop(server) }
         })) {
             SettingsHelpLabel("Sync Favorites with Folders",
                               help: server.engine.keepsFavoriteLists
@@ -240,6 +250,9 @@ private struct BooruSignInWebView: UIViewRepresentable {
         private var observation: NSKeyValueObservation?
         private var done = false
         private var checking = false
+        /// Dropped connections are tried again here, a few times, rather than ending the sign-in.
+        private var retries = 0
+        private var lastRequest: URLRequest?
         init(_ parent: BooruSignInWebView) { self.parent = parent }
 
         /// Sign-in cookies can arrive without a finished page load, so the page is looked at every second.
@@ -275,21 +288,43 @@ private struct BooruSignInWebView: UIViewRepresentable {
             guard let identity = await parent.check(), !done else { return }
             done = true
             detach()
+            // The page passed whatever check the website showed; the app's requests use this browser too,
+            // so the website doesn't ask for Validate Client again.
+            BooruWebTransport.adopt(view, server: parent.server)
+            BooruBrowserSession.clearChallenge(for: parent.server)
+            NotificationCenter.default.post(name: .booruClientValidated, object: parent.server.id)
             parent.signedIn(identity)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { parent.loading = true }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             parent.loading = false
+            retries = 0
             Task { await look(at: webView) }
         }
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fail(error) }
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fail(error) }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fail(error, in: webView) }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fail(error, in: webView) }
 
-        private func fail(_ error: Error) {
+        private func fail(_ error: Error, in webView: WKWebView) {
+            let error = error as NSError
+            // A page left for another one, or handed to another frame, is not a failure.
+            guard error.code != NSURLErrorCancelled, !(error.domain == "WebKitErrorDomain" && error.code == 102) else { return }
+            let transient = [NSURLErrorSecureConnectionFailed, NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut,
+                             NSURLErrorCannotConnectToHost, NSURLErrorCannotFindHost].contains(error.code)
+            if transient, retries < 3 {
+                retries += 1
+                // A form sent again could act twice, so a failed sign-in form starts over from its page.
+                let again = lastRequest.flatMap { $0.httpMethod == "POST" ? nil : $0 }
+                    ?? URLRequest(url: parent.server.engine.signInURL(base: parent.server.baseURL))
+                let delay = retries
+                Task { [weak webView] in
+                    try? await Task.sleep(for: .milliseconds(700 * delay))
+                    webView?.load(again)
+                }
+                return
+            }
             parent.loading = false
-            guard (error as NSError).code != NSURLErrorCancelled else { return }
-            parent.failure = BooruConnectionMessage.describe(error)
+            parent.failure = L10n.text("Couldn’t reach the website. Check the connection and try again.")
         }
 
         /// The server's own pages, and any secure frame a sign-in check shows inside them.
@@ -298,7 +333,9 @@ private struct BooruSignInWebView: UIViewRepresentable {
             let main = action.targetFrame?.isMainFrame ?? true
             let site = SiteAccount.registrableDomain(parent.server.baseURL.host?.lowercased() ?? "")
             let host = url.host?.lowercased() ?? ""
-            let allowed = !main || host == site || host.hasSuffix("." + site)
+            // A bot check's own pages pass through too; they lead back to the website.
+            let allowed = !main || host == site || host.hasSuffix("." + site) || host == "challenges.cloudflare.com"
+            if main, allowed { lastRequest = action.request }
             if allowed && action.targetFrame == nil { webView.load(action.request); decisionHandler(.cancel) }
             else { decisionHandler(allowed ? .allow : .cancel) }
         }

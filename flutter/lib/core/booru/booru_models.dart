@@ -162,6 +162,29 @@ class BooruCredentials {
   final String account;
   final String apiKey;
   bool get isEmpty => account.isEmpty && apiKey.isEmpty;
+
+  /// Gelbooru's account options show API access as one line, `&api_key=…&user_id=…`. Pasted into
+  /// either field, it fills both.
+  BooruCredentials get normalized {
+    for (final text in [account, apiKey]) {
+      final pasted = pastedAPIAccess(text);
+      if (pasted != null) return pasted;
+    }
+    return BooruCredentials(account: account.trim(), apiKey: apiKey.trim());
+  }
+
+  static BooruCredentials? pastedAPIAccess(String text) {
+    final line = text.replaceAll('&amp;', '&');
+    final key = RegExp(r'api_key=([^&\s]+)').firstMatch(line)?.group(1);
+    final user = RegExp(r'user_id=([0-9]+)').firstMatch(line)?.group(1);
+    if (key == null || user == null) return null;
+    return BooruCredentials(account: user, apiKey: key);
+  }
+
+  @override
+  bool operator ==(Object other) => other is BooruCredentials && other.account == account && other.apiKey == apiKey;
+  @override
+  int get hashCode => Object.hash(account, apiKey);
 }
 
 class BooruPost {

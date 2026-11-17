@@ -19,6 +19,7 @@ import '../library/folders_view.dart' show ContentUnavailable;
 import '../settings/settings_rows.dart';
 import '../settings/site_account_section.dart' show WebCookies;
 import 'booru_common.dart';
+import 'booru_settings_views.dart' show booruClientValidated;
 
 /// `BooruAccountSection`: one image server's account, in its settings. The person signs in on the
 /// server's own page or saves the API key the server's account settings show; the app keeps only
@@ -182,6 +183,8 @@ class _BooruAccountSectionState extends State<BooruAccountSection> {
     if (sync == null) return const SizedBox.shrink();
     final identity = sync.identity(_server);
     final canChange = identity != null && sync.client.canChange(_server);
+    final hasKey = !sync.client.credentials.read(_server.id).isEmpty;
+    final gelbooru = _server.engine == BooruEngine.gelbooru;
     return FormSection(
       prominentHeader: true,
       rowColor: widget.rowColor,
@@ -197,8 +200,8 @@ class _BooruAccountSectionState extends State<BooruAccountSection> {
             )
           : Text(
               L10n.text(
-                identity != null && !canChange
-                    ? 'Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website.'
+                gelbooru
+                    ? "Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in."
                     : _server.engine.keepsFavoriteLists
                     ? "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password."
                     : "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password.",
@@ -207,6 +210,11 @@ class _BooruAccountSectionState extends State<BooruAccountSection> {
       children: [
         if (identity != null) ...[
           SettingsValueRow(title: L10n.text('Website Account'), value: identity.displayName.isEmpty ? L10n.text('Signed In') : identity.displayName),
+          // Gelbooru keeps two kinds of access apart; both are shown, and the website's is used first.
+          if (gelbooru) ...[
+            SettingsValueRow(title: L10n.text('Website Sign-In'), value: L10n.text(canChange ? 'Signed In' : 'Not Signed In')),
+            SettingsValueRow(title: L10n.text('API Key'), value: L10n.text(hasKey ? 'Stored' : 'Not Saved')),
+          ],
           // An API key that only reads, or a sign-in the website stopped accepting.
           if (sync.expired.contains(_server.id) || !canChange)
             SettingsLinkRow(
@@ -245,6 +253,10 @@ class _BooruSignInPageState extends State<BooruSignInPage> {
   bool _checking = false;
   String? _failure;
 
+  /// Dropped connections are tried again here, a few times, rather than ending the sign-in.
+  int _retries = 0;
+  String? _lastURL;
+
   BooruServer get _server => widget.server;
 
   @override
@@ -266,8 +278,11 @@ class _BooruSignInPageState extends State<BooruSignInPage> {
       ..setBackgroundColor(const Color(0xFFFFFFFF))
       ..setNavigationDelegate(
         NavigationDelegate(
-          onNavigationRequest: (request) =>
-              _allows(Uri.tryParse(request.url), mainFrame: request.isMainFrame) ? NavigationDecision.navigate : NavigationDecision.prevent,
+          onNavigationRequest: (request) {
+            final allowed = _allows(Uri.tryParse(request.url), mainFrame: request.isMainFrame);
+            if (allowed && request.isMainFrame) _lastURL = request.url;
+            return allowed ? NavigationDecision.navigate : NavigationDecision.prevent;
+          },
           onPageStarted: (_) {
             if (mounted) setState(() => _loading = true);
           },
@@ -275,16 +290,32 @@ class _BooruSignInPageState extends State<BooruSignInPage> {
             if (mounted) setState(() => _progress = value / 100);
           },
           onPageFinished: (_) {
+            _retries = 0;
             if (mounted) setState(() => _loading = false);
             _look(controller);
           },
           onWebResourceError: (error) {
             // A page left for another one is not a failure.
             if (error.isForMainFrame == false || error.errorType == WebResourceErrorType.unknown && error.errorCode == -3) return;
+            const transient = {
+              WebResourceErrorType.connect,
+              WebResourceErrorType.timeout,
+              WebResourceErrorType.hostLookup,
+              WebResourceErrorType.failedSslHandshake,
+              WebResourceErrorType.io,
+            };
+            if (transient.contains(error.errorType) && _retries < 3) {
+              _retries += 1;
+              final again = Uri.tryParse(error.url ?? _lastURL ?? '') ?? _server.engine.signInURL(_server.baseURL);
+              Future<void>.delayed(Duration(milliseconds: 700 * _retries), () {
+                if (mounted && !_done) controller.loadRequest(again);
+              });
+              return;
+            }
             if (mounted) {
               setState(() {
                 _loading = false;
-                _failure = error.description;
+                _failure = L10n.text('Couldn’t reach the website. Check the connection and try again.');
               });
             }
           },
@@ -335,6 +366,10 @@ class _BooruSignInPageState extends State<BooruSignInPage> {
       if (sync == null || identity == null || _done) return;
       _done = true;
       _watcher?.cancel();
+      // The page passed whatever check the website showed; its cookies serve the app's requests too,
+      // so the website doesn't ask for Validate Client again.
+      BooruBrowserSession.shared.clearChallenge(_server);
+      booruClientValidated.value = (_server.id, DateTime.now().microsecondsSinceEpoch);
       unawaited(sync.signedIn(_server, identity));
       if (mounted) Navigator.of(context).pop();
     } finally {

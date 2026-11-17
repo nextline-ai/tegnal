@@ -81,6 +81,45 @@ void main() {
     expect(other.first.text, 'Great picture');
   });
 
+  test('an API access line pasted into either field fills both', () {
+    const line = '&api_key=348erj3kr&user_id=1824193';
+    expect(const BooruCredentials(account: line).normalized, const BooruCredentials(account: '1824193', apiKey: '348erj3kr'));
+    expect(const BooruCredentials(apiKey: ' $line\n').normalized, const BooruCredentials(account: '1824193', apiKey: '348erj3kr'));
+    expect(
+      const BooruCredentials(account: '1824193', apiKey: '&amp;api_key=abc&amp;user_id=7').normalized,
+      const BooruCredentials(account: '7', apiKey: 'abc'),
+    );
+    expect(
+      const BooruCredentials(account: ' name ', apiKey: ' key ').normalized,
+      const BooruCredentials(account: 'name', apiKey: 'key'),
+      reason: 'Other details are only trimmed',
+    );
+  });
+
+  test('a favorites page with no images is empty only when it is the website’s own page', () {
+    List<int> page(String html) => utf8.encode(html);
+    expect(
+      BooruAccountParser.isEmptyFavoritesPage(
+        page('<html><body><a href="index.php?page=favorites&amp;s=view&amp;id=7">My Favorites</a><div id="paginator"></div></body></html>'),
+      ),
+      isTrue,
+    );
+    expect(
+      BooruAccountParser.isEmptyFavoritesPage(
+        page('<html><body><span class="thumb"><a href="index.php?page=post&amp;s=view&amp;id=12"></a></span></body></html>'),
+      ),
+      isFalse,
+      reason: 'Images the parser didn’t recognize are not an empty page',
+    );
+    expect(BooruAccountParser.isEmptyFavoritesPage(page('<html><body><a href="index.php?page=post&s=view&id=12">12</a></body></html>')), isFalse);
+    expect(
+      BooruAccountParser.isEmptyFavoritesPage(page('<html><head><title>Just a moment...</title></head><body><form id="challenge-form"></form></body></html>')),
+      isFalse,
+      reason: 'A bot check never reads as no favorites',
+    );
+    expect(BooruAccountParser.isEmptyFavoritesPage(page('{}')), isFalse);
+  });
+
   test('comment form keeps hidden fields without posting anonymously', () {
     const html = '''
 <form method="post" action="index.php?page=search"><input name="tags"></form>

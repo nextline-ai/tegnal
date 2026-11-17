@@ -53,6 +53,20 @@ final class BooruUITests: XCTestCase {
         }
         return app
     }
+    /// Opens a server's own settings (its account, blacklist, check and cookies) from the More tab:
+    /// the first server listed, or the one with [id].
+    private func openServerSettings(_ app: XCUIApplication, id: String? = nil) {
+        for _ in 0..<6 where !element(app, "booru.serversLink").isHittable { app.swipeDown() }
+        element(app, "booru.serversLink").tap()
+        let edit = id.map { element(app, "booru.editServer." + $0) }
+            ?? app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'booru.editServer.'")).firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+    }
+    /// Closes a server's settings and returns to the More tab's top.
+    private func closeServerSettings(_ app: XCUIApplication) {
+        app.buttons["Cancel"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+    }
     private func reveal(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         let value = element(app, id)
         for _ in 0..<6 {
@@ -1183,11 +1197,12 @@ final class BooruUITests: XCTestCase {
         let app = launch()
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
         app.tabBars.buttons["More"].tap()
-        app.swipeUp()
+        openServerSettings(app)
         reveal(app, "booru.blacklist").tap()
         let rules = element(app, "booru.blacklistText")
         XCTAssertTrue(rules.waitForExistence(timeout: 5)); rules.tap(); rules.typeText("scenery")
         element(app, "booru.blacklistSave").tap()
+        closeServerSettings(app)
         app.tabBars.buttons["Explore"].tap()
         XCTAssertTrue(element(app, "booru.post.102").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "booru.post.101").exists)
@@ -1200,7 +1215,7 @@ final class BooruUITests: XCTestCase {
         reveal(app, "booru.serverOptions").tap()
         element(app, "booru.serverName").tap(); element(app, "booru.serverName").typeText("My Booru")
         element(app, "booru.serverSave").tap()
-        XCTAssertTrue(app.staticTexts["My Booru"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["example.com"].waitForExistence(timeout: 5), "Servers are listed by their address")
         capture(app, "Custom server configured")
         app.tabBars.buttons["Explore"].tap()
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 5))
@@ -1441,21 +1456,24 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["More"].tap()
         let servers = element(app, "booru.serversLink"), pools = element(app, "booru.poolsLink"), columns = element(app, "settings.gridColumns")
         XCTAssertLessThan(servers.frame.minY, pools.frame.minY)
-        XCTAssertTrue(columns.isHittable, "More must expose settings without another navigation step")
-        XCTAssertLessThan(pools.frame.minY, columns.frame.minY)
+        // The import banner can push the settings below the fold; a scroll is not another navigation step.
+        XCTAssertTrue(reveal(app, "settings.gridColumns").isHittable, "More must expose settings without another navigation step")
+        if pools.exists { XCTAssertLessThan(pools.frame.minY, columns.frame.minY) }
         XCTAssertFalse(element(app, "booru.settingsLink").exists)
         capture(app, "Booru More with inline settings")
-        app.swipeUp()
+        XCTAssertFalse(element(app, "booru.validate").exists, "A server's check lives in its own settings")
+        openServerSettings(app)
         reveal(app, "booru.validate").tap()
         XCTAssertTrue(app.webViews.staticTexts["Validation browser is ready."].waitForExistence(timeout: 10))
         capture(app, "Validate Client")
         element(app, "booru.validationDone").tap()
-        element(app, "booru.cookies").tap()
+        reveal(app, "booru.cookies").tap()
         XCTAssertTrue(app.staticTexts["No Cookies"].waitForExistence(timeout: 5))
         element(app, "booru.resetCookies").tap()
         app.sheets.buttons["Reset Cookies"].tap()
         XCTAssertTrue(app.staticTexts["No Cookies"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
+        closeServerSettings(app)
         XCTAssertTrue(reveal(app, "developer.website").isHittable)
         XCTAssertTrue(element(app, "developer.logo").exists)
         XCTAssertTrue(reveal(app, "developer.community").isHittable)
@@ -2226,10 +2244,11 @@ final class BooruUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--booru-live-ui-test", "--booru-legacy-address", String(address), "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch(); app.tabBars.buttons["More"].tap()
+        openServerSettings(app)
         reveal(app, "booru.validate").tap()
         XCTAssertTrue(element(app, "booru.validationWeb").waitForExistence(timeout: 10))
         Thread.sleep(forTimeInterval: 8)
-        element(app, "booru.validationDone").tap(); app.tabBars.buttons["Explore"].tap()
+        element(app, "booru.validationDone").tap(); closeServerSettings(app); app.tabBars.buttons["Explore"].tap()
         XCTAssertFalse(element(app, "booru.rating").exists)
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'booru.post.'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 40), "Legacy public gallery should load without a rating condition")
@@ -2248,11 +2267,12 @@ final class BooruUITests: XCTestCase {
         let search = element(app, "booru.search")
         search.tap(); search.typeText("landscape rating:general"); app.keyboards.buttons["Search"].tap()
         app.tabBars.buttons["More"].tap()
+        openServerSettings(app, id: "gelbooru")
         reveal(app, "booru.validate").tap()
         XCTAssertTrue(element(app, "booru.validationWeb").waitForExistence(timeout: 10))
         Thread.sleep(forTimeInterval: 8)
         XCTAssertFalse(app.staticTexts["Unable to Load"].exists, "The visible validation page itself must connect")
-        element(app, "booru.validationDone").tap(); app.tabBars.buttons["Explore"].tap()
+        element(app, "booru.validationDone").tap(); closeServerSettings(app); app.tabBars.buttons["Explore"].tap()
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'booru.post.'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 40), "Public Gelbooru gallery must load without an API key")
         card.tap()
@@ -2271,11 +2291,12 @@ final class BooruUITests: XCTestCase {
         let search = element(app, "booru.search")
         search.tap(); search.typeText("id:15029425"); app.keyboards.buttons["Search"].tap()
         app.tabBars.buttons["More"].tap()
+        openServerSettings(app, id: "gelbooru")
         reveal(app, "booru.validate").tap()
         XCTAssertTrue(element(app, "booru.validationWeb").waitForExistence(timeout: 10))
         Thread.sleep(forTimeInterval: 8)
         XCTAssertFalse(app.staticTexts["Unable to Load"].exists, "The visible validation page itself must connect")
-        element(app, "booru.validationDone").tap(); app.tabBars.buttons["Explore"].tap()
+        element(app, "booru.validationDone").tap(); closeServerSettings(app); app.tabBars.buttons["Explore"].tap()
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'booru.post.'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 40), "Public Gelbooru gallery must load without an API key")
         XCTAssertTrue(element(app, "booru.post.15029425").exists)
@@ -2377,6 +2398,7 @@ final class BooruUITests: XCTestCase {
         let search = element(app, "booru.search")
         search.tap(); search.typeText("rating:g landscape"); app.keyboards.buttons["Search"].tap()
         app.tabBars.buttons["More"].tap()
+        openServerSettings(app, id: "danbooru")
         reveal(app, "booru.validate").tap()
         XCTAssertTrue(element(app, "booru.validationWeb").waitForExistence(timeout: 10))
         let error = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "Unable to connect securely.", "The server interrupted the connection.")).firstMatch
@@ -2384,6 +2406,7 @@ final class BooruUITests: XCTestCase {
             throw XCTSkip("The live validation page could not connect on this device network")
         }
         element(app, "booru.validationDone").tap()
+        closeServerSettings(app)
         app.tabBars.buttons["Explore"].tap()
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'booru.post.'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 35), "Explore must load through the retained validation browser")
@@ -2403,10 +2426,12 @@ final class BooruUITests: XCTestCase {
         element(app, "booru.server").tap(); app.buttons["Danbooru"].tap(); app.buttons["Safebooru"].tap()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).tap()
         app.tabBars.buttons["More"].tap()
+        openServerSettings(app, id: "danbooru")
         reveal(app, "booru.validate").tap()
         XCTAssertTrue(element(app, "booru.validationWeb").waitForExistence(timeout: 10))
         Thread.sleep(forTimeInterval: 8)
         element(app, "booru.validationDone").tap()
+        closeServerSettings(app)
         for _ in 0..<6 {
             if element(app, "booru.poolsLink").isHittable { break }
             app.swipeDown()

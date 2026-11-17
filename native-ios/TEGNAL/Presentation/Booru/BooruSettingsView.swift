@@ -17,16 +17,15 @@ struct BooruServersView: View {
                         Button { store.perform { try store.toggleServer(server) } } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: store.selectedServerIDs.contains(server.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(.tint)
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(server.displayName).foregroundStyle(.primary)
-                                    Text(server.baseURL.host ?? "").font(.caption).foregroundStyle(.secondary)
-                                }
+                                // The address alone: a name that repeats it says nothing more.
+                                Text(server.baseURL.host ?? server.displayName).foregroundStyle(.primary)
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }.buttonStyle(.plain)
                             // Safe Mode browses Safebooru alone; the other servers stay, unchosen, until it is off.
                             .disabled(store.safeMode && !server.isSafebooru)
                         Button { editing = .init(server: server) } label: { Image(systemName: "slider.horizontal.3") }
                             .buttonStyle(.borderless).accessibilityLabel(L10n.text("Edit") + " " + server.displayName)
+                            .accessibilityIdentifier("booru.editServer.\(server.id)")
                     }.padding(.vertical, 4).swipeActions {
                         Button(L10n.text("Delete"), role: .destructive) { deleting = server }
                     }
@@ -207,7 +206,13 @@ struct WebsiteConnectionEditor: View {
                         TextField(L10n.text("Name (Optional)"), text: $name).accessibilityIdentifier("booru.serverName")
                         if engine != .oldGelbooru {
                             TextField(L10n.text(engine == .gelbooru ? "User ID" : "Username"), text: $account).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                .onChange(of: account) { fillPastedAPIAccess() }
                             SecureField(L10n.text(engine == .moebooru ? "Password Hash" : "API Key"), text: $apiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                .onChange(of: apiKey) { fillPastedAPIAccess() }
+                            if engine == .gelbooru {
+                                Text(L10n.text("You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field."))
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
                         }
                     } label: {
                         SettingsHelpLabel("Additional Options", help: "Optional account details can improve access on some websites. Copy them from that website’s account settings; they are stored securely in Keychain.")
@@ -217,9 +222,13 @@ struct WebsiteConnectionEditor: View {
             }
             if let server {
                 BooruAccountSection(server: server)
+                // The server's connection and filters, which image mode's settings no longer list.
                 Section {
-                    Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = true }
+                    NavigationLink { BooruBlacklistView(server: server) } label: { Label(L10n.text("Tag Blacklist"), systemImage: "eye.slash") }
+                        .accessibilityIdentifier("booru.blacklist")
+                    Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = true }.accessibilityIdentifier("booru.validate")
                     NavigationLink { BooruCookiesView(server: server) } label: { Label(L10n.text("Cookies"), systemImage: "network.badge.shield.half.filled") }
+                        .accessibilityIdentifier("booru.cookies")
                 }
             }
             if let error { Section { Text(error).foregroundStyle(.red) } }
@@ -258,6 +267,13 @@ struct WebsiteConnectionEditor: View {
                 }
             }
     }
+    /// Gelbooru's API access line, pasted into either field, fills both.
+    private func fillPastedAPIAccess() {
+        for text in [account, apiKey] {
+            if let pasted = BooruCredentials.pastedAPIAccess(text) { account = pasted.account; apiKey = pasted.apiKey; return }
+        }
+    }
+
     private func save() {
         guard let effectiveServerType else { return }
         switch effectiveServerType {
@@ -274,7 +290,7 @@ struct WebsiteConnectionEditor: View {
                 let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let value = BooruServer(id: server?.id ?? UUID().uuidString, name: displayName.isEmpty ? (url.host ?? url.absoluteString) : displayName, baseURL: url, engine: engine)
                 guard !store.servers.contains(where: { $0.id != value.id && $0.baseURL == url }) else { throw BooruError.duplicateServer }
-                let credentials = BooruCredentials(account: account.trimmingCharacters(in: .whitespacesAndNewlines), apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+                let credentials = BooruCredentials(account: account, apiKey: apiKey).normalized
                 guard credentials.account.isEmpty == credentials.apiKey.isEmpty else { throw BooruError.authentication }
                 try BooruKeychain.save(credentials, serverID: value.id)
                 try store.saveServer(value)
@@ -318,7 +334,6 @@ struct BooruMoreView: View {
     @Environment(BooruStore.self) private var store
     @State private var showOnboarding = false
     @State private var showReader = false
-    @State private var validating: BooruServer?
     @State private var cacheCleared = false
     @State private var confirmClearCache = false
     @SwiftUI.AppStorage("booru.useEmbeddedBrowser", store: ReaderPreferences.booruDefaults) private var useEmbeddedBrowser = false
@@ -354,17 +369,6 @@ struct BooruMoreView: View {
                     SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.", symbol: "safari")
                 }.accessibilityIdentifier("booru.browserToggle")
             } header: { Text(L10n.text("Website Connection")) }
-            // One section per server: its account, then its connection and filters at the bottom.
-            ForEach(store.selectedServers) { server in
-                BooruAccountSection(server: server, header: server.displayName) {
-                    NavigationLink { BooruBlacklistView(server: server) } label: { Label(L10n.text("Tag Blacklist"), systemImage: "eye.slash") }.accessibilityIdentifier("booru.blacklist")
-                    HStack(spacing: 4) {
-                        Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = server }.accessibilityIdentifier("booru.validate")
-                        SettingsInfoButton(title: "Validate Client", message: "Opens the website’s connection check. Complete it here if the server blocks searches or image loading.")
-                    }
-                    NavigationLink { BooruCookiesView(server: server) } label: { Label(L10n.text("Cookies"), systemImage: "network.badge.shield.half.filled") }.accessibilityIdentifier("booru.cookies")
-                }
-            }
             SearchHistorySettings(booru: true)
             TasteSettingsSection(mode: .booru)
             BooruSafeModeSettings()
@@ -390,7 +394,6 @@ struct BooruMoreView: View {
         } message: { Text(L10n.text("Saved favorites are kept. Images will be downloaded again when needed.")) }
         .appSheet(isPresented: $showReader) { ReaderSettingsView(booru: true) }
         .appFullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
-        .appSheet(item: $validating) { BooruValidationView(server: $0) }
 
     }
 }

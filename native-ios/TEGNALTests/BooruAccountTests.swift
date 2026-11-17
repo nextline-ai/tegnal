@@ -56,6 +56,26 @@ final class BooruAccountTests: XCTestCase {
         XCTAssertEqual(other.first?.text, "Great picture")
     }
 
+    func testAPIAccessLinePastedIntoEitherFieldFillsBoth() {
+        let line = "&api_key=348erj3kr&user_id=1824193"
+        XCTAssertEqual(BooruCredentials(account: line, apiKey: "").normalized, BooruCredentials(account: "1824193", apiKey: "348erj3kr"))
+        XCTAssertEqual(BooruCredentials(account: "", apiKey: " \(line)\n").normalized, BooruCredentials(account: "1824193", apiKey: "348erj3kr"))
+        XCTAssertEqual(BooruCredentials(account: "1824193", apiKey: "&amp;api_key=abc&amp;user_id=7").normalized, BooruCredentials(account: "7", apiKey: "abc"))
+        XCTAssertEqual(BooruCredentials(account: " name ", apiKey: " key ").normalized, BooruCredentials(account: "name", apiKey: "key"), "Other details are only trimmed")
+    }
+
+    func testAFavoritesPageWithNoImagesIsEmptyOnlyWhenItIsTheWebsitesOwnPage() {
+        let empty = Data("<html><body><a href=\"index.php?page=favorites&amp;s=view&amp;id=7\">My Favorites</a><div id=\"paginator\"></div></body></html>".utf8)
+        XCTAssertTrue(BooruAccountParser.isEmptyFavoritesPage(empty))
+        let images = Data("<html><body><span class=\"thumb\"><a href=\"index.php?page=post&amp;s=view&amp;id=12\"></a></span></body></html>".utf8)
+        XCTAssertFalse(BooruAccountParser.isEmptyFavoritesPage(images), "Images the parser didn't recognize are not an empty page")
+        let link = Data("<html><body><a href=\"index.php?page=post&s=view&id=12\">12</a></body></html>".utf8)
+        XCTAssertFalse(BooruAccountParser.isEmptyFavoritesPage(link))
+        let check = Data("<html><head><title>Just a moment...</title></head><body><form id=\"challenge-form\"></form></body></html>".utf8)
+        XCTAssertFalse(BooruAccountParser.isEmptyFavoritesPage(check), "A bot check never reads as no favorites")
+        XCTAssertFalse(BooruAccountParser.isEmptyFavoritesPage(Data("{}".utf8)))
+    }
+
     func testCommentFormKeepsHiddenFieldsWithoutPostingAnonymously() throws {
         let html = """
         <form method="post" action="index.php?page=search"><input name="tags"></form>
