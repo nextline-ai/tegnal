@@ -596,10 +596,15 @@ final class SiteFavoriteFolders: @unchecked Sendable {
 
     private let defaults: UserDefaults
     private let lock = NSLock()
-    private static let statesKey = "manga.favoriteSync"
-    private static let declinedKey = "manga.favoriteSyncDeclined"
+    private let statesKey: String
+    private let declinedKey: String
 
-    init(defaults: UserDefaults) { self.defaults = defaults }
+    /// Image servers keep their own states under other keys, by server.
+    init(defaults: UserDefaults, statesKey: String = "manga.favoriteSync", declinedKey: String = "manga.favoriteSyncDeclined") {
+        self.defaults = defaults
+        self.statesKey = statesKey
+        self.declinedKey = declinedKey
+    }
 
     /// A website whose favorites are synced, with what was learned about them.
     func state(for site: String) -> State? {
@@ -610,8 +615,8 @@ final class SiteFavoriteFolders: @unchecked Sendable {
         lock.withLock {
             var states = states
             states[site] = try? JSONEncoder().encode(state)
-            defaults.set(states, forKey: Self.statesKey)
-            defaults.set(declined.subtracting([site]).sorted(), forKey: Self.declinedKey)
+            defaults.set(states, forKey: statesKey)
+            defaults.set(declined.subtracting([site]).sorted(), forKey: declinedKey)
         }
     }
 
@@ -622,15 +627,15 @@ final class SiteFavoriteFolders: @unchecked Sendable {
         lock.withLock {
             var states = states
             states[site] = nil
-            defaults.set(states, forKey: Self.statesKey)
-            if decline { defaults.set(declined.union([site]).sorted(), forKey: Self.declinedKey) }
+            defaults.set(states, forKey: statesKey)
+            if decline { defaults.set(declined.union([site]).sorted(), forKey: declinedKey) }
         }
     }
 
     func isDeclined(_ site: String) -> Bool { lock.withLock { declined.contains(site) } }
 
-    private var states: [String: Data] { defaults.dictionary(forKey: Self.statesKey) as? [String: Data] ?? [:] }
-    private var declined: Set<String> { Set(defaults.stringArray(forKey: Self.declinedKey) ?? []) }
+    private var states: [String: Data] { defaults.dictionary(forKey: statesKey) as? [String: Data] ?? [:] }
+    private var declined: Set<String> { Set(defaults.stringArray(forKey: declinedKey) ?? []) }
 }
 
 extension AccountFavorites {

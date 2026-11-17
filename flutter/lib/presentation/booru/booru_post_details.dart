@@ -12,6 +12,7 @@ import '../design/grouped_form.dart';
 import '../design/ios_controls.dart';
 import '../design/tegnal_theme.dart';
 import '../library/folders_view.dart' show anchorOf;
+import 'booru_account_views.dart';
 import 'booru_common.dart';
 import 'booru_feed_view.dart';
 import 'booru_post_view.dart' show openExternalLink;
@@ -199,7 +200,7 @@ class _DetailsPageState extends State<_DetailsPage> {
                   value(L10n.text('Server'), _server.displayName),
                   value(L10n.text('Resolution'), '${_post.width} × ${_post.height}'),
                   value(L10n.text('Format'), _post.fileExtension.toUpperCase()),
-                  value(L10n.text('Score'), '${_post.score}'),
+                  BooruScoreRow(server: _server, post: _post),
                   if (!_post.isVideo && !_post.isAnimated)
                     FormRow(
                       child: Row(
@@ -251,6 +252,8 @@ class _DetailsPageState extends State<_DetailsPage> {
                   ],
                 ),
               ],
+              const SizedBox(height: 28),
+              BooruCommentsSection(server: _server, postID: _post.postID, fixture: _booru.fixture),
               const SizedBox(height: 28),
               FormSection(
                 rowColor: row,

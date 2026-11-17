@@ -9,6 +9,10 @@ enum BooruWebTransport {
 
     static func hasSession(for server: BooruServer) -> Bool { sessions[server.id] != nil }
 
+    /// Marks a GET whose redirect answer is enough, such as a vote or a favorite removed. The
+    /// header itself never leaves the app.
+    nonisolated static let followsNoRedirect = "X-TEGNAL-Redirect-Answer"
+
     static func adopt(_ webView: WKWebView, server: BooruServer) {
         // A usable page may keep loading ads/subresources. Keep the actual validated
         // view even then, rather than silently replacing it with a cold browser.
@@ -64,14 +68,20 @@ enum BooruWebTransport {
         try Task.checkCancellation()
         // The isolated content world prevents page scripts from inspecting API credentials
         // or replacing fetch. Redirects are rejected before credentials can leave this origin.
+        // An account's change (a form or a vote) is answered with a redirect to the page it
+        // changed; that answer is enough, and the redirect is never followed elsewhere.
+        let method = request.httpMethod ?? "GET"
         let value = try await browser.webView.callAsyncJavaScript("""
             const target = new URL(address);
             if (target.origin !== location.origin || target.protocol !== 'https:') throw new Error('Origin mismatch');
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 25000);
             try {
-                const response = await fetch(target.href, {method: 'GET', headers,
-                    credentials: 'include', redirect: 'error', signal: controller.signal});
+                const options = {method, headers, credentials: 'include',
+                    redirect: method === 'GET' && !manual ? 'error' : 'manual', signal: controller.signal};
+                if (payload !== null) options.body = payload;
+                const response = await fetch(target.href, options);
+                if (response.type === 'opaqueredirect') return {status: 302, body: ''};
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let body = '', size = 0;
@@ -89,8 +99,12 @@ enum BooruWebTransport {
                 if (error.name === 'TypeError') return {networkError: 'connection'};
                 throw error;
             } finally { clearTimeout(timer); }
-            """, arguments: ["address": url.absoluteString,
-                             "headers": request.allHTTPHeaderFields?.filter { ["accept", "authorization"].contains($0.key.lowercased()) } ?? [:]],
+            """, arguments: ["address": url.absoluteString, "method": method,
+                             "manual": request.value(forHTTPHeaderField: Self.followsNoRedirect) != nil,
+                             "payload": request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? NSNull(),
+                             "headers": request.allHTTPHeaderFields?.filter {
+                                 ["accept", "authorization", "content-type", "x-csrf-token"].contains($0.key.lowercased())
+                             } ?? [:]],
             in: nil, contentWorld: .defaultClient)
         try Task.checkCancellation()
         if let result = value as? [String: Any], let failure = result["networkError"] as? String {

@@ -117,10 +117,19 @@ struct SettingsHelpLabel: View {
         self.title = title; self.help = help; self.symbol = symbol
     }
     var body: some View {
-        HStack(spacing: 4) {
-            if let symbol { Label(L10n.text(title), systemImage: symbol) }
-            else { Text(L10n.text(title)) }
-            SettingsInfoButton(title: title, message: help)
+        if let symbol {
+            // A Label of its own, so a row draws its symbol tinted in the same column as other rows.
+            Label {
+                HStack(spacing: 4) {
+                    Text(L10n.text(title))
+                    SettingsInfoButton(title: title, message: help)
+                }
+            } icon: { Image(systemName: symbol) }
+        } else {
+            HStack(spacing: 4) {
+                Text(L10n.text(title))
+                SettingsInfoButton(title: title, message: help)
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../app/localization.dart';
+import '../../core/booru/booru_account.dart';
 import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/content/content_environment.dart';
@@ -28,6 +29,7 @@ import '../settings/settings_rows.dart';
 import '../settings/settings_view.dart' show DeveloperSection, GlassIconToolbarButton, LicensesPage, PrivacyPolicyPage, ThumbnailGestureSettings;
 import '../settings/site_account_section.dart' show WebCookies;
 import '../settings/website_setup.dart';
+import 'booru_account_views.dart';
 import 'booru_common.dart';
 import '../challenge/challenge_library_view.dart';
 import 'booru_feed_view.dart';
@@ -98,6 +100,29 @@ class _BooruMoreViewState extends State<BooruMoreView> {
   void _setViewer(String key, Object? value) => setState(() => _booru.booruDefaults.set(key, value));
 
   void _push(Widget Function(BuildContext context) builder) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: builder));
+
+  /// A server's connection and filters, at the bottom of its section.
+  List<Widget> _serverRows(BooruServer server) => [
+    SettingsLinkRow(
+      title: L10n.text('Tag Blacklist'),
+      icon: CupertinoIcons.eye_slash,
+      onTap: () => _push((context) => BooruBlacklistView(booru: _booru, server: server)),
+    ),
+    if (AppPlatform.hasWebView)
+      SettingsLinkRow(
+        title: L10n.text('Validate Client'),
+        help: L10n.text('Opens the website’s connection check. Complete it here if the server blocks searches or image loading.'),
+        icon: CupertinoIcons.checkmark_shield,
+        tinted: true,
+        chevron: false,
+        onTap: () => showBooruValidation(context, booru: _booru, server: server),
+      ),
+    SettingsLinkRow(
+      title: L10n.text('Cookies'),
+      icon: CupertinoIcons.shield_lefthalf_fill,
+      onTap: () => _push((context) => BooruCookiesView(booru: _booru, server: server)),
+    ),
+  ];
 
   Future<void> _setLanguage(String value) async {
     _booru.preferences.set('app.language', value);
@@ -299,38 +324,20 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       SettingsToggleRow(
                         title: L10n.text('Use Embedded Browser'),
                         help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
+                        icon: CupertinoIcons.compass,
                         value: _booru.useEmbeddedBrowser,
                         onChanged: (value) => setState(() => _booru.useEmbeddedBrowser = value),
                       ),
                     ],
                   ),
                 ],
+                // One section per server: its account, then its connection and filters at the bottom.
                 for (final server in store.selectedServers) ...[
                   settingsSectionGap,
-                  section(
-                    header: '${L10n.text('Connection & Filters')} · ${server.displayName}',
-                    children: [
-                      SettingsLinkRow(
-                        title: L10n.text('Tag Blacklist'),
-                        icon: CupertinoIcons.eye_slash,
-                        onTap: () => _push((context) => BooruBlacklistView(booru: _booru, server: server)),
-                      ),
-                      if (AppPlatform.hasWebView)
-                        SettingsLinkRow(
-                          title: L10n.text('Validate Client'),
-                          help: L10n.text('Opens the website’s connection check. Complete it here if the server blocks searches or image loading.'),
-                          icon: CupertinoIcons.checkmark_shield,
-                          tinted: true,
-                          chevron: false,
-                          onTap: () => showBooruValidation(context, booru: _booru, server: server),
-                        ),
-                      SettingsLinkRow(
-                        title: L10n.text('Cookies'),
-                        icon: CupertinoIcons.shield_lefthalf_fill,
-                        onTap: () => _push((context) => BooruCookiesView(booru: _booru, server: server)),
-                      ),
-                    ],
-                  ),
+                  if (BooruAccountSync.shared != null)
+                    BooruAccountSection(booru: _booru, server: server, header: server.displayName, rowColor: row, rows: _serverRows(server))
+                  else
+                    section(header: server.displayName, children: _serverRows(server)),
                 ],
                 settingsSectionGap,
                 section(
@@ -454,6 +461,7 @@ class _BooruServersViewState extends State<BooruServersView> {
         builder: (context) => BooruCookiesView(booru: _booru, server: server),
       ),
     ),
+    account: BooruAccountSync.shared == null ? null : (context, server) => BooruAccountSection(booru: _booru, server: server),
   );
 
   Future<void> _delete(BooruServer server) async {
@@ -468,6 +476,8 @@ class _BooruServersViewState extends State<BooruServersView> {
     );
     if (delete != true) return;
     _booru.store.deleteServer(server);
+    BooruAccountSync.shared?.accounts.setIdentity(null, server.id);
+    BooruAccountSync.shared?.accounts.favorites.remove(server.id, declined: false);
     await BooruBrowserSession.shared.reset(server);
   }
 

@@ -95,13 +95,18 @@ class SiteFavoriteState {
 /// `SiteFavoriteFolders`: each signed-in website's favorites categories and the app folders kept in
 /// step with them. Kept as JSON text, since stored preferences hold only plain values.
 class SiteFavoriteFolders {
-  SiteFavoriteFolders(this._preferences);
+  /// Image servers keep their own states under other keys, by server.
+  SiteFavoriteFolders(this._preferences, {String statesKey = 'manga.favoriteSync', String declinedKey = 'manga.favoriteSyncDeclined'})
+    // ignore: prefer_initializing_formals
+    : _statesKey = statesKey,
+      // ignore: prefer_initializing_formals
+      _declinedKey = declinedKey;
 
   static SiteFavoriteFolders get shared => SiteFavoriteFolders(ContentPreferences.defaults);
 
   final Preferences _preferences;
-  static const _statesKey = 'manga.favoriteSync';
-  static const _declinedKey = 'manga.favoriteSyncDeclined';
+  final String _statesKey;
+  final String _declinedKey;
 
   Map<String, Object?> get _states {
     final text = _preferences.string(_statesKey);

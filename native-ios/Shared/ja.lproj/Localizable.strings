@@ -1918,3 +1918,20 @@
 "The passwords must match and have at least 4 characters." = "2つのパスワードが一致し、4文字以上である必要があります。";
 "Anyone with this password can open the backup. A forgotten password can’t be recovered." = "このパスワードを知っている人は誰でもバックアップを開けます。忘れたパスワードは復元できません。";
 "Enter Backup Password" = "バックアップのパスワードを入力";
+
+/* Image server accounts */
+"%@ Favorites" = "%@のお気に入り";
+"The website didn’t offer this account a comment form here. Open the image on the website to comment." = "ウェブサイトがこのアカウントにコメント欄を表示しませんでした。ウェブサイトで画像を開いてコメントしてください。";
+"Sign In Again" = "もう一度ログイン";
+"Saved images stay in the app. Folders made for favorite groups stay as plain folders." = "保存した画像はアプリに残ります。お気に入りグループ用に作ったフォルダは通常のフォルダとして残ります。";
+"Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Each favorite group that holds images becomes a folder of the same name, and the two hold the same images. You can't delete such a folder yourself while you're signed in. Images saved before signing in stay in the app only." = "アプリで保存した画像はウェブサイトのお気に入りに入り、ウェブサイトで追加したお気に入りはアプリに入ります。画像の入ったお気に入りグループごとに同じ名前のフォルダができ、両者は同じ画像を保ちます。ログインしている間は、このフォルダを自分で削除できません。ログイン前に保存した画像はアプリにだけ保存されます。";
+"Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Images saved before signing in stay in the app only." = "アプリで保存した画像はウェブサイトのお気に入りに入り、ウェブサイトで追加したお気に入りはアプリに入ります。ログイン前に保存した画像はアプリにだけ保存されます。";
+"Images you save in folders that don't stand for a favorite group are added to this list on the website. Keep in App Only leaves them off the website; the website's favorites then come to a folder of their own." = "お気に入りグループと連携していないフォルダに保存した画像は、ウェブサイトのこのリストに追加されます。「アプリにだけ保存」を選ぶとウェブサイトには追加せず、ウェブサイトのお気に入りは専用のフォルダに入ります。";
+"Reading Favorites…" = "お気に入りを読み込み中…";
+"Loading Comments…" = "コメントを読み込み中…";
+"This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings." = "このフォルダはログイン中のサイトのお気に入りグループと連携しているため、ログインしている間は削除できません。削除するには、そのサイトからログアウトするか、サイトの設定で「お気に入りをフォルダと同期」をオフにしてください。";
+"Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "ウェブサイト自体でログインするか、サーバー設定にAPIキーを保存すると、お気に入り、お気に入りグループ、投票、コメントをウェブサイトに残せます。アプリはログイン情報だけをこのデバイスに保存し、パスワードは保存しません。";
+"Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "ウェブサイト自体でログインするか、サーバー設定にAPIキーを保存すると、お気に入り、投票、コメントをウェブサイトに残せます。アプリはログイン情報だけをこのデバイスに保存し、パスワードは保存しません。";
+"Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website." = "APIキーではお気に入りとコメントを読むことができます。アプリからお気に入りを変更したり、投票やコメントをしたりするには、ウェブサイトでもログインしてください。";
+"The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website." = "ウェブサイトが保存したアカウント情報を受け付けませんでした。サーバー設定に、ウェブサイトのアカウントオプションでAPIキーと一緒に表示される数字のユーザーIDとAPIキーを入力してください。";
+"The website didn't accept the saved account details. Check the username and API key in the server's settings." = "ウェブサイトが保存したアカウント情報を受け付けませんでした。サーバー設定でユーザー名とAPIキーを確認してください。";

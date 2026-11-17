@@ -239,9 +239,13 @@ class BooruBrowserSession {
 
 /// A request as `URLRequest` holds it: the address and its headers.
 class BooruRequest {
-  BooruRequest(this.url, {Map<String, String>? headers}) : headers = {...?headers};
+  BooruRequest(this.url, {Map<String, String>? headers, this.method = 'GET', this.body}) : headers = {...?headers};
   Uri url;
   final Map<String, String> headers;
+
+  /// An account's change sends a form; reads have neither.
+  final String method;
+  List<int>? body;
 
   String? header(String name) => headers.entries.where((entry) => entry.key.toLowerCase() == name.toLowerCase()).firstOrNull?.value;
 }
@@ -439,9 +443,19 @@ abstract final class BooruWebTransport {
     final url = page.isolatesScripts ? request.url : publicURL ?? request.url;
     final headers = {
       for (final MapEntry(:key, :value) in request.headers.entries)
-        if (key.toLowerCase() == 'accept' || key.toLowerCase() == 'authorization' && page.isolatesScripts) key: value,
+        if (['accept', 'content-type', 'x-csrf-token'].contains(key.toLowerCase()) || key.toLowerCase() == 'authorization' && page.isolatesScripts) key: value,
     };
-    final result = BooruBrowserScripts.fetchResult(await page.evaluate(BooruBrowserScripts.fetch, {'address': url.toString(), 'headers': headers}));
+    // An account's change (a form or a vote) is answered with a redirect to the page it changed;
+    // that answer is enough, and the redirect is never followed elsewhere.
+    final result = BooruBrowserScripts.fetchResult(
+      await page.evaluate(BooruBrowserScripts.fetch, {
+        'address': url.toString(),
+        'headers': headers,
+        'method': request.method,
+        'payload': request.body == null ? null : utf8.decode(request.body!),
+        'manual': request.header('X-TEGNAL-Redirect-Answer') != null,
+      }),
+    );
     return BooruResponse(url: url, statusCode: result.$1, data: Uint8List.fromList(utf8.encode(result.$2)));
   }
 
@@ -499,8 +513,11 @@ if (target.origin !== location.origin || target.protocol !== 'https:') throw new
 const controller = new AbortController();
 const timer = setTimeout(() => controller.abort(), 25000);
 try {
-    const response = await fetch(target.href, {method: 'GET', headers,
-        credentials: 'include', redirect: 'error', signal: controller.signal});
+    const options = {method, headers, credentials: 'include',
+        redirect: method === 'GET' && !manual ? 'error' : 'manual', signal: controller.signal};
+    if (payload !== null) options.body = payload;
+    const response = await fetch(target.href, options);
+    if (response.type === 'opaqueredirect') return {status: 302, body: ''};
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let body = '', size = 0;

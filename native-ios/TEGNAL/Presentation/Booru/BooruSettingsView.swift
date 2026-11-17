@@ -36,7 +36,17 @@ struct BooruServersView: View {
         }.navigationTitle(L10n.text("Servers")).navigationBarTitleDisplayMode(.inline)
             .appSheet(item: $editing) { item in WebsiteConnectionEditor(server: item.server) }
             .confirmationDialog(L10n.text("Delete Server?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-                Button(L10n.text("Delete"), role: .destructive) { if let deleting { store.perform { try store.deleteServer(deleting); Task { await BooruBrowserSession.reset(deleting) } } }; deleting = nil }
+                Button(L10n.text("Delete"), role: .destructive) {
+                    if let deleting {
+                        store.perform {
+                            try store.deleteServer(deleting)
+                            BooruAccounts.shared.setIdentity(nil, serverID: deleting.id)
+                            BooruAccounts.shared.favorites.remove(deleting.id, declined: false)
+                            Task { await BooruBrowserSession.reset(deleting) }
+                        }
+                    }
+                    deleting = nil
+                }
             } message: { Text(L10n.text("This removes the server and its Booru favorites, saved tags, artists, history and blacklist from this device.")) }
     }
 }
@@ -139,6 +149,11 @@ struct WebsiteConnectionEditor: View {
         serverTypeChoice ?? detectedServerType
     }
 
+    private var automaticTitle: String {
+        guard let detectedServerType else { return L10n.text("Automatic") }
+        return L10n.text("Automatic") + " · " + L10n.text(detectedServerType == .comics ? "Comics Mode" : "Image Mode")
+    }
+
     private var isComics: Bool {
         effectiveServerType == .comics
     }
@@ -160,8 +175,9 @@ struct WebsiteConnectionEditor: View {
                     .accessibilityLabel(L10n.text("Website Address"))
             } header: { SettingsHelpLabel("Website Address", help: "Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode.") }
             Section {
+                // The Automatic choice names what it found, so the section needs no row of its own for it.
                 Picker(L10n.text("Mode"), selection: $serverTypeChoice) {
-                    Text(L10n.text("Automatic")).tag(nil as ServerType?)
+                    Text(automaticTitle).tag(nil as ServerType?)
                     if allowsComics {
                         Text(L10n.text("Comics Mode")).tag(Optional(ServerType.comics))
                     }
@@ -171,11 +187,7 @@ struct WebsiteConnectionEditor: View {
                 }.accessibilityIdentifier("booru.serverEngine")
                 if case .checking(let url) = detection, url == addressURL, serverTypeChoice == nil {
                     ProgressView(L10n.text("Identifying website…")).accessibilityIdentifier("website.detecting")
-                } else if let effectiveServerType {
-                    Label(effectiveServerType == .comics ? L10n.text("Comics Mode") : L10n.text("Image Mode"), systemImage: effectiveServerType.icon)
-                        .foregroundStyle(.tint).accessibilityIdentifier("website.detectedMode")
-                    if case .booru(let engine) = effectiveServerType { Text(engine.title).font(.footnote).foregroundStyle(.secondary) }
-                } else if !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                } else if effectiveServerType == nil, !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(L10n.text("Couldn’t identify this website. Check the connection or select its mode manually."))
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -204,6 +216,7 @@ struct WebsiteConnectionEditor: View {
                 }
             }
             if let server {
+                BooruAccountSection(server: server)
                 Section {
                     Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = true }
                     NavigationLink { BooruCookiesView(server: server) } label: { Label(L10n.text("Cookies"), systemImage: "network.badge.shield.half.filled") }
@@ -266,6 +279,9 @@ struct WebsiteConnectionEditor: View {
                 try BooruKeychain.save(credentials, serverID: value.id)
                 try store.saveServer(value)
                 if server == nil { try store.setSelectedServers(store.selectedServerIDs + [value.id]) }
+                // Account details saved here sign the account in, as a sign-in on the website does.
+                let accounts = env.booruAccounts
+                if !credentials.isEmpty { Task { await accounts.discover(value, force: true) } }
                 dismiss()
                 env.mode = .booru
             } catch { self.error = error.localizedDescription }
@@ -335,11 +351,12 @@ struct BooruMoreView: View {
             LanguageSettingsSection(booru: true)
             Section {
                 Toggle(isOn: $useEmbeddedBrowser) {
-                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.")
+                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.", symbol: "safari")
                 }.accessibilityIdentifier("booru.browserToggle")
             } header: { Text(L10n.text("Website Connection")) }
+            // One section per server: its account, then its connection and filters at the bottom.
             ForEach(store.selectedServers) { server in
-                Section(L10n.text("Connection & Filters") + " · " + server.displayName) {
+                BooruAccountSection(server: server, header: server.displayName) {
                     NavigationLink { BooruBlacklistView(server: server) } label: { Label(L10n.text("Tag Blacklist"), systemImage: "eye.slash") }.accessibilityIdentifier("booru.blacklist")
                     HStack(spacing: 4) {
                         Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = server }.accessibilityIdentifier("booru.validate")

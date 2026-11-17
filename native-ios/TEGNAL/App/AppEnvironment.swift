@@ -270,6 +270,8 @@ public final class AppEnvironment: @unchecked Sendable {
     public let coverQueueState: CoverQueueState
     public let mangaViewerImporter: MangaViewerImportService
     let booru: BooruStore
+    /// Each image server's signed-in account and its favorites sync.
+    @ObservationIgnored lazy var booruAccounts = BooruAccountSync(store: booru)
     let modeSwitchMotion = AppModeSwitchMotion()
     @ObservationIgnored var removedBookmarks: [Int64: RemovedBookmark] = [:]
     /// The folder each work saved this session went to, which Change Folder moves it out of.

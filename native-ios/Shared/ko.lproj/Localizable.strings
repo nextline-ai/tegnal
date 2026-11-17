@@ -1918,3 +1918,20 @@
 "The passwords must match and have at least 4 characters." = "두 암호가 같고 4자 이상이어야 합니다.";
 "Anyone with this password can open the backup. A forgotten password can’t be recovered." = "이 암호를 아는 사람은 누구나 백업을 열 수 있습니다. 잊어버린 암호는 되찾을 수 없습니다.";
 "Enter Backup Password" = "백업 암호 입력";
+
+/* Image server accounts */
+"%@ Favorites" = "%@ 즐겨찾기";
+"The website didn’t offer this account a comment form here. Open the image on the website to comment." = "웹사이트가 이 계정에 댓글 입력란을 보여 주지 않았습니다. 웹사이트에서 이미지를 열어 댓글을 남기세요.";
+"Sign In Again" = "다시 로그인";
+"Saved images stay in the app. Folders made for favorite groups stay as plain folders." = "저장한 이미지는 앱에 남습니다. 즐겨찾기 그룹용으로 만든 폴더는 일반 폴더로 남습니다.";
+"Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Each favorite group that holds images becomes a folder of the same name, and the two hold the same images. You can't delete such a folder yourself while you're signed in. Images saved before signing in stay in the app only." = "앱에서 저장한 이미지는 웹사이트 즐겨찾기에 들어가고, 웹사이트에서 추가한 즐겨찾기는 앱으로 들어옵니다. 이미지가 들어 있는 즐겨찾기 그룹마다 같은 이름의 폴더가 생기고, 둘은 같은 이미지를 담습니다. 로그인한 동안에는 이 폴더를 직접 삭제할 수 없습니다. 로그인 전에 저장한 이미지는 앱에만 보관합니다.";
+"Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Images saved before signing in stay in the app only." = "앱에서 저장한 이미지는 웹사이트 즐겨찾기에 들어가고, 웹사이트에서 추가한 즐겨찾기는 앱으로 들어옵니다. 로그인 전에 저장한 이미지는 앱에만 보관합니다.";
+"Images you save in folders that don't stand for a favorite group are added to this list on the website. Keep in App Only leaves them off the website; the website's favorites then come to a folder of their own." = "즐겨찾기 그룹과 연결되지 않은 폴더에 저장한 이미지는 웹사이트의 이 목록에 추가됩니다. 앱에만 보관을 고르면 웹사이트에 올리지 않으며, 웹사이트의 즐겨찾기는 별도 폴더로 들어옵니다.";
+"Reading Favorites…" = "즐겨찾기 읽는 중…";
+"Loading Comments…" = "댓글 불러오는 중…";
+"This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings." = "이 폴더는 로그인한 웹사이트의 즐겨찾기 그룹과 연동되어 있어서, 로그인한 동안에는 삭제할 수 없습니다. 삭제하려면 그 웹사이트에서 로그아웃하거나, 웹사이트 설정에서 즐겨찾기를 폴더와 동기화를 끄세요.";
+"Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "웹사이트 자체에서 로그인하거나 서버 설정에 API 키를 저장하면 즐겨찾기, 즐겨찾기 그룹, 투표, 댓글을 웹사이트에 남길 수 있습니다. 앱은 로그인 정보만 이 기기에 보관하며, 비밀번호는 보관하지 않습니다.";
+"Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "웹사이트 자체에서 로그인하거나 서버 설정에 API 키를 저장하면 즐겨찾기, 투표, 댓글을 웹사이트에 남길 수 있습니다. 앱은 로그인 정보만 이 기기에 보관하며, 비밀번호는 보관하지 않습니다.";
+"Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website." = "API 키로는 즐겨찾기와 댓글을 읽을 수 있습니다. 앱에서 즐겨찾기를 바꾸거나 투표하고 댓글을 남기려면 웹사이트에서도 로그인하세요.";
+"The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website." = "웹사이트가 저장한 계정 정보를 받아들이지 않았습니다. 서버 설정에 웹사이트 계정 옵션에서 API 키와 함께 표시되는 숫자 사용자 ID와 API 키를 입력하세요.";
+"The website didn't accept the saved account details. Check the username and API key in the server's settings." = "웹사이트가 저장한 계정 정보를 받아들이지 않았습니다. 서버 설정에서 사용자 이름과 API 키를 확인하세요.";

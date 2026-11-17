@@ -11,6 +11,19 @@ final class BooruUITests: XCTestCase {
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
+    /// The mode Automatic found, as the Mode picker names it ("Automatic · Comics Mode").
+    private func waitForDetectedMode(_ app: XCUIApplication, _ mode: String, timeout: TimeInterval = 5) -> Bool {
+        let picker = element(app, "booru.serverEngine")
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if picker.exists {
+                let text = picker.label + " " + ((picker.value as? String) ?? "")
+                if text.contains("·"), mode.isEmpty || text.contains(mode) { return true }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return false
+    }
     private func modeTitles(_ mode: String) -> [String] {
         mode == "manga" ? ["Comics Mode", "만화 모드", "漫画モード"] : ["Image Mode", "이미지 모드", "画像モード"]
     }
@@ -1852,7 +1865,7 @@ final class BooruUITests: XCTestCase {
         let input = element(app, "booru.serverURL")
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap(); input.typeText("catalog.example")
-        XCTAssertTrue(element(app, "website.detectedMode").waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForDetectedMode(app, ""))
         element(app, "booru.serverSave").tap()
         XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "comics.connectionCard").exists)
@@ -1870,7 +1883,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(element(app, "booru.serverSave").isEnabled)
         input.tap()
         input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "not-a-domain".count) + "catalog.example")
-        XCTAssertTrue(element(app, "website.detectedMode").waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForDetectedMode(app, ""))
         element(app, "booru.serverSave").tap()
         XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "comics.enterAddress").exists)
@@ -1976,9 +1989,7 @@ final class BooruUITests: XCTestCase {
         let address = element(app, "booru.serverURL")
         XCTAssertTrue(address.waitForExistence(timeout: 5))
         address.tap(); address.typeText("https://catalog.example")
-        let mode = element(app, "website.detectedMode")
-        XCTAssertTrue(mode.waitForExistence(timeout: 5))
-        XCTAssertEqual(mode.label, "Comics Mode")
+        XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"))
         element(app, "booru.serverSave").tap()
         assertMode(app, "manga")
         app.tabBars.buttons["Explore"].tap()
@@ -2069,9 +2080,7 @@ final class BooruUITests: XCTestCase {
         let address = element(app, "booru.serverURL")
         XCTAssertTrue(address.waitForExistence(timeout: 5))
         address.tap(); address.typeText("catalog.example")
-        let mode = element(app, "website.detectedMode")
-        XCTAssertTrue(mode.waitForExistence(timeout: 5))
-        XCTAssertEqual(mode.label, "Comics Mode")
+        XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"))
         element(app, "booru.serverSave").tap()
         XCTAssertTrue(element(app, "onboarding.comicsConnected").waitForExistence(timeout: 5))
         for _ in 0..<3 { element(app, "onboarding.continue").tap() }
@@ -2090,9 +2099,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(address.waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "website.connectionHelp").exists)
         address.tap(); address.typeText("unknown.example")
-        let mode = element(app, "website.detectedMode")
-        XCTAssertTrue(mode.waitForExistence(timeout: 5))
-        XCTAssertEqual(mode.label, "Comics Mode", "A website that is no supported image engine opens in Comics Mode")
+        XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"), "A website that is no supported image engine opens in Comics Mode")
         let help = element(app, "website.connectionHelp")
         XCTAssertFalse(help.exists)
         XCTAssertTrue(element(app, "booru.serverSave").isEnabled)
@@ -2103,12 +2110,11 @@ final class BooruUITests: XCTestCase {
         address.tap(); address.typeText("retry.example")
         XCTAssertTrue(help.waitForExistence(timeout: 5))
         XCTAssertTrue(help.label.contains("VPN or HTTPS bypass"))
-        XCTAssertEqual(mode.label, "Comics Mode", "A home page that couldn't load may still open through the comics connection")
+        XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"), "A home page that couldn't load may still open through the comics connection")
         XCTAssertTrue(element(app, "booru.serverSave").isEnabled)
         capture(app, "First connection network guidance")
         reveal(app, "website.retryDetection").tap()
-        XCTAssertTrue(mode.waitForExistence(timeout: 5))
-        XCTAssertEqual(mode.label, "Comics Mode")
+        XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"))
         XCTAssertTrue(help.waitForNonExistence(timeout: 5))
         XCTAssertTrue(element(app, "booru.serverSave").isEnabled)
         app.buttons["Cancel"].tap()
@@ -2125,12 +2131,12 @@ final class BooruUITests: XCTestCase {
         address.tap(); address.typeText("delayed.example")
         XCTAssertTrue(element(app, "website.detecting").waitForExistence(timeout: 5))
         address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "delayed.example".count) + "sample.booru.org")
-        let mode = element(app, "website.detectedMode")
-        XCTAssertTrue(mode.waitForExistence(timeout: 5))
-        let stale = expectation(for: NSPredicate(format: "label == %@", "Comics Mode"), evaluatedWith: mode)
+        XCTAssertTrue(waitForDetectedMode(app, "Image Mode"))
+        let mode = element(app, "booru.serverEngine")
+        let stale = expectation(for: NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", "Comics Mode", "Comics Mode"), evaluatedWith: mode)
         stale.isInverted = true
         waitForExpectations(timeout: 2.5)
-        XCTAssertEqual(mode.label, "Image Mode")
+        XCTAssertTrue(waitForDetectedMode(app, "Image Mode"))
         element(app, "booru.serverSave").tap()
         for _ in 0..<3 { element(app, "onboarding.continue").tap() }
         assertMode(app, "booru")
@@ -2145,9 +2151,7 @@ final class BooruUITests: XCTestCase {
         let address = element(app, "booru.serverURL")
         XCTAssertTrue(address.waitForExistence(timeout: 5))
         address.tap(); address.typeText("https://indexed.example/")
-        let detected = element(app, "website.detectedMode")
-        XCTAssertTrue(detected.waitForExistence(timeout: 5))
-        XCTAssertEqual(detected.label, "Comics Mode")
+        XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"))
         XCTAssertFalse(element(app, "booru.serverOptions").exists)
         element(app, "booru.serverSave").tap()
         assertMode(app, "manga")

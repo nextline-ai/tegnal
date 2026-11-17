@@ -316,6 +316,11 @@ struct TEGNALApp: App {
                 guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible else { return }
                 await env.runSiteFavoritesSync()
             }
+            // The same for each signed-in image server.
+            .task(id: "\(scenePhase):\(isSplashScreenVisible):booruFavorites") {
+                guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible else { return }
+                await env.booruAccounts.run()
+            }
             .onChange(of: scenePhase, initial: true) { _, phase in
                 if phase != .inactive { DownloadStore.shared.setBackground(phase == .background) }
                 guard !isContentUITest else { return }

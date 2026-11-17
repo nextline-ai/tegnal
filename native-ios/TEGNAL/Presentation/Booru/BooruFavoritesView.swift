@@ -56,7 +56,9 @@ struct BooruFavoritesView: View {
                                 // Uncategorized can be a smart folder like any other.
                                 Button(L10n.text("Smart Folder"), systemImage: "sparkles") { smartFolder = .init(id: folder.id) }
                                 Button(L10n.text("Delete Folder"), systemImage: "trash", role: .destructive) {
-                                    if folder.id == "unsorted" {
+                                    if env.booruAccounts.isListFolder(folder.id) {
+                                        folderMessage = L10n.text("This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.")
+                                    } else if folder.id == "unsorted" {
                                         do { try store.deleteFolder(folder.id) }
                                         catch { folderMessage = error.localizedDescription }
                                     } else { deleting = folder }

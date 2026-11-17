@@ -102,18 +102,32 @@ class SettingsLinkRow extends StatelessWidget implements FormSeparatorInset {
 }
 
 /// `Toggle` with an optional help button, its switch at the trailing edge.
-class SettingsToggleRow extends StatelessWidget {
-  const SettingsToggleRow({super.key, required this.title, required this.value, required this.onChanged, this.help});
+class SettingsToggleRow extends StatelessWidget implements FormSeparatorInset {
+  const SettingsToggleRow({super.key, required this.title, required this.value, required this.onChanged, this.help, this.icon});
   final String title;
   final String? help;
   final bool value;
   final ValueChanged<bool>? onChanged;
 
+  /// A tinted symbol before the title, as `Label` in a toggle shows it.
+  final IconData? icon;
+
+  @override
+  double get separatorInset => icon != null ? settingsIconInset : 16;
+
   @override
   Widget build(BuildContext context) => FormRow(
     minHeight: help == null ? 52 : settingsHelpRowHeight,
+    separatorInset: separatorInset,
     child: Row(
       children: [
+        if (icon != null) ...[
+          SizedBox(
+            width: 24,
+            child: Center(child: Icon(icon, size: 22, color: TegnalColors.tint.resolveFrom(context))),
+          ),
+          const SizedBox(width: 16),
+        ],
         Expanded(child: SettingsTitle(title, help: help)),
         const SizedBox(width: 8),
         // Native switches sit 2 pt closer to the row's trailing edge than text does.
