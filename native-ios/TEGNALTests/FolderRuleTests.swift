@@ -655,9 +655,8 @@ final class FolderPaletteTests: XCTestCase {
         XCTAssertEqual(try comics.ensureDefaultFolder().color, FolderPalette.unfiled)
         XCTAssertEqual(try comics.createFolder(name: "First").color, FolderPalette.colors[0])
         let images = try BooruStore()
-        try images.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try images.refresh()
-        XCTAssertEqual(images.folders().first { $0.id == "unsorted" }?.color, FolderPalette.unsorted)
+        try images.saveServer(BooruServer.presets[0])
+        XCTAssertEqual(images.folders().first?.color, FolderPalette.colors[0], "a server's Uncategorized takes the first color")
 
         let backup = BooruBackup(servers: [], folders: [.init(id: "old", name: "Old", color: 0xFF0D9488)], favorites: [],
                                  history: [], savedTags: [], blacklist: [:], selectedServerIDs: [])

@@ -67,6 +67,13 @@ final class BooruUITests: XCTestCase {
         app.buttons["Cancel"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
     }
+    /// The fixture's images are Danbooru's, in its Uncategorized.
+    private let uncategorized = "booru.folder.site:https://danbooru.donmai.us"
+    private func openSavedImages(_ app: XCUIApplication) {
+        let folder = element(app, uncategorized)
+        XCTAssertTrue(folder.waitForExistence(timeout: 5))
+        folder.tap()
+    }
     private func reveal(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         let value = element(app, id)
         for _ in 0..<6 {
@@ -144,7 +151,7 @@ final class BooruUITests: XCTestCase {
     func testSavedImageOffersSimilarArtStyleSearch() {
         let app = launch(extra: ["--taste-ui-rich"])
         app.tabBars.buttons["Saved"].tap()
-        element(app, "booru.allFavorites").tap()
+        openSavedImages(app)
         let post = element(app, "booru.post.108")
         XCTAssertTrue(post.waitForExistence(timeout: 5))
         post.press(forDuration: 0.8)
@@ -165,12 +172,10 @@ final class BooruUITests: XCTestCase {
         // The multiselect menu stays open so several servers can be changed together.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.55)).tap()
         XCTAssertTrue(element(app, "booru.noSelection").waitForExistence(timeout: 5))
+        // Saved shows the chosen servers' folders, so with none chosen it says so as Explore does.
         app.tabBars.buttons["Saved"].tap()
-        XCTAssertTrue(element(app, "booru.allFavorites").waitForExistence(timeout: 5))
-        XCTAssertFalse(element(app, "booru.noSelection").exists)
-        element(app, "booru.allFavorites").tap()
-        for _ in 0..<3 where !element(app, "booru.post.108").exists { app.swipeUp() }
-        XCTAssertTrue(element(app, "booru.post.108").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "booru.noSelection").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, uncategorized).exists)
         for title in ["Tags", "Smart"] {
             app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title)).firstMatch.tap()
             XCTAssertTrue(element(app, "booru.server").waitForExistence(timeout: 5))
@@ -588,7 +593,7 @@ final class BooruUITests: XCTestCase {
         let tabs = ["Saved", "Explore", "Smart", "Explore"]
         func body(_ mode: String, _ tab: String) -> XCUIElement? {
             switch tab {
-            case "Saved": return element(app, mode == "manga" ? "manga.createFolder" : "booru.allFavorites")
+            case "Saved": return element(app, mode == "manga" ? "manga.createFolder" : "booru.createFolder")
             case "Explore": return element(app, mode == "manga" ? "content.search" : "booru.search")
             default: return nil
             }
@@ -646,7 +651,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Tags"].exists)
         XCTAssertFalse(app.tabBars.buttons["More"].exists)
         selectMode(app, "booru")
-        XCTAssertTrue(element(app, "booru.allFavorites").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "booru.createFolder").waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["Tags"].exists)
         XCTAssertFalse(app.tabBars.buttons["Settings"].exists)
         app.tabBars.buttons["Explore"].tap()
@@ -944,7 +949,7 @@ final class BooruUITests: XCTestCase {
         card.press(forDuration: 0.8)
         XCTAssertFalse(element(app, "booru.favoriteBadge.101").exists)
         card.press(forDuration: 0.8)
-        app.tabBars.buttons["Saved"].tap(); element(app, "booru.allFavorites").tap()
+        app.tabBars.buttons["Saved"].tap(); openSavedImages(app)
         element(app, "booru.select").tap(); element(app, "booru.post.101").tap()
         element(app, "booru.deleteSelected").tap()
         app.alerts.buttons["Delete"].tap()
@@ -1123,7 +1128,7 @@ final class BooruUITests: XCTestCase {
         element(app, "booru.close").tap()
         XCTAssertEqual(card.value as? String, "Saved")
         app.tabBars.buttons["Saved"].tap()
-        element(app, "booru.allFavorites").tap()
+        openSavedImages(app)
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         XCTAssertEqual(card.value as? String ?? "", "")
         app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -1133,7 +1138,7 @@ final class BooruUITests: XCTestCase {
         app.buttons["Danbooru"].tap()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).tap()
         app.tabBars.buttons["Saved"].tap()
-        element(app, "booru.allFavorites").tap()
+        openSavedImages(app)
         XCTAssertTrue(card.waitForExistence(timeout: 5), "Saved works remain visible regardless of the selected exploration server")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         selectMode(app, "manga")
@@ -1142,7 +1147,7 @@ final class BooruUITests: XCTestCase {
         capture(app, "Manga mode remains separate")
         selectMode(app, "booru")
         app.tabBars.buttons["Saved"].tap()
-        element(app, "booru.allFavorites").tap()
+        openSavedImages(app)
         XCTAssertTrue(card.waitForExistence(timeout: 5))
     }
 
@@ -1496,6 +1501,9 @@ final class BooruUITests: XCTestCase {
         capture(app, "Multi-server Explore")
         app.tabBars.buttons["Saved"].tap()
         element(app, "booru.createFolder").tap()
+        // With two servers chosen, a new folder goes to one of them, or is global.
+        XCTAssertTrue(element(app, "booru.createFolder.global").waitForExistence(timeout: 5))
+        element(app, "booru.createFolder.gelbooru").tap()
         let alert = element(app, "folder.namePrompt")
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         let name = alert.textFields.firstMatch
@@ -1508,21 +1516,26 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["Explore"].tap()
         element(app, "booru.post.1101").tap(); openMenu(app)
         element(app, "booru.folder").tap()
-        app.buttons["Create Folder"].tap()
+        // Gelbooru's own folders and the global ones are offered for Gelbooru's image.
+        XCTAssertTrue(app.buttons.containing(.staticText, identifier: "Landscapes").firstMatch.waitForExistence(timeout: 5))
+        element(app, "booru.pickFolder.create").tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         XCTAssertEqual(name.frame.midX, alert.frame.midX, accuracy: 3)
         name.typeText("Discarded from picker")
         alert.buttons["Cancel"].firstMatch.tap()
+        // Choosing the folder saves the image there.
         app.buttons.containing(.staticText, identifier: "Landscapes").firstMatch.tap()
         element(app, "booru.close").tap()
-        element(app, "booru.post.1101").press(forDuration: 0.7)
         app.tabBars.buttons["Saved"].tap()
         capture(app, "Booru folder library")
         app.buttons.containing(.staticText, identifier: "Landscapes").firstMatch.tap()
         XCTAssertTrue(element(app, "booru.post.1101").waitForExistence(timeout: 5))
         element(app, "booru.server").tap(); app.buttons["Gelbooru"].tap()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).tap()
-        XCTAssertTrue(app.staticTexts["No Favorites"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Gelbooru's folders leave Saved when it is no longer chosen.
+        XCTAssertTrue(element(app, "booru.folder.site:https://danbooru.donmai.us").waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons.containing(.staticText, identifier: "Landscapes").firstMatch.exists)
     }
 
     func testFolderNamePromptsAlignAndResetAcrossModes() {
@@ -1636,8 +1649,13 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["Saved"].tap()
         XCTAssertTrue(element(app, "booru.folder.site:https://danbooru.donmai.us").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "booru.folder.site:https://gelbooru.com").exists)
-        element(app, "booru.allFavorites").tap()
-        XCTAssertEqual(app.buttons.matching(identifier: "booru.post.201").count, 2)
+        // Each server's image is in that server's own Uncategorized.
+        for folder in ["booru.folder.site:https://danbooru.donmai.us", "booru.folder.site:https://gelbooru.com"] {
+            element(app, folder).tap()
+            XCTAssertTrue(element(app, "booru.post.201").waitForExistence(timeout: 5))
+            XCTAssertEqual(app.buttons.matching(identifier: "booru.post.201").count, 1)
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
         capture(app, "Imported favorites organized by server")
     }
 

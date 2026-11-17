@@ -378,37 +378,58 @@ extension BooruStore: SmartFolderLibrary {
         try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: [FolderRule.keyPrefix + rule.folder, String(decoding: JSONEncoder().encode(rule), as: UTF8.self)])
     }
 
-    /// New favorites land in their site's folder, or Uncategorized.
-    private static func isLanding(_ folder: String) -> Bool { folder == "unsorted" || folder.hasPrefix("site:") }
-
-    private static func rule(_ rule: FolderRule, reads folder: String) -> Bool {
-        guard folder != rule.folder else { return false }
-        if rule.includesOtherFolders == true { return true }
-        return rule.sources?.contains(folder) ?? isLanding(folder)
+    /// New favorites land in each server's save folder: its Uncategorized unless another is chosen.
+    static func landingFolders(_ db: Database) throws -> Set<String> {
+        var result = Set(try String.fetchAll(db, sql: "SELECT id FROM folders WHERE id GLOB ? OR id = 'unsorted'", arguments: [BooruFolder.uncategorizedPrefix + "*"]))
+        for server in try decodedServers(db) { if let chosen = server.saveFolder { result.insert(chosen) } }
+        return result
     }
 
-    /// An image is in one folder, so the first matching smart folder takes it. Only new
-    /// favorites come through here, so an image a person moves stays where they put it.
+    private static func rule(_ rule: FolderRule, reads folder: String, landing: Set<String>) -> Bool {
+        guard folder != rule.folder else { return false }
+        if rule.includesOtherFolders == true { return true }
+        return rule.sources?.contains(folder) ?? landing.contains(folder)
+    }
+
+    /// An image is in one folder, so the first matching smart folder takes it: one of its server's
+    /// own or a global one. Only new favorites come through here, so an image a person moves stays
+    /// where they put it.
     static func smartDestination(for post: BooruPost, landing folder: String, db: Database) throws -> String {
         guard LibrarySavePreferences.rulesEnabled else { return folder }
-        let rules = try fetchFolderRules(db).filter { $0.isActive && rule($0, reads: folder) }
+        let landing = try landingFolders(db)
+        let rules = try fetchFolderRules(db).filter { $0.isActive && rule($0, reads: folder, landing: landing) }
         guard !rules.isEmpty else { return folder }
-        for id in try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name") {
+        for row in try Row.fetchAll(db, sql: "SELECT id, server_id FROM folders ORDER BY position, name") {
+            let id: String = row["id"], owner: String? = row["server_id"]
+            guard owner == nil || owner == post.serverID else { continue }
             if let match = rules.first(where: { $0.folder == id }), match.postMatcher(post) { return id }
         }
         return folder
     }
 
+    /// Saved images the rule's folder would take: those it reads, of a server the folder may hold.
     private func matches(_ rule: FolderRule) -> [BooruPost] {
-        let matcher = rule.postMatcher
-        return favoriteRecords().compactMap { Self.rule(rule, reads: $0.folderID) && matcher($0.post) ? $0.post : nil }
+        let matcher = rule.postMatcher, landing = (try? database.read { try Self.landingFolders($0) }) ?? []
+        let target = folder(rule.folder)
+        return favoriteRecords().compactMap {
+            Self.rule(rule, reads: $0.folderID, landing: landing) && target?.holds(serverID: $0.post.serverID) != false && matcher($0.post) ? $0.post : nil
+        }
+    }
+
+    /// Several servers' folders may share a name, so each is named with its server when more than one is set up.
+    func labeledName(_ folder: BooruFolder) -> String {
+        let server = servers.count > 1 ? serverName(ofFolder: folder) : nil
+        return server.map { folder.displayName + " · " + $0 } ?? folder.displayName
     }
 
     func folderChoices() throws -> [SmartFolderChoice] {
-        folders().map { SmartFolderChoice(id: $0.id, name: $0.displayName, canBeSmart: true) }
+        folders().map { SmartFolderChoice(id: $0.id, name: labeledName($0), canBeSmart: true) }
     }
 
-    func defaultRuleSources() throws -> Set<String> { Set(folders().map(\.id).filter(Self.isLanding)) }
+    func defaultRuleSources() throws -> Set<String> {
+        let landing = try database.read { try Self.landingFolders($0) }
+        return Set(folders().map(\.id).filter(landing.contains))
+    }
 
     func rule(forFolder id: String) throws -> FolderRule? {
         try database.read { try Self.fetchFolderRules($0).first { $0.folder == id } }
@@ -421,8 +442,11 @@ extension BooruStore: SmartFolderLibrary {
 
     func matchingCount(_ rule: FolderRule) throws -> Int { matches(rule).count }
     func matchingCountElsewhere(_ rule: FolderRule) throws -> Int {
-        let matcher = rule.postMatcher
-        return favoriteRecords().filter { $0.folderID != rule.folder && !Self.rule(rule, reads: $0.folderID) && matcher($0.post) }.count
+        let matcher = rule.postMatcher, landing = try database.read { try Self.landingFolders($0) }
+        let target = folder(rule.folder)
+        return favoriteRecords().filter {
+            $0.folderID != rule.folder && !Self.rule(rule, reads: $0.folderID, landing: landing) && target?.holds(serverID: $0.post.serverID) != false && matcher($0.post)
+        }.count
     }
     func createRuleFolder(named name: String) throws -> String { try saveFolder(name: name) }
 
@@ -432,4 +456,26 @@ extension BooruStore: SmartFolderLibrary {
 
     func deleteRule(forFolder id: String) throws { try removeSetting(FolderRule.keyPrefix + id) }
     func fill(_ rule: FolderRule) throws { try moveFavorites(matches(rule), folderID: rule.folder) }
+}
+
+/// Image folders as one server sees them, for a smart folder of that server: its own folders and
+/// the global ones, and a new folder made in it. Without a server, it is every folder and a new
+/// folder is global.
+struct BooruServerFolders: SmartFolderLibrary {
+    let store: BooruStore
+    let serverID: String?
+    private func shown(_ id: String) -> Bool { serverID.map { server in store.folder(id)?.holds(serverID: server) ?? false } ?? true }
+    func folderChoices() throws -> [SmartFolderChoice] {
+        guard let serverID else { return try store.folderChoices() }
+        return store.folders(forServer: serverID).map { SmartFolderChoice(id: $0.id, name: $0.displayName, canBeSmart: true) }
+    }
+    func defaultRuleSources() throws -> Set<String> { try store.defaultRuleSources().filter(shown) }
+    func rule(forFolder id: String) throws -> FolderRule? { try store.rule(forFolder: id) }
+    func smartRules() throws -> [FolderRule] { try store.smartRules().filter { shown($0.folder) } }
+    func matchingCount(_ rule: FolderRule) throws -> Int { try store.matchingCount(rule) }
+    func matchingCountElsewhere(_ rule: FolderRule) throws -> Int { try store.matchingCountElsewhere(rule) }
+    func createRuleFolder(named name: String) throws -> String { try store.saveFolder(name: name, serverID: serverID) }
+    func saveRule(_ rule: FolderRule) throws { try store.saveRule(rule) }
+    func deleteRule(forFolder id: String) throws { try store.deleteRule(forFolder: id) }
+    func fill(_ rule: FolderRule) throws { try store.fill(rule) }
 }

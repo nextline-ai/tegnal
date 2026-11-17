@@ -1941,3 +1941,4 @@
 "You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field." = "웹사이트 계정 옵션에 표시되는 “&api_key=…&user_id=…” 한 줄을 그대로 어느 칸에든 붙여 넣어도 됩니다.";
 "Couldn’t reach the website. Check the connection and try again." = "웹사이트에 연결하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.";
 "Stored" = "저장됨";
+"Global Folder" = "전역 폴더";

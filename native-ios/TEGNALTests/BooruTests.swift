@@ -78,7 +78,7 @@ final class BooruTests: XCTestCase {
         XCTAssertEqual(store.selectedServers.map(\.isSafebooru), [true])
         restored.booruSafeMode = false
         XCTAssertEqual(store.selectedServerIDs, ["other"], "Turning it off chooses the servers chosen before")
-        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 2, 3, 4], "Without Safe Mode every saved image shows")
+        XCTAssertEqual(Set(store.visibleFavorites().map(\.postID)), [1, 2, 3], "Without Safe Mode the chosen server's saved images show, whatever their rating")
         XCTAssertEqual(store.selectableServers.count, 2)
         restored.booruSafeMode = true
         XCTAssertEqual(store.servers.filter(\.isSafebooru).count, 1, "An existing Safebooru is reused")

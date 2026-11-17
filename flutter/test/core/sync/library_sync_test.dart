@@ -364,13 +364,83 @@ void main() {
     expect(ledger.changes[later.key]?.row.values['a_later_column']?.string, 'value', reason: 'The record passes the column on unchanged');
   });
 
+  test("an older device's folders and images settle into their servers", () {
+    final a = adapter(), b = adapter();
+    final danbooru = BooruServer(id: 'd', name: 'Danbooru', baseURL: 'https://danbooru.donmai.us', engine: BooruEngine.danbooru);
+    final gelbooru = BooruServer(id: 'g', name: 'Gelbooru', baseURL: 'https://gelbooru.com', engine: BooruEngine.gelbooru);
+    a.booru.saveServer(danbooru);
+    a.booru.saveServer(gelbooru);
+    final cats = a.booru.saveFolder(name: 'Cats', serverID: danbooru.id);
+    exchange(a, b, LibrarySyncLedger(), LibrarySyncLedger());
+    // A version from before folder ownership sends folders without a server, the shared
+    // Uncategorized, and images of one server put into another server's folder.
+    LibrarySyncRow favorite(int id, BooruServer server, String folder) => LibrarySyncRow(
+      table: 'booru.favorites',
+      values: {
+        'server_id': SyncValue.text(server.canonicalAddress),
+        'post_id': SyncValue.integer(id),
+        'payload': SyncValue.blob(encodeSwiftJson(fixturePost(id, server).onServer(server.canonicalAddress).toJson())),
+        'saved_at': SyncValue.real(DateTime.now().millisecondsSinceEpoch / 1000),
+        'folder_id': SyncValue.text(folder),
+      },
+    );
+    final rows = [
+      LibrarySyncRow(
+        table: 'booru.folders',
+        values: const {
+          'id': SyncValue.text('older'),
+          'name': SyncValue.text('From an older version'),
+          'color': SyncValue.integer(4278239976),
+          'position': SyncValue.integer(9),
+        },
+      ),
+      LibrarySyncRow(
+        table: 'booru.folders',
+        values: const {'id': SyncValue.text('unsorted'), 'name': SyncValue.text(''), 'color': SyncValue.integer(4284922736), 'position': SyncValue.integer(0)},
+      ),
+      favorite(1, gelbooru, cats),
+      favorite(2, danbooru, 'unsorted'),
+      favorite(3, gelbooru, 'older'),
+    ];
+    final later = DateTime.now().millisecondsSinceEpoch / 1000 + 10;
+    b.apply({for (final row in rows) row.key: LibrarySyncChange(row: row, timestamp: later, device: 'old', deleted: false)});
+    b.booru.refresh();
+    final local = {for (final server in b.booru.servers) server.canonicalAddress: server.id};
+    final gelbooruHere = local[gelbooru.canonicalAddress]!, danbooruHere = local[danbooru.canonicalAddress]!;
+    expect(b.booru.folder('unsorted'), isNull, reason: 'the shared Uncategorized never comes back');
+    expect(b.booru.folder('older')?.serverID, isNull, reason: 'a folder an older version made is global');
+    expect(b.booru.folderIDFor(fixturePost(3, gelbooru).onServer(gelbooruHere)), 'older');
+    expect(b.booru.folderIDFor(fixturePost(2, danbooru).onServer(danbooruHere)), 'site:${danbooru.canonicalAddress}');
+    final copy = b.booru.folderIDFor(fixturePost(1, gelbooru).onServer(gelbooruHere));
+    expect(copy, '$cats@${gelbooru.canonicalAddress}', reason: "Gelbooru's image put in Danbooru's folder goes to Gelbooru's folder of that name");
+    expect(b.booru.folder(copy!)?.plainName, 'Cats');
+    expect(b.booru.folder(copy)?.serverID, gelbooruHere);
+  });
+
+  test('an image saved into a folder another device removes stays saved in its uncategorized', () {
+    final a = adapter(), b = adapter();
+    final server = presetServer();
+    a.booru.saveServer(server);
+    final folder = a.booru.saveFolder(name: 'Later', serverID: server.id);
+    final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
+    exchange(a, b, la, lb);
+    b.booru.refresh();
+    final value = fixturePost(83, b.booru.servers.single);
+    b.booru.saveFavorite(value, folderID: folder);
+    a.booru.deleteFolder(folder);
+    la.capture(a.snapshot(), device: 'A');
+    b.apply(la.changes);
+    expect(b.booru.isFavorite(value), isTrue);
+    expect(b.booru.folderIDFor(value), 'site:${server.canonicalAddress}');
+    expect(b.booru.folder(folder), isNull);
+  });
+
   test('a server added by hand syncs as user data with its folder order', () {
     final a = adapter(), b = adapter();
     final server = presetServer();
     a.booru.saveServer(server);
-    final folder = a.booru.saveFolder(name: 'Favorites', color: 0xFF4A3DFF);
-    a.booru.database.write(BooruStore.ensureUnsorted);
-    a.booru.reorderFolders([folder, 'unsorted']);
+    final folder = a.booru.saveFolder(name: 'Favorites', color: 0xFF4A3DFF, serverID: server.id);
+    a.booru.reorderFolders([folder, 'site:${server.canonicalAddress}']);
     final post = fixturePost(101, server);
     a.booru.saveFavorite(post, folderID: folder);
     exchange(a, b, LibrarySyncLedger(), LibrarySyncLedger());
@@ -379,6 +449,7 @@ void main() {
     final local = b.booru.servers.single;
     expect(b.booru.folderIDFor(post.onServer(local.id)), folder);
     expect(b.booru.folders().first.id, folder);
+    expect(b.booru.folder(folder)?.serverID, local.id, reason: "a folder reaches the other device as its server's");
     expect(a.snapshot().values.firstWhere((row) => row.table == 'booru.servers').isFactoryDefault, isFalse);
   });
 

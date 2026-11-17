@@ -453,10 +453,17 @@ extension BooruStoreAnimeBoxes on BooruStore {
           serverCount += 1;
         }
       }
+      // A new server has its Uncategorized from the start, as one added by hand does.
+      for (final id in mapping.values.toSet()) {
+        BooruStore.uncategorized(id, db);
+      }
+      // The one folder for every image imported is global: it holds every server's images.
       if (options.folderID == 'anime-boxes') {
-        db.execute("INSERT OR IGNORE INTO folders VALUES ('anime-boxes', 'Anime Boxes', 4287784115, (SELECT COUNT(*) FROM folders))");
+        db.execute(
+          "INSERT OR IGNORE INTO folders (id, name, color, position) VALUES ('anime-boxes', 'Anime Boxes', 4287784115, (SELECT COUNT(*) FROM folders))",
+        );
       } else if (options.folderID == AnimeBoxesBackup.importedFolderID) {
-        db.execute('INSERT OR IGNORE INTO folders VALUES (?, ?, 4287784115, (SELECT COUNT(*) FROM folders))', [
+        db.execute('INSERT OR IGNORE INTO folders (id, name, color, position) VALUES (?, ?, 4287784115, (SELECT COUNT(*) FROM folders))', [
           AnimeBoxesBackup.importedFolderID,
           L10n.text('Imported'),
         ]);
@@ -502,6 +509,8 @@ extension BooruStoreAnimeBoxes on BooruStore {
         }
       }
       if (options.folderID == 'by-site') BooruStore.organizeLegacyImportsIn(db);
+      // A chosen folder of one server takes the others' images into their own folders of its name.
+      BooruStore.settleFolders(db);
       for (final id in mapping.values.toSet()) {
         if (options.history) {
           for (final search in backup.history) {

@@ -43,6 +43,9 @@ struct BooruServer: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var baseURL: URL
     var engine: BooruEngine
+    /// Where images saved without a folder land: one of this server's folders or a global one.
+    /// Absent, or gone, it is the server's Uncategorized.
+    var saveFolder: String? = nil
     var isGelbooruWebsite: Bool { engine == .gelbooru && Self.bareHost(baseURL) == "gelbooru.com" }
     /// A host without its leading `www.`: every site is the same site with or without it.
     static func bareHost(_ url: URL) -> String { bareHost(url.host ?? "") }
@@ -415,13 +418,25 @@ enum BooruError: LocalizedError {
     }
 }
 
+/// A folder belongs to one server, and holds only that server's images, or is global: shown
+/// whichever servers are chosen, holding images of any of them.
 struct BooruFolder: Identifiable, Hashable, Sendable {
     let id: String
     var name: String
     var color: Int64
     var isSmart = false
-    var plainName: String { id == "unsorted" ? L10n.text("Uncategorized") : BooruServer.displayName(name) }
+    /// The server it belongs to; nil for a global folder.
+    var serverID: String? = nil
+    var isGlobal: Bool { serverID == nil }
+    /// Each server's own Uncategorized, where its images land unless another folder is chosen.
+    var isUncategorized: Bool { Self.isUncategorized(id) }
+    static func isUncategorized(_ id: String) -> Bool { id == "unsorted" || id.hasPrefix(uncategorizedPrefix) }
+    /// Kept from when each server had a folder of its own name, which is now its Uncategorized.
+    static let uncategorizedPrefix = "site:"
+    var plainName: String { isUncategorized ? L10n.text("Uncategorized") : BooruServer.displayName(name) }
     var displayName: String { FolderRule.markedName(plainName, isSmart: isSmart) }
+    /// Whether an image of a server may sit here.
+    func holds(serverID: String) -> Bool { isGlobal || self.serverID == serverID }
 }
 
 

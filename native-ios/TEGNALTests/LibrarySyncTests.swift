@@ -730,24 +730,59 @@ final class LibrarySyncTests: XCTestCase {
 
     func testEmptyDefaultDeletionSyncsAndConcurrentFavoritesAreProtected() throws {
         let a = try adapter(), b = try adapter()
-        try a.booru.database.write { try BooruStore.ensureUnsorted(in: $0) }
+        let server = BooruServer.presets[0]
+        try a.booru.saveServer(server)
+        let folder = try a.booru.saveFolder(name: "Later", serverID: server.id)
         var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
         try exchange(a, b, &la, &lb)
         try a.manga.deleteFolder(id: try XCTUnwrap(a.manga.listFolders().first?.id))
-        try a.booru.deleteFolder("unsorted")
         try exchange(a, b, &la, &lb)
         XCTAssertTrue(try b.manga.listFolders().isEmpty)
-        XCTAssertTrue(b.booru.folders().isEmpty)
 
-        let server = BooruServer.presets[0]
-        try b.booru.saveServer(server)
-        try b.booru.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        let post = BooruFixtureSource.post(83, server: server)
-        try b.booru.saveFavorite(post, folderID: "unsorted")
+        // One device saves into an image folder while the other removes it: the image stays saved,
+        // in its server's Uncategorized.
+        try b.booru.refresh()
+        let local = try XCTUnwrap(b.booru.servers.first)
+        let post = BooruFixtureSource.post(83, server: local)
+        try b.booru.saveFavorite(post, folderID: folder)
+        try a.booru.deleteFolder(folder)
+        la.capture(try a.snapshot(), device: "A")
         try b.apply(la.changes)
         XCTAssertTrue(b.booru.isFavorite(post))
-        XCTAssertEqual(b.booru.folderID(for: post), "unsorted")
-        XCTAssertTrue(b.booru.folders().contains { $0.id == "unsorted" })
+        XCTAssertEqual(b.booru.folderID(for: post), "site:" + server.canonicalAddress)
+        XCTAssertFalse(b.booru.folders().contains { $0.id == folder })
+    }
+
+    /// A version from before folder ownership sends folders without a server, the shared
+    /// Uncategorized, and images of one server put into another server's folder.
+    func testOlderDevicesFoldersAndImagesSettleIntoTheirServers() throws {
+        let a = try adapter(), b = try adapter()
+        let danbooru = BooruServer(id: "d", name: "Danbooru", baseURL: URL(string: "https://danbooru.donmai.us")!, engine: .danbooru)
+        let gelbooru = BooruServer(id: "g", name: "Gelbooru", baseURL: URL(string: "https://gelbooru.com")!, engine: .gelbooru)
+        for server in [danbooru, gelbooru] { try a.booru.saveServer(server) }
+        let cats = try a.booru.saveFolder(name: "Cats", serverID: danbooru.id)
+        var la = LibrarySyncLedger(), lb = LibrarySyncLedger()
+        try exchange(a, b, &la, &lb)
+        let older = LibrarySyncRow(table: "booru.folders", values: ["id": .text("older"), "name": .text("From an older version"), "color": .integer(FolderPalette.colors[2]), "position": .integer(9)])
+        let shared = LibrarySyncRow(table: "booru.folders", values: ["id": .text("unsorted"), "name": .text(""), "color": .integer(FolderPalette.unsorted), "position": .integer(0)])
+        func favorite(_ id: Int64, _ server: BooruServer, folder: String) throws -> LibrarySyncRow {
+            LibrarySyncRow(table: "booru.favorites", values: ["server_id": .text(server.canonicalAddress), "post_id": .integer(id),
+                "payload": .blob(try JSONEncoder().encode(BooruFixtureSource.post(id, server: server).onServer(server.canonicalAddress))),
+                "saved_at": .real(Date().timeIntervalSince1970), "folder_id": .text(folder)])
+        }
+        let rows = [older, shared, try favorite(1, gelbooru, folder: cats), try favorite(2, danbooru, folder: "unsorted"), try favorite(3, gelbooru, folder: "older")]
+        try b.apply(Dictionary(uniqueKeysWithValues: rows.map { ($0.key, LibrarySyncChange(row: $0, timestamp: Date().timeIntervalSince1970 + 10, device: "old", deleted: false)) }))
+        try b.booru.refresh()
+        let local = Dictionary(uniqueKeysWithValues: b.booru.servers.map { ($0.canonicalAddress, $0.id) })
+        let gelbooruHere = try XCTUnwrap(local[gelbooru.canonicalAddress]), danbooruHere = try XCTUnwrap(local[danbooru.canonicalAddress])
+        XCTAssertNil(b.booru.folder("unsorted"), "the shared Uncategorized never comes back")
+        XCTAssertNil(b.booru.folder("older")?.serverID, "a folder an older version made is global")
+        XCTAssertEqual(b.booru.folderID(for: BooruFixtureSource.post(3, server: gelbooru).onServer(gelbooruHere)), "older")
+        XCTAssertEqual(b.booru.folderID(for: BooruFixtureSource.post(2, server: danbooru).onServer(danbooruHere)), "site:" + danbooru.canonicalAddress)
+        let copy = try XCTUnwrap(b.booru.folderID(for: BooruFixtureSource.post(1, server: gelbooru).onServer(gelbooruHere)))
+        XCTAssertEqual(copy, cats + "@" + gelbooru.canonicalAddress, "Gelbooru's image put in Danbooru's folder goes to Gelbooru's folder of that name")
+        XCTAssertEqual(b.booru.folder(copy)?.plainName, "Cats")
+        XCTAssertEqual(b.booru.folder(copy)?.serverID, gelbooruHere)
     }
 
     func testConcurrentFolderRemovalKeepsNewlySavedWorks() throws {
@@ -834,9 +869,9 @@ final class LibrarySyncTests: XCTestCase {
         let sa = BooruServer(id: "a", name: "Gelbooru", baseURL: URL(string: "https://gelbooru.com")!, engine: .gelbooru)
         let sb = BooruServer(id: "b", name: "Gelbooru", baseURL: URL(string: "https://www.gelbooru.com/")!, engine: .gelbooru)
         try a.booru.saveServer(sa); try b.booru.saveServer(sb)
-        let folder = try a.booru.saveFolder(name: "Favorites", color: 0xFF4A3DFF)
-        try a.booru.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try a.booru.reorderFolders([folder, "unsorted"])
+        let folder = try a.booru.saveFolder(name: "Favorites", color: 0xFF4A3DFF, serverID: sa.id)
+        let uncategorized = "site:" + sa.canonicalAddress
+        try a.booru.reorderFolders([folder, uncategorized])
         let post = BooruPost(serverID: sa.id, postID: 123, width: 100, height: 100, tags: ["landscape"], artists: [], rating: "g", score: 1, fileExtension: "jpg")
         try a.booru.saveFavorite(post, folderID: folder)
         try a.booru.toggleTag("landscape sky", serverID: sa.id, kind: "search")
@@ -849,13 +884,13 @@ final class LibrarySyncTests: XCTestCase {
         XCTAssertEqual(b.booru.savedTags(serverID: sb.id, kind: "search"), ["landscape sky"])
         try a.booru.deleteFolder(folder)
         try exchange(a, b, &la, &lb)
-        XCTAssertEqual(b.booru.folderID(for: post.onServer(sb.id)), "unsorted")
+        XCTAssertEqual(b.booru.folderID(for: post.onServer(sb.id)), uncategorized)
         XCTAssertFalse(b.booru.folders().contains { $0.id == folder })
     }
     func testFreshDeviceDoesNotOverwriteExistingDefaultFolderColor() throws {
         let a = try adapter(), b = try adapter()
-        try a.booru.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try a.booru.setFolderColor("unsorted", color: 0xFF00C2E8)
+        try a.booru.saveServer(BooruServer.presets[0])
+        try a.booru.setFolderColor("site:" + BooruServer.presets[0].canonicalAddress, color: 0xFF00C2E8)
         let folder = try XCTUnwrap(a.manga.listFolders().first?.id)
         try a.manga.setFolderColor(id: folder, color: 0xFF8E4BFF)
         var la = LibrarySyncLedger(), lb = LibrarySyncLedger()

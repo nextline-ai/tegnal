@@ -250,12 +250,14 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
               SettingsPickerRow<String>(
                 title: L10n.text('Destination Folder'),
                 options: [
-                  ('by-site', L10n.text('Site Folders')),
+                  // Each server's Uncategorized, or the folder it saves to.
+                  ('by-site', L10n.text('Uncategorized')),
                   if (backup.source != AnimeBoxesSource.animeBoxes) ...[
                     if (!folders.any((folder) => folder.id == AnimeBoxesBackup.importedFolderID)) (AnimeBoxesBackup.importedFolderID, L10n.text('Imported')),
                   ] else if (!folders.any((folder) => folder.id == 'anime-boxes'))
                     ('anime-boxes', 'Anime Boxes'),
-                  for (final folder in folders) (folder.id, folder.displayName),
+                  for (final folder in folders)
+                    if (!folder.isUncategorized) (folder.id, widget.booru.store.labeledName(folder)),
                 ],
                 selected: _folderID,
                 onSelected: (value) => setState(() => _folderID = value),

@@ -1,5 +1,12 @@
 import SwiftUI
 
+private struct BooruFavoritesSearch: Identifiable, Hashable {
+    let query: String
+    var id: String { query }
+}
+
+/// Saved in image mode, laid out as comics mode's: the chosen servers' folders and the global ones,
+/// with a search of everything they hold. With several servers chosen, each folder names its server.
 struct BooruFavoritesView: View {
     let source: any BooruProviding
     @Environment(AppEnvironment.self) private var env
@@ -8,6 +15,8 @@ struct BooruFavoritesView: View {
     @State private var width: CGFloat = 390
     @Environment(BooruStore.self) private var store
     @State private var creating = false
+    /// The server a new folder goes to; nil makes a global folder.
+    @State private var newFolderServer: String?
     @State private var smartFolder: SmartFolderTarget?
     @State private var editing: BooruFolderEdit?
     @State private var deleting: BooruFolder?
@@ -16,77 +25,67 @@ struct BooruFavoritesView: View {
     @State private var showRename = false
     @State private var renameDraft = ""
     @State private var folderMessage: String?
-    private var posts: [BooruPost] { store.visibleFavorites() }
+    @State private var searchText = ""
+    @State private var searchResults: BooruFavoritesSearch?
+    private var showsServerNames: Bool { store.selectedServerIDs.count > 1 }
     var body: some View {
         let geometry = ArtworkGridGeometry(width: width,
             columns: typeSize.isAccessibilitySize ? 1 : ArtworkGridGeometry.columns(chosen: env.folderColumns(for: .booru), width: width, minimum: sizeClass == .regular ? 240 : 160),
             minimum: sizeClass == .regular ? 240 : 160, removesPadding: env.removesGridPadding(for: .booru), maximumColumns: 12)
         ScrollView {
-            VStack(spacing: 0) {
-                NavigationLink { BooruFolderContentsView(source: source) } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: "square.grid.2x2.fill").font(.title2).foregroundStyle(.tint)
-                        Text(L10n.text("All Favorites")).font(.headline).foregroundStyle(.primary)
-                        Spacer()
-                        Text(String(posts.count)).foregroundStyle(.secondary)
-                        Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
-                    }.padding(18).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
-                }.accessibilityIdentifier("booru.allFavorites").padding(.bottom, geometry.spacing)
-                ArtworkGrid(mode: .booru, kind: .folders, surroundingPadding: 16) { _ in
-                    if env.recentImages.showsInSaved {
-                        let recents = env.recentImages.entries.filter { env.booru.isShownInSafeMode($0.post) }
-                        NavigationLink { RecentImagesView() } label: {
-                            BooruFolderCard(title: L10n.text("Recent Images"), color: RecentFolderStyle.color, posts: Array(recents.prefix(4).map(\.post)), count: recents.count)
-                                .contextMenu {
-                                    Button(L10n.text("Hide from Saved"), systemImage: "eye.slash") { env.recentImages.setShowsInSaved(false) }
-                                }
-                        }.buttonStyle(.plain).accessibilityIdentifier("booru.recentFolder")
-                    }
-                    ForEach(store.folders()) { folder in
-                        NavigationLink { BooruFolderContentsView(source: source, folderID: folder.id) } label: {
-                            let posts = store.visibleFavorites(folderID: folder.id)
-                            BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: folder.color, posts: posts, count: posts.count)
-                        }.buttonStyle(.plain).accessibilityIdentifier("booru.folder.\(folder.id)")
+            // Without a server chosen there are no folders but global ones, as Explore shows nothing.
+            if store.selectedServers.isEmpty && store.visibleFolders().isEmpty {
+                BooruNoSelectionView().padding(.top, 60)
+            } else {
+            ArtworkGrid(mode: .booru, kind: .folders, surroundingPadding: 16) { _ in
+                if env.recentImages.showsInSaved {
+                    let recents = env.recentImages.entries.filter { env.booru.isShownInSafeMode($0.post) }
+                    NavigationLink { RecentImagesView() } label: {
+                        BooruFolderCard(title: L10n.text("Recent Images"), color: RecentFolderStyle.color, posts: Array(recents.prefix(4).map(\.post)), count: recents.count)
                             .contextMenu {
-                                Button(L10n.text("Change Color"), systemImage: "paintpalette") { editing = .init(folder: folder) }
-                                Button(L10n.text("Reorder Folders"), systemImage: "arrow.up.arrow.down") { reordering = true }
-                                if folder.id != "unsorted" {
-                                    Button(L10n.text("Rename Folder"), systemImage: "pencil") { renaming = folder; renameDraft = folder.plainName; showRename = true }
-                                }
-                                // Uncategorized can be a smart folder like any other.
-                                Button(L10n.text("Smart Folder"), systemImage: "sparkles") { smartFolder = .init(id: folder.id) }
-                                Button(L10n.text("Delete Folder"), systemImage: "trash", role: .destructive) {
-                                    if env.booruAccounts.isListFolder(folder.id) {
-                                        folderMessage = L10n.text("This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.")
-                                    } else if folder.id == "unsorted" {
-                                        do { try store.deleteFolder(folder.id) }
-                                        catch { folderMessage = error.localizedDescription }
-                                    } else { deleting = folder }
-                                }
+                                Button(L10n.text("Hide from Saved"), systemImage: "eye.slash") { env.recentImages.setShowsInSaved(false) }
                             }
-                    }
-                }.padding(.top, -geometry.margin)
+                    }.buttonStyle(.plain).accessibilityIdentifier("booru.recentFolder")
+                }
+                ForEach(store.visibleFolders()) { folder in
+                    NavigationLink { BooruFolderContentsView(source: source, folderID: folder.id) } label: {
+                        let posts = store.visibleFavorites(folderID: folder.id)
+                        BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: folder.color, posts: posts, count: posts.count,
+                                        server: showsServerNames ? store.serverName(ofFolder: folder) : nil, isGlobal: folder.isGlobal)
+                    }.buttonStyle(.plain).accessibilityIdentifier("booru.folder.\(folder.id)")
+                        .contextMenu { menu(for: folder) }
+                }
             }.padding(16)
+            }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L10n.text("Search Favorites"))
+        .autocorrectionDisabled().textInputAutocapitalization(.never)
+        .onSubmit(of: .search) {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !query.isEmpty { searchResults = BooruFavoritesSearch(query: query) }
+        }
+        .navigationDestination(item: $searchResults) { BooruFolderContentsView(source: source, initialQuery: $0.query) }
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             AppToolbarActions {
-                Button { creating = true } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
-                    .accessibilityLabel(L10n.text("Create Folder")).accessibilityIdentifier("booru.createFolder")
+                createButton
                 BooruServerMenu(compact: true)
             }
         } }
         .transientMessage($folderMessage)
-        .newFolderPrompt(isPresented: $creating, booru: true, identifier: "booru.folderName") { _ in }
+        .newFolderPrompt(isPresented: $creating, booru: true, booruServerID: newFolderServer, identifier: "booru.folderName") { _ in }
         .appSheet(item: $smartFolder) { FolderRuleEditor(booru: true, folder: $0.id) }
         .appSheet(isPresented: $reordering) { FolderOrderView(booru: true) }
         .appSheet(item: $editing) { item in
             if let folder = item.folder {
                 let posts = store.visibleFavorites(folderID: folder.id)
-                FolderColorSheet(title: folder.displayName, color: folder.color, others: store.folders().filter { $0.id != folder.id }.map(\.color)) { color in
+                // Colors differ among the folders shown beside it: its server's and the global ones.
+                let others = store.folders().filter { $0.id != folder.id && (folder.serverID == nil || $0.serverID == nil || $0.serverID == folder.serverID) }
+                FolderColorSheet(title: folder.displayName, color: folder.color, others: others.map(\.color)) { color in
                     store.perform { try store.setFolderColor(folder.id, color: color) }
                 } preview: { color in
-                    BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: color, posts: posts, count: posts.count)
+                    BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: color, posts: posts, count: posts.count,
+                                    server: showsServerNames ? store.serverName(ofFolder: folder) : nil, isGlobal: folder.isGlobal)
                 }
             }
         }
@@ -99,6 +98,48 @@ struct BooruFavoritesView: View {
             Button(L10n.text("Delete"), role: .destructive) { if let deleting { store.perform { try store.deleteFolder(deleting.id) } }; deleting = nil }
         } message: { Text(L10n.text("Favorites in this folder will move to Uncategorized.")) }
     }
+
+    /// One server chosen, a new folder is that server's; with several, the menu asks which, or global.
+    @ViewBuilder private var createButton: some View {
+        let chosen = store.selectedServers
+        if chosen.count > 1 {
+            Menu {
+                ForEach(chosen) { server in
+                    Button(server.displayName, systemImage: "server.rack") { newFolderServer = server.id; creating = true }
+                        .accessibilityIdentifier("booru.createFolder." + server.id)
+                }
+                Divider()
+                Button(L10n.text("Global Folder"), systemImage: "globe") { newFolderServer = nil; creating = true }
+                    .accessibilityIdentifier("booru.createFolder.global")
+            } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
+                .accessibilityLabel(L10n.text("Create Folder")).accessibilityIdentifier("booru.createFolder")
+        } else {
+            Button { newFolderServer = chosen.first?.id; creating = true } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
+                .accessibilityLabel(L10n.text("Create Folder")).accessibilityIdentifier("booru.createFolder")
+        }
+    }
+
+    @ViewBuilder private func menu(for folder: BooruFolder) -> some View {
+        Button(L10n.text("Change Color"), systemImage: "paintpalette") { editing = .init(folder: folder) }
+        Button(L10n.text("Reorder Folders"), systemImage: "arrow.up.arrow.down") { reordering = true }
+        if !folder.isUncategorized {
+            Button(L10n.text("Rename Folder"), systemImage: "pencil") { renaming = folder; renameDraft = folder.plainName; showRename = true }
+        }
+        // Uncategorized can be a smart folder like any other.
+        Button(L10n.text("Smart Folder"), systemImage: "sparkles") { smartFolder = .init(id: folder.id) }
+        // Each server keeps its own Uncategorized.
+        if !folder.isUncategorized {
+            Toggle(isOn: Binding(get: { folder.isGlobal }, set: { global in
+                store.perform { try store.setGlobal(folder.id, global, emptyServer: store.selectedServerID.isEmpty ? nil : store.selectedServerID) }
+            })) { Label(L10n.text("Global Folder"), systemImage: "globe") }
+                .accessibilityIdentifier("booru.globalFolder")
+            Button(L10n.text("Delete Folder"), systemImage: "trash", role: .destructive) {
+                if env.booruAccounts.isListFolder(folder.id) {
+                    folderMessage = L10n.text("This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.")
+                } else { deleting = folder }
+            }
+        }
+    }
 }
 
 private struct BooruFolderCard: View {
@@ -108,6 +149,9 @@ private struct BooruFolderCard: View {
     let color: Int64
     let posts: [BooruPost]
     let count: Int
+    /// With several servers chosen, the server's name takes the count's place.
+    var server: String? = nil
+    var isGlobal = false
     @Environment(BooruStore.self) private var store
     /// Light colors such as yellow take dark text, as comics folders do.
     private var text: Color { FolderBentoFrame<EmptyView>.textColor(color) }
@@ -129,7 +173,7 @@ private struct BooruFolderCard: View {
                     }
                 }.padding(style.inset(6))
             }.clipped()
-            FolderCardCaption(title: title, isSmart: isSmart, count: count, color: text)
+            FolderCardCaption(title: title, isSmart: isSmart, count: count, color: text, detail: server, isGlobal: isGlobal)
         }.foregroundStyle(text).background(Color(argb: color))
             .clipShape(RoundedRectangle(cornerRadius: style.radius(16))).overlay(RoundedRectangle(cornerRadius: style.radius(16)).stroke(.white.opacity(0.15), lineWidth: style.removesPadding ? 0 : 0.5))
     }
@@ -140,9 +184,12 @@ struct BooruFolderContentsView: View {
     var folderID: String?
     /// Recently opened images, shown the way a folder shows its favorites.
     var recents = false
+    /// Saved's search: every folder shown there, searched for this.
+    var initialQuery = ""
     @Environment(AppEnvironment.self) private var env
     @Environment(BooruStore.self) private var store
     @State private var query = ""
+    @State private var queryLoaded = false
     @State private var selectedPost: BooruPost?
     @State private var viewerPosition: BooruPost?
     @State private var saveFeedback: WorkSaveFeedback?
@@ -183,6 +230,7 @@ struct BooruFolderContentsView: View {
         }
         .animation(isSearchBarVisible ? .spring(response: 0.35, dampingFraction: 0.86) : .easeInOut(duration: 0.32), value: isSearchBarVisible)
         .onChange(of: searchFocused) { _, focused in if focused { isSearchBarVisible = true } }
+        .onAppear { if !queryLoaded { queryLoaded = true; query = initialQuery } }
         .workSaveFeedback($saveFeedback, identifier: "booru.saveStatus")
         .navigationTitle(recents ? L10n.text("Recently Opened Images") : store.folders().first(where: { $0.id == folderID })?.displayName ?? L10n.text("All Favorites"))
         .navigationBarTitleDisplayMode(.inline)
@@ -192,9 +240,12 @@ struct BooruFolderContentsView: View {
                 if selecting {
                     Button { selection = Set(posts.map(\.id)) } label: { Image(systemName: "checkmark.circle.fill") }.accessibilityLabel(L10n.text("Select All"))
                     if !recents {
+                        // Folders that may hold every image chosen: global ones, and one server's own when all are its.
+                        let chosen = posts.filter { selection.contains($0.id) }
+                        let servers = Set(chosen.map(\.serverID))
                         Menu {
-                            ForEach(store.folders()) { folder in
-                                Button(folder.displayName) { store.perform { try store.moveFavorites(posts.filter { selection.contains($0.id) }, folderID: folder.id); selection.removeAll(); selecting = false } }
+                            ForEach(store.folders().filter { folder in servers.allSatisfy { folder.holds(serverID: $0) } }) { folder in
+                                Button(folder.displayName) { store.perform { try store.moveFavorites(chosen, folderID: folder.id); selection.removeAll(); selecting = false } }
                             }
                         } label: { Image(systemName: "folder") }.disabled(selection.isEmpty).accessibilityLabel(L10n.text("Move to Another Folder"))
                     }
@@ -258,14 +309,15 @@ struct BooruFolderPicker: View {
     var filed: ((String) -> Void)? = nil
     @Environment(BooruStore.self) private var store
     var body: some View {
+        // The image's own server's folders and the global ones; a folder made here is its server's.
         let current = store.folderID(for: post)
-        FolderPickerSheet(rows: store.folders().map {
-            FolderPickerRow(id: $0.id, name: $0.displayName, color: $0.color, isCurrent: $0.id == current)
+        FolderPickerSheet(rows: store.folders(forServer: post.serverID).map {
+            FolderPickerRow(id: $0.id, name: $0.displayName, color: $0.color, isCurrent: $0.id == current, isGlobal: $0.isGlobal)
         }, identifier: "booru.pickFolder", pick: { row in
             file(in: row.id, name: row.name)
         }, create: { id in
             file(in: id, name: store.folders().first { $0.id == id }?.displayName ?? "")
-        }, booru: true)
+        }, booru: true, booruServerID: post.serverID)
     }
     private func file(in id: String, name: String) {
         store.perform {

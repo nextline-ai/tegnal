@@ -118,25 +118,81 @@ struct FolderCardCaption: View {
     var isSmart = false
     let count: Int
     let color: Color
+    /// Shown in the count's place: the server an image folder belongs to, when several are chosen.
+    var detail: String? = nil
+    /// An image folder shown whichever servers are chosen.
+    var isGlobal = false
     @Environment(\.artworkCellStyle) private var style
     @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption2) private var captionSize: CGFloat = 11
+    private var name: some View {
+        // A long name truncates before the mark, never over it.
+        HStack(alignment: .lastTextBaseline, spacing: style.inset(3)) {
+            Text(title).lineLimit(1)
+            if isSmart { Text(verbatim: "✦").fixedSize().accessibilityLabel(L10n.text("Smart Folder")) }
+        }.font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
+    }
+    private var trailing: some View {
+        HStack(spacing: style.inset(3)) {
+            if isGlobal { Image(systemName: "globe").accessibilityLabel(L10n.text("Global Folder")) }
+            if let detail { Text(detail).lineLimit(1) } else { Text(count, format: .number) }
+        }
+            .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
+            .foregroundStyle(color.opacity(0.85))
+    }
     var body: some View {
-        HStack(alignment: .lastTextBaseline, spacing: style.inset(6)) {
-            // A long name truncates before the mark, never over it.
-            HStack(alignment: .lastTextBaseline, spacing: style.inset(3)) {
-                Text(title).lineLimit(1)
-                if isSmart { Text(verbatim: "✦").fixedSize().accessibilityLabel(L10n.text("Smart Folder")) }
-            }.font(.system(size: style.fontSize(titleSize, minimum: 10), weight: .bold))
-                .frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
-            Text(count, format: .number)
-                .font(.system(size: style.fontSize(captionSize, minimum: 9), weight: .semibold))
-                .foregroundStyle(color.opacity(0.85)).fixedSize()
+        Group {
+            if detail != nil {
+                // Right-aligned where the count is. A server's name takes what it needs, up to half
+                // the line, so it shares the line with a long folder name rather than vanishing.
+                FolderCaptionLine(spacing: style.inset(6)) { name; trailing }
+            } else {
+                HStack(alignment: .lastTextBaseline, spacing: style.inset(6)) {
+                    name.frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+                    trailing.fixedSize()
+                }
+            }
         }.foregroundStyle(color)
             .padding(.horizontal, style.inset(10))
             // Thumbnail inset 6 + caption inset 8 was 14; use 2/3 of that gap.
             .padding(.top, style.inset(10.0 / 3.0))
             .padding(.bottom, style.inset(8))
             .accessibilityElement(children: .combine)
+    }
+}
+
+/// A folder's name and what sits at the end of its line: the end takes what it needs, up to half the
+/// line, flush right; the name takes the rest. Their last baselines line up.
+private struct FolderCaptionLine: Layout {
+    var spacing: CGFloat
+
+    private func widths(_ total: CGFloat, _ subviews: Subviews) -> (name: CGFloat, end: CGFloat) {
+        let end = min(subviews[1].sizeThatFits(.unspecified).width, total / 2)
+        return (max(0, total - end - spacing), end)
+    }
+
+    private func dimensions(_ total: CGFloat, _ subviews: Subviews) -> (name: ViewDimensions, end: ViewDimensions) {
+        let (name, end) = widths(total, subviews)
+        return (subviews[0].dimensions(in: ProposedViewSize(width: name, height: nil)), subviews[1].dimensions(in: ProposedViewSize(width: end, height: nil)))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let total = proposal.width ?? (subviews.map { $0.sizeThatFits(.unspecified).width }.reduce(0, +) + spacing)
+        let (name, end) = dimensions(total, subviews)
+        let baseline = max(name[VerticalAlignment.lastTextBaseline], end[VerticalAlignment.lastTextBaseline])
+        let descent = max(name.height - name[VerticalAlignment.lastTextBaseline], end.height - end[VerticalAlignment.lastTextBaseline])
+        return CGSize(width: total, height: baseline + descent)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let (nameWidth, endWidth) = widths(bounds.width, subviews)
+        let (name, end) = dimensions(bounds.width, subviews)
+        let baseline = max(name[VerticalAlignment.lastTextBaseline], end[VerticalAlignment.lastTextBaseline])
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY + baseline - name[VerticalAlignment.lastTextBaseline]),
+                          proposal: ProposedViewSize(width: nameWidth, height: nil))
+        subviews[1].place(at: CGPoint(x: bounds.maxX - end.width, y: bounds.minY + baseline - end[VerticalAlignment.lastTextBaseline]),
+                          proposal: ProposedViewSize(width: endWidth, height: nil))
     }
 }

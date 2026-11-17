@@ -7,6 +7,8 @@ import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/storage/folder_palette.dart';
 import 'package:tegnal/core/support/sql_database.dart';
 
+import '../../support/backup_fixtures.dart';
+
 /// Colors 1.5.1 and earlier gave folders on their own, in the order they gave them.
 const _earlierPalette = [
   0xFF2563EB, 0xFF059669, 0xFFEA580C, 0xFFE11D48, 0xFF7C3AED, 0xFF0891B2, 0xFFD97706, 0xFFDB2777, //
@@ -68,9 +70,8 @@ void main() {
     expect(comics.ensureDefaultFolder().color, FolderPalette.unfiled);
     expect(comics.createFolder(name: 'First').color, FolderPalette.colors.first);
     final images = BooruStore.inMemory();
-    images.database.write(BooruStore.ensureUnsorted);
-    images.refresh();
-    expect(images.folders().firstWhere((folder) => folder.id == 'unsorted').color, FolderPalette.unsorted);
+    images.saveServer(presetServer());
+    expect(images.folders().first.color, FolderPalette.colors.first, reason: "a server's Uncategorized takes the first color");
     images.restoreBackup(
       BooruBackup(
         servers: const [],

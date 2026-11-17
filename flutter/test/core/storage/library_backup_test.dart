@@ -48,7 +48,7 @@ void main() {
     expect(destination.savedSearches(), ['favorite query']);
     expect(destination.dbWriter.value<String>("SELECT note FROM artists WHERE name = 'Artist'"), 'Artist note');
     expect(images.favoriteIDs.length, 1);
-    expect(images.folders().first.color, 0xFF00C2E8);
+    expect(images.folders().firstWhere((folder) => folder.name == 'References').color, 0xFF00C2E8);
     expect(images.blacklist(images.servers[0].id), 'gore');
     expect(ChallengeStore(images).definitions().map(gameJson), [gameJson(game)]);
   });

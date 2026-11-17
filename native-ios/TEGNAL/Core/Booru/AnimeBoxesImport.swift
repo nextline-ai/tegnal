@@ -287,10 +287,13 @@ extension BooruStore {
                     mapping[imported.id] = imported.id; existing.append(imported); serverCount += 1
                 }
             }
+            // A new server has its Uncategorized from the start, as one added by hand does.
+            for id in Set(mapping.values) { try Self.uncategorized(for: id, db: db) }
+            // The one folder for every image imported is global: it holds every server's images.
             if options.folderID == "anime-boxes" {
-                try db.execute(sql: "INSERT OR IGNORE INTO folders VALUES ('anime-boxes', 'Anime Boxes', 4287784115, (SELECT COUNT(*) FROM folders))")
+                try db.execute(sql: "INSERT OR IGNORE INTO folders (id, name, color, position) VALUES ('anime-boxes', 'Anime Boxes', 4287784115, (SELECT COUNT(*) FROM folders))")
             } else if options.folderID == AnimeBoxesBackup.importedFolderID {
-                try db.execute(sql: "INSERT OR IGNORE INTO folders VALUES (?, ?, 4287784115, (SELECT COUNT(*) FROM folders))", arguments: [AnimeBoxesBackup.importedFolderID, L10n.text("Imported")])
+                try db.execute(sql: "INSERT OR IGNORE INTO folders (id, name, color, position) VALUES (?, ?, 4287784115, (SELECT COUNT(*) FROM folders))", arguments: [AnimeBoxesBackup.importedFolderID, L10n.text("Imported")])
             }
             if options.folderID != "by-site" {
                 guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ?)", arguments: [options.folderID]) == true else { throw BooruError.invalidResponse }
@@ -308,6 +311,8 @@ extension BooruStore {
                 } else { duplicates += 1 }
             }
             if options.folderID == "by-site" { try Self.organizeLegacyImports(db: db) }
+            // A chosen folder of one server takes the others' images into their own folders of its name.
+            try Self.settleFolders(db: db)
             for id in Set(mapping.values) {
                 if options.history {
                     for search in backup.history {

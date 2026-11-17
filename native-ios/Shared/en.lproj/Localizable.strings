@@ -1941,3 +1941,4 @@
 "You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field." = "You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field.";
 "Couldn’t reach the website. Check the connection and try again." = "Couldn’t reach the website. Check the connection and try again.";
 "Stored" = "Stored";
+"Global Folder" = "Global Folder";

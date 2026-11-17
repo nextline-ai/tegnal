@@ -1941,3 +1941,4 @@
 "You can paste the whole “&api_key=…&user_id=…” line from your account options on the website into either field." = "ウェブサイトのアカウントオプションに表示される「&api_key=…&user_id=…」の1行を、そのままどちらの欄に貼り付けても構いません。";
 "Couldn’t reach the website. Check the connection and try again." = "ウェブサイトに接続できませんでした。接続を確認してもう一度お試しください。";
 "Stored" = "保存済み";
+"Global Folder" = "グローバルフォルダ";

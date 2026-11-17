@@ -1210,8 +1210,12 @@ class BooruAccountSync extends ChangeNotifier {
     for (final list in favorites.categories) {
       if (list.count <= 0 || state.folders.containsKey(list.id) || list.id == state.unassigned) continue;
       final name = _listFolderName(list, server);
-      final reusable = store.folders().where((folder) => folder.plainName == name && folder.id != 'unsorted' && !taken.contains(folder.id)).firstOrNull;
-      final id = reusable?.id ?? store.saveFolder(name: name);
+      // Only this server's own folders: another server's folder of the same name is its own.
+      final reusable = store
+          .folders()
+          .where((folder) => folder.serverID == server.id && folder.plainName == name && !folder.isUncategorized && !taken.contains(folder.id))
+          .firstOrNull;
+      final id = reusable?.id ?? store.saveFolder(name: name, serverID: server.id);
       state.folders[list.id] = id;
       taken.add(id);
       linked.add(list.id);

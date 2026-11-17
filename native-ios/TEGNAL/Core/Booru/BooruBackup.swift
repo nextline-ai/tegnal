@@ -3,7 +3,14 @@ import GRDB
 
 /// Portable library data only. Credentials, cookies, caches and device preferences stay local.
 struct BooruBackup: Codable, Sendable {
-    struct Folder: Codable, Sendable { var id: String; var name: String; var color: Int64 }
+    /// `serverID` names one of the backup's servers; `isGlobal` marks a folder of every server.
+    /// Both absent, it is from before folders belonged to servers, and goes where its images are.
+    struct Folder: Codable, Sendable {
+        var id: String; var name: String; var color: Int64
+        var serverID: String? = nil
+        var isGlobal: Bool? = nil
+        var isLegacy: Bool { serverID == nil && isGlobal == nil }
+    }
     struct Favorite: Codable, Sendable { var post: BooruPost; var folderID: String; var savedAt: Double }
     struct Search: Codable, Sendable { var serverID: String; var query: String; var usedAt: Double }
     struct Tag: Codable, Sendable { var serverID: String; var name: String; var kind: String }
@@ -53,6 +60,7 @@ struct BooruBackup: Codable, Sendable {
               history.allSatisfy({ serverIDs.contains($0.serverID) && !$0.query.isEmpty && $0.usedAt.isFinite }),
               savedTags.allSatisfy({ serverIDs.contains($0.serverID) && !$0.name.isEmpty && (SavedCollectionKind(rawValue: $0.kind).map { $0 != .history } ?? false) }),
               Set(blacklist.keys).isSubset(of: serverIDs), Set(selectedServerIDs).isSubset(of: serverIDs),
+              folders.allSatisfy({ $0.serverID.map(serverIDs.contains) ?? true }),
               (folderRules ?? []).allSatisfy({ folderIDs.contains($0.folder) && !$0.query.isEmpty }),
               (recentImages ?? []).allSatisfy({ serverIDs.contains($0.post.serverID) && $0.post.postID > 0 && $0.openedAt.isFinite })
         else { throw BooruError.invalidResponse }
@@ -83,7 +91,9 @@ extension BooruStore {
     func exportBackup() throws -> BooruBackup {
         try database.read { db in
             let servers = try Row.fetchAll(db, sql: "SELECT payload FROM servers ORDER BY position").map { try JSONDecoder().decode(BooruServer.self, from: $0["payload"] as Data) }
-            let folders = try Row.fetchAll(db, sql: "SELECT * FROM folders ORDER BY position, name").map { BooruBackup.Folder(id: $0["id"], name: $0["name"], color: $0["color"]) }
+            let folders = try Row.fetchAll(db, sql: "SELECT * FROM folders ORDER BY position, name").map {
+                BooruBackup.Folder(id: $0["id"], name: $0["name"], color: $0["color"], serverID: $0["server_id"], isGlobal: ($0["server_id"] as String?) == nil)
+            }
             let favorites = try Row.fetchAll(db, sql: "SELECT * FROM favorites ORDER BY saved_at DESC").map { BooruBackup.Favorite(post: try JSONDecoder().decode(BooruPost.self, from: $0["payload"] as Data), folderID: $0["folder_id"], savedAt: $0["saved_at"]) }
             let history = try Row.fetchAll(db, sql: "SELECT * FROM history WHERE used_at >= ? ORDER BY used_at DESC", arguments: [SearchRetention.cutoff(booru: true)]).map { BooruBackup.Search(serverID: $0["server_id"], query: $0["query"], usedAt: $0["used_at"]) }
             let tags = try Row.fetchAll(db, sql: "SELECT * FROM saved_tags ORDER BY server_id, kind, name").map { BooruBackup.Tag(serverID: $0["server_id"], name: $0["name"], kind: $0["kind"]) }
@@ -117,7 +127,11 @@ extension BooruStore {
         let incomingOrder = backup.folders.map(\.id)
         let remaining = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name").filter { !incomingOrder.contains($0) }
         for (position, folder) in backup.folders.enumerated() {
-            try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position", arguments: [folder.id, folder.id == "unsorted" ? "" : folder.name, FolderPalette.vivid(folder.color), position])
+            let owner = folder.isGlobal == true ? nil : folder.serverID.flatMap { mapping[$0] }
+            // A folder from before folders belonged to servers keeps the server it has here.
+            let ownerUpdate = folder.isLegacy ? "" : ", server_id = excluded.server_id"
+            try db.execute(sql: "INSERT INTO folders (id, name, color, position, server_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, position = excluded.position" + ownerUpdate,
+                           arguments: [folder.id, folder.id == "unsorted" ? "" : folder.name, FolderPalette.vivid(folder.color), position, owner])
         }
         for (position, id) in (incomingOrder + remaining).enumerated() {
             try db.execute(sql: "UPDATE folders SET position = ? WHERE id = ?", arguments: [position, id])
@@ -143,6 +157,12 @@ extension BooruStore {
             try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: ["blacklist." + targetServerID, rules])
         }
         for rule in backup.folderRules ?? [] { try Self.storeFolderRule(rule, db: db) }
+        // Folders of an older backup go where their images are, and every image to a folder of its server.
+        try Self.assignFolderServers(db: db, only: Set(backup.folders.filter(\.isLegacy).map(\.id)))
+        // The order kept is the one the folders now have, each server's Uncategorized included, so a
+        // second restore of the same backup changes nothing.
+        let order = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name")
+        try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('folder_order', ?)", arguments: [String(decoding: JSONEncoder().encode(order), as: UTF8.self)])
         if !backup.selectedServerIDs.isEmpty {
             try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES ('selected_servers', ?)", arguments: [String(decoding: JSONEncoder().encode(backup.selectedServerIDs.compactMap { mapping[$0] }), as: UTF8.self)])
         }

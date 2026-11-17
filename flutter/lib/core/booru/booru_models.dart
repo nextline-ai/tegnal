@@ -34,12 +34,16 @@ enum BooruEngine {
 }
 
 class BooruServer {
-  BooruServer({String? id, required this.name, required this.baseURL, required this.engine}) : id = id ?? uuidString();
+  BooruServer({String? id, required this.name, required this.baseURL, required this.engine, this.saveFolder}) : id = id ?? uuidString();
 
   String id;
   String name;
   String baseURL;
   BooruEngine engine;
+
+  /// Where images saved without a folder land: one of this server's folders or a global one.
+  /// Absent, or gone, it is the server's Uncategorized.
+  String? saveFolder;
 
   /// Safebooru carries only all-ages images, so Safe Mode browses it without a rating tag.
   static const safebooruHost = 'safebooru.org';
@@ -145,16 +149,22 @@ class BooruServer {
   /// `baseURL.appendingPathComponent(path)`.
   String _appending(String path) => baseURL.endsWith('/') ? '$baseURL$path' : '$baseURL/$path';
 
-  factory BooruServer.fromJson(JsonObject json) =>
-      BooruServer(id: json.string('id'), name: json.string('name'), baseURL: json.string('baseURL'), engine: BooruEngine.fromRawValue(json.string('engine')));
+  factory BooruServer.fromJson(JsonObject json) => BooruServer(
+    id: json.string('id'),
+    name: json.string('name'),
+    baseURL: json.string('baseURL'),
+    engine: BooruEngine.fromRawValue(json.string('engine')),
+    saveFolder: json.stringOrNull('saveFolder'),
+  );
 
-  JsonObject toJson() => {'id': id, 'name': name, 'baseURL': baseURL, 'engine': engine.rawValue};
+  JsonObject toJson() => {'id': id, 'name': name, 'baseURL': baseURL, 'engine': engine.rawValue, 'saveFolder': ?saveFolder};
 
   @override
-  bool operator ==(Object other) => other is BooruServer && other.id == id && other.name == name && other.baseURL == baseURL && other.engine == engine;
+  bool operator ==(Object other) =>
+      other is BooruServer && other.id == id && other.name == name && other.baseURL == baseURL && other.engine == engine && other.saveFolder == saveFolder;
 
   @override
-  int get hashCode => Object.hash(id, name, baseURL, engine);
+  int get hashCode => Object.hash(id, name, baseURL, engine, saveFolder);
 }
 
 class BooruCredentials {
@@ -416,15 +426,30 @@ class BooruError implements Exception {
   String toString() => 'BooruError.${kind.name}';
 }
 
+/// A folder belongs to one server, and holds only that server's images, or is global: shown
+/// whichever servers are chosen, holding images of any of them.
 class BooruFolder {
-  BooruFolder({required this.id, required this.name, required this.color, this.isSmart = false});
+  BooruFolder({required this.id, required this.name, required this.color, this.isSmart = false, this.serverID});
   final String id;
   String name;
   int color;
   bool isSmart;
 
-  String get plainName => id == 'unsorted' ? L10n.text('Uncategorized') : BooruServer.displayNameOf(name);
+  /// The server it belongs to; null for a global folder.
+  String? serverID;
+  bool get isGlobal => serverID == null;
+
+  /// Each server's own Uncategorized, where its images land unless another folder is chosen.
+  bool get isUncategorized => isUncategorizedID(id);
+  static bool isUncategorizedID(String id) => id == 'unsorted' || id.startsWith(uncategorizedPrefix);
+
+  /// Kept from when each server had a folder of its own name, which is now its Uncategorized.
+  static const uncategorizedPrefix = 'site:';
+  String get plainName => isUncategorized ? L10n.text('Uncategorized') : BooruServer.displayNameOf(name);
   String get displayName => FolderRule.markedName(plainName, isSmart: isSmart);
+
+  /// Whether an image of a server may sit here.
+  bool holds(String serverID) => isGlobal || this.serverID == serverID;
 }
 
 /// `url.pathExtension`: the last path component's extension, without the dot.

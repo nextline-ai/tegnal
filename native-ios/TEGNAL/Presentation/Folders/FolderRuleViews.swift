@@ -14,6 +14,7 @@ struct FolderRuleEditor: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     private let booru: Bool
+    private let booruServerID: String?
     private let creatingFolder: Bool
     /// Told the new folder's identity once it is saved.
     private let onCreated: ((String) -> Void)?
@@ -42,9 +43,11 @@ struct FolderRuleEditor: View {
     @State private var error: String?
     @FocusState private var nameFocused: Bool
 
-    /// A new folder, as a smart folder unless switched off; a search's tag comes filled in.
-    init(booru: Bool = false, name: String = "", tag: String = "", smart: Bool = true, onCreated: ((String) -> Void)? = nil) {
+    /// A new folder, as a smart folder unless switched off; a search's tag comes filled in. A new
+    /// image folder belongs to `booruServerID`, or is global without one.
+    init(booru: Bool = false, booruServerID: String? = nil, name: String = "", tag: String = "", smart: Bool = true, onCreated: ((String) -> Void)? = nil) {
         self.booru = booru
+        self.booruServerID = booruServerID
         self.onCreated = onCreated
         creatingFolder = true
         fixedFolder = false
@@ -57,6 +60,7 @@ struct FolderRuleEditor: View {
     /// An existing folder, or a choice of folders when none is given.
     init(booru: Bool = false, folder: String?) {
         self.booru = booru
+        booruServerID = nil
         onCreated = nil
         creatingFolder = false
         fixedFolder = folder != nil
@@ -67,7 +71,12 @@ struct FolderRuleEditor: View {
         _fillsSavedWorks = State(initialValue: false)
     }
 
-    private var library: any SmartFolderLibrary { booru ? env.booru : env.database }
+    /// An image folder sees its own server's folders and the global ones.
+    private var library: any SmartFolderLibrary {
+        guard booru else { return env.database }
+        let server = creatingFolder ? booruServerID : folder.flatMap { env.booru.folder($0)?.serverID }
+        return BooruServerFolders(store: env.booru, serverID: server)
+    }
     private var query: WorkQuery { WorkQuery(tag, excluding: excluded) }
     /// A folder that is not smart holds only what is put in it, so its tags are hidden.
     private var usesTags: Bool { isSmart }
@@ -393,6 +402,8 @@ struct FolderPickerRow: Identifiable {
     let name: String
     let color: Int64
     let isCurrent: Bool
+    /// An image folder of every server, marked beside one of the image's own server.
+    var isGlobal = false
 }
 
 /// The folder list both modes show when a saved work changes folder: a new folder first, then
@@ -404,6 +415,8 @@ struct FolderPickerSheet: View {
     /// Files the work in a folder just made, by its identity.
     let create: (String) -> Void
     var booru = false
+    /// The image's server, which a folder made here belongs to.
+    var booruServerID: String? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var creating = false
 
@@ -419,6 +432,7 @@ struct FolderPickerSheet: View {
                         HStack(spacing: 12) {
                             Image(systemName: "folder.fill").foregroundStyle(Color(argb: row.color)).frame(width: 24)
                             Text(row.name).foregroundStyle(.primary)
+                            if row.isGlobal { Image(systemName: "globe").foregroundStyle(.secondary).font(.footnote).accessibilityLabel(L10n.text("Global Folder")) }
                             Spacer()
                             if row.isCurrent { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).font(.subheadline.bold()) }
                         }.contentShape(Rectangle())
@@ -430,7 +444,7 @@ struct FolderPickerSheet: View {
             }
             .navigationTitle(L10n.text("Save to Folder")).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Cancel")) { dismiss() } } }
-            .newFolderPrompt(isPresented: $creating, booru: booru) { identity in
+            .newFolderPrompt(isPresented: $creating, booru: booru, booruServerID: booruServerID) { identity in
                 create(identity); dismiss()
             }
         }

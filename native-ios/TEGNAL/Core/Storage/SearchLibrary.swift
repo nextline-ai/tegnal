@@ -81,10 +81,13 @@ extension BooruStore {
         }
         try refresh()
     }
+    /// Moves the images the folder may hold: any into a global folder, a server's own into its folders.
     func moveFavorites(_ posts: [BooruPost], folderID: String) throws {
         try database.write { db in
             guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ?)", arguments: [folderID]) == true else { throw BooruError.invalidResponse }
-            for post in posts { try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE server_id = ? AND post_id = ?", arguments: [folderID, post.serverID, post.postID]) }
+            for post in posts where try Self.folder(folderID, holds: post.serverID, db: db) {
+                try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE server_id = ? AND post_id = ?", arguments: [folderID, post.serverID, post.postID])
+            }
         }
         try refresh()
     }

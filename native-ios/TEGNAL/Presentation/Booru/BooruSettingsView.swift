@@ -17,8 +17,11 @@ struct BooruServersView: View {
                         Button { store.perform { try store.toggleServer(server) } } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: store.selectedServerIDs.contains(server.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(.tint)
-                                // The address alone: a name that repeats it says nothing more.
-                                Text(server.baseURL.host ?? server.displayName).foregroundStyle(.primary)
+                                // The name the app uses for the server everywhere, over its address.
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(server.displayName).foregroundStyle(.primary)
+                                    Text(server.baseURL.host ?? server.baseURL.absoluteString).font(.footnote).foregroundStyle(.secondary)
+                                }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }.buttonStyle(.plain)
                             // Safe Mode browses Safebooru alone; the other servers stay, unchosen, until it is off.
@@ -119,6 +122,8 @@ struct WebsiteConnectionEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var address = ""
+    /// Where the server's images land when no folder is chosen.
+    @State private var saveFolder = ""
     @State private var serverTypeChoice: ServerType?
     @State private var showOptions = false
     private enum Detection: Equatable {
@@ -172,6 +177,13 @@ struct WebsiteConnectionEditor: View {
                 TextField("https://example.com", text: $address).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                     .disabled(server != nil).accessibilityIdentifier("booru.serverURL")
                     .accessibilityLabel(L10n.text("Website Address"))
+                // Every server has a name, used for it throughout the app.
+                if case .booru = effectiveServerType {
+                    LabeledContent(L10n.text("Name")) {
+                        TextField(L10n.text("Name"), text: $name, prompt: Text(addressURL?.host ?? ""))
+                            .multilineTextAlignment(.trailing).accessibilityIdentifier("booru.serverName")
+                    }
+                }
             } header: { SettingsHelpLabel("Website Address", help: "Enter the website’s home address. Automatic identifies the website and opens the matching Comics or Image mode.") }
             Section {
                 // The Automatic choice names what it found, so the section needs no row of its own for it.
@@ -203,7 +215,6 @@ struct WebsiteConnectionEditor: View {
             if case .booru(let engine) = effectiveServerType {
                 Section {
                     DisclosureGroup(isExpanded: $showOptions) {
-                        TextField(L10n.text("Name (Optional)"), text: $name).accessibilityIdentifier("booru.serverName")
                         if engine != .oldGelbooru {
                             TextField(L10n.text(engine == .gelbooru ? "User ID" : "Username"), text: $account).textInputAutocapitalization(.never).autocorrectionDisabled()
                                 .onChange(of: account) { fillPastedAPIAccess() }
@@ -224,6 +235,10 @@ struct WebsiteConnectionEditor: View {
                 BooruAccountSection(server: server)
                 // The server's connection and filters, which image mode's settings no longer list.
                 Section {
+                    Picker(selection: $saveFolder) {
+                        ForEach(store.folders(forServer: server.id)) { Text($0.displayName).tag($0.id) }
+                    } label: { Label(L10n.text("Default Save Folder"), systemImage: "folder") }
+                        .accessibilityIdentifier("booru.saveFolder")
                     NavigationLink { BooruBlacklistView(server: server) } label: { Label(L10n.text("Tag Blacklist"), systemImage: "eye.slash") }
                         .accessibilityIdentifier("booru.blacklist")
                     Button(L10n.text("Validate Client"), systemImage: "checkmark.shield") { validating = true }.accessibilityIdentifier("booru.validate")
@@ -247,6 +262,7 @@ struct WebsiteConnectionEditor: View {
                 guard !initialized else { return }; initialized = true
                 guard let server else { address = initialAddress; return }
                 name = server.displayName; address = server.baseURL.absoluteString; serverTypeChoice = .booru(server.engine); showOptions = true
+                saveFolder = (try? store.database.read { try BooruStore.defaultFolder(for: server.id, db: $0) }) ?? ""
                 do { let credentials = try BooruKeychain.read(serverID: server.id); account = credentials.account; apiKey = credentials.apiKey }
                 catch { self.error = error.localizedDescription }
             }
@@ -288,7 +304,10 @@ struct WebsiteConnectionEditor: View {
             do {
                 let url = try BooruServer.validatedURL(address)
                 let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                let value = BooruServer(id: server?.id ?? UUID().uuidString, name: displayName.isEmpty ? (url.host ?? url.absoluteString) : displayName, baseURL: url, engine: engine)
+                // Uncategorized is where a server saves unless told otherwise, so it is never stored as a choice.
+                let chosenFolder = saveFolder.isEmpty || BooruFolder.isUncategorized(saveFolder) ? nil : saveFolder
+                let value = BooruServer(id: server?.id ?? UUID().uuidString, name: displayName.isEmpty ? (url.host ?? url.absoluteString) : displayName, baseURL: url, engine: engine,
+                                        saveFolder: server == nil ? nil : chosenFolder)
                 guard !store.servers.contains(where: { $0.id != value.id && $0.baseURL == url }) else { throw BooruError.duplicateServer }
                 let credentials = BooruCredentials(account: account, apiKey: apiKey).normalized
                 guard credentials.account.isEmpty == credentials.apiKey.isEmpty else { throw BooruError.authentication }

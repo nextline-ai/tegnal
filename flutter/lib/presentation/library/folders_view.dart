@@ -506,42 +506,68 @@ class FolderBentoFrame extends StatelessWidget {
 
 /// `FolderCardCaption`: the name, a smart mark, and the count at the trailing baseline.
 class FolderCardCaption extends StatelessWidget {
-  const FolderCardCaption({super.key, required this.title, this.isSmart = false, required this.count, required this.color, required this.style});
+  const FolderCardCaption({
+    super.key,
+    required this.title,
+    this.isSmart = false,
+    required this.count,
+    required this.color,
+    required this.style,
+    this.detail,
+    this.isGlobal = false,
+  });
   final String title;
   final bool isSmart;
   final int count;
   final Color color;
   final ArtworkCellStyle style;
 
+  /// Shown in the count's place: the server an image folder belongs to, when several are chosen.
+  final String? detail;
+
+  /// An image folder shown whichever servers are chosen.
+  final bool isGlobal;
+
   @override
   Widget build(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
     final titleStyle = TegnalType.style(style.fontSize(scaler.scale(15), minimum: 10), weight: FontWeight.w700, color: color);
+    final trailingStyle = TegnalType.style(style.fontSize(scaler.scale(11), minimum: 9), weight: FontWeight.w600, color: color.withValues(alpha: 0.85));
     return Padding(
       padding: EdgeInsets.fromLTRB(style.inset(10), style.inset(10 / 3), style.inset(10), style.inset(8)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Flexible(
-                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle, textScaler: TextScaler.noScaling),
-                ),
-                if (isSmart) ...[SizedBox(width: style.inset(3)), Text('✦', style: titleStyle, textScaler: TextScaler.noScaling)],
-              ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Flexible(
+                    child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle, textScaler: TextScaler.noScaling),
+                  ),
+                  if (isSmart) ...[SizedBox(width: style.inset(3)), Text('✦', style: titleStyle, textScaler: TextScaler.noScaling)],
+                ],
+              ),
             ),
-          ),
-          SizedBox(width: style.inset(6)),
-          Text(
-            '$count',
-            style: TegnalType.style(style.fontSize(scaler.scale(11), minimum: 9), weight: FontWeight.w600, color: color.withValues(alpha: 0.85)),
-            textScaler: TextScaler.noScaling,
-          ),
-        ],
+            SizedBox(width: style.inset(6)),
+            if (isGlobal) ...[
+              Icon(CupertinoIcons.globe, size: style.fontSize(scaler.scale(11), minimum: 9), color: color.withValues(alpha: 0.85)),
+              SizedBox(width: style.inset(3)),
+            ],
+            // Right-aligned where the count is. A server's name takes what it needs, up to half the
+            // line, so it shares the line with a long folder name rather than vanishing.
+            if (detail case final detail?)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                child: Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis, style: trailingStyle, textScaler: TextScaler.noScaling),
+              )
+            else
+              Text('$count', style: trailingStyle, textScaler: TextScaler.noScaling),
+          ],
+        ),
       ),
     );
   }

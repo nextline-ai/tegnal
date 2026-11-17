@@ -26,7 +26,8 @@ struct FolderOrderView: View {
                     } }
                 }
                 .onAppear {
-                    if booru { entries = env.booru.folders().map { Entry(id: $0.id, name: $0.displayName) } }
+                    // The folders Saved shows, each named with its server when several share a name.
+                    if booru { entries = env.booru.visibleFolders().map { Entry(id: $0.id, name: env.booru.labeledName($0)) } }
                     else { entries = ((try? env.database.listFolders()) ?? []).compactMap { folder in folder.id.map { Entry(id: String($0), name: folder.displayName) } } }
                 }
         }

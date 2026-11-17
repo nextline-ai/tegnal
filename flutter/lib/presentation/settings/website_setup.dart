@@ -300,6 +300,9 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
   late final _name = TextEditingController(text: widget.server?.displayName ?? '');
   late final _account = TextEditingController();
   late final _apiKey = TextEditingController();
+
+  /// Where the server's images land when no folder is chosen.
+  String? _saveFolder;
   late ServerType? _choice = widget.server == null ? null : BooruServerType(widget.server!.engine);
   late bool _automatic = widget.server == null;
   late bool _showOptions = widget.server != null;
@@ -326,6 +329,11 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
     super.initState();
     final server = widget.server;
     if (server != null) {
+      try {
+        _saveFolder = widget.booru!.database.read((db) => BooruStore.defaultFolder(server.id, db));
+      } on Object {
+        _saveFolder = null;
+      }
       try {
         final credentials = widget.booru!.credentials.read(server.id);
         _account.text = credentials.account;
@@ -411,11 +419,14 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
         try {
           final url = BooruServer.validatedURL(_address.text);
           final name = _name.text.trim();
+          // Uncategorized is where a server saves unless told otherwise, so it is never stored as a choice.
+          final chosenFolder = _saveFolder;
           final value = BooruServer(
             id: widget.server?.id,
             name: name.isEmpty ? (Uri.parse(url).host.isEmpty ? url : Uri.parse(url).host) : name,
             baseURL: url,
             engine: engine,
+            saveFolder: widget.server == null || chosenFolder == null || BooruFolder.isUncategorizedID(chosenFolder) ? null : chosenFolder,
           );
           if (store.servers.any((server) => server.id != value.id && server.baseURL == url)) throw const BooruError(BooruErrorKind.duplicateServer);
           final credentials = BooruCredentials(account: _account.text, apiKey: _apiKey.text).normalized;
@@ -433,6 +444,21 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
       case null:
         break;
     }
+  }
+
+  Future<void> _pickSaveFolder(BooruServer server) async {
+    final folders = widget.booru?.foldersForServer(server.id) ?? const <BooruFolder>[];
+    final picked = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(L10n.text('Default Save Folder')),
+        actions: [
+          for (final folder in folders) CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, folder.id), child: Text(folder.displayName)),
+        ],
+        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
+      ),
+    );
+    if (picked != null) setState(() => _saveFolder = picked);
   }
 
   Future<void> _pickMode() async {
@@ -516,6 +542,28 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                           placeholderStyle: TegnalType.style(17, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
                         ),
                       ),
+                      // Every server has a name, used for it throughout the app.
+                      if (effective is BooruServerType)
+                        FormRow(
+                          child: Row(
+                            children: [
+                              Text(L10n.text('Name')),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: CupertinoTextField.borderless(
+                                  key: const ValueKey('booru.serverName'),
+                                  controller: _name,
+                                  padding: EdgeInsets.zero,
+                                  placeholder: _addressURL?.host ?? '',
+                                  textAlign: TextAlign.end,
+                                  autocorrect: false,
+                                  style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)),
+                                  placeholderStyle: TegnalType.style(17, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 26),
@@ -597,7 +645,6 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                           ),
                         ),
                         if (_showOptions) ...[
-                          _field(_name, L10n.text('Name (Optional)')),
                           if (engine != BooruEngine.oldGelbooru) ...[
                             _field(_account, L10n.text(engine == BooruEngine.gelbooru ? 'User ID' : 'Username')),
                             _field(_apiKey, L10n.text(engine == BooruEngine.moebooru ? 'Password Hash' : 'API Key'), secure: true),
@@ -618,6 +665,26 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                     const SizedBox(height: 26),
                     FormSection(
                       children: [
+                        FormRow(
+                          onTap: () => _pickSaveFolder(server),
+                          child: Row(
+                            children: [
+                              Icon(CupertinoIcons.folder, size: 22, color: tint),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(L10n.text('Default Save Folder'))),
+                              Flexible(
+                                child: Text(
+                                  (_saveFolder == null ? null : widget.booru?.folder(_saveFolder!))?.displayName ?? L10n.text('Uncategorized'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TegnalType.style(17, color: secondary),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(CupertinoIcons.chevron_up_chevron_down, size: 15, color: secondary),
+                            ],
+                          ),
+                        ),
                         FormRow(
                           onTap: widget.blacklist == null ? null : () => widget.blacklist!(context, server),
                           child: Row(

@@ -102,7 +102,7 @@ final class BooruLibraryTests: XCTestCase {
         XCTAssertEqual(try upgraded.database.read { try Double.fetchAll($0, sql: "SELECT saved_at FROM favorites ORDER BY server_id, post_id") }, dates)
         // A backup imported later into the former shared folder is repaired on reimport too.
         try upgraded.database.write { db in
-            try db.execute(sql: "INSERT INTO folders VALUES ('anime-boxes', 'Anime Boxes', 1, 99)")
+            try db.execute(sql: "INSERT INTO folders (id, name, color, position) VALUES ('anime-boxes', 'Anime Boxes', 1, 99)")
             try db.execute(sql: "UPDATE favorites SET folder_id = 'anime-boxes' WHERE post_id = 201")
         }
         let result = try upgraded.importAnimeBoxes(backup, options: .init())
@@ -118,7 +118,9 @@ final class BooruLibraryTests: XCTestCase {
         let store = try BooruStore(); try store.saveServer(server)
         try store.saveFavorite(BooruFixtureSource.post(42, server: server))
         XCTAssertEqual(server.displayName, "danbooru.donmai.us")
-        XCTAssertEqual(store.folders().first { $0.id.hasPrefix("site:") }?.displayName, "danbooru.donmai.us")
+        // The server's own folder is its Uncategorized, keeping the server's name for older versions.
+        XCTAssertEqual(store.folders().first { $0.id.hasPrefix("site:") }?.name, "danbooru.donmai.us")
+        XCTAssertEqual(store.folders().first { $0.id.hasPrefix("site:") }?.displayName, L10n.text("Uncategorized"))
         XCTAssertEqual(store.servers[0].baseURL.absoluteString, "https://danbooru.donmai.us")
         XCTAssertEqual(BooruServer.displayName("My collection"), "My collection")
         XCTAssertEqual(BooruServer.displayName("https://example.com/booru"), "example.com/booru")
@@ -170,7 +172,7 @@ final class BooruLibraryTests: XCTestCase {
         try restored.setBlacklist("scenery", serverID: a.id)
         XCTAssertEqual(restored.visibleFavorites().map(\.id), [second.id])
         try restored.deleteFolder(folder)
-        XCTAssertEqual(restored.folderID(for: first), "unsorted")
+        XCTAssertEqual(restored.folderID(for: first), "site:" + a.canonicalAddress)
         XCTAssertTrue(restored.isFavorite(first))
         try restored.toggleServer(a)
         try restored.toggleServer(b)
@@ -333,16 +335,18 @@ final class BooruLibraryTests: XCTestCase {
         XCTAssertTrue(loader.didLoad)
     }
 
-    func testSavedLibraryIgnoresServerSelectionAndDefaultsToSiteFolders() throws {
+    func testSavedFollowsServerSelectionAndDefaultsToEachServersUncategorized() throws {
         let store = try BooruStore()
         let a = BooruServer.presets[0], b = BooruServer.presets[1]
         try store.saveServer(a); try store.saveServer(b)
         let first = BooruFixtureSource.post(1, server: a), second = BooruFixtureSource.post(2, server: b)
         try store.toggleFavorite(first); try store.saveFavorite(second)
         try store.setSelectedServers([a.id])
+        XCTAssertEqual(Set(store.visibleFavorites().map(\.id)), Set([first.id]), "each server's images are in its own folders")
+        try store.setSelectedServers([a.id, b.id])
         XCTAssertEqual(Set(store.visibleFavorites().map(\.id)), Set([first.id, second.id]))
         try store.setSelectedServers([])
-        XCTAssertEqual(Set(store.visibleFavorites().map(\.id)), Set([first.id, second.id]))
+        XCTAssertTrue(store.visibleFavorites().isEmpty)
         XCTAssertEqual(store.favorites(serverIDs: [a.id, b.id]).count, 2)
         XCTAssertEqual(store.folderID(for: first), "site:" + a.canonicalAddress)
         XCTAssertEqual(store.folderID(for: second), "site:" + b.canonicalAddress)
@@ -377,4 +381,162 @@ private actor PartialBooruSource: BooruProviding {
     func pools(server: BooruServer, query: String, page: Int) async throws -> [BooruPool] { [] }
     func poolPosts(server: BooruServer, poolID: Int64, page: Int) async throws -> BooruBatch { .init(posts: [], hasMore: false) }
     func notes(server: BooruServer, postID: Int64) async throws -> [BooruNote] { [] }
+}
+
+/// Folders belong to servers: each server has its own folders, starting with Uncategorized, and a
+/// global folder is shown and takes images whichever servers are chosen.
+final class BooruServerFolderTests: XCTestCase {
+    private let danbooru = BooruServer(id: "d", name: "Danbooru", baseURL: URL(string: "https://danbooru.donmai.us")!, engine: .danbooru)
+    private let gelbooru = BooruServer(id: "g", name: "Gelbooru", baseURL: URL(string: "https://gelbooru.com")!, engine: .gelbooru)
+    private func post(_ id: Int64, _ server: BooruServer, tags: [String] = ["scenery"]) -> BooruPost { BooruFixtureSource.post(id, server: server, tags: tags) }
+
+    /// A library from before folder ownership, as the version before this one left it.
+    private func legacyLibrary() throws -> String {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite").path
+        let store = try BooruStore(path: path)
+        for server in [danbooru, gelbooru] { try store.saveServer(server) }
+        try store.database.write { db in
+            try db.execute(sql: "DELETE FROM folders")
+            try db.execute(sql: "ALTER TABLE folders DROP COLUMN server_id")
+            try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'booru_v13_server_folders'")
+            let folders: [(String, String, Int64)] = [("unsorted", "", FolderPalette.unsorted), ("site:" + danbooru.canonicalAddress, "danbooru.donmai.us", FolderPalette.colors[1]),
+                                                      ("mixed", "Mixed", FolderPalette.colors[2]), ("empty", "Empty", FolderPalette.colors[3]), ("only-g", "Only Gelbooru", FolderPalette.colors[4])]
+            for (position, folder) in folders.enumerated() {
+                try db.execute(sql: "INSERT INTO folders VALUES (?, ?, ?, ?)", arguments: [folder.0, folder.1, folder.2, position])
+            }
+            let saved: [(BooruPost, String)] = [(post(1, danbooru), "unsorted"), (post(2, gelbooru), "unsorted"), (post(3, danbooru), "site:" + danbooru.canonicalAddress),
+                                                (post(4, danbooru), "mixed"), (post(5, gelbooru), "mixed"), (post(6, gelbooru), "only-g")]
+            for (index, (post, folder)) in saved.enumerated() {
+                try db.execute(sql: "INSERT INTO favorites (server_id, post_id, payload, saved_at, folder_id) VALUES (?, ?, ?, ?, ?)",
+                               arguments: [post.serverID, post.postID, try JSONEncoder().encode(post), Double(index), folder])
+            }
+            let rule = FolderRule(folder: "mixed", query: "scenery", sources: ["unsorted"])
+            try db.execute(sql: "INSERT INTO settings VALUES (?, ?)", arguments: [FolderRule.keyPrefix + "mixed", String(decoding: try JSONEncoder().encode(rule), as: UTF8.self)])
+        }
+        return path
+    }
+
+    func testUpdateGivesEachServerItsFoldersAndSplitsAFolderOfSeveralServers() throws {
+        let path = try legacyLibrary()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try BooruStore(path: path)
+        let danbooruUncategorized = "site:" + danbooru.canonicalAddress, gelbooruUncategorized = "site:" + gelbooru.canonicalAddress
+        let copy = "mixed@" + gelbooru.canonicalAddress
+        XCTAssertNil(store.folder("unsorted"), "the shared Uncategorized splits into each server's own")
+        XCTAssertEqual(store.folderID(for: post(1, danbooru)), danbooruUncategorized)
+        XCTAssertEqual(store.folderID(for: post(2, gelbooru)), gelbooruUncategorized)
+        XCTAssertEqual(store.folderID(for: post(3, danbooru)), danbooruUncategorized, "the server's own folder is its Uncategorized")
+        XCTAssertEqual(store.folder(danbooruUncategorized)?.plainName, L10n.text("Uncategorized"))
+        XCTAssertEqual(store.folder(danbooruUncategorized)?.color, FolderPalette.colors[1], "keeping its color")
+        XCTAssertEqual(store.folderID(for: post(4, danbooru)), "mixed", "the server whose address comes first keeps the folder")
+        XCTAssertEqual(store.folderID(for: post(5, gelbooru)), copy)
+        XCTAssertEqual(store.folder("mixed")?.serverID, danbooru.id)
+        XCTAssertEqual(store.folder(copy)?.serverID, gelbooru.id)
+        XCTAssertEqual(store.folder(copy)?.plainName, "Mixed")
+        XCTAssertEqual(store.folder(copy)?.color, FolderPalette.colors[2], "the same name and color in each server")
+        XCTAssertEqual(store.folder("only-g")?.serverID, gelbooru.id)
+        XCTAssertNil(store.folder("empty")?.serverID, "a folder holding nothing stays global, shown as before")
+        // The smart folder works in each server, reading that server's Uncategorized.
+        XCTAssertEqual(try store.rule(forFolder: "mixed")?.sources, [danbooruUncategorized])
+        XCTAssertEqual(try store.rule(forFolder: copy)?.sources, [gelbooruUncategorized])
+        // Reopening changes nothing more.
+        let reopened = try BooruStore(path: path)
+        XCTAssertEqual(reopened.folders().map(\.id), store.folders().map(\.id))
+    }
+
+    func testSavedShowsTheChosenServersFoldersAndTheGlobalOnes() throws {
+        let store = try BooruStore()
+        for server in [danbooru, gelbooru] { try store.saveServer(server) }
+        try store.setSelectedServers([danbooru.id])
+        let mine = try store.saveFolder(name: "Cats", serverID: danbooru.id)
+        let theirs = try store.saveFolder(name: "Cats", serverID: gelbooru.id)
+        let global = try store.saveFolder(name: "Everything")
+        XCTAssertEqual(Set(store.visibleFolders().map(\.id)), ["site:" + danbooru.canonicalAddress, mine, global])
+        try store.setSelectedServers([danbooru.id, gelbooru.id])
+        XCTAssertEqual(Set(store.visibleFolders().map(\.id)), ["site:" + danbooru.canonicalAddress, "site:" + gelbooru.canonicalAddress, mine, theirs, global],
+                       "a name may repeat in another server")
+        XCTAssertEqual(store.serverName(ofFolder: try XCTUnwrap(store.folder(theirs))), "Gelbooru")
+        XCTAssertNil(store.serverName(ofFolder: try XCTUnwrap(store.folder(global))))
+        // An image goes only to its own server's folders, or a global one.
+        XCTAssertThrowsError(try store.saveFavorite(post(1, gelbooru), folderID: mine))
+        try store.saveFavorite(post(1, gelbooru), folderID: global)
+        try store.saveFavorite(post(2, danbooru), folderID: global)
+        try store.moveFavorites([post(1, gelbooru), post(2, danbooru)], folderID: mine)
+        XCTAssertEqual(store.folderID(for: post(2, danbooru)), mine)
+        XCTAssertEqual(store.folderID(for: post(1, gelbooru)), global, "another server's image stays where it was")
+        XCTAssertEqual(Set(store.folders(forServer: gelbooru.id).map(\.id)), ["site:" + gelbooru.canonicalAddress, theirs, global])
+        // Saved's search reads every folder shown.
+        try store.setSelectedServers([gelbooru.id])
+        XCTAssertEqual(Set(store.visibleFavorites(query: "scenery").map(\.id)), [post(1, gelbooru).id])
+    }
+
+    func testGlobalFolderTurnedBackStaysInEachServerItHoldsImagesOf() throws {
+        let store = try BooruStore()
+        for server in [danbooru, gelbooru] { try store.saveServer(server) }
+        let folder = try store.saveFolder(name: "Wallpapers", serverID: danbooru.id)
+        try store.setGlobal(folder, true, emptyServer: nil)
+        XCTAssertTrue(try XCTUnwrap(store.folder(folder)).isGlobal)
+        try store.saveFavorite(post(1, danbooru), folderID: folder)
+        try store.saveFavorite(post(2, gelbooru), folderID: folder)
+        try store.setGlobal(folder, false, emptyServer: gelbooru.id)
+        let copy = folder + "@" + gelbooru.canonicalAddress
+        XCTAssertEqual(store.folder(folder)?.serverID, danbooru.id)
+        XCTAssertEqual(store.folderID(for: post(2, gelbooru)), copy)
+        XCTAssertEqual(store.folder(copy)?.plainName, "Wallpapers")
+        // An empty one goes to the server named for it.
+        let empty = try store.saveFolder(name: "Later")
+        try store.setGlobal(empty, false, emptyServer: gelbooru.id)
+        XCTAssertEqual(store.folder(empty)?.serverID, gelbooru.id)
+        // Uncategorized is never global.
+        try store.setGlobal("site:" + danbooru.canonicalAddress, true, emptyServer: nil)
+        XCTAssertEqual(store.folder("site:" + danbooru.canonicalAddress)?.serverID, danbooru.id)
+    }
+
+    func testEachServerSavesWhereItIsToldAndFallsBackToUncategorized() throws {
+        let store = try BooruStore()
+        try store.saveServer(danbooru)
+        let favorites = try store.saveFolder(name: "Favorites", serverID: danbooru.id)
+        var chosen = danbooru; chosen.saveFolder = favorites
+        try store.saveServer(chosen)
+        try store.toggleFavorite(post(1, danbooru))
+        XCTAssertEqual(store.folderID(for: post(1, danbooru)), favorites)
+        try store.deleteFolder(favorites)
+        XCTAssertEqual(store.folderID(for: post(1, danbooru)), "site:" + danbooru.canonicalAddress, "a deleted save folder's images go to Uncategorized")
+        try store.toggleFavorite(post(2, danbooru))
+        XCTAssertEqual(store.folderID(for: post(2, danbooru)), "site:" + danbooru.canonicalAddress)
+    }
+
+    func testDevicesThatSplitDifferentlyEndUpWithOneFolderPerServer() throws {
+        let store = try BooruStore()
+        for server in [danbooru, gelbooru] { try store.saveServer(server) }
+        // One device kept the folder for Gelbooru and the other made Gelbooru a copy as well.
+        let folder = try store.saveFolder(name: "Mixed", serverID: gelbooru.id)
+        let copy = folder + "@" + gelbooru.canonicalAddress
+        try store.database.write { db in
+            try db.execute(sql: "INSERT INTO folders (id, name, color, position, server_id) VALUES (?, 'Mixed', 1, 5, ?)", arguments: [copy, gelbooru.id])
+        }
+        try store.saveFavorite(post(1, gelbooru), folderID: copy)
+        try store.database.write { try BooruStore.settleFolders(db: $0) }
+        try store.refresh()
+        XCTAssertNil(store.folder(copy))
+        XCTAssertEqual(store.folderID(for: post(1, gelbooru)), folder)
+    }
+
+    func testAnOlderBackupSplitsLikeTheUpdate() throws {
+        let store = try BooruStore()
+        for server in [danbooru, gelbooru] { try store.saveServer(server) }
+        let backup = BooruBackup(servers: [danbooru, gelbooru], folders: [.init(id: "unsorted", name: "", color: FolderPalette.unsorted), .init(id: "mixed", name: "Mixed", color: FolderPalette.colors[2])],
+                                 favorites: [.init(post: post(1, danbooru), folderID: "mixed", savedAt: 1), .init(post: post(2, gelbooru), folderID: "mixed", savedAt: 2),
+                                             .init(post: post(3, gelbooru), folderID: "unsorted", savedAt: 3)],
+                                 history: [], savedTags: [], blacklist: [:], selectedServerIDs: [])
+        try store.restoreBackup(backup)
+        XCTAssertNil(store.folder("unsorted"))
+        XCTAssertEqual(store.folderID(for: post(1, danbooru)), "mixed")
+        XCTAssertEqual(store.folderID(for: post(2, gelbooru)), "mixed@" + gelbooru.canonicalAddress)
+        XCTAssertEqual(store.folderID(for: post(3, gelbooru)), "site:" + gelbooru.canonicalAddress)
+        // A current backup brings each folder back to its server.
+        let again = try BooruStore()
+        try again.restoreBackup(BooruBackup.decode(store.exportBackup().encoded()))
+        XCTAssertEqual(again.folder("mixed@" + gelbooru.canonicalAddress)?.serverID, again.servers.first { $0.canonicalAddress == gelbooru.canonicalAddress }?.id)
+    }
 }

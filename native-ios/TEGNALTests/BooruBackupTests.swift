@@ -26,8 +26,8 @@ final class BooruBackupTests: XCTestCase {
     func testAutomaticColorsUseComicsPaletteAndFallbackWithoutChangingRenames() throws {
         let comics = try AppDatabase.inMemory(), images = try BooruStore()
         let initial = try XCTUnwrap(comics.listFolders().first?.color)
-        try images.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try images.setFolderColor("unsorted", color: initial)
+        // A folder already in the first color, as Uncategorized is in comics.
+        try images.saveFolder(name: "First", color: initial)
         for index in 0..<(AppDatabase.presetColors.count + 3) {
             let comic = try comics.createFolder(name: "Folder \(index)")
             let id = try images.saveFolder(name: "Folder \(index)")
@@ -43,9 +43,9 @@ final class BooruBackupTests: XCTestCase {
         try source.saveServer(server)
         let a = try source.saveFolder(name: "Landscapes"), b = try source.saveFolder(name: "Rooms")
         try source.setFolderColor(a, color: 0xFF4A3DFF)
-        try source.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try source.setFolderColor("unsorted", color: 0xFF00BFA0)
-        try source.reorderFolders([b, "unsorted", a])
+        let uncategorized = "site:" + server.canonicalAddress
+        try source.setFolderColor(uncategorized, color: 0xFF00BFA0)
+        try source.reorderFolders([b, uncategorized, a])
         let post = BooruFixtureSource.post(5194309, server: server)
         try source.saveFavorite(post, folderID: a)
         try source.recordSearch("scenery sky", serverID: server.id)
@@ -58,9 +58,11 @@ final class BooruBackupTests: XCTestCase {
         try destination.restoreBackup(backup)
         try destination.restoreBackup(backup)
         XCTAssertEqual(destination.servers.map(\.id), [local.id])
-        XCTAssertEqual(destination.folders().map(\.id), [b, "unsorted", a, extra])
+        XCTAssertEqual(destination.folders().map(\.id), [b, uncategorized, a, extra])
         XCTAssertEqual(destination.folders().first { $0.id == a }?.color, 0xFF4A3DFF)
-        XCTAssertEqual(destination.folders().first { $0.id == "unsorted" }?.color, 0xFF00BFA0)
+        XCTAssertEqual(destination.folders().first { $0.id == uncategorized }?.color, 0xFF00BFA0)
+        XCTAssertEqual(destination.folder(uncategorized)?.serverID, local.id, "the server's Uncategorized stays its own")
+        XCTAssertNil(destination.folder(a)?.serverID, "a global folder stays global")
         let mapped = post.onServer(local.id)
         XCTAssertEqual(destination.favoriteIDs, [mapped.id])
         XCTAssertEqual(destination.folderID(for: mapped), a)
@@ -87,12 +89,13 @@ final class BooruBackupTests: XCTestCase {
     }
 
     func testRestoredFolderColorsAndOrderReachAnotherSyncLibrary() throws {
-        let source = try BooruStore()
-        let id = try source.saveFolder(name: "Synced folder")
+        let source = try BooruStore(), server = BooruServer.presets[0]
+        try source.saveServer(server)
+        let uncategorized = "site:" + server.canonicalAddress
+        let id = try source.saveFolder(name: "Synced folder", serverID: server.id)
         try source.setFolderColor(id, color: 0xFF00C2E8)
-        try source.database.write { try BooruStore.ensureUnsorted(in: $0) }
-        try source.setFolderColor("unsorted", color: 0xFFFF6A3D)
-        try source.reorderFolders([id, "unsorted"])
+        try source.setFolderColor(uncategorized, color: 0xFFFF6A3D)
+        try source.reorderFolders([id, uncategorized])
         let restored = try BooruStore()
         try restored.restoreBackup(BooruBackup.decode(source.exportBackup().encoded()))
         let name = "backup-sync-" + UUID().uuidString
@@ -103,7 +106,9 @@ final class BooruBackupTests: XCTestCase {
         var ledger = LibrarySyncLedger()
         ledger.capture(try a.snapshot(), device: "A")
         try b.apply(ledger.changes)
-        XCTAssertEqual(b.booru.folders().map(\.id), [id, "unsorted"])
+        XCTAssertEqual(b.booru.folders().map(\.id), [id, uncategorized])
+        try b.booru.refresh()
+        XCTAssertEqual(b.booru.folder(id)?.serverID, b.booru.servers.first?.id, "a folder reaches the other device as its server's")
         XCTAssertEqual(b.booru.folders().map(\.color), [0xFF00C2E8, 0xFFFF6A3D])
         try restored.setFolderColor(id, color: 0xFFB5651D)
         ledger.capture(try a.snapshot(), device: "A")
@@ -113,25 +118,26 @@ final class BooruBackupTests: XCTestCase {
 }
 
 extension BooruBackupTests {
-    func testUncategorizedIsOptionalAndNonemptyDeletionIsAtomic() throws {
+    func testEachServerKeepsItsUncategorizedAndADeletedFolderEmptiesIntoIt() throws {
         let images = try BooruStore(), server = BooruServer.presets[0]
         XCTAssertTrue(images.folders().isEmpty)
         try images.exportBackup().validate()
         try images.saveServer(server)
-        let folder = try images.saveFolder(name: "References")
+        let uncategorized = "site:" + server.canonicalAddress
+        XCTAssertEqual(images.folders().map(\.id), [uncategorized], "a server has its Uncategorized from the start")
+        let folder = try images.saveFolder(name: "References", serverID: server.id)
         let post = BooruFixtureSource.post(72, server: server)
         try images.saveFavorite(post, folderID: folder)
         try images.deleteFolder(folder)
-        XCTAssertEqual(images.folderID(for: post), "unsorted")
-        XCTAssertThrowsError(try images.deleteFolder("unsorted")) { XCTAssertTrue($0 is FolderDeletionError) }
-        XCTAssertTrue(images.isFavorite(post))
-        XCTAssertEqual(images.folders().map(\.id), ["unsorted"])
+        XCTAssertEqual(images.folderID(for: post), uncategorized)
+        XCTAssertThrowsError(try images.deleteFolder(uncategorized)) { XCTAssertTrue($0 is FolderDeletionError) }
         try images.toggleFavorite(post)
-        try images.deleteFolder("unsorted")
-        XCTAssertTrue(images.folders().isEmpty)
+        XCTAssertThrowsError(try images.deleteFolder(uncategorized), "even empty, it stays while the server does")
         let restored = try BooruStore()
         try restored.restoreBackup(BooruBackup.decode(images.exportBackup().encoded()))
-        XCTAssertTrue(restored.folders().isEmpty)
+        XCTAssertEqual(restored.folders().map(\.id), [uncategorized])
+        try images.deleteServer(server)
+        XCTAssertTrue(images.folders().isEmpty, "a server's folders go with it")
     }
 
     func testEmptyComicDefaultCanBeDeletedAndStaysDeletedAfterReopen() throws {

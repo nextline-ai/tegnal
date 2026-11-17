@@ -30,7 +30,7 @@ final class KeyboardUITests: XCTestCase {
             XCTAssertTrue(element(app, "booru.favoriteBadge.\(id)").waitForExistence(timeout: 5))
         }
         element(app, "folder.fill").tap()
-        element(app, "booru.allFavorites").tap()
+        element(app, "booru.folder.site:https://danbooru.donmai.us").tap()
         element(app, "booru.select").tap()
         let first = element(app, "booru.post.101"), second = element(app, "booru.post.102")
         XCTAssertTrue(first.waitForExistence(timeout: 5))
