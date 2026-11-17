@@ -1,15 +1,23 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
 
+/// The app languages; any other device language falls back to English.
+const appLocales = [Locale('en'), Locale('ko'), Locale('ja')];
+
+/// Cupertino's own wording (text selection menu, search placeholder, back label,
+/// picker dates, alert labels) in the app language, as iOS shows it.
+const appLocalizationsDelegates = GlobalCupertinoLocalizations.delegates;
+
 /// Installs the wording for the app language: the `app.language` setting, or
 /// the device language when it is one of the supported three, else English.
 Future<void> loadLocalization(Preferences preferences) async {
-  const supported = ['en', 'ko', 'ja'];
+  final supported = [for (final locale in appLocales) locale.languageCode];
   final setting = preferences.string('app.language') ?? 'system';
   final device = ui.PlatformDispatcher.instance.locales.map((locale) => locale.languageCode).where(supported.contains).firstOrNull;
   final language = supported.contains(setting) ? setting : device ?? 'en';

@@ -62,6 +62,7 @@ import '../core/content/recent_works.dart';
 import '../core/support/app_platform.dart';
 import '../presentation/design/desktop_input.dart';
 import 'app_lock.dart';
+import 'localization.dart';
 
 /// Everything the root screens share, created once at launch.
 class AppServices {
@@ -195,6 +196,8 @@ class _TegnalAppState extends State<TegnalApp> {
           debugShowCheckedModeBanner: false,
           scrollBehavior: const TegnalScrollBehavior(),
           locale: Locale(L10n.language),
+          supportedLocales: appLocales,
+          localizationsDelegates: appLocalizationsDelegates,
           theme: tegnalTheme(brightness),
           builder: (context, child) => ReadingQueueScope(
             queue: widget.services.readingQueue,
