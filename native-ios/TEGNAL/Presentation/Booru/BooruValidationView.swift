@@ -180,9 +180,11 @@ final class BooruValidationModel: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
         cancelRetries(); loading = false; self.error = BooruConnectionMessage.describe(error, inBrowser: true)
     }
+    /// Secure pages, and the frames a bot check draws itself (`about:srcdoc`, `blob:`, `data:`), as the
+    /// comics sign-in allows; a new window opens in place.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { decisionHandler(.cancel); return }
-        let allowed = (url.scheme == "https" && url.user == nil && url.password == nil) || url.absoluteString == "about:blank"
+        let allowed = ComicsBrowserProfile.allows(url, mainFrame: action.targetFrame?.isMainFrame ?? true)
         if allowed && action.targetFrame == nil { webView.load(action.request); decisionHandler(.cancel) }
         else { decisionHandler(allowed ? .allow : .cancel) }
     }

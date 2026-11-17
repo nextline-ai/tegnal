@@ -1942,3 +1942,4 @@
 "Couldn’t reach the website. Check the connection and try again." = "ウェブサイトに接続できませんでした。接続を確認してもう一度お試しください。";
 "Stored" = "保存済み";
 "Global Folder" = "グローバルフォルダ";
+"Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key." = "Danbooru: サーバー設定にAPIキーを保存すると、お気に入り、お気に入りグループ、投票、コメントにAPIキーを使うため、ウェブサイトのログインは不要です。APIキーがない場合はウェブサイトのログインを使います。両方ある場合、アプリはAPIキーを使います。";

@@ -669,7 +669,8 @@ class _BooruValidationViewState extends State<BooruValidationView> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) {
-            final decision = BooruValidationState.navigation(Uri.parse(request.url), newWindow: !request.isMainFrame);
+            // A check's own frames stay in their frames; loading one as the page would leave the check unfinished.
+            final decision = BooruValidationState.navigation(Uri.parse(request.url), newWindow: false, mainFrame: request.isMainFrame);
             if (decision == BooruNavigationDecision.loadInPlace) {
               _controller?.loadRequest(Uri.parse(request.url));
               return NavigationDecision.prevent;

@@ -35,6 +35,9 @@ struct BooruAccountSection<Rows: View>: View {
                         // Gelbooru keeps two kinds of access apart; both are shown, and the website's is used first.
                         LabeledContent(L10n.text("Website Sign-In"), value: L10n.text(canChange ? "Signed In" : "Not Signed In"))
                             .accessibilityIdentifier("booru.account.website")
+                    }
+                    if server.engine == .gelbooru || server.engine == .danbooru {
+                        // Danbooru uses a saved API key first, Gelbooru its website sign-in.
                         LabeledContent(L10n.text("API Key"), value: L10n.text(hasKey ? "Stored" : "Not Saved"))
                             .accessibilityIdentifier("booru.account.apiKey")
                     }
@@ -82,6 +85,8 @@ struct BooruAccountSection<Rows: View>: View {
                     .foregroundStyle(.red)
             } else if server.engine == .gelbooru {
                 Text(L10n.text("Gelbooru: an API key only reads your favorites and comments. Adding and removing favorites, voting and commenting need the website sign-in, and a vote can only be up and can't be taken back. With both, the app uses the website sign-in."))
+            } else if server.engine == .danbooru {
+                Text(L10n.text("Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key."))
             } else {
                 Text(L10n.text(server.engine.keepsFavoriteLists
                                ? "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password."
@@ -327,14 +332,13 @@ private struct BooruSignInWebView: UIViewRepresentable {
             parent.failure = L10n.text("Couldn’t reach the website. Check the connection and try again.")
         }
 
-        /// The server's own pages, and any secure frame a sign-in check shows inside them.
+        /// Secure pages, and the frames a bot check such as Cloudflare's draws itself: the rule the
+        /// comics sign-in goes by, which the check lets through. Its frames are often `about:srcdoc`,
+        /// `blob:` or `data:`, and turning them away leaves the check, and the sign-in, stuck.
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard let url = action.request.url, url.scheme == "https" || url.absoluteString == "about:blank" else { decisionHandler(.cancel); return }
+            guard let url = action.request.url else { decisionHandler(.cancel); return }
             let main = action.targetFrame?.isMainFrame ?? true
-            let site = SiteAccount.registrableDomain(parent.server.baseURL.host?.lowercased() ?? "")
-            let host = url.host?.lowercased() ?? ""
-            // A bot check's own pages pass through too; they lead back to the website.
-            let allowed = !main || host == site || host.hasSuffix("." + site) || host == "challenges.cloudflare.com"
+            let allowed = ComicsBrowserProfile.allows(url, mainFrame: main)
             if main, allowed { lastRequest = action.request }
             if allowed && action.targetFrame == nil { webView.load(action.request); decisionHandler(.cancel) }
             else { decisionHandler(allowed ? .allow : .cancel) }

@@ -1942,3 +1942,4 @@
 "Couldn’t reach the website. Check the connection and try again." = "Couldn’t reach the website. Check the connection and try again.";
 "Stored" = "Stored";
 "Global Folder" = "Global Folder";
+"Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key." = "Danbooru: with an API key saved in the server's settings, the app uses it for favorites, favorite groups, votes and comments, so the website sign-in isn't needed. Without one, it uses the website sign-in. With both, the app uses the API key.";

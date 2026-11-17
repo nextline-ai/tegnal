@@ -490,6 +490,12 @@ void main() {
       expect(BooruValidationState.navigation(Uri.parse('https://x.example/'), newWindow: true), BooruNavigationDecision.loadInPlace);
       expect(BooruValidationState.navigation(Uri.parse('http://x.example/'), newWindow: false), BooruNavigationDecision.cancel);
       expect(BooruValidationState.navigation(Uri.parse('about:blank'), newWindow: false), BooruNavigationDecision.allow);
+      // A bot check's own frames load where they are, as the comics sign-in lets them.
+      for (final frame in ['about:srcdoc', 'blob:https://x.example/1', 'data:text/html,check', 'https://challenges.cloudflare.com/turnstile']) {
+        expect(BooruValidationState.navigation(Uri.parse(frame), newWindow: false, mainFrame: false), BooruNavigationDecision.allow, reason: frame);
+      }
+      expect(BooruValidationState.navigation(Uri.parse('https://x.example/'), newWindow: true, mainFrame: false), BooruNavigationDecision.allow);
+      expect(BooruValidationState.navigation(Uri.parse('about:srcdoc'), newWindow: false), BooruNavigationDecision.cancel, reason: 'never as the page');
     });
   });
 
