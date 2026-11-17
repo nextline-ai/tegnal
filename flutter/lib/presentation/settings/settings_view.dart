@@ -171,12 +171,14 @@ class _SettingsViewState extends State<SettingsView> {
                       SettingsToggleRow(
                         title: L10n.text('Use Embedded Browser'),
                         help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
+                        icon: CupertinoIcons.compass,
                         value: _content.useEmbeddedBrowser,
                         onChanged: (value) => setState(() => _content.useEmbeddedBrowser = value),
                       ),
                     SettingsToggleRow(
                       title: L10n.text('Show Work Information Before Reading'),
                       help: L10n.text('Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.'),
+                      icon: CupertinoIcons.list_bullet_below_rectangle,
                       value: _defaults.boolean(MangaThumbnailOpening.preferenceKey) ?? false,
                       onChanged: (value) => _set(MangaThumbnailOpening.preferenceKey, value),
                     ),

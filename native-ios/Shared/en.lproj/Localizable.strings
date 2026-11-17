@@ -221,7 +221,7 @@
 "Sort" = "Sort";
 "Swipe down to exit" = "Swipe down to exit";
 "Swipe down to exit the work" = "Swipe down to exit the work";
-"System Default" = "System Default";
+"System Default" = "System";
 "Tags" = "Tags";
 "Tags (Tap to Copy)" = "Tags (Tap to Copy)";
 "Tap Left" = "Tap Left";
@@ -460,7 +460,7 @@
 "Popular" = "Popular";
 "Welcome" = "Welcome";
 "App Language" = "App Language";
-"System Language" = "System Language";
+"System Language" = "System";
 "Translation Language" = "Translation Language";
 "Choose a Language" = "Choose a Language";
 "Replay Onboarding" = "Replay Onboarding";
@@ -590,7 +590,7 @@
 "Connect an Image Website" = "Connect an Image Website";
 "You can add a website later from Saved, Explore, or More > Servers." = "You can add a website later from Saved, Explore, or More > Servers.";
 "Connection" = "Connection";
-"Automatic" = "Automatic";
+"Automatic" = "Auto";
 "Additional Options" = "Additional Options";
 "Name (Optional)" = "Name (Optional)";
 "Set Up Later" = "Set Up Later";
@@ -1918,3 +1918,20 @@
 "The passwords must match and have at least 4 characters." = "The passwords must match and have at least 4 characters.";
 "Anyone with this password can open the backup. A forgotten password can’t be recovered." = "Anyone with this password can open the backup. A forgotten password can’t be recovered.";
 "Enter Backup Password" = "Enter Backup Password";
+
+/* Image server accounts */
+"%@ Favorites" = "%@ Favorites";
+"The website didn’t offer this account a comment form here. Open the image on the website to comment." = "The website didn’t offer this account a comment form here. Open the image on the website to comment.";
+"Sign In Again" = "Sign In Again";
+"Saved images stay in the app. Folders made for favorite groups stay as plain folders." = "Saved images stay in the app. Folders made for favorite groups stay as plain folders.";
+"Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Each favorite group that holds images becomes a folder of the same name, and the two hold the same images. You can't delete such a folder yourself while you're signed in. Images saved before signing in stay in the app only." = "Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Each favorite group that holds images becomes a folder of the same name, and the two hold the same images. You can't delete such a folder yourself while you're signed in. Images saved before signing in stay in the app only.";
+"Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Images saved before signing in stay in the app only." = "Images you save in the app are kept in your favorites on the website, and favorites you add there come to the app. Images saved before signing in stay in the app only.";
+"Images you save in folders that don't stand for a favorite group are added to this list on the website. Keep in App Only leaves them off the website; the website's favorites then come to a folder of their own." = "Images you save in folders that don't stand for a favorite group are added to this list on the website. Keep in App Only leaves them off the website; the website's favorites then come to a folder of their own.";
+"Reading Favorites…" = "Reading Favorites…";
+"Loading Comments…" = "Loading Comments…";
+"This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings." = "This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.";
+"Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, favorite groups, votes and comments there. The app keeps only the sign-in, on this device, never your password.";
+"Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password." = "Sign in on the website itself, or save your API key in the server's settings, to keep favorites, votes and comments there. The app keeps only the sign-in, on this device, never your password.";
+"Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website." = "Your API key lets the app read your favorites and comments. To change favorites, vote or comment from the app, also sign in on the website.";
+"The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website." = "The website didn't accept the saved account details. In the server's settings, enter the numeric User ID and the API key shown together in your account options on the website.";
+"The website didn't accept the saved account details. Check the username and API key in the server's settings." = "The website didn't accept the saved account details. Check the username and API key in the server's settings.";

@@ -22,6 +22,7 @@ SCOPES = {
     "downloads": ["DownloadTests"],
     "media": ["MediaInputTests"],
     "booru": ["BooruTests"],
+    "booru-account": ["BooruAccountTests"],
     "booru-revision": ["BooruRevisionTests"],
     "booru-library": ["BooruLibraryTests"],
     "booru-cache": ["BooruThumbnailCacheTests"],

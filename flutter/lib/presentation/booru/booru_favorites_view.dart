@@ -1,5 +1,6 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/booru/booru_account.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_store.dart';
 import '../../core/content/recent_works.dart';
@@ -164,7 +165,21 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
           title: L10n.text('Delete Folder'),
           icon: CupertinoIcons.trash,
           destructive: true,
-          onSelected: () => unsorted ? _perform(() => _booru.store.deleteFolder(folder.id)) : _confirmDelete(folder),
+          onSelected: () {
+            if (BooruAccountSync.shared?.isListFolder(folder.id) ?? false) {
+              showTransientMessage(
+                context,
+                L10n.text(
+                  "This folder holds a favorite group of a website you're signed in to, so it stays while you're signed in. To delete it, sign out of that website or turn off Sync Favorites with Folders in its settings.",
+                ),
+                bottom: tabBarClearance(context) + 8,
+              );
+            } else if (unsorted) {
+              _perform(() => _booru.store.deleteFolder(folder.id));
+            } else {
+              _confirmDelete(folder);
+            }
+          },
         ),
       ],
     );

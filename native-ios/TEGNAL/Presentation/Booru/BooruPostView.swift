@@ -734,7 +734,7 @@ struct BooruPostView: View {
                     LabeledContent(L10n.text("Server"), value: server.displayName)
                     LabeledContent(L10n.text("Resolution"), value: "\(post.width) × \(post.height)")
                     LabeledContent(L10n.text("Format"), value: post.fileExtension.uppercased())
-                    LabeledContent(L10n.text("Score"), value: String(post.score))
+                    BooruScoreRow(server: server, post: post)
                     if !post.isVideo && !post.isAnimated {
                         Toggle(L10n.text("Original Image"), isOn: $original)
                     }
@@ -754,6 +754,7 @@ struct BooruPostView: View {
                         }
                     }
                 }
+                BooruCommentsSection(server: server, postID: post.postID)
                 Section(L10n.text("Notes")) {
                     if let notesError {
                         Text(notesError).foregroundStyle(.secondary)

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B7AFA29D20A0CE2A37B34366 /* BooruAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 811E6E23CC9A56C5E88F1F61 /* BooruAccountTests.swift */; };
+		1FA66F3829D61F4313648F89 /* BooruAccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDA338A1D16ED0DED0254B6 /* BooruAccountViews.swift */; };
+		B4A107E20B377D5194C0BA92 /* BooruAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9C64DB713069D448C68E0F /* BooruAccount.swift */; };
 		08D5209D38C894CD9B51E8A9 /* TEGNAL/Presentation/Taste/Recap/RecapDemoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CFBA255F6DC6A5C0A610388 /* TEGNAL/Presentation/Taste/Recap/RecapDemoLibrary.swift */; };
 		093684353E04DA4B0D4FDBDC /* BooruBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */; };
 		096DD821E1D6B54E59D7B23B /* TEGNAL/Presentation/Taste/Recap/RecapCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113D3F97D499E8F01770CDEF /* TEGNAL/Presentation/Taste/Recap/RecapCover.swift */; };
@@ -239,6 +242,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		811E6E23CC9A56C5E88F1F61 /* BooruAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruAccountTests.swift; sourceTree = "<group>"; };
+		8FDA338A1D16ED0DED0254B6 /* BooruAccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruAccountViews.swift; sourceTree = "<group>"; };
+		8F9C64DB713069D448C68E0F /* BooruAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruAccount.swift; sourceTree = "<group>"; };
 		000C153E8CFFBA57336D1A14 /* TEGNAL/Core/Taste/TasteRecap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Taste/TasteRecap.swift; sourceTree = SOURCE_ROOT; };
 		009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaBackendTests.swift; sourceTree = "<group>"; };
 		00A3D8D9E5D6B186E154E5DE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -575,6 +581,7 @@
 				A688C07943C20ABCE3EE27BA /* BooruReleaseLiveTests.swift */,
 				AF1291AD1D0E2E2F74F73C0F /* BooruRevisionTests.swift */,
 				F9A5E549BC3A992CAE3BE32D /* BooruTests.swift */,
+				811E6E23CC9A56C5E88F1F61 /* BooruAccountTests.swift */,
 				4B2DCD5BCF18F0F15745D09B /* GalleryIDParserTests.swift */,
 				13607A445BF764C6E101E808 /* GridLayoutTests.swift */,
 				31F4737CDB76989ABF03A465 /* LibrarySyncTests.swift */,
@@ -622,6 +629,7 @@
 				B0CB1BCAA6EF4F3BE2B62573 /* BooruBackup.swift */,
 				3A1C14EBB331C745654EA7FB /* BooruBrowserSession.swift */,
 				C3563D5B3248F319CCDA8D86 /* BooruClient.swift */,
+				8F9C64DB713069D448C68E0F /* BooruAccount.swift */,
 				C205E452FAEE1C62625513E0 /* BooruLegacyHTML.swift */,
 				5C03DFA3F5213D29C1C638B1 /* BooruModels.swift */,
 				7C17FACAAF2D1F2F2E286128 /* BooruStore.swift */,
@@ -841,6 +849,7 @@
 				A22D8647630A782E540D7EF8 /* BooruBackupView.swift */,
 				A32843587F8341CD1016F667 /* BooruEmbeddedBrowserView.swift */,
 				F79A612BD527569B9E20C830 /* BooruFavoritesView.swift */,
+				8FDA338A1D16ED0DED0254B6 /* BooruAccountViews.swift */,
 				DB6DA24BF7D36336B5968707 /* BooruLibraryViews.swift */,
 				DC026010A751FA4ECEC32C58 /* BooruMediaView.swift */,
 				049FCB9C7DD396BBAB69C28D /* BooruPostView.swift */,
@@ -1138,8 +1147,10 @@
 				6B692FB13CBD3CA8AF39D898 /* BooruBackupView.swift in Sources */,
 				47C36C499EBA78112C525081 /* BooruBrowserSession.swift in Sources */,
 				FB7871E4663830124B9A0C5F /* BooruClient.swift in Sources */,
+				B4A107E20B377D5194C0BA92 /* BooruAccount.swift in Sources */,
 				34AB2A2B77F07AC406CBB81F /* BooruEmbeddedBrowserView.swift in Sources */,
 				DF8E10E2A920B6A33911ABDA /* BooruFavoritesView.swift in Sources */,
+				1FA66F3829D61F4313648F89 /* BooruAccountViews.swift in Sources */,
 				E8A01BD6FF3FE3E253A450FB /* BooruLegacyHTML.swift in Sources */,
 				DA272F265CA70FCB25A0283C /* BooruLibraryViews.swift in Sources */,
 				CA3ED56268C7F1914E6C3189 /* BooruMediaView.swift in Sources */,
@@ -1228,6 +1239,7 @@
 				9AE4AA3721DEDE1610B8B5A0 /* BooruReleaseLiveTests.swift in Sources */,
 				C4E563AAFF6C1AF00B6FF425 /* BooruRevisionTests.swift in Sources */,
 				9222CF5DF347B12600C8154F /* BooruTests.swift in Sources */,
+				B7AFA29D20A0CE2A37B34366 /* BooruAccountTests.swift in Sources */,
 				69BEADC98520A8FFD8B0D31C /* GalleryIDParserTests.swift in Sources */,
 				BA64A4EEBAEB6973149849AB /* GridLayoutTests.swift in Sources */,
 				09739507CAC0DB089B36F2C4 /* TEGNALTests/TasteTests.swift in Sources */,

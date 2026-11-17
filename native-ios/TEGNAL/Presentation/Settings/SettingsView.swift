@@ -26,11 +26,11 @@ public struct SettingsView: View {
                     }.accessibilityIdentifier("settings.connection")
                 }
                 Toggle(isOn: $env.useEmbeddedBrowser) {
-                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.")
+                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.", symbol: "safari")
                 }
                     .accessibilityIdentifier("settings.embeddedBrowser")
                 Toggle(isOn: $showsInformationBeforeReading) {
-                    SettingsHelpLabel("Show Work Information Before Reading", help: "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.")
+                    SettingsHelpLabel("Show Work Information Before Reading", help: "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.", symbol: "list.bullet.below.rectangle")
                 }
                     .accessibilityIdentifier("settings.mangaInfoBeforeReading")
                 NavigationLink { ThumbnailGestureSettings() } label: {
@@ -98,11 +98,11 @@ struct ComicSitesView: View {
                 ForEach(env.comicSites, id: \.self) { site in
                     HStack {
                         // Picks the websites lists show together, as the Explore menu does: several, or none.
+                        // The check sits before the name, as image servers show theirs.
                         Button { env.toggleListedComicSite(site) } label: {
-                            HStack {
+                            HStack(spacing: 12) {
+                                Image(systemName: env.listedComicSites.contains(site) ? "checkmark.circle.fill" : "circle").foregroundStyle(.tint)
                                 Text(site).foregroundStyle(.primary)
-                                Spacer()
-                                if env.listedComicSites.contains(site) { Image(systemName: "checkmark").foregroundStyle(.tint) }
                             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                         .accessibilityAddTraits(env.listedComicSites.contains(site) ? .isSelected : [])

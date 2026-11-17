@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/booru/booru_account.dart';
 import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_store.dart';
@@ -233,6 +234,7 @@ Future<void> showWebsiteConnectionEditor(
   String initialAddress = '',
   void Function(BuildContext context, BooruServer server)? validate,
   void Function(BuildContext context, BooruServer server)? cookies,
+  Widget Function(BuildContext context, BooruServer server)? account,
 }) => showAppSheet<void>(
   context,
   builder: (context, controller) => WebsiteConnectionEditor(
@@ -243,6 +245,7 @@ Future<void> showWebsiteConnectionEditor(
     initialAddress: initialAddress,
     validate: validate,
     cookies: cookies,
+    account: account,
     scrollController: controller,
   ),
 );
@@ -259,6 +262,7 @@ class WebsiteConnectionEditor extends StatefulWidget {
     this.initialAddress = '',
     this.validate,
     this.cookies,
+    this.account,
     this.scrollController,
   });
   final ContentEnvironment content;
@@ -273,6 +277,9 @@ class WebsiteConnectionEditor extends StatefulWidget {
 
   /// Opens the server's validation browser and its cookies while editing.
   final void Function(BuildContext context, BooruServer server)? validate;
+
+  /// The server's account section, where image mode provides one.
+  final Widget Function(BuildContext context, BooruServer server)? account;
   final void Function(BuildContext context, BooruServer server)? cookies;
   final ScrollController? scrollController;
 
@@ -397,6 +404,8 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
           store.credentials.save(credentials, value.id);
           store.saveServer(value);
           if (widget.server == null) store.setSelectedServers([...store.selectedServerIDs, value.id]);
+          // Account details saved here sign the account in, as a sign-in on the website does.
+          if (!credentials.isEmpty) unawaited(BooruAccountSync.shared?.discover(value, force: true));
           Navigator.of(context).pop();
           widget.state.mode = AppMode.booru;
         } on Object catch (error) {
@@ -499,7 +508,15 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                         child: Row(
                           children: [
                             Expanded(child: Text(L10n.text('Mode'))),
-                            Text(_automatic ? L10n.text('Automatic') : _choice!.title, style: TegnalType.style(17, color: secondary)),
+                            // The Automatic choice names what it found, so the section needs no row of its own for it.
+                            Text(
+                              _automatic
+                                  ? (effective == null
+                                        ? L10n.text('Automatic')
+                                        : '${L10n.text('Automatic')} · ${L10n.text(effective is ComicsServer ? 'Comics Mode' : 'Image Mode')}')
+                                  : _choice!.title,
+                              style: TegnalType.style(17, color: secondary),
+                            ),
                             const SizedBox(width: 4),
                             Icon(CupertinoIcons.chevron_up_chevron_down, size: 15, color: secondary),
                           ],
@@ -515,17 +532,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                             ],
                           ),
                         )
-                      else if (effective != null)
-                        FormRow(
-                          child: Row(
-                            children: [
-                              Icon(effective.icon, size: 22, color: tint),
-                              const SizedBox(width: 12),
-                              Text(effective is ComicsServer ? L10n.text('Comics Mode') : L10n.text('Image Mode'), style: TegnalType.style(17, color: tint)),
-                            ],
-                          ),
-                        )
-                      else if (_address.text.trim().isNotEmpty)
+                      else if (effective == null && _address.text.trim().isNotEmpty)
                         FormRow(
                           child: Text(
                             L10n.text('Couldn’t identify this website. Check the connection or select its mode manually.'),
@@ -581,6 +588,7 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                     ),
                   ],
                   if (widget.server case final server?) ...[
+                    if (widget.account case final account?) ...[const SizedBox(height: 26), account(context, server)],
                     const SizedBox(height: 26),
                     FormSection(
                       children: [
@@ -694,13 +702,15 @@ class _ComicSitesPageState extends State<ComicSitesPage> {
                   onTap: () => _content.toggleListedComicSite(site),
                   child: Row(
                     children: [
+                      // The check sits before the name, as image servers show theirs.
+                      Icon(_content.listedComicSites.contains(site) ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle, size: 22, color: tint),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Semantics(
                           selected: _content.listedComicSites.contains(site),
                           child: Text(site, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
                       ),
-                      if (_content.listedComicSites.contains(site)) Icon(CupertinoIcons.checkmark_alt, size: 20, color: tint),
                       // Each website keeps its own account and check, like an image server.
                       Semantics(
                         button: true,

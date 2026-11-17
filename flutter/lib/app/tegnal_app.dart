@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../core/booru/booru_account.dart';
 import '../core/booru/booru_client.dart';
 import '../core/booru/booru_image_cache.dart';
 import '../core/booru/booru_store.dart';
@@ -91,6 +92,8 @@ class AppServices {
     bookmarks = BookmarkSession(database: database, content: content, isTesting: isTesting, startCoverQueue: coverQueue.start);
     favorites = SiteFavoritesSync(database: database, content: content, startCoverQueue: coverQueue.start);
     if (!isTesting) SiteFavoritesSync.shared = favorites;
+    booruAccounts = BooruAccountSync(store: booru, accounts: BooruAccounts(preferences.booruDefaults));
+    if (!isTesting) BooruAccountSync.shared = booruAccounts;
     downloads = DownloadStore(directory: downloadsDirectory, filesRoot: downloadsFilesRoot, manga: content.source, booru: booruDownloads);
     sync = LibraryDriveSync(
       // Without Google's mobile sign-in the backend stays unconfigured and sync never starts.
@@ -137,6 +140,9 @@ class AppServices {
 
   /// Keeps each signed-in website's favorites and the folder named after it the same.
   late final SiteFavoritesSync favorites;
+
+  /// Each image server's signed-in account and its favorites sync.
+  late final BooruAccountSync booruAccounts;
   late final BookmarkSession bookmarks;
   late final DownloadStore downloads;
   late final LibraryDriveSync sync;
@@ -267,9 +273,11 @@ class _RootState extends State<_Root> {
         services.downloads.setBackground(!active);
         if (!services.isTesting) services.coverQueue.setActive(active);
         if (!services.isTesting) unawaited(services.favorites.setActive(active));
+        if (!services.isTesting) unawaited(services.booruAccounts.setActive(active));
       },
     );
     if (!services.isTesting) unawaited(services.favorites.setActive(true));
+    if (!services.isTesting) unawaited(services.booruAccounts.setActive(true));
     if (!services.isTesting) services.sync.restore().then((_) => services.sync.setActive(true));
   }
 
@@ -448,11 +456,8 @@ class _RootState extends State<_Root> {
                     icon: CupertinoIcons.square_arrow_down_on_square,
                     onTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
-                        builder: (_) => OtherAppImportView(
-                          database: services.database,
-                          startCoverQueue: services.coverQueue.start,
-                          libraryChanged: _library.notifyChanged,
-                        ),
+                        builder: (_) =>
+                            OtherAppImportView(database: services.database, startCoverQueue: services.coverQueue.start, libraryChanged: _library.notifyChanged),
                       ),
                     ),
                   ),
