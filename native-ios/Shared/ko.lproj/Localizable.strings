@@ -2111,7 +2111,7 @@
 "Review" = "복습하기";
 "Soon" = "준비 중";
 "Tags collected: %@ of %@" = "모은 태그 %1$@ / %2$@";
-"Tags you learn on the path are kept here." = "길에서 배운 태그가 이곳에 모입니다.";
+"Tags you learn on the map are kept here." = "지도에서 배운 태그가 이곳에 모입니다.";
 "Level %@" = "레벨 %@";
 "Pictures From" = "그림 서버";
 "Open in Learning Mode" = "학습 모드로 시작";
@@ -2119,7 +2119,7 @@
 "Lessons show real pictures from one server. You can change it later under Me." = "레슨은 서버 한 곳의 실제 그림을 보여 줍니다. 나중에 '나' 탭에서 바꿀 수 있어요.";
 "Enter Learning Mode" = "학습 모드 열기";
 "Learning Mode" = "학습 모드";
-"Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away." = "켜면 앱을 열자마자 학습 모드로 들어갑니다. 학습 모드에서는 이미지 생성 AI의 프롬프트에 쓰는 태그를 단계별로 배웁니다. 라이브러리는 언제든 한 번의 탭으로 돌아갈 수 있습니다.";
+"Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away." = "켜면 앱을 열자마자 학습 모드로 들어갑니다. 학습 모드에서는 이미지 생성 AI의 프롬프트에 쓰는 태그를 단계별로 배웁니다. 시작 화면은 지나가는 길에 잠깐 보입니다.";
 "Weak Spots" = "약점 훈련";
 "Tags you miss most, asked again." = "자주 틀리는 태그를 다시 풉니다.";
 "Speed Round" = "스피드 라운드";
@@ -2145,7 +2145,7 @@
 "Day streak: %@" = "%@일 연속 학습";
 "Got It" = "알겠어요";
 "Check" = "확인";
-"Learning Path" = "길";
+"Map" = "지도";
 "Lesson Done" = "완료함";
 "Suggested" = "추천";
 
@@ -2188,7 +2188,7 @@
 "Dedicated Learner" = "꾸준한 학습자";
 "Finish 30 lessons." = "레슨 30개를 끝내기";
 "Graduate" = "졸업";
-"Finish every lesson on the path." = "길의 모든 레슨을 끝내기";
+"Finish every lesson on the map." = "지도의 모든 레슨을 끝내기";
 "Finish every lesson of this section." = "이 구간의 모든 레슨을 끝내기";
 "Three in a Row" = "3일 연속";
 "Study 3 days in a row." = "3일 연속으로 학습하기";
@@ -2265,3 +2265,25 @@
 "Tap them in order, or drag them into place." = "순서대로 누르거나, 끌어서 원하는 자리에 놓으세요.";
 "Open in the Viewer" = "뷰어에서 열기";
 "The best-rated model for 2D illustration, and the one this generator starts with." = "2D 일러스트에서 가장 좋다고 평가받는 모델이며, 이 생성기의 기본 모델입니다.";
+"Swipe down anywhere to open." = "화면 어디서든 아래로 쓸어내리면 열립니다.";
+"Swipe up anywhere to open." = "화면 어디서든 위로 쓸어올리면 열립니다.";
+"Turn Music On" = "음악 켜기";
+"Turn Music Off" = "음악 끄기";
+"Keep Pulling to Return" = "더 당기면 돌아갑니다";
+"Release to Return" = "놓으면 돌아갑니다";
+"Pull down from the top to return to the start" = "맨 위에서 아래로 쓸어내리면 처음 화면으로 돌아갑니다";
+"Back to the Start" = "처음 화면으로 돌아가기";
+"Open in Viewing Mode" = "감상 모드로 시작";
+"Turning this on takes the app straight on from its opening scene into viewing mode, without waiting for a swipe." = "켜면 앱을 열 때 시작 화면에서 쓸어올리지 않아도 곧바로 감상 모드로 넘어갑니다.";
+"Swipe up from the bottom bar to return to the start" = "아래쪽 바에서 위로 쓸어올리면 처음 화면으로 돌아갑니다";
+"Other Image Viewer" = "다른 이미지 뷰어";
+"Other Comics Viewer" = "다른 만화 뷰어";
+"Import from Another Image Viewer" = "다른 이미지 뷰어에서 가져오기";
+"Import from Another Comics Viewer" = "다른 만화 뷰어에서 가져오기";
+"Choose a backup or export from another image viewer. TEGNAL recognizes what the file holds and shows it before importing." = "다른 이미지 뷰어의 백업이나 내보내기 파일을 선택하세요. TEGNAL이 파일 종류를 자동으로 인식하고, 가져오기 전에 내용을 보여 줍니다.";
+"Supported: Anime Boxes backups (.abbj), bookmark exports (.json) and database backups (.db)." = "지원 형식: Anime Boxes 백업(.abbj), 북마크 내보내기(.json), 데이터베이스 백업(.db)";
+"Choose a backup, export, database or link list from another comics viewer. TEGNAL recognizes what the file holds and shows it before importing." = "다른 만화 뷰어의 백업, 내보내기, 데이터베이스 또는 링크 목록 파일을 선택하세요. TEGNAL이 파일 종류를 자동으로 인식하고, 가져오기 전에 내용을 보여 줍니다.";
+"Supported: bookmark backups and work catalogs (user.db, data.db), database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html)." = "지원 형식: 북마크 백업과 작품 카탈로그(user.db, data.db), 데이터베이스 내보내기(.db), 앱 데이터 내보내기(.json), manifest.json이 있는 다운로드 폴더, 만화 리더 백업(.tachibk), 링크 목록이나 브라우저 북마크(.txt, .html)";
+"Bookmark Backup" = "북마크 백업";
+"Work Information Catalog" = "작품 정보 카탈로그";
+"Bookmark backups, work catalogs, database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks. The file's kind is recognized automatically." = "북마크 백업, 작품 카탈로그, 데이터베이스 내보내기, 앱 데이터 내보내기, 다운로드 폴더, 만화 리더 백업, 링크 목록, 브라우저 북마크를 가져올 수 있습니다. 파일 종류는 자동으로 인식합니다.";

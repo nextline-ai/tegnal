@@ -191,34 +191,21 @@ struct ComicsConnectionCard: View {
 
 
 struct MangaLibraryToolsView: View {
-    var importOnly = false
     @Environment(AppEnvironment.self) private var env
 
     @State private var worksCount = 0
     @State private var catalogCount = 0
     @State private var missingCount = 0
-    @State private var statusMessage: String?
-    @State private var isImporting = false
-    @State private var isCancellingImport = false
     @State private var isExporting = false
-    @State private var showUserDbPicker = false
-    @State private var showDataDbPicker = false
-    @State private var showDataDbActionSheet = false
-    @State private var showNoWorksAlert = false
     @State private var confirmingRefresh = false
-    @State private var pendingDataDbUrl: URL? = nil
-    @State private var importTask: Task<Void, Never>? = nil
 
 
 
     var body: some View {
         List {
-            if !importOnly { LibraryMaintenanceLinks() }
-            if !importOnly {
-                LibraryBackupSection(busy: $isExporting, onRestore: loadStats)
-                    .disabled(isImporting)
-            }
-            if !importOnly {
+            LibraryMaintenanceLinks()
+            LibraryBackupSection(busy: $isExporting, onRestore: loadStats)
+            Group {
                 Section(header: Text(L10n.text("Library Status"))) {
                     LabeledContent(L10n.text("Saved Works"), value: L10n.text("%@ items", String(describing: worksCount)))
                     LabeledContent(L10n.text("Catalog Matches"), value: L10n.text("%@ items", String(describing: catalogCount)))
@@ -285,111 +272,23 @@ struct MangaLibraryToolsView: View {
                     }
                 }
             }
-            Section(header: Text(L10n.text("Import Data (Other Manga Viewer)"))) {
-                Button {
-                    showUserDbPicker = true
-                } label: {
-                    Label(L10n.text("Import user.db (Bookmarks, Folders, Artists)"), systemImage: "person.crop.rectangle.stack")
-                }
-                .disabled(isImporting || isExporting)
-
-                Button {
-                    showDataDbPicker = true
-                } label: {
-                    Label(L10n.text("Import data.db (Work Metadata Catalog)"), systemImage: "cylinder.split.1x2")
-                }
-                .disabled(isImporting || isExporting)
-            }
             Section {
                 NavigationLink { OtherAppImportView() } label: {
-                    Label(L10n.text("Import from Another Comics App"), systemImage: "square.and.arrow.down.on.square")
+                    Label(L10n.text("Import from Another Comics Viewer"), systemImage: "square.and.arrow.down.on.square")
                 }
-                .disabled(isImporting || isExporting)
+                .disabled(isExporting)
                 .accessibilityIdentifier("comics.importOtherApp")
             } header: {
-                Text(L10n.text("Other Comics Apps"))
+                Text(L10n.text("Import Data"))
             } footer: {
-                Text(L10n.text("Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks."))
+                Text(L10n.text("Bookmark backups, work catalogs, database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks. The file's kind is recognized automatically."))
             }
 
-            if isImporting || statusMessage != nil {
-                Section(header: Text(L10n.text("Task Status"))) {
-                    if isImporting {
-                        HStack(spacing: 12) {
-                            ProgressView()
-                            Text(statusMessage ?? L10n.text("Processing…"))
-                                .font(.footnote)
-                            Spacer()
-                            Button(L10n.text("Cancel")) {
-                                isCancellingImport = true
-                                importTask?.cancel()
-                                // Keep controls disabled until the worker acknowledges cancellation.
-                                statusMessage = L10n.text("Cancel") + "…"
-                            }
-                            .disabled(isCancellingImport)
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-                            .controlSize(.small)
-                        }
-                    } else if let statusMessage {
-                        Text(statusMessage)
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            if !importOnly { CloudSyncSection() }
+            CloudSyncSection()
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(L10n.text(importOnly ? "Import from Another Manga Viewer" : "Library Management"))
+        .navigationTitle(L10n.text("Library Management"))
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(
-            isPresented: $showUserDbPicker,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false
-        ) { result in
-            handleUserDbImport(result: result)
-        }
-        .fileImporter(
-            isPresented: $showDataDbPicker,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false
-        ) { result in
-            handleDataDbSelection(result: result)
-        }
-        .confirmationDialog(
-            L10n.text("How to Import data.db (Catalog)"),
-            isPresented: $showDataDbActionSheet,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.text("⚡️ Fill Only My Library (Recommended)")) {
-                if let url = pendingDataDbUrl {
-                    startDataDbImport(url: url, matchOnly: true)
-                }
-            }
-            Button(L10n.text("📦 Save Entire Catalog (Background Import)")) {
-                if let url = pendingDataDbUrl {
-                    startDataDbImport(url: url, matchOnly: false)
-                }
-            }
-            Button(L10n.text("Cancel"), role: .cancel) {
-                pendingDataDbUrl = nil
-            }
-        } message: {
-            Text(L10n.text("data.db is a large catalog that can exceed 500 MB.\n\nChoose 'Fill Only My Library' to extract information for your %@ saved works. This avoids storing hundreds of thousands of unnecessary records.", String(describing: worksCount)))
-        }
-        .alert(L10n.text("Your Library Is Empty"), isPresented: $showNoWorksAlert) {
-            Button(L10n.text("Save Entire Catalog")) {
-                if let url = pendingDataDbUrl {
-                    startDataDbImport(url: url, matchOnly: false)
-                }
-            }
-            Button(L10n.text("Cancel (Import user.db First)"), role: .cancel) {
-                pendingDataDbUrl = nil
-            }
-        } message: {
-            Text(L10n.text("There are no saved works to match. Import user.db (bookmarks) first, then import data.db to fill the information you need."))
-        }
         .task {
             loadStats()
         }
@@ -430,156 +329,6 @@ struct MangaLibraryToolsView: View {
             env.startCoverQueue(manual: true)
         }
     }
-
-    private func handleDataDbSelection(result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
-        pendingDataDbUrl = url
-        loadStats()
-        if worksCount > 0 {
-            showDataDbActionSheet = true
-        } else {
-            showNoWorksAlert = true
-        }
-    }
-
-    private func handleUserDbImport(result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
-        guard !isImporting, !isExporting else { return }
-        isImporting = true
-        isCancellingImport = false
-        statusMessage = L10n.text("Preparing user.db…")
-
-        let importer = env.mangaViewerImporter
-        let envRef = env
-
-        importTask = Task.detached(priority: .userInitiated) {
-            let hasAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if hasAccess { url.stopAccessingSecurityScopedResource() }
-            }
-
-            var readPath = url.path
-            var tempURL: URL? = nil
-
-            if !MangaViewerImportService.isUserDb(at: readPath) {
-                let tempDir = FileManager.default.temporaryDirectory
-                let copyUrl = tempDir.appendingPathComponent("\(UUID().uuidString)_\(url.lastPathComponent)")
-                do {
-                    try? FileManager.default.removeItem(at: copyUrl)
-                    try FileManager.default.copyItem(at: url, to: copyUrl)
-                    readPath = copyUrl.path
-                    tempURL = copyUrl
-                } catch {
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.statusMessage = L10n.text("Unable to read file: %@", String(describing: error.localizedDescription))
-                    }
-                    return
-                }
-            }
-
-            defer {
-                if let tempURL {
-                    try? FileManager.default.removeItem(at: tempURL)
-                }
-            }
-
-            do {
-                try Task.checkCancellation()
-                let res = try importer.importUserDb(path: readPath)
-                await MainActor.run {
-                    self.isImporting = false
-                    self.statusMessage = L10n.text("user.db imported: %@ folders, %@ works, %@ artists", String(describing: res.folders), String(describing: res.works), String(describing: res.artists))
-                    self.loadStats()
-                    envRef.startCoverQueue()
-                }
-            } catch {
-                await MainActor.run {
-                    self.isImporting = false
-                    self.statusMessage = error is CancellationError ? L10n.text("The task was canceled.") : L10n.text("Import failed: %@", String(describing: error.localizedDescription))
-                    self.loadStats()
-                }
-            }
-        }
-    }
-
-    private func startDataDbImport(url: URL, matchOnly: Bool) {
-        guard !isImporting, !isExporting else { return }
-        isImporting = true
-        isCancellingImport = false
-        statusMessage = matchOnly ? L10n.text("Matching metadata for your library…") : L10n.text("Preparing catalog import…")
-
-        let importer = env.mangaViewerImporter
-
-        importTask = Task.detached(priority: .userInitiated) {
-            let hasAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if hasAccess { url.stopAccessingSecurityScopedResource() }
-            }
-
-            var readPath = url.path
-            var tempURL: URL? = nil
-
-            if !MangaViewerImportService.isDataDb(at: readPath) {
-                await MainActor.run {
-                    self.statusMessage = L10n.text("Caching large file… Please wait.")
-                }
-                let tempDir = FileManager.default.temporaryDirectory
-                let copyUrl = tempDir.appendingPathComponent("\(UUID().uuidString)_\(url.lastPathComponent)")
-                do {
-                    try? FileManager.default.removeItem(at: copyUrl)
-                    try FileManager.default.copyItem(at: url, to: copyUrl)
-                    readPath = copyUrl.path
-                    tempURL = copyUrl
-                } catch {
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.statusMessage = L10n.text("Unable to read file: %@", String(describing: error.localizedDescription))
-                    }
-                    return
-                }
-            }
-
-            defer {
-                if let tempURL {
-                    try? FileManager.default.removeItem(at: tempURL)
-                }
-            }
-
-            do {
-                try Task.checkCancellation()
-                if matchOnly {
-                    let res = try importer.matchAndFillWorks(fromDataDb: readPath)
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.statusMessage = L10n.text("Metadata matched! Filled %2$@ of %1$@ saved works.", String(describing: res.totalWorks), String(describing: res.matched)) + "\n" + L10n.text("Missing covers are downloaded separately in the background.")
-                        self.loadStats()
-                        env.startCoverQueue()
-                    }
-                } else {
-                    let total = try importer.importDataDb(path: readPath) { progress in
-                        Task { @MainActor in
-                            guard self.isImporting, !self.isCancellingImport else { return }
-                            self.statusMessage = L10n.text("Importing entire catalog… (%@ records)", String(describing: progress))
-                        }
-                    }
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.statusMessage = L10n.text("data.db imported: %@ catalog records applied", String(describing: total))
-                        self.loadStats()
-                        env.startCoverQueue()
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.isImporting = false
-                    self.statusMessage = error is CancellationError ? L10n.text("The task was canceled.") : L10n.text("Import failed: %@", String(describing: error.localizedDescription))
-                    self.loadStats()
-                }
-            }
-        }
-    }
-
 }
 
 enum LibraryClassification: String, CaseIterable, Identifiable {

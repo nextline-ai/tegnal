@@ -8,11 +8,6 @@ public struct OnboardingView: View {
     @State private var tutorialMode: AppMode = .booru
     @State private var addingServer = false
     @State private var validating: BooruServer?
-    @State private var showFilePicker = false
-    @State private var isImporting = false
-    @State private var importStatus = ""
-    @State private var importCompleted = false
-    @State private var importSummary = ""
     /// True for learning mode, false for viewing mode; nil until one is picked.
     @State private var startsLearning: Bool?
     private var hasConnection: Bool { env.isSiteVerified || !env.booru.servers.isEmpty }
@@ -45,7 +40,7 @@ public struct OnboardingView: View {
                     Button(action: next) {
                         Text(L10n.text(importsOnly ? "Done" : step == Self.last ? "Get Started" : step == 2 && startsLearning == true ? "Start Learning" : (step == 0 && !hasConnection ? "Set Up Later" : "Continue"))).font(.headline)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    }.buttonStyle(.borderedProminent).controlSize(.large).disabled(isImporting || (step == 2 && !importsOnly && startsLearning == nil))
+                    }.buttonStyle(.borderedProminent).controlSize(.large).disabled(step == 2 && !importsOnly && startsLearning == nil)
                         .tint(step == 0 && !hasConnection ? Color.secondary : Color.accentColor)
                         .accessibilityIdentifier("onboarding.continue")
                     if step == 0 {
@@ -57,15 +52,14 @@ public struct OnboardingView: View {
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if step > 0 && !importsOnly { Button { step -= 1 } label: { Image(systemName: "chevron.left") }.disabled(isImporting).accessibilityLabel(L10n.text("Back")) }
+                    if step > 0 && !importsOnly { Button { step -= 1 } label: { Image(systemName: "chevron.left") }.accessibilityLabel(L10n.text("Back")) }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    if env.isOnboardingCompleted { Button(L10n.text("Done")) { dismiss() }.disabled(isImporting) }
+                    if env.isOnboardingCompleted { Button(L10n.text("Done")) { dismiss() } }
                 }
             }
             .appSheet(item: $validating) { BooruValidationView(server: $0) }
             .appSheet(isPresented: $addingServer) { WebsiteConnectionEditor(server: nil) }
-            .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: false, onCompletion: handleImport)
         }.environment(env.booru)
     }
 
@@ -99,35 +93,21 @@ public struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 20) {
             Image(systemName: "square.and.arrow.down").font(.system(size: 42)).foregroundStyle(.tint)
             Text(L10n.text("Import Data")).font(.title.bold())
+            // One way in for each kind of library. Either screen takes any file and works out what it is.
             VStack(alignment: .leading, spacing: 12) {
-                Label("Anime Boxes", systemImage: "shippingbox.fill").font(.headline)
-                Text(".abbj").font(.subheadline).foregroundStyle(.secondary)
+                Label(L10n.text("Other Image Viewer"), systemImage: AppMode.booru.icon + ".fill").font(.headline)
+                Text(".abbj · .json · .db").font(.subheadline).foregroundStyle(.secondary)
                 NavigationLink { AnimeBoxesImportView() } label: {
                     Label(L10n.text("Import"), systemImage: "doc.badge.plus")
                 }.buttonStyle(.bordered).accessibilityIdentifier("onboarding.import")
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
             VStack(alignment: .leading, spacing: 12) {
-                Label(L10n.text("Other Manga Viewer"), systemImage: AppMode.manga.icon + ".fill").font(.headline)
-                Text("user.db · data.db").font(.subheadline).foregroundStyle(.secondary)
-                Button(L10n.text("Choose File"), systemImage: "doc.badge.plus") { showFilePicker = true }
-                    .buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.mangaViewerImport")
-                if isImporting { ProgressView(importStatus) }
-                else if importCompleted { Label(importSummary, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
-                else if !importStatus.isEmpty { Text(importStatus).foregroundStyle(.red) }
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            VStack(alignment: .leading, spacing: 12) {
-                Label(L10n.text("Other Apps"), systemImage: "square.and.arrow.down.on.square.fill").font(.headline)
-                Text(".db · .json · .tachibk · .html").font(.subheadline).foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    NavigationLink { OtherAppImportView() } label: {
-                        Label(L10n.text("Comics"), systemImage: AppMode.manga.icon)
-                    }.buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.otherComicsApp")
-                    NavigationLink { AnimeBoxesImportView(otherApps: true) } label: {
-                        Label(L10n.text("Images"), systemImage: AppMode.booru.icon)
-                    }.buttonStyle(.bordered).disabled(isImporting).accessibilityIdentifier("onboarding.otherImageApp")
-                }
+                Label(L10n.text("Other Comics Viewer"), systemImage: AppMode.manga.icon + ".fill").font(.headline)
+                Text(".db · .json · .tachibk · .html · .txt").font(.subheadline).foregroundStyle(.secondary)
+                NavigationLink { OtherAppImportView() } label: {
+                    Label(L10n.text("Import"), systemImage: "doc.badge.plus")
+                }.buttonStyle(.bordered).accessibilityIdentifier("onboarding.mangaViewerImport")
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
         }
@@ -203,6 +183,7 @@ public struct OnboardingView: View {
             // What is chosen here is how the app opens from now on.
             let learning = startsLearning == true
             StudyMode.shared.startsActive = learning
+            StudyMode.shared.startsInLibrary = !learning
             if learning {
                 env.isOnboardingCompleted = true
                 StudyMode.shared.enter()
@@ -212,82 +193,5 @@ public struct OnboardingView: View {
                 step = 3
             }
         } else { env.isOnboardingCompleted = true; dismiss() }
-    }
-
-    private func handleImport(result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
-        isImporting = true
-        importStatus = L10n.text("Checking file…")
-
-        let importer = env.mangaViewerImporter
-        let envRef = env
-
-        Task.detached(priority: .userInitiated) {
-            let hasAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if hasAccess { url.stopAccessingSecurityScopedResource() }
-            }
-
-            var readPath = url.path
-            var tempURL: URL? = nil
-
-            let isUser = MangaViewerImportService.isUserDb(at: readPath)
-            let isData = MangaViewerImportService.isDataDb(at: readPath)
-
-            if !isUser && !isData {
-                let tempDir = FileManager.default.temporaryDirectory
-                let copyUrl = tempDir.appendingPathComponent("\(UUID().uuidString)_\(url.lastPathComponent)")
-                do {
-                    try? FileManager.default.removeItem(at: copyUrl)
-                    try FileManager.default.copyItem(at: url, to: copyUrl)
-                    readPath = copyUrl.path
-                    tempURL = copyUrl
-                } catch {
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.importStatus = L10n.text("Unable to read file: %@", String(describing: error.localizedDescription))
-                    }
-                    return
-                }
-            }
-
-            defer {
-                if let tempURL {
-                    try? FileManager.default.removeItem(at: tempURL)
-                }
-            }
-
-            do {
-                if MangaViewerImportService.isUserDb(at: readPath) {
-                    await MainActor.run { self.importStatus = L10n.text("Importing library from user.db…") }
-                    let res = try importer.importUserDb(path: readPath)
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.importCompleted = true
-                        self.importSummary = L10n.text("user.db imported!\n%@ folders, %@ works", String(describing: res.folders), String(describing: res.works))
-                        envRef.startCoverQueue()
-                    }
-                } else if MangaViewerImportService.isDataDb(at: readPath) {
-                    await MainActor.run { self.importStatus = L10n.text("Matching data.db metadata…") }
-                    let res = try importer.matchAndFillWorks(fromDataDb: readPath)
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.importCompleted = true
-                        self.importSummary = L10n.text("data.db matched!\nUpdated %2$@ of %1$@ works", String(describing: res.totalWorks), String(describing: res.matched)) + "\n" + L10n.text("Missing covers are downloaded separately in the background.")
-                        envRef.startCoverQueue()
-                    }
-                } else {
-                    await MainActor.run {
-                        self.isImporting = false
-                        self.importStatus = L10n.text("Unsupported database format. Select user.db or data.db.")
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.isImporting = false
-                    self.importStatus = L10n.text("Import error: %@", String(describing: error.localizedDescription))
-                }
-            }
-        }
     }
 }

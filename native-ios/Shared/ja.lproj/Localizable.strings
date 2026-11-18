@@ -2111,7 +2111,7 @@
 "Review" = "復習する";
 "Soon" = "準備中";
 "Tags collected: %@ of %@" = "集めたタグ %1$@ / %2$@";
-"Tags you learn on the path are kept here." = "みちで覚えたタグがここに集まります。";
+"Tags you learn on the map are kept here." = "マップで覚えたタグがここに集まります。";
 "Level %@" = "レベル %@";
 "Pictures From" = "画像サーバー";
 "Open in Learning Mode" = "学習モードで開く";
@@ -2119,7 +2119,7 @@
 "Lessons show real pictures from one server. You can change it later under Me." = "レッスンでは 1 つのサーバーの実際の画像を使います。あとで「じぶん」タブで変更できます。";
 "Enter Learning Mode" = "学習モードを開く";
 "Learning Mode" = "学習モード";
-"Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away." = "オンにすると、アプリを開いてすぐ学習モードに入ります。学習モードでは、画像生成 AI のプロンプトに使うタグを段階的に学びます。ライブラリにはいつでもワンタップで戻れます。";
+"Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away." = "オンにすると、アプリを開いてすぐ学習モードに入ります。学習モードでは、画像生成 AI のプロンプトに使うタグを段階的に学びます。最初の画面は通りがかりに少しだけ表示されます。";
 "Weak Spots" = "苦手トレーニング";
 "Tags you miss most, asked again." = "よく間違えるタグをもう一度。";
 "Speed Round" = "スピードラウンド";
@@ -2145,7 +2145,7 @@
 "Day streak: %@" = "%@日連続";
 "Got It" = "わかった";
 "Check" = "チェック";
-"Learning Path" = "みち";
+"Map" = "マップ";
 "Lesson Done" = "完了";
 "Suggested" = "おすすめ";
 
@@ -2188,7 +2188,7 @@
 "Dedicated Learner" = "熱心な学習者";
 "Finish 30 lessons." = "レッスンを30個終える";
 "Graduate" = "卒業";
-"Finish every lesson on the path." = "道のすべてのレッスンを終える";
+"Finish every lesson on the map." = "マップのすべてのレッスンを終える";
 "Finish every lesson of this section." = "この区間のすべてのレッスンを終える";
 "Three in a Row" = "3日連続";
 "Study 3 days in a row." = "3日続けて学習する";
@@ -2265,3 +2265,25 @@
 "Tap them in order, or drag them into place." = "順番にタップするか、ドラッグして置きましょう。";
 "Open in the Viewer" = "ビューアで開く";
 "The best-rated model for 2D illustration, and the one this generator starts with." = "2Dイラストでもっとも評価の高いモデルで、このジェネレーターの初期モデルです。";
+"Swipe down anywhere to open." = "画面のどこでも下にスワイプすると開きます。";
+"Swipe up anywhere to open." = "画面のどこでも上にスワイプすると開きます。";
+"Turn Music On" = "音楽をオンにする";
+"Turn Music Off" = "音楽をオフにする";
+"Keep Pulling to Return" = "さらに引くと戻ります";
+"Release to Return" = "離すと戻ります";
+"Pull down from the top to return to the start" = "上端から下にスワイプすると最初の画面に戻ります";
+"Back to the Start" = "最初の画面に戻る";
+"Open in Viewing Mode" = "鑑賞モードで開く";
+"Turning this on takes the app straight on from its opening scene into viewing mode, without waiting for a swipe." = "オンにすると、アプリを開いたとき、スワイプしなくても最初の画面からそのまま鑑賞モードへ進みます。";
+"Swipe up from the bottom bar to return to the start" = "下のバーから上にスワイプすると最初の画面に戻ります";
+"Other Image Viewer" = "ほかの画像ビューア";
+"Other Comics Viewer" = "ほかのマンガビューア";
+"Import from Another Image Viewer" = "ほかの画像ビューアから読み込む";
+"Import from Another Comics Viewer" = "ほかのマンガビューアから読み込む";
+"Choose a backup or export from another image viewer. TEGNAL recognizes what the file holds and shows it before importing." = "ほかの画像ビューアのバックアップまたは書き出しファイルを選んでください。TEGNAL がファイルの種類を自動で判別し、読み込む前に内容を表示します。";
+"Supported: Anime Boxes backups (.abbj), bookmark exports (.json) and database backups (.db)." = "対応形式：Anime Boxes のバックアップ（.abbj）、ブックマークの書き出し（.json）、データベースのバックアップ（.db）";
+"Choose a backup, export, database or link list from another comics viewer. TEGNAL recognizes what the file holds and shows it before importing." = "ほかのマンガビューアのバックアップ、書き出し、データベース、またはリンク一覧のファイルを選んでください。TEGNAL がファイルの種類を自動で判別し、読み込む前に内容を表示します。";
+"Supported: bookmark backups and work catalogs (user.db, data.db), database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html)." = "対応形式：ブックマークのバックアップと作品カタログ（user.db、data.db）、データベースの書き出し（.db）、アプリデータの書き出し（.json）、manifest.json のあるダウンロードフォルダ、マンガリーダーのバックアップ（.tachibk）、リンク一覧やブラウザのブックマーク（.txt、.html）";
+"Bookmark Backup" = "ブックマークのバックアップ";
+"Work Information Catalog" = "作品情報カタログ";
+"Bookmark backups, work catalogs, database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks. The file's kind is recognized automatically." = "ブックマークのバックアップ、作品カタログ、データベースの書き出し、アプリデータの書き出し、ダウンロードフォルダ、マンガリーダーのバックアップ、リンク一覧、ブラウザのブックマークを読み込めます。ファイルの種類は自動で判別します。";

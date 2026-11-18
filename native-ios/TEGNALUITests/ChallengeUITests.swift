@@ -47,8 +47,12 @@ final class ChallengeUITests: XCTestCase {
         if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] }
         app.launch()
         if extra.contains("--splash-ui-test") {
-            let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element(app, "splash.launch"))
-            XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 8), .completed)
+            // The app opens on the home scene; a swipe up travels down to the library.
+            let library = element(app, "home.library")
+            XCTAssertTrue(library.waitForExistence(timeout: 10), "The home scene shows the way to the library")
+            app.swipeUp()
+            let arrived = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: library)
+            XCTAssertEqual(XCTWaiter.wait(for: [arrived], timeout: 8), .completed)
         }
         let more = language == "ko" ? "더보기" : language == "ja" ? "その他" : "More"
         let tab = app.tabBars.buttons[more]

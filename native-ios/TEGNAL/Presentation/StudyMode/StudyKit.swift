@@ -11,21 +11,34 @@ final class StudyMode {
     /// The tab learning mode opens on the next time it is entered.
     var tab = StudyTab.path
     /// Open straight into learning mode when the app starts.
-    var startsActive: Bool { didSet { defaults.set(startsActive, forKey: Self.startKey) } }
+    var startsActive: Bool { didSet { defaults.set(startsActive, forKey: Self.startKey); if startsActive, startsInLibrary { startsInLibrary = false } } }
+    /// Go straight on from the opening scene into the library when the app starts. Only one of the two can be on.
+    static let libraryStartKey = "home.startInLibrary"
+    var startsInLibrary: Bool { didSet { defaults.set(startsInLibrary, forKey: Self.libraryStartKey); if startsInLibrary, startsActive { startsActive = false } } }
 
     private init() {
         let starts = defaults.bool(forKey: Self.startKey)
         startsActive = starts
+        startsInLibrary = !starts && defaults.bool(forKey: Self.libraryStartKey)
         active = starts || ProcessInfo.processInfo.arguments.contains("--study-mode")
     }
-    func enter(_ tab: StudyTab = .path) { self.tab = tab; withAnimation(.snappy(duration: 0.35)) { active = true } }
-    func leave() { withAnimation(.snappy(duration: 0.35)) { active = false }; StudySound.rest() }
+    /// Opens learning mode. From the library, the way there leads back up through the home scene and on into the sky.
+    func enter(_ tab: StudyTab = .path) {
+        self.tab = tab
+        if HomeStage.shared.cross(to: .study) { return }
+        withAnimation(.snappy(duration: 0.35)) { active = true }
+    }
+    /// Opens the library, by the same way in the other direction.
+    func leave() {
+        if HomeStage.shared.cross(to: .library) { return }
+        withAnimation(.snappy(duration: 0.35)) { active = false }; StudySound.rest()
+    }
 }
 
 enum StudyTab: String, CaseIterable, Identifiable {
     case path, practice, dex, lab, me
     var id: String { rawValue }
-    var title: String { L10n.text(["path": "Learning Path", "practice": "Practice", "dex": "Collection", "lab": "Studio", "me": "Me"][rawValue] ?? "") }
+    var title: String { L10n.text(["path": "Map", "practice": "Practice", "dex": "Collection", "lab": "Studio", "me": "Me"][rawValue] ?? "") }
     var symbol: String { ["path": "map.fill", "practice": "dumbbell.fill", "dex": "square.grid.2x2.fill", "lab": "wand.and.stars", "me": "person.crop.circle.fill"][rawValue] ?? "circle" }
 }
 

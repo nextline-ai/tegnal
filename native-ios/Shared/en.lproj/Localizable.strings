@@ -2111,7 +2111,7 @@
 "Review" = "Review";
 "Soon" = "Soon";
 "Tags collected: %@ of %@" = "Tags collected: %@ of %@";
-"Tags you learn on the path are kept here." = "Tags you learn on the path are kept here.";
+"Tags you learn on the map are kept here." = "Tags you learn on the map are kept here.";
 "Level %@" = "Level %@";
 "Pictures From" = "Pictures From";
 "Open in Learning Mode" = "Open in Learning Mode";
@@ -2119,7 +2119,7 @@
 "Lessons show real pictures from one server. You can change it later under Me." = "Lessons show real pictures from one server. You can change it later under Me.";
 "Enter Learning Mode" = "Enter Learning Mode";
 "Learning Mode" = "Learning Mode";
-"Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away." = "Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away.";
+"Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away." = "Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The app passes through its opening scene on the way.";
 "Weak Spots" = "Weak Spots";
 "Tags you miss most, asked again." = "Tags you miss most, asked again.";
 "Speed Round" = "Speed Round";
@@ -2145,7 +2145,7 @@
 "Day streak: %@" = "Day streak: %@";
 "Got It" = "Got It";
 "Check" = "Check";
-"Learning Path" = "Learning Path";
+"Map" = "Map";
 "Lesson Done" = "Lesson Done";
 "Suggested" = "Suggested";
 
@@ -2188,7 +2188,7 @@
 "Dedicated Learner" = "Dedicated Learner";
 "Finish 30 lessons." = "Finish 30 lessons.";
 "Graduate" = "Graduate";
-"Finish every lesson on the path." = "Finish every lesson on the path.";
+"Finish every lesson on the map." = "Finish every lesson on the map.";
 "Finish every lesson of this section." = "Finish every lesson of this section.";
 "Three in a Row" = "Three in a Row";
 "Study 3 days in a row." = "Study 3 days in a row.";
@@ -2265,3 +2265,25 @@
 "Tap them in order, or drag them into place." = "Tap them in order, or drag them into place.";
 "Open in the Viewer" = "Open in the Viewer";
 "The best-rated model for 2D illustration, and the one this generator starts with." = "The best-rated model for 2D illustration, and the one this generator starts with.";
+"Swipe down anywhere to open." = "Swipe down anywhere to open.";
+"Swipe up anywhere to open." = "Swipe up anywhere to open.";
+"Turn Music On" = "Turn Music On";
+"Turn Music Off" = "Turn Music Off";
+"Keep Pulling to Return" = "Keep Pulling to Return";
+"Release to Return" = "Release to Return";
+"Pull down from the top to return to the start" = "Pull down from the top to return to the start";
+"Back to the Start" = "Back to the Start";
+"Open in Viewing Mode" = "Open in Viewing Mode";
+"Turning this on takes the app straight on from its opening scene into viewing mode, without waiting for a swipe." = "Turning this on takes the app straight on from its opening scene into viewing mode, without waiting for a swipe.";
+"Swipe up from the bottom bar to return to the start" = "Swipe up from the bottom bar to return to the start";
+"Other Image Viewer" = "Other Image Viewer";
+"Other Comics Viewer" = "Other Comics Viewer";
+"Import from Another Image Viewer" = "Import from Another Image Viewer";
+"Import from Another Comics Viewer" = "Import from Another Comics Viewer";
+"Choose a backup or export from another image viewer. TEGNAL recognizes what the file holds and shows it before importing." = "Choose a backup or export from another image viewer. TEGNAL recognizes what the file holds and shows it before importing.";
+"Supported: Anime Boxes backups (.abbj), bookmark exports (.json) and database backups (.db)." = "Supported: Anime Boxes backups (.abbj), bookmark exports (.json) and database backups (.db).";
+"Choose a backup, export, database or link list from another comics viewer. TEGNAL recognizes what the file holds and shows it before importing." = "Choose a backup, export, database or link list from another comics viewer. TEGNAL recognizes what the file holds and shows it before importing.";
+"Supported: bookmark backups and work catalogs (user.db, data.db), database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html)." = "Supported: bookmark backups and work catalogs (user.db, data.db), database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html).";
+"Bookmark Backup" = "Bookmark Backup";
+"Work Information Catalog" = "Work Information Catalog";
+"Bookmark backups, work catalogs, database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks. The file's kind is recognized automatically." = "Bookmark backups, work catalogs, database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks. The file's kind is recognized automatically.";

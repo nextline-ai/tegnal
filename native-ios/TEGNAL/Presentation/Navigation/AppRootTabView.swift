@@ -10,10 +10,14 @@ public struct AppRootTabView: View {
 
     public var body: some View {
         let studying = StudyMode.shared.active
+        let stage = HomeStage.shared
         ZStack {
-            library.accessibilityHidden(studying).allowsHitTesting(!studying)
+            // Behind the home scene, the library is built only for someone who goes there.
+            if stage.libraryMounted || (!studying && stage.place != .home) {
+                library.accessibilityHidden(studying).allowsHitTesting(!studying)
+            }
             // Learning mode takes over the whole screen, dock included; the library waits underneath.
-            if studying {
+            if studying, stage.studyMounted || stage.place != .home {
                 StudyModeRoot().environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language))
                     .transition(.opacity.combined(with: .scale(scale: 1.03))).zIndex(1)
             }
@@ -24,13 +28,11 @@ public struct AppRootTabView: View {
             setupApp()
         }
         .modifier(BackupReminderModifier())
+        .onChange(of: studying) { _, studying in stage.follow(studying: studying) }
+        // Filling in saved works is the library's work; it waits until the library has been opened.
+        .onChange(of: stage.libraryOpened, initial: true) { _, opened in if opened { fillLibrary() } }
         .onChange(of: env.isSiteVerified) { _, verified in
-            if verified {
-                #if DEBUG
-                if ContentUITestSupport.enabled { return }
-                #endif
-                env.startCoverQueue()
-            }
+            if verified, stage.libraryOpened { fillLibrary() }
         }
     }
 
@@ -51,9 +53,15 @@ public struct AppRootTabView: View {
         if ContentUITestSupport.enabled { return }
         #endif
         env.database.syncFoldersToAppGroup()
-        env.startCoverQueue()
         observeShareNotifications()
         consumePendingShare()
+    }
+
+    private func fillLibrary() {
+        #if DEBUG
+        if ContentUITestSupport.enabled { return }
+        #endif
+        env.startCoverQueue()
     }
 
     private func syncFoldersToAppGroup() {

@@ -91,6 +91,20 @@ import GRDB
         XCTAssertThrowsError(try OtherAppImport.readDatabase(at: image.path)) { XCTAssertEqual($0 as? OtherAppImportError, .imageAppBackup) }
     }
 
+    func testAViewersOwnDatabasesAreRecognizedByWhatTheyHold() throws {
+        // Whatever the file is called, a bookmark backup is known by its bookmark table.
+        let bookmarks = temporary(".backup")
+        try DatabaseQueue(path: bookmarks.path).write { try $0.execute(sql: "CREATE TABLE BookmarkArticle (Id INTEGER)") }
+        XCTAssertEqual(try ViewerDatabase.recognize(bookmarks), .bookmarks)
+        // Any other database, and any file that is not one, goes on to the other readers.
+        let other = temporary(".db")
+        try DatabaseQueue(path: other.path).write { try $0.execute(sql: "CREATE TABLE Unrelated (id INTEGER)") }
+        XCTAssertNil(try ViewerDatabase.recognize(other))
+        let text = temporary(".txt")
+        try Data("not a database".utf8).write(to: text)
+        XCTAssertNil(try ViewerDatabase.recognize(text))
+    }
+
     // MARK: App data export
 
     func testAppDataExportHistoryKeepsTagsAndKeys() throws {

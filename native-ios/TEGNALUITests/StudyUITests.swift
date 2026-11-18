@@ -169,7 +169,7 @@ final class StudyUITests: XCTestCase {
         element(app, "study.award.lessons-all").tap()
         XCTAssertTrue(element(app, "study.award.name").waitForExistence(timeout: 5))
         XCTAssertEqual(element(app, "study.award.name").label, "Graduate")
-        XCTAssertTrue(app.staticTexts["Finish every lesson on the path."].exists, "A badge says how it is earned")
+        XCTAssertTrue(app.staticTexts["Finish every lesson on the map."].exists, "A badge says how it is earned")
     }
 
     func testALessonThatEarnsABadgeCelebratesIt() {

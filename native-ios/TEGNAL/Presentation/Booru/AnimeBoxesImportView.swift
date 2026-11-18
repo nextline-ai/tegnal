@@ -1,10 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Reads a backup or export from another image viewer. One button takes every kind of file:
+/// what the file is, is worked out from the file.
 struct AnimeBoxesImportView: View {
-    /// Opened for the other image apps: bookmark exports and app databases instead of `.abbj`.
-    /// Either screen reads every supported file.
-    var otherApps = false
     @Environment(BooruStore.self) private var store
     @State private var picking = false
     @State private var backup: AnimeBoxesBackup?
@@ -16,17 +15,13 @@ struct AnimeBoxesImportView: View {
     var body: some View {
         Form {
             Section {
-                if otherApps {
-                    Label(L10n.text("Import from Another Image App"), systemImage: "square.and.arrow.down.on.square.fill").font(.headline)
-                    Text(L10n.text("Choose a bookmark export (.json) or a database backup (.db) from another image app. Review its contents before importing."))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                } else {
-                    Label(L10n.text("Import from Anime Boxes"), systemImage: "shippingbox.fill").font(.headline)
-                    Text(L10n.text("Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing."))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                }
-                Button(L10n.text(backup == nil ? "Choose Backup File" : "Choose Another File"), systemImage: "doc.badge.plus") { picking = true }
+                Label(L10n.text("Import from Another Image Viewer"), systemImage: "square.and.arrow.down.on.square.fill").font(.headline)
+                Text(L10n.text("Choose a backup or export from another image viewer. TEGNAL recognizes what the file holds and shows it before importing."))
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button(L10n.text(backup == nil ? "Choose File" : "Choose Another File"), systemImage: "doc.badge.plus") { picking = true }
                     .accessibilityIdentifier("booru.import.choose").disabled(loading)
+            } footer: {
+                Text(L10n.text("Supported: Anime Boxes backups (.abbj), bookmark exports (.json) and database backups (.db)."))
             }
             if loading { Section { ProgressView(L10n.text("Importing…")) } }
             if let error { Section { Text(error).foregroundStyle(.red).accessibilityIdentifier("booru.import.error") } }
@@ -77,7 +72,7 @@ struct AnimeBoxesImportView: View {
                 }
             }
         }
-        .navigationTitle(otherApps ? L10n.text("Another App") : "Anime Boxes").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(L10n.text("Other Image Viewer")).navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $picking, allowedContentTypes: [.item]) { outcome in
             if case .success(let url) = outcome { read(url) }
             else if case .failure(let failure) = outcome { error = failure.localizedDescription }

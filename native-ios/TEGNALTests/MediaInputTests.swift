@@ -726,41 +726,87 @@ import WebKit
         _ = try await web.evaluateJavaScript("window.pausePlayback()")
     }
 
-    func testLaunchArtworkPreservesBothJPEGsAndFollowsAppearanceChanges() throws {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
-        window.rootViewController = UIViewController()
-        window.isHidden = false
-        defer { window.isHidden = true }
-        let container = SplashContainerView()
-        container.frame = window.bounds
-        window.rootViewController?.view.addSubview(container)
-        let artwork = container.artwork
-        let imageView = try XCTUnwrap(artwork.subviews.compactMap { $0 as? UIImageView }.first)
-        for (style, name) in [(UIUserInterfaceStyle.light, "splash_light"), (.dark, "splash_dark"), (.light, "splash_light")] {
-            window.overrideUserInterfaceStyle = style
-            window.layoutIfNeeded()
-            let url = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "jpg"))
-            XCTAssertEqual(Array(try Data(contentsOf: url).prefix(3)), [0xFF, 0xD8, 0xFF])
-            let original = try XCTUnwrap(UIImage(contentsOfFile: url.path))
-            let expected = original.preparingForDisplay() ?? original
-            XCTAssertEqual(imageView.image?.pngData(), expected.pngData())
-            XCTAssertEqual(imageView.contentMode, .scaleAspectFit)
-            XCTAssertEqual(artwork.backgroundColor?.resolvedColor(with: artwork.traitCollection), style == .dark ? .black : .white)
-            let screenshot = UIGraphicsImageRenderer(size: container.bounds.size).image { container.layer.render(in: $0.cgContext) }
-            let attachment = XCTAttachment(image: screenshot); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    @MainActor func testOnlyOnePlaceCanBeTheOneTheAppOpensIn() {
+        let mode = StudyMode.shared, learning = mode.startsActive, viewing = mode.startsInLibrary
+        defer { mode.startsActive = learning; mode.startsInLibrary = viewing }
+        mode.startsActive = true
+        mode.startsInLibrary = true
+        XCTAssertFalse(mode.startsActive, "Opening in viewing mode turns opening in learning mode off")
+        XCTAssertEqual(HomeStage.shared.preferred, .library)
+        mode.startsActive = true
+        XCTAssertFalse(mode.startsInLibrary)
+        XCTAssertEqual(HomeStage.shared.preferred, .study)
+        mode.startsActive = false
+        XCTAssertNil(HomeStage.shared.preferred)
+    }
+
+    func testHomeRemembersWhoUsesTheLibrary() {
+        // Before anything is known, the choice made while setting up the app stands in.
+        XCTAssertTrue(HomeHabit().prefersLibrary(startsLearning: false))
+        XCTAssertFalse(HomeHabit().prefersLibrary(startsLearning: true))
+        var habit = HomeHabit()
+        for _ in 0..<3 { habit.record(.study) }
+        XCTAssertFalse(habit.prefersLibrary(startsLearning: false), "Someone who only learns has no library prepared")
+        habit.record(.library)
+        XCTAssertTrue(habit.prefersLibrary(startsLearning: true))
+        for _ in 0..<HomeHabit.limit { habit.record(.study) }
+        XCTAssertEqual(habit.recent, String(repeating: "S", count: HomeHabit.limit))
+        XCTAssertFalse(habit.prefersLibrary(startsLearning: false), "An old visit to the library is forgotten")
+        XCTAssertEqual(HomeHabit(recent: "LxS?L").recent, "LSL")
+    }
+
+    func testHomeJourneyIsOneSmoothCurve() {
+        XCTAssertEqual(HomeTravel.camera(0), 0)
+        XCTAssertEqual(HomeTravel.camera(1), HomeTravel.distance, accuracy: 0.0001)
+        var last = -1.0
+        for step in 0...200 {
+            let camera = HomeTravel.camera(Double(step) / 200)
+            XCTAssertGreaterThanOrEqual(camera, last, "The camera never turns back")
+            last = camera
+        }
+        // The scene follows a finger from the first point, and a finger alone cannot finish the journey.
+        let height: CGFloat = 874
+        let near = HomeTravel.camera(HomeTravel.progress(drag: 40, height: height)) * Double(height)
+        XCTAssertEqual(near, 40, accuracy: 4)
+        XCTAssertLessThan(HomeTravel.camera(HomeTravel.progress(drag: height * 3, height: height)), 1, "The picture is never pulled right off the screen")
+        XCTAssertEqual(HomeTravel.progress(drag: 0, height: height), 0)
+        // The camera ends clear of the world's edge and of everything that reaches past it.
+        XCTAssertEqual(HomeTravel.distance, HomeTravel.depth + 1 + HomeTravel.overhang, accuracy: 0.0001)
+        // Pulling a place back brings that edge in under the finger, point for point at first.
+        let resting = HomeTravel.camera(HomeTravel.progress(pull: 0, height: height))
+        XCTAssertEqual(resting, HomeTravel.distance - HomeTravel.slack, accuracy: 0.01)
+        let pulled = HomeTravel.camera(HomeTravel.progress(pull: 60, height: height))
+        XCTAssertEqual((resting - pulled) * Double(height), 60, accuracy: 6)
+        let committed = HomeTravel.camera(HomeTravel.progress(pull: height * CGFloat(HomeTravel.returnCommit), height: height))
+        XCTAssertLessThan(committed, HomeTravel.depth + 1 + 0.22, "A pull far enough to go back has what hangs from the edge on screen")
+        // An animation starts where the finger was and ends exactly at its goal, without stepping backward.
+        let moments = HomeTravel.moments(from: 0.2, to: 1, seconds: 1.8, leaving: 1.4)
+        XCTAssertEqual(moments.first ?? -1, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(moments.last ?? -1, 1, accuracy: 0.0001)
+        XCTAssertTrue(zip(moments, moments.dropFirst()).allSatisfy { $0 <= $1 })
+        let back = HomeTravel.moments(from: 0.9, to: 0, seconds: 1.7, landing: 0)
+        XCTAssertEqual(back.last ?? -1, 0, accuracy: 0.0001)
+        XCTAssertTrue(zip(back, back.dropFirst()).allSatisfy { $0 >= $1 })
+    }
+
+    func testHomeWorldFindsEveryDrawingAndFilm() {
+        let size = CGSize(width: 402, height: 874)
+        for request in HomeArt.requests(for: size) {
+            XCTAssertNotNil(HomeArt.render(request, screenScale: 3), "\(request.art) is missing from the asset catalog")
+        }
+        for realm in HomeRealm.allCases {
+            // Whatever moves with the camera or faster has passed the world's end before that end is on screen.
+            for plane in HomeWorld.planes(realm) where plane.depth >= 1 {
+                XCTAssertTrue(plane.sprites.allSatisfy { $0.at <= HomeTravel.depth + 0.5 }, "Nothing in the \(realm) world stands beyond its edge")
+            }
+        }
+        XCTAssertNotNil(HomeStillView.picture, "The blurred first frame is missing from the asset catalog")
+        for (name, type) in [("home_intro", "mp4"), ("home_loop", "mp4"), ("home_theme", "mp3")] {
+            XCTAssertNotNil(HomeMediaFile.url(name, type), "\(name).\(type) is missing from the app")
         }
     }
 
-    func testLaunchAndResumeHaveIndependentDurations() {
-        XCTAssertEqual(SplashTiming.launch.hold, SplashTiming.resume.hold * 2)
-        XCTAssertEqual(SplashTiming.launch.slide, SplashTiming.resume.slide * 2)
-        XCTAssertEqual(SplashTiming.resume.total, 1.5)
-        XCTAssertEqual(SplashTiming.launch.total, 3)
-    }
-
-    func testPrivacyCoverIsImmediateAndSurvivesInterruptedReturn() async throws {
+    func testPrivacyCoverIsTheBlurredStillAndFadesOnReturn() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 400, height: 800)
@@ -769,30 +815,26 @@ import WebKit
         defer { window.isHidden = true }
         let manager = PrivacyCoverManager()
         manager.show(in: [window])
-        let cover = try XCTUnwrap(window.subviews.last)
+        let cover = try XCTUnwrap(window.subviews.last as? UIImageView)
         XCTAssertEqual(cover.accessibilityIdentifier, "privacy.cover")
         XCTAssertEqual(cover.frame, window.bounds)
         XCTAssertEqual(cover.alpha, 1)
         XCTAssertTrue(cover.isOpaque)
+        XCTAssertNotNil(cover.image, "The cover is the home scene's blurred first frame")
+        XCTAssertTrue(cover.image === HomeStillView.picture, "The app starts from, and hides behind, one picture")
+        XCTAssertEqual(cover.contentMode, .scaleAspectFill)
         XCTAssertTrue(cover.layer.animationKeys()?.isEmpty ?? true)
+        // Leaving again while the cover fades puts it straight back, and that fade's end must not remove it.
         manager.hide()
         manager.show(in: [window])
-        try await Task.sleep(for: .milliseconds(550))
-        XCTAssertTrue(cover.superview === window)
-        XCTAssertEqual(cover.transform, .identity)
         XCTAssertEqual(cover.alpha, 1)
+        try await Task.sleep(for: .milliseconds(Int(PrivacyCoverManager.fade * 1000) + 200))
+        XCTAssertTrue(cover.superview === window, "An interrupted fade must not remove the restored privacy cover")
+        XCTAssertEqual(cover.alpha, 1)
+        // Coming back fades it and nothing else: it never moves.
         manager.hide()
-        try await Task.sleep(for: .milliseconds(250))
-        XCTAssertTrue(cover.superview === window, "Resume keeps the original 0.6 second hold")
         XCTAssertEqual(cover.transform, .identity)
-        try await Task.sleep(for: .milliseconds(500))
-        XCTAssertLessThan(cover.transform.ty, 0, "Resume slides upward after the hold")
-        manager.show(in: [window])
-        XCTAssertEqual(cover.transform, .identity)
-        try await Task.sleep(for: .milliseconds(900))
-        XCTAssertTrue(cover.superview === window, "Interrupted slide must not remove the restored privacy cover")
-        manager.hide()
-        try await Task.sleep(for: .milliseconds(1700))
+        try await Task.sleep(for: .milliseconds(Int(PrivacyCoverManager.fade * 1000) + 200))
         XCTAssertNil(cover.superview)
     }
 
