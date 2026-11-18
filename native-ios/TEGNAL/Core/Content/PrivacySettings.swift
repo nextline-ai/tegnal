@@ -102,7 +102,7 @@ enum EncryptedDNS: String, CaseIterable, Identifiable {
             covering = false
             // A cover kept for the app switcher leaves with the app's own return animation.
             guard UIApplication.shared.applicationState == .active else { return }
-            PrivacyCoverManager.shared.hide(timing: SplashTiming(hold: 0, slide: 0))
+            PrivacyCoverManager.shared.hide(animated: false)
         }
     }
 }

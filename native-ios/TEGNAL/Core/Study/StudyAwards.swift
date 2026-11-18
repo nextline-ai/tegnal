@@ -33,7 +33,7 @@ struct StudyAward: Identifiable, Hashable, Sendable {
             (10, "book.fill", "Getting Going", "Finish 10 lessons."),
             (30, "books.vertical.fill", "Dedicated Learner", "Finish 30 lessons.")])
         // The last of the family is the whole path, however long the path is.
-        awards.append(.init(id: "lessons-all", family: .lessons, metal: .prism, symbol: "graduationcap.fill", title: "Graduate", detail: "Finish every lesson on the path.", goal: max(1, path.lessons.count)))
+        awards.append(.init(id: "lessons-all", family: .lessons, metal: .prism, symbol: "graduationcap.fill", title: "Graduate", detail: "Finish every lesson on the map.", goal: max(1, path.lessons.count)))
         awards += path.sections.filter { !$0.lessons.isEmpty }.map { section in
             .init(id: "section-\(section.id)", family: .sections, metal: .gold, symbol: section.lessons.first?.symbol ?? "flag.fill", title: "", detail: "Finish every lesson of this section.",
                   goal: section.lessons.count, section: section.id, color: section.color, sectionTitle: section.title)

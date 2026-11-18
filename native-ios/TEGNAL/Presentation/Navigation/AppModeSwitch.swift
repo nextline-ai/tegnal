@@ -296,7 +296,7 @@ private struct ImportReminderBanner: View {
                             Image(systemName: "square.and.arrow.down").font(.title3)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(L10n.text("Import from Other Apps")).font(.subheadline.weight(.semibold))
-                                Text("Anime Boxes · Other Manga Viewer").font(.caption).foregroundStyle(.secondary)
+                                Text(L10n.text("Other Image Viewer") + " · " + L10n.text("Other Comics Viewer")).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.caption)

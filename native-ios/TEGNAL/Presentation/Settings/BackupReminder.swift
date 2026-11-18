@@ -58,6 +58,7 @@ struct BackupReminderModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: scenePhase, initial: true) { _, phase in if phase == .active { check() } }
+            .onChange(of: HomeStage.shared.coversScreen) { _, covered in if !covered, scenePhase == .active { check() } }
             .alert(L10n.text("Back Up Your Library"), isPresented: $asking) {
                 Button(L10n.text("Save File")) { save() }
                 Button(L10n.text("Later"), role: .cancel) {}
@@ -84,8 +85,8 @@ struct BackupReminderModifier: ViewModifier {
         #if DEBUG
         if ContentUITestSupport.enabled && !ProcessInfo.processInfo.arguments.contains("--backup-reminder-test") { return }
         #endif
-        // The one-time iCloud reminder goes first; this one waits for a later visit.
-        guard env.isOnboardingCompleted, !env.sync.needsOffReminder, !asking, document == nil else { return }
+        // The one-time iCloud reminder goes first; this one waits for a later visit. Neither is asked over the home scene.
+        guard !HomeStage.shared.coversScreen, env.isOnboardingCompleted, !env.sync.needsOffReminder, !asking, document == nil else { return }
         let works = (try? env.database.worksCount()) ?? 0
         guard works > 0 || !env.booru.favoriteIDs.isEmpty else { return }
         #if DEBUG

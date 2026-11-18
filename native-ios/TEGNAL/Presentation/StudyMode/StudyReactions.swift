@@ -24,9 +24,8 @@ enum StudySound: String, CaseIterable {
 
     /// Hands the audio session back as it was found, once learning mode is left.
     static func rest() {
-        guard claimed else { return }
+        // The whole app plays as media, so there is nothing to hand back; the next sound simply claims the session again.
         claimed = false
-        try? AVAudioSession.sharedInstance().setCategory(.soloAmbient)
     }
 
     private func player() -> AVAudioPlayer? {
@@ -43,7 +42,7 @@ enum StudySound: String, CaseIterable {
         if !Self.claimed {
             Self.claimed = true
             // Playback is the category the silent switch leaves alone; mixing keeps the learner's own music going.
-            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            AppAudio.useMediaVolume()
             try? AVAudioSession.sharedInstance().setActive(true)
         }
         guard let player = player() else { return }

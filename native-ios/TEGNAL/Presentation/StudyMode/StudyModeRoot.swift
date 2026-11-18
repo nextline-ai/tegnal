@@ -63,6 +63,16 @@ struct StudyModeRoot: View {
     @State private var parade: [StudyAward] = []
     private let source: any BooruProviding = TasteSources.booru
 
+    /// Whether this visit's opening question or celebration has been shown.
+    @State private var greeted = false
+
+    /// Asks or celebrates once the learner has arrived, not while the home scene is still on the way out.
+    private func greet() {
+        guard !greeted, !HomeStage.shared.coversScreen else { return }
+        greeted = true
+        if model.needsServer { choosingServer = true } else { celebrate() }
+    }
+
     /// The tabs opened so far. A tab is built the first time it is opened and kept from then on.
     @State private var opened: Set<StudyTab> = []
 
@@ -126,8 +136,9 @@ struct StudyModeRoot: View {
             model.reload(store)
             StudySound.warm()
             // A learner who already has servers says once which one the pictures come from.
-            if model.needsServer { choosingServer = true } else { celebrate() }
+            greet()
         }
+        .onChange(of: HomeStage.shared.coversScreen) { _, _ in greet() }
         .onChange(of: store.revision) { model.reload(store) }
         // The path behind a finished lesson is already up to date when the lesson closes.
         .onChange(of: session?.phase) { _, phase in
@@ -172,14 +183,20 @@ struct StudyModeRoot: View {
 struct StudyDock: View {
     @Binding var selection: StudyTab
     @Namespace private var space
+    /// How many times each tab has been chosen. Its symbol bounces when it is chosen, not when it is left.
+    @State private var chosenCount: [StudyTab: Int] = [:]
     var body: some View {
         HStack(spacing: 2) {
             ForEach(StudyTab.allCases) { tab in
                 let chosen = tab == selection
-                Button { StudySound.tap.play(); withAnimation(.spring(duration: 0.32, bounce: 0.22)) { selection = tab } } label: {
+                Button {
+                    StudySound.tap.play()
+                    if !chosen { chosenCount[tab, default: 0] += 1 }
+                    withAnimation(.spring(duration: 0.32, bounce: 0.22)) { selection = tab }
+                } label: {
                     VStack(spacing: 3) {
                         Image(systemName: tab.symbol).font(.system(size: 21, weight: .bold))
-                            .symbolEffect(.bounce, value: chosen)
+                            .symbolEffect(.bounce, value: chosenCount[tab, default: 0])
                         Text(tab.title).font(StudyTheme.body(11, .bold)).lineLimit(1).minimumScaleFactor(0.8)
                     }
                     .foregroundStyle(chosen ? StudyTheme.primary : StudyTheme.muted)
@@ -198,7 +215,6 @@ struct StudyDock: View {
         .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 2) }
         .frame(maxWidth: 520).padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 4)
         .frame(maxWidth: .infinity)
-        .background(StudyTheme.background)
     }
 }
 
@@ -207,11 +223,13 @@ struct StudyHUD: View {
     let model: StudyModeModel
     var body: some View {
         HStack(spacing: 16) {
-            Button { StudyMode.shared.leave() } label: {
-                Image(systemName: "books.vertical.fill").font(.system(size: 17, weight: .bold)).foregroundStyle(StudyTheme.muted)
+            // Learning mode is left for the home scene it was reached from. Where that scene is not in use, the library is next door.
+            let home = HomeStage.shared.enabled
+            Button { if home { HomeStage.shared.goHome?() } else { StudyMode.shared.leave() } } label: {
+                Image(systemName: home ? "house.fill" : "books.vertical.fill").font(.system(size: 17, weight: .bold)).foregroundStyle(StudyTheme.muted)
                     .frame(width: 40, height: 40).background(StudyTheme.surface, in: Circle())
                     .overlay { Circle().strokeBorder(StudyTheme.line, lineWidth: 2) }
-            }.buttonStyle(.plain).accessibilityLabel(L10n.text("Back to the Library")).accessibilityIdentifier("study.exit")
+            }.buttonStyle(.plain).accessibilityLabel(L10n.text(home ? "Back to the Start" : "Back to the Library")).accessibilityIdentifier("study.exit")
             StudyStat(symbol: "flame.fill", color: model.summary.streak > 0 ? StudyTheme.flame : StudyTheme.muted, value: String(model.summary.streak))
                 .accessibilityLabel(L10n.text("Day streak") + " " + String(model.summary.streak)).accessibilityIdentifier("study.hud.streak")
             StudyStat(symbol: "bolt.fill", color: StudyTheme.gold, value: String(model.game.xp))
@@ -453,7 +471,7 @@ struct StudyDexView: View {
                 if met.isEmpty {
                     VStack(spacing: 12) {
                         StudyMascot(pose: .think, size: 110)
-                        Text(L10n.text("Tags you learn on the path are kept here.")).font(StudyTheme.body(16, .medium)).foregroundStyle(StudyTheme.muted).multilineTextAlignment(.center)
+                        Text(L10n.text("Tags you learn on the map are kept here.")).font(StudyTheme.body(16, .medium)).foregroundStyle(StudyTheme.muted).multilineTextAlignment(.center)
                     }.frame(maxWidth: .infinity).padding(.top, 60)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 12) {
@@ -704,5 +722,10 @@ struct StudyModeSettings: View {
             }.accessibilityIdentifier("settings.startInStudyMode")
             Button(L10n.text("Enter Learning Mode")) { mode.enter() }.accessibilityIdentifier("settings.enterStudyMode")
         } header: { Text(L10n.text("Learning Mode")) }
+        Section {
+            Toggle(isOn: $mode.startsInLibrary) {
+                SettingsHelpLabel("Open in Viewing Mode", help: "Turning this on takes the app straight on from its opening scene into viewing mode, without waiting for a swipe.")
+            }.accessibilityIdentifier("settings.startInViewingMode")
+        } header: { Text(L10n.text("Viewing Mode")) }
     }
 }

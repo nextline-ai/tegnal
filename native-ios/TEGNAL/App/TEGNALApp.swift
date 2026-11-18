@@ -1,76 +1,17 @@
 import SwiftUI
 import UIKit
 
-// Animation is a single compositor transform, independent of SwiftUI feed updates.
-struct SplashTiming: Equatable {
-    let hold: TimeInterval
-    let slide: TimeInterval
-    static let launch = SplashTiming(hold: 1.2, slide: 1.8)
-    static let resume = SplashTiming(hold: 0.6, slide: 0.9)
-    var total: TimeInterval { hold + slide }
-}
+// MARK: - App switcher privacy cover
 
-@MainActor private enum SplashArtwork {
-    // Prepare each original JPEG once; launch and resume reuse the same images.
-    static let light = load("splash_light")
-    static let dark = load("splash_dark")
-    private static func load(_ name: String) -> UIImage? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "jpg") else { return nil }
-        let image = UIImage(contentsOfFile: url.path)
-        return image?.preparingForDisplay() ?? image
-    }
-    static func make(frame: CGRect, identifier: String) -> UIView {
-        let cover = SplashArtworkView(frame: frame)
-        cover.accessibilityIdentifier = identifier
-        return cover
-    }
-    static func slide(_ cover: UIView, duration: TimeInterval) {
-        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0.15 : duration,
-                       delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-            if UIAccessibility.isReduceMotionEnabled { cover.alpha = 0 }
-            else { cover.transform = CGAffineTransform(translationX: 0, y: -cover.bounds.height - 1) }
-        }
-    }
-}
-
-/// UIKit traits follow both the app's appearance setting and system changes,
-/// including a privacy cover reused after returning from the background.
-@MainActor private final class SplashArtworkView: UIView {
-    private let imageView = UIImageView()
-    private let fallback = UILabel()
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? .black : .white }
-        isOpaque = true; clipsToBounds = true
-        autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        imageView.contentMode = .scaleAspectFit
-        fallback.text = L10n.text("TEGNAL"); fallback.textColor = .label
-        fallback.font = .systemFont(ofSize: 48, weight: .bold)
-        fallback.textAlignment = .center; fallback.adjustsFontSizeToFitWidth = true
-        for view in [imageView, fallback] {
-            view.frame = bounds; view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(view)
-        }
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: SplashArtworkView, _: UITraitCollection) in
-            view.updateArtwork()
-        }
-        updateArtwork()
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func didMoveToWindow() { super.didMoveToWindow(); updateArtwork() }
-    private func updateArtwork() {
-        imageView.image = traitCollection.userInterfaceStyle == .dark ? SplashArtwork.dark : SplashArtwork.light
-        fallback.isHidden = imageView.image != nil
-    }
-}
-
-// MARK: - App switcher privacy cover and resume splash
+/// What hides the app in the app switcher: the home scene's blurred first frame, the same picture
+/// the app starts from. Coming back, it simply fades.
 #if os(iOS) && !targetEnvironment(macCatalyst)
 @MainActor final class PrivacyCoverManager {
     static let shared = PrivacyCoverManager()
+    static let fade: TimeInterval = 0.3
     private var covers: [ObjectIdentifier: UIView] = [:]
     private var generation = 0
-    private var cleanup: Task<Void, Never>?
+    private var leaving = false
     init() {}
     func show() {
         let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -78,40 +19,42 @@ struct SplashTiming: Equatable {
         show(in: windows)
     }
     func show(in windows: [UIWindow]) {
-        cleanup?.cancel(); cleanup = nil; generation += 1
+        generation += 1; leaving = false
         UIView.performWithoutAnimation {
             for window in windows {
                 let key = ObjectIdentifier(window)
-                let cover = covers[key] ?? SplashArtwork.make(frame: window.bounds, identifier: "privacy.cover")
-                cover.layer.removeAllAnimations(); cover.transform = .identity; cover.alpha = 1
+                let cover = covers[key] ?? {
+                    let view = HomeStillView()
+                    view.accessibilityIdentifier = "privacy.cover"
+                    view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                    return view
+                }()
+                cover.layer.removeAllAnimations(); cover.alpha = 1
                 cover.frame = window.bounds; cover.isUserInteractionEnabled = true
                 cover.accessibilityElementsHidden = false
                 window.addSubview(cover); covers[key] = cover
             }
         }
     }
-    func hide(timing: SplashTiming = .resume, completion: @escaping @MainActor () -> Void = {}) {
+    func hide(animated: Bool = true, completion: @escaping @MainActor () -> Void = {}) {
         // Both scenePhase and UIKit notifications can fire for the same activation.
-        guard cleanup == nil else { return }
+        guard !leaving else { return }
         guard !covers.isEmpty else { completion(); return }
         generation += 1; let current = generation
-        if timing.hold == 0 && timing.slide == 0 {
+        guard animated, !UIAccessibility.isReduceMotionEnabled else {
             for cover in covers.values { cover.removeFromSuperview() }
             covers.removeAll(); completion(); return
         }
-        cleanup = Task { [weak self] in
-            do {
-                try await Task.sleep(for: .seconds(timing.hold))
-                guard let self, self.generation == current else { return }
-                for cover in self.covers.values {
-                    cover.isUserInteractionEnabled = false; cover.accessibilityElementsHidden = true
-                    SplashArtwork.slide(cover, duration: timing.slide)
-                }
-                try await Task.sleep(for: .seconds(UIAccessibility.isReduceMotionEnabled ? 0.2 : timing.slide + 0.05))
-                guard self.generation == current else { return }
-                for cover in self.covers.values { cover.removeFromSuperview() }
-                self.covers.removeAll(); self.cleanup = nil; completion()
-            } catch { }
+        leaving = true
+        let fading = Array(covers.values)
+        for cover in fading { cover.isUserInteractionEnabled = false; cover.accessibilityElementsHidden = true }
+        UIView.animate(withDuration: Self.fade, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+            for cover in fading { cover.alpha = 0 }
+        } completion: { [weak self] _ in
+            // The app can leave again before the fade ends; the cover then stays where it was put back.
+            guard let self, self.generation == current else { return }
+            for cover in self.covers.values { cover.removeFromSuperview() }
+            self.covers.removeAll(); self.leaving = false; completion()
         }
     }
 }
@@ -120,57 +63,15 @@ struct SplashTiming: Equatable {
     static let shared = PrivacyCoverManager()
     private init() {}
     func show() {}
-    func hide(timing: SplashTiming = .resume, completion: @escaping @MainActor () -> Void = {}) { completion() }
+    func hide(animated: Bool = true, completion: @escaping @MainActor () -> Void = {}) { completion() }
+}
+
+/// On the Mac the window stays on screen when the app is not in front; the same still covers it.
+private struct InactiveCover: UIViewRepresentable {
+    func makeUIView(context: Context) -> HomeStillView { HomeStillView() }
+    func updateUIView(_ view: HomeStillView, context: Context) {}
 }
 #endif
-
-// SwiftUI owns the host's frame/transform. Animate only its child so layout
-// updates cannot reinterpret the exit transform as a new placement.
-@MainActor final class SplashContainerView: UIView {
-    let artwork = SplashArtwork.make(frame: .zero, identifier: "splash.artwork")
-    init() {
-        super.init(frame: .zero)
-        accessibilityIdentifier = "splash.launch"
-        addSubview(artwork)
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        artwork.bounds = CGRect(origin: .zero, size: bounds.size)
-        artwork.center = CGPoint(x: bounds.midX, y: bounds.midY)
-    }
-}
-
-private struct SplashScreenOverlay: UIViewRepresentable {
-    @Binding var isVisible: Bool
-    let active: Bool
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIView(context: Context) -> SplashContainerView { SplashContainerView() }
-    func updateUIView(_ view: SplashContainerView, context: Context) {
-        if active { context.coordinator.start(view.artwork, finished: { isVisible = false }) }
-        else { context.coordinator.cancel(view.artwork) }
-    }
-    static func dismantleUIView(_ view: SplashContainerView, coordinator: Coordinator) { coordinator.cancel(view.artwork) }
-    @MainActor final class Coordinator {
-        var work: Task<Void, Never>?
-        func start(_ view: UIView, finished: @escaping @MainActor () -> Void) {
-            guard work == nil else { return }
-            work = Task { [weak view] in
-                do {
-                    try await Task.sleep(for: .seconds(SplashTiming.launch.hold))
-                    guard let view else { return }
-                    SplashArtwork.slide(view, duration: SplashTiming.launch.slide)
-                    try await Task.sleep(for: .seconds(UIAccessibility.isReduceMotionEnabled ? 0.2 : SplashTiming.launch.slide + 0.05))
-                    finished()
-                } catch { }
-            }
-        }
-        func cancel(_ view: UIView) {
-            work?.cancel(); work = nil
-            view.layer.removeAllAnimations(); view.transform = .identity; view.alpha = 1
-        }
-    }
-}
 
 // MARK: - Main Application
 
@@ -227,7 +128,9 @@ struct TEGNALApp: App {
         #endif
     }
 
-    @State private var isSplashScreenVisible = true
+    @State private var stage = HomeStage.shared
+    /// The home scene opens from a blur, as the splash once slid away; what waited for the splash waits for that.
+    private var isSplashScreenVisible: Bool { stage.enabled && !stage.introFinished }
     @SwiftUI.AppStorage("app.resumeAnimation", store: ContentPreferences.defaults) private var resumeAnimation = true
     @State private var isResumeSplashVisible = false
     @State private var backgroundSync = BackgroundLibrarySync()
@@ -242,15 +145,17 @@ struct TEGNALApp: App {
     private var launchRequest: LaunchRequest {
         let enabled = !isContentUITest || ProcessInfo.processInfo.arguments.contains("--launch-warmup-test")
         let servers = env.booru.selectedServers
-        return LaunchRequest(active: enabled && scenePhase == .active && launchThermalAllowed && env.isOnboardingCompleted,
+        // The first pages are read ahead only for someone on the way to the library.
+        return LaunchRequest(active: enabled && stage.libraryWarm && scenePhase == .active && launchThermalAllowed && env.isOnboardingCompleted,
                              query: env.isSiteVerified && !env.booruSafeMode ? env.launchMangaQuery : nil, site: env.mangaSiteAddress,
                              servers: servers, booruQuery: "")
     }
-    private var splashEnabled: Bool { !isContentUITest || ProcessInfo.processInfo.arguments.contains("--splash-ui-test") }
+    private var splashEnabled: Bool { stage.enabled }
 
     init() {
         // Encrypted DNS is the first thing set, before any request leaves the app.
         EncryptedDNS.applyStored()
+        AppAudio.useMediaVolume()
     }
 
     var body: some Scene {
@@ -264,28 +169,19 @@ struct TEGNALApp: App {
                 } else if ContentUITestSupport.categoryLibraryTest {
                     NavigationStack { WorksGridView() }
                 } else if isContentUITest && (ProcessInfo.processInfo.arguments.contains("--native-content-tab-test") || BooruUITestSupport.enabled || BooruUITestSupport.liveEnabled) {
-                    AppRootTabView()
+                    HomeRootView()
                 } else if isContentUITest {
                     NativeContentView(source: ContentUITestSupport.source, savesProgress: false)
                 } else {
-                    AppRootTabView()
+                    HomeRootView()
                 }
                 #else
-                AppRootTabView()
+                HomeRootView()
                 #endif
-
-                // Cold launch holds 1.2 seconds and slides for 1.8 seconds while active.
-                if isSplashScreenVisible && splashEnabled {
-                    SplashScreenOverlay(isVisible: $isSplashScreenVisible, active: scenePhase == .active)
-                        .zIndex(9999)
-                        .ignoresSafeArea()
-                }
-
 
                 #if targetEnvironment(macCatalyst)
                 if scenePhase != .active && !isSplashScreenVisible {
-                    SplashScreenOverlay(isVisible: .constant(true), active: false)
-                        .clipped().ignoresSafeArea().zIndex(9998)
+                    InactiveCover().ignoresSafeArea().zIndex(9998)
                 }
                 #endif
             }
@@ -312,13 +208,13 @@ struct TEGNALApp: App {
                 }
             }
             // Keeps each signed-in website's favorites and its folder the same while the app is open.
-            .task(id: "\(scenePhase):\(isSplashScreenVisible):favorites") {
-                guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible else { return }
+            .task(id: "\(scenePhase):\(isSplashScreenVisible):\(stage.libraryWarm):favorites") {
+                guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible, stage.libraryWarm else { return }
                 await env.runSiteFavoritesSync()
             }
             // The same for each signed-in image server.
-            .task(id: "\(scenePhase):\(isSplashScreenVisible):booruFavorites") {
-                guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible else { return }
+            .task(id: "\(scenePhase):\(isSplashScreenVisible):\(stage.libraryWarm):booruFavorites") {
+                guard !isContentUITest, scenePhase == .active, !isSplashScreenVisible, stage.libraryWarm else { return }
                 await env.booruAccounts.run()
             }
             .onChange(of: scenePhase, initial: true) { _, phase in
@@ -330,6 +226,9 @@ struct TEGNALApp: App {
                 if phase == .active { backgroundSync.cancel() }
                 else if phase == .background, env.sync.enabled { backgroundSync.start(env: env) }
             }
+            // An app set to open in a place goes straight on to it: after the blur, or once it has been set up.
+            .onChange(of: stage.introFinished) { _, finished in if finished, env.isOnboardingCompleted || isContentUITest { stage.openPreferred() } }
+            .onChange(of: env.isOnboardingCompleted) { _, completed in if completed { stage.openPreferred(after: 0.7) } }
             .onChange(of: env.mode) { _, _ in env.setCoverQueueActive(scenePhase == .active) }
             .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
                 env.setCoverQueueActive(scenePhase == .active)
@@ -341,13 +240,16 @@ struct TEGNALApp: App {
             .preferredColorScheme(env.appTheme.colorScheme)
             .environment(\.locale, Locale(identifier: L10n.language))
             .id(env.appLanguage)
+            // The home scene fills the whole screen. This is set outside the part that is rebuilt for a new
+            // language: set inside it, the status bar stayed hidden after the rebuild.
+            .statusBarHidden(stage.atHome)
+            .persistentSystemOverlays(stage.atHome ? .hidden : .automatic)
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                 if !isSplashScreenVisible || !splashEnabled { isResumeSplashVisible = true }
                 PrivacyCoverManager.shared.show()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                let timing: SplashTiming = splashEnabled && resumeAnimation && !isSplashScreenVisible ? .resume : .init(hold: 0, slide: 0)
-                PrivacyCoverManager.shared.hide(timing: timing) { isResumeSplashVisible = false }
+                PrivacyCoverManager.shared.hide(animated: splashEnabled && resumeAnimation && !isSplashScreenVisible) { isResumeSplashVisible = false }
             }
             .appFullScreenCover(isPresented: Binding(
                 get: {
@@ -360,7 +262,7 @@ struct TEGNALApp: App {
             }
             // Sync left off from the old onboarding switch: ask once, after the splash.
             .appSheet(isPresented: Binding(
-                get: { env.isOnboardingCompleted && env.sync.needsOffReminder && (!isSplashScreenVisible || !splashEnabled) },
+                get: { env.isOnboardingCompleted && env.sync.needsOffReminder && !stage.coversScreen },
                 set: { _ in }
             )) {
                 CloudSyncTurnOffView(alreadyOff: true)

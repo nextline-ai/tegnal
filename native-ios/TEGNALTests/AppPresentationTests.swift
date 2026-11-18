@@ -102,7 +102,7 @@ final class AppPresentationTests: XCTestCase {
         manager.show(in: [window])
         XCTAssertTrue(window.subviews.contains { $0.accessibilityIdentifier == "privacy.cover" })
         var finished = false
-        manager.hide(timing: .init(hold: 0, slide: 0)) { finished = true }
+        manager.hide(animated: false) { finished = true }
         XCTAssertTrue(finished)
         XCTAssertFalse(window.subviews.contains { $0.accessibilityIdentifier == "privacy.cover" })
     }

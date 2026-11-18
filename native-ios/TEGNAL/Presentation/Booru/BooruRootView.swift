@@ -111,14 +111,14 @@ struct WebsiteImportLinks: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             NavigationLink { AnimeBoxesImportView() } label: {
-                Label(L10n.text("Import from Anime Boxes"), systemImage: "shippingbox")
+                Label(L10n.text("Import from Another Image Viewer"), systemImage: "square.and.arrow.down.on.square")
             }.buttonStyle(.plain).foregroundStyle(.tint).accessibilityIdentifier("booru.setupImport")
             Button { showMangaImport = true } label: {
-                Label(L10n.text("Import from Another Manga Viewer"), systemImage: "square.and.arrow.down")
+                Label(L10n.text("Import from Another Comics Viewer"), systemImage: "square.and.arrow.down")
             }.buttonStyle(.plain).foregroundStyle(.tint).accessibilityIdentifier(mangaImportIdentifier)
         }.appSheet(isPresented: $showMangaImport) {
             NavigationStack {
-                MangaLibraryToolsView(importOnly: true)
+                OtherAppImportView()
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { showMangaImport = false } } }
             }
         }
