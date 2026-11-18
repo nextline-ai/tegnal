@@ -109,6 +109,7 @@ struct StudyModeRoot: View {
             }
             #endif
             model.reload(store)
+            StudySound.warm()
             // A learner who already has servers says once which one the pictures come from.
             if model.needsServer { choosingServer = true } else { celebrate() }
         }
@@ -216,6 +217,8 @@ struct StudyPathView: View {
     var celebrating: String?
     let start: (StudyLessonPlan) -> Void
     @State private var selected: StudyPathLesson?
+    /// True once the learner has closed the card, until they tap a stop or finish a lesson.
+    @State private var dismissed = false
     private static let sway: [CGFloat] = [0, 58, 86, 58, 0, -58, -86, -58]
 
     var body: some View {
@@ -236,7 +239,7 @@ struct StudyPathView: View {
                                 // The guide stands beside the lesson the learner is on, on the side the path leaves free.
                                 .overlay(alignment: Self.sway[index % Self.sway.count] > 0 ? .leading : .trailing) {
                                     if current?.id == lesson.id {
-                                        StudyMascot(pose: .wave, size: 96).padding(.horizontal, 22)
+                                        StudyMascot(pose: .fullBody, size: 104).padding(.horizontal, 18)
                                             .transition(.scale(scale: 0.2).combined(with: .opacity))
                                     }
                                 }
@@ -244,7 +247,7 @@ struct StudyPathView: View {
                                 .padding(.bottom, 20).id(lesson.id)
                         }
                     }
-                    Color.clear.frame(height: 24)
+                    Color.clear.frame(height: 190)
                 }
                 .frame(maxWidth: 560).frame(maxWidth: .infinity)
             }
@@ -257,8 +260,14 @@ struct StudyPathView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
-        .overlay(alignment: .bottom) { if let selected { card(selected) } }
+        // The lesson the learner is on offers its start at once; any other stop does when tapped.
+        .overlay(alignment: .bottom) {
+            if let shown = selected ?? (dismissed || celebrating != nil ? nil : current) { card(shown).id(shown.id) }
+        }
         .animation(.spring(duration: 0.3, bounce: 0.2), value: selected)
+        .animation(.spring(duration: 0.3, bounce: 0.2), value: dismissed)
+        .animation(.spring(duration: 0.35, bounce: 0.2), value: celebrating)
+        .onChange(of: current?.id) { selected = nil; dismissed = false }
     }
 
     private func banner(_ section: StudyPathSection) -> some View {
@@ -292,7 +301,7 @@ struct StudyPathView: View {
                     .background(StudyTheme.surface, in: Capsule()).overlay { Capsule().strokeBorder(StudyTheme.line, lineWidth: 2) }
                     .phaseAnimator([0, -5]) { view, lift in view.offset(y: lift) } animation: { _ in .easeInOut(duration: 0.8) }
             }
-            Button { StudySound.pick.play(); selected = selected == lesson ? nil : lesson } label: {
+            Button { StudySound.pick.play(); selected = lesson; dismissed = false } label: {
                 Image(systemName: open ? (record != nil && lesson.kind != .boss ? "checkmark" : lesson.symbol) : "lock.fill")
                     .font(.system(size: size * 0.38, weight: .heavy))
                     .frame(width: size, height: size)
@@ -332,7 +341,7 @@ struct StudyPathView: View {
                         Text(detail).font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted)
                     }
                     Spacer()
-                    Button { selected = nil } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .heavy)).foregroundStyle(StudyTheme.muted).padding(8) }
+                    Button { selected = nil; dismissed = true } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .heavy)).foregroundStyle(StudyTheme.muted).padding(8) }
                         .buttonStyle(.plain).accessibilityLabel(L10n.text("Close"))
                 }
                 if let record { StudyStars(count: record.stars, size: 18) }
@@ -643,8 +652,9 @@ struct StudyServerPicker: View {
     @Environment(BooruStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     var body: some View {
-        let servers = StudyServer.choices(store)
-        let suggested = StudyServer.recommended(servers)
+        let suggested = StudyServer.recommended(StudyServer.choices(store))
+        // The suggested server, which is Danbooru when it is there, leads the list.
+        let servers = [suggested] + StudyServer.choices(store).filter { $0.id != suggested.id }
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(L10n.text("Where should the pictures come from?")).font(StudyTheme.title(22)).foregroundStyle(StudyTheme.ink)

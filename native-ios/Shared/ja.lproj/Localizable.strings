@@ -2262,3 +2262,4 @@
 "Show Advanced Settings" = "詳細設定を表示";
 "Advanced Settings" = "詳細設定";
 "Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used." = "画像を%@枚生成すると、サイズ、ステップ、LoRA、避けたいものの設定が開きます。それまではおすすめの設定で描きます。";
+"Tap them in order, or drag them into place." = "順番にタップするか、ドラッグして置きましょう。";

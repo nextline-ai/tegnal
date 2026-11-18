@@ -19,7 +19,7 @@ final class StudyMode {
         active = starts || ProcessInfo.processInfo.arguments.contains("--study-mode")
     }
     func enter(_ tab: StudyTab = .path) { self.tab = tab; withAnimation(.snappy(duration: 0.35)) { active = true } }
-    func leave() { withAnimation(.snappy(duration: 0.35)) { active = false } }
+    func leave() { withAnimation(.snappy(duration: 0.35)) { active = false }; StudySound.rest() }
 }
 
 enum StudyTab: String, CaseIterable, Identifiable {
@@ -177,6 +177,8 @@ struct StudyMascot: View {
         case wave, cheer, think, sad, read
         case closeUp = "close-up"
         case fullBody = "full-body"
+        /// True for the drawings that show the guide from the waist up.
+        var isBust: Bool { self != .cheer && self != .fullBody }
     }
     var pose = Pose.wave
     var size: CGFloat = 96
@@ -198,6 +200,10 @@ struct StudyMascot: View {
             }
         }
         .frame(width: size, height: size)
+        .mask {
+            if pose.isBust { LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.8), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom) }
+            else { Rectangle() }
+        }
         .phaseAnimator(lively && !reduceMotion ? [false, true] : [false]) { view, up in
             view.offset(y: up ? -size * 0.025 : size * 0.015).rotationEffect(.degrees(up ? 1.6 : -1.6), anchor: .bottom)
         } animation: { _ in .easeInOut(duration: 1.15) }

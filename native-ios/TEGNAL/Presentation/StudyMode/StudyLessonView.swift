@@ -135,8 +135,10 @@ struct StudyPlayView: View {
         }
         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background { StudyTheme.surface.overlay(color.opacity(0.16)).ignoresSafeArea(edges: .bottom) }
-        .overlay(alignment: .top) { Rectangle().fill(color.opacity(0.5)).frame(height: 2) }
+        .background {
+            StudyTheme.surface.overlay(color.opacity(0.16)).overlay(alignment: .top) { Rectangle().fill(color.opacity(0.5)).frame(height: 2) }
+                .ignoresSafeArea(edges: .bottom)
+        }
     }
 }
 
@@ -240,6 +242,17 @@ private struct StudyFlow: Layout {
 
 // MARK: - Steps
 
+/// The tail of a speech bubble: a triangle open along its foot.
+private struct StudyTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        return path
+    }
+}
+
 private struct StudyCardStep: View {
     private enum Opened: String, Identifiable { case key, generator; var id: String { rawValue } }
     let card: StudyPathLesson.Card
@@ -248,12 +261,13 @@ private struct StudyCardStep: View {
     @State private var opened: Opened?
     @State private var generation = GenerationStore.shared
     @Environment(\.openURL) private var openURL
+    private var pose: StudyMascot.Pose { StudyMascot.Pose(rawValue: card.pose ?? "") ?? .read }
 
     var body: some View {
         StudyStepFrame(button: "Continue", action: { StudySound.tap.play(); proceed() }) {
             // The guide tells it: its picture, then what it says in a bubble.
             HStack(alignment: .bottom, spacing: 12) {
-                StudyMascot(pose: StudyMascot.Pose(rawValue: card.pose ?? "") ?? .read, size: 124).studyPop(shown, from: 0.3)
+                StudyMascot(pose: pose, size: 124).studyPop(shown, from: 0.3).padding(.bottom, pose.isBust ? -30 : -4)
                 if let symbol = card.symbol {
                     Image(systemName: symbol).font(.system(size: 42, weight: .bold)).foregroundStyle(StudyTheme.primary)
                         .symbolEffect(.bounce, value: shown)
@@ -268,9 +282,12 @@ private struct StudyCardStep: View {
                     if let code = card.code { StudyCodeBox(code: code) }
                 }
             }
-            // The bubble's tail, pointing up at the guide.
-            .overlay(alignment: .topLeading) {
-                Image(systemName: "arrowtriangle.up.fill").font(.system(size: 18)).foregroundStyle(StudyTheme.line).offset(x: 46, y: -13)
+            // The bubble's tail points up at the guide. It lies under the bubble, which covers its foot.
+            .background(alignment: .topLeading) {
+                if !pose.isBust {
+                    StudyTail().fill(StudyTheme.surface).overlay { StudyTail().stroke(StudyTheme.line, style: StrokeStyle(lineWidth: 2, lineJoin: .round)) }
+                        .frame(width: 24, height: 16).offset(x: 50, y: -13)
+                }
             }
             .studyRise(shown, delay: 0.1)
             if let action = card.action { button(action).studyRise(shown, delay: 0.25) }
@@ -329,15 +346,19 @@ private struct StudyTeachStep: View {
             }
             .studyRise(shown, delay: 0.18)
             if !posts.isEmpty {
-                HStack(spacing: 10) {
-                    ForEach(Array(posts.enumerated()), id: \.element.id) { index, post in
-                        StudyPicture(post: post, server: server, fills: true)
-                            .frame(maxWidth: .infinity).aspectRatio(0.75, contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .rotationEffect(.degrees(shown ? 0 : index % 2 == 0 ? -6 : 6))
-                            .studyRise(shown, delay: 0.28 + Double(index) * 0.09, by: 40)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(posts.enumerated()), id: \.element.id) { index, post in
+                            StudyPicture(post: post, server: server)
+                                .aspectRatio(min(2.2, max(0.5, CGFloat(max(post.width, 1)) / CGFloat(max(post.height, 1)))), contentMode: .fit)
+                                .frame(height: 190)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .rotationEffect(.degrees(shown ? 0 : index % 2 == 0 ? -6 : 6))
+                                .studyRise(shown, delay: 0.28 + Double(index) * 0.09, by: 40)
+                        }
                     }
                 }
+                .scrollClipDisabled()
                 Text(L10n.text("Pictures that carry this tag")).font(StudyTheme.body(13, .bold)).foregroundStyle(StudyTheme.muted)
             }
         }
@@ -648,7 +669,13 @@ private struct StudySpellStep: View {
     }
 }
 
-/// Things that happen one after another, put in order by tapping them into numbered places.
+/// Where each numbered place of an order step lies, so that a dragged thing knows which one it is over.
+private struct StudyPlaceFrames: PreferenceKey {
+    static let defaultValue: [Int: CGRect] = [:]
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) { value.merge(nextValue()) { $1 } }
+}
+
+/// Things that happen one after another, put in order by tapping them or dragging them into numbered places.
 private struct StudyOrderStep: View {
     let order: StudyPathLesson.Order
     let revealed: Bool
@@ -656,47 +683,64 @@ private struct StudyOrderStep: View {
     /// Positions in the right order, as they were mixed for the bank and as they have been placed.
     @State private var bank: [Int] = []
     @State private var chosen: [Int] = []
+    @State private var frames: [Int: CGRect] = [:]
+    /// The thing being dragged, how far it has been carried and the place it is over.
+    @State private var dragging: Int?
+    @State private var carried = CGSize.zero
+    @State private var target: Int?
+    private static let space = "study.order"
 
     var body: some View {
         StudyStepFrame(button: "Check", enabled: chosen.count == order.items.count, hidden: revealed,
                        action: { answer(StudyLessonSession.judge(chosen.map { order.items[$0] }, order)) }) {
             Text(order.brief.resolved()).font(StudyTheme.title(22)).foregroundStyle(StudyTheme.ink)
+            if !revealed {
+                Label(L10n.text("Tap them in order, or drag them into place."), systemImage: "hand.draw.fill")
+                    .font(StudyTheme.body(13, .bold)).foregroundStyle(StudyTheme.muted)
+            }
             VStack(spacing: 10) {
                 ForEach(0..<order.items.count, id: \.self) { place in
                     let item = chosen.indices.contains(place) ? chosen[place] : nil
                     HStack(spacing: 12) {
                         Text(String(place + 1)).font(StudyTheme.body(16, .heavy)).foregroundStyle(.white).frame(width: 30, height: 30)
-                            .background(item == nil ? StudyTheme.line : StudyTheme.primary, in: Circle())
-                        if let item {
-                            let right = order.items[item] == order.items[place]
-                            Button { StudySound.tap.play(); withAnimation(.spring(duration: 0.3, bounce: 0.4)) { chosen.removeAll { $0 == item } } } label: {
-                                Text(order.items[item].resolved()).font(StudyTheme.body(16, .bold)).multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 4)
-                            }
-                            .buttonStyle(StudyChoiceStyle(state: revealed ? (right ? .right : .wrong) : .picked))
-                            .allowsHitTesting(!revealed).transition(.scale(scale: 0.6).combined(with: .opacity))
-                            .accessibilityIdentifier("study.order.place.\(place)")
-                        } else {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(StudyTheme.line, style: StrokeStyle(lineWidth: 2, dash: [6, 5]))
+                            .background(target == place ? StudyTheme.gold : item == nil ? StudyTheme.line : StudyTheme.primary, in: Circle())
+                            .scaleEffect(target == place ? 1.2 : 1)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(target == place ? StudyTheme.gold : StudyTheme.line, style: StrokeStyle(lineWidth: 2, dash: [6, 5]))
+                                .background { if target == place { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(StudyTheme.gold.opacity(0.14)) } }
                                 .frame(maxWidth: .infinity, minHeight: 52)
+                                .opacity(item == nil || dragging == item ? 1 : 0)
+                                .accessibilityIdentifier("study.order.slot.\(place)")
+                            if let item {
+                                let right = order.items[item] == order.items[place]
+                                row(item, style: StudyChoiceStyle(state: revealed ? (right ? .right : .wrong) : .picked), id: "study.order.place.\(place)") {
+                                    StudySound.tap.play(); withAnimation(.spring(duration: 0.3, bounce: 0.4)) { chosen.removeAll { $0 == item } }
+                                }
+                            }
                         }
                     }
+                    .background { GeometryReader { proxy in Color.clear.preference(key: StudyPlaceFrames.self, value: [place: proxy.frame(in: .named(Self.space))]) } }
+                    .zIndex(item != nil && dragging == item ? 2 : 0)
                 }
             }
+            // A placed thing carried down over the bank must pass above it.
+            .zIndex(dragging.map(chosen.contains) == true ? 1 : 0)
+            .animation(.spring(duration: 0.25, bounce: 0.4), value: target)
             if !revealed {
                 VStack(spacing: 10) {
                     ForEach(bank.filter { !chosen.contains($0) }, id: \.self) { item in
-                        Button { StudySound.pick.play(); withAnimation(.spring(duration: 0.3, bounce: 0.5)) { chosen.append(item) } } label: {
-                            Text(order.items[item].resolved()).font(StudyTheme.body(16, .bold)).multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 4)
+                        row(item, style: StudyPressStyle(radius: 16, depth: 4, outlined: true), id: "study.order.item.\(item)") {
+                            StudySound.pick.play(); withAnimation(.spring(duration: 0.3, bounce: 0.5)) { chosen.append(item) }
                         }
-                        .buttonStyle(StudyPressStyle(radius: 16, depth: 4, outlined: true))
-                        .transition(.scale(scale: 0.6).combined(with: .opacity))
-                        .accessibilityIdentifier("study.order.item.\(item)")
+                        .zIndex(dragging == item ? 2 : 0)
                     }
                 }.padding(.top, 6)
             }
         }
+        .coordinateSpace(name: Self.space)
+        .onPreferenceChange(StudyPlaceFrames.self) { frames = $0 }
+        .sensoryFeedback(.selection, trigger: target)
         .onAppear {
             guard bank.isEmpty else { return }
             var mixed = Array(order.items.indices).shuffled()
@@ -704,6 +748,46 @@ private struct StudyOrderStep: View {
             if mixed == Array(order.items.indices), mixed.count > 1 { mixed.swapAt(0, 1) }
             bank = mixed
         }
+    }
+
+    /// One thing to order: a tap sends it to the next free place or back, and a drag carries it to the place it is dropped on.
+    private func row<Style: ButtonStyle>(_ item: Int, style: Style, id: String, tap: @escaping () -> Void) -> some View {
+        Button(action: tap) {
+            HStack(spacing: 8) {
+                Text(order.items[item].resolved()).font(StudyTheme.body(16, .bold)).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
+                if !revealed { Image(systemName: "line.3.horizontal").font(.system(size: 14, weight: .bold)).opacity(0.45) }
+            }
+            .frame(minHeight: 44).padding(.horizontal, 14).padding(.vertical, 4)
+        }
+        .buttonStyle(style)
+        .scaleEffect(dragging == item ? 1.04 : 1)
+        .shadow(color: .black.opacity(dragging == item ? 0.3 : 0), radius: 10, y: 6)
+        .offset(dragging == item ? carried : .zero)
+        .allowsHitTesting(!revealed)
+        .transition(.scale(scale: 0.6).combined(with: .opacity))
+        .highPriorityGesture(DragGesture(minimumDistance: 8, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                if dragging != item { dragging = item; StudySound.pick.play() }
+                carried = value.translation
+                target = place(at: value.location)
+            }
+            .onEnded { value in
+                let place = place(at: value.location)
+                withAnimation(.spring(duration: 0.3, bounce: 0.4)) {
+                    // Dropped on a place, it goes there and the others make room; dropped anywhere else, it goes back to the bank.
+                    chosen.removeAll { $0 == item }
+                    if let place { chosen.insert(item, at: min(place, chosen.count)) }
+                    dragging = nil; carried = .zero; target = nil
+                }
+                StudySound.tap.play()
+            })
+        .accessibilityIdentifier(id)
+    }
+
+    /// The numbered place under a point, taking the nearest one while the point is among the places at all.
+    private func place(at point: CGPoint) -> Int? {
+        guard let top = frames.values.map(\.minY).min(), let bottom = frames.values.map(\.maxY).max(), point.y >= top - 16, point.y <= bottom + 16 else { return nil }
+        return frames.min { abs($0.value.midY - point.y) < abs($1.value.midY - point.y) }?.key
     }
 }
 
