@@ -2080,7 +2080,7 @@
 "Too many requests. Wait a moment and try again." = "リクエストが多すぎます。しばらくしてからもう一度お試しください。";
 "Civitai's moderation refused this prompt. Change it before trying again; repeated refusals can get an account muted." = "Civitai のモデレーションがこのプロンプトを拒否しました。内容を変えてからやり直してください。拒否が続くとアカウントが制限されることがあります。";
 "The picture could not be generated." = "画像を生成できませんでした。";
-"This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine." = "この生成機能は Stable Diffusion 1.5 と SDXL 系のチェックポイント(Illustrious、NoobAI、Pony、Animagine など)に対応しています。";
+"This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine." = "この生成機能は Anima、Stable Diffusion 1.5 と SDXL 系のチェックポイント(Illustrious、NoobAI、Pony、Animagine など)に対応しています。";
 "Choose a model first." = "先にモデルを選択してください。";
 "Nothing was found for this." = "見つかりませんでした。";
 "The answer could not be read." = "応答を読み取れませんでした。";
@@ -2263,3 +2263,5 @@
 "Advanced Settings" = "詳細設定";
 "Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used." = "画像を%@枚生成すると、サイズ、ステップ、LoRA、避けたいものの設定が開きます。それまではおすすめの設定で描きます。";
 "Tap them in order, or drag them into place." = "順番にタップするか、ドラッグして置きましょう。";
+"Open in the Viewer" = "ビューアで開く";
+"The best-rated model for 2D illustration, and the one this generator starts with." = "2Dイラストでもっとも評価の高いモデルで、このジェネレーターの初期モデルです。";

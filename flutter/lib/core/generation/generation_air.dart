@@ -6,7 +6,8 @@ enum GenerationKind { checkpoint, lora, embedding, vae, other }
 /// The engine family a checkpoint runs on.
 enum GenerationFamily {
   sd1,
-  sdxl;
+  sdxl,
+  anima;
 
   String get rawValue => name;
 }
@@ -87,8 +88,9 @@ class GenerationAIR {
     _ => GenerationKind.other,
   };
 
-  /// Stable Diffusion 1.5 and the SDXL family, which Illustrious, NoobAI, Pony and Animagine belong to.
+  /// Anima, Stable Diffusion 1.5 and the SDXL family, which Illustrious, NoobAI, Pony and Animagine belong to.
   GenerationFamily? get family => switch (ecosystem) {
+    'anima' => GenerationFamily.anima,
     'sd1' || 'sd15' || 'sd1.5' => GenerationFamily.sd1,
     'sdxl' || 'illustrious' || 'noobai' || 'pony' || 'sdxlturbo' || 'sdxllightning' || 'sdxlhyper' => GenerationFamily.sdxl,
     _ => null,

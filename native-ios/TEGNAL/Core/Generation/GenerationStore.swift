@@ -37,6 +37,7 @@ struct GenerationPreset: Hashable, Identifiable, Sendable {
     var id: String { name }
 
     static let all: [GenerationPreset] = [
+        .init(name: "Anima", front: "masterpiece, best quality", negative: "worst quality, low quality, blurry, bad anatomy, deformed hands", steps: 30, guidance: 4),
         .init(name: "NoobAI-XL", front: "masterpiece, best quality, newest, absurdres, highres, safe",
               negative: "nsfw, worst quality, old, early, low quality, lowres, signature, username, logo, bad hands, mutated hands, mammal, anthro, furry, ambiguous form, feral, semi-anthro", steps: 28, guidance: 5.5),
         .init(name: "Illustrious XL", front: "masterpiece, best quality",
@@ -100,7 +101,9 @@ final class GenerationStore {
     init(folder: URL, defaults: UserDefaults, key: String, saveKey: @escaping (String) -> Bool, transport: GenerationClient.Transport? = nil) {
         self.folder = folder; self.defaults = defaults; self.key = key; self.saveKey = saveKey; self.transport = transport
         hasKey = !key.isEmpty
-        settings = Self.load(GenerationSettings.self, Self.settingsKey, defaults) ?? .init()
+        settings = Self.load(GenerationSettings.self, Self.settingsKey, defaults) ?? .starting
+        // A generator set up before there was a suggested model, and never given one, starts with it too.
+        if settings.model == nil { settings.use(.recommended) }
         recentModels = Self.load([GenerationModel].self, Self.recentKey, defaults) ?? []
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: index), let saved = try? JSONDecoder().decode([GeneratedPicture].self, from: data) {

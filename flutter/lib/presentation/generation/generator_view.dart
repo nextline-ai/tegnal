@@ -187,6 +187,7 @@ class _GeneratorViewState extends State<GeneratorView> {
       const {'euler_a': 'Euler a', 'euler': 'Euler', 'dpm++2m': 'DPM++ 2M', 'dpm++2s_a': 'DPM++ 2S a', 'lcm': 'LCM'}[value] ?? value;
 
   static String scheduleName(String value) => switch (value) {
+    'simple' => 'Simple',
     'discrete' => 'Discrete',
     'karras' => 'Karras',
     _ => 'SGM Uniform',
@@ -273,7 +274,7 @@ class _GeneratorViewState extends State<GeneratorView> {
               key: const Key('generator.model'),
               onTap: () => pushGenerator<void>(
                 context,
-                (context) => GeneratorModelPicker(environment: _environment, kind: GenerationKind.checkpoint, choose: (model) => _set(_settings.copyWith(model: model))),
+                (context) => GeneratorModelPicker(environment: _environment, kind: GenerationKind.checkpoint, choose: (model) => _set(_settings.use(model))),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),

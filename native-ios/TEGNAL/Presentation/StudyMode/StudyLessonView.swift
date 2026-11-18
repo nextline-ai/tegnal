@@ -10,6 +10,8 @@ struct StudyPlayView: View {
     @State private var misses = 0
     @State private var praise = ""
     @State private var banner: Int?
+    @State private var viewing: StudyViewing?
+    @Environment(BooruStore.self) private var store
     private var feedback: Bool? { if case .feedback(let right) = session.phase { return right }; return nil }
 
     var body: some View {
@@ -40,12 +42,26 @@ struct StudyPlayView: View {
         }
         .animation(.spring(duration: 0.4, bounce: 0.5), value: banner)
         .tint(StudyTheme.primary)
+        .environment(\.studyOpenPicture, open)
+        .appFullScreenCover(item: $viewing) { viewing in
+            BooruPostView(post: viewing.post, posts: viewing.posts, server: session.server, source: session.source)
+        }
         .task { await session.start() }
         .sensoryFeedback(trigger: feedback) { _, right in right == true ? .success : right == false ? .error : nil }
         .onChange(of: session.phase) { _, phase in react(phase) }
         .confirmationDialog(L10n.text("Leave this lesson?"), isPresented: $confirmingQuit, titleVisibility: .visible) {
             Button(L10n.text("Leave"), role: .destructive) { dismiss() }
         } message: { Text(L10n.text("What you did in this lesson will not be kept.")) }
+    }
+
+    /// Opens a picture in the library's own image viewer, where it can be zoomed, translated, saved and filed.
+    private func open(_ post: BooruPost, _ among: [BooruPost]) {
+        // What is saved in the viewer is filed under the picture's server. A server only learning mode knew
+        // (Safebooru, for a learner with no server of their own) joins the library, so that the save is found there.
+        if !store.servers.contains(where: { $0.id == session.server.id }), (try? store.saveServer(session.server)) != nil {
+            ReaderPreferences.booruDefaults.set(session.server.id, forKey: StudyServer.key)
+        }
+        viewing = StudyViewing(post: post, posts: among.contains(post) ? among : [post])
     }
 
     /// Answers what just happened with a sound, a word and a movement.
@@ -157,6 +173,51 @@ private struct StudyVerdictGuide: View {
 }
 
 // MARK: - Shared pieces
+
+/// A picture opened in the image viewer, with the pictures beside it to page through.
+private struct StudyViewing: Identifiable {
+    let post: BooruPost
+    let posts: [BooruPost]
+    var id: String { post.id }
+}
+
+private struct StudyOpenPictureKey: EnvironmentKey {
+    static let defaultValue: (BooruPost, [BooruPost]) -> Void = { _, _ in }
+}
+extension EnvironmentValues {
+    /// Opens a lesson's picture in the image viewer.
+    var studyOpenPicture: (BooruPost, [BooruPost]) -> Void {
+        get { self[StudyOpenPictureKey.self] }
+        set { self[StudyOpenPictureKey.self] = newValue }
+    }
+}
+
+/// Makes a lesson's picture open in the image viewer: by a tap anywhere on it, or, where a tap already chooses
+/// the picture as an answer, by the small button in its corner.
+private struct StudyZoom: ViewModifier {
+    let post: BooruPost
+    var among: [BooruPost] = []
+    var cornerOnly = false
+    @Environment(\.studyOpenPicture) private var open
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture { if !cornerOnly { open(post, among) } }
+            .overlay(alignment: .topTrailing) {
+                Button { open(post, among) } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                        .padding(7).background(.black.opacity(0.5), in: Circle()).padding(8).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).accessibilityLabel(L10n.text("Open in the Viewer")).accessibilityIdentifier("study.zoom")
+            }
+    }
+}
+extension View {
+    fileprivate func studyZoom(_ post: BooruPost, among: [BooruPost] = [], cornerOnly: Bool = false) -> some View {
+        modifier(StudyZoom(post: post, among: among, cornerOnly: cornerOnly))
+    }
+}
 
 /// A step's scrolling body with its button pinned below.
 private struct StudyStepFrame<Content: View>: View {
@@ -353,6 +414,7 @@ private struct StudyTeachStep: View {
                                 .aspectRatio(min(2.2, max(0.5, CGFloat(max(post.width, 1)) / CGFloat(max(post.height, 1)))), contentMode: .fit)
                                 .frame(height: 190)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .studyZoom(post, among: posts)
                                 .rotationEffect(.degrees(shown ? 0 : index % 2 == 0 ? -6 : 6))
                                 .studyRise(shown, delay: 0.28 + Double(index) * 0.09, by: 40)
                         }
@@ -385,6 +447,7 @@ private struct StudyQuizStep: View {
                         .aspectRatio(min(1.6, max(0.7, CGFloat(max(post.width, 1)) / CGFloat(max(post.height, 1)))), contentMode: .fit)
                         .frame(maxWidth: .infinity).frame(maxHeight: sizeClass == .regular ? 480 : 300)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)).accessibilityIdentifier("study.picture")
+                        .studyZoom(post)
                 }
                 words
             case .meaningToTag:
@@ -404,6 +467,7 @@ private struct StudyQuizStep: View {
                         .buttonStyle(StudyChoiceStyle(state: choiceState(index, picked: picked, answer: question.answer, revealed: revealed)))
                         .allowsHitTesting(!revealed)
                         .accessibilityLabel(L10n.text("Picture %@", String(index + 1))).accessibilityIdentifier("study.choice.\(index)")
+                        .studyZoom(post, among: question.posts, cornerOnly: true)
                     }
                 }
             }
@@ -556,6 +620,7 @@ private struct StudyBuildStep: View {
                     Text(L10n.text("A picture this prompt describes")).font(StudyTheme.body(13, .bold)).foregroundStyle(StudyTheme.muted)
                     StudyPicture(post: picture, server: server).aspectRatio(CGFloat(max(picture.width, 1)) / CGFloat(max(picture.height, 1)), contentMode: .fit)
                         .frame(maxHeight: 260).clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .studyZoom(picture)
                 }
             } else {
                 StudyFlow(spacing: 8) {
@@ -596,6 +661,7 @@ private struct StudyOddStep: View {
                 .aspectRatio(min(1.6, max(0.7, CGFloat(max(post.width, 1)) / CGFloat(max(post.height, 1)))), contentMode: .fit)
                 .frame(maxWidth: .infinity).frame(maxHeight: sizeClass == .regular ? 480 : 300)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)).accessibilityIdentifier("study.picture")
+                .studyZoom(post)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(Array(choices.enumerated()), id: \.offset) { index, tag in
                     Button { picked = index; StudySound.pick.play() } label: {
@@ -640,6 +706,7 @@ private struct StudySpellStep: View {
                     .aspectRatio(min(1.6, max(0.7, CGFloat(max(post.width, 1)) / CGFloat(max(post.height, 1)))), contentMode: .fit)
                     .frame(maxWidth: .infinity).frame(maxHeight: sizeClass == .regular ? 360 : 200)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .studyZoom(post)
             }
             TextField(L10n.text("Write it in English"), text: $typed)
                 .font(StudyTheme.code).foregroundStyle(StudyTheme.ink)
@@ -753,11 +820,8 @@ private struct StudyOrderStep: View {
     /// One thing to order: a tap sends it to the next free place or back, and a drag carries it to the place it is dropped on.
     private func row<Style: ButtonStyle>(_ item: Int, style: Style, id: String, tap: @escaping () -> Void) -> some View {
         Button(action: tap) {
-            HStack(spacing: 8) {
-                Text(order.items[item].resolved()).font(StudyTheme.body(16, .bold)).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
-                if !revealed { Image(systemName: "line.3.horizontal").font(.system(size: 14, weight: .bold)).opacity(0.45) }
-            }
-            .frame(minHeight: 44).padding(.horizontal, 14).padding(.vertical, 4)
+            Text(order.items[item].resolved()).font(StudyTheme.body(16, .bold)).multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 4)
         }
         .buttonStyle(style)
         .scaleEffect(dragging == item ? 1.04 : 1)

@@ -172,7 +172,7 @@ class _GeneratedPictureViewState extends State<GeneratedPictureView> {
       clearSeed: _picture.seed == null,
     );
     if (_picture.model.isNotEmpty) {
-      settings = settings.copyWith(model: GenerationModel(air: _picture.model, name: _picture.modelName.isEmpty ? _picture.model : _picture.modelName));
+      settings = settings.use(GenerationModel(air: _picture.model, name: _picture.modelName.isEmpty ? _picture.model : _picture.modelName));
     }
     store.settings = settings;
     Navigator.of(context).pop();

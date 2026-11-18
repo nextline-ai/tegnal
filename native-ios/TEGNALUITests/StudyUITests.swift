@@ -309,8 +309,8 @@ final class StudyUITests: XCTestCase {
     }
     private func open(_ app: XCUIApplication, _ lesson: String) {
         let node = element(app, "study.node.\(lesson)")
+        // A stop that is open starts its lesson at a tap.
         XCTAssertTrue(node.waitForExistence(timeout: 10)); node.tap()
-        XCTAssertTrue(element(app, "study.startLesson").waitForExistence(timeout: 5)); element(app, "study.startLesson").tap()
     }
     /// Leaves a finished lesson, passing any page shown for a streak, a goal or a level.
     private func finish(_ app: XCUIApplication) {

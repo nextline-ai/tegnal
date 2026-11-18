@@ -2080,7 +2080,7 @@
 "Too many requests. Wait a moment and try again." = "요청이 너무 많습니다. 잠시 뒤에 다시 시도하세요.";
 "Civitai's moderation refused this prompt. Change it before trying again; repeated refusals can get an account muted." = "Civitai의 검수에서 이 프롬프트가 거부되었습니다. 내용을 바꾼 뒤에 다시 시도하세요. 거부가 반복되면 계정이 제한될 수 있습니다.";
 "The picture could not be generated." = "그림을 생성하지 못했습니다.";
-"This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine." = "이 생성기는 Stable Diffusion 1.5와 SDXL 계열 체크포인트(Illustrious, NoobAI, Pony, Animagine 등)를 지원합니다.";
+"This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine." = "이 생성기는 Anima, Stable Diffusion 1.5와 SDXL 계열 체크포인트(Illustrious, NoobAI, Pony, Animagine 등)를 지원합니다.";
 "Choose a model first." = "먼저 모델을 선택하세요.";
 "Nothing was found for this." = "찾지 못했습니다.";
 "The answer could not be read." = "응답을 읽지 못했습니다.";
@@ -2263,3 +2263,5 @@
 "Advanced Settings" = "고급 설정";
 "Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used." = "그림을 %@장 생성하면 크기, 스텝, LoRA, 피할 것 설정이 열립니다. 그때까지는 권장 설정으로 그립니다.";
 "Tap them in order, or drag them into place." = "순서대로 누르거나, 끌어서 원하는 자리에 놓으세요.";
+"Open in the Viewer" = "뷰어에서 열기";
+"The best-rated model for 2D illustration, and the one this generator starts with." = "2D 일러스트에서 가장 좋다고 평가받는 모델이며, 이 생성기의 기본 모델입니다.";

@@ -5,7 +5,7 @@ import Foundation
 struct GenerationAIR: Hashable, Sendable {
     enum Kind: String, Sendable { case checkpoint, lora, embedding, vae, other }
     /// The engine family a checkpoint runs on.
-    enum Family: String, Sendable { case sd1, sdxl }
+    enum Family: String, Sendable { case sd1, sdxl, anima }
 
     var ecosystem: String?
     var type: String?
@@ -63,9 +63,10 @@ struct GenerationAIR: Hashable, Sendable {
         }
     }
 
-    /// Stable Diffusion 1.5 and the SDXL family, which Illustrious, NoobAI, Pony and Animagine belong to.
+    /// Anima, Stable Diffusion 1.5 and the SDXL family, which Illustrious, NoobAI, Pony and Animagine belong to.
     var family: Family? {
         switch ecosystem {
+        case "anima": .anima
         case "sd1", "sd15", "sd1.5": .sd1
         case "sdxl", "illustrious", "noobai", "pony", "sdxlturbo", "sdxllightning", "sdxlhyper": .sdxl
         default: nil

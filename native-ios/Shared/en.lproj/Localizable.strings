@@ -2080,7 +2080,7 @@
 "Too many requests. Wait a moment and try again." = "Too many requests. Wait a moment and try again.";
 "Civitai's moderation refused this prompt. Change it before trying again; repeated refusals can get an account muted." = "Civitai's moderation refused this prompt. Change it before trying again; repeated refusals can get an account muted.";
 "The picture could not be generated." = "The picture could not be generated.";
-"This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine." = "This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.";
+"This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine." = "This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.";
 "Choose a model first." = "Choose a model first.";
 "Nothing was found for this." = "Nothing was found for this.";
 "The answer could not be read." = "The answer could not be read.";
@@ -2263,3 +2263,5 @@
 "Advanced Settings" = "Advanced Settings";
 "Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used." = "Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used.";
 "Tap them in order, or drag them into place." = "Tap them in order, or drag them into place.";
+"Open in the Viewer" = "Open in the Viewer";
+"The best-rated model for 2D illustration, and the one this generator starts with." = "The best-rated model for 2D illustration, and the one this generator starts with.";

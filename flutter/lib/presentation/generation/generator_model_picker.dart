@@ -247,6 +247,43 @@ class _GeneratorModelPickerState extends State<GeneratorModelPicker> {
               ),
           ],
         ),
+        if (_kind == GenerationKind.checkpoint) ...[
+          FormSection(
+            rowColor: rowColor,
+            children: [
+              FormRow(
+                key: const Key('generator.recommendedModel'),
+                onTap: () => _pick(GenerationModel.recommended),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(GenerationModel.recommended.name, style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context))),
+                            Text(
+                              L10n.text('The best-rated model for 2D illustration, and the one this generator starts with.'),
+                              style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: ShapeDecoration(color: StudyStyle.accent(context), shape: const StadiumBorder()),
+                        child: Text(L10n.text('Suggested'), style: TegnalType.style(12, color: const Color(0xFFFFFFFF)).copyWith(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          settingsSectionGap,
+        ],
         if (recent.isNotEmpty) ...[
           settingsSectionGap,
           FormSection(
