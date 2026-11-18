@@ -2262,3 +2262,4 @@
 "Show Advanced Settings" = "고급 설정 보기";
 "Advanced Settings" = "고급 설정";
 "Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used." = "그림을 %@장 생성하면 크기, 스텝, LoRA, 피할 것 설정이 열립니다. 그때까지는 권장 설정으로 그립니다.";
+"Tap them in order, or drag them into place." = "순서대로 누르거나, 끌어서 원하는 자리에 놓으세요.";

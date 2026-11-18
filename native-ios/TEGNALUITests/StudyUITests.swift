@@ -113,8 +113,10 @@ final class StudyUITests: XCTestCase {
             opened = true
         }) {
             if element(app, "study.order.item.0").exists {
-                // Tapped in their numbered order, the steps are in the right order.
-                for index in 0..<5 { element(app, "study.order.item.\(index)").tap() }
+                // The first step is dragged into the first place; the rest are tapped in their numbered order.
+                element(app, "study.order.item.0").press(forDuration: 0.2, thenDragTo: element(app, "study.order.slot.0"))
+                XCTAssertTrue(element(app, "study.order.place.0").waitForExistence(timeout: 3), "A step can be dragged into a place")
+                for index in 1..<5 { element(app, "study.order.item.\(index)").tap() }
                 element(app, "study.check").tap()
                 XCTAssertTrue(element(app, "study.verdict").waitForExistence(timeout: 5))
                 XCTAssertEqual(element(app, "study.verdict").value as? String, "right")

@@ -16,15 +16,20 @@ struct StudyPicture: View {
         #endif
     }
     var body: some View {
-        ZStack {
-            Color(uiColor: .tertiarySystemFill)
-            if let image { Image(uiImage: image).resizable().aspectRatio(contentMode: fills ? .fill : .fit) }
+        // The picture is drawn over a box of the size it is given, so that a wide or tall one never pushes the layout out.
+        // Where the box must be filled, the whole picture is still shown, over a blurred copy of itself that fills the rest.
+        Color(uiColor: .tertiarySystemFill).overlay {
+            if let image {
+                if fills { Image(uiImage: image).resizable().scaledToFill().blur(radius: 18).opacity(0.75) }
+                Image(uiImage: image).resizable().scaledToFit()
+            }
             else if isFixture {
                 LinearGradient(colors: [.indigo, .cyan.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
                 Image(systemName: "mountain.2.fill").font(.system(size: 44)).foregroundStyle(.white.opacity(0.8))
             } else if failed { Image(systemName: "photo.badge.exclamationmark").foregroundStyle(.secondary) }
             else { ProgressView() }
         }
+        .clipped()
         .task(id: post.id) {
             guard !isFixture, let url else { failed = !isFixture; return }
             if let cached = BooruThumbnailCache.shared.cachedImage(url: url, server: server) { image = cached; return }

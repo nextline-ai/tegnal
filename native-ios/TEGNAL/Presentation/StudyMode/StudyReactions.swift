@@ -1,10 +1,10 @@
 import SwiftUI
-import AudioToolbox
+import AVFoundation
 
 // Learning mode answers everything the learner does: a sound, a movement, a word from the guide.
 
-/// The sounds learning mode makes. They are played as interface sounds, so they follow the silent switch
-/// and never stop music the learner is listening to.
+/// The sounds learning mode makes. They are played as media, so the volume buttons turn them up and down;
+/// they follow the silent switch and play over music the learner is listening to without stopping it.
 @MainActor
 enum StudySound: String, CaseIterable {
     case tap, pick, right, wrong, match, combo, star1, star2, star3, complete, levelup, streak
@@ -13,15 +13,40 @@ enum StudySound: String, CaseIterable {
         get { ReaderPreferences.booruDefaults.object(forKey: key) as? Bool ?? true }
         set { ReaderPreferences.booruDefaults.set(newValue, forKey: key) }
     }
-    private static var loaded: [StudySound: SystemSoundID] = [:]
+    private static var players: [StudySound: AVAudioPlayer] = [:]
+    private static var ambient = false
+
+    /// Loads every sound, so that the first one played does not arrive late.
+    static func warm() {
+        guard isOn else { return }
+        for sound in allCases { _ = sound.player() }
+    }
+
+    /// Hands the audio session back as it was found, once learning mode is left.
+    static func rest() {
+        guard ambient else { return }
+        ambient = false
+        try? AVAudioSession.sharedInstance().setCategory(.soloAmbient)
+    }
+
+    private func player() -> AVAudioPlayer? {
+        if let player = Self.players[self] { return player }
+        guard let url = Bundle.main.url(forResource: "StudySound-" + rawValue, withExtension: "wav", subdirectory: "StudySounds"),
+              let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.prepareToPlay()
+        Self.players[self] = player
+        return player
+    }
 
     func play() {
         guard Self.isOn else { return }
-        if Self.loaded[self] == nil, let url = Bundle.main.url(forResource: "StudySound-" + rawValue, withExtension: "wav", subdirectory: "StudySounds") {
-            var id: SystemSoundID = 0
-            if AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError { Self.loaded[self] = id }
+        if !Self.ambient {
+            Self.ambient = true
+            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
         }
-        if let id = Self.loaded[self] { AudioServicesPlaySystemSound(id) }
+        guard let player = player() else { return }
+        player.currentTime = 0
+        player.play()
     }
 }
 
