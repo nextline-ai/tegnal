@@ -984,7 +984,7 @@ class _GoldPageSource extends _EmptySource {
   }
 }
 
-class _EmptySource implements BooruProviding {
+class _EmptySource with BooruTagStudyUnsupported implements BooruProviding {
   @override
   Future<BooruBatch> posts(BooruServer server, String query, int page) async => const BooruBatch(posts: [], hasMore: false);
   @override

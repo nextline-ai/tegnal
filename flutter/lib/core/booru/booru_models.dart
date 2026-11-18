@@ -48,6 +48,7 @@ class BooruServer {
   /// Safebooru carries only all-ages images, so Safe Mode browses it without a rating tag.
   static const safebooruHost = 'safebooru.org';
   bool get isSafebooru => bareHost(Uri.tryParse(baseURL)?.host ?? '') == safebooruHost;
+  bool get isGelbooruWebsite => engine == BooruEngine.gelbooru && bareHost(Uri.tryParse(baseURL)?.host ?? '') == 'gelbooru.com';
   static BooruServer safebooru() => BooruServer(name: 'Safebooru', baseURL: 'https://$safebooruHost', engine: BooruEngine.gelbooru);
 
   String get displayName => BooruServer.displayNameOf(name);

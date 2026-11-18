@@ -391,6 +391,7 @@ struct BooruMoreView: View {
             SearchHistorySettings(booru: true)
             TasteSettingsSection(mode: .booru)
             BooruSafeModeSettings()
+            StudyModeSettings()
             Section {
                 NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }
                     .accessibilityIdentifier("booru.libraryManagement")

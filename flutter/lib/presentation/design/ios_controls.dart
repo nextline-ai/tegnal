@@ -78,7 +78,10 @@ class TegnalSwitch extends StatelessWidget {
 
 /// The iOS 26 `Slider`: a 6 pt track filled with the tint up to a 37 × 24 pt capsule knob.
 class TegnalSlider extends StatelessWidget {
-  const TegnalSlider({super.key, required this.value, required this.onChanged, this.min = 0, this.max = 1, this.label});
+  const TegnalSlider({super.key, required this.value, required this.onChanged, this.min = 0, this.max = 1, this.label, this.tint});
+
+  /// The filled track's color when a screen sets its own tint.
+  final Color? tint;
   final double value;
   final double min;
   final double max;
@@ -97,7 +100,7 @@ class TegnalSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = TegnalColors.tint.resolveFrom(context);
+    final tint = this.tint ?? TegnalColors.tint.resolveFrom(context);
     final track = ControlColors.sliderTrack.resolveFrom(context);
     return Semantics(
       label: label,

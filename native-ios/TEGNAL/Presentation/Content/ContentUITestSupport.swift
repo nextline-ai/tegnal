@@ -68,6 +68,10 @@ enum ContentUITestSupport {
                 }
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--study-due-test") {
+            // A tag answered three days ago is due again today.
+            _ = try! env.booru.studyStore.answer("smile", right: true, now: Date().addingTimeInterval(-3 * 86_400))
+        }
         if ProcessInfo.processInfo.arguments.contains("--taste-recap-demo") { RecapDemoLibrary.seed(env) }
         if ProcessInfo.processInfo.arguments.contains("--fill-heat-banner-test") {
             env.coverQueueState.total = 100

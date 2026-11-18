@@ -23,7 +23,11 @@ void main() {
     );
     expect(index.contains(gallery(1001, 'Anything', [])), isTrue, reason: 'The saved number itself');
     expect(index.contains(gallery(2001, 'Other Title', [], versions: [1001])), isTrue, reason: 'A version the site lists for a saved work');
-    expect(index.contains(gallery(2002, '[Mira] Career Women to Sono Joushi (C99) [Digital]', ['Mira'])), isTrue, reason: 'The same original by a shared artist');
+    expect(
+      index.contains(gallery(2002, '[Mira] Career Women to Sono Joushi (C99) [Digital]', ['Mira'])),
+      isTrue,
+      reason: 'The same original by a shared artist',
+    );
     expect(index.contains(gallery(2003, 'Career Women to sono Joushi', ['theo'])), isFalse, reason: "Another artist's work of the same name");
     expect(index.contains(gallery(2004, 'Career Women to sono Joushi 2', ['mira'])), isFalse, reason: 'A sequel');
     expect(index.contains(gallery(2005, 'AI', ['mira'])), isFalse, reason: 'Titles this short are not matched');

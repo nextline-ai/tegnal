@@ -1,0 +1,7352 @@
+{
+ "version": 1,
+ "units": [
+  {
+   "id": "count",
+   "title": {
+    "en": "People",
+    "ko": "인원",
+    "ja": "人数"
+   },
+   "summary": {
+    "en": "How many characters appear and how they relate.",
+    "ko": "등장 인물의 수와 서로의 관계.",
+    "ja": "登場人物の数と、その関係。"
+   },
+   "groups": [
+    {
+     "id": "count.number",
+     "title": {
+      "en": "Headcount",
+      "ko": "인원수",
+      "ja": "人数"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "solo",
+       "ko": "혼자",
+       "ja": "ソロ",
+       "note": {
+        "en": "Only one character is in the picture.",
+        "ko": "그림에 인물이 한 명뿐인 구도.",
+        "ja": "絵に人物が一人だけいる。"
+       },
+       "confusable": [
+        "solo_focus",
+        "1girl"
+       ]
+      },
+      {
+       "name": "1girl",
+       "ko": "소녀 한 명",
+       "ja": "女の子1人",
+       "note": {
+        "en": "Exactly one girl; usually paired with solo.",
+        "ko": "여성 캐릭터가 정확히 한 명. 보통 solo와 함께 쓴다.",
+        "ja": "女性キャラがちょうど1人。solo と併用が多い。"
+       },
+       "confusable": [
+        "solo",
+        "2girls"
+       ]
+      },
+      {
+       "name": "1boy",
+       "ko": "소년 한 명",
+       "ja": "男の子1人",
+       "note": {
+        "en": "Exactly one boy or man.",
+        "ko": "남성 캐릭터가 정확히 한 명.",
+        "ja": "男性キャラがちょうど1人。"
+       },
+       "confusable": [
+        "1girl",
+        "2boys"
+       ]
+      },
+      {
+       "name": "2girls",
+       "ko": "소녀 두 명",
+       "ja": "女の子2人",
+       "note": {
+        "en": "Exactly two girls.",
+        "ko": "여성 캐릭터가 정확히 두 명.",
+        "ja": "女性キャラがちょうど2人。"
+       },
+       "confusable": [
+        "3girls",
+        "multiple_girls"
+       ]
+      },
+      {
+       "name": "2boys",
+       "ko": "소년 두 명",
+       "ja": "男の子2人",
+       "note": {
+        "en": "Exactly two boys or men.",
+        "ko": "남성 캐릭터가 정확히 두 명.",
+        "ja": "男性キャラがちょうど2人。"
+       },
+       "confusable": [
+        "1boy",
+        "multiple_boys"
+       ]
+      },
+      {
+       "name": "3girls",
+       "ko": "소녀 세 명",
+       "ja": "女の子3人",
+       "note": {
+        "en": "Exactly three girls.",
+        "ko": "여성 캐릭터가 정확히 세 명.",
+        "ja": "女性キャラがちょうど3人。"
+       },
+       "confusable": [
+        "2girls",
+        "4girls"
+       ]
+      },
+      {
+       "name": "4girls",
+       "ko": "소녀 네 명",
+       "ja": "女の子4人",
+       "note": {
+        "en": "Exactly four girls.",
+        "ko": "여성 캐릭터가 정확히 네 명.",
+        "ja": "女性キャラがちょうど4人。"
+       },
+       "confusable": [
+        "3girls",
+        "5girls"
+       ]
+      },
+      {
+       "name": "5girls",
+       "ko": "소녀 다섯 명",
+       "ja": "女の子5人",
+       "note": {
+        "en": "Exactly five girls.",
+        "ko": "여성 캐릭터가 정확히 다섯 명.",
+        "ja": "女性キャラがちょうど5人。"
+       },
+       "confusable": [
+        "4girls",
+        "6+girls"
+       ]
+      },
+      {
+       "name": "6+girls",
+       "ko": "소녀 여섯 명 이상",
+       "ja": "女の子6人以上",
+       "note": {
+        "en": "Six or more girls; the count tags stop at 5.",
+        "ko": "여성 캐릭터가 여섯 명 이상. 정확한 수 태그는 5까지.",
+        "ja": "女性キャラが6人以上。人数タグは5人まで。"
+       },
+       "confusable": [
+        "5girls",
+        "multiple_girls"
+       ]
+      },
+      {
+       "name": "multiple_girls",
+       "ko": "소녀 여러 명",
+       "ja": "複数の女の子",
+       "note": {
+        "en": "Two or more girls; added next to the exact count tag.",
+        "ko": "여성이 둘 이상. 정확한 수 태그와 함께 붙인다.",
+        "ja": "女性が2人以上。人数タグと併用する。"
+       },
+       "confusable": [
+        "2girls",
+        "multiple_boys"
+       ]
+      },
+      {
+       "name": "multiple_boys",
+       "ko": "소년 여러 명",
+       "ja": "複数の男の子",
+       "note": {
+        "en": "Two or more boys or men; added next to the exact count tag.",
+        "ko": "남성이 둘 이상. 정확한 수 태그와 함께 붙인다.",
+        "ja": "男性が2人以上。人数タグと併用する。"
+       },
+       "confusable": [
+        "2boys",
+        "multiple_girls"
+       ]
+      },
+      {
+       "name": "1other",
+       "ko": "성별 불명 한 명",
+       "ja": "性別不明1人",
+       "note": {
+        "en": "One character that is neither clearly a girl nor a boy, such as a robot.",
+        "ko": "소녀도 소년도 아닌 한 명. 로봇 같은 캐릭터.",
+        "ja": "男女どちらとも言えない1人。ロボットなど。"
+       },
+       "confusable": [
+        "1girl",
+        "1boy"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "count.focus",
+     "title": {
+      "en": "Who is the subject",
+      "ko": "주인공",
+      "ja": "主役"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "solo_focus",
+       "ko": "단독 주목",
+       "ja": "ソロ主体",
+       "note": {
+        "en": "Several figures are visible, but one is clearly the subject.",
+        "ko": "여럿이 보이지만 한 명이 확실한 주인공인 그림.",
+        "ja": "複数いても主役が一人に絞られている。"
+       },
+       "confusable": [
+        "solo",
+        "multiple_girls"
+       ]
+      },
+      {
+       "name": "male_focus",
+       "ko": "남성 중심",
+       "ja": "男性中心",
+       "note": {
+        "en": "The picture centers on male characters.",
+        "ko": "남성 캐릭터가 중심인 그림.",
+        "ja": "男性キャラが中心の絵。"
+       },
+       "confusable": [
+        "1boy",
+        "multiple_boys"
+       ]
+      },
+      {
+       "name": "animal_focus",
+       "ko": "동물 중심",
+       "ja": "動物が主役",
+       "note": {
+        "en": "An animal is the main subject.",
+        "ko": "동물이 주인공인 그림.",
+        "ja": "動物が主役の絵。"
+       },
+       "confusable": [
+        "no_humans"
+       ]
+      },
+      {
+       "name": "no_humans",
+       "ko": "사람 없음",
+       "ja": "人間なし",
+       "note": {
+        "en": "No people at all; animals, objects or scenery only.",
+        "ko": "사람이 없는 그림. 동물, 사물, 풍경만 나온다.",
+        "ja": "人が一人もいない。動物・物・風景のみ。"
+       },
+       "confusable": [
+        "animal_focus",
+        "solo"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "count.relation",
+     "title": {
+      "en": "Between characters",
+      "ko": "인물 관계",
+      "ja": "人物どうしの関係"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "holding_hands",
+       "ko": "손잡기",
+       "ja": "手をつなぐ",
+       "note": {
+        "en": "Two characters hold each other's hands.",
+        "ko": "서로의 손을 맞잡은 모습.",
+        "ja": "互いの手をつないでいる。"
+       },
+       "confusable": [
+        "hug",
+        "side-by-side"
+       ]
+      },
+      {
+       "name": "hug",
+       "ko": "포옹",
+       "ja": "ハグ",
+       "note": {
+        "en": "One character wraps arms around another.",
+        "ko": "한 사람이 다른 사람을 두 팔로 감싸 안은 모습.",
+        "ja": "一人が相手を腕で抱きしめている。"
+       },
+       "confusable": [
+        "hug_from_behind",
+        "holding_hands"
+       ]
+      },
+      {
+       "name": "hug_from_behind",
+       "ko": "뒤에서 안기",
+       "ja": "後ろから抱く",
+       "note": {
+        "en": "A hug where one character stands behind the other.",
+        "ko": "한 사람이 상대의 뒤에서 안은 모습.",
+        "ja": "一人が相手の後ろから抱いている。"
+       },
+       "confusable": [
+        "hug",
+        "back-to-back"
+       ]
+      },
+      {
+       "name": "side-by-side",
+       "ko": "나란히",
+       "ja": "並んで",
+       "note": {
+        "en": "Characters stand or sit beside each other, facing the same way.",
+        "ko": "같은 방향을 보며 나란히 선 모습.",
+        "ja": "同じ向きで横に並んでいる。"
+       },
+       "confusable": [
+        "back-to-back",
+        "face-to-face"
+       ]
+      },
+      {
+       "name": "back-to-back",
+       "ko": "등 맞대기",
+       "ja": "背中合わせ",
+       "note": {
+        "en": "Two characters stand with their backs touching.",
+        "ko": "서로 등을 맞대고 선 모습.",
+        "ja": "互いに背中を合わせて立っている。"
+       },
+       "confusable": [
+        "side-by-side",
+        "face-to-face"
+       ]
+      },
+      {
+       "name": "face-to-face",
+       "ko": "마주 보기",
+       "ja": "向かい合う",
+       "note": {
+        "en": "Two characters face each other at close range.",
+        "ko": "가까이서 서로 마주 본 모습.",
+        "ja": "近い距離で向かい合っている。"
+       },
+       "confusable": [
+        "side-by-side",
+        "back-to-back"
+       ]
+      },
+      {
+       "name": "height_difference",
+       "ko": "키 차이",
+       "ja": "身長差",
+       "note": {
+        "en": "Characters of clearly different heights stand together.",
+        "ko": "키 차이가 뚜렷한 인물들이 함께 있는 모습.",
+        "ja": "身長差がはっきりした人物が並ぶ。"
+       },
+       "confusable": [
+        "side-by-side"
+       ]
+      },
+      {
+       "name": "piggyback",
+       "ko": "업기",
+       "ja": "おんぶ",
+       "note": {
+        "en": "One character carries another on their back.",
+        "ko": "한 사람이 다른 사람을 등에 업은 모습.",
+        "ja": "一人が相手を背負っている。"
+       },
+       "confusable": [
+        "princess_carry"
+       ]
+      },
+      {
+       "name": "princess_carry",
+       "ko": "공주님 안기",
+       "ja": "お姫様抱っこ",
+       "note": {
+        "en": "Carrying someone with one arm under the back and one under the knees.",
+        "ko": "등과 무릎 아래를 받쳐 안아 든 모습.",
+        "ja": "背中と膝の下を支えて抱き上げている。"
+       },
+       "confusable": [
+        "piggyback",
+        "hug"
+       ]
+      },
+      {
+       "name": "headpat",
+       "ko": "쓰다듬기",
+       "ja": "なでなで",
+       "note": {
+        "en": "A hand pats or strokes another character's head.",
+        "ko": "상대의 머리를 쓰다듬는 손.",
+        "ja": "相手の頭をなでる手。"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "framing",
+   "title": {
+    "en": "Framing",
+    "ko": "구도",
+    "ja": "構図"
+   },
+   "summary": {
+    "en": "How much of the subject the picture shows, and how it is laid out.",
+    "ko": "그림이 대상을 어디까지 담는지, 화면을 어떻게 짜는지.",
+    "ja": "被写体をどこまで収め、画面をどう組むか。"
+   },
+   "groups": [
+    {
+     "id": "framing.shot",
+     "title": {
+      "en": "Shot size",
+      "ko": "샷 크기",
+      "ja": "ショットサイズ"
+     },
+     "exclusive": true,
+     "visual": true,
+     "tags": [
+      {
+       "name": "close-up",
+       "ko": "클로즈업",
+       "ja": "クローズアップ",
+       "note": {
+        "en": "A tight view of one part, such as the face or a hand.",
+        "ko": "얼굴이나 손 같은 한 부분을 가까이 담은 구도.",
+        "ja": "顔や手など一部に寄った構図。"
+       },
+       "confusable": [
+        "portrait"
+       ]
+      },
+      {
+       "name": "portrait",
+       "ko": "초상",
+       "ja": "ポートレート",
+       "note": {
+        "en": "Head and shoulders only; tighter than upper_body.",
+        "ko": "머리와 어깨 정도만 담은 구도. 상반신보다 좁다.",
+        "ja": "頭と肩ほどを収める。上半身より寄り。"
+       },
+       "confusable": [
+        "upper_body",
+        "close-up"
+       ]
+      },
+      {
+       "name": "upper_body",
+       "ko": "상반신",
+       "ja": "上半身",
+       "note": {
+        "en": "From the head down to about the waist.",
+        "ko": "머리부터 허리 언저리까지 담은 구도.",
+        "ja": "頭から腰あたりまでを収めた構図。"
+       },
+       "confusable": [
+        "portrait",
+        "cowboy_shot"
+       ]
+      },
+      {
+       "name": "cowboy_shot",
+       "ko": "카우보이 샷",
+       "ja": "カウボーイショット",
+       "note": {
+        "en": "Head down to the thighs; more than upper_body, less than full_body.",
+        "ko": "머리부터 허벅지까지. 상반신보다 넓고 전신보다 좁다.",
+        "ja": "頭から太ももまで。上半身より広く全身より狭い。"
+       },
+       "confusable": [
+        "upper_body",
+        "full_body"
+       ]
+      },
+      {
+       "name": "full_body",
+       "ko": "전신",
+       "ja": "全身",
+       "note": {
+        "en": "The whole body from head to feet is visible.",
+        "ko": "머리부터 발끝까지 전부 담은 구도.",
+        "ja": "頭からつま先まで全身が見える構図。"
+       },
+       "confusable": [
+        "cowboy_shot",
+        "wide_shot"
+       ]
+      },
+      {
+       "name": "lower_body",
+       "ko": "하반신",
+       "ja": "下半身",
+       "note": {
+        "en": "Only the waist down is shown; the upper body is cropped out.",
+        "ko": "허리 아래만 보이고 상반신은 잘린 구도.",
+        "ja": "腰から下だけが見え、上半身は見切れる。"
+       },
+       "confusable": [
+        "upper_body",
+        "cropped_torso"
+       ]
+      },
+      {
+       "name": "wide_shot",
+       "ko": "와이드 샷",
+       "ja": "ロングショット",
+       "note": {
+        "en": "The character appears small within a large scene.",
+        "ko": "넓은 장면 속에 인물이 작게 보이는 구도.",
+        "ja": "広い場面の中で人物が小さく見える構図。"
+       },
+       "confusable": [
+        "full_body",
+        "very_wide_shot"
+       ]
+      },
+      {
+       "name": "very_wide_shot",
+       "ko": "초광각 샷",
+       "ja": "超ロングショット",
+       "note": {
+        "en": "A far-off view where the character is tiny against the scenery.",
+        "ko": "풍경에 비해 인물이 아주 작게 보이는 먼 구도.",
+        "ja": "風景に対し人物がごく小さい遠景。"
+       },
+       "confusable": [
+        "wide_shot"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "framing.crop",
+     "title": {
+      "en": "Cropping",
+      "ko": "잘림",
+      "ja": "見切れ"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "head_out_of_frame",
+       "ko": "머리 잘림",
+       "ja": "頭が見切れ",
+       "note": {
+        "en": "The top of the head is cut off by the picture edge.",
+        "ko": "머리 윗부분이 화면 밖으로 잘린 구도.",
+        "ja": "頭の上が画面の外に切れている。"
+       },
+       "confusable": [
+        "out_of_frame",
+        "lower_body"
+       ]
+      },
+      {
+       "name": "feet_out_of_frame",
+       "ko": "발 잘림",
+       "ja": "足が見切れ",
+       "note": {
+        "en": "The feet fall outside the picture.",
+        "ko": "발이 화면 밖으로 나간 구도.",
+        "ja": "足元が画面の外に切れている。"
+       },
+       "confusable": [
+        "cropped_legs",
+        "cowboy_shot"
+       ]
+      },
+      {
+       "name": "out_of_frame",
+       "ko": "프레임 밖",
+       "ja": "画面外",
+       "note": {
+        "en": "Part of the subject runs past the picture edge.",
+        "ko": "대상의 일부가 화면 가장자리 밖으로 나간 상태.",
+        "ja": "被写体の一部が画面端からはみ出している。"
+       },
+       "confusable": [
+        "head_out_of_frame",
+        "feet_out_of_frame"
+       ]
+      },
+      {
+       "name": "cropped_legs",
+       "ko": "다리 잘림",
+       "ja": "脚が見切れ",
+       "note": {
+        "en": "The legs are cut by the frame, a bigger crop than feet_out_of_frame.",
+        "ko": "다리가 화면에 잘림. 발만 잘리는 것보다 많이 잘린다.",
+        "ja": "脚が画面で切れる。足先だけの見切れより大きい。"
+       },
+       "confusable": [
+        "feet_out_of_frame",
+        "cowboy_shot"
+       ]
+      },
+      {
+       "name": "cropped_torso",
+       "ko": "몸통 잘림",
+       "ja": "胴体が見切れ",
+       "note": {
+        "en": "The torso is cut by the frame, so mainly head or limbs show.",
+        "ko": "몸통이 잘려서 머리나 팔다리만 보이는 구도.",
+        "ja": "胴体が切れ、頭や手足が主に見える。"
+       },
+       "confusable": [
+        "lower_body",
+        "upper_body"
+       ]
+      },
+      {
+       "name": "cropped_arms",
+       "ko": "팔 잘림",
+       "ja": "腕が見切れ",
+       "note": {
+        "en": "The arms are cut off by the picture edge.",
+        "ko": "팔이 화면 가장자리에서 잘린 구도.",
+        "ja": "腕が画面の端で切れている。"
+       },
+       "confusable": [
+        "cropped_shoulders",
+        "out_of_frame"
+       ]
+      },
+      {
+       "name": "cropped_shoulders",
+       "ko": "어깨 잘림",
+       "ja": "肩が見切れ",
+       "note": {
+        "en": "The frame edge cuts through the shoulders, as in a tight face view.",
+        "ko": "화면 끝이 어깨를 가르는 바짝 붙은 구도.",
+        "ja": "画面の端が肩を切る、顔に寄った構図。"
+       },
+       "confusable": [
+        "portrait",
+        "close-up"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "framing.layout",
+     "title": {
+      "en": "Layout",
+      "ko": "화면 구성",
+      "ja": "画面構成"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "border",
+       "ko": "테두리",
+       "ja": "フチ",
+       "note": {
+        "en": "A visible frame or band runs around the picture.",
+        "ko": "그림 둘레에 테두리가 둘러진 상태.",
+        "ja": "絵の周りにフチや枠がある。"
+       },
+       "confusable": [
+        "black_border",
+        "white_border"
+       ]
+      },
+      {
+       "name": "black_border",
+       "ko": "검은 테두리",
+       "ja": "黒フチ",
+       "note": {
+        "en": "A black frame around the picture.",
+        "ko": "그림 둘레의 검은 테두리.",
+        "ja": "絵の周りの黒い枠。"
+       },
+       "confusable": [
+        "white_border",
+        "letterboxed"
+       ]
+      },
+      {
+       "name": "white_border",
+       "ko": "흰 테두리",
+       "ja": "白フチ",
+       "note": {
+        "en": "A white frame around the picture, like a photo print.",
+        "ko": "사진처럼 그림 둘레를 감싼 흰 테두리.",
+        "ja": "写真のように絵を囲む白い枠。"
+       },
+       "confusable": [
+        "black_border",
+        "border"
+       ]
+      },
+      {
+       "name": "letterboxed",
+       "ko": "레터박스",
+       "ja": "レターボックス",
+       "note": {
+        "en": "Bars above and below, like a widescreen film.",
+        "ko": "위아래에 띠가 있는 영화 화면 같은 구도.",
+        "ja": "上下に帯が入った映画のような画面。"
+       },
+       "confusable": [
+        "pillarboxed",
+        "black_border"
+       ]
+      },
+      {
+       "name": "pillarboxed",
+       "ko": "필러박스",
+       "ja": "ピラーボックス",
+       "note": {
+        "en": "Bars at the left and right sides of the picture.",
+        "ko": "화면 좌우에 띠가 들어간 구도.",
+        "ja": "画面の左右に帯が入っている。"
+       },
+       "confusable": [
+        "letterboxed",
+        "black_border"
+       ]
+      },
+      {
+       "name": "multiple_views",
+       "ko": "여러 시점",
+       "ja": "複数ビュー",
+       "note": {
+        "en": "The same subject drawn several times from different views.",
+        "ko": "같은 대상을 여러 시점으로 한 장에 그린 그림.",
+        "ja": "同じ被写体を違う視点で複数描いた絵。"
+       },
+       "confusable": [
+        "character_sheet",
+        "zoom_layer"
+       ]
+      },
+      {
+       "name": "zoom_layer",
+       "ko": "줌 레이어",
+       "ja": "ズームレイヤー",
+       "note": {
+        "en": "A close-up of a detail overlaid on the main picture.",
+        "ko": "세부를 확대한 그림을 본 그림 위에 겹친 구성.",
+        "ja": "細部の拡大図を本絵に重ねた構成。"
+       },
+       "confusable": [
+        "multiple_views"
+       ]
+      },
+      {
+       "name": "negative_space",
+       "ko": "여백",
+       "ja": "余白",
+       "note": {
+        "en": "A large empty area is left on purpose around the subject.",
+        "ko": "대상 둘레에 일부러 넓게 비워 둔 공간.",
+        "ja": "被写体の周りに意図して広く空けた余白。"
+       },
+       "confusable": [
+        "wide_shot"
+       ]
+      },
+      {
+       "name": "symmetry",
+       "ko": "대칭",
+       "ja": "シンメトリー",
+       "note": {
+        "en": "The two halves of the picture mirror each other.",
+        "ko": "좌우가 거울처럼 같은 모양인 구도.",
+        "ja": "左右が鏡のように対称な構図。"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "angle",
+   "title": {
+    "en": "Camera and gaze",
+    "ko": "시점과 시선",
+    "ja": "アングルと視線"
+   },
+   "summary": {
+    "en": "Where the camera is, where the eyes look, and what the lens does.",
+    "ko": "카메라 위치, 시선 방향, 렌즈 효과.",
+    "ja": "カメラの位置、視線の向き、レンズの効果。"
+   },
+   "groups": [
+    {
+     "id": "angle.camera",
+     "title": {
+      "en": "Camera angle",
+      "ko": "카메라 앵글",
+      "ja": "カメラアングル"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "from_above",
+       "ko": "위에서",
+       "ja": "俯瞰",
+       "note": {
+        "en": "The camera looks down on the subject from above.",
+        "ko": "대상을 위에서 내려다본 앵글.",
+        "ja": "被写体を上から見下ろすアングル。"
+       },
+       "confusable": [
+        "from_below",
+        "straight-on"
+       ]
+      },
+      {
+       "name": "from_below",
+       "ko": "아래에서",
+       "ja": "あおり",
+       "note": {
+        "en": "The camera looks up at the subject from below.",
+        "ko": "대상을 아래에서 올려다본 앵글.",
+        "ja": "被写体を下から見上げるアングル。"
+       },
+       "confusable": [
+        "from_above",
+        "straight-on"
+       ]
+      },
+      {
+       "name": "from_side",
+       "ko": "옆에서",
+       "ja": "横から",
+       "note": {
+        "en": "The camera stands beside the subject; the face need not be pure profile.",
+        "ko": "대상의 옆에 카메라가 있는 앵글. 얼굴이 완전한 옆모습일 필요는 없다.",
+        "ja": "カメラが被写体の横にある。顔は完全な横顔でなくてよい。"
+       },
+       "confusable": [
+        "profile",
+        "from_behind"
+       ]
+      },
+      {
+       "name": "from_behind",
+       "ko": "뒤에서",
+       "ja": "後ろから",
+       "note": {
+        "en": "The camera sees the subject's back.",
+        "ko": "대상의 뒷모습을 담은 앵글.",
+        "ja": "被写体の背中側から撮ったアングル。"
+       },
+       "confusable": [
+        "facing_away",
+        "looking_back"
+       ]
+      },
+      {
+       "name": "straight-on",
+       "ko": "정면",
+       "ja": "正面",
+       "note": {
+        "en": "Level, front-on view with no up or down tilt.",
+        "ko": "위아래 기울임 없이 똑바로 정면에서 본 앵글.",
+        "ja": "上下の傾きなく正面から見たアングル。"
+       },
+       "confusable": [
+        "from_above",
+        "dutch_angle"
+       ]
+      },
+      {
+       "name": "dutch_angle",
+       "ko": "기울인 앵글",
+       "ja": "ダッチアングル",
+       "note": {
+        "en": "The camera is tilted so the horizon runs diagonally.",
+        "ko": "카메라를 기울여 지평선이 비스듬한 앵글.",
+        "ja": "カメラを傾け、水平線が斜めになる。"
+       },
+       "confusable": [
+        "straight-on",
+        "from_below"
+       ]
+      },
+      {
+       "name": "pov",
+       "ko": "1인칭 시점",
+       "ja": "主観視点",
+       "note": {
+        "en": "Seen through the viewer's own eyes, often with their hands in frame.",
+        "ko": "보는 사람의 눈으로 본 시점. 본인 손이 보이기도 한다.",
+        "ja": "見る人の目線の構図。自分の手が映ることも。"
+       },
+       "confusable": [
+        "looking_at_viewer",
+        "from_above"
+       ]
+      },
+      {
+       "name": "profile",
+       "ko": "옆모습",
+       "ja": "横顔",
+       "note": {
+        "en": "The face is seen purely from the side.",
+        "ko": "얼굴을 완전히 옆에서 본 모습.",
+        "ja": "顔を真横から見た姿。"
+       },
+       "confusable": [
+        "from_side",
+        "looking_to_the_side"
+       ]
+      },
+      {
+       "name": "facing_away",
+       "ko": "등을 돌림",
+       "ja": "背を向ける",
+       "note": {
+        "en": "The subject's front is turned away from the viewer.",
+        "ko": "대상이 보는 사람에게서 등을 돌리고 있는 모습.",
+        "ja": "被写体が見る人に背を向けている。"
+       },
+       "confusable": [
+        "from_behind",
+        "looking_back"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "angle.gaze",
+     "title": {
+      "en": "Gaze",
+      "ko": "시선",
+      "ja": "視線"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "looking_at_viewer",
+       "ko": "카메라 응시",
+       "ja": "カメラ目線",
+       "note": {
+        "en": "The eyes are aimed at the viewer.",
+        "ko": "눈이 보는 사람을 향한 모습.",
+        "ja": "目が見る人の方を向いている。"
+       },
+       "confusable": [
+        "eye_contact",
+        "looking_away"
+       ]
+      },
+      {
+       "name": "eye_contact",
+       "ko": "눈 맞춤",
+       "ja": "アイコンタクト",
+       "note": {
+        "en": "Eyes lock with the viewer or another character.",
+        "ko": "보는 사람이나 상대와 눈이 마주친 모습.",
+        "ja": "見る人や相手と視線が合っている。"
+       },
+       "confusable": [
+        "looking_at_viewer",
+        "looking_at_another"
+       ]
+      },
+      {
+       "name": "looking_at_another",
+       "ko": "상대를 봄",
+       "ja": "相手を見る",
+       "note": {
+        "en": "One character looks at another character in the picture.",
+        "ko": "그림 속 다른 인물을 바라보는 모습.",
+        "ja": "絵の中の別の人物を見ている。"
+       },
+       "confusable": [
+        "eye_contact",
+        "looking_at_viewer"
+       ]
+      },
+      {
+       "name": "looking_back",
+       "ko": "뒤돌아봄",
+       "ja": "振り返り",
+       "note": {
+        "en": "The body faces away but the head turns back over the shoulder.",
+        "ko": "몸은 돌렸지만 어깨 너머로 고개를 돌려 본다.",
+        "ja": "体は背を向け、肩越しに振り返っている。"
+       },
+       "confusable": [
+        "facing_away",
+        "looking_at_viewer"
+       ]
+      },
+      {
+       "name": "looking_away",
+       "ko": "시선 회피",
+       "ja": "目をそらす",
+       "note": {
+        "en": "Eyes avoid the viewer, as if shy; the head can still face front.",
+        "ko": "눈을 피하는 모습. 고개는 정면이어도 된다.",
+        "ja": "目をそらす。顔は正面のままでもよい。"
+       },
+       "confusable": [
+        "looking_to_the_side",
+        "looking_at_viewer"
+       ]
+      },
+      {
+       "name": "looking_to_the_side",
+       "ko": "옆을 봄",
+       "ja": "横を見る",
+       "note": {
+        "en": "Eyes or head turn to the side, simply toward a direction.",
+        "ko": "눈이나 고개가 단순히 옆쪽을 향한 모습.",
+        "ja": "目や顔が単に横の方向を向いている。"
+       },
+       "confusable": [
+        "looking_away",
+        "profile"
+       ]
+      },
+      {
+       "name": "looking_up",
+       "ko": "올려다봄",
+       "ja": "見上げる",
+       "note": {
+        "en": "Eyes or face turn upward.",
+        "ko": "눈이나 얼굴이 위쪽을 향한 모습.",
+        "ja": "目や顔が上を向いている。"
+       },
+       "confusable": [
+        "looking_down"
+       ]
+      },
+      {
+       "name": "looking_down",
+       "ko": "내려다봄",
+       "ja": "見下ろす",
+       "note": {
+        "en": "Eyes or face turn downward.",
+        "ko": "눈이나 얼굴이 아래쪽을 향한 모습.",
+        "ja": "目や顔が下を向いている。"
+       },
+       "confusable": [
+        "looking_up"
+       ]
+      },
+      {
+       "name": "looking_afar",
+       "ko": "먼 곳을 봄",
+       "ja": "遠くを見る",
+       "note": {
+        "en": "Gazing at something far off, often shown from behind or the side.",
+        "ko": "멀리 있는 무언가를 바라보는 모습.",
+        "ja": "遠くの何かを眺めている。"
+       },
+       "confusable": [
+        "looking_up",
+        "looking_to_the_side"
+       ]
+      },
+      {
+       "name": "looking_at_phone",
+       "ko": "폰을 봄",
+       "ja": "スマホを見る",
+       "note": {
+        "en": "The eyes are on a phone screen.",
+        "ko": "휴대폰 화면을 보고 있는 모습.",
+        "ja": "スマホの画面を見ている。"
+       },
+       "confusable": [
+        "looking_down"
+       ]
+      },
+      {
+       "name": "head_tilt",
+       "ko": "고개 갸웃",
+       "ja": "首をかしげる",
+       "note": {
+        "en": "The head tips sideways toward a shoulder.",
+        "ko": "고개를 한쪽 어깨 쪽으로 기울인 모습.",
+        "ja": "頭を肩の方へ傾けている。"
+       },
+       "confusable": [
+        "looking_to_the_side"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "angle.lens",
+     "title": {
+      "en": "Lens and depth",
+      "ko": "렌즈와 심도",
+      "ja": "レンズと被写界深度"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "fisheye",
+       "ko": "어안 렌즈",
+       "ja": "魚眼レンズ",
+       "note": {
+        "en": "Ultra-wide distortion where the picture bulges like a ball.",
+        "ko": "화면이 공처럼 부풀어 보이는 초광각 왜곡.",
+        "ja": "画面が球状に歪む超広角表現。"
+       },
+       "confusable": [
+        "perspective",
+        "foreshortening"
+       ]
+      },
+      {
+       "name": "foreshortening",
+       "ko": "원근 단축",
+       "ja": "フォーショートニング",
+       "note": {
+        "en": "Parts near the viewer look huge and shrink away, like a hand thrust forward.",
+        "ko": "가까운 부분이 크고 뒤로 급히 줄어드는 표현.",
+        "ja": "手前が大きく奥が急に縮んで見える表現。"
+       },
+       "confusable": [
+        "perspective",
+        "fisheye"
+       ]
+      },
+      {
+       "name": "perspective",
+       "ko": "원근법",
+       "ja": "パース",
+       "note": {
+        "en": "Strong depth lines that run toward a far point.",
+        "ko": "깊이를 강조하는 선이 먼 곳으로 모이는 표현.",
+        "ja": "奥行きの線が遠くへ収束する表現。"
+       },
+       "confusable": [
+        "vanishing_point",
+        "foreshortening"
+       ]
+      },
+      {
+       "name": "vanishing_point",
+       "ko": "소실점",
+       "ja": "消失点",
+       "note": {
+        "en": "Lines clearly meet at one point in the picture.",
+        "ko": "선들이 화면 속 한 점에서 만나는 구도.",
+        "ja": "線が画面内の一点に集まる構図。"
+       },
+       "confusable": [
+        "perspective"
+       ]
+      },
+      {
+       "name": "blurry_background",
+       "ko": "흐린 배경",
+       "ja": "背景ぼかし",
+       "note": {
+        "en": "The background is out of focus behind a sharp subject.",
+        "ko": "대상은 또렷하고 배경이 흐릿한 상태.",
+        "ja": "被写体は鮮明で背景がぼけている。"
+       },
+       "confusable": [
+        "blurry_foreground",
+        "depth_of_field"
+       ]
+      },
+      {
+       "name": "blurry_foreground",
+       "ko": "흐린 앞쪽",
+       "ja": "手前ぼかし",
+       "note": {
+        "en": "Objects in front of the subject are out of focus.",
+        "ko": "대상 앞쪽의 사물이 흐릿한 상태.",
+        "ja": "被写体の手前の物がぼけている。"
+       },
+       "confusable": [
+        "blurry_background",
+        "depth_of_field"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pose",
+   "title": {
+    "en": "Pose",
+    "ko": "포즈",
+    "ja": "ポーズ"
+   },
+   "summary": {
+    "en": "How the body, arms, hands and legs are held, and whether it moves.",
+    "ko": "몸, 팔, 손, 다리의 자세와 움직임.",
+    "ja": "体・腕・手・脚の姿勢と動き。"
+   },
+   "groups": [
+    {
+     "id": "pose.posture",
+     "title": {
+      "en": "Body posture",
+      "ko": "전체 자세",
+      "ja": "全身の姿勢"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "standing",
+       "ko": "서 있기",
+       "ja": "立つ",
+       "note": {
+        "en": "Standing upright on the feet.",
+        "ko": "두 발로 곧게 선 자세.",
+        "ja": "足で立っている姿勢。"
+       },
+       "confusable": [
+        "walking",
+        "leaning_forward"
+       ]
+      },
+      {
+       "name": "sitting",
+       "ko": "앉기",
+       "ja": "座る",
+       "note": {
+        "en": "Seated on a seat or the ground.",
+        "ko": "의자나 바닥에 앉은 자세.",
+        "ja": "椅子や地面に座っている姿勢。"
+       },
+       "confusable": [
+        "kneeling",
+        "squatting"
+       ]
+      },
+      {
+       "name": "kneeling",
+       "ko": "무릎 꿇기",
+       "ja": "ひざまずく",
+       "note": {
+        "en": "Weight on one or both knees on the ground.",
+        "ko": "한쪽 또는 양쪽 무릎을 바닥에 댄 자세.",
+        "ja": "片膝または両膝を地面につけた姿勢。"
+       },
+       "confusable": [
+        "seiza",
+        "squatting"
+       ]
+      },
+      {
+       "name": "squatting",
+       "ko": "쪼그려 앉기",
+       "ja": "しゃがむ",
+       "note": {
+        "en": "Knees bent deeply with the body low, not touching the ground.",
+        "ko": "무릎을 깊이 굽혀 몸을 낮추고 바닥에 닿지 않는 자세.",
+        "ja": "膝を深く曲げて腰を落とし、地面につかない。"
+       },
+       "confusable": [
+        "kneeling",
+        "sitting"
+       ]
+      },
+      {
+       "name": "lying",
+       "ko": "눕기",
+       "ja": "横になる",
+       "note": {
+        "en": "Lying down on a surface; tells nothing about which side.",
+        "ko": "바닥에 누운 자세. 어느 쪽인지는 따로 나타낸다.",
+        "ja": "横たわる姿勢。向きは別タグで示す。"
+       },
+       "confusable": [
+        "on_back",
+        "on_side"
+       ]
+      },
+      {
+       "name": "on_back",
+       "ko": "누운 자세(위)",
+       "ja": "仰向け",
+       "note": {
+        "en": "Lying face-up with the back on the ground.",
+        "ko": "등을 바닥에 대고 얼굴이 위를 향해 누운 자세.",
+        "ja": "背中を下にして顔を上に向けて寝る。"
+       },
+       "confusable": [
+        "on_stomach",
+        "on_side"
+       ]
+      },
+      {
+       "name": "on_side",
+       "ko": "옆으로 눕기",
+       "ja": "横向き寝",
+       "note": {
+        "en": "Lying on one side of the body.",
+        "ko": "몸의 한쪽 옆을 바닥에 대고 누운 자세.",
+        "ja": "体の片側を下にして横たわる。"
+       },
+       "confusable": [
+        "on_back",
+        "on_stomach"
+       ]
+      },
+      {
+       "name": "on_stomach",
+       "ko": "엎드리기",
+       "ja": "うつ伏せ",
+       "note": {
+        "en": "Lying face-down on the stomach.",
+        "ko": "배를 바닥에 대고 엎드린 자세.",
+        "ja": "お腹を下にしてうつ伏せに寝る。"
+       },
+       "confusable": [
+        "on_back",
+        "on_side"
+       ]
+      },
+      {
+       "name": "wariza",
+       "ko": "와리자",
+       "ja": "割り座",
+       "note": {
+        "en": "Sitting on the floor with the bottom between the feet.",
+        "ko": "두 발 사이 바닥에 엉덩이를 대고 앉는 자세.",
+        "ja": "足の間の床にお尻をつけて座る。"
+       },
+       "confusable": [
+        "seiza",
+        "indian_style"
+       ]
+      },
+      {
+       "name": "seiza",
+       "ko": "정좌",
+       "ja": "正座",
+       "note": {
+        "en": "Kneeling and sitting on the heels with the back straight.",
+        "ko": "무릎 꿇고 발뒤꿈치에 앉아 등을 편 자세.",
+        "ja": "膝をそろえ、かかとに座って背を伸ばす。"
+       },
+       "confusable": [
+        "wariza",
+        "kneeling"
+       ]
+      },
+      {
+       "name": "indian_style",
+       "ko": "책상다리",
+       "ja": "あぐら",
+       "note": {
+        "en": "Sitting cross-legged on the floor.",
+        "ko": "바닥에 양반다리로 앉은 자세.",
+        "ja": "床にあぐらをかいて座る。"
+       },
+       "confusable": [
+        "crossed_legs",
+        "wariza"
+       ]
+      },
+      {
+       "name": "leaning_forward",
+       "ko": "앞으로 숙임",
+       "ja": "前かがみ",
+       "note": {
+        "en": "The upper body tips forward from the hips.",
+        "ko": "상체를 앞으로 기울인 자세.",
+        "ja": "上体を前に傾けた姿勢。"
+       },
+       "confusable": [
+        "standing"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "pose.arms",
+     "title": {
+      "en": "Arms",
+      "ko": "팔",
+      "ja": "腕"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "arms_up",
+       "ko": "두 팔 들기",
+       "ja": "両腕を上げる",
+       "note": {
+        "en": "Both arms raised above the head.",
+        "ko": "두 팔을 머리 위로 든 자세.",
+        "ja": "両腕を頭の上に上げている。"
+       },
+       "confusable": [
+        "arm_up",
+        "outstretched_arms"
+       ]
+      },
+      {
+       "name": "arm_up",
+       "ko": "한 팔 들기",
+       "ja": "片腕を上げる",
+       "note": {
+        "en": "One arm raised.",
+        "ko": "한쪽 팔만 든 자세.",
+        "ja": "片腕だけ上げている。"
+       },
+       "confusable": [
+        "arms_up",
+        "hand_up"
+       ]
+      },
+      {
+       "name": "outstretched_arms",
+       "ko": "팔 벌리기",
+       "ja": "腕を広げる",
+       "note": {
+        "en": "Both arms spread out to the sides.",
+        "ko": "두 팔을 양옆으로 활짝 벌린 자세.",
+        "ja": "両腕を左右に広げている。"
+       },
+       "confusable": [
+        "arms_up"
+       ]
+      },
+      {
+       "name": "arms_behind_back",
+       "ko": "뒷짐",
+       "ja": "後ろ手",
+       "note": {
+        "en": "Both arms held behind the back.",
+        "ko": "두 팔을 등 뒤로 돌린 자세.",
+        "ja": "両腕を背中側に回している。"
+       },
+       "confusable": [
+        "arms_behind_head",
+        "crossed_arms"
+       ]
+      },
+      {
+       "name": "arms_behind_head",
+       "ko": "머리 뒤로 팔",
+       "ja": "頭の後ろで腕",
+       "note": {
+        "en": "Both hands rest behind the head.",
+        "ko": "두 손을 머리 뒤에 둔 자세.",
+        "ja": "両手を頭の後ろに組んでいる。"
+       },
+       "confusable": [
+        "arms_behind_back",
+        "arms_up"
+       ]
+      },
+      {
+       "name": "crossed_arms",
+       "ko": "팔짱",
+       "ja": "腕組み",
+       "note": {
+        "en": "The arms are folded across the chest.",
+        "ko": "가슴 앞에서 팔을 접어 겹친 자세.",
+        "ja": "胸の前で腕を組んでいる。"
+       },
+       "confusable": [
+        "arms_behind_back",
+        "own_hands_together"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "pose.hands",
+     "title": {
+      "en": "Hands",
+      "ko": "손동작",
+      "ja": "手のしぐさ"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "hand_up",
+       "ko": "손 들기",
+       "ja": "手を上げる",
+       "note": {
+        "en": "One hand is raised, often with the palm open.",
+        "ko": "한 손을 든 자세. 손바닥을 펴기도 한다.",
+        "ja": "片手を上げている。手のひらを開くことも。"
+       },
+       "confusable": [
+        "arm_up",
+        "waving"
+       ]
+      },
+      {
+       "name": "waving",
+       "ko": "손 흔들기",
+       "ja": "手を振る",
+       "note": {
+        "en": "A hand raised and swung in greeting.",
+        "ko": "인사하듯 손을 들어 흔드는 모습.",
+        "ja": "挨拶するように手を振っている。"
+       },
+       "confusable": [
+        "hand_up"
+       ]
+      },
+      {
+       "name": "v",
+       "ko": "브이 사인",
+       "ja": "ピース",
+       "note": {
+        "en": "A hand shows two fingers in a V.",
+        "ko": "두 손가락으로 브이를 만든 손.",
+        "ja": "二本指でVサインをしている。"
+       },
+       "confusable": [
+        "waving"
+       ]
+      },
+      {
+       "name": "pointing",
+       "ko": "가리키기",
+       "ja": "指さし",
+       "note": {
+        "en": "A finger points at something.",
+        "ko": "손가락으로 무언가를 가리키는 모습.",
+        "ja": "指で何かを示している。"
+       },
+       "confusable": [
+        "hand_up"
+       ]
+      },
+      {
+       "name": "own_hands_together",
+       "ko": "두 손 모으기",
+       "ja": "両手を合わせる",
+       "note": {
+        "en": "Both hands are pressed or clasped together in front.",
+        "ko": "자기 두 손을 앞에서 모으거나 맞잡은 모습.",
+        "ja": "自分の両手を前で合わせている。"
+       },
+       "confusable": [
+        "crossed_arms",
+        "hand_on_own_chest"
+       ]
+      },
+      {
+       "name": "hand_on_own_hip",
+       "ko": "허리에 손",
+       "ja": "腰に手",
+       "note": {
+        "en": "One hand rests on the hip.",
+        "ko": "한 손을 자기 허리에 짚은 자세.",
+        "ja": "片手を自分の腰に当てている。"
+       },
+       "confusable": [
+        "hand_on_own_chest",
+        "hands_in_pockets"
+       ]
+      },
+      {
+       "name": "hand_on_own_chest",
+       "ko": "가슴에 손",
+       "ja": "胸に手",
+       "note": {
+        "en": "A hand is placed over the chest.",
+        "ko": "손을 자기 가슴 위에 얹은 모습.",
+        "ja": "自分の胸に手を当てている。"
+       },
+       "confusable": [
+        "hand_on_own_hip",
+        "own_hands_together"
+       ]
+      },
+      {
+       "name": "hand_to_own_mouth",
+       "ko": "입가에 손",
+       "ja": "口元に手",
+       "note": {
+        "en": "A hand covers or touches the mouth.",
+        "ko": "손을 입가에 대거나 입을 가린 모습.",
+        "ja": "手を口元に当てている。"
+       },
+       "confusable": [
+        "hand_up"
+       ]
+      },
+      {
+       "name": "hands_in_pockets",
+       "ko": "주머니에 손",
+       "ja": "ポケットに手",
+       "note": {
+        "en": "Hands tucked into pockets.",
+        "ko": "두 손을 주머니에 넣은 모습.",
+        "ja": "両手をポケットに入れている。"
+       },
+       "confusable": [
+        "hand_on_own_hip"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "pose.legs",
+     "title": {
+      "en": "Legs",
+      "ko": "다리",
+      "ja": "脚"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "crossed_legs",
+       "ko": "다리 꼬기",
+       "ja": "脚を組む",
+       "note": {
+        "en": "One leg crosses over the other, seated or standing.",
+        "ko": "한쪽 다리를 다른 다리 위로 겹친 자세.",
+        "ja": "片脚をもう一方の上に組んでいる。"
+       },
+       "confusable": [
+        "indian_style",
+        "knees_up"
+       ]
+      },
+      {
+       "name": "standing_on_one_leg",
+       "ko": "한 발 서기",
+       "ja": "片足立ち",
+       "note": {
+        "en": "Balancing on a single leg.",
+        "ko": "한쪽 다리로만 선 자세.",
+        "ja": "片脚だけで立っている。"
+       },
+       "confusable": [
+        "standing"
+       ]
+      },
+      {
+       "name": "knees_up",
+       "ko": "무릎 세우기",
+       "ja": "膝を立てる",
+       "note": {
+        "en": "Sitting with the knees raised.",
+        "ko": "앉아서 무릎을 세운 자세.",
+        "ja": "座って膝を立てている。"
+       },
+       "confusable": [
+        "hugging_own_legs",
+        "crossed_legs"
+       ]
+      },
+      {
+       "name": "hugging_own_legs",
+       "ko": "무릎 끌어안기",
+       "ja": "膝を抱える",
+       "note": {
+        "en": "Arms wrap around the drawn-up legs.",
+        "ko": "끌어올린 무릎을 두 팔로 감싼 자세.",
+        "ja": "引き寄せた脚を腕で抱えている。"
+       },
+       "confusable": [
+        "knees_up"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "pose.motion",
+     "title": {
+      "en": "Motion",
+      "ko": "움직임",
+      "ja": "動き"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "walking",
+       "ko": "걷기",
+       "ja": "歩く",
+       "note": {
+        "en": "Mid-stride at a walking pace.",
+        "ko": "걷는 도중의 모습.",
+        "ja": "歩いている最中。"
+       },
+       "confusable": [
+        "running",
+        "standing"
+       ]
+      },
+      {
+       "name": "running",
+       "ko": "달리기",
+       "ja": "走る",
+       "note": {
+        "en": "Running, with both feet often off the ground.",
+        "ko": "빠르게 달리는 모습.",
+        "ja": "走っている。"
+       },
+       "confusable": [
+        "walking",
+        "jumping"
+       ]
+      },
+      {
+       "name": "jumping",
+       "ko": "점프",
+       "ja": "ジャンプ",
+       "note": {
+        "en": "Pushing off the ground into a jump.",
+        "ko": "땅을 박차고 뛰어오르는 모습.",
+        "ja": "地面を蹴って跳んでいる。"
+       },
+       "confusable": [
+        "midair",
+        "floating"
+       ]
+      },
+      {
+       "name": "midair",
+       "ko": "공중",
+       "ja": "空中",
+       "note": {
+        "en": "Airborne with nothing underfoot; wider than jumping.",
+        "ko": "발이 땅에서 떨어져 공중에 있는 상태.",
+        "ja": "足が地面を離れ宙に浮いている状態。"
+       },
+       "confusable": [
+        "jumping",
+        "floating"
+       ]
+      },
+      {
+       "name": "floating",
+       "ko": "떠 있기",
+       "ja": "浮遊",
+       "note": {
+        "en": "Drifting weightlessly, such as in water or air.",
+        "ko": "물이나 공기 중에 가볍게 떠 있는 모습.",
+        "ja": "水中や空中で軽く浮いている。"
+       },
+       "confusable": [
+        "midair",
+        "jumping"
+       ]
+      },
+      {
+       "name": "dancing",
+       "ko": "춤추기",
+       "ja": "踊る",
+       "note": {
+        "en": "Moving in a dance pose.",
+        "ko": "춤추는 동작.",
+        "ja": "踊っている動き。"
+       },
+       "confusable": [
+        "jumping"
+       ]
+      },
+      {
+       "name": "stretching",
+       "ko": "기지개",
+       "ja": "伸びをする",
+       "note": {
+        "en": "Arms and body stretched out to loosen up.",
+        "ko": "팔과 몸을 쭉 펴 기지개 켜는 모습.",
+        "ja": "腕や体を伸ばしている。"
+       },
+       "confusable": [
+        "arms_up"
+       ]
+      },
+      {
+       "name": "fighting_stance",
+       "ko": "전투 자세",
+       "ja": "構え",
+       "note": {
+        "en": "Braced stance ready to fight.",
+        "ko": "싸울 준비를 한 자세.",
+        "ja": "戦う構えをとった姿勢。"
+       },
+       "confusable": [
+        "standing"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "expression",
+   "title": {
+    "en": "Expression",
+    "ko": "표정",
+    "ja": "表情"
+   },
+   "summary": {
+    "en": "Mouth, eyes, mood and the symbols that show feeling.",
+    "ko": "입, 눈, 감정, 감정을 나타내는 기호.",
+    "ja": "口・目・感情と、感情を示す記号。"
+   },
+   "groups": [
+    {
+     "id": "expression.mouth",
+     "title": {
+      "en": "Mouth",
+      "ko": "입",
+      "ja": "口"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "smile",
+       "ko": "미소",
+       "ja": "笑顔",
+       "note": {
+        "en": "The mouth curves into a smile.",
+        "ko": "입꼬리가 올라간 미소.",
+        "ja": "口角が上がった笑顔。"
+       },
+       "confusable": [
+        "grin",
+        "smirk"
+       ]
+      },
+      {
+       "name": "grin",
+       "ko": "씩 웃음",
+       "ja": "にやり笑い",
+       "note": {
+        "en": "A wide smile showing teeth.",
+        "ko": "이를 드러내며 활짝 웃는 표정.",
+        "ja": "歯を見せて大きく笑う。"
+       },
+       "confusable": [
+        "smile",
+        "smirk"
+       ]
+      },
+      {
+       "name": "smirk",
+       "ko": "능글웃음",
+       "ja": "ふてぶてしい笑み",
+       "note": {
+        "en": "A one-sided, self-satisfied smile.",
+        "ko": "한쪽 입꼬리만 올린 득의양양한 웃음.",
+        "ja": "片側だけ口角を上げた得意げな笑み。"
+       },
+       "confusable": [
+        "smile",
+        "grin"
+       ]
+      },
+      {
+       "name": "open_mouth",
+       "ko": "입 벌림",
+       "ja": "口を開ける",
+       "note": {
+        "en": "The mouth is open.",
+        "ko": "입을 벌린 상태.",
+        "ja": "口を開けている。"
+       },
+       "confusable": [
+        "parted_lips",
+        ":o"
+       ]
+      },
+      {
+       "name": "closed_mouth",
+       "ko": "입 다묾",
+       "ja": "口を閉じる",
+       "note": {
+        "en": "The mouth is closed in a neutral line.",
+        "ko": "입을 다문 상태.",
+        "ja": "口を閉じている。"
+       },
+       "confusable": [
+        "parted_lips",
+        "smile"
+       ]
+      },
+      {
+       "name": "parted_lips",
+       "ko": "살짝 벌린 입술",
+       "ja": "唇を軽く開く",
+       "note": {
+        "en": "Lips slightly apart, less open than open_mouth.",
+        "ko": "입술이 살짝 벌어진 상태. 입 벌림보다 작다.",
+        "ja": "唇がわずかに開く。口を開けるより小さい。"
+       },
+       "confusable": [
+        "open_mouth",
+        "closed_mouth"
+       ]
+      },
+      {
+       "name": "pout",
+       "ko": "뾰로통",
+       "ja": "ふくれっ面",
+       "note": {
+        "en": "Lips pushed out in a sulk.",
+        "ko": "입술을 내밀어 토라진 표정.",
+        "ja": "唇を突き出してすねた表情。"
+       },
+       "confusable": [
+        "closed_mouth"
+       ]
+      },
+      {
+       "name": ":d",
+       "ko": "활짝 웃는 입",
+       "ja": "ニコ口",
+       "note": {
+        "en": ":D style open-mouth smile, written as a face.",
+        "ko": "웃으며 입을 벌린 :D 모양의 입.",
+        "ja": ":D の形の笑って開けた口。"
+       },
+       "confusable": [
+        "smile",
+        "open_mouth"
+       ]
+      },
+      {
+       "name": ":o",
+       "ko": "동그란 입",
+       "ja": ":o の口",
+       "note": {
+        "en": "A small round open mouth showing surprise.",
+        "ko": "놀란 듯 작고 동그랗게 벌린 입.",
+        "ja": "驚いて小さく丸く開けた口。"
+       },
+       "confusable": [
+        "open_mouth"
+       ]
+      },
+      {
+       "name": "tongue_out",
+       "ko": "혀 내밀기",
+       "ja": "舌を出す",
+       "note": {
+        "en": "The tongue sticks out of the mouth.",
+        "ko": "혀를 입 밖으로 내민 모습.",
+        "ja": "舌を出している。"
+       },
+       "confusable": [
+        "open_mouth"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "expression.eyes",
+     "title": {
+      "en": "Eyes",
+      "ko": "눈",
+      "ja": "目"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "closed_eyes",
+       "ko": "눈 감음",
+       "ja": "目を閉じる",
+       "note": {
+        "en": "Both eyes are shut.",
+        "ko": "두 눈을 감은 상태.",
+        "ja": "両目を閉じている。"
+       },
+       "confusable": [
+        "one_eye_closed",
+        "half-closed_eyes"
+       ]
+      },
+      {
+       "name": "one_eye_closed",
+       "ko": "윙크",
+       "ja": "片目を閉じる",
+       "note": {
+        "en": "One eye shut, as in a wink.",
+        "ko": "한쪽 눈만 감은 윙크 상태.",
+        "ja": "片目だけ閉じたウインク。"
+       },
+       "confusable": [
+        "closed_eyes"
+       ]
+      },
+      {
+       "name": "half-closed_eyes",
+       "ko": "반쯤 감긴 눈",
+       "ja": "半目",
+       "note": {
+        "en": "The eyelids droop halfway.",
+        "ko": "눈꺼풀이 반쯤 내려온 상태.",
+        "ja": "まぶたが半分下りている。"
+       },
+       "confusable": [
+        "jitome",
+        "closed_eyes"
+       ]
+      },
+      {
+       "name": "wide-eyed",
+       "ko": "눈 휘둥그레",
+       "ja": "目を見開く",
+       "note": {
+        "en": "Eyes opened wide.",
+        "ko": "눈을 크게 뜬 상태.",
+        "ja": "目を大きく見開いている。"
+       },
+       "confusable": [
+        "surprised"
+       ]
+      },
+      {
+       "name": "tears",
+       "ko": "눈물",
+       "ja": "涙",
+       "note": {
+        "en": "Tears gather or fall from the eyes.",
+        "ko": "눈에 맺히거나 흐르는 눈물.",
+        "ja": "目に溜まる、またはこぼれる涙。"
+       },
+       "confusable": [
+        "crying"
+       ]
+      },
+      {
+       "name": "crying",
+       "ko": "울기",
+       "ja": "泣く",
+       "note": {
+        "en": "A sobbing face, usually with tears running.",
+        "ko": "눈물 흘리며 우는 얼굴.",
+        "ja": "涙を流して泣いている顔。"
+       },
+       "confusable": [
+        "tears",
+        "sad"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "expression.emotion",
+     "title": {
+      "en": "Emotion",
+      "ko": "감정",
+      "ja": "感情"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "blush",
+       "ko": "홍조",
+       "ja": "赤面",
+       "note": {
+        "en": "Reddened cheeks from shyness or warmth.",
+        "ko": "부끄러움 등으로 볼이 붉어진 모습.",
+        "ja": "照れなどで頬が赤くなる。"
+       },
+       "confusable": [
+        "embarrassed"
+       ]
+      },
+      {
+       "name": "embarrassed",
+       "ko": "당황 / 부끄러움",
+       "ja": "恥ずかしがる",
+       "note": {
+        "en": "Visibly flustered or ashamed.",
+        "ko": "부끄럽고 당황한 표정.",
+        "ja": "恥ずかしくて慌てた表情。"
+       },
+       "confusable": [
+        "blush",
+        "nervous"
+       ]
+      },
+      {
+       "name": "angry",
+       "ko": "화남",
+       "ja": "怒り",
+       "note": {
+        "en": "A furious face with a glare.",
+        "ko": "눈을 부라리며 화난 표정.",
+        "ja": "怒って睨む表情。"
+       },
+       "confusable": [
+        "annoyed"
+       ]
+      },
+      {
+       "name": "annoyed",
+       "ko": "짜증",
+       "ja": "イラ立ち",
+       "note": {
+        "en": "Mildly irritated, milder than angry.",
+        "ko": "화남보다 약한 짜증스러운 표정.",
+        "ja": "怒りより軽い、うんざりした表情。"
+       },
+       "confusable": [
+        "angry"
+       ]
+      },
+      {
+       "name": "surprised",
+       "ko": "놀람",
+       "ja": "驚き",
+       "note": {
+        "en": "Shocked, with eyes wide and mouth often open.",
+        "ko": "눈이 커지고 입이 벌어진 놀란 표정.",
+        "ja": "目を見開き口が開いた驚きの表情。"
+       },
+       "confusable": [
+        "scared",
+        "wide-eyed"
+       ]
+      },
+      {
+       "name": "scared",
+       "ko": "겁먹음",
+       "ja": "怯える",
+       "note": {
+        "en": "Frightened and cringing.",
+        "ko": "겁에 질려 움츠린 표정.",
+        "ja": "怖がって縮こまった表情。"
+       },
+       "confusable": [
+        "nervous",
+        "surprised"
+       ]
+      },
+      {
+       "name": "nervous",
+       "ko": "긴장",
+       "ja": "緊張",
+       "note": {
+        "en": "Tense or uneasy, often with sweat.",
+        "ko": "불안하고 긴장한 표정. 땀이 맺히기도 한다.",
+        "ja": "不安で落ち着かない表情。汗を伴うことも。"
+       },
+       "confusable": [
+        "scared",
+        "embarrassed"
+       ]
+      },
+      {
+       "name": "sad",
+       "ko": "슬픔",
+       "ja": "悲しい",
+       "note": {
+        "en": "A downcast, sorrowful look.",
+        "ko": "풀이 죽은 슬픈 표정.",
+        "ja": "落ち込んだ悲しげな表情。"
+       },
+       "confusable": [
+        "crying"
+       ]
+      },
+      {
+       "name": "happy",
+       "ko": "행복",
+       "ja": "嬉しい",
+       "note": {
+        "en": "Joyful, in a cheerful mood.",
+        "ko": "즐겁고 기쁜 표정.",
+        "ja": "楽しく嬉しそうな表情。"
+       },
+       "confusable": [
+        "smile"
+       ]
+      },
+      {
+       "name": "expressionless",
+       "ko": "무표정",
+       "ja": "無表情",
+       "note": {
+        "en": "A blank face with no visible feeling.",
+        "ko": "감정이 드러나지 않는 얼굴.",
+        "ja": "感情の見えない顔。"
+       },
+       "confusable": [
+        "serious",
+        "empty_eyes"
+       ]
+      },
+      {
+       "name": "serious",
+       "ko": "진지",
+       "ja": "真剣",
+       "note": {
+        "en": "A firm, focused face, not blank.",
+        "ko": "굳고 집중한 진지한 얼굴. 무표정과는 다르다.",
+        "ja": "引き締まった真剣な顔。無表情とは違う。"
+       },
+       "confusable": [
+        "expressionless"
+       ]
+      },
+      {
+       "name": "sleepy",
+       "ko": "졸림",
+       "ja": "眠そう",
+       "note": {
+        "en": "Drowsy, with drooping eyelids.",
+        "ko": "눈꺼풀이 처진 졸린 얼굴.",
+        "ja": "まぶたが重い眠そうな顔。"
+       },
+       "confusable": [
+        "half-closed_eyes"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "expression.symbols",
+     "title": {
+      "en": "Manga symbols",
+      "ko": "만화 기호",
+      "ja": "漫符"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "sweatdrop",
+       "ko": "땀방울",
+       "ja": "汗マーク",
+       "note": {
+        "en": "A drop beside the head showing awkwardness.",
+        "ko": "머리 옆의 방울로 난처함을 나타낸다.",
+        "ja": "頭の横の滴で気まずさを表す。"
+       },
+       "confusable": [
+        "nervous"
+       ]
+      },
+      {
+       "name": "anger_vein",
+       "ko": "혈관 마크",
+       "ja": "怒りマーク",
+       "note": {
+        "en": "A cross-shaped vein mark for anger.",
+        "ko": "화를 나타내는 十자 혈관 기호.",
+        "ja": "怒りを表す十字の血管マーク。"
+       },
+       "confusable": [
+        "angry"
+       ]
+      },
+      {
+       "name": "heart",
+       "ko": "하트",
+       "ja": "ハート",
+       "note": {
+        "en": "A heart shape floating in the picture.",
+        "ko": "화면에 떠 있는 하트 모양.",
+        "ja": "画面に浮かぶハート型。"
+       }
+      },
+      {
+       "name": "^_^",
+       "ko": "웃는 눈",
+       "ja": "^_^",
+       "note": {
+        "en": "Eyes drawn as happy upward arcs.",
+        "ko": "즐겁게 감은 호 모양의 눈.",
+        "ja": "笑って閉じた弧の目。"
+       },
+       "confusable": [
+        "closed_eyes",
+        ">_<"
+       ]
+      },
+      {
+       "name": ">_<",
+       "ko": "꾹 감은 눈",
+       "ja": "><の目",
+       "note": {
+        "en": "Eyes squeezed shut, as in strain or pain.",
+        "ko": "힘주어 꾹 감은 > < 모양 눈.",
+        "ja": "ぎゅっとつぶった > < の目。"
+       },
+       "confusable": [
+        "^_^",
+        "closed_eyes"
+       ]
+      },
+      {
+       "name": "@_@",
+       "ko": "빙글 눈",
+       "ja": "ぐるぐる目",
+       "note": {
+        "en": "Spiral eyes showing dizziness.",
+        "ko": "어지러움을 나타내는 소용돌이 눈.",
+        "ja": "目が回った様子の渦巻き目。"
+       }
+      },
+      {
+       "name": "!",
+       "ko": "느낌표",
+       "ja": "!",
+       "note": {
+        "en": "An exclamation mark for surprise or alarm.",
+        "ko": "놀람을 나타내는 느낌표.",
+        "ja": "驚きを示す感嘆符。"
+       },
+       "confusable": [
+        "?"
+       ]
+      },
+      {
+       "name": "?",
+       "ko": "물음표",
+       "ja": "?",
+       "note": {
+        "en": "A question mark for confusion.",
+        "ko": "의문이나 당황을 나타내는 물음표.",
+        "ja": "疑問や困惑を示す疑問符。"
+       },
+       "confusable": [
+        "!"
+       ]
+      },
+      {
+       "name": "spoken_question_mark",
+       "ko": "말풍선 물음표",
+       "ja": "吹き出しの?",
+       "note": {
+        "en": "A speech bubble containing only a question mark.",
+        "ko": "말풍선 안에 물음표만 든 표현.",
+        "ja": "吹き出しの中に?だけがある。"
+       },
+       "confusable": [
+        "?"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hair",
+   "title": {
+    "en": "Hair",
+    "ko": "머리카락",
+    "ja": "髪"
+   },
+   "summary": {
+    "en": "Hair colour, length, style and fringe.",
+    "ko": "머리 색, 길이, 스타일, 앞머리.",
+    "ja": "髪の色・長さ・髪型・前髪。"
+   },
+   "groups": [
+    {
+     "id": "hair.colour",
+     "title": {
+      "en": "Hair colour",
+      "ko": "머리 색",
+      "ja": "髪の色"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "blonde_hair",
+       "ko": "금발",
+       "ja": "金髪",
+       "note": {
+        "en": "Yellow or golden hair.",
+        "ko": "노란색, 황금빛 머리카락.",
+        "ja": "黄色や黄金色の髪。"
+       }
+      },
+      {
+       "name": "black_hair",
+       "ko": "검은 머리",
+       "ja": "黒髪",
+       "note": {
+        "en": "Black hair.",
+        "ko": "검은색 머리카락.",
+        "ja": "黒い髪。"
+       },
+       "confusable": [
+        "brown_hair"
+       ]
+      },
+      {
+       "name": "brown_hair",
+       "ko": "갈색 머리",
+       "ja": "茶髪",
+       "note": {
+        "en": "Brown hair, lighter than black.",
+        "ko": "검정보다 밝은 갈색 머리카락.",
+        "ja": "黒より明るい茶色の髪。"
+       },
+       "confusable": [
+        "black_hair"
+       ]
+      },
+      {
+       "name": "white_hair",
+       "ko": "흰 머리",
+       "ja": "白髪",
+       "note": {
+        "en": "Pure white hair, often for fantasy characters.",
+        "ko": "순백색 머리카락. 판타지 캐릭터에 많음.",
+        "ja": "真っ白な髪。ファンタジー系に多い。"
+       },
+       "confusable": [
+        "grey_hair"
+       ]
+      },
+      {
+       "name": "grey_hair",
+       "ko": "회색 머리",
+       "ja": "灰色の髪",
+       "note": {
+        "en": "Grey or silver hair; the tag is spelled with an e.",
+        "ko": "회색·은빛 머리카락. 철자는 grey.",
+        "ja": "灰色や銀色の髪。綴りはgrey。"
+       },
+       "confusable": [
+        "white_hair"
+       ]
+      },
+      {
+       "name": "pink_hair",
+       "ko": "분홍 머리",
+       "ja": "ピンク髪",
+       "note": {
+        "en": "Pink hair.",
+        "ko": "분홍색 머리카락.",
+        "ja": "ピンク色の髪。"
+       }
+      },
+      {
+       "name": "blue_hair",
+       "ko": "파란 머리",
+       "ja": "青髪",
+       "note": {
+        "en": "Blue hair.",
+        "ko": "파란색 머리카락.",
+        "ja": "青い髪。"
+       }
+      },
+      {
+       "name": "red_hair",
+       "ko": "빨간 머리",
+       "ja": "赤髪",
+       "note": {
+        "en": "Red hair.",
+        "ko": "빨간색 머리카락.",
+        "ja": "赤い髪。"
+       },
+       "confusable": [
+        "brown_hair"
+       ]
+      },
+      {
+       "name": "purple_hair",
+       "ko": "보라 머리",
+       "ja": "紫髪",
+       "note": {
+        "en": "Purple hair.",
+        "ko": "보라색 머리카락.",
+        "ja": "紫色の髪。"
+       }
+      },
+      {
+       "name": "green_hair",
+       "ko": "초록 머리",
+       "ja": "緑髪",
+       "note": {
+        "en": "Green hair.",
+        "ko": "초록색 머리카락.",
+        "ja": "緑色の髪。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "hair.multi",
+     "title": {
+      "en": "Multicolour hair",
+      "ko": "여러 색 머리",
+      "ja": "複数色の髪"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "multicolored_hair",
+       "ko": "멀티컬러 머리",
+       "ja": "マルチカラーの髪",
+       "note": {
+        "en": "Hair with two or more colours; the general tag for this.",
+        "ko": "두 가지 이상 색이 섞인 머리. 가장 넓은 태그.",
+        "ja": "二色以上の髪。最も広いタグ。"
+       },
+       "confusable": [
+        "two-tone_hair"
+       ]
+      },
+      {
+       "name": "two-tone_hair",
+       "ko": "투톤 머리",
+       "ja": "ツートンの髪",
+       "note": {
+        "en": "Two colours split into clear halves, e.g. left and right.",
+        "ko": "두 색이 뚜렷하게 나뉜 머리.",
+        "ja": "二色がはっきり分かれた髪。"
+       },
+       "confusable": [
+        "multicolored_hair",
+        "streaked_hair"
+       ]
+      },
+      {
+       "name": "gradient_hair",
+       "ko": "그라데이션 머리",
+       "ja": "グラデーションの髪",
+       "note": {
+        "en": "Colour fades smoothly from one to another along the strands.",
+        "ko": "한 색에서 다른 색으로 서서히 변하는 머리.",
+        "ja": "毛先に向かって色が滑らかに変わる髪。"
+       },
+       "confusable": [
+        "two-tone_hair"
+       ]
+      },
+      {
+       "name": "streaked_hair",
+       "ko": "브릿지 머리",
+       "ja": "メッシュの髪",
+       "note": {
+        "en": "A few strands in a different colour.",
+        "ko": "일부 가닥만 다른 색인 머리.",
+        "ja": "一部の房だけ違う色の髪。"
+       },
+       "confusable": [
+        "two-tone_hair"
+       ]
+      },
+      {
+       "name": "colored_inner_hair",
+       "ko": "안쪽 염색 머리",
+       "ja": "インナーカラー",
+       "note": {
+        "en": "Colour only on the inner layer, seen under the top hair.",
+        "ko": "겉머리 아래 안쪽만 염색한 머리.",
+        "ja": "内側の層だけ染めた髪。"
+       },
+       "confusable": [
+        "streaked_hair"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "hair.length",
+     "title": {
+      "en": "Hair length",
+      "ko": "머리 길이",
+      "ja": "髪の長さ"
+     },
+     "exclusive": true,
+     "visual": true,
+     "tags": [
+      {
+       "name": "very_short_hair",
+       "ko": "아주 짧은 머리",
+       "ja": "超ショートヘア",
+       "note": {
+        "en": "Cropped close, above the ears or neck.",
+        "ko": "귀나 목 위로 바싹 짧게 자른 머리.",
+        "ja": "耳や首より上の短い髪。"
+       },
+       "confusable": [
+        "short_hair"
+       ]
+      },
+      {
+       "name": "short_hair",
+       "ko": "짧은 머리",
+       "ja": "ショートヘア",
+       "note": {
+        "en": "Ends around the chin or neck.",
+        "ko": "턱이나 목 언저리에서 끝나는 머리.",
+        "ja": "あごや首あたりまでの髪。"
+       },
+       "confusable": [
+        "very_short_hair",
+        "medium_hair"
+       ]
+      },
+      {
+       "name": "medium_hair",
+       "ko": "중간 길이 머리",
+       "ja": "ミディアムヘア",
+       "note": {
+        "en": "Ends around the shoulders, between short and long.",
+        "ko": "어깨 근처에서 끝나는 길이.",
+        "ja": "肩あたりまでの髪。"
+       },
+       "confusable": [
+        "short_hair",
+        "long_hair"
+       ]
+      },
+      {
+       "name": "long_hair",
+       "ko": "긴 머리",
+       "ja": "ロングヘア",
+       "note": {
+        "en": "Reaches past the shoulders toward the back or waist.",
+        "ko": "어깨를 넘어 등이나 허리 쪽까지 오는 머리.",
+        "ja": "肩を越え背中や腰へ届く髪。"
+       },
+       "confusable": [
+        "medium_hair",
+        "very_long_hair"
+       ]
+      },
+      {
+       "name": "very_long_hair",
+       "ko": "아주 긴 머리",
+       "ja": "とても長い髪",
+       "note": {
+        "en": "Falls past the waist, down to the hips or thighs.",
+        "ko": "허리를 넘어 엉덩이·허벅지까지 오는 머리.",
+        "ja": "腰を越え腰〜太ももまで届く髪。"
+       },
+       "confusable": [
+        "long_hair",
+        "absurdly_long_hair"
+       ]
+      },
+      {
+       "name": "absurdly_long_hair",
+       "ko": "땅에 끌리는 머리",
+       "ja": "極端に長い髪",
+       "note": {
+        "en": "Impossibly long, reaching the knees or trailing on the floor.",
+        "ko": "무릎 아래, 바닥에 끌릴 만큼 비현실적으로 긴 머리.",
+        "ja": "膝より下、床に届くほど非現実的に長い髪。"
+       },
+       "confusable": [
+        "very_long_hair"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "hair.style",
+     "title": {
+      "en": "Hairstyles",
+      "ko": "머리 모양",
+      "ja": "髪型"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "ponytail",
+       "ko": "포니테일",
+       "ja": "ポニーテール",
+       "note": {
+        "en": "Hair gathered into one tail at the back of the head.",
+        "ko": "머리를 뒤에서 한 가닥으로 묶은 모양.",
+        "ja": "後頭部で一つに束ねた髪型。"
+       },
+       "confusable": [
+        "side_ponytail",
+        "twintails"
+       ]
+      },
+      {
+       "name": "side_ponytail",
+       "ko": "사이드 포니테일",
+       "ja": "サイドポニーテール",
+       "note": {
+        "en": "One tail tied off to one side of the head.",
+        "ko": "머리 한쪽 옆에서 묶은 한 갈래 꼬리.",
+        "ja": "頭の片側で束ねた一つ結び。"
+       },
+       "confusable": [
+        "ponytail"
+       ]
+      },
+      {
+       "name": "twintails",
+       "ko": "트윈테일",
+       "ja": "ツインテール",
+       "note": {
+        "en": "Two tails tied on both sides of the head.",
+        "ko": "머리 양쪽에서 두 갈래로 묶은 모양.",
+        "ja": "頭の両側で二つに束ねた髪型。"
+       },
+       "confusable": [
+        "ponytail",
+        "twin_braids"
+       ]
+      },
+      {
+       "name": "braid",
+       "ko": "땋은 머리",
+       "ja": "三つ編み",
+       "note": {
+        "en": "A single plaited braid.",
+        "ko": "한 가닥으로 땋은 머리.",
+        "ja": "一本の三つ編み。"
+       },
+       "confusable": [
+        "twin_braids"
+       ]
+      },
+      {
+       "name": "twin_braids",
+       "ko": "양갈래 땋은 머리",
+       "ja": "三つ編みおさげ",
+       "note": {
+        "en": "Two braids, one on each side.",
+        "ko": "양쪽으로 두 가닥 땋은 머리.",
+        "ja": "左右二本の三つ編み。"
+       },
+       "confusable": [
+        "braid",
+        "twintails"
+       ]
+      },
+      {
+       "name": "hair_bun",
+       "ko": "똥머리",
+       "ja": "お団子ヘア",
+       "note": {
+        "en": "Hair coiled into one round knot.",
+        "ko": "머리를 둥글게 말아 올린 하나의 덩어리.",
+        "ja": "髪を丸くまとめた一つのお団子。"
+       },
+       "confusable": [
+        "double_bun"
+       ]
+      },
+      {
+       "name": "double_bun",
+       "ko": "양쪽 똥머리",
+       "ja": "ツインお団子",
+       "note": {
+        "en": "Two round buns, usually one each side.",
+        "ko": "양쪽에 둥근 뭉치를 두 개 만든 모양.",
+        "ja": "左右に二つ作ったお団子。"
+       },
+       "confusable": [
+        "hair_bun"
+       ]
+      },
+      {
+       "name": "drill_hair",
+       "ko": "드릴 머리",
+       "ja": "ドリルヘア",
+       "note": {
+        "en": "Tight spiral curls like a drill, ringlets.",
+        "ko": "드릴처럼 단단히 말린 나선형 컬.",
+        "ja": "ドリルのように巻いた縦ロール。"
+       },
+       "confusable": [
+        "wavy_hair"
+       ]
+      },
+      {
+       "name": "wavy_hair",
+       "ko": "웨이브 머리",
+       "ja": "ウェーブヘア",
+       "note": {
+        "en": "Softly wavy hair; looser than drill curls.",
+        "ko": "부드럽게 물결치는 머리. 드릴보다 느슨함.",
+        "ja": "柔らかく波打つ髪。ドリルより緩い。"
+       },
+       "confusable": [
+        "drill_hair"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "hair.fringe",
+     "title": {
+      "en": "Fringe and details",
+      "ko": "앞머리와 디테일",
+      "ja": "前髪・ディテール"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "bangs",
+       "ko": "앞머리",
+       "ja": "前髪",
+       "note": {
+        "en": "Hair falling over the forehead; the general fringe tag.",
+        "ko": "이마를 덮는 앞머리. 가장 넓은 태그.",
+        "ja": "額にかかる前髪。最も広いタグ。"
+       },
+       "confusable": [
+        "blunt_bangs",
+        "parted_bangs"
+       ]
+      },
+      {
+       "name": "blunt_bangs",
+       "ko": "일자 앞머리",
+       "ja": "ぱっつん前髪",
+       "note": {
+        "en": "Straight-cut bangs ending in a flat line.",
+        "ko": "가지런히 일직선으로 자른 앞머리.",
+        "ja": "真っ直ぐ切り揃えた前髪。"
+       },
+       "confusable": [
+        "bangs"
+       ]
+      },
+      {
+       "name": "swept_bangs",
+       "ko": "비껴 넘긴 앞머리",
+       "ja": "流し前髪",
+       "note": {
+        "en": "Bangs swept to one side across the forehead.",
+        "ko": "한쪽으로 비스듬히 넘긴 앞머리.",
+        "ja": "片側に流した前髪。"
+       },
+       "confusable": [
+        "parted_bangs"
+       ]
+      },
+      {
+       "name": "parted_bangs",
+       "ko": "가르마 앞머리",
+       "ja": "センター分け前髪",
+       "note": {
+        "en": "Bangs split in the middle, showing the forehead.",
+        "ko": "가운데로 갈라 이마가 보이는 앞머리.",
+        "ja": "中央で分けて額が見える前髪。"
+       },
+       "confusable": [
+        "swept_bangs"
+       ]
+      },
+      {
+       "name": "hair_between_eyes",
+       "ko": "눈 사이 머리카락",
+       "ja": "目の間の髪",
+       "note": {
+        "en": "A lock hanging down between the eyes.",
+        "ko": "두 눈 사이로 내려온 한 가닥 머리.",
+        "ja": "両目の間に垂れた一房の髪。"
+       },
+       "confusable": [
+        "hair_over_one_eye"
+       ]
+      },
+      {
+       "name": "hair_over_one_eye",
+       "ko": "한쪽 눈을 가린 머리",
+       "ja": "片目隠れの髪",
+       "note": {
+        "en": "Hair covering one eye completely.",
+        "ko": "한쪽 눈을 완전히 가린 머리.",
+        "ja": "片目を隠すように覆った髪。"
+       },
+       "confusable": [
+        "hair_between_eyes"
+       ]
+      },
+      {
+       "name": "sidelocks",
+       "ko": "옆머리",
+       "ja": "もみあげ髪",
+       "note": {
+        "en": "Locks of hair framing the face beside the cheeks.",
+        "ko": "얼굴 옆으로 흘러내린 머리 가닥.",
+        "ja": "顔の横に垂れる髪の房。"
+       },
+       "confusable": [
+        "hair_intakes"
+       ]
+      },
+      {
+       "name": "ahoge",
+       "ko": "아호게",
+       "ja": "アホ毛",
+       "note": {
+        "en": "A single strand sticking up from the head.",
+        "ko": "머리 위로 삐죽 솟은 한 가닥 머리.",
+        "ja": "頭頂から立つ一本の毛。"
+       }
+      },
+      {
+       "name": "hair_intakes",
+       "ko": "헤어 인테이크",
+       "ja": "ヘアインテーク",
+       "note": {
+        "en": "Tufts of hair sticking out at the sides of the head like air vents.",
+        "ko": "머리 양옆으로 공기구처럼 삐져나온 머리 뭉치.",
+        "ja": "頭の両脇に吸気口のように突き出た髪の房。"
+       },
+       "confusable": [
+        "sidelocks"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "face",
+   "title": {
+    "en": "Eyes and face",
+    "ko": "눈과 얼굴",
+    "ja": "目と顔"
+   },
+   "summary": {
+    "en": "Eye colour, eye shapes and small facial details.",
+    "ko": "눈동자 색, 눈 모양, 얼굴의 작은 특징.",
+    "ja": "瞳の色・目の形・顔の細かな特徴。"
+   },
+   "groups": [
+    {
+     "id": "face.colour",
+     "title": {
+      "en": "Eye colour",
+      "ko": "눈 색",
+      "ja": "瞳の色"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "blue_eyes",
+       "ko": "파란 눈",
+       "ja": "青い瞳",
+       "note": {
+        "en": "Blue eyes.",
+        "ko": "파란색 눈동자.",
+        "ja": "青い瞳。"
+       },
+       "confusable": [
+        "aqua_eyes"
+       ]
+      },
+      {
+       "name": "red_eyes",
+       "ko": "빨간 눈",
+       "ja": "赤い瞳",
+       "note": {
+        "en": "Red eyes.",
+        "ko": "빨간색 눈동자.",
+        "ja": "赤い瞳。"
+       },
+       "confusable": [
+        "pink_eyes"
+       ]
+      },
+      {
+       "name": "green_eyes",
+       "ko": "초록 눈",
+       "ja": "緑の瞳",
+       "note": {
+        "en": "Green eyes.",
+        "ko": "초록색 눈동자.",
+        "ja": "緑の瞳。"
+       },
+       "confusable": [
+        "aqua_eyes"
+       ]
+      },
+      {
+       "name": "brown_eyes",
+       "ko": "갈색 눈",
+       "ja": "茶色の瞳",
+       "note": {
+        "en": "Brown eyes.",
+        "ko": "갈색 눈동자.",
+        "ja": "茶色の瞳。"
+       },
+       "confusable": [
+        "black_eyes"
+       ]
+      },
+      {
+       "name": "yellow_eyes",
+       "ko": "노란 눈",
+       "ja": "黄色い瞳",
+       "note": {
+        "en": "Yellow or golden eyes.",
+        "ko": "노랗거나 황금빛인 눈동자.",
+        "ja": "黄色や金色の瞳。"
+       },
+       "confusable": [
+        "orange_eyes"
+       ]
+      },
+      {
+       "name": "purple_eyes",
+       "ko": "보라 눈",
+       "ja": "紫の瞳",
+       "note": {
+        "en": "Purple eyes.",
+        "ko": "보라색 눈동자.",
+        "ja": "紫色の瞳。"
+       }
+      },
+      {
+       "name": "pink_eyes",
+       "ko": "분홍 눈",
+       "ja": "ピンクの瞳",
+       "note": {
+        "en": "Pink eyes.",
+        "ko": "분홍색 눈동자.",
+        "ja": "ピンク色の瞳。"
+       },
+       "confusable": [
+        "red_eyes"
+       ]
+      },
+      {
+       "name": "aqua_eyes",
+       "ko": "청록 눈",
+       "ja": "水色の瞳",
+       "note": {
+        "en": "Turquoise eyes, between blue and green.",
+        "ko": "파랑과 초록 사이 청록색 눈동자.",
+        "ja": "青と緑の間の水色の瞳。"
+       },
+       "confusable": [
+        "blue_eyes",
+        "green_eyes"
+       ]
+      },
+      {
+       "name": "orange_eyes",
+       "ko": "주황 눈",
+       "ja": "オレンジの瞳",
+       "note": {
+        "en": "Orange eyes.",
+        "ko": "주황색 눈동자.",
+        "ja": "オレンジ色の瞳。"
+       },
+       "confusable": [
+        "yellow_eyes"
+       ]
+      },
+      {
+       "name": "black_eyes",
+       "ko": "검은 눈",
+       "ja": "黒い瞳",
+       "note": {
+        "en": "Black eyes.",
+        "ko": "검은색 눈동자.",
+        "ja": "黒い瞳。"
+       },
+       "confusable": [
+        "brown_eyes"
+       ]
+      },
+      {
+       "name": "grey_eyes",
+       "ko": "회색 눈",
+       "ja": "灰色の瞳",
+       "note": {
+        "en": "Grey eyes; the tag is spelled with an e.",
+        "ko": "회색 눈동자. 철자는 grey.",
+        "ja": "灰色の瞳。綴りはgrey。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "face.eyes",
+     "title": {
+      "en": "Eye shape and effects",
+      "ko": "눈 모양과 효과",
+      "ja": "目の形・演出"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "heterochromia",
+       "ko": "오드아이",
+       "ja": "オッドアイ",
+       "note": {
+        "en": "The two eyes are different colours.",
+        "ko": "양쪽 눈의 색이 서로 다름.",
+        "ja": "左右の瞳の色が違う。"
+       }
+      },
+      {
+       "name": "tsurime",
+       "ko": "올라간 눈꼬리",
+       "ja": "つり目",
+       "note": {
+        "en": "Eyes whose outer corners slant upward; a sharp look.",
+        "ko": "눈꼬리가 위로 올라간, 날카로운 인상의 눈.",
+        "ja": "目尻が上がった鋭い印象の目。"
+       },
+       "confusable": [
+        "tareme",
+        "jitome"
+       ]
+      },
+      {
+       "name": "tareme",
+       "ko": "처진 눈꼬리",
+       "ja": "たれ目",
+       "note": {
+        "en": "Eyes whose outer corners droop downward; a gentle look.",
+        "ko": "눈꼬리가 아래로 처진 온화한 인상의 눈.",
+        "ja": "目尻が下がった柔らかい印象の目。"
+       },
+       "confusable": [
+        "tsurime"
+       ]
+      },
+      {
+       "name": "jitome",
+       "ko": "무표정한 반눈",
+       "ja": "ジト目",
+       "note": {
+        "en": "Flat, half-lidded stare with heavy upper lids.",
+        "ko": "윗눈꺼풀이 무거워 보이는 흘겨보는 눈.",
+        "ja": "まぶたが重い、冷めた半眼。"
+       },
+       "confusable": [
+        "tsurime"
+       ]
+      },
+      {
+       "name": "eyelashes",
+       "ko": "속눈썹",
+       "ja": "まつ毛",
+       "note": {
+        "en": "Lashes drawn clearly along the eyelid.",
+        "ko": "눈꺼풀을 따라 뚜렷이 그린 속눈썹.",
+        "ja": "まぶたに沿って描いたまつ毛。"
+       }
+      },
+      {
+       "name": "slit_pupils",
+       "ko": "세로 동공",
+       "ja": "縦長の瞳孔",
+       "note": {
+        "en": "Thin vertical pupils, like a cat or snake.",
+        "ko": "고양이·뱀처럼 가늘고 세로로 긴 동공.",
+        "ja": "猫や蛇のような縦に細い瞳孔。"
+       }
+      },
+      {
+       "name": "symbol-shaped_pupils",
+       "ko": "기호 모양 동공",
+       "ja": "記号型の瞳孔",
+       "note": {
+        "en": "Pupils shaped like a heart, star or other symbol.",
+        "ko": "하트나 별 같은 모양의 동공.",
+        "ja": "ハートや星などの形の瞳孔。"
+       }
+      },
+      {
+       "name": "glowing_eyes",
+       "ko": "빛나는 눈",
+       "ja": "光る瞳",
+       "note": {
+        "en": "Eyes that glow as if lit from within.",
+        "ko": "안에서 빛나는 듯한 눈.",
+        "ja": "内側から光るように見える瞳。"
+       },
+       "confusable": [
+        "empty_eyes"
+       ]
+      },
+      {
+       "name": "empty_eyes",
+       "ko": "공허한 눈",
+       "ja": "虚ろな目",
+       "note": {
+        "en": "Dull eyes with no highlights, a blank look.",
+        "ko": "하이라이트 없는 멍하고 텅 빈 눈.",
+        "ja": "ハイライトがなく虚ろな目。"
+       },
+       "confusable": [
+        "glowing_eyes"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "face.details",
+     "title": {
+      "en": "Face details",
+      "ko": "얼굴 특징",
+      "ja": "顔のディテール"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "mole",
+       "ko": "점",
+       "ja": "ほくろ",
+       "note": {
+        "en": "A small dark mole on the skin.",
+        "ko": "피부 위의 작고 검은 점.",
+        "ja": "肌にある小さなほくろ。"
+       },
+       "confusable": [
+        "mole_under_eye"
+       ]
+      },
+      {
+       "name": "mole_under_eye",
+       "ko": "눈 밑 점",
+       "ja": "泣きぼくろ",
+       "note": {
+        "en": "A mole just beneath the eye.",
+        "ko": "눈 바로 아래에 있는 점.",
+        "ja": "目の下にあるほくろ。"
+       },
+       "confusable": [
+        "mole"
+       ]
+      },
+      {
+       "name": "freckles",
+       "ko": "주근깨",
+       "ja": "そばかす",
+       "note": {
+        "en": "Many small spots across the cheeks and nose.",
+        "ko": "뺨과 코에 흩어진 작은 점들.",
+        "ja": "頬や鼻に散った小さな斑点。"
+       },
+       "confusable": [
+        "mole"
+       ]
+      },
+      {
+       "name": "fang",
+       "ko": "송곳니",
+       "ja": "八重歯",
+       "note": {
+        "en": "A small pointed tooth showing from the mouth.",
+        "ko": "입 밖으로 살짝 보이는 뾰족한 이빨.",
+        "ja": "口からのぞく小さな尖った歯。"
+       }
+      },
+      {
+       "name": "thick_eyebrows",
+       "ko": "굵은 눈썹",
+       "ja": "太眉",
+       "note": {
+        "en": "Bold, heavy eyebrows.",
+        "ko": "굵고 진한 눈썹.",
+        "ja": "太くはっきりした眉。"
+       }
+      },
+      {
+       "name": "facial_mark",
+       "ko": "얼굴 문양",
+       "ja": "顔のマーク",
+       "note": {
+        "en": "Marks, stripes or tattoos drawn on the face.",
+        "ko": "얼굴에 그려진 무늬나 선, 문신.",
+        "ja": "顔に描かれた模様やライン。"
+       },
+       "confusable": [
+        "scar_on_face"
+       ]
+      },
+      {
+       "name": "scar_on_face",
+       "ko": "얼굴 흉터",
+       "ja": "顔の傷跡",
+       "note": {
+        "en": "A scar running across the face.",
+        "ko": "얼굴에 난 흉터.",
+        "ja": "顔にある傷跡。"
+       },
+       "confusable": [
+        "facial_mark"
+       ]
+      },
+      {
+       "name": "makeup",
+       "ko": "화장",
+       "ja": "メイク",
+       "note": {
+        "en": "Cosmetics on the face in general.",
+        "ko": "얼굴에 한 화장 전반.",
+        "ja": "顔のメイク全般。"
+       },
+       "confusable": [
+        "lipstick",
+        "eyeshadow"
+       ]
+      },
+      {
+       "name": "lipstick",
+       "ko": "립스틱",
+       "ja": "口紅",
+       "note": {
+        "en": "Colour applied to the lips.",
+        "ko": "입술에 바른 색.",
+        "ja": "唇に塗った色。"
+       },
+       "confusable": [
+        "makeup"
+       ]
+      },
+      {
+       "name": "eyeshadow",
+       "ko": "아이섀도",
+       "ja": "アイシャドウ",
+       "note": {
+        "en": "Colour applied on the eyelids.",
+        "ko": "눈꺼풀에 칠한 색.",
+        "ja": "まぶたに塗った色。"
+       },
+       "confusable": [
+        "makeup"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "body",
+   "title": {
+    "en": "Body and species",
+    "ko": "신체와 종족",
+    "ja": "身体と種族"
+   },
+   "summary": {
+    "en": "Animal and fantasy features, kinds of character and skin.",
+    "ko": "동물·판타지 특징, 캐릭터 종류, 피부.",
+    "ja": "動物・ファンタジーの特徴、種族、肌。"
+   },
+   "groups": [
+    {
+     "id": "body.animal",
+     "title": {
+      "en": "Animal features",
+      "ko": "동물 특징",
+      "ja": "動物の特徴"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "animal_ears",
+       "ko": "동물 귀",
+       "ja": "獣耳",
+       "note": {
+        "en": "Ears of an animal on a human; the general tag.",
+        "ko": "사람 머리에 달린 동물 귀. 가장 넓은 태그.",
+        "ja": "人に生えた動物の耳。最も広いタグ。"
+       },
+       "confusable": [
+        "cat_ears",
+        "fox_ears"
+       ]
+      },
+      {
+       "name": "cat_ears",
+       "ko": "고양이 귀",
+       "ja": "猫耳",
+       "note": {
+        "en": "Pointed triangular cat ears on the head.",
+        "ko": "머리 위의 뾰족한 삼각형 고양이 귀.",
+        "ja": "頭の上の三角形の猫耳。"
+       },
+       "confusable": [
+        "fox_ears"
+       ]
+      },
+      {
+       "name": "fox_ears",
+       "ko": "여우 귀",
+       "ja": "狐耳",
+       "note": {
+        "en": "Large pointed ears, fuller than cat ears.",
+        "ko": "고양이 귀보다 크고 풍성한 뾰족 귀.",
+        "ja": "猫耳より大きくふさふさした耳。"
+       },
+       "confusable": [
+        "cat_ears",
+        "wolf_ears"
+       ]
+      },
+      {
+       "name": "wolf_ears",
+       "ko": "늑대 귀",
+       "ja": "狼耳",
+       "note": {
+        "en": "Wolf ears, often darker and rounder at the tip.",
+        "ko": "끝이 둥글고 짙은 색이 많은 늑대 귀.",
+        "ja": "先が丸めで濃い色が多い狼の耳。"
+       },
+       "confusable": [
+        "fox_ears",
+        "dog_ears"
+       ]
+      },
+      {
+       "name": "dog_ears",
+       "ko": "개 귀",
+       "ja": "犬耳",
+       "note": {
+        "en": "Floppy or drooping dog ears.",
+        "ko": "아래로 처진 개 귀.",
+        "ja": "垂れた犬の耳。"
+       },
+       "confusable": [
+        "wolf_ears"
+       ]
+      },
+      {
+       "name": "rabbit_ears",
+       "ko": "토끼 귀",
+       "ja": "うさ耳",
+       "note": {
+        "en": "Long upright or drooping rabbit ears.",
+        "ko": "길게 솟거나 늘어진 토끼 귀.",
+        "ja": "長く立つか垂れたうさぎの耳。"
+       }
+      },
+      {
+       "name": "horse_ears",
+       "ko": "말 귀",
+       "ja": "馬耳",
+       "note": {
+        "en": "Horse ears, upright and rounded.",
+        "ko": "위로 선 둥근 말 귀.",
+        "ja": "立った丸みのある馬の耳。"
+       }
+      },
+      {
+       "name": "tail",
+       "ko": "꼬리",
+       "ja": "しっぽ",
+       "note": {
+        "en": "A tail growing from a human body; the general tag.",
+        "ko": "사람 몸에 달린 꼬리. 가장 넓은 태그.",
+        "ja": "人の体に生えたしっぽ。最も広いタグ。"
+       },
+       "confusable": [
+        "cat_tail",
+        "fox_tail"
+       ]
+      },
+      {
+       "name": "cat_tail",
+       "ko": "고양이 꼬리",
+       "ja": "猫の尻尾",
+       "note": {
+        "en": "A slim cat tail.",
+        "ko": "가늘고 긴 고양이 꼬리.",
+        "ja": "細長い猫のしっぽ。"
+       },
+       "confusable": [
+        "fox_tail"
+       ]
+      },
+      {
+       "name": "fox_tail",
+       "ko": "여우 꼬리",
+       "ja": "狐の尻尾",
+       "note": {
+        "en": "A big bushy tail, often several.",
+        "ko": "크고 풍성한 꼬리. 여러 개인 경우도 많음.",
+        "ja": "大きくふさふさしたしっぽ。複数も多い。"
+       },
+       "confusable": [
+        "cat_tail"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "body.fantasy",
+     "title": {
+      "en": "Fantasy features",
+      "ko": "판타지 특징",
+      "ja": "ファンタジーの特徴"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "horns",
+       "ko": "뿔",
+       "ja": "角",
+       "note": {
+        "en": "Horns on the head; the general tag.",
+        "ko": "머리에 난 뿔. 가장 넓은 태그.",
+        "ja": "頭に生えた角。最も広いタグ。"
+       },
+       "confusable": [
+        "demon_horns"
+       ]
+      },
+      {
+       "name": "demon_horns",
+       "ko": "악마 뿔",
+       "ja": "悪魔の角",
+       "note": {
+        "en": "Small curved horns of a demon.",
+        "ko": "악마의 작고 휘어진 뿔.",
+        "ja": "悪魔の小さく曲がった角。"
+       },
+       "confusable": [
+        "horns"
+       ]
+      },
+      {
+       "name": "wings",
+       "ko": "날개",
+       "ja": "翼",
+       "note": {
+        "en": "Wings on the back; the general tag.",
+        "ko": "등에 달린 날개. 가장 넓은 태그.",
+        "ja": "背中の翼。最も広いタグ。"
+       },
+       "confusable": [
+        "angel_wings",
+        "demon_wings"
+       ]
+      },
+      {
+       "name": "angel_wings",
+       "ko": "천사 날개",
+       "ja": "天使の翼",
+       "note": {
+        "en": "White feathered wings.",
+        "ko": "흰 깃털로 된 날개.",
+        "ja": "白い羽根の翼。"
+       },
+       "confusable": [
+        "demon_wings"
+       ]
+      },
+      {
+       "name": "demon_wings",
+       "ko": "악마 날개",
+       "ja": "悪魔の翼",
+       "note": {
+        "en": "Bat-like wings, often dark.",
+        "ko": "박쥐 같은 어두운 색 날개.",
+        "ja": "コウモリのような暗い色の翼。"
+       },
+       "confusable": [
+        "angel_wings"
+       ]
+      },
+      {
+       "name": "fairy_wings",
+       "ko": "요정 날개",
+       "ja": "妖精の羽",
+       "note": {
+        "en": "Thin, translucent insect-like wings.",
+        "ko": "얇고 투명한 곤충 같은 날개.",
+        "ja": "薄く透き通った虫のような羽。"
+       },
+       "confusable": [
+        "angel_wings"
+       ]
+      },
+      {
+       "name": "halo",
+       "ko": "후광",
+       "ja": "天使の輪",
+       "note": {
+        "en": "A ring of light floating above the head.",
+        "ko": "머리 위에 떠 있는 빛의 고리.",
+        "ja": "頭上に浮かぶ光の輪。"
+       }
+      },
+      {
+       "name": "pointy_ears",
+       "ko": "뾰족한 귀",
+       "ja": "とがった耳",
+       "note": {
+        "en": "Human-shaped ears with long pointed tips, as an elf's.",
+        "ko": "사람 귀 모양에 끝이 길게 뾰족한 귀.",
+        "ja": "先が長く尖った人型の耳。"
+       },
+       "confusable": [
+        "animal_ears"
+       ]
+      },
+      {
+       "name": "demon_tail",
+       "ko": "악마 꼬리",
+       "ja": "悪魔の尻尾",
+       "note": {
+        "en": "A thin tail with a spade or arrow tip.",
+        "ko": "끝이 화살촉 모양인 가느다란 꼬리.",
+        "ja": "先が矢じり型の細いしっぽ。"
+       },
+       "confusable": [
+        "tail"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "body.kind",
+     "title": {
+      "en": "Kinds of character",
+      "ko": "캐릭터 종류",
+      "ja": "キャラクターの種類"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "elf",
+       "ko": "엘프",
+       "ja": "エルフ",
+       "note": {
+        "en": "A long-eared fantasy folk.",
+        "ko": "귀가 긴 판타지 종족.",
+        "ja": "耳の長いファンタジーの種族。"
+       },
+       "confusable": [
+        "pointy_ears"
+       ]
+      },
+      {
+       "name": "cat_girl",
+       "ko": "고양이 소녀",
+       "ja": "猫娘",
+       "note": {
+        "en": "A girl with cat ears and tail.",
+        "ko": "고양이 귀와 꼬리를 가진 소녀.",
+        "ja": "猫耳としっぽを持つ少女。"
+       },
+       "confusable": [
+        "fox_girl"
+       ]
+      },
+      {
+       "name": "fox_girl",
+       "ko": "여우 소녀",
+       "ja": "狐娘",
+       "note": {
+        "en": "A girl with fox ears and tails.",
+        "ko": "여우 귀와 꼬리를 가진 소녀.",
+        "ja": "狐耳としっぽを持つ少女。"
+       },
+       "confusable": [
+        "cat_girl"
+       ]
+      },
+      {
+       "name": "angel",
+       "ko": "천사",
+       "ja": "天使",
+       "note": {
+        "en": "A winged heavenly being, often with a halo.",
+        "ko": "날개와 후광을 지닌 천상의 존재.",
+        "ja": "翼や輪を持つ天上の存在。"
+       },
+       "confusable": [
+        "demon_girl"
+       ]
+      },
+      {
+       "name": "demon_girl",
+       "ko": "악마 소녀",
+       "ja": "悪魔っ娘",
+       "note": {
+        "en": "A girl with demon horns, wings or tail.",
+        "ko": "악마의 뿔·날개·꼬리를 가진 소녀.",
+        "ja": "悪魔の角・翼・尻尾を持つ少女。"
+       },
+       "confusable": [
+        "angel"
+       ]
+      },
+      {
+       "name": "vampire",
+       "ko": "흡혈귀",
+       "ja": "吸血鬼",
+       "note": {
+        "en": "A fanged night creature, often in a cape.",
+        "ko": "송곳니를 드러낸 밤의 존재. 망토가 많음.",
+        "ja": "牙を持つ夜の存在。マントが多い。"
+       }
+      },
+      {
+       "name": "mermaid",
+       "ko": "인어",
+       "ja": "人魚",
+       "note": {
+        "en": "A person with a fish tail instead of legs.",
+        "ko": "다리 대신 물고기 꼬리를 가진 모습.",
+        "ja": "脚の代わりに魚の尾を持つ姿。"
+       }
+      },
+      {
+       "name": "robot",
+       "ko": "로봇",
+       "ja": "ロボット",
+       "note": {
+        "en": "A machine body with visible mechanical parts.",
+        "ko": "기계 부품이 드러나는 기계 몸.",
+        "ja": "機械部品が見えるメカの体。"
+       },
+       "confusable": [
+        "android"
+       ]
+      },
+      {
+       "name": "android",
+       "ko": "안드로이드",
+       "ja": "アンドロイド",
+       "note": {
+        "en": "A human-looking robot, with joints or seams as hints.",
+        "ko": "관절이나 이음새로 구분되는 사람 모습의 로봇.",
+        "ja": "関節や継ぎ目で分かる人型ロボット。"
+       },
+       "confusable": [
+        "robot"
+       ]
+      },
+      {
+       "name": "monster_girl",
+       "ko": "몬스터 소녀",
+       "ja": "モンスター娘",
+       "note": {
+        "en": "A girl who has monster traits such as scales or claws.",
+        "ko": "비늘·발톱 같은 괴물 특징을 가진 소녀.",
+        "ja": "鱗や爪など怪物の特徴を持つ少女。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "body.skin",
+     "title": {
+      "en": "Skin and age",
+      "ko": "피부와 연령",
+      "ja": "肌と年齢"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "dark_skin",
+       "ko": "어두운 피부",
+       "ja": "褐色肌",
+       "note": {
+        "en": "Dark-brown skin tone.",
+        "ko": "짙은 갈색 피부.",
+        "ja": "濃い褐色の肌。"
+       },
+       "confusable": [
+        "pale_skin"
+       ]
+      },
+      {
+       "name": "pale_skin",
+       "ko": "창백한 피부",
+       "ja": "色白の肌",
+       "note": {
+        "en": "Very light, pale skin.",
+        "ko": "매우 밝고 창백한 피부.",
+        "ja": "とても白い肌。"
+       },
+       "confusable": [
+        "dark_skin"
+       ]
+      },
+      {
+       "name": "colored_skin",
+       "ko": "특수한 피부색",
+       "ja": "色付きの肌",
+       "note": {
+        "en": "Unnatural skin colours such as blue or green.",
+        "ko": "파랑·초록 같은 비현실적인 피부색.",
+        "ja": "青や緑など非現実的な肌色。"
+       }
+      },
+      {
+       "name": "muscular",
+       "ko": "근육질",
+       "ja": "筋肉質",
+       "note": {
+        "en": "A heavily built, bulky muscular body.",
+        "ko": "근육이 크게 발달한 체격.",
+        "ja": "筋肉が大きく発達した体つき。"
+       }
+      },
+      {
+       "name": "aged_down",
+       "ko": "어려진 모습",
+       "ja": "年齢を下げた姿",
+       "note": {
+        "en": "An original character drawn younger than usual.",
+        "ko": "원래보다 어리게 그린 모습.",
+        "ja": "本来より若く描いた姿。"
+       },
+       "confusable": [
+        "aged_up"
+       ]
+      },
+      {
+       "name": "aged_up",
+       "ko": "나이 든 모습",
+       "ja": "年齢を上げた姿",
+       "note": {
+        "en": "An original character drawn older than usual.",
+        "ko": "원래보다 나이 들게 그린 모습.",
+        "ja": "本来より年上に描いた姿。"
+       },
+       "confusable": [
+        "aged_down"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "outfit",
+   "title": {
+    "en": "Outfits",
+    "ko": "의상",
+    "ja": "服装"
+   },
+   "summary": {
+    "en": "Uniforms, traditional dress, tops and sleeves.",
+    "ko": "제복, 전통 의상, 상의와 소매.",
+    "ja": "制服・和装・トップス・袖。"
+   },
+   "groups": [
+    {
+     "id": "outfit.sets",
+     "title": {
+      "en": "Uniforms and sets",
+      "ko": "제복과 세트",
+      "ja": "制服・セット"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "school_uniform",
+       "ko": "교복",
+       "ja": "学生服",
+       "note": {
+        "en": "Any school uniform; the general tag.",
+        "ko": "학교 교복 전반. 가장 넓은 태그.",
+        "ja": "学校の制服全般。最も広いタグ。"
+       },
+       "confusable": [
+        "serafuku"
+       ]
+      },
+      {
+       "name": "serafuku",
+       "ko": "세일러복",
+       "ja": "セーラー服",
+       "note": {
+        "en": "Sailor-collar school uniform with a neckerchief.",
+        "ko": "세일러 칼라와 스카프가 달린 교복.",
+        "ja": "セーラーカラーとスカーフの制服。"
+       },
+       "confusable": [
+        "school_uniform",
+        "sailor_collar"
+       ]
+      },
+      {
+       "name": "gym_uniform",
+       "ko": "체육복",
+       "ja": "体操服",
+       "note": {
+        "en": "A PE shirt with shorts or bloomers.",
+        "ko": "체육 시간에 입는 상의와 하의.",
+        "ja": "体育で着る上下の運動着。"
+       }
+      },
+      {
+       "name": "maid",
+       "ko": "메이드복",
+       "ja": "メイド服",
+       "note": {
+        "en": "A maid's dress with white apron and headdress.",
+        "ko": "흰 앞치마와 머리장식이 있는 메이드 복장.",
+        "ja": "白いエプロンとカチューシャのメイド服。"
+       }
+      },
+      {
+       "name": "military_uniform",
+       "ko": "군복",
+       "ja": "軍服",
+       "note": {
+        "en": "A uniform with a structured jacket and often a cap.",
+        "ko": "각진 재킷에 모자가 곁들여지는 제복.",
+        "ja": "きっちりした上着と帽子が付く制服。"
+       }
+      },
+      {
+       "name": "business_suit",
+       "ko": "정장",
+       "ja": "ビジネススーツ",
+       "note": {
+        "en": "Jacket and trousers or skirt for office wear.",
+        "ko": "사무용 재킷과 바지·치마 정장.",
+        "ja": "事務用の上着とパンツやスカートのスーツ。"
+       },
+       "confusable": [
+        "blazer"
+       ]
+      },
+      {
+       "name": "pajamas",
+       "ko": "잠옷",
+       "ja": "パジャマ",
+       "note": {
+        "en": "Loose sleepwear.",
+        "ko": "헐렁한 잠옷.",
+        "ja": "ゆったりした寝間着。"
+       }
+      },
+      {
+       "name": "armor",
+       "ko": "갑옷",
+       "ja": "鎧",
+       "note": {
+        "en": "Metal plates protecting the body.",
+        "ko": "몸을 덮는 금속 갑옷.",
+        "ja": "体を覆う金属の鎧。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "outfit.trad",
+     "title": {
+      "en": "Traditional dress",
+      "ko": "전통 의상",
+      "ja": "伝統衣装"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "japanese_clothes",
+       "ko": "일본 전통 의상",
+       "ja": "和服",
+       "note": {
+        "en": "Traditional Japanese dress; the general tag.",
+        "ko": "일본 전통 의상 전반. 넓은 태그.",
+        "ja": "日本の伝統衣装全般。広いタグ。"
+       },
+       "confusable": [
+        "kimono",
+        "yukata"
+       ]
+      },
+      {
+       "name": "kimono",
+       "ko": "기모노",
+       "ja": "着物",
+       "note": {
+        "en": "Formal long robe wrapped with a wide obi.",
+        "ko": "넓은 오비로 여미는 격식 있는 긴 옷.",
+        "ja": "広い帯で締める格式ある長着。"
+       },
+       "confusable": [
+        "yukata"
+       ]
+      },
+      {
+       "name": "yukata",
+       "ko": "유카타",
+       "ja": "浴衣",
+       "note": {
+        "en": "Casual summer cotton robe, lighter than a kimono.",
+        "ko": "기모노보다 가벼운 여름 무명 옷.",
+        "ja": "着物より軽い夏の木綿の着物。"
+       },
+       "confusable": [
+        "kimono"
+       ]
+      },
+      {
+       "name": "hakama",
+       "ko": "하카마",
+       "ja": "袴",
+       "note": {
+        "en": "Pleated wide trousers worn over a robe.",
+        "ko": "옷 위에 입는 주름 잡힌 넓은 바지.",
+        "ja": "着物の上にはくひだの入った袴。"
+       }
+      },
+      {
+       "name": "miko",
+       "ko": "무녀",
+       "ja": "巫女",
+       "note": {
+        "en": "Shrine maiden, in white top and red hakama.",
+        "ko": "흰 상의와 붉은 하카마의 신사 무녀.",
+        "ja": "白い上衣と赤い袴の神社の巫女。"
+       },
+       "confusable": [
+        "hakama"
+       ]
+      },
+      {
+       "name": "obi",
+       "ko": "오비",
+       "ja": "帯",
+       "note": {
+        "en": "The wide sash tied around a kimono.",
+        "ko": "기모노 허리에 두르는 넓은 띠.",
+        "ja": "着物の腰に巻く幅広の帯。"
+       },
+       "confusable": [
+        "kimono"
+       ]
+      },
+      {
+       "name": "chinese_clothes",
+       "ko": "중국 전통 의상",
+       "ja": "中華風の服",
+       "note": {
+        "en": "Chinese-style clothes; the general tag.",
+        "ko": "중국풍 의상 전반. 넓은 태그.",
+        "ja": "中国風の服全般。広いタグ。"
+       },
+       "confusable": [
+        "china_dress"
+       ]
+      },
+      {
+       "name": "china_dress",
+       "ko": "차이나 드레스",
+       "ja": "チャイナドレス",
+       "note": {
+        "en": "Fitted dress with a high collar and slit skirt.",
+        "ko": "높은 칼라와 옆트임이 있는 몸에 붙는 드레스.",
+        "ja": "立て襟とスリットのある体に沿ったドレス。"
+       },
+       "confusable": [
+        "chinese_clothes"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "outfit.tops",
+     "title": {
+      "en": "Tops and dresses",
+      "ko": "상의와 원피스",
+      "ja": "トップス・ドレス"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "shirt",
+       "ko": "셔츠",
+       "ja": "シャツ",
+       "note": {
+        "en": "A collared button shirt.",
+        "ko": "칼라와 단추가 있는 셔츠.",
+        "ja": "襟とボタンのあるシャツ。"
+       },
+       "confusable": [
+        "t-shirt",
+        "white_shirt"
+       ]
+      },
+      {
+       "name": "white_shirt",
+       "ko": "흰 셔츠",
+       "ja": "白いシャツ",
+       "note": {
+        "en": "A white button shirt.",
+        "ko": "흰색 셔츠.",
+        "ja": "白いシャツ。"
+       },
+       "confusable": [
+        "shirt"
+       ]
+      },
+      {
+       "name": "t-shirt",
+       "ko": "티셔츠",
+       "ja": "Tシャツ",
+       "note": {
+        "en": "A casual short-sleeved shirt with no collar.",
+        "ko": "칼라 없는 짧은 소매의 캐주얼 셔츠.",
+        "ja": "襟のない半袖のカジュアルなシャツ。"
+       },
+       "confusable": [
+        "shirt"
+       ]
+      },
+      {
+       "name": "sweater",
+       "ko": "스웨터",
+       "ja": "セーター",
+       "note": {
+        "en": "Knitted pullover.",
+        "ko": "뜨개질로 짠 풀오버.",
+        "ja": "ニットのプルオーバー。"
+       },
+       "confusable": [
+        "cardigan",
+        "hoodie"
+       ]
+      },
+      {
+       "name": "hoodie",
+       "ko": "후드티",
+       "ja": "パーカー",
+       "note": {
+        "en": "A sweatshirt with a hood.",
+        "ko": "모자가 달린 맨투맨 상의.",
+        "ja": "フード付きのスウェット。"
+       },
+       "confusable": [
+        "sweater"
+       ]
+      },
+      {
+       "name": "jacket",
+       "ko": "재킷",
+       "ja": "ジャケット",
+       "note": {
+        "en": "A short outer layer worn over a shirt.",
+        "ko": "셔츠 위에 입는 짧은 겉옷.",
+        "ja": "シャツの上に着る短い上着。"
+       },
+       "confusable": [
+        "coat",
+        "blazer"
+       ]
+      },
+      {
+       "name": "coat",
+       "ko": "코트",
+       "ja": "コート",
+       "note": {
+        "en": "A long heavy outer layer.",
+        "ko": "기장이 길고 두툼한 겉옷.",
+        "ja": "丈が長く厚手の上着。"
+       },
+       "confusable": [
+        "jacket"
+       ]
+      },
+      {
+       "name": "cardigan",
+       "ko": "카디건",
+       "ja": "カーディガン",
+       "note": {
+        "en": "Front-opening knit top.",
+        "ko": "앞이 트인 니트 상의.",
+        "ja": "前開きのニット。"
+       },
+       "confusable": [
+        "sweater"
+       ]
+      },
+      {
+       "name": "blazer",
+       "ko": "블레이저",
+       "ja": "ブレザー",
+       "note": {
+        "en": "A tailored jacket, as in a school uniform.",
+        "ko": "교복 등에 쓰이는 맞춤 재킷.",
+        "ja": "制服などで着る仕立てのよい上着。"
+       },
+       "confusable": [
+        "jacket"
+       ]
+      },
+      {
+       "name": "dress",
+       "ko": "원피스",
+       "ja": "ワンピース",
+       "note": {
+        "en": "A one-piece garment joining top and skirt.",
+        "ko": "상의와 치마가 이어진 한 벌 옷.",
+        "ja": "トップスとスカートが一続きの服。"
+       },
+       "confusable": [
+        "sundress"
+       ]
+      },
+      {
+       "name": "sundress",
+       "ko": "썬드레스",
+       "ja": "サンドレス",
+       "note": {
+        "en": "A light summer dress with thin straps.",
+        "ko": "가는 어깨끈의 가벼운 여름 원피스.",
+        "ja": "細い肩紐の軽い夏のワンピース。"
+       },
+       "confusable": [
+        "dress"
+       ]
+      },
+      {
+       "name": "wedding_dress",
+       "ko": "웨딩드레스",
+       "ja": "ウェディングドレス",
+       "note": {
+        "en": "A long white bridal gown.",
+        "ko": "길고 흰 신부 드레스.",
+        "ja": "白く長い花嫁のドレス。"
+       },
+       "confusable": [
+        "dress"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "outfit.sleeves",
+     "title": {
+      "en": "Sleeves and collars",
+      "ko": "소매와 칼라",
+      "ja": "袖・襟"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "long_sleeves",
+       "ko": "긴 소매",
+       "ja": "長袖",
+       "note": {
+        "en": "Sleeves covering the whole arm.",
+        "ko": "팔 전체를 덮는 소매.",
+        "ja": "腕全体を覆う袖。"
+       },
+       "confusable": [
+        "short_sleeves"
+       ]
+      },
+      {
+       "name": "short_sleeves",
+       "ko": "짧은 소매",
+       "ja": "半袖",
+       "note": {
+        "en": "Sleeves ending above the elbow.",
+        "ko": "팔꿈치 위에서 끝나는 소매.",
+        "ja": "ひじより上で終わる袖。"
+       },
+       "confusable": [
+        "long_sleeves",
+        "sleeveless"
+       ]
+      },
+      {
+       "name": "sleeveless",
+       "ko": "민소매",
+       "ja": "ノースリーブ",
+       "note": {
+        "en": "No sleeves, arms bare.",
+        "ko": "소매가 없고 팔이 드러난 옷.",
+        "ja": "袖がなく腕が出ている服。"
+       },
+       "confusable": [
+        "detached_sleeves"
+       ]
+      },
+      {
+       "name": "detached_sleeves",
+       "ko": "분리형 소매",
+       "ja": "デタッチドスリーブ",
+       "note": {
+        "en": "Sleeves separated from the top, tied to the arms.",
+        "ko": "상의와 분리되어 팔에만 걸친 소매.",
+        "ja": "トップスと分かれて腕にだけ付く袖。"
+       },
+       "confusable": [
+        "sleeveless"
+       ]
+      },
+      {
+       "name": "wide_sleeves",
+       "ko": "넓은 소매",
+       "ja": "広い袖",
+       "note": {
+        "en": "Sleeves that flare out wide, as in traditional dress.",
+        "ko": "전통 의상처럼 넓게 퍼지는 소매.",
+        "ja": "和装のように大きく広がる袖。"
+       },
+       "confusable": [
+        "puffy_sleeves"
+       ]
+      },
+      {
+       "name": "puffy_sleeves",
+       "ko": "퍼프 소매",
+       "ja": "パフスリーブ",
+       "note": {
+        "en": "Sleeves gathered into a rounded puff.",
+        "ko": "둥글게 부풀린 소매.",
+        "ja": "丸く膨らませた袖。"
+       },
+       "confusable": [
+        "wide_sleeves"
+       ]
+      },
+      {
+       "name": "sleeves_past_wrists",
+       "ko": "손목 넘는 소매",
+       "ja": "萌え袖",
+       "note": {
+        "en": "Sleeves too long, covering the hands to the wrists.",
+        "ko": "손목을 지나 손등까지 덮는 긴 소매.",
+        "ja": "手首を越えて手を隠す長い袖。"
+       },
+       "confusable": [
+        "long_sleeves"
+       ]
+      },
+      {
+       "name": "sailor_collar",
+       "ko": "세일러 칼라",
+       "ja": "セーラーカラー",
+       "note": {
+        "en": "A broad square collar on the back, as on sailor tops.",
+        "ko": "뒤가 네모나게 넓은 세일러풍 칼라.",
+        "ja": "背中が四角く広い水兵風の襟。"
+       },
+       "confusable": [
+        "serafuku"
+       ]
+      },
+      {
+       "name": "turtleneck",
+       "ko": "터틀넥",
+       "ja": "タートルネック",
+       "note": {
+        "en": "A high, tubular collar folded around the neck.",
+        "ko": "목을 감싸는 높은 통 모양 칼라.",
+        "ja": "首を覆う高い筒状の襟。"
+       }
+      },
+      {
+       "name": "off_shoulder",
+       "ko": "오프숄더",
+       "ja": "オフショルダー",
+       "note": {
+        "en": "The neckline drops to leave the shoulders bare.",
+        "ko": "어깨가 드러나도록 파인 옷.",
+        "ja": "肩が出るよう襟ぐりが下がった服。"
+       },
+       "confusable": [
+        "sleeveless"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "legwear",
+   "title": {
+    "en": "Skirts, legs and shoes",
+    "ko": "치마·다리·신발",
+    "ja": "スカート・脚・靴"
+   },
+   "summary": {
+    "en": "Bottoms, legwear and footwear.",
+    "ko": "하의, 다리에 신는 것, 신발.",
+    "ja": "ボトムス・レッグウェア・靴。"
+   },
+   "groups": [
+    {
+     "id": "legwear.bottoms",
+     "title": {
+      "en": "Skirts and trousers",
+      "ko": "치마와 바지",
+      "ja": "スカート・パンツ"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "skirt",
+       "ko": "치마",
+       "ja": "スカート",
+       "note": {
+        "en": "A skirt of any kind; the general tag.",
+        "ko": "모든 치마. 가장 넓은 태그.",
+        "ja": "あらゆるスカート。最も広いタグ。"
+       },
+       "confusable": [
+        "pleated_skirt",
+        "miniskirt"
+       ]
+      },
+      {
+       "name": "pleated_skirt",
+       "ko": "주름치마",
+       "ja": "プリーツスカート",
+       "note": {
+        "en": "Skirt with regular folds, as in a school uniform.",
+        "ko": "교복처럼 규칙적인 주름이 있는 치마.",
+        "ja": "制服のような規則的なひだのあるスカート。"
+       },
+       "confusable": [
+        "miniskirt"
+       ]
+      },
+      {
+       "name": "miniskirt",
+       "ko": "미니스커트",
+       "ja": "ミニスカート",
+       "note": {
+        "en": "A skirt ending high on the thigh.",
+        "ko": "허벅지 위쪽에서 끝나는 짧은 치마.",
+        "ja": "太ももの上で終わる短いスカート。"
+       },
+       "confusable": [
+        "long_skirt"
+       ]
+      },
+      {
+       "name": "long_skirt",
+       "ko": "롱스커트",
+       "ja": "ロングスカート",
+       "note": {
+        "en": "A skirt reaching the calves or ankles.",
+        "ko": "종아리나 발목까지 오는 치마.",
+        "ja": "ふくらはぎや足首まであるスカート。"
+       },
+       "confusable": [
+        "miniskirt"
+       ]
+      },
+      {
+       "name": "plaid_skirt",
+       "ko": "체크 치마",
+       "ja": "チェックのスカート",
+       "note": {
+        "en": "A skirt with a checked tartan pattern.",
+        "ko": "체크무늬가 있는 치마.",
+        "ja": "格子柄のスカート。"
+       },
+       "confusable": [
+        "pleated_skirt"
+       ]
+      },
+      {
+       "name": "shorts",
+       "ko": "반바지",
+       "ja": "ショートパンツ",
+       "note": {
+        "en": "Trousers ending above the knee.",
+        "ko": "무릎 위에서 끝나는 바지.",
+        "ja": "ひざ上で終わるパンツ。"
+       },
+       "confusable": [
+        "pants"
+       ]
+      },
+      {
+       "name": "pants",
+       "ko": "바지",
+       "ja": "パンツ",
+       "note": {
+        "en": "Long trousers covering the legs.",
+        "ko": "다리를 덮는 긴 바지.",
+        "ja": "脚を覆う長いズボン。"
+       },
+       "confusable": [
+        "shorts",
+        "jeans"
+       ]
+      },
+      {
+       "name": "jeans",
+       "ko": "청바지",
+       "ja": "ジーンズ",
+       "note": {
+        "en": "Denim trousers.",
+        "ko": "데님 소재의 바지.",
+        "ja": "デニム生地のパンツ。"
+       },
+       "confusable": [
+        "pants"
+       ]
+      },
+      {
+       "name": "overalls",
+       "ko": "멜빵바지",
+       "ja": "オーバーオール",
+       "note": {
+        "en": "Trousers with a bib and shoulder straps.",
+        "ko": "어깨끈과 가슴판이 달린 바지.",
+        "ja": "胸当てと肩紐の付いたパンツ。"
+       },
+       "confusable": [
+        "pants"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "legwear.socks",
+     "title": {
+      "en": "Legwear",
+      "ko": "스타킹·양말",
+      "ja": "靴下・タイツ"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "thighhighs",
+       "ko": "니하이 스타킹",
+       "ja": "ニーソックス",
+       "note": {
+        "en": "Stockings reaching the thighs; the general tag.",
+        "ko": "허벅지까지 오는 스타킹. 넓은 태그.",
+        "ja": "太ももまで届くソックス。広いタグ。"
+       },
+       "confusable": [
+        "kneehighs",
+        "pantyhose"
+       ]
+      },
+      {
+       "name": "black_thighhighs",
+       "ko": "검은 니하이",
+       "ja": "黒ニーソ",
+       "note": {
+        "en": "Black thigh-high stockings.",
+        "ko": "검은색 허벅지 길이 스타킹.",
+        "ja": "黒い太もも丈のソックス。"
+       },
+       "confusable": [
+        "thighhighs"
+       ]
+      },
+      {
+       "name": "white_thighhighs",
+       "ko": "흰 니하이",
+       "ja": "白ニーソ",
+       "note": {
+        "en": "White thigh-high stockings.",
+        "ko": "흰색 허벅지 길이 스타킹.",
+        "ja": "白い太もも丈のソックス。"
+       },
+       "confusable": [
+        "thighhighs"
+       ]
+      },
+      {
+       "name": "striped_thighhighs",
+       "ko": "줄무늬 니하이",
+       "ja": "縞ニーソ",
+       "note": {
+        "en": "Thigh-highs with stripes.",
+        "ko": "줄무늬가 있는 허벅지 길이 스타킹.",
+        "ja": "縞模様の太もも丈ソックス。"
+       },
+       "confusable": [
+        "thighhighs"
+       ]
+      },
+      {
+       "name": "kneehighs",
+       "ko": "무릎 양말",
+       "ja": "ハイソックス",
+       "note": {
+        "en": "Socks reaching just below the knee; shorter than thighhighs.",
+        "ko": "무릎 바로 아래까지 오는 양말. 니하이보다 짧음.",
+        "ja": "ひざ下まである靴下。ニーソより短い。"
+       },
+       "confusable": [
+        "thighhighs",
+        "socks"
+       ]
+      },
+      {
+       "name": "pantyhose",
+       "ko": "팬티스타킹",
+       "ja": "パンスト",
+       "note": {
+        "en": "Sheer tights covering the whole leg up to the waist.",
+        "ko": "허리까지 다리 전체를 덮는 얇은 스타킹.",
+        "ja": "腰から足先までを覆う薄いタイツ。"
+       },
+       "confusable": [
+        "thighhighs"
+       ]
+      },
+      {
+       "name": "black_pantyhose",
+       "ko": "검은 팬티스타킹",
+       "ja": "黒パンスト",
+       "note": {
+        "en": "Black sheer tights.",
+        "ko": "검은색 얇은 스타킹.",
+        "ja": "黒い薄手のタイツ。"
+       },
+       "confusable": [
+        "pantyhose"
+       ]
+      },
+      {
+       "name": "socks",
+       "ko": "양말",
+       "ja": "靴下",
+       "note": {
+        "en": "Socks ending at the ankle or calf.",
+        "ko": "발목이나 종아리까지 오는 양말.",
+        "ja": "足首やふくらはぎまでの靴下。"
+       },
+       "confusable": [
+        "kneehighs"
+       ]
+      },
+      {
+       "name": "leggings",
+       "ko": "레깅스",
+       "ja": "レギンス",
+       "note": {
+        "en": "Skin-tight stretch trousers.",
+        "ko": "몸에 붙는 신축성 있는 바지.",
+        "ja": "体に沿ったストレッチのパンツ。"
+       },
+       "confusable": [
+        "pantyhose"
+       ]
+      },
+      {
+       "name": "zettai_ryouiki",
+       "ko": "절대영역",
+       "ja": "絶対領域",
+       "note": {
+        "en": "The bare strip of thigh between skirt and thighhighs.",
+        "ko": "치마와 니하이 사이로 드러난 허벅지 부분.",
+        "ja": "スカートとニーソの間に見える太もも。"
+       },
+       "confusable": [
+        "thighhighs"
+       ]
+      },
+      {
+       "name": "bare_legs",
+       "ko": "맨다리",
+       "ja": "生脚",
+       "note": {
+        "en": "Legs with nothing worn on them.",
+        "ko": "아무것도 신지 않은 다리.",
+        "ja": "何も履いていない脚。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "legwear.shoes",
+     "title": {
+      "en": "Footwear",
+      "ko": "신발",
+      "ja": "履物"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "boots",
+       "ko": "부츠",
+       "ja": "ブーツ",
+       "note": {
+        "en": "Footwear covering the ankle or higher.",
+        "ko": "발목 이상을 덮는 신발.",
+        "ja": "足首以上を覆う靴。"
+       },
+       "confusable": [
+        "knee_boots"
+       ]
+      },
+      {
+       "name": "knee_boots",
+       "ko": "무릎 부츠",
+       "ja": "ニーブーツ",
+       "note": {
+        "en": "Boots reaching the knee.",
+        "ko": "무릎 높이까지 오는 부츠.",
+        "ja": "ひざ丈のブーツ。"
+       },
+       "confusable": [
+        "boots",
+        "thigh_boots"
+       ]
+      },
+      {
+       "name": "thigh_boots",
+       "ko": "허벅지 부츠",
+       "ja": "サイハイブーツ",
+       "note": {
+        "en": "Boots reaching the thigh.",
+        "ko": "허벅지까지 오는 부츠.",
+        "ja": "太ももまであるブーツ。"
+       },
+       "confusable": [
+        "knee_boots"
+       ]
+      },
+      {
+       "name": "shoes",
+       "ko": "신발",
+       "ja": "靴",
+       "note": {
+        "en": "Closed shoes; the general tag.",
+        "ko": "발을 감싸는 일반 신발. 넓은 태그.",
+        "ja": "足を包む靴全般。広いタグ。"
+       },
+       "confusable": [
+        "loafers",
+        "sneakers"
+       ]
+      },
+      {
+       "name": "sneakers",
+       "ko": "운동화",
+       "ja": "スニーカー",
+       "note": {
+        "en": "Casual lace-up athletic shoes.",
+        "ko": "끈으로 묶는 캐주얼한 운동화.",
+        "ja": "紐で結ぶカジュアルな運動靴。"
+       },
+       "confusable": [
+        "shoes"
+       ]
+      },
+      {
+       "name": "loafers",
+       "ko": "로퍼",
+       "ja": "ローファー",
+       "note": {
+        "en": "Slip-on leather shoes, common with school uniforms.",
+        "ko": "교복에 흔한 끈 없는 가죽 구두.",
+        "ja": "制服に多い紐なしの革靴。"
+       },
+       "confusable": [
+        "mary_janes"
+       ]
+      },
+      {
+       "name": "mary_janes",
+       "ko": "메리제인",
+       "ja": "メリージェーン",
+       "note": {
+        "en": "Shoes with a strap across the instep.",
+        "ko": "발등에 끈이 가로지르는 구두.",
+        "ja": "甲にストラップのある靴。"
+       },
+       "confusable": [
+        "loafers"
+       ]
+      },
+      {
+       "name": "high_heels",
+       "ko": "하이힐",
+       "ja": "ハイヒール",
+       "note": {
+        "en": "Shoes with a tall raised heel.",
+        "ko": "굽이 높은 구두.",
+        "ja": "かかとの高い靴。"
+       }
+      },
+      {
+       "name": "sandals",
+       "ko": "샌들",
+       "ja": "サンダル",
+       "note": {
+        "en": "Open shoes held on by straps.",
+        "ko": "끈으로 고정하는 트인 신발.",
+        "ja": "紐で留める開放的な履物。"
+       },
+       "confusable": [
+        "slippers"
+       ]
+      },
+      {
+       "name": "slippers",
+       "ko": "슬리퍼",
+       "ja": "スリッパ",
+       "note": {
+        "en": "Soft indoor shoes.",
+        "ko": "실내에서 신는 부드러운 신발.",
+        "ja": "室内用の柔らかい履物。"
+       },
+       "confusable": [
+        "sandals"
+       ]
+      },
+      {
+       "name": "geta",
+       "ko": "게타",
+       "ja": "下駄",
+       "note": {
+        "en": "Wooden sandals raised on two blocks.",
+        "ko": "굽이 두 개 달린 일본식 나막신.",
+        "ja": "二本歯の付いた木の履物。"
+       },
+       "confusable": [
+        "sandals"
+       ]
+      },
+      {
+       "name": "barefoot",
+       "ko": "맨발",
+       "ja": "裸足",
+       "note": {
+        "en": "Feet with nothing worn on them.",
+        "ko": "아무것도 신지 않은 발.",
+        "ja": "何も履いていない足。"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "accessory",
+   "title": {
+    "en": "Accessories and props",
+    "ko": "소품과 장신구",
+    "ja": "小物とアクセサリー"
+   },
+   "summary": {
+    "en": "Things worn on the head, face and body, and things carried or held.",
+    "ko": "머리·얼굴·몸에 걸치는 것, 들거나 가진 물건.",
+    "ja": "頭や顔、体に身につけるものと、持ち物。"
+   },
+   "groups": [
+    {
+     "id": "accessory.head",
+     "title": {
+      "en": "Headwear",
+      "ko": "모자류",
+      "ja": "帽子・かぶりもの"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "hat",
+       "ko": "모자",
+       "ja": "帽子",
+       "note": {
+        "en": "Any hat; the general tag when no specific type applies.",
+        "ko": "종류를 따지지 않는 모자 전반.",
+        "ja": "種類を問わない帽子全般。"
+       },
+       "confusable": [
+        "beret",
+        "baseball_cap"
+       ]
+      },
+      {
+       "name": "beret",
+       "ko": "베레모",
+       "ja": "ベレー帽",
+       "note": {
+        "en": "Soft, flat, round cap with no brim.",
+        "ko": "챙 없이 납작하고 둥근 부드러운 모자.",
+        "ja": "つばのない平たく丸い柔らかい帽子。"
+       },
+       "confusable": [
+        "hat"
+       ]
+      },
+      {
+       "name": "witch_hat",
+       "ko": "마녀 모자",
+       "ja": "魔女帽子",
+       "note": {
+        "en": "Tall pointed hat with a wide brim.",
+        "ko": "챙이 넓고 끝이 뾰족한 높은 모자.",
+        "ja": "つばが広く先のとがった背の高い帽子。"
+       },
+       "confusable": [
+        "hat"
+       ]
+      },
+      {
+       "name": "straw_hat",
+       "ko": "밀짚모자",
+       "ja": "麦わら帽子",
+       "note": {
+        "en": "Hat woven from straw, wide-brimmed and summery.",
+        "ko": "밀짚으로 엮은 챙 넓은 여름 모자.",
+        "ja": "麦わらで編んだつば広の夏の帽子。"
+       },
+       "confusable": [
+        "hat"
+       ]
+      },
+      {
+       "name": "baseball_cap",
+       "ko": "야구 모자",
+       "ja": "キャップ",
+       "note": {
+        "en": "Cap with a rounded crown and a single front visor.",
+        "ko": "둥근 크라운에 앞챙만 있는 모자.",
+        "ja": "丸い頭部と前だけのつばを持つ帽子。"
+       },
+       "confusable": [
+        "hat"
+       ]
+      },
+      {
+       "name": "hood",
+       "ko": "후드",
+       "ja": "フード",
+       "note": {
+        "en": "Hood attached to a garment; shown up or down.",
+        "ko": "옷에 달린 후드. 쓴 모습이든 내린 모습이든 해당.",
+        "ja": "衣服に付いたフード。かぶっていても下ろしていても可。"
+       },
+       "confusable": [
+        "hat"
+       ]
+      },
+      {
+       "name": "crown",
+       "ko": "왕관",
+       "ja": "王冠",
+       "note": {
+        "en": "Metal crown worn by royalty; bigger than a tiara.",
+        "ko": "왕족이 쓰는 금속제 관. 티아라보다 크다.",
+        "ja": "王族がかぶる金属の冠。ティアラより大ぶり。"
+       },
+       "confusable": [
+        "tiara"
+       ]
+      },
+      {
+       "name": "tiara",
+       "ko": "티아라",
+       "ja": "ティアラ",
+       "note": {
+        "en": "Small decorative arch worn on the head; lighter than a crown.",
+        "ko": "머리에 얹는 작은 장식 관. 왕관보다 가볍다.",
+        "ja": "頭に載せる小さな飾り冠。王冠より控えめ。"
+       },
+       "confusable": [
+        "crown"
+       ]
+      },
+      {
+       "name": "headphones",
+       "ko": "헤드폰",
+       "ja": "ヘッドホン",
+       "note": {
+        "en": "Headphones worn over the ears or around the neck.",
+        "ko": "귀를 덮거나 목에 건 헤드폰.",
+        "ja": "耳を覆う、または首にかけたヘッドホン。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "accessory.hair",
+     "title": {
+      "en": "Hair ornaments",
+      "ko": "머리 장식",
+      "ja": "髪飾り"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "hair_ornament",
+       "ko": "머리 장식",
+       "ja": "髪飾り",
+       "note": {
+        "en": "Umbrella tag for any decoration placed in the hair.",
+        "ko": "머리에 꽂거나 단 장식을 아우르는 상위 태그.",
+        "ja": "髪につける飾り全般をまとめる上位タグ。"
+       },
+       "confusable": [
+        "hair_ribbon",
+        "hairclip"
+       ]
+      },
+      {
+       "name": "hair_ribbon",
+       "ko": "머리 리본",
+       "ja": "髪リボン",
+       "note": {
+        "en": "Ribbon tied in the hair, often as a small bow.",
+        "ko": "머리에 묶은 리본. 작은 매듭 형태가 많다.",
+        "ja": "髪に結んだリボン。小さな蝶結びが多い。"
+       },
+       "confusable": [
+        "hair_bow"
+       ]
+      },
+      {
+       "name": "hair_bow",
+       "ko": "머리 보우",
+       "ja": "髪の大きなリボン",
+       "note": {
+        "en": "A bow-shaped hair accessory, often a big pre-made one.",
+        "ko": "나비 모양의 머리 장식. 큼직한 완성형이 많다.",
+        "ja": "蝶の形をした髪飾り。大きな既製品が多い。"
+       },
+       "confusable": [
+        "hair_ribbon"
+       ]
+      },
+      {
+       "name": "hairclip",
+       "ko": "머리핀",
+       "ja": "ヘアピン",
+       "note": {
+        "en": "Small clip or pin holding hair, often seen at the fringe.",
+        "ko": "머리카락을 고정하는 작은 핀. 앞머리에 많다.",
+        "ja": "髪を留める小さなピン。前髪によく見られる。"
+       },
+       "confusable": [
+        "hair_ornament"
+       ]
+      },
+      {
+       "name": "hair_flower",
+       "ko": "머리 꽃",
+       "ja": "髪の花",
+       "note": {
+        "en": "A flower tucked into or attached to the hair.",
+        "ko": "머리에 꽂거나 단 꽃.",
+        "ja": "髪に挿した、または付けた花。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "accessory.worn",
+     "title": {
+      "en": "Worn items",
+      "ko": "착용 소품",
+      "ja": "身につける小物"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "glasses",
+       "ko": "안경",
+       "ja": "眼鏡",
+       "note": {
+        "en": "Prescription-style glasses with clear lenses.",
+        "ko": "투명한 렌즈의 일반 안경.",
+        "ja": "透明なレンズの普通の眼鏡。"
+       },
+       "confusable": [
+        "sunglasses"
+       ]
+      },
+      {
+       "name": "sunglasses",
+       "ko": "선글라스",
+       "ja": "サングラス",
+       "note": {
+        "en": "Dark-lensed glasses; the eyes are hidden or tinted.",
+        "ko": "어두운 렌즈로 눈이 가려지는 안경.",
+        "ja": "色の濃いレンズで目が隠れる眼鏡。"
+       },
+       "confusable": [
+        "glasses"
+       ]
+      },
+      {
+       "name": "mask",
+       "ko": "마스크",
+       "ja": "マスク",
+       "note": {
+        "en": "Covering over the face, such as a surgical or costume mask.",
+        "ko": "얼굴을 가리는 마스크. 위생용·가장용 모두 포함.",
+        "ja": "顔を覆うマスク。衛生用も仮装用も含む。"
+       },
+       "confusable": [
+        "eyepatch"
+       ]
+      },
+      {
+       "name": "eyepatch",
+       "ko": "안대",
+       "ja": "眼帯",
+       "note": {
+        "en": "Patch covering one eye.",
+        "ko": "한쪽 눈을 덮는 안대.",
+        "ja": "片目を覆う眼帯。"
+       },
+       "confusable": [
+        "mask"
+       ]
+      },
+      {
+       "name": "choker",
+       "ko": "초커",
+       "ja": "チョーカー",
+       "note": {
+        "en": "Band worn snug around the neck.",
+        "ko": "목에 딱 맞게 두르는 띠.",
+        "ja": "首にぴったり巻くバンド。"
+       },
+       "confusable": [
+        "necktie"
+       ]
+      },
+      {
+       "name": "scarf",
+       "ko": "스카프",
+       "ja": "マフラー",
+       "note": {
+        "en": "Long cloth wrapped around the neck, usually for warmth.",
+        "ko": "목에 두르는 긴 천. 보온용이 많다.",
+        "ja": "首に巻く長い布。防寒用が多い。"
+       }
+      },
+      {
+       "name": "necktie",
+       "ko": "넥타이",
+       "ja": "ネクタイ",
+       "note": {
+        "en": "Long tie hanging down from the collar.",
+        "ko": "옷깃 아래로 길게 늘어진 타이.",
+        "ja": "襟から垂らす長いタイ。"
+       },
+       "confusable": [
+        "choker"
+       ]
+      },
+      {
+       "name": "gloves",
+       "ko": "장갑",
+       "ja": "手袋",
+       "note": {
+        "en": "Gloves covering the hands.",
+        "ko": "손을 덮는 장갑.",
+        "ja": "手を覆う手袋。"
+       }
+      },
+      {
+       "name": "apron",
+       "ko": "앞치마",
+       "ja": "エプロン",
+       "note": {
+        "en": "Cloth worn over the front of clothes, as when cooking.",
+        "ko": "옷 앞에 두르는 천. 요리할 때 많다.",
+        "ja": "服の前にかける布。調理時などに。"
+       }
+      },
+      {
+       "name": "belt",
+       "ko": "벨트",
+       "ja": "ベルト",
+       "note": {
+        "en": "Strap or band worn around the waist.",
+        "ko": "허리에 두른 띠.",
+        "ja": "腰に巻くベルト。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "accessory.carry",
+     "title": {
+      "en": "Carried things",
+      "ko": "들고 다니는 것",
+      "ja": "持ち物"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "bag",
+       "ko": "가방",
+       "ja": "バッグ",
+       "note": {
+        "en": "Any bag carried; the general tag.",
+        "ko": "들고 있는 가방 전반.",
+        "ja": "持っているバッグ全般。"
+       },
+       "confusable": [
+        "backpack"
+       ]
+      },
+      {
+       "name": "backpack",
+       "ko": "배낭",
+       "ja": "リュック",
+       "note": {
+        "en": "Bag worn on the back with two straps.",
+        "ko": "어깨끈 두 개로 등에 메는 가방.",
+        "ja": "肩ひも2本で背負うバッグ。"
+       },
+       "confusable": [
+        "bag"
+       ]
+      },
+      {
+       "name": "umbrella",
+       "ko": "우산",
+       "ja": "傘",
+       "note": {
+        "en": "An umbrella, open or closed.",
+        "ko": "펼쳤거나 접은 우산.",
+        "ja": "開いた、または閉じた傘。"
+       },
+       "confusable": [
+        "holding_umbrella"
+       ]
+      },
+      {
+       "name": "book",
+       "ko": "책",
+       "ja": "本",
+       "note": {
+        "en": "A book, shown open or closed.",
+        "ko": "펼쳤거나 덮은 책.",
+        "ja": "開いた、または閉じた本。"
+       },
+       "confusable": [
+        "holding_book"
+       ]
+      },
+      {
+       "name": "cup",
+       "ko": "컵",
+       "ja": "カップ",
+       "note": {
+        "en": "A cup or mug; teacups and coffee mugs included.",
+        "ko": "컵이나 머그잔. 찻잔도 포함.",
+        "ja": "カップやマグ。ティーカップも含む。"
+       },
+       "confusable": [
+        "holding_cup"
+       ]
+      },
+      {
+       "name": "sword",
+       "ko": "검",
+       "ja": "剣",
+       "note": {
+        "en": "Blade weapon; the general tag for swords of any kind.",
+        "ko": "검 종류 전반을 가리키는 칼날 무기.",
+        "ja": "あらゆる剣を指す刃物の武器。"
+       },
+       "confusable": [
+        "holding_sword"
+       ]
+      },
+      {
+       "name": "gun",
+       "ko": "총",
+       "ja": "銃",
+       "note": {
+        "en": "Firearm of any kind.",
+        "ko": "모든 종류의 총기.",
+        "ja": "あらゆる種類の銃。"
+       },
+       "confusable": [
+        "holding_weapon"
+       ]
+      },
+      {
+       "name": "staff",
+       "ko": "지팡이",
+       "ja": "杖",
+       "note": {
+        "en": "Long staff or rod, often magical.",
+        "ko": "길고 곧은 지팡이. 마법용이 많다.",
+        "ja": "長い杖。魔法用が多い。"
+       }
+      },
+      {
+       "name": "guitar",
+       "ko": "기타",
+       "ja": "ギター",
+       "note": {
+        "en": "A guitar, acoustic or electric.",
+        "ko": "어쿠스틱이든 일렉이든 기타.",
+        "ja": "アコースティックでもエレキでもギター。"
+       }
+      },
+      {
+       "name": "bouquet",
+       "ko": "꽃다발",
+       "ja": "花束",
+       "note": {
+        "en": "Flowers gathered into a bunch.",
+        "ko": "여러 송이를 묶은 꽃다발.",
+        "ja": "花をまとめた花束。"
+       },
+       "confusable": [
+        "hair_flower"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "accessory.hold",
+     "title": {
+      "en": "Holding",
+      "ko": "들고 있음",
+      "ja": "持っている"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "holding",
+       "ko": "들고 있음",
+       "ja": "持っている",
+       "note": {
+        "en": "Something is held in hand; the umbrella tag for the family.",
+        "ko": "손에 무언가를 쥔 모습. 아래 태그들의 상위.",
+        "ja": "手に何かを持つ姿。下の各タグの上位。"
+       },
+       "confusable": [
+        "holding_weapon"
+       ]
+      },
+      {
+       "name": "holding_umbrella",
+       "ko": "우산 들기",
+       "ja": "傘を持つ",
+       "note": {
+        "en": "Holding an umbrella in hand.",
+        "ko": "우산을 손에 든 모습.",
+        "ja": "傘を手に持っている。"
+       },
+       "confusable": [
+        "umbrella"
+       ]
+      },
+      {
+       "name": "holding_book",
+       "ko": "책 들기",
+       "ja": "本を持つ",
+       "note": {
+        "en": "Holding a book in hand.",
+        "ko": "책을 손에 든 모습.",
+        "ja": "本を手に持っている。"
+       },
+       "confusable": [
+        "book"
+       ]
+      },
+      {
+       "name": "holding_cup",
+       "ko": "컵 들기",
+       "ja": "カップを持つ",
+       "note": {
+        "en": "Holding a cup or mug.",
+        "ko": "컵이나 머그를 손에 든 모습.",
+        "ja": "カップやマグを持っている。"
+       },
+       "confusable": [
+        "cup"
+       ]
+      },
+      {
+       "name": "holding_weapon",
+       "ko": "무기 들기",
+       "ja": "武器を持つ",
+       "note": {
+        "en": "Holding any weapon.",
+        "ko": "어떤 무기든 손에 든 모습.",
+        "ja": "何かの武器を持っている。"
+       },
+       "confusable": [
+        "holding_sword"
+       ]
+      },
+      {
+       "name": "holding_sword",
+       "ko": "검 들기",
+       "ja": "剣を持つ",
+       "note": {
+        "en": "Holding a sword; narrower than holding_weapon.",
+        "ko": "검을 손에 든 모습. 무기 들기보다 좁다.",
+        "ja": "剣を持っている。武器を持つより限定的。"
+       },
+       "confusable": [
+        "holding_weapon",
+        "sword"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "scene",
+   "title": {
+    "en": "Background and place",
+    "ko": "배경과 장소",
+    "ja": "背景と場所"
+   },
+   "summary": {
+    "en": "What is behind the character: plain backdrops, places, nature, time and weather.",
+    "ko": "인물 뒤에 무엇이 있는지. 단색 배경, 장소, 자연, 시간과 날씨.",
+    "ja": "キャラの背後に何があるか。無地背景、場所、自然、時間と天気。"
+   },
+   "groups": [
+    {
+     "id": "scene.plain",
+     "title": {
+      "en": "Plain backgrounds",
+      "ko": "단순 배경",
+      "ja": "無地の背景"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "simple_background",
+       "ko": "단순 배경",
+       "ja": "シンプルな背景",
+       "note": {
+        "en": "Flat, featureless backdrop of any colour; the umbrella tag.",
+        "ko": "특징 없는 단색 배경 전반. 색은 상관없다.",
+        "ja": "特徴のない単色の背景全般。色は問わない。"
+       },
+       "confusable": [
+        "white_background",
+        "grey_background"
+       ]
+      },
+      {
+       "name": "white_background",
+       "ko": "흰 배경",
+       "ja": "白背景",
+       "note": {
+        "en": "Plain white backdrop; most common on character sheets.",
+        "ko": "순백의 단색 배경. 캐릭터 시트에 흔하다.",
+        "ja": "真っ白な無地背景。キャラ設定画に多い。"
+       },
+       "confusable": [
+        "simple_background",
+        "transparent_background"
+       ]
+      },
+      {
+       "name": "grey_background",
+       "ko": "회색 배경",
+       "ja": "グレー背景",
+       "note": {
+        "en": "Plain grey backdrop.",
+        "ko": "회색 단색 배경.",
+        "ja": "グレーの無地背景。"
+       },
+       "confusable": [
+        "simple_background"
+       ]
+      },
+      {
+       "name": "black_background",
+       "ko": "검은 배경",
+       "ja": "黒背景",
+       "note": {
+        "en": "Plain black backdrop; the subject stands out.",
+        "ko": "검은 단색 배경. 인물이 두드러진다.",
+        "ja": "黒の無地背景。被写体が際立つ。"
+       },
+       "confusable": [
+        "simple_background"
+       ]
+      },
+      {
+       "name": "gradient_background",
+       "ko": "그라데이션 배경",
+       "ja": "グラデ背景",
+       "note": {
+        "en": "Backdrop fading smoothly from one colour to another.",
+        "ko": "한 색에서 다른 색으로 번지는 배경.",
+        "ja": "ある色から別の色へなめらかに変わる背景。"
+       },
+       "confusable": [
+        "simple_background"
+       ]
+      },
+      {
+       "name": "transparent_background",
+       "ko": "투명 배경",
+       "ja": "透過背景",
+       "note": {
+        "en": "Cutout with no backdrop at all, shown as a checkerboard.",
+        "ko": "배경이 아예 없는 누끼 이미지.",
+        "ja": "背景が一切ない切り抜き画像。"
+       },
+       "confusable": [
+        "white_background"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "scene.space",
+     "title": {
+      "en": "Indoors and outdoors",
+      "ko": "실내·실외",
+      "ja": "屋内・屋外"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "indoors",
+       "ko": "실내",
+       "ja": "屋内",
+       "note": {
+        "en": "The scene is inside a building.",
+        "ko": "건물 안이 배경인 장면.",
+        "ja": "建物の中が舞台の場面。"
+       },
+       "confusable": [
+        "outdoors"
+       ]
+      },
+      {
+       "name": "outdoors",
+       "ko": "야외",
+       "ja": "屋外",
+       "note": {
+        "en": "The scene is outside, under the open air.",
+        "ko": "바깥 공간이 배경인 장면.",
+        "ja": "屋外が舞台の場面。"
+       },
+       "confusable": [
+        "indoors"
+       ]
+      },
+      {
+       "name": "scenery",
+       "ko": "풍경",
+       "ja": "風景",
+       "note": {
+        "en": "Picture that centres the setting; the character is small or absent.",
+        "ko": "배경 자체가 주인공인 그림. 인물은 작거나 없다.",
+        "ja": "背景そのものが主役の絵。人物は小さいか不在。"
+       },
+       "confusable": [
+        "cityscape"
+       ]
+      },
+      {
+       "name": "cityscape",
+       "ko": "도시 풍경",
+       "ja": "街の風景",
+       "note": {
+        "en": "View of a town or city with buildings.",
+        "ko": "건물이 늘어선 도시의 전경.",
+        "ja": "建物が並ぶ街並みの眺め。"
+       },
+       "confusable": [
+        "scenery"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "scene.nature",
+     "title": {
+      "en": "Nature",
+      "ko": "자연",
+      "ja": "自然"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "sky",
+       "ko": "하늘",
+       "ja": "空",
+       "note": {
+        "en": "The sky fills part of the picture.",
+        "ko": "화면의 일부를 차지하는 하늘.",
+        "ja": "画面の一部を占める空。"
+       },
+       "confusable": [
+        "blue_sky",
+        "cloud"
+       ]
+      },
+      {
+       "name": "blue_sky",
+       "ko": "푸른 하늘",
+       "ja": "青空",
+       "note": {
+        "en": "Clear, bright blue daytime sky.",
+        "ko": "맑고 푸른 낮 하늘.",
+        "ja": "晴れた明るい青空。"
+       },
+       "confusable": [
+        "sky"
+       ]
+      },
+      {
+       "name": "cloud",
+       "ko": "구름",
+       "ja": "雲",
+       "note": {
+        "en": "Clouds in the sky.",
+        "ko": "하늘에 뜬 구름.",
+        "ja": "空に浮かぶ雲。"
+       },
+       "confusable": [
+        "sky"
+       ]
+      },
+      {
+       "name": "ocean",
+       "ko": "바다",
+       "ja": "海",
+       "note": {
+        "en": "Open sea or ocean water.",
+        "ko": "탁 트인 바다.",
+        "ja": "広々とした海。"
+       },
+       "confusable": [
+        "beach"
+       ]
+      },
+      {
+       "name": "beach",
+       "ko": "해변",
+       "ja": "ビーチ",
+       "note": {
+        "en": "Sandy shore beside the water.",
+        "ko": "물가에 펼쳐진 모래사장.",
+        "ja": "水辺に広がる砂浜。"
+       },
+       "confusable": [
+        "ocean"
+       ]
+      },
+      {
+       "name": "forest",
+       "ko": "숲",
+       "ja": "森",
+       "note": {
+        "en": "Many trees growing together.",
+        "ko": "나무가 빽빽하게 모인 곳.",
+        "ja": "木々が密集した場所。"
+       },
+       "confusable": [
+        "tree"
+       ]
+      },
+      {
+       "name": "tree",
+       "ko": "나무",
+       "ja": "木",
+       "note": {
+        "en": "One or more trees.",
+        "ko": "한 그루 이상의 나무.",
+        "ja": "1本以上の木。"
+       },
+       "confusable": [
+        "forest"
+       ]
+      },
+      {
+       "name": "mountain",
+       "ko": "산",
+       "ja": "山",
+       "note": {
+        "en": "Mountains or hills in view.",
+        "ko": "시야에 들어온 산이나 언덕.",
+        "ja": "視界に入る山や丘。"
+       }
+      },
+      {
+       "name": "flower_field",
+       "ko": "꽃밭",
+       "ja": "花畑",
+       "note": {
+        "en": "Open ground covered with flowers.",
+        "ko": "꽃으로 뒤덮인 들판.",
+        "ja": "花で埋まった野原。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "scene.place",
+     "title": {
+      "en": "Places",
+      "ko": "장소",
+      "ja": "場所"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "classroom",
+       "ko": "교실",
+       "ja": "教室",
+       "note": {
+        "en": "School room with desks and a blackboard.",
+        "ko": "책상과 칠판이 있는 학교 교실.",
+        "ja": "机と黒板のある学校の教室。"
+       }
+      },
+      {
+       "name": "bedroom",
+       "ko": "침실",
+       "ja": "寝室",
+       "note": {
+        "en": "Room with a bed.",
+        "ko": "침대가 있는 방.",
+        "ja": "ベッドのある部屋。"
+       }
+      },
+      {
+       "name": "kitchen",
+       "ko": "주방",
+       "ja": "キッチン",
+       "note": {
+        "en": "Room for cooking, with counters or a stove.",
+        "ko": "조리대나 가스레인지가 있는 방.",
+        "ja": "調理台やコンロのある部屋。"
+       }
+      },
+      {
+       "name": "library",
+       "ko": "도서관",
+       "ja": "図書館",
+       "note": {
+        "en": "Room lined with bookshelves.",
+        "ko": "책장이 늘어선 공간.",
+        "ja": "本棚が並ぶ空間。"
+       }
+      },
+      {
+       "name": "street",
+       "ko": "거리",
+       "ja": "通り",
+       "note": {
+        "en": "Road or lane in a town.",
+        "ko": "마을 안의 길.",
+        "ja": "町の中の道。"
+       },
+       "confusable": [
+        "cityscape"
+       ]
+      },
+      {
+       "name": "shrine",
+       "ko": "신사",
+       "ja": "神社",
+       "note": {
+        "en": "Japanese shrine grounds, often with torii gates.",
+        "ko": "도리이가 서 있는 일본의 신사.",
+        "ja": "鳥居などがある日本の神社。"
+       }
+      },
+      {
+       "name": "rooftop",
+       "ko": "옥상",
+       "ja": "屋上",
+       "note": {
+        "en": "The flat top of a building.",
+        "ko": "건물의 평평한 꼭대기.",
+        "ja": "建物の平らな上部。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "scene.time",
+     "title": {
+      "en": "Time and weather",
+      "ko": "시간·날씨",
+      "ja": "時間と天気"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "day",
+       "ko": "낮",
+       "ja": "昼",
+       "note": {
+        "en": "Daytime lighting.",
+        "ko": "햇빛이 밝은 낮의 장면.",
+        "ja": "日中の明るい場面。"
+       },
+       "confusable": [
+        "night"
+       ]
+      },
+      {
+       "name": "night",
+       "ko": "밤",
+       "ja": "夜",
+       "note": {
+        "en": "Night-time scene, dark overall.",
+        "ko": "전체적으로 어두운 밤 장면.",
+        "ja": "全体が暗い夜の場面。"
+       },
+       "confusable": [
+        "day",
+        "starry_sky"
+       ]
+      },
+      {
+       "name": "sunset",
+       "ko": "노을",
+       "ja": "夕焼け",
+       "note": {
+        "en": "Sky glowing orange and red as the sun sets.",
+        "ko": "해질녘 주황·붉게 물든 하늘.",
+        "ja": "日没時にオレンジや赤に染まる空。"
+       },
+       "confusable": [
+        "night"
+       ]
+      },
+      {
+       "name": "starry_sky",
+       "ko": "별이 빛나는 하늘",
+       "ja": "星空",
+       "note": {
+        "en": "Night sky full of visible stars.",
+        "ko": "별이 가득 보이는 밤하늘.",
+        "ja": "星がたくさん見える夜空。"
+       },
+       "confusable": [
+        "night"
+       ]
+      },
+      {
+       "name": "full_moon",
+       "ko": "보름달",
+       "ja": "満月",
+       "note": {
+        "en": "The moon shown round and full.",
+        "ko": "둥글게 가득 찬 달.",
+        "ja": "丸く満ちた月。"
+       }
+      },
+      {
+       "name": "rain",
+       "ko": "비",
+       "ja": "雨",
+       "note": {
+        "en": "Rain falling, often with raindrops visible.",
+        "ko": "내리는 비. 빗방울이 보이는 경우가 많다.",
+        "ja": "降る雨。雨粒が見えることが多い。"
+       },
+       "confusable": [
+        "snow"
+       ]
+      },
+      {
+       "name": "snow",
+       "ko": "눈",
+       "ja": "雪",
+       "note": {
+        "en": "Snow on the ground or falling.",
+        "ko": "쌓였거나 내리는 눈.",
+        "ja": "積もった、または降る雪。"
+       },
+       "confusable": [
+        "rain"
+       ]
+      },
+      {
+       "name": "cherry_blossoms",
+       "ko": "벚꽃",
+       "ja": "桜",
+       "note": {
+        "en": "Sakura flowers in bloom.",
+        "ko": "활짝 핀 벚꽃.",
+        "ja": "咲いている桜の花。"
+       }
+      },
+      {
+       "name": "autumn_leaves",
+       "ko": "단풍",
+       "ja": "紅葉",
+       "note": {
+        "en": "Red and golden autumn foliage.",
+        "ko": "붉고 노랗게 물든 가을 잎.",
+        "ja": "赤や黄色に色づいた秋の葉。"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "light",
+   "title": {
+    "en": "Light, colour and effects",
+    "ko": "빛·색감·효과",
+    "ja": "光・色味・エフェクト"
+   },
+   "summary": {
+    "en": "How the picture is lit, how its colours are treated, and added visual effects.",
+    "ko": "조명 방식, 색감 처리, 덧붙인 시각 효과.",
+    "ja": "光の当て方、色の扱い、加えられた視覚効果。"
+   },
+   "groups": [
+    {
+     "id": "light.lighting",
+     "title": {
+      "en": "Lighting",
+      "ko": "조명",
+      "ja": "ライティング"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "backlighting",
+       "ko": "역광",
+       "ja": "逆光",
+       "note": {
+        "en": "Light source behind the subject, giving a bright rim or glow.",
+        "ko": "피사체 뒤에서 오는 빛. 윤곽이 밝게 빛난다.",
+        "ja": "被写体の背後からの光。輪郭が明るく光る。"
+       },
+       "confusable": [
+        "silhouette"
+       ]
+      },
+      {
+       "name": "silhouette",
+       "ko": "실루엣",
+       "ja": "シルエット",
+       "note": {
+        "en": "Subject reduced to a flat dark shape with no inner detail.",
+        "ko": "내부 디테일 없이 어두운 형태만 남은 모습.",
+        "ja": "内部の描写がなく暗い形だけになった姿。"
+       },
+       "confusable": [
+        "backlighting"
+       ]
+      },
+      {
+       "name": "sunlight",
+       "ko": "햇빛",
+       "ja": "日差し",
+       "note": {
+        "en": "Sunshine falling on the scene.",
+        "ko": "장면에 내리쬐는 햇빛.",
+        "ja": "場面に降り注ぐ日光。"
+       },
+       "confusable": [
+        "dappled_sunlight"
+       ]
+      },
+      {
+       "name": "dappled_sunlight",
+       "ko": "木漏れ日",
+       "ja": "木漏れ日",
+       "note": {
+        "en": "Sun broken into spots by leaves.",
+        "ko": "나뭇잎 사이로 부서져 내리는 빛.",
+        "ja": "葉の間から斑に落ちる日光。"
+       },
+       "confusable": [
+        "sunlight",
+        "light_rays"
+       ]
+      },
+      {
+       "name": "light_rays",
+       "ko": "빛줄기",
+       "ja": "光の筋",
+       "note": {
+        "en": "Visible beams of light, like shafts through a window.",
+        "ko": "창을 통과하듯 눈에 보이는 빛의 줄기.",
+        "ja": "窓から差すような目に見える光の筋。"
+       },
+       "confusable": [
+        "dappled_sunlight"
+       ]
+      },
+      {
+       "name": "lens_flare",
+       "ko": "렌즈 플레어",
+       "ja": "レンズフレア",
+       "note": {
+        "en": "Bright streaks or rings as if light hit a camera lens.",
+        "ko": "카메라 렌즈에 빛이 들어온 듯한 번짐.",
+        "ja": "カメラのレンズに光が入ったような光の滲み。"
+       },
+       "confusable": [
+        "light_rays"
+       ]
+      },
+      {
+       "name": "shadow",
+       "ko": "그림자",
+       "ja": "影",
+       "note": {
+        "en": "Cast or shaded dark areas.",
+        "ko": "드리워진 어두운 부분.",
+        "ja": "落ちた、または生じた暗い部分。"
+       }
+      },
+      {
+       "name": "spotlight",
+       "ko": "스포트라이트",
+       "ja": "スポットライト",
+       "note": {
+        "en": "Focused beam lighting one spot.",
+        "ko": "한 곳만 비추는 집중 조명.",
+        "ja": "一点を照らす集中した光。"
+       }
+      },
+      {
+       "name": "glowing",
+       "ko": "빛나는",
+       "ja": "発光",
+       "note": {
+        "en": "Something emits its own light.",
+        "ko": "스스로 빛을 내는 대상.",
+        "ja": "自ら光を放つもの。"
+       },
+       "confusable": [
+        "sparkle"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "light.colour",
+     "title": {
+      "en": "Colour treatment",
+      "ko": "색 처리",
+      "ja": "色の扱い"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "monochrome",
+       "ko": "단색화",
+       "ja": "モノクロ",
+       "note": {
+        "en": "Whole image in one hue or colour family; not always grey.",
+        "ko": "한 가지 색조로 통일된 그림. 회색만은 아니다.",
+        "ja": "1つの色調で統一された絵。灰色とは限らない。"
+       },
+       "confusable": [
+        "greyscale",
+        "sepia"
+       ]
+      },
+      {
+       "name": "greyscale",
+       "ko": "그레이스케일",
+       "ja": "グレースケール",
+       "note": {
+        "en": "Only shades of grey, black and white (spelled with an e on Danbooru).",
+        "ko": "흑·백·회색 계조만 쓴 그림. 철자는 grey.",
+        "ja": "白・黒・灰色の濃淡だけの絵。綴りはgrey。"
+       },
+       "confusable": [
+        "monochrome"
+       ]
+      },
+      {
+       "name": "sepia",
+       "ko": "세피아",
+       "ja": "セピア",
+       "note": {
+        "en": "Brownish single-tone, like an old photo.",
+        "ko": "낡은 사진 같은 갈색 단색 톤.",
+        "ja": "古い写真のような茶色の単色調。"
+       },
+       "confusable": [
+        "monochrome"
+       ]
+      },
+      {
+       "name": "limited_palette",
+       "ko": "제한된 팔레트",
+       "ja": "限定パレット",
+       "note": {
+        "en": "Painted with only a few colours.",
+        "ko": "몇 가지 색만으로 그린 그림.",
+        "ja": "少数の色だけで描かれた絵。"
+       },
+       "confusable": [
+        "spot_color"
+       ]
+      },
+      {
+       "name": "spot_color",
+       "ko": "스폿 컬러",
+       "ja": "スポットカラー",
+       "note": {
+        "en": "Mostly mono, with one colour kept on a single element.",
+        "ko": "대부분 단색이고 한 요소만 색을 남김.",
+        "ja": "大半が単色で、一部だけ色を残す。"
+       },
+       "confusable": [
+        "limited_palette"
+       ]
+      },
+      {
+       "name": "partially_colored",
+       "ko": "부분 채색",
+       "ja": "部分着色",
+       "note": {
+        "en": "Some areas coloured, the rest left uncoloured.",
+        "ko": "일부만 색칠하고 나머지는 비워 둔 그림.",
+        "ja": "一部だけ色を塗り、残りは塗らない絵。"
+       },
+       "confusable": [
+        "spot_color"
+       ]
+      },
+      {
+       "name": "high_contrast",
+       "ko": "고대비",
+       "ja": "ハイコントラスト",
+       "note": {
+        "en": "Strong gap between the lightest and darkest areas.",
+        "ko": "밝은 곳과 어두운 곳의 차이가 강한 그림.",
+        "ja": "明暗の差が強い絵。"
+       }
+      },
+      {
+       "name": "colorful",
+       "ko": "화려한 색감",
+       "ja": "カラフル",
+       "note": {
+        "en": "Many bright, varied colours throughout.",
+        "ko": "밝고 다양한 색이 가득한 그림.",
+        "ja": "明るく多様な色にあふれた絵。"
+       },
+       "confusable": [
+        "limited_palette"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "light.camera",
+     "title": {
+      "en": "Lens and filters",
+      "ko": "렌즈·필터",
+      "ja": "レンズ・フィルター"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "bloom",
+       "ko": "블룸",
+       "ja": "ブルーム",
+       "note": {
+        "en": "Soft glow bleeding out from bright areas.",
+        "ko": "밝은 부분에서 번져 나오는 부드러운 빛.",
+        "ja": "明るい部分から滲み出る柔らかな光。"
+       },
+       "confusable": [
+        "glowing"
+       ]
+      },
+      {
+       "name": "bokeh",
+       "ko": "보케",
+       "ja": "ボケ",
+       "note": {
+        "en": "Soft, round blurs of out-of-focus light.",
+        "ko": "초점 밖의 빛이 만든 둥글고 흐릿한 점.",
+        "ja": "ピントの外れた光が作る丸いぼかし。"
+       },
+       "confusable": [
+        "depth_of_field"
+       ]
+      },
+      {
+       "name": "depth_of_field",
+       "ko": "피사계 심도",
+       "ja": "被写界深度",
+       "note": {
+        "en": "Subject sharp, foreground or background blurred.",
+        "ko": "피사체는 선명하고 앞뒤는 흐린 표현.",
+        "ja": "被写体は鮮明で前後がぼやける表現。"
+       },
+       "confusable": [
+        "bokeh",
+        "blurry"
+       ]
+      },
+      {
+       "name": "blurry",
+       "ko": "흐림",
+       "ja": "ぼやけ",
+       "note": {
+        "en": "Parts of the image are out of focus or smeared.",
+        "ko": "화면 일부가 초점이 나가거나 번진 상태.",
+        "ja": "画面の一部がピンぼけや滲んだ状態。"
+       },
+       "confusable": [
+        "depth_of_field"
+       ]
+      },
+      {
+       "name": "motion_blur",
+       "ko": "모션 블러",
+       "ja": "モーションブラー",
+       "note": {
+        "en": "Smeared look showing fast movement.",
+        "ko": "빠른 움직임을 나타내는 흐린 잔상.",
+        "ja": "速い動きを示すブレた残像。"
+       },
+       "confusable": [
+        "motion_lines"
+       ]
+      },
+      {
+       "name": "chromatic_aberration",
+       "ko": "색수차",
+       "ja": "色収差",
+       "note": {
+        "en": "Coloured fringes split at edges, like a cheap lens.",
+        "ko": "가장자리에 색이 갈라져 번지는 효과.",
+        "ja": "縁で色がずれて分かれる効果。"
+       }
+      },
+      {
+       "name": "film_grain",
+       "ko": "필름 그레인",
+       "ja": "フィルムグレイン",
+       "note": {
+        "en": "Fine noise texture like old film stock.",
+        "ko": "오래된 필름 같은 잔 노이즈 질감.",
+        "ja": "古いフィルムのような細かなノイズ質感。"
+       }
+      },
+      {
+       "name": "vignetting",
+       "ko": "비네팅",
+       "ja": "ビネット",
+       "note": {
+        "en": "Corners darkened to focus the centre.",
+        "ko": "모서리를 어둡게 해 중앙을 강조.",
+        "ja": "四隅を暗くして中央を目立たせる。"
+       }
+      },
+      {
+       "name": "glitch",
+       "ko": "글리치",
+       "ja": "グリッチ",
+       "note": {
+        "en": "Digital distortion, as if the image were corrupted.",
+        "ko": "화면이 깨진 듯한 디지털 왜곡.",
+        "ja": "画像が壊れたようなデジタルの歪み。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "light.fx",
+     "title": {
+      "en": "Particles and motion",
+      "ko": "입자·움직임",
+      "ja": "粒子・動き"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "sparkle",
+       "ko": "반짝임",
+       "ja": "きらめき",
+       "note": {
+        "en": "Small stars or glints of light.",
+        "ko": "작은 별빛이나 반짝이는 점.",
+        "ja": "小さな星や光の点。"
+       },
+       "confusable": [
+        "light_particles"
+       ]
+      },
+      {
+       "name": "light_particles",
+       "ko": "빛 입자",
+       "ja": "光の粒",
+       "note": {
+        "en": "Floating dots of light drifting in the air.",
+        "ko": "공중에 떠다니는 빛의 알갱이.",
+        "ja": "空中に漂う光の粒。"
+       },
+       "confusable": [
+        "sparkle"
+       ]
+      },
+      {
+       "name": "petals",
+       "ko": "꽃잎",
+       "ja": "花びら",
+       "note": {
+        "en": "Petals drifting or scattered in the air.",
+        "ko": "흩날리거나 흩어진 꽃잎.",
+        "ja": "舞ったり散ったりした花びら。"
+       }
+      },
+      {
+       "name": "confetti",
+       "ko": "색종이 조각",
+       "ja": "紙吹雪",
+       "note": {
+        "en": "Small bits of coloured paper thrown for a celebration.",
+        "ko": "축하용으로 뿌린 작은 색종이 조각.",
+        "ja": "祝いに撒かれた小さな色紙。"
+       }
+      },
+      {
+       "name": "bubble",
+       "ko": "거품",
+       "ja": "泡",
+       "note": {
+        "en": "Round bubbles, soap or underwater.",
+        "ko": "비누나 물속의 둥근 거품.",
+        "ja": "シャボン玉や水中の丸い泡。"
+       }
+      },
+      {
+       "name": "floating_hair",
+       "ko": "휘날리는 머리",
+       "ja": "舞う髪",
+       "note": {
+        "en": "Hair lifted and drifting in the air.",
+        "ko": "공중에 떠올라 흩날리는 머리카락.",
+        "ja": "宙に浮いてなびく髪。"
+       },
+       "confusable": [
+        "wind"
+       ]
+      },
+      {
+       "name": "wind",
+       "ko": "바람",
+       "ja": "風",
+       "note": {
+        "en": "Wind shown through blown hair, clothes or leaves.",
+        "ko": "머리·옷·잎이 날려 표현된 바람.",
+        "ja": "髪や服、葉のなびきで表された風。"
+       },
+       "confusable": [
+        "floating_hair"
+       ]
+      },
+      {
+       "name": "motion_lines",
+       "ko": "운동선",
+       "ja": "動線",
+       "note": {
+        "en": "Drawn lines showing the direction of movement.",
+        "ko": "움직임의 방향을 보여 주는 선.",
+        "ja": "動きの向きを示す線。"
+       },
+       "confusable": [
+        "motion_blur"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "style",
+   "title": {
+    "en": "Style and medium",
+    "ko": "화풍과 매체",
+    "ja": "画風と画材"
+   },
+   "summary": {
+    "en": "The tools, finish, era and format the artwork is made in.",
+    "ko": "작품을 만든 도구, 마감, 시대감, 형식.",
+    "ja": "作品の画材、仕上げ、時代感、形式。"
+   },
+   "groups": [
+    {
+     "id": "style.medium",
+     "title": {
+      "en": "Medium",
+      "ko": "매체",
+      "ja": "画材"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "traditional_media",
+       "ko": "아날로그 작업",
+       "ja": "アナログ画",
+       "note": {
+        "en": "Drawn by hand on paper or canvas, not digitally; umbrella tag.",
+        "ko": "종이 등에 손으로 그린 그림. 아래 매체들의 상위.",
+        "ja": "紙などに手で描いた絵。下の画材タグの上位。"
+       },
+       "confusable": [
+        "watercolor_(medium)",
+        "photo_(medium)"
+       ]
+      },
+      {
+       "name": "watercolor_(medium)",
+       "ko": "수채화",
+       "ja": "水彩",
+       "note": {
+        "en": "Transparent washes of water-based paint.",
+        "ko": "물에 푼 투명한 물감으로 그린 그림.",
+        "ja": "水で溶いた透明な絵の具で描いた絵。"
+       },
+       "confusable": [
+        "acrylic_paint_(medium)"
+       ]
+      },
+      {
+       "name": "acrylic_paint_(medium)",
+       "ko": "아크릴화",
+       "ja": "アクリル画",
+       "note": {
+        "en": "Opaque, flat acrylic paint.",
+        "ko": "불투명하고 평평하게 칠하는 아크릴 물감.",
+        "ja": "不透明で平らに塗るアクリル絵の具。"
+       },
+       "confusable": [
+        "watercolor_(medium)",
+        "oil_painting_(medium)"
+       ]
+      },
+      {
+       "name": "oil_painting_(medium)",
+       "ko": "유화",
+       "ja": "油絵",
+       "note": {
+        "en": "Thick, rich oil paint with visible brushwork.",
+        "ko": "붓 자국이 보이는 두껍고 짙은 유화.",
+        "ja": "筆跡の見える厚く濃い油絵。"
+       },
+       "confusable": [
+        "acrylic_paint_(medium)"
+       ]
+      },
+      {
+       "name": "marker_(medium)",
+       "ko": "마커",
+       "ja": "マーカー",
+       "note": {
+        "en": "Coloured with felt-tip markers.",
+        "ko": "펠트 마커로 칠한 그림.",
+        "ja": "マーカーペンで彩色した絵。"
+       },
+       "confusable": [
+        "colored_pencil_(medium)"
+       ]
+      },
+      {
+       "name": "colored_pencil_(medium)",
+       "ko": "색연필",
+       "ja": "色鉛筆",
+       "note": {
+        "en": "Drawn with coloured pencils, with visible strokes.",
+        "ko": "색연필로 그려 선결이 보이는 그림.",
+        "ja": "色鉛筆で描かれ線の跡が見える絵。"
+       },
+       "confusable": [
+        "graphite_(medium)"
+       ]
+      },
+      {
+       "name": "graphite_(medium)",
+       "ko": "연필화",
+       "ja": "鉛筆画",
+       "note": {
+        "en": "Pencil drawing in grey graphite.",
+        "ko": "회색 흑연 연필로 그린 그림.",
+        "ja": "灰色の鉛筆で描いた絵。"
+       },
+       "confusable": [
+        "ink_(medium)"
+       ]
+      },
+      {
+       "name": "ink_(medium)",
+       "ko": "잉크화",
+       "ja": "インク画",
+       "note": {
+        "en": "Drawn with ink, giving bold black lines.",
+        "ko": "잉크로 그려 굵고 진한 선이 나오는 그림.",
+        "ja": "インクで描かれた力強い黒線の絵。"
+       },
+       "confusable": [
+        "graphite_(medium)"
+       ]
+      },
+      {
+       "name": "pixel_art",
+       "ko": "픽셀 아트",
+       "ja": "ドット絵",
+       "note": {
+        "en": "Drawn in visible square pixels.",
+        "ko": "네모난 픽셀이 보이도록 그린 그림.",
+        "ja": "四角いドットが見える絵。"
+       }
+      },
+      {
+       "name": "3d",
+       "ko": "3D",
+       "ja": "3D",
+       "note": {
+        "en": "Rendered from a 3D model, not drawn by hand.",
+        "ko": "3D 모델로 만든 그림. 손으로 그리지 않음.",
+        "ja": "3Dモデルで作られた絵。手描きではない。"
+       }
+      },
+      {
+       "name": "photo_(medium)",
+       "ko": "사진",
+       "ja": "写真",
+       "note": {
+        "en": "An actual photograph, not an illustration.",
+        "ko": "일러스트가 아닌 실제 사진.",
+        "ja": "イラストではない実際の写真。"
+       },
+       "confusable": [
+        "photorealistic"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "style.finish",
+     "title": {
+      "en": "Finish and rendering",
+      "ko": "마감·묘사",
+      "ja": "仕上げ"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "sketch",
+       "ko": "스케치",
+       "ja": "スケッチ",
+       "note": {
+        "en": "Rough, loose drawing with sketchy lines.",
+        "ko": "거칠고 느슨한 선으로 그린 밑그림풍.",
+        "ja": "ラフで緩い線で描いた下描き風。"
+       },
+       "confusable": [
+        "lineart"
+       ]
+      },
+      {
+       "name": "lineart",
+       "ko": "선화",
+       "ja": "線画",
+       "note": {
+        "en": "Clean outlines only, before colouring.",
+        "ko": "채색 전의 깔끔한 윤곽선만 있는 그림.",
+        "ja": "彩色前のきれいな輪郭線だけの絵。"
+       },
+       "confusable": [
+        "sketch",
+        "flat_color"
+       ]
+      },
+      {
+       "name": "no_lineart",
+       "ko": "선 없는 그림",
+       "ja": "線画なし",
+       "note": {
+        "en": "Shapes defined by colour, with no outlines.",
+        "ko": "윤곽선 없이 색면으로 형태를 잡은 그림.",
+        "ja": "輪郭線がなく色面で形を作った絵。"
+       },
+       "confusable": [
+        "lineart"
+       ]
+      },
+      {
+       "name": "flat_color",
+       "ko": "플랫 컬러",
+       "ja": "ベタ塗り",
+       "note": {
+        "en": "Even fills of colour with no shading.",
+        "ko": "음영 없이 고르게 칠한 색.",
+        "ja": "陰影なしで均一に塗った色。"
+       },
+       "confusable": [
+        "anime_coloring"
+       ]
+      },
+      {
+       "name": "anime_coloring",
+       "ko": "애니메이션식 채색",
+       "ja": "アニメ塗り",
+       "note": {
+        "en": "Crisp, simple shading like a TV anime.",
+        "ko": "TV 애니처럼 또렷하고 단순한 음영.",
+        "ja": "TVアニメのようにくっきり単純な陰影。"
+       },
+       "confusable": [
+        "flat_color"
+       ]
+      },
+      {
+       "name": "realistic",
+       "ko": "사실적",
+       "ja": "リアル",
+       "note": {
+        "en": "Proportions and shading close to real life.",
+        "ko": "현실에 가까운 비례와 음영.",
+        "ja": "実物に近い比率と陰影。"
+       },
+       "confusable": [
+        "photorealistic"
+       ]
+      },
+      {
+       "name": "photorealistic",
+       "ko": "극사실",
+       "ja": "フォトリアル",
+       "note": {
+        "en": "So lifelike it could pass for a photograph.",
+        "ko": "사진으로 착각할 만큼 정교한 묘사.",
+        "ja": "写真と見まがうほど精密な描写。"
+       },
+       "confusable": [
+        "realistic",
+        "photo_(medium)"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "style.look",
+     "title": {
+      "en": "Look and era",
+      "ko": "분위기·시대",
+      "ja": "画風・年代"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "chibi",
+       "ko": "치비",
+       "ja": "ちび",
+       "note": {
+        "en": "Tiny, round figure with a big head.",
+        "ko": "머리가 크고 몸이 작고 둥근 캐릭터.",
+        "ja": "頭が大きく体が小さく丸いキャラ。"
+       }
+      },
+      {
+       "name": "retro_artstyle",
+       "ko": "레트로 화풍",
+       "ja": "レトロ画風",
+       "note": {
+        "en": "Deliberately old-fashioned anime look.",
+        "ko": "일부러 옛 애니풍으로 그린 화풍.",
+        "ja": "あえて昔のアニメ風にした画風。"
+       },
+       "confusable": [
+        "1980s_(style)",
+        "1990s_(style)"
+       ]
+      },
+      {
+       "name": "1980s_(style)",
+       "ko": "80년대풍",
+       "ja": "80年代風",
+       "note": {
+        "en": "Look of 1980s anime and illustration.",
+        "ko": "1980년대 애니·일러스트의 분위기.",
+        "ja": "1980年代のアニメ・イラストの雰囲気。"
+       },
+       "confusable": [
+        "1990s_(style)"
+       ]
+      },
+      {
+       "name": "1990s_(style)",
+       "ko": "90년대풍",
+       "ja": "90年代風",
+       "note": {
+        "en": "Look of 1990s anime, with cel colours and grain.",
+        "ko": "셀 느낌과 질감이 있는 1990년대 애니풍.",
+        "ja": "セル画風の質感がある90年代アニメ風。"
+       },
+       "confusable": [
+        "1980s_(style)",
+        "2000s_(style)"
+       ]
+      },
+      {
+       "name": "2000s_(style)",
+       "ko": "2000년대풍",
+       "ja": "2000年代風",
+       "note": {
+        "en": "Look of 2000s anime and digital art.",
+        "ko": "2000년대 애니와 디지털 일러스트 분위기.",
+        "ja": "2000年代のアニメやデジタル絵の雰囲気。"
+       },
+       "confusable": [
+        "1990s_(style)"
+       ]
+      },
+      {
+       "name": "toon_(style)",
+       "ko": "카툰풍",
+       "ja": "トゥーン調",
+       "note": {
+        "en": "Western cartoon look with bold outlines.",
+        "ko": "굵은 윤곽선의 서양 카툰풍.",
+        "ja": "太い輪郭線の欧米カートゥーン風。"
+       }
+      },
+      {
+       "name": "oekaki",
+       "ko": "오에카키",
+       "ja": "お絵かき",
+       "note": {
+        "en": "Casual doodle look, as if drawn quickly in a paint app.",
+        "ko": "그림판으로 빠르게 그린 듯한 낙서풍.",
+        "ja": "お絵かきソフトで手早く描いた落書き風。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "style.format",
+     "title": {
+      "en": "Format and purpose",
+      "ko": "형식·용도",
+      "ja": "形式・用途"
+     },
+     "exclusive": false,
+     "visual": true,
+     "tags": [
+      {
+       "name": "comic",
+       "ko": "만화",
+       "ja": "漫画",
+       "note": {
+        "en": "Panels telling a story in sequence.",
+        "ko": "칸을 나눠 이야기를 잇는 형식.",
+        "ja": "コマで順に物語を語る形式。"
+       },
+       "confusable": [
+        "4koma"
+       ]
+      },
+      {
+       "name": "4koma",
+       "ko": "4컷 만화",
+       "ja": "4コマ",
+       "note": {
+        "en": "Four stacked panels telling a short gag.",
+        "ko": "세로로 쌓은 네 칸짜리 짧은 만화.",
+        "ja": "縦に4コマ並んだ短い漫画。"
+       },
+       "confusable": [
+        "comic"
+       ]
+      },
+      {
+       "name": "cover",
+       "ko": "표지",
+       "ja": "表紙",
+       "note": {
+        "en": "Artwork made as the front of a book or disc.",
+        "ko": "책이나 음반의 앞면용 그림.",
+        "ja": "本やディスクの表紙用の絵。"
+       },
+       "confusable": [
+        "cover_page"
+       ]
+      },
+      {
+       "name": "cover_page",
+       "ko": "표지 페이지",
+       "ja": "扉絵",
+       "note": {
+        "en": "Opening illustration page of a chapter.",
+        "ko": "챕터 첫머리의 일러스트 페이지.",
+        "ja": "章の冒頭にある扉絵のページ。"
+       },
+       "confusable": [
+        "cover"
+       ]
+      },
+      {
+       "name": "official_art",
+       "ko": "공식 일러스트",
+       "ja": "公式イラスト",
+       "note": {
+        "en": "Made by the official makers of the work.",
+        "ko": "원작 제작 측이 낸 일러스트.",
+        "ja": "原作の制作側が出したイラスト。"
+       }
+      },
+      {
+       "name": "character_sheet",
+       "ko": "캐릭터 시트",
+       "ja": "キャラ設定画",
+       "note": {
+        "en": "Several views of one character on one page.",
+        "ko": "한 캐릭터의 여러 시점을 모은 설정 시트.",
+        "ja": "1キャラの複数の角度を並べた設定画。"
+       },
+       "confusable": [
+        "reference_sheet"
+       ]
+      },
+      {
+       "name": "reference_sheet",
+       "ko": "레퍼런스 시트",
+       "ja": "リファレンスシート",
+       "note": {
+        "en": "Sheet of views, colours and details for a character.",
+        "ko": "캐릭터의 모습·색·세부를 정리한 참고 시트.",
+        "ja": "キャラの姿や色、細部をまとめた資料。"
+       },
+       "confusable": [
+        "character_sheet"
+       ]
+      },
+      {
+       "name": "concept_art",
+       "ko": "콘셉트 아트",
+       "ja": "コンセプトアート",
+       "note": {
+        "en": "Rough design art made before final work.",
+        "ko": "완성 전 설정을 잡기 위한 디자인 그림.",
+        "ja": "完成前に設定を固めるためのデザイン画。"
+       }
+      },
+      {
+       "name": "game_cg",
+       "ko": "게임 CG",
+       "ja": "ゲームCG",
+       "note": {
+        "en": "Full-screen event illustration from a game.",
+        "ko": "게임 속 이벤트용 전체 화면 일러스트.",
+        "ja": "ゲーム内のイベント用一枚絵。"
+       }
+      },
+      {
+       "name": "parody",
+       "ko": "패러디",
+       "ja": "パロディ",
+       "note": {
+        "en": "Humorous take on another work.",
+        "ko": "다른 작품을 흉내 낸 유머러스한 그림.",
+        "ja": "他作品をもじったユーモラスな絵。"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "meta",
+   "title": {
+    "en": "File and meta tags",
+    "ko": "파일·메타 태그",
+    "ja": "ファイル・メタタグ"
+   },
+   "summary": {
+    "en": "Bookkeeping tags about the file, text and translation; not about what is drawn.",
+    "ko": "그려진 내용이 아닌 파일, 글자, 번역에 관한 관리용 태그.",
+    "ja": "描かれた内容ではなく、ファイルや文字、翻訳に関する管理用タグ。"
+   },
+   "groups": [
+    {
+     "id": "meta.size",
+     "title": {
+      "en": "Resolution and shape",
+      "ko": "해상도·모양",
+      "ja": "解像度・形状"
+     },
+     "exclusive": false,
+     "visual": false,
+     "tags": [
+      {
+       "name": "lowres",
+       "ko": "저해상도",
+       "ja": "低解像度",
+       "note": {
+        "en": "Meta tag for small images with few pixels; used as a negative quality word.",
+        "ko": "픽셀이 적은 이미지용 메타 태그. 부정 품질어로 쓰임.",
+        "ja": "画素が少ない画像のメタタグ。ネガティブ品質語に使う。"
+       },
+       "confusable": [
+        "highres"
+       ]
+      },
+      {
+       "name": "highres",
+       "ko": "고해상도",
+       "ja": "高解像度",
+       "note": {
+        "en": "Meta tag for large images; often a positive quality word.",
+        "ko": "큰 이미지용 메타 태그. 긍정 품질어로 자주 쓰임.",
+        "ja": "大きな画像のメタタグ。ポジティブ品質語によく使う。"
+       },
+       "confusable": [
+        "lowres",
+        "absurdres"
+       ]
+      },
+      {
+       "name": "absurdres",
+       "ko": "초고해상도",
+       "ja": "超高解像度",
+       "note": {
+        "en": "Meta tag for very large images; a step above highres.",
+        "ko": "highres보다 한 단계 큰 이미지. 긍정 품질어로 쓰임.",
+        "ja": "highresよりさらに大きい画像。ポジティブ品質語に使う。"
+       },
+       "confusable": [
+        "highres",
+        "incredibly_absurdres"
+       ]
+      },
+      {
+       "name": "incredibly_absurdres",
+       "ko": "극초고해상도",
+       "ja": "極超高解像度",
+       "note": {
+        "en": "Meta tag for enormous images; above absurdres.",
+        "ko": "absurdres보다 더 거대한 이미지용 메타 태그.",
+        "ja": "absurdresを超える巨大な画像のメタタグ。"
+       },
+       "confusable": [
+        "absurdres"
+       ]
+      },
+      {
+       "name": "wide_image",
+       "ko": "가로로 긴 이미지",
+       "ja": "横長画像",
+       "note": {
+        "en": "Meta tag for images much wider than tall.",
+        "ko": "세로보다 훨씬 가로가 긴 이미지.",
+        "ja": "縦よりずっと横が長い画像。"
+       },
+       "confusable": [
+        "tall_image"
+       ]
+      },
+      {
+       "name": "tall_image",
+       "ko": "세로로 긴 이미지",
+       "ja": "縦長画像",
+       "note": {
+        "en": "Meta tag for images much taller than wide.",
+        "ko": "가로보다 훨씬 세로가 긴 이미지.",
+        "ja": "横よりずっと縦が長い画像。"
+       },
+       "confusable": [
+        "wide_image"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "meta.anim",
+     "title": {
+      "en": "Animation and sound",
+      "ko": "애니메이션·소리",
+      "ja": "動画・音"
+     },
+     "exclusive": false,
+     "visual": false,
+     "tags": [
+      {
+       "name": "animated",
+       "ko": "움직이는 이미지",
+       "ja": "動画",
+       "note": {
+        "en": "Meta tag for any moving image; umbrella for gif and video.",
+        "ko": "움직이는 이미지 전반. gif·영상의 상위.",
+        "ja": "動く画像全般。gifや動画の上位。"
+       },
+       "confusable": [
+        "animated_gif",
+        "video"
+       ]
+      },
+      {
+       "name": "animated_gif",
+       "ko": "애니메이션 GIF",
+       "ja": "アニメGIF",
+       "note": {
+        "en": "Meta tag for a moving GIF file.",
+        "ko": "움직이는 GIF 파일용 메타 태그.",
+        "ja": "動くGIFファイルのメタタグ。"
+       },
+       "confusable": [
+        "video"
+       ]
+      },
+      {
+       "name": "video",
+       "ko": "영상",
+       "ja": "動画ファイル",
+       "note": {
+        "en": "Meta tag for a video file such as mp4 or webm.",
+        "ko": "mp4·webm 같은 영상 파일용 메타 태그.",
+        "ja": "mp4やwebmなどの動画ファイルのメタタグ。"
+       },
+       "confusable": [
+        "animated_gif"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "meta.trans",
+     "title": {
+      "en": "Translation and commentary",
+      "ko": "번역·해설",
+      "ja": "翻訳・コメント"
+     },
+     "exclusive": false,
+     "visual": false,
+     "tags": [
+      {
+       "name": "translated",
+       "ko": "번역됨",
+       "ja": "翻訳済み",
+       "note": {
+        "en": "Meta tag: text in the image has an added translation.",
+        "ko": "그림 속 글자에 번역이 달린 상태.",
+        "ja": "画像内の文字に翻訳が付いた状態。"
+       },
+       "confusable": [
+        "translation_request"
+       ]
+      },
+      {
+       "name": "translation_request",
+       "ko": "번역 요청",
+       "ja": "翻訳依頼",
+       "note": {
+        "en": "Meta tag: text in the image still needs translating.",
+        "ko": "그림 속 글자에 번역이 필요한 상태.",
+        "ja": "画像内の文字が翻訳待ちの状態。"
+       },
+       "confusable": [
+        "translated"
+       ]
+      },
+      {
+       "name": "commentary",
+       "ko": "작가 코멘트",
+       "ja": "作者コメント",
+       "note": {
+        "en": "Meta tag: the artist's own caption is included, in its original language.",
+        "ko": "작가가 쓴 설명글이 원문 그대로 있음.",
+        "ja": "作者自身の説明文が原文で付いている。"
+       },
+       "confusable": [
+        "commentary_request"
+       ]
+      },
+      {
+       "name": "commentary_request",
+       "ko": "코멘트 번역 요청",
+       "ja": "コメント翻訳依頼",
+       "note": {
+        "en": "Meta tag: the artist's caption still needs translating.",
+        "ko": "작가 설명글의 번역이 필요한 상태.",
+        "ja": "作者の説明文の翻訳が必要な状態。"
+       },
+       "confusable": [
+        "commentary"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "meta.text",
+     "title": {
+      "en": "Text inside the image",
+      "ko": "그림 속 글자",
+      "ja": "画像内の文字"
+     },
+     "exclusive": false,
+     "visual": false,
+     "tags": [
+      {
+       "name": "english_text",
+       "ko": "영어 글자",
+       "ja": "英語の文字",
+       "note": {
+        "en": "General tag, not meta: English words appear in the picture.",
+        "ko": "메타가 아닌 일반 태그. 그림에 영어 글자가 있음.",
+        "ja": "メタではなく一般タグ。絵に英語の文字がある。"
+       },
+       "confusable": [
+        "japanese_text"
+       ]
+      },
+      {
+       "name": "japanese_text",
+       "ko": "일본어 글자",
+       "ja": "日本語の文字",
+       "note": {
+        "en": "General tag, not meta: Japanese writing appears in the picture.",
+        "ko": "메타가 아닌 일반 태그. 그림에 일본어 글자가 있음.",
+        "ja": "メタではなく一般タグ。絵に日本語の文字がある。"
+       },
+       "confusable": [
+        "english_text"
+       ]
+      },
+      {
+       "name": "text_focus",
+       "ko": "글자 중심",
+       "ja": "文字が主役",
+       "note": {
+        "en": "Text is the main subject of the picture.",
+        "ko": "글자가 그림의 주된 대상인 경우.",
+        "ja": "文字が絵の主題になっている。"
+       }
+      },
+      {
+       "name": "speech_bubble",
+       "ko": "말풍선",
+       "ja": "吹き出し",
+       "note": {
+        "en": "Balloon holding spoken words.",
+        "ko": "말이 담긴 풍선 모양 칸.",
+        "ja": "セリフが入った吹き出し。"
+       }
+      },
+      {
+       "name": "signature",
+       "ko": "서명",
+       "ja": "サイン",
+       "note": {
+        "en": "Artist's signature drawn in the image; often a negative prompt word.",
+        "ko": "그림 속 작가 서명. 부정 프롬프트에 자주 씀.",
+        "ja": "絵の中の作者サイン。ネガティブによく使う。"
+       },
+       "confusable": [
+        "artist_name",
+        "watermark"
+       ]
+      },
+      {
+       "name": "watermark",
+       "ko": "워터마크",
+       "ja": "透かし",
+       "note": {
+        "en": "Overlaid logo or mark on the image; often a negative prompt word.",
+        "ko": "이미지에 덧씌운 로고. 부정 프롬프트에 자주 씀.",
+        "ja": "画像に重ねたロゴ。ネガティブによく使う。"
+       },
+       "confusable": [
+        "signature"
+       ]
+      },
+      {
+       "name": "artist_name",
+       "ko": "작가 이름",
+       "ja": "作者名",
+       "note": {
+        "en": "Artist name written in the image; often a negative prompt word.",
+        "ko": "그림 속에 적힌 작가 이름. 부정 프롬프트에 자주 씀.",
+        "ja": "絵の中の作者名。ネガティブによく使う。"
+       },
+       "confusable": [
+        "signature"
+       ]
+      },
+      {
+       "name": "dated",
+       "ko": "날짜 기입",
+       "ja": "日付入り",
+       "note": {
+        "en": "A date is written in the picture.",
+        "ko": "그림 안에 날짜가 적혀 있음.",
+        "ja": "絵の中に日付が書かれている。"
+       }
+      },
+      {
+       "name": "twitter_username",
+       "ko": "트위터 ID",
+       "ja": "Twitterユーザー名",
+       "note": {
+        "en": "A Twitter or X handle appears in the picture.",
+        "ko": "그림 안에 트위터(X) 아이디가 있음.",
+        "ja": "絵の中にTwitter(X)のIDがある。"
+       }
+      },
+      {
+       "name": "web_address",
+       "ko": "웹 주소",
+       "ja": "Webアドレス",
+       "note": {
+        "en": "A web address appears in the picture.",
+        "ko": "그림 안에 웹 주소가 적혀 있음.",
+        "ja": "絵の中にWebアドレスがある。"
+       }
+      }
+     ]
+    },
+    {
+     "id": "meta.quality",
+     "title": {
+      "en": "Quality and revisions",
+      "ko": "품질·판본",
+      "ja": "品質・版"
+     },
+     "exclusive": false,
+     "visual": false,
+     "tags": [
+      {
+       "name": "jpeg_artifacts",
+       "ko": "JPEG 노이즈",
+       "ja": "JPEGノイズ",
+       "note": {
+        "en": "Blocky compression noise; a common negative prompt word.",
+        "ko": "압축으로 생긴 블록 노이즈. 부정 프롬프트에 자주 씀.",
+        "ja": "圧縮によるブロックノイズ。ネガティブによく使う。"
+       },
+       "confusable": [
+        "lowres"
+       ]
+      },
+      {
+       "name": "scan",
+       "ko": "스캔본",
+       "ja": "スキャン",
+       "note": {
+        "en": "Meta tag: scanned from print, often with paper texture.",
+        "ko": "인쇄물을 스캔한 이미지. 종이 질감이 보임.",
+        "ja": "印刷物をスキャンした画像。紙の質感が出る。"
+       }
+      },
+      {
+       "name": "md5_mismatch",
+       "ko": "MD5 불일치",
+       "ja": "MD5不一致",
+       "note": {
+        "en": "Meta tag: same picture as another post, but the file differs.",
+        "ko": "다른 게시물과 같은 그림이나 파일이 다름.",
+        "ja": "別の投稿と同じ絵だがファイルが異なる。"
+       },
+       "confusable": [
+        "revision"
+       ]
+      },
+      {
+       "name": "revision",
+       "ko": "수정판",
+       "ja": "修正版",
+       "note": {
+        "en": "Meta tag: an updated version of an earlier image.",
+        "ko": "이전 이미지를 고친 수정판.",
+        "ja": "以前の画像を修正した版。"
+       },
+       "confusable": [
+        "md5_mismatch"
+       ]
+      },
+      {
+       "name": "upscaled",
+       "ko": "업스케일",
+       "ja": "アップスケール",
+       "note": {
+        "en": "Meta tag: enlarged by software, not drawn at that size.",
+        "ko": "소프트웨어로 키운 이미지. 원래 크기가 아님.",
+        "ja": "ソフトで拡大した画像。元の大きさではない。"
+       },
+       "confusable": [
+        "resized"
+       ]
+      },
+      {
+       "name": "resized",
+       "ko": "크기 조정됨",
+       "ja": "リサイズ",
+       "note": {
+        "en": "Meta tag: the pixel size was changed after creation.",
+        "ko": "제작 후 픽셀 크기를 바꾼 이미지.",
+        "ja": "制作後にピクセルサイズを変えた画像。"
+       },
+       "confusable": [
+        "upscaled"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

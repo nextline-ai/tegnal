@@ -40,6 +40,8 @@ import 'presentation/content/image_translation.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
 import 'core/content/recent_works.dart';
+import 'core/study/study_guide.dart';
+import 'core/study/study_models.dart';
 import 'core/support/app_platform.dart';
 import 'core/support/privacy_settings.dart';
 import 'presentation/settings/site_account_section.dart';
@@ -171,12 +173,15 @@ Future<AppServices> _launch() async {
   // Whether AI translation can be on; asked early, as Translate needs the answer.
   unawaited(AITranslationModel.check());
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
+  // The tag study curriculum is empty until its file is read.
+  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled()]);
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
   ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
   RecentWorks.defaultCoverDirectory = Directory('${caches.path}/RecentWorks');
   await preparingStorage;
   await localizing;
+  await studying;
   // Sign-in cookies live in the Android Keystore, never in the database or backups.
   final secrets = await loadingSecrets;
   SiteAccount.store = secrets;
@@ -240,6 +245,8 @@ Future<AppServices> _launchFixture() async {
   ReaderPreferences.defaults.set('reader.helpHidden', !_fixture.split(',').map((name) => name.trim()).contains('readerHelp'));
   ReaderPreferences.install(preferences);
   await loadLocalization(preferences.defaults);
+  await StudyCurriculum.loadBundled();
+  await StudyGuide.loadBundled();
   final names = _fixture.split(',').map((name) => name.trim()).toSet();
   final options = {for (final name in names) ...FixtureOption.values.where((option) => option.name == name)};
   // `setup` starts without a connected website, as `--comics-setup-test` does.

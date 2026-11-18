@@ -35,7 +35,10 @@ void main() {
     expect(MangaUrls.hasResolvedBackend, isTrue, reason: 'Switching back needs no new check');
     expect(MangaUrls.backend, MangaBackend.keyed);
     expect(preferences.object('manga.resolved_media_hosts'), ['media.keyed-one.example'], reason: 'Lists come back as text lists');
-    expect(ComicSites.siblings('keyed-one.example'), ['keyed-two.example', 'indexed.example'], reason: 'Every website numbers works the same way, however it is read');
+    expect(ComicSites.siblings('keyed-one.example'), [
+      'keyed-two.example',
+      'indexed.example',
+    ], reason: 'Every website numbers works the same way, however it is read');
 
     ComicSites.remove('keyed-two.example');
     expect(ComicSites.siblings('keyed-one.example'), ['indexed.example']);

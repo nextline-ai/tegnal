@@ -159,6 +159,9 @@ final class BooruStore: @unchecked Sendable {
             try db.execute(sql: "ALTER TABLE folders ADD COLUMN server_id TEXT")
             try Self.assignFolderServers(db: db)
         }
+        migrations.registerMigration("booru_v14_study") { try StudyStore.migrate($0) }
+        migrations.registerMigration("booru_v15_study_game") { try StudyStore.migrateGame($0) }
+        migrations.registerMigration("booru_v16_study_awards") { try StudyStore.migrateAwards($0) }
         try migrations.migrate(database)
         try reload()
     }
@@ -277,6 +280,7 @@ final class BooruStore: @unchecked Sendable {
                 try db.execute(sql: "DELETE FROM \(table) WHERE server_id = ?", arguments: [server.id])
             }
             try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: ["blacklist." + server.id])
+            try StudyStore.forget(address: server.canonicalAddress, db: db)
             // Its folders go with it; global folders stay.
             for id in try String.fetchAll(db, sql: "SELECT id FROM folders WHERE server_id = ?", arguments: [server.id]) {
                 try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])

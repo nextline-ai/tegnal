@@ -6,6 +6,7 @@ import '../challenge/challenge_store.dart';
 import '../content/site_account.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
+import '../study/study_store.dart';
 import '../support/preferences.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
@@ -275,6 +276,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       db.execute('ALTER TABLE folders ADD COLUMN server_id TEXT');
       assignFolderServers(db);
     });
+    migrations.registerMigration('booru_v14_study', StudyStore.migrate);
     return migrations;
   }
 
@@ -407,6 +409,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
         db.execute('DELETE FROM $table WHERE server_id = ?', [server.id]);
       }
       db.execute('DELETE FROM settings WHERE key = ?', ['blacklist.${server.id}']);
+      StudyStore.forget(server.canonicalAddress, db);
       // Its folders go with it; global folders stay.
       for (final id in db.column<String>('SELECT id FROM folders WHERE server_id = ?', [server.id])) {
         db.execute('DELETE FROM settings WHERE key = ?', [FolderRule.keyPrefix + id]);

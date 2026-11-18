@@ -1,0 +1,1161 @@
+{
+  "version": 1,
+  "checked": "2026-11",
+  "lessons": [
+    {
+      "id": "basics",
+      "symbol": "text.alignleft",
+      "title": {
+        "en": "How a Prompt Is Built",
+        "ko": "프롬프트의 뼈대",
+        "ja": "プロンプトの組み立て方"
+      },
+      "summary": {
+        "en": "Tags, commas, and the order models were trained with.",
+        "ko": "태그와 쉼표, 그리고 모델이 학습한 순서.",
+        "ja": "タグ、カンマ、そしてモデルが学習した順序。"
+      },
+      "parts": [
+        {
+          "body": {
+            "en": "A prompt for a tag-trained model is a list of tags separated by commas. Where a server writes an underscore, a prompt writes a space: the official examples of NovelAI, Illustrious XL and Animagine XL all write `looking at viewer` and `upper body`.",
+            "ko": "태그로 학습한 모델의 프롬프트는 태그를 쉼표로 이어 쓴 목록입니다. 서버에서 밑줄로 쓰는 자리는 프롬프트에서 띄어 씁니다. NovelAI, Illustrious XL, Animagine XL의 공식 예시는 모두 `looking at viewer`, `upper body`처럼 씁니다.",
+            "ja": "タグで学習したモデル向けのプロンプトは、カンマで区切ったタグの並びです。サーバーではアンダースコアで表記されるところも、プロンプトでは半角スペースで書きます。NovelAI、Illustrious XL、Animagine XL の公式例はどれも `looking at viewer` や `upper body` のように書かれています。"
+          },
+          "examples": [
+            {
+              "code": "1girl, solo, long hair, smile, looking at viewer, upper body, outdoors"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Order",
+            "ko": "순서",
+            "ja": "順序"
+          },
+          "body": {
+            "en": "Each model family publishes the order its training captions used. They agree on the start: how many people, then who, then from which series. NovelAI also advises keeping the most important things in the front half of the prompt.",
+            "ko": "모델마다 학습 때 쓴 캡션의 순서를 공개합니다. 시작은 모두 같습니다. 인원수, 캐릭터, 작품 순입니다. NovelAI는 가장 중요한 내용을 프롬프트 앞쪽 절반에 두라고도 안내합니다.",
+            "ja": "各モデルは、学習時のキャプションで使われた順序を公開しています。冒頭はどれも共通で、人数、誰か、どの作品か、の順です。NovelAI は、最も大切な要素をプロンプトの前半に置くことも勧めています。"
+          },
+          "examples": [
+            {
+              "code": "1boy, 1girl, characters, series, everything else in any order",
+              "note": {
+                "en": "NovelAI",
+                "ko": "NovelAI",
+                "ja": "NovelAI"
+              }
+            },
+            {
+              "code": "<1girl/1boy/1other/...>, <character>, <series>, <artists>, <special tags>, <general tags>, <other tags>",
+              "note": {
+                "en": "NoobAI-XL",
+                "ko": "NoobAI-XL",
+                "ja": "NoobAI-XL"
+              }
+            },
+            {
+              "code": "1girl/1boy/1other, character name, from which series, rating, everything else in any order and end with quality enhancement",
+              "note": {
+                "en": "Animagine XL 4.0",
+                "ko": "Animagine XL 4.0",
+                "ja": "Animagine XL 4.0"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "In This App",
+            "ko": "이 앱에서",
+            "ja": "このアプリでは"
+          },
+          "body": {
+            "en": "“View as a Prompt” on any picture writes its tags in this order, so a picture you like becomes a prompt to study.",
+            "ko": "그림의 “프롬프트로 보기”는 그 그림의 태그를 이 순서로 써 줍니다. 마음에 드는 그림이 곧 공부할 프롬프트가 됩니다.",
+            "ja": "どの画像でも「プロンプトとして見る」を使うと、タグがこの順序で書き出されます。気に入った画像が、そのまま学習用のプロンプトになります。"
+          }
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which prompt is written the recommended way?",
+            "ko": "권장하는 방식으로 쓴 프롬프트는?",
+            "ja": "推奨どおりに書かれたプロンプトはどれですか？"
+          },
+          "choices": [
+            "1girl, solo, long hair, smile, outdoors",
+            "outdoors, smile, long hair, solo, 1girl",
+            "1girl solo long_hair smile outdoors",
+            "smile; long hair; 1girl"
+          ],
+          "answer": 0,
+          "why": {
+            "en": "Headcount first, commas between tags, spaces inside a tag.",
+            "ko": "인원수를 먼저 쓰고, 태그 사이는 쉼표로, 태그 안은 띄어 씁니다.",
+            "ja": "最初に人数、タグの間はカンマ、タグの中はスペースです。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/tags",
+        "https://docs.novelai.net/en/image/basics",
+        "https://huggingface.co/Laxhar/noobai-XL-1.0",
+        "https://huggingface.co/cagliostrolab/animagine-xl-4.0"
+      ]
+    },
+    {
+      "id": "emphasis-novelai",
+      "symbol": "curlybraces",
+      "tool": "emphasis",
+      "title": {
+        "en": "Emphasis in NovelAI",
+        "ko": "NovelAI의 강조 문법",
+        "ja": "NovelAI の強調"
+      },
+      "summary": {
+        "en": "Braces, brackets and the numbered :: form.",
+        "ko": "중괄호와 대괄호, 숫자를 쓰는 :: 문법.",
+        "ja": "波括弧、角括弧、数値指定の :: 形式。"
+      },
+      "parts": [
+        {
+          "heading": {
+            "en": "Braces and Brackets",
+            "ko": "중괄호와 대괄호",
+            "ja": "波括弧と角括弧"
+          },
+          "body": {
+            "en": "`{ }` strengthens what it encloses by 1.05 times and `[ ]` weakens it by the same factor. Nesting multiplies, so `{{rain}}` weighs 1.1025.",
+            "ko": "`{ }`로 감싸면 1.05배 강해지고 `[ ]`로 감싸면 그만큼 약해집니다. 겹치면 곱해지므로 `{{rain}}`은 1.1025배입니다.",
+            "ja": "`{ }` は囲んだ部分を 1.05 倍に強め、`[ ]` は同じ倍率で弱めます。重ねると掛け算になるので、`{{rain}}` の重みは 1.1025 です。"
+          },
+          "examples": [
+            {
+              "code": "1girl, {{rain}}, night, [coat]",
+              "note": {
+                "en": "More rain, less coat",
+                "ko": "비는 더 강하게, 코트는 약하게",
+                "ja": "雨を強く、コートを弱く"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Numbered Emphasis (V4 and Later)",
+            "ko": "숫자 강조 (V4 이상)",
+            "ja": "数値による強調（V4 以降）"
+          },
+          "body": {
+            "en": "Write the weight right before `::` and end the section with a bare `::`. Numbers between 0.0 and 1.0 weaken. Several tags can share one section.",
+            "ko": "`::` 바로 앞에 가중치를 쓰고, 숫자 없는 `::`로 끝냅니다. 0.0에서 1.0 사이의 숫자는 약하게 합니다. 태그 여러 개를 한 구간에 넣을 수 있습니다.",
+            "ja": "重みを `::` の直前に書き、区間の終わりに数字なしの `::` を置きます。0.0 から 1.0 の間の数値は弱めます。1 つの区間に複数のタグを入れられます。"
+          },
+          "examples": [
+            {
+              "code": "1girl, 1.5::rain, night ::, 0.5::coat ::, black shoes"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Negative Emphasis (V4.5 and Later)",
+            "ko": "음수 강조 (V4.5 이상)",
+            "ja": "マイナスの強調（V4.5 以降）"
+          },
+          "body": {
+            "en": "A negative weight pushes the picture away from a concept. NovelAI describes it as better at targeted removals and inversions, while a long list of things to avoid belongs in Undesired Content.",
+            "ko": "음수 가중치는 그 개념에서 멀어지게 합니다. NovelAI는 이 방법이 특정한 것을 빼거나 뒤집는 데 더 알맞고, 피할 것을 길게 나열할 때는 Undesired Content가 알맞다고 설명합니다.",
+            "ja": "マイナスの重みは、画像をその概念から遠ざけます。NovelAI によると、特定の要素を取り除いたり反転させたりするのに向いています。避けたいものを長く並べる場合は Undesired Content を使います。"
+          },
+          "examples": [
+            {
+              "code": "-1::hat ::",
+              "note": {
+                "en": "No hat",
+                "ko": "모자 없이",
+                "ja": "帽子なし"
+              }
+            },
+            {
+              "code": "-2.5::flat color ::",
+              "note": {
+                "en": "Away from flat colouring",
+                "ko": "단색 채색에서 멀어지게",
+                "ja": "フラットな塗りから遠ざける"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Closing",
+            "ko": "닫기",
+            "ja": "閉じ方"
+          },
+          "body": {
+            "en": "Close everything you open. A bare `::` also closes any braces still open, as in `{{{{{rain ::`. In Undesired Content the meaning turns around: `{ }` avoids more and `[ ]` avoids less.",
+            "ko": "연 것은 모두 닫습니다. 숫자 없는 `::`는 열려 있는 중괄호도 함께 닫습니다(`{{{{{rain ::`). Undesired Content 칸에서는 뜻이 반대가 되어 `{ }`는 더 피하고 `[ ]`는 덜 피합니다.",
+            "ja": "開いたものは必ず閉じましょう。数字なしの `::` は、`{{{{{rain ::` のように、開いたままの波括弧もまとめて閉じます。Undesired Content では意味が逆になり、`{ }` はより強く避け、`[ ]` は避ける度合いが弱まります。"
+          }
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which strengthens rain the most in NovelAI?",
+            "ko": "NovelAI에서 rain을 가장 강하게 하는 것은?",
+            "ja": "NovelAI で rain を最も強めるのはどれですか？"
+          },
+          "choices": [
+            "{rain}",
+            "{{{rain}}}",
+            "[rain]",
+            "[[[rain]]]"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "Each pair of braces multiplies by 1.05; brackets divide.",
+            "ko": "중괄호 한 겹마다 1.05배가 곱해지고, 대괄호는 나눕니다.",
+            "ja": "波括弧は 1 組ごとに 1.05 倍になり、角括弧は割り算になります。"
+          }
+        },
+        {
+          "question": {
+            "en": "Which numbered emphasis is written correctly?",
+            "ko": "숫자 강조를 바르게 쓴 것은?",
+            "ja": "数値による強調として正しく書かれているのはどれですか？"
+          },
+          "choices": [
+            "1.5::rain ::",
+            "1.5:rain:",
+            "rain::1.5",
+            "{rain:1.5}"
+          ],
+          "answer": 0,
+          "why": {
+            "en": "The number goes right before `::`, and a bare `::` ends the section.",
+            "ko": "숫자는 `::` 바로 앞에 쓰고, 숫자 없는 `::`로 끝냅니다.",
+            "ja": "数値は `::` の直前に置き、数字なしの `::` で区間を閉じます。"
+          }
+        },
+        {
+          "question": {
+            "en": "On V4.5, which takes the hat out of the picture?",
+            "ko": "V4.5에서 그림에서 모자를 빼는 것은?",
+            "ja": "V4.5 で、画像から帽子を取り除くのはどれですか？"
+          },
+          "choices": [
+            "-1::hat ::",
+            "{hat}",
+            "1.5::hat ::",
+            "{{hat}}"
+          ],
+          "answer": 0,
+          "why": {
+            "en": "A negative weight pushes away from the concept; the others strengthen it.",
+            "ko": "음수 가중치는 그 개념에서 멀어지게 합니다. 나머지는 오히려 강하게 합니다.",
+            "ja": "マイナスの重みは概念から遠ざけます。ほかは強める書き方です。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/strengthening-weakening"
+      ]
+    },
+    {
+      "id": "emphasis-diffusion",
+      "symbol": "parentheses",
+      "tool": "emphasis",
+      "title": {
+        "en": "Emphasis in Stable Diffusion",
+        "ko": "Stable Diffusion의 강조 문법",
+        "ja": "Stable Diffusion の強調"
+      },
+      "summary": {
+        "en": "Parentheses, weights, and escaping a tag's own brackets.",
+        "ko": "괄호와 가중치, 태그에 든 괄호를 그대로 쓰는 법.",
+        "ja": "丸括弧、重み、タグ自身の括弧のエスケープ。"
+      },
+      "parts": [
+        {
+          "heading": {
+            "en": "Parentheses",
+            "ko": "괄호",
+            "ja": "丸括弧"
+          },
+          "body": {
+            "en": "In the Stable Diffusion web UI, `(word)` raises attention by 1.1 times and `[word]` lowers it by the same factor. A weight can be written out, but only with round brackets: `(word:1.5)`. Without a number the weight is 1.1, so `((word))` is 1.21.",
+            "ko": "Stable Diffusion web UI에서 `(word)`는 1.1배 강하게, `[word]`는 그만큼 약하게 합니다. 가중치를 직접 쓸 수 있는데 둥근 괄호에서만 됩니다: `(word:1.5)`. 숫자가 없으면 1.1이므로 `((word))`는 1.21입니다.",
+            "ja": "Stable Diffusion web UI では、`(word)` が注目度を 1.1 倍に上げ、`[word]` が同じ倍率で下げます。重みを数値で書くこともできますが、丸括弧でのみ使えます（`(word:1.5)`）。数値がなければ重みは 1.1 なので、`((word))` は 1.21 です。"
+          },
+          "examples": [
+            {
+              "code": "1girl, (rain:1.3), night, (coat:0.8)"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Brackets That Belong to a Tag",
+            "ko": "태그에 든 괄호",
+            "ja": "タグ自身の括弧"
+          },
+          "body": {
+            "en": "Many tags carry brackets of their own, such as `watercolor_(medium)`. Left as they are, the web UI reads them as emphasis, so each one is escaped with a backslash. The “Escaped Brackets” format of “View as a Prompt” does this for you.",
+            "ko": "`watercolor_(medium)`처럼 태그 자체에 괄호가 든 경우가 많습니다. 그대로 두면 web UI가 강조로 읽으므로, 괄호마다 역슬래시를 붙입니다. “프롬프트로 보기”의 “괄호 처리” 형식이 이 일을 대신 해 줍니다.",
+            "ja": "`watercolor_(medium)` のように、括弧を含むタグは多くあります。そのままだと web UI が強調と解釈してしまうため、1 つずつバックスラッシュでエスケープします。「プロンプトとして見る」の「括弧エスケープ」形式を使えば、自動で処理されます。"
+          },
+          "examples": [
+            {
+              "code": "watercolor \\(medium\\)"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "From NovelAI",
+            "ko": "NovelAI에서 옮길 때",
+            "ja": "NovelAI から移す場合"
+          },
+          "body": {
+            "en": "The two tools use different steps, so braces do not carry over one to one.",
+            "ko": "두 도구는 한 단계의 크기가 달라서 괄호를 그대로 옮길 수 없습니다.",
+            "ja": "2 つのツールは倍率の刻みが異なるため、波括弧をそのまま 1 対 1 で置き換えることはできません。"
+          },
+          "examples": [
+            {
+              "code": "{word}  =  (word:1.05)"
+            },
+            {
+              "code": "{{word}}  =  (word:1.1025)"
+            },
+            {
+              "code": "[word]  =  (word:0.952)"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "More Syntax",
+            "ko": "그 밖의 문법",
+            "ja": "そのほかの構文"
+          },
+          "body": {
+            "en": "`[from:to:when]` switches wording part-way through; `when` is a fraction of the steps, or a step number. `[a|b]` alternates every step. An uppercase `BREAK` starts a new chunk of 75 tokens, and an uppercase `AND` combines whole prompts. Other programs may read these symbols differently.",
+            "ko": "`[from:to:when]`은 생성 도중에 문구를 바꿉니다. `when`은 전체 단계의 비율이거나 단계 번호입니다. `[a|b]`는 단계마다 번갈아 씁니다. 대문자 `BREAK`는 75토큰짜리 새 묶음을 시작하고, 대문자 `AND`는 프롬프트 전체를 합칩니다. 다른 프로그램은 이 기호들을 다르게 읽을 수 있습니다.",
+            "ja": "`[from:to:when]` は途中で表現を切り替えます。`when` はステップ全体に対する割合か、ステップ数で指定します。`[a|b]` は 1 ステップごとに交互に切り替えます。大文字の `BREAK` は 75 トークンの新しいまとまりを始め、大文字の `AND` は複数のプロンプトを合成します。ほかのソフトでは、これらの記号が別の意味になることもあります。"
+          },
+          "examples": [
+            {
+              "code": "a [fantasy:cyberpunk:16] landscape",
+              "note": {
+                "en": "Fantasy until step 16, then cyberpunk",
+                "ko": "16단계까지 fantasy, 그 뒤로 cyberpunk",
+                "ja": "16 ステップ目まではファンタジー、その後はサイバーパンク"
+              }
+            },
+            {
+              "code": "[cow|horse] in a field"
+            },
+            {
+              "code": "a cat AND a dog"
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which gives smile a weight of 1.21?",
+            "ko": "smile의 가중치가 1.21이 되는 것은?",
+            "ja": "smile の重みが 1.21 になるのはどれですか？"
+          },
+          "choices": [
+            "(smile)",
+            "((smile))",
+            "[smile]",
+            "[smile:1.21]"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "Each pair of round brackets multiplies by 1.1, and a number only works inside round brackets.",
+            "ko": "둥근 괄호 한 겹마다 1.1배가 곱해집니다. 숫자는 둥근 괄호 안에서만 통합니다.",
+            "ja": "丸括弧は 1 組ごとに 1.1 倍になり、数値は丸括弧の中でのみ使えます。"
+          }
+        },
+        {
+          "question": {
+            "en": "How is the tag watercolor_(medium) written?",
+            "ko": "태그 watercolor_(medium)은 어떻게 쓸까요?",
+            "ja": "タグ watercolor_(medium) はどう書きますか？"
+          },
+          "choices": [
+            "watercolor (medium)",
+            "watercolor \\(medium\\)",
+            "(watercolor medium)",
+            "watercolor [medium]"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "A backslash before each bracket keeps it part of the tag.",
+            "ko": "괄호마다 역슬래시를 붙여야 태그의 일부로 남습니다.",
+            "ja": "各括弧の前にバックスラッシュを付けると、括弧がタグの一部として扱われます。"
+          }
+        },
+        {
+          "question": {
+            "en": "Which equals NovelAI's {{smile}}?",
+            "ko": "NovelAI의 {{smile}}과 같은 것은?",
+            "ja": "NovelAI の {{smile}} に相当するのはどれですか？"
+          },
+          "choices": [
+            "((smile))",
+            "(smile:1.21)",
+            "(smile:1.1025)",
+            "[smile]"
+          ],
+          "answer": 2,
+          "why": {
+            "en": "NovelAI's step is 1.05, so two braces are 1.05 × 1.05.",
+            "ko": "NovelAI의 한 단계는 1.05이므로 두 겹은 1.05 × 1.05입니다.",
+            "ja": "NovelAI の刻みは 1.05 なので、波括弧 2 組は 1.05 × 1.05 です。"
+          }
+        }
+      ],
+      "sources": [
+        "https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features"
+      ]
+    },
+    {
+      "id": "quality",
+      "symbol": "sparkles",
+      "title": {
+        "en": "Quality Tags",
+        "ko": "품질 태그",
+        "ja": "Quality Tags"
+      },
+      "summary": {
+        "en": "Each model family has its own; they are not interchangeable.",
+        "ko": "모델 계열마다 다르고, 서로 바꿔 쓸 수 없습니다.",
+        "ja": "モデルごとに専用のものがあり、互換性はありません。"
+      },
+      "parts": [
+        {
+          "body": {
+            "en": "Training pictures were labelled by how well they were rated, and a quality tag asks for the well-rated kind. NoobAI-XL publishes its scale: `masterpiece` is the top 5 percent, `best quality` the next 10, then `good quality`, `normal quality` and `worst quality`.",
+            "ko": "학습에 쓴 그림에는 평가가 얼마나 좋았는지가 태그로 붙어 있고, 품질 태그는 그중 평가가 좋은 쪽을 요청합니다. NoobAI-XL은 기준을 공개합니다. `masterpiece`는 상위 5%, `best quality`는 그다음 10%이고, 이어서 `good quality`, `normal quality`, `worst quality`입니다.",
+            "ja": "学習用の画像には評価の高さに応じたラベルが付けられており、品質タグは高く評価された種類の画像を求めるものです。NoobAI-XL は段階を公開しています。`masterpiece` は上位 5 パーセント、`best quality` はその次の 10 パーセント、以下 `good quality`、`normal quality`、`worst quality` と続きます。"
+          }
+        },
+        {
+          "heading": {
+            "en": "By Model",
+            "ko": "모델별",
+            "ja": "モデルごとの違い"
+          },
+          "body": {
+            "en": "NovelAI adds its tags by itself while Quality Tags is switched on, at the end of the prompt. The others are written by hand: NoobAI-XL at the start, Animagine XL at the end.",
+            "ko": "NovelAI는 Quality Tags를 켜 두면 프롬프트 끝에 직접 붙여 줍니다. 나머지는 손으로 씁니다. NoobAI-XL은 맨 앞에, Animagine XL은 맨 끝에 씁니다.",
+            "ja": "NovelAI は Quality Tags をオンにしている間、プロンプトの末尾にタグを自動で追加します。ほかのモデルは手で書きます。NoobAI-XL は先頭に、Animagine XL は末尾に置きます。"
+          },
+          "examples": [
+            {
+              "code": ", location, very aesthetic, masterpiece, no text",
+              "note": {
+                "en": "NovelAI V4.5 Full (added for you)",
+                "ko": "NovelAI V4.5 Full (자동으로 붙음)",
+                "ja": "NovelAI V4.5 Full（自動で追加）"
+              }
+            },
+            {
+              "code": ", no text, best quality, very aesthetic, absurdres",
+              "note": {
+                "en": "NovelAI V4 Full (added for you)",
+                "ko": "NovelAI V4 Full (자동으로 붙음)",
+                "ja": "NovelAI V4 Full（自動で追加）"
+              }
+            },
+            {
+              "code": "masterpiece, best quality, newest, absurdres, highres, safe,",
+              "note": {
+                "en": "NoobAI-XL",
+                "ko": "NoobAI-XL",
+                "ja": "NoobAI-XL"
+              }
+            },
+            {
+              "code": "masterpiece, high score, great score, absurdres",
+              "note": {
+                "en": "Animagine XL 4.0",
+                "ko": "Animagine XL 4.0",
+                "ja": "Animagine XL 4.0"
+              }
+            },
+            {
+              "code": "score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up,",
+              "note": {
+                "en": "Pony Diffusion V6 XL",
+                "ko": "Pony Diffusion V6 XL",
+                "ja": "Pony Diffusion V6 XL"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Pony's Scores",
+            "ko": "Pony의 점수 태그",
+            "ja": "Pony のスコア"
+          },
+          "body": {
+            "en": "Pony Diffusion V6 uses its score tags in place of words like `masterpiece`, and its card says `score_9` alone has a much weaker effect than the whole string. These tags keep their underscores.",
+            "ko": "Pony Diffusion V6는 `masterpiece` 같은 말 대신 점수 태그를 씁니다. 모델 설명에 따르면 `score_9`만 쓰면 전체를 쓸 때보다 효과가 훨씬 약합니다. 이 태그들은 밑줄을 그대로 둡니다.",
+            "ja": "Pony Diffusion V6 では、`masterpiece` のような語の代わりにスコアタグを使います。モデルカードによると、`score_9` だけでは、並び全体を書いた場合よりずっと効果が弱くなります。これらのタグはアンダースコアをそのまま残します。"
+          }
+        },
+        {
+          "heading": {
+            "en": "When the Picture Is From",
+            "ko": "그림의 시기",
+            "ja": "画像の時期"
+          },
+          "body": {
+            "en": "NoobAI-XL names periods: `newest` for 2021 to 2024, `recent` for 2018 to 2020, then `mid`, `early` and `old`. NovelAI and Animagine XL write the year itself.",
+            "ko": "NoobAI-XL은 시기에 이름을 붙입니다. `newest`는 2021~2024년, `recent`는 2018~2020년이고, 이어서 `mid`, `early`, `old`입니다. NovelAI와 Animagine XL은 연도를 직접 씁니다.",
+            "ja": "NoobAI-XL は時期を名前で指定します。`newest` は 2021 年から 2024 年、`recent` は 2018 年から 2020 年、その後は `mid`、`early`、`old` です。NovelAI と Animagine XL は年そのものを書きます。"
+          },
+          "examples": [
+            {
+              "code": "year 2023",
+              "note": {
+                "en": "NovelAI, Animagine XL 4.0",
+                "ko": "NovelAI, Animagine XL 4.0",
+                "ja": "NovelAI, Animagine XL 4.0"
+              }
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which opens a Pony Diffusion V6 prompt?",
+            "ko": "Pony Diffusion V6 프롬프트의 시작으로 맞는 것은?",
+            "ja": "Pony Diffusion V6 のプロンプトの先頭にくるのはどれですか？"
+          },
+          "choices": [
+            "masterpiece, best quality,",
+            "score_9, score_8_up, score_7_up,",
+            "very aesthetic, absurdres,",
+            "high score, great score,"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "Pony uses score tags and does not need other quality words.",
+            "ko": "Pony는 점수 태그를 쓰며 다른 품질 표현이 필요하지 않습니다.",
+            "ja": "Pony はスコアタグを使うため、ほかの品質ワードは不要です。"
+          }
+        },
+        {
+          "question": {
+            "en": "Which NoobAI-XL tag asks for pictures from 2021 to 2024?",
+            "ko": "NoobAI-XL에서 2021~2024년 그림을 요청하는 태그는?",
+            "ja": "2021 年から 2024 年の画像を求める NoobAI-XL のタグはどれですか？"
+          },
+          "choices": [
+            "recent",
+            "modern",
+            "newest",
+            "year 2024"
+          ],
+          "answer": 2,
+          "why": {
+            "en": "`recent` is 2018 to 2020; `newest` is the latest period.",
+            "ko": "`recent`는 2018~2020년이고, 가장 최근 시기가 `newest`입니다.",
+            "ja": "`recent` は 2018 年から 2020 年で、`newest` が最新の時期です。"
+          }
+        },
+        {
+          "question": {
+            "en": "Which follows Animagine XL 4.0's order?",
+            "ko": "Animagine XL 4.0의 순서에 맞는 것은?",
+            "ja": "Animagine XL 4.0 の順序に沿っているのはどれですか？"
+          },
+          "choices": [
+            "masterpiece, high score, 1girl, smile",
+            "1girl, smile, masterpiece, high score"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "Animagine XL 4.0 ends with its quality tags.",
+            "ko": "Animagine XL 4.0은 품질 태그로 끝냅니다.",
+            "ja": "Animagine XL 4.0 は、品質タグで終わります。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/qualitytags",
+        "https://huggingface.co/Laxhar/noobai-XL-1.0",
+        "https://huggingface.co/cagliostrolab/animagine-xl-4.0",
+        "https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL"
+      ]
+    },
+    {
+      "id": "negative",
+      "symbol": "minus.circle",
+      "title": {
+        "en": "What to Avoid",
+        "ko": "피할 것 쓰기",
+        "ja": "避けたいもの"
+      },
+      "summary": {
+        "en": "The negative prompt, or Undesired Content.",
+        "ko": "네거티브 프롬프트, 또는 Undesired Content.",
+        "ja": "ネガティブプロンプト、つまり Undesired Content。"
+      },
+      "parts": [
+        {
+          "body": {
+            "en": "A second prompt lists what the model should stay away from. The Stable Diffusion web UI calls it the negative prompt; NovelAI calls it Undesired Content and switches on a recommended preset by default.",
+            "ko": "두 번째 프롬프트에는 모델이 멀리해야 할 것을 씁니다. Stable Diffusion web UI에서는 네거티브 프롬프트라 하고, NovelAI에서는 Undesired Content라 하며 권장 프리셋이 기본으로 켜져 있습니다.",
+            "ja": "2 つ目のプロンプトに、モデルに避けてほしいものを並べます。Stable Diffusion web UI ではネガティブプロンプト、NovelAI では Undesired Content と呼ばれ、NovelAI では初期状態で推奨プリセットがオンになっています。"
+          }
+        },
+        {
+          "heading": {
+            "en": "What the Model Cards Recommend",
+            "ko": "모델 설명이 권하는 내용",
+            "ja": "モデルカードの推奨"
+          },
+          "examples": [
+            {
+              "code": "nsfw, worst quality, old, early, low quality, lowres, signature, username, logo, bad hands, mutated hands, mammal, anthro, furry, ambiguous form, feral, semi-anthro",
+              "note": {
+                "en": "NoobAI-XL",
+                "ko": "NoobAI-XL",
+                "ja": "NoobAI-XL"
+              }
+            },
+            {
+              "code": "lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry",
+              "note": {
+                "en": "Animagine XL 4.0",
+                "ko": "Animagine XL 4.0",
+                "ja": "Animagine XL 4.0"
+              }
+            },
+            {
+              "code": "blurry, lowres, error, worst quality, bad quality, jpeg artifacts, very displeasing",
+              "note": {
+                "en": "NovelAI V4 Full, Light preset",
+                "ko": "NovelAI V4 Full, Light 프리셋",
+                "ja": "NovelAI V4 Full、Light プリセット"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Less Can Be Enough",
+            "ko": "적어도 됩니다",
+            "ja": "少なくても十分なこともある"
+          },
+          "body": {
+            "en": "Pony Diffusion V6 is designed not to need a negative prompt in most cases. On NovelAI V4.5, one unwanted thing is better removed with negative emphasis such as `-1::hat ::`.",
+            "ko": "Pony Diffusion V6는 대부분의 경우 네거티브 프롬프트가 필요 없도록 만들어졌습니다. NovelAI V4.5에서 원치 않는 것이 하나뿐이라면 `-1::hat ::` 같은 음수 강조로 빼는 편이 낫습니다.",
+            "ja": "Pony Diffusion V6 は、ほとんどの場合ネガティブプロンプトが不要になるよう設計されています。NovelAI V4.5 では、不要なものが 1 つだけなら、`-1::hat ::` のようなマイナスの強調で取り除くほうが向いています。"
+          }
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which belongs in the negative prompt?",
+            "ko": "네거티브 프롬프트에 들어갈 것은?",
+            "ja": "ネガティブプロンプトに入れるのはどれですか？"
+          },
+          "choices": [
+            "masterpiece, best quality",
+            "worst quality, lowres, bad hands",
+            "1girl, solo",
+            "newest, absurdres"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "It lists what to avoid: low quality and common flaws.",
+            "ko": "피할 것, 곧 낮은 품질과 흔한 결함을 씁니다.",
+            "ja": "避けたいもの、つまり低品質やよくある不具合を並べます。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/undesiredcontent",
+        "https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features",
+        "https://huggingface.co/Laxhar/noobai-XL-1.0",
+        "https://huggingface.co/cagliostrolab/animagine-xl-4.0",
+        "https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL"
+      ]
+    },
+    {
+      "id": "characters",
+      "symbol": "person.2",
+      "title": {
+        "en": "Several Characters",
+        "ko": "여러 캐릭터",
+        "ja": "複数のキャラクター"
+      },
+      "summary": {
+        "en": "NovelAI's base prompt and character prompts.",
+        "ko": "NovelAI의 기본 프롬프트와 캐릭터 프롬프트.",
+        "ja": "NovelAI のベースプロンプトとキャラクタープロンプト。"
+      },
+      "parts": [
+        {
+          "body": {
+            "en": "From V4 on, NovelAI splits a prompt in two. The base prompt sets the scene and style and carries the headcount, such as `2girls`. Each character then gets a prompt of their own, which starts with `girl`, `boy` or `other` without a number. V4 takes up to six characters.",
+            "ko": "NovelAI는 V4부터 프롬프트를 둘로 나눕니다. 기본 프롬프트는 장면과 화풍을 정하고 `2girls` 같은 인원수를 담습니다. 캐릭터마다 따로 프롬프트를 쓰는데, 숫자 없이 `girl`, `boy`, `other`로 시작합니다. V4는 캐릭터를 여섯까지 받습니다.",
+            "ja": "V4 以降、NovelAI ではプロンプトが 2 つに分かれます。ベースプロンプトでは場面や画風を決め、`2girls` のような人数も書きます。各キャラクターには専用のプロンプトがあり、数字なしの `girl`、`boy`、`other` で始めます。V4 は最大 6 人まで扱えます。"
+          },
+          "examples": [
+            {
+              "code": "2girls, outdoors",
+              "note": {
+                "en": "Base prompt",
+                "ko": "기본 프롬프트",
+                "ja": "ベースプロンプト"
+              }
+            },
+            {
+              "code": "girl, black hair, school uniform",
+              "note": {
+                "en": "Character 1",
+                "ko": "캐릭터 1",
+                "ja": "キャラクター 1"
+              }
+            },
+            {
+              "code": "girl, blonde hair, hoodie",
+              "note": {
+                "en": "Character 2",
+                "ko": "캐릭터 2",
+                "ja": "キャラクター 2"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "In One Line",
+            "ko": "한 줄로 쓰기",
+            "ja": "1 行で書く場合"
+          },
+          "body": {
+            "en": "Without the character boxes, `|` separates the base prompt from each character prompt. The two ways cannot be mixed.",
+            "ko": "캐릭터 칸을 쓰지 않을 때는 `|`로 기본 프롬프트와 각 캐릭터 프롬프트를 나눕니다. 두 방식을 섞어 쓸 수는 없습니다.",
+            "ja": "キャラクター用の入力欄を使わない場合は、`|` でベースプロンプトと各キャラクターのプロンプトを区切ります。2 つの方法を混ぜて使うことはできません。"
+          },
+          "examples": [
+            {
+              "code": "2girls, outdoors | girl, black hair, school uniform | girl, blonde hair, hoodie"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Who Does What",
+            "ko": "누가 무엇을 하는지",
+            "ja": "誰が何をするか"
+          },
+          "body": {
+            "en": "An action between characters takes a prefix: `source#` for the one doing it, `target#` for the one receiving it, `mutual#` when both do. NovelAI notes that this is not always reliable.",
+            "ko": "캐릭터 사이의 동작에는 접두어를 붙입니다. 하는 쪽은 `source#`, 받는 쪽은 `target#`, 서로 하면 `mutual#`입니다. NovelAI는 항상 통하지는 않는다고 밝힙니다.",
+            "ja": "キャラクター間の動作には接頭辞を付けます。する側は `source#`、される側は `target#`、お互いにする場合は `mutual#` です。NovelAI は、これが常に確実に効くわけではないとしています。"
+          },
+          "examples": [
+            {
+              "code": "girl, black hair, source#hug",
+              "note": {
+                "en": "The one who hugs",
+                "ko": "안는 쪽",
+                "ja": "抱きしめる側"
+              }
+            },
+            {
+              "code": "girl, blonde hair, target#hug",
+              "note": {
+                "en": "The one being hugged",
+                "ko": "안기는 쪽",
+                "ja": "抱きしめられる側"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Other Models",
+            "ko": "다른 모델",
+            "ja": "ほかのモデル"
+          },
+          "body": {
+            "en": "Animagine XL 4.0 says only that several characters may require careful prompt engineering; it has no separate syntax for them.",
+            "ko": "Animagine XL 4.0은 캐릭터가 여럿이면 프롬프트를 신경 써서 써야 할 수 있다고만 설명하며, 별도의 문법은 없습니다.",
+            "ja": "Animagine XL 4.0 は、複数のキャラクターには慎重なプロンプト作りが必要になることがある、と述べるだけで、専用の構文はありません。"
+          }
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "The base prompt says 2girls. Which character prompt is right?",
+            "ko": "기본 프롬프트에 2girls가 있습니다. 캐릭터 프롬프트로 맞는 것은?",
+            "ja": "ベースプロンプトは 2girls です。正しいキャラクタープロンプトはどれですか？"
+          },
+          "choices": [
+            "1girl, black hair",
+            "2girls, black hair",
+            "girl, black hair",
+            "girls, black hair"
+          ],
+          "answer": 2,
+          "why": {
+            "en": "The headcount stays in the base prompt; a character prompt starts with `girl`, `boy` or `other`.",
+            "ko": "인원수는 기본 프롬프트에 두고, 캐릭터 프롬프트는 `girl`, `boy`, `other`로 시작합니다.",
+            "ja": "人数はベースプロンプトに書き、キャラクタープロンプトは `girl`、`boy`、`other` で始めます。"
+          }
+        },
+        {
+          "question": {
+            "en": "Which marks the character who gives the hug?",
+            "ko": "안는 쪽 캐릭터에 붙이는 것은?",
+            "ja": "抱きしめる側のキャラクターを示すのはどれですか？"
+          },
+          "choices": [
+            "target#hug",
+            "source#hug",
+            "mutual#hug",
+            "hug#source"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "`source#` is the one acting, `target#` the one acted on.",
+            "ko": "`source#`는 하는 쪽, `target#`는 받는 쪽입니다.",
+            "ja": "`source#` は動作をする側、`target#` は動作を受ける側です。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/multiplecharacters",
+        "https://huggingface.co/cagliostrolab/animagine-xl-4.0"
+      ]
+    },
+    {
+      "id": "text",
+      "symbol": "textformat",
+      "title": {
+        "en": "Words in the Picture",
+        "ko": "그림 속 글자",
+        "ja": "画像の中の文字"
+      },
+      "summary": {
+        "en": "How NovelAI is asked to write text.",
+        "ko": "NovelAI에 글자를 써 달라고 하는 법.",
+        "ja": "NovelAI に文字を書かせる方法。"
+      },
+      "parts": [
+        {
+          "body": {
+            "en": "From V4 on, NovelAI can write text into a picture. Put `text, english text` somewhere in the prompt and end the base prompt with `Text:` and the words. `Text:` has to be the very last thing. V4 and V4.5 write English only, up to 118 characters.",
+            "ko": "NovelAI는 V4부터 그림 안에 글자를 쓸 수 있습니다. 프롬프트 어딘가에 `text, english text`를 넣고, 기본 프롬프트를 `Text:`와 쓸 문구로 끝냅니다. `Text:`는 반드시 맨 끝에 와야 합니다. V4와 V4.5는 영어만, 118자까지 씁니다.",
+            "ja": "V4 以降、NovelAI は画像に文字を書き込めます。プロンプトのどこかに `text, english text` を入れ、ベースプロンプトの最後を `Text:` と書きたい文字で終えます。`Text:` は必ず一番最後に置きます。V4 と V4.5 は英語のみで、118 文字までです。"
+          },
+          "examples": [
+            {
+              "code": "1girl, holding sign, text, english text, Text: Hello"
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "If No Text Appears",
+            "ko": "글자가 나오지 않으면",
+            "ja": "文字が出ないとき"
+          },
+          "body": {
+            "en": "NovelAI's quality tags contain `no text`, so switching Quality Tags off can help.",
+            "ko": "NovelAI의 품질 태그에는 `no text`가 들어 있으므로, Quality Tags를 끄면 도움이 될 수 있습니다.",
+            "ja": "NovelAI の品質タグには `no text` が含まれているため、Quality Tags をオフにすると改善することがあります。"
+          }
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which asks NovelAI to write Hello?",
+            "ko": "NovelAI에 Hello를 써 달라고 하는 것은?",
+            "ja": "NovelAI に Hello と書かせるのはどれですか？"
+          },
+          "choices": [
+            "Text: Hello, 1girl, holding sign",
+            "1girl, holding sign, text, english text, Text: Hello",
+            "1girl, holding sign, \"Hello\"",
+            "1girl, holding sign, text=Hello"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "`Text:` goes at the very end, with `text, english text` in the prompt.",
+            "ko": "`Text:`는 맨 끝에 두고, 프롬프트에 `text, english text`를 넣습니다.",
+            "ja": "`Text:` は一番最後に置き、プロンプトに `text, english text` を入れます。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/textrendering",
+        "https://docs.novelai.net/en/image/qualitytags"
+      ]
+    },
+    {
+      "id": "settings",
+      "symbol": "slider.horizontal.3",
+      "title": {
+        "en": "Settings the Models Recommend",
+        "ko": "모델이 권하는 설정",
+        "ja": "モデルの推奨設定"
+      },
+      "summary": {
+        "en": "Sampler, steps, guidance and size.",
+        "ko": "샘플러, 단계 수, 가이던스, 크기.",
+        "ja": "サンプラー、ステップ数、ガイダンス、サイズ。"
+      },
+      "parts": [
+        {
+          "body": {
+            "en": "A prompt works together with a few numbers. Steps is how many times the picture is refined, and CFG (guidance) is how strictly the prompt is followed. The model cards give these starting points.",
+            "ko": "프롬프트는 몇 가지 숫자와 함께 작동합니다. 단계 수(Steps)는 그림을 다듬는 횟수이고, CFG(가이던스)는 프롬프트를 얼마나 엄격히 따를지입니다. 모델 설명은 아래 값을 출발점으로 제시합니다.",
+            "ja": "プロンプトは、いくつかの数値と合わせて働きます。Steps は画像を磨き上げる回数、CFG（ガイダンス）はプロンプトにどれだけ厳密に従うかを表します。モデルカードには、出発点となる値が載っています。"
+          },
+          "examples": [
+            {
+              "code": "Euler a · Steps 25–30 · CFG 5–6",
+              "note": {
+                "en": "NoobAI-XL",
+                "ko": "NoobAI-XL",
+                "ja": "NoobAI-XL"
+              }
+            },
+            {
+              "code": "Euler a · Steps 20–28 · CFG 5–7.5",
+              "note": {
+                "en": "Illustrious XL (early release)",
+                "ko": "Illustrious XL (초기 공개판)",
+                "ja": "Illustrious XL（初期リリース）"
+              }
+            },
+            {
+              "code": "Euler a · Steps 28 · CFG 5",
+              "note": {
+                "en": "Animagine XL 4.0",
+                "ko": "Animagine XL 4.0",
+                "ja": "Animagine XL 4.0"
+              }
+            },
+            {
+              "code": "Euler a · Steps 25 · Clip skip 2",
+              "note": {
+                "en": "Pony Diffusion V6 XL",
+                "ko": "Pony Diffusion V6 XL",
+                "ja": "Pony Diffusion V6 XL"
+              }
+            }
+          ]
+        },
+        {
+          "heading": {
+            "en": "Size",
+            "ko": "크기",
+            "ja": "サイズ"
+          },
+          "body": {
+            "en": "These models draw best at a total area of about 1024 × 1024. Change the shape, not the area.",
+            "ko": "이 모델들은 전체 넓이가 1024 × 1024쯤일 때 가장 잘 그립니다. 넓이는 두고 비율만 바꿉니다.",
+            "ja": "これらのモデルは、総面積が 1024 × 1024 前後のときに最もよく描けます。面積は変えず、形だけ変えましょう。"
+          },
+          "examples": [
+            {
+              "code": "832 × 1216",
+              "note": {
+                "en": "Portrait",
+                "ko": "세로",
+                "ja": "縦長"
+              }
+            },
+            {
+              "code": "1024 × 1024",
+              "note": {
+                "en": "Square",
+                "ko": "정사각형",
+                "ja": "正方形"
+              }
+            },
+            {
+              "code": "1216 × 832",
+              "note": {
+                "en": "Landscape",
+                "ko": "가로",
+                "ja": "横長"
+              }
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which size suits an upright picture on these models?",
+            "ko": "이 모델들에서 세로 그림에 알맞은 크기는?",
+            "ja": "これらのモデルで縦長の画像に合うサイズはどれですか？"
+          },
+          "choices": [
+            "512 × 512",
+            "832 × 1216",
+            "1080 × 1920",
+            "2048 × 2048"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "It keeps the area near 1024 × 1024.",
+            "ko": "넓이가 1024 × 1024에 가깝게 유지됩니다.",
+            "ja": "面積が 1024 × 1024 に近いままです。"
+          }
+        }
+      ],
+      "sources": [
+        "https://huggingface.co/Laxhar/noobai-XL-1.0",
+        "https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0",
+        "https://huggingface.co/cagliostrolab/animagine-xl-4.0",
+        "https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL"
+      ]
+    },
+    {
+      "id": "tips",
+      "symbol": "lightbulb",
+      "title": {
+        "en": "Habits of a Good Prompt",
+        "ko": "좋은 프롬프트의 습관",
+        "ja": "よいプロンプトの習慣"
+      },
+      "summary": {
+        "en": "What the makers of the models advise.",
+        "ko": "모델을 만든 곳들이 권하는 내용.",
+        "ja": "モデルの開発元が勧めていること。"
+      },
+      "parts": [
+        {
+          "heading": {
+            "en": "What Matters Goes First",
+            "ko": "중요한 것부터",
+            "ja": "大切なものを先に"
+          },
+          "body": {
+            "en": "NovelAI advises keeping the subject in the first half of the prompt, and art style tags close to the start. On its V3 model and earlier, the earlier a tag appears, the stronger its effect.",
+            "ko": "NovelAI는 주제를 프롬프트 앞쪽 절반에 두고, 화풍 태그는 시작 가까이에 두라고 권합니다. V3 이하 모델에서는 태그가 앞에 올수록 효과가 강합니다.",
+            "ja": "NovelAI は、主題をプロンプトの前半に置き、画風のタグも先頭近くに置くよう勧めています。V3 以前のモデルでは、タグが前にあるほど効果が強くなります。"
+          }
+        },
+        {
+          "heading": {
+            "en": "Say It Once",
+            "ko": "한 번만 말하기",
+            "ja": "一度だけ言う"
+          },
+          "body": {
+            "en": "NovelAI warns that overly redundant, drawn-out descriptions may not be what you want. One exact tag does more than three near-synonyms.",
+            "ko": "NovelAI는 같은 말을 되풀이하며 길게 늘인 묘사가 바람직하지 않을 수 있다고 경고합니다. 정확한 태그 하나가 비슷한 말 셋보다 낫습니다.",
+            "ja": "NovelAI は、冗長で長すぎる説明は思いどおりにならないことがある、と注意しています。的確なタグ 1 つのほうが、似た語を 3 つ並べるより効果的です。"
+          }
+        },
+        {
+          "heading": {
+            "en": "One Framing Tag",
+            "ko": "구도 태그는 하나만",
+            "ja": "構図のタグは 1 つ"
+          },
+          "body": {
+            "en": "Illustrious XL advises against overusing composition tags such as `close-up` or `upside-down`. Choose one framing, for example `upper body`, `cowboy shot`, `portrait` or `full body`.",
+            "ko": "Illustrious XL은 `close-up`, `upside-down` 같은 구도 태그를 남용하지 말라고 권합니다. `upper body`, `cowboy shot`, `portrait`, `full body` 가운데 하나를 고릅니다.",
+            "ja": "Illustrious XL は、`close-up` や `upside-down` のような構図タグを使いすぎないよう勧めています。構図は 1 つに絞りましょう。たとえば `upper body`、`cowboy shot`、`portrait`、`full body` などです。"
+          }
+        },
+        {
+          "heading": {
+            "en": "Sentences or Tags",
+            "ko": "문장과 태그",
+            "ja": "文章かタグか"
+          },
+          "body": {
+            "en": "NovelAI V4 and later, Illustrious XL v1.0 and Pony Diffusion V6 also understand plain sentences, and tags can follow a sentence to reinforce it. Animagine XL 4.0 says it is limited to tags.",
+            "ko": "NovelAI V4 이상, Illustrious XL v1.0, Pony Diffusion V6는 일반 문장도 이해하며, 문장 뒤에 태그를 덧붙여 보강할 수 있습니다. Animagine XL 4.0은 태그에 한정된다고 밝힙니다.",
+            "ja": "NovelAI V4 以降、Illustrious XL v1.0、Pony Diffusion V6 は、普通の文章も理解します。文章の後にタグを続けて補強することもできます。Animagine XL 4.0 はタグのみ対応と明記されています。"
+          }
+        },
+        {
+          "heading": {
+            "en": "Words the List Does Not Know",
+            "ko": "목록에 없는 말",
+            "ja": "リストにない言葉"
+          },
+          "body": {
+            "en": "NovelAI says not to be afraid of a term just because it is not suggested as a tag. Still, a tag carried by many pictures is one the model has seen often, which is why the tag pages here show how many posts a tag has.",
+            "ko": "NovelAI는 태그로 제안되지 않는 말이라도 써 보기를 꺼리지 말라고 합니다. 그래도 많은 그림에 붙은 태그일수록 모델이 자주 본 태그입니다. 이 앱의 태그 화면이 게시물 수를 보여 주는 이유입니다.",
+            "ja": "NovelAI は、タグとして提案されていない言葉でも、恐れずに試してよいとしています。とはいえ、多くの画像に付いているタグは、モデルがよく見てきたタグです。このアプリのタグページに投稿数が表示されるのは、そのためです。"
+          }
+        },
+        {
+          "heading": {
+            "en": "Borrow From Pictures You Like",
+            "ko": "좋아하는 그림에서 가져오기",
+            "ja": "好きな画像から学ぶ"
+          },
+          "body": {
+            "en": "Open “View as a Prompt” on a picture, read which tags make it what it is, and practise the ones you did not know.",
+            "ko": "그림에서 “프롬프트로 보기”를 열어 어떤 태그가 그 그림을 이루는지 읽고, 몰랐던 태그를 연습합니다.",
+            "ja": "画像で「プロンプトとして見る」を開き、どのタグがその画像らしさを作っているかを読み取って、知らなかったタグを練習しましょう。"
+          }
+        }
+      ],
+      "checks": [
+        {
+          "question": {
+            "en": "Which prompt frames the picture the advised way?",
+            "ko": "권하는 방식으로 구도를 정한 프롬프트는?",
+            "ja": "勧められた方法で構図を決めているプロンプトはどれですか？"
+          },
+          "choices": [
+            "1girl, close-up, upper body, cowboy shot, full body, smile",
+            "1girl, upper body, smile"
+          ],
+          "answer": 1,
+          "why": {
+            "en": "One framing tag; several pull against each other.",
+            "ko": "구도 태그는 하나만 씁니다. 여럿이면 서로 충돌합니다.",
+            "ja": "構図のタグは 1 つにします。複数あると互いに打ち消し合います。"
+          }
+        }
+      ],
+      "sources": [
+        "https://docs.novelai.net/en/image/basics",
+        "https://docs.novelai.net/en/image/tags",
+        "https://docs.novelai.net/en/image/tutorial-artstyles",
+        "https://docs.novelai.net/en/image/models",
+        "https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0",
+        "https://huggingface.co/OnomaAIResearch/Illustrious-XL-v1.0",
+        "https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL",
+        "https://huggingface.co/cagliostrolab/animagine-xl-4.0"
+      ]
+    }
+  ]
+}

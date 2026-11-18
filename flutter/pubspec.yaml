@@ -42,6 +42,7 @@ flutter:
     - assets/l10n/
     - assets/developer/
     - assets/legal/
+    - assets/study/
   fonts:
     - family: Pretendard
       fonts:

@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:characters/characters.dart';
+
 import '../../domain/models.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
+import '../study/study_models.dart';
 import '../support/sql_database.dart';
 import '../content/recent_works.dart';
 import '../support/swift_json.dart';
@@ -76,6 +79,57 @@ class BooruBackupRecent {
   JsonObject toJson() => {'post': post.toJson(), 'openedAt': openedAt};
 }
 
+/// One tag's study progress; times are seconds since 1970, as both apps write them.
+class BooruBackupLearned {
+  BooruBackupLearned({required this.tag, required this.step, required this.due, required this.correct, required this.wrong, required this.seen});
+  final String tag;
+  final int step;
+  final double due;
+  final int correct;
+  final int wrong;
+  final double seen;
+
+  factory BooruBackupLearned.fromJson(JsonObject json) => BooruBackupLearned(
+    tag: json.string('tag'),
+    step: json.integer('step'),
+    due: json.number('due'),
+    correct: json.integer('correct'),
+    wrong: json.integer('wrong'),
+    seen: json.number('seen'),
+  );
+  JsonObject toJson() => {'tag': tag, 'step': step, 'due': due, 'correct': correct, 'wrong': wrong, 'seen': seen};
+}
+
+/// Tag study: what has been learned and each day's answers.
+class BooruBackupStudy {
+  BooruBackupStudy({required this.progress, required this.days});
+  final List<BooruBackupLearned> progress;
+  final List<StudyDay> days;
+
+  factory BooruBackupStudy.fromJson(JsonObject json) => BooruBackupStudy(
+    progress: json.list('progress', (value) => BooruBackupLearned.fromJson(jsonObject(value))),
+    days: json.list('days', (value) => StudyDay.fromJson(jsonObject(value))),
+  );
+  JsonObject toJson() => {
+    'progress': [for (final value in progress) value.toJson()],
+    'days': [for (final day in days) day.toJson()],
+  };
+
+  bool get isValid =>
+      progress.every(
+        (value) =>
+            value.tag.isNotEmpty &&
+            value.tag.characters.length <= 200 &&
+            value.step >= 0 &&
+            value.step <= StudyProgress.lastStep &&
+            value.correct >= 0 &&
+            value.wrong >= 0 &&
+            value.due.isFinite &&
+            value.seen.isFinite,
+      ) &&
+      days.every((day) => day.day.characters.length == 10 && day.answered >= 0 && day.correct >= 0 && day.correct <= day.answered);
+}
+
 /// Portable library data only. Credentials, cookies, caches and device preferences stay local.
 class BooruBackup {
   BooruBackup({
@@ -91,6 +145,7 @@ class BooruBackup {
     required this.selectedServerIDs,
     this.folderRules,
     this.recentImages,
+    this.study,
   }) : exportedAt = exportedAt ?? DateTime.now();
 
   String format;
@@ -110,6 +165,9 @@ class BooruBackup {
   /// Optional so backups from before recent images still read.
   List<BooruBackupRecent>? recentImages;
 
+  /// Tag study progress. Optional so backups from before tag study still read.
+  BooruBackupStudy? study;
+
   static const maximumBytes = 64 * 1024 * 1024;
 
   factory BooruBackup.fromJson(JsonObject json) => BooruBackup(
@@ -126,6 +184,7 @@ class BooruBackup {
     selectedServerIDs: json.strings('selectedServerIDs'),
     folderRules: json.listOrNull('folderRules', (value) => FolderRule.fromJson(jsonObject(value))),
     recentImages: json.listOrNull('recentImages', (value) => BooruBackupRecent.fromJson(jsonObject(value))),
+    study: json.objectOrNull('study') == null ? null : BooruBackupStudy.fromJson(json.object('study')),
   );
 
   JsonObject toJson() =>
@@ -142,7 +201,8 @@ class BooruBackup {
           'selectedServerIDs': selectedServerIDs,
         }
         ..putIfPresent('folderRules', folderRules == null ? null : [for (final rule in folderRules!) rule.toJson()])
-        ..putIfPresent('recentImages', recentImages == null ? null : [for (final recent in recentImages!) recent.toJson()]);
+        ..putIfPresent('recentImages', recentImages == null ? null : [for (final recent in recentImages!) recent.toJson()])
+        ..putIfPresent('study', study?.toJson());
 
   static BooruBackup read(File file) {
     if (file.lengthSync() > maximumBytes) throw const BooruError(BooruErrorKind.invalidResponse);
@@ -187,7 +247,8 @@ class BooruBackup {
         folders.every((folder) => folder.serverID == null || serverIDs.contains(folder.serverID)) &&
         serverIDs.containsAll(selectedServerIDs) &&
         (folderRules ?? []).every((rule) => folderIDs.contains(rule.folder) && rule.query.isNotEmpty) &&
-        (recentImages ?? []).every((recent) => serverIDs.contains(recent.post.serverID) && recent.post.postID > 0 && recent.openedAt.isFinite);
+        (recentImages ?? []).every((recent) => serverIDs.contains(recent.post.serverID) && recent.post.postID > 0 && recent.openedAt.isFinite) &&
+        (study?.isValid ?? true);
     if (!valid) throw const BooruError(BooruErrorKind.invalidResponse);
     for (final post in [for (final favorite in favorites) favorite.post, for (final recent in recentImages ?? const <BooruBackupRecent>[]) recent.post]) {
       for (final url in [post.previewURL, post.sampleURL, post.fileURL, post.animationVideoURL].nonNulls) {
@@ -244,6 +305,21 @@ extension BooruStoreBackup on BooruStore {
     final blacklist = {
       for (final server in servers) server.id: db.value<String>('SELECT value FROM settings WHERE key = ?', ['blacklist.${server.id}']) ?? '',
     };
+    final learned = [
+      for (final row in db.rows('SELECT * FROM study_progress ORDER BY tag'))
+        BooruBackupLearned(
+          tag: row['tag'] as String,
+          step: row['step'] as int,
+          due: (row['due'] as num).toDouble(),
+          correct: row['correct'] as int,
+          wrong: row['wrong'] as int,
+          seen: (row['seen'] as num).toDouble(),
+        ),
+    ];
+    final days = [
+      for (final row in db.rows('SELECT * FROM study_days ORDER BY day'))
+        StudyDay(day: row['day'] as String, answered: row['answered'] as int, correct: row['correct'] as int),
+    ];
     return BooruBackup(
       servers: servers,
       folders: folders,
@@ -253,6 +329,7 @@ extension BooruStoreBackup on BooruStore {
       blacklist: blacklist,
       selectedServerIDs: selectedServerIDs,
       folderRules: BooruStoreFolderRules.fetchFolderRules(db).where((rule) => folders.any((folder) => folder.id == rule.folder)).toList(),
+      study: learned.isEmpty && days.isEmpty ? null : BooruBackupStudy(progress: learned, days: days),
     );
   });
 
@@ -330,6 +407,26 @@ extension BooruStoreBackup on BooruStore {
     }
     for (final rule in backup.folderRules ?? <FolderRule>[]) {
       BooruStoreFolderRules.storeFolderRule(rule, db);
+    }
+    // Study progress merges: a tag keeps whichever answer came later, and a day its larger count.
+    for (final value in backup.study?.progress ?? const <BooruBackupLearned>[]) {
+      db.execute(
+        '''
+        INSERT INTO study_progress (tag, step, due, correct, wrong, seen) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tag) DO UPDATE SET step = excluded.step, due = excluded.due, correct = excluded.correct, wrong = excluded.wrong, seen = excluded.seen
+        WHERE excluded.seen > study_progress.seen
+        ''',
+        [value.tag, value.step, value.due, value.correct, value.wrong, value.seen],
+      );
+    }
+    for (final value in backup.study?.days ?? const <StudyDay>[]) {
+      db.execute(
+        '''
+        INSERT INTO study_days (day, answered, correct) VALUES (?, ?, ?)
+        ON CONFLICT(day) DO UPDATE SET answered = MAX(answered, excluded.answered), correct = MAX(correct, excluded.correct)
+        ''',
+        [value.day, value.answered, value.correct],
+      );
     }
     // Folders of an older backup go where their images are, and every image to a folder of its server.
     BooruStore.assignFolderServers(

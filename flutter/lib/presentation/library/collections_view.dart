@@ -211,6 +211,7 @@ class CollectionsView extends StatefulWidget {
     this.openQuery,
     this.headerActions = const [],
     this.onBack,
+    this.header,
   });
   final AppState state;
   final LibraryRoutes routes;
@@ -226,6 +227,9 @@ class CollectionsView extends StatefulWidget {
   /// Toolbar items before Edit, such as the image server menu.
   final List<Widget> headerActions;
   final VoidCallback? onBack;
+
+  /// A section above the saved entries, such as the way into tag study.
+  final Widget? header;
 
   @override
   State<CollectionsView> createState() => _CollectionsViewState();
@@ -295,6 +299,7 @@ class _CollectionsViewState extends State<CollectionsView> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.only(top: top + 10, bottom: MediaQuery.viewInsetsOf(context).bottom > 0 ? 16 : tabBarClearance(context)),
               children: [
+                if (widget.header case final header?) ...[header, const SizedBox(height: 28)],
                 for (final kind in _model.sections) ...[
                   CollectionSection(
                     model: _model,

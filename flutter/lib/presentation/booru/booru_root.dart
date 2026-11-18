@@ -14,6 +14,7 @@ import 'booru_common.dart';
 import 'booru_favorites_view.dart';
 import 'booru_feed_view.dart';
 import 'booru_settings_views.dart';
+import '../study/study_home_view.dart';
 
 /// `BooruRootView`: image mode's four tabs. Until a server is connected, Saved, Explore
 /// and Tags show the website setup.
@@ -88,6 +89,7 @@ class BooruRootPages {
             booru: booru.store,
             server: server,
             onBack: onBack,
+            header: StudyEntrySection(booru: booru),
             openQuery: (context, query) => BooruFeedView.push(context, booru: booru, server: server, query: query),
             headerActions: [if (onBack == null) BooruServerMenuButton(store: booru.store)],
           ),

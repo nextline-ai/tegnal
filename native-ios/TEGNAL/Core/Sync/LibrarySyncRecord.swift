@@ -46,7 +46,9 @@ struct LibrarySyncRow: Codable, Equatable, Sendable {
         "manga.artists": ["name", "kind"], "manga.search_history": ["query"], "manga.saved_searches": ["query"],
         "booru.challenges": ["id"], "booru.servers": ["id"], "booru.folders": ["id"], "booru.favorites": ["server_id", "post_id"],
         "booru.saved_tags": ["server_id", "name", "kind"], "booru.history": ["server_id", "query"],
-        "booru.settings": ["key"], "preferences.manga": ["key"], "preferences.booru": ["key"],
+        "booru.settings": ["key"], "booru.study_progress": ["tag"], "booru.study_days": ["day"],
+        "booru.study_lessons": ["lesson"], "booru.study_awards": ["id"], "booru.study_stats": ["name"],
+        "preferences.manga": ["key"], "preferences.booru": ["key"],
         "recent.works": ["id"], "recent.images": ["server_id", "post_id"]
     ]
 }

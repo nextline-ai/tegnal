@@ -6,7 +6,7 @@ struct BooruSavedView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(BooruStore.self) private var store
     var body: some View {
-        SavedCollectionsBrowser(database: env.database, booru: store, server: server, source: source)
+        SavedCollectionsBrowser(database: env.database, booru: store, server: server, source: source, header: AnyView(StudyEntrySection(source: source)))
             .navigationTitle(L10n.text("Tags")).navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -91,12 +91,20 @@ struct BooruSavedServersView: View {
     @Environment(BooruStore.self) private var store
     var body: some View {
         Group {
-            if store.selectedServers.isEmpty { BooruNoSelectionView() }
-            else if store.selectedServers.count == 1, let server = store.selectedServer { BooruSavedView(server: server, source: source).id(server.id) }
+            if store.selectedServers.count == 1, let server = store.selectedServer { BooruSavedView(server: server, source: source).id(server.id) }
             else {
-                List(store.selectedServers) { server in
-                    NavigationLink { BooruSavedView(server: server, source: source) } label: { Label(server.displayName, systemImage: "server.rack") }
-                }
+                // Tag study needs no server for its lessons, so it stays reachable with none or several chosen.
+                List {
+                    StudyEntrySection(source: source)
+                    if store.selectedServers.isEmpty { Section { BooruNoSelectionView() } }
+                    else {
+                        Section {
+                            ForEach(store.selectedServers) { server in
+                                NavigationLink { BooruSavedView(server: server, source: source) } label: { Label(server.displayName, systemImage: "server.rack") }
+                            }
+                        }
+                    }
+                }.listStyle(.insetGrouped)
             }
         }.toolbar { ToolbarItem(placement: .topBarTrailing) { BooruServerMenu() } }
     }
