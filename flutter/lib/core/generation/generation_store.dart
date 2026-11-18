@@ -59,6 +59,7 @@ class GenerationPreset {
   String get id => name;
 
   static const all = [
+    GenerationPreset(name: 'Anima', front: 'masterpiece, best quality', negative: 'worst quality, low quality, blurry, bad anatomy, deformed hands', steps: 30, guidance: 4),
     GenerationPreset(
       name: 'NoobAI-XL',
       front: 'masterpiece, best quality, newest, absurdres, highres, safe',
@@ -179,6 +180,8 @@ class GeneratedPicture {
 class GenerationStore extends ChangeNotifier {
   GenerationStore({required this.folder, required this.defaults, required this._keychain, this._transport}) {
     _settings = _loadSettings();
+    // A generator set up before there was a suggested model, and never given one, starts with it too.
+    if (_settings.model == null) _settings = _settings.use(GenerationModel.recommended);
     _recent = _loadRecent();
     _readIndex();
   }
@@ -246,11 +249,11 @@ class GenerationStore extends ChangeNotifier {
 
   GenerationSettings _loadSettings() {
     final text = defaults.string(_settingsKey);
-    if (text == null) return const GenerationSettings();
+    if (text == null) return GenerationSettings.starting;
     try {
       return GenerationSettings.fromJson(jsonDecode(text));
     } on FormatException {
-      return const GenerationSettings();
+      return GenerationSettings.starting;
     }
   }
 

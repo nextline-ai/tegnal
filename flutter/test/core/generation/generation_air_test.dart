@@ -104,6 +104,7 @@ void main() {
       expect(air('illustrious:checkpoint:civitai:1').family, GenerationFamily.sdxl);
       expect(air('pony:checkpoint:civitai:1').family, GenerationFamily.sdxl);
       expect(air('noobai:checkpoint:civitai:1').family, GenerationFamily.sdxl);
+      expect(air('anima:checkpoint:civitai:1').family, GenerationFamily.anima);
       expect(air('flux1:checkpoint:civitai:1').family, isNull);
       expect(air('civitai:1').family, isNull);
     });

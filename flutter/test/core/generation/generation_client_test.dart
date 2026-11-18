@@ -95,10 +95,60 @@ void main() {
       expect(input['ecosystem'], 'sdxl');
     });
 
+    test('leaves the checkpoint out of an Anima request, and names only another Anima checkpoint', () {
+      final recommended = const GenerationSettings().use(GenerationModel.recommended);
+      final input = inputOf(GenerationClient.body(prompt: 'x', settings: recommended));
+      expect(input['ecosystem'], 'anima');
+      for (final field in ['model', 'checkpointModel', 'diffuserModel']) {
+        expect(input.containsKey(field), isFalse, reason: field);
+      }
+      final other = const GenerationSettings().use(const GenerationModel(air: 'urn:air:anima:checkpoint:civitai:1@2', name: 'Other'));
+      final overridden = inputOf(GenerationClient.body(prompt: 'x', settings: other, field: 'checkpointModel'));
+      expect(overridden['diffuserModel'], 'urn:air:anima:checkpoint:civitai:1@2');
+      expect(overridden.containsKey('model'), isFalse);
+      expect(overridden.containsKey('checkpointModel'), isFalse);
+      // The same checkpoint written without its file part is still the suggested one.
+      final bare = const GenerationSettings().use(const GenerationModel(air: 'urn:air:anima:checkpoint:civitai:2458426@2945208', name: 'Same'));
+      expect(inputOf(GenerationClient.body(prompt: 'x', settings: bare)).containsKey('diffuserModel'), isFalse);
+    });
+
+    test('recognises the suggested model however it is written', () {
+      expect(GenerationModel.recommended.isRecommended, isTrue);
+      expect(const GenerationModel(air: 'urn:air:anima:checkpoint:civitai:2458426@2945208', name: 'x').isRecommended, isTrue);
+      expect(const GenerationModel(air: 'urn:air:anima:checkpoint:civitai:2458426@1', name: 'x').isRecommended, isFalse);
+      expect(checkpoint.isRecommended, isFalse);
+      expect(const GenerationModel(air: '', name: 'x').isRecommended, isFalse);
+    });
+
+    test('starts from the suggested model and what it runs best at', () {
+      final starting = GenerationSettings.starting;
+      expect(starting.model, GenerationModel.recommended);
+      expect((starting.steps, starting.guidance, starting.sampler, starting.schedule), (30, 4.0, 'euler', 'simple'));
+    });
+
+    test('moves the values with the family and leaves them within one', () {
+      final sdxl = GenerationSettings.starting.use(checkpoint);
+      expect((sdxl.steps, sdxl.guidance, sdxl.sampler, sdxl.schedule), (25, 5.5, 'euler_a', 'discrete'));
+      final back = sdxl.use(GenerationModel.recommended);
+      expect((back.steps, back.guidance, back.sampler, back.schedule), (30, 4.0, 'euler', 'simple'));
+      final tuned = sdxl.copyWith(steps: 40, schedule: 'karras').use(const GenerationModel(air: 'urn:air:pony:checkpoint:civitai:1@2', name: 'Pony'));
+      expect((tuned.steps, tuned.schedule), (40, 'karras'));
+      final animaTuned = back.copyWith(steps: 35).use(const GenerationModel(air: 'urn:air:anima:checkpoint:civitai:1@2', name: 'Other'));
+      expect(animaTuned.steps, 35);
+      // No model yet: only the Anima schedule is undone.
+      expect(const GenerationSettings(schedule: 'simple', steps: 30).use(checkpoint).schedule, 'discrete');
+      expect(const GenerationSettings(schedule: 'karras', steps: 40).use(checkpoint).steps, 40);
+    });
+
+    test('offers the simple schedule first', () => expect(GenerationSettings.schedules, ['simple', 'discrete', 'karras', 'sgm_uniform']));
+
     test('estimates the cost by the published formula', () {
       expect(const GenerationSettings(width: 1024, height: 1024, steps: 20).roughCost, 8);
       expect(const GenerationSettings().roughCost, 10);
       expect(const GenerationSettings(width: 1024, height: 1024, steps: 20, quantity: 3).roughCost, 24);
+      expect(const GenerationSettings(model: checkpoint, width: 1024, height: 1024, steps: 20).roughCost, 8);
+      expect(const GenerationSettings(model: GenerationModel.recommended, width: 1024, height: 1024, steps: 25).roughCost, 8);
+      expect(const GenerationSettings(model: GenerationModel.recommended, width: 1024, height: 1024, steps: 50).roughCost, 16);
     });
   });
 
@@ -235,6 +285,14 @@ void main() {
       final api = client(service);
       await expectLater(api.submit(prompt: 'x', settings: const GenerationSettings(model: checkpoint)), throwsA(const GenerationError.invalid('refusal 1')));
       expect(service.requests, hasLength(2));
+      expect(api.acceptedModelField, 'model');
+    });
+
+    test('does not retry a refused Anima request, which has no field to rename', () async {
+      final service = FakeService((request) async => json({'detail': 'refused'}, status: 400));
+      final api = client(service);
+      await expectLater(api.submit(prompt: 'x', settings: GenerationSettings.starting), throwsA(const GenerationError.invalid('refused')));
+      expect(service.requests, hasLength(1));
       expect(api.acceptedModelField, 'model');
     });
 

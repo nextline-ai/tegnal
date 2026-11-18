@@ -3,8 +3,8 @@ import AVFoundation
 
 // Learning mode answers everything the learner does: a sound, a movement, a word from the guide.
 
-/// The sounds learning mode makes. They are played as media, so the volume buttons turn them up and down;
-/// they follow the silent switch and play over music the learner is listening to without stopping it.
+/// The sounds learning mode makes. They are played as media: the volume buttons turn them up and down, the silent
+/// switch does not mute them, and they play over music the learner is listening to without stopping it.
 @MainActor
 enum StudySound: String, CaseIterable {
     case tap, pick, right, wrong, match, combo, star1, star2, star3, complete, levelup, streak
@@ -14,7 +14,7 @@ enum StudySound: String, CaseIterable {
         set { ReaderPreferences.booruDefaults.set(newValue, forKey: key) }
     }
     private static var players: [StudySound: AVAudioPlayer] = [:]
-    private static var ambient = false
+    private static var claimed = false
 
     /// Loads every sound, so that the first one played does not arrive late.
     static func warm() {
@@ -24,8 +24,8 @@ enum StudySound: String, CaseIterable {
 
     /// Hands the audio session back as it was found, once learning mode is left.
     static func rest() {
-        guard ambient else { return }
-        ambient = false
+        guard claimed else { return }
+        claimed = false
         try? AVAudioSession.sharedInstance().setCategory(.soloAmbient)
     }
 
@@ -40,9 +40,11 @@ enum StudySound: String, CaseIterable {
 
     func play() {
         guard Self.isOn else { return }
-        if !Self.ambient {
-            Self.ambient = true
-            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+        if !Self.claimed {
+            Self.claimed = true
+            // Playback is the category the silent switch leaves alone; mixing keeps the learner's own music going.
+            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            try? AVAudioSession.sharedInstance().setActive(true)
         }
         guard let player = player() else { return }
         player.currentTime = 0

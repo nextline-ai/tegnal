@@ -35,7 +35,7 @@ class Harness {
         return (transport ?? GenerationFixture.transport(delay: Duration.zero))(request);
       },
     );
-    if (model) store.settings = store.settings.copyWith(model: GenerationFixture.model);
+    if (model) store.settings = store.settings.use(GenerationFixture.model);
   }
 
   bool safeMode;
@@ -382,6 +382,22 @@ void main() {
       expect(safe.requests.firstWhere((request) => request.uri.path.endsWith('/models')).uri.queryParameters['nsfw'], 'false');
     });
 
+    testWidgets('offers the suggested model first for checkpoints, and not for LoRAs', (tester) async {
+      final harness = Harness();
+      GenerationModel? chosen;
+      await open(tester, harness, picker(harness, (model) => chosen = model));
+      expect(key('generator.recommendedModel'), findsOneWidget);
+      expect(find.text('Suggested'), findsOneWidget);
+      expect(find.text('The best-rated model for 2D illustration, and the one this generator starts with.'), findsOneWidget);
+      await tester.tap(key('generator.recommendedModel'));
+      await tester.pump();
+      expect(chosen, GenerationModel.recommended);
+
+      final other = Harness();
+      await open(tester, other, picker(other, (model) {}, kind: GenerationKind.lora));
+      expect(key('generator.recommendedModel'), findsNothing);
+    });
+
     testWidgets('takes a pasted AIR as it is', (tester) async {
       final harness = Harness();
       GenerationModel? chosen;
@@ -413,7 +429,7 @@ void main() {
       await open(tester, harness, picker(harness, (model) => chosen = true));
       for (final (text, message) in [
         ('hello there', 'This is not an AIR, a model page address or a version number.'),
-        ('urn:air:flux1:checkpoint:civitai:1@2', 'This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.'),
+        ('urn:air:flux1:checkpoint:civitai:1@2', 'This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.'),
         ('urn:air:sdxl:lora:civitai:1@2', 'This is not a checkpoint.'),
       ]) {
         await tester.enterText(key('generator.air'), text);

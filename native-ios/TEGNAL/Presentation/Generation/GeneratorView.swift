@@ -64,7 +64,7 @@ struct GeneratorView: View {
                 }
             }
             Section {
-                NavigationLink { GeneratorModelPicker(kind: .checkpoint) { store.settings.model = $0 } } label: {
+                NavigationLink { GeneratorModelPicker(kind: .checkpoint) { store.settings.use($0) } } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(settings.model?.name ?? L10n.text("Choose a Model")).font(.body.weight(.medium))
                             .foregroundStyle(settings.model == nil ? StudyStyle.accent : Color.primary)
@@ -205,7 +205,7 @@ struct GeneratorView: View {
                 ForEach(GenerationSettings.samplers, id: \.self) { Text(Self.samplerName($0)).tag($0) }
             }
             Picker(L10n.text("Schedule"), selection: $store.settings.schedule) {
-                ForEach(GenerationSettings.schedules, id: \.self) { Text($0 == "discrete" ? "Discrete" : $0 == "karras" ? "Karras" : "SGM Uniform").tag($0) }
+                ForEach(GenerationSettings.schedules, id: \.self) { Text(["simple": "Simple", "discrete": "Discrete", "karras": "Karras"][$0] ?? "SGM Uniform").tag($0) }
             }
             Stepper(value: $store.settings.quantity, in: GenerationSettings.quantityRange) { row(L10n.text("Pictures"), String(settings.quantity)) }
             Toggle(L10n.text("Random Seed"), isOn: Binding(get: { settings.seed == nil }, set: { store.settings.seed = $0 ? nil : Int64.random(in: 0...4_294_967_295) }))
@@ -292,7 +292,7 @@ struct GeneratedPictureView: View {
                     var settings = store.settings
                     settings.negative = picture.negative; settings.width = picture.width; settings.height = picture.height
                     settings.steps = picture.steps; settings.guidance = picture.guidance; settings.seed = picture.seed
-                    if !picture.model.isEmpty { settings.model = .init(air: picture.model, name: picture.modelName.isEmpty ? picture.model : picture.modelName) }
+                    if !picture.model.isEmpty { settings.use(.init(air: picture.model, name: picture.modelName.isEmpty ? picture.model : picture.modelName)) }
                     store.settings = settings; dismiss()
                 } label: { Label(L10n.text("Use These Settings"), systemImage: "slider.horizontal.3") }
             }
@@ -402,6 +402,20 @@ struct GeneratorModelPicker: View {
                 if let message { Label(message, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red) }
             } header: { Text(L10n.text("AIR or Model Page")) } footer: {
                 Text(L10n.text("An AIR names a model exactly: urn:air:ecosystem:type:source:id@version. A Civitai model page address or version number works too."))
+            }
+            if kind == .checkpoint {
+                Section {
+                    Button { pick(.recommended) } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(GenerationModel.recommended.name).foregroundStyle(Color.primary)
+                                Text(L10n.text("The best-rated model for 2D illustration, and the one this generator starts with.")).font(.caption).foregroundStyle(Color.secondary)
+                            }
+                            Spacer()
+                            Text(L10n.text("Suggested")).font(.caption.weight(.bold)).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 4).background(StudyStyle.accent, in: Capsule())
+                        }
+                    }.accessibilityIdentifier("generator.recommendedModel")
+                }
             }
             if !recent.isEmpty {
                 Section(L10n.text("Recent")) { ForEach(recent) { model in line(model) { pick(model) } } }

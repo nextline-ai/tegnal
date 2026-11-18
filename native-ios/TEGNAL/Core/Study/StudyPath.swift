@@ -302,7 +302,7 @@ final class StudyLessonSession: Identifiable {
     private(set) var before = StudyStanding()
 
     private let store: BooruStore
-    private let source: any BooruProviding
+    let source: any BooruProviding
     let server: BooruServer
     private let engine: StudyEngine
     private var generator = SystemRandomNumberGenerator()

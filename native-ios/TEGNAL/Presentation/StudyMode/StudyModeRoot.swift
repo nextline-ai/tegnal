@@ -63,18 +63,33 @@ struct StudyModeRoot: View {
     @State private var parade: [StudyAward] = []
     private let source: any BooruProviding = TasteSources.booru
 
+    /// The tabs opened so far. A tab is built the first time it is opened and kept from then on.
+    @State private var opened: Set<StudyTab> = []
+
+    @ViewBuilder private func page(_ tab: StudyTab) -> some View {
+        switch tab {
+        case .path: StudyPathView(model: model, celebrating: celebrating, start: start)
+        case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
+        case .dex: StudyDexView(model: model, source: source)
+        case .lab: StudyLabView(model: model, start: start, closed: celebrate)
+        case .me: StudyMeView(model: model, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true })
+        }
+    }
+
     var body: some View {
-        Group {
-            switch mode.tab {
-            case .path: StudyPathView(model: model, celebrating: celebrating, start: start)
-            case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
-            case .dex: StudyDexView(model: model, source: source)
-            case .lab: StudyLabView(model: model, start: start, closed: celebrate)
-            case .me: StudyMeView(model: model, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true })
+        ZStack {
+            ForEach(StudyTab.allCases) { tab in
+                if opened.contains(tab) || tab == mode.tab {
+                    let shown = tab == mode.tab
+                    page(tab).opacity(shown ? 1 : 0).allowsHitTesting(shown).accessibilityHidden(!shown).zIndex(shown ? 1 : 0)
+                }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: mode.tab)
+        .onChange(of: mode.tab, initial: true) { opened.insert(mode.tab) }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(StudyTheme.background.ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
         .safeAreaInset(edge: .bottom, spacing: 0) { StudyDock(selection: $mode.tab) }
         .tint(StudyTheme.primary)
         .fullScreenCover(item: $session, onDismiss: closed) { StudyPlayView(session: $0) }
@@ -156,11 +171,12 @@ struct StudyModeRoot: View {
 
 struct StudyDock: View {
     @Binding var selection: StudyTab
+    @Namespace private var space
     var body: some View {
         HStack(spacing: 2) {
             ForEach(StudyTab.allCases) { tab in
                 let chosen = tab == selection
-                Button { StudySound.tap.play(); withAnimation(.snappy(duration: 0.2)) { selection = tab } } label: {
+                Button { StudySound.tap.play(); withAnimation(.spring(duration: 0.32, bounce: 0.22)) { selection = tab } } label: {
                     VStack(spacing: 3) {
                         Image(systemName: tab.symbol).font(.system(size: 21, weight: .bold))
                             .symbolEffect(.bounce, value: chosen)
@@ -168,7 +184,9 @@ struct StudyDock: View {
                     }
                     .foregroundStyle(chosen ? StudyTheme.primary : StudyTheme.muted)
                     .frame(maxWidth: .infinity).padding(.vertical, 8)
-                    .background { if chosen { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(StudyTheme.primary.opacity(0.14)) } }
+                    .background {
+                        if chosen { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(StudyTheme.primary.opacity(0.14)).matchedGeometryEffect(id: "chosen", in: space) }
+                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -216,8 +234,7 @@ struct StudyPathView: View {
     let model: StudyModeModel
     var celebrating: String?
     let start: (StudyLessonPlan) -> Void
-    @State private var selected: StudyPathLesson?
-    /// True once the learner has closed the card, until they tap a stop or finish a lesson.
+    /// True once the learner has closed the start card, until a lesson is finished.
     @State private var dismissed = false
     private static let sway: [CGFloat] = [0, 58, 86, 58, 0, -58, -86, -58]
 
@@ -259,15 +276,13 @@ struct StudyPathView: View {
                 else if let current { withAnimation(.spring(duration: 0.9, bounce: 0.15)) { proxy.scrollTo(current.id, anchor: .center) } }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
         // The lesson the learner is on offers its start at once; any other stop does when tapped.
         .overlay(alignment: .bottom) {
-            if let shown = selected ?? (dismissed || celebrating != nil ? nil : current) { card(shown).id(shown.id) }
+            if let current, !dismissed, celebrating == nil { card(current).id(current.id) }
         }
-        .animation(.spring(duration: 0.3, bounce: 0.2), value: selected)
         .animation(.spring(duration: 0.3, bounce: 0.2), value: dismissed)
         .animation(.spring(duration: 0.35, bounce: 0.2), value: celebrating)
-        .onChange(of: current?.id) { selected = nil; dismissed = false }
+        .onChange(of: current?.id) { dismissed = false }
     }
 
     private func banner(_ section: StudyPathSection) -> some View {
@@ -301,7 +316,7 @@ struct StudyPathView: View {
                     .background(StudyTheme.surface, in: Capsule()).overlay { Capsule().strokeBorder(StudyTheme.line, lineWidth: 2) }
                     .phaseAnimator([0, -5]) { view, lift in view.offset(y: lift) } animation: { _ in .easeInOut(duration: 0.8) }
             }
-            Button { StudySound.pick.play(); selected = lesson; dismissed = false } label: {
+            Button { StudySound.tap.play(); start(.lesson(lesson)) } label: {
                 Image(systemName: open ? (record != nil && lesson.kind != .boss ? "checkmark" : lesson.symbol) : "lock.fill")
                     .font(.system(size: size * 0.38, weight: .heavy))
                     .frame(width: size, height: size)
@@ -341,12 +356,12 @@ struct StudyPathView: View {
                         Text(detail).font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted)
                     }
                     Spacer()
-                    Button { selected = nil; dismissed = true } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .heavy)).foregroundStyle(StudyTheme.muted).padding(8) }
+                    Button { dismissed = true } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .heavy)).foregroundStyle(StudyTheme.muted).padding(8) }
                         .buttonStyle(.plain).accessibilityLabel(L10n.text("Close"))
                 }
                 if let record { StudyStars(count: record.stars, size: 18) }
                 StudyMainButton(title: L10n.text(record == nil ? "Start  +%@ XP" : "Play Again  +%@ XP", String(StudyGame.earned(mistakes: 1, bestCombo: 0))), symbol: "play.fill") {
-                    StudySound.tap.play(); selected = nil; start(.lesson(lesson))
+                    StudySound.tap.play(); start(.lesson(lesson))
                 }.accessibilityIdentifier("study.startLesson")
             }
         }
@@ -399,7 +414,6 @@ struct StudyPracticeView: View {
             }
             .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
-        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
     }
 
     private func game(_ symbol: String, _ color: Color, _ title: String, _ detail: String, enabled: Bool, id: String, action: @escaping () -> Void) -> some View {
@@ -464,7 +478,6 @@ struct StudyDexView: View {
             }
             .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 720).frame(maxWidth: .infinity)
         }
-        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
         .sheet(item: $opened) { tag in
             NavigationStack {
                 StudyTagView(name: tag.name, source: source)
@@ -494,7 +507,6 @@ struct StudyLabView: View {
             }
             .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
-        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
         .sheet(item: $opened, onDismiss: closed) { tool in
             NavigationStack {
                 switch tool {
@@ -618,7 +630,6 @@ struct StudyMeView: View {
             }
             .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
-        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
         .confirmationDialog(L10n.text("Reset study progress?"), isPresented: $confirmingReset, titleVisibility: .visible) {
             Button(L10n.text("Reset"), role: .destructive) { try? store.studyStore.reset(); model.reload(store) }
         } message: { Text(L10n.text("Every tag goes back to not started. This cannot be undone.")) }

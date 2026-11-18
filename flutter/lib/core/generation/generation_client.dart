@@ -21,6 +21,16 @@ class GenerationModel {
 
   String get id => air.isEmpty ? 'version:${versionID ?? 0}' : air;
 
+  /// The model a new generator starts with and suggests: Anima, base v1.0.
+  static const recommended = GenerationModel(air: 'urn:air:anima:checkpoint:civitai:2458426@2945208+2824391', name: 'Anima · base-v1.0', base: 'Anima', versionID: 2945208);
+
+  /// True for the suggested model, however the identifier's optional parts are written.
+  bool get isRecommended {
+    final mine = GenerationAIR.parse(air), ours = GenerationAIR.parse(recommended.air);
+    if (mine == null || ours == null) return false;
+    return mine.source == ours.source && mine.id == ours.id && mine.version == ours.version;
+  }
+
   Map<String, Object?> toJson() => {'air': air, 'name': name, if (base != null) 'base': base, if (versionID != null) 'versionID': versionID};
 
   static GenerationModel? fromJson(Object? json) {
@@ -100,12 +110,34 @@ class GenerationSettings {
 
   static const sizes = [(832, 1216), (896, 1152), (1024, 1024), (1152, 896), (1216, 832)];
   static const samplers = ['euler_a', 'euler', 'dpm++2m', 'dpm++2s_a', 'lcm'];
-  static const schedules = ['discrete', 'karras', 'sgm_uniform'];
+  static const schedules = ['simple', 'discrete', 'karras', 'sgm_uniform'];
   static const stepRange = (8, 50);
   static const quantityRange = (1, 4);
 
   /// The service's own estimate comes from a dry run; this is the published formula, for when there is none yet.
-  int get roughCost => (8.0 * (width * height) / (1024 * 1024) * steps / 20.0 * quantity).ceil();
+  int get roughCost {
+    // Anima is priced per 25 steps, the Stable Diffusion families per 20.
+    final unit = _family(model) == GenerationFamily.anima ? 25.0 : 20.0;
+    return (8.0 * (width * height) / (1024 * 1024) * steps / unit * quantity).ceil();
+  }
+
+  static GenerationFamily? _family(GenerationModel? model) => model == null ? null : GenerationAIR.parse(model.air)?.family;
+
+  /// The settings a new generator starts with: the suggested model and what it runs best at.
+  static GenerationSettings get starting => const GenerationSettings().use(GenerationModel.recommended);
+
+  /// Chooses a model. Moving between Anima and the Stable Diffusion families also moves the steps, the guidance,
+  /// the sampler and the schedule to what the new family runs best at, since one family's values spoil the other's pictures.
+  GenerationSettings use(GenerationModel chosen) {
+    final before = _family(model), after = _family(chosen);
+    final next = copyWith(model: chosen);
+    if (before == after) return next;
+    if (after == GenerationFamily.anima) return next.copyWith(steps: 30, guidance: 4, sampler: 'euler', schedule: 'simple');
+    if (before == GenerationFamily.anima || (before == null && schedule == 'simple')) {
+      return next.copyWith(steps: 25, guidance: 5.5, sampler: 'euler_a', schedule: 'discrete');
+    }
+    return next;
+  }
 
   /// [clearModel] and [clearSeed] set those two to null, which a plain argument cannot say.
   GenerationSettings copyWith({
@@ -294,7 +326,7 @@ class GenerationError implements Exception {
       L10n.text("Civitai's moderation refused this prompt. Change it before trying again; repeated refusals can get an account muted.") + (detail.isEmpty ? '' : '\n$detail'),
     GenerationErrorKind.failed => detail.isEmpty ? L10n.text('The picture could not be generated.') : detail,
     GenerationErrorKind.unsupportedModel => L10n.text(
-      'This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.',
+      'This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.',
     ),
     GenerationErrorKind.noModel => L10n.text('Choose a model first.'),
     GenerationErrorKind.notFound => L10n.text('Nothing was found for this.'),
@@ -387,7 +419,6 @@ class GenerationClient {
       'engine': 'sdcpp',
       'ecosystem': family.rawValue,
       'operation': 'createImage',
-      field: air.text,
       'prompt': prompt,
       'width': settings.width,
       'height': settings.height,
@@ -397,6 +428,13 @@ class GenerationClient {
       'schedule': settings.schedule,
       'quantity': settings.quantity,
     };
+    if (family == GenerationFamily.anima) {
+      // Anima ships with the service and takes no checkpoint field: sending one is refused. Its base model is the
+      // one built in, so nothing names it; any other Anima checkpoint is named as an override of the built-in one.
+      if (!model.isRecommended) input['diffuserModel'] = air.text;
+    } else {
+      input[field] = air.text;
+    }
     final negative = settings.negative.trim();
     if (negative.isNotEmpty) input['negativePrompt'] = negative;
     if (settings.seed != null) input['seed'] = settings.seed;
@@ -546,6 +584,8 @@ class GenerationClient {
       return job(await _send(_request(url, method: 'POST', query: query, body: body(prompt: prompt, settings: settings, field: _modelField))));
     } on GenerationError catch (refusal) {
       if (refusal.kind != GenerationErrorKind.invalid) rethrow;
+      // Anima's request has no checkpoint field to rename, so its refusal stands.
+      if (GenerationSettings._family(settings.model) == GenerationFamily.anima) rethrow;
       // The service's guide and its schema name the checkpoint field differently; a refusal is retried once under the other name.
       final other = modelFields.firstWhere((name) => name != _modelField, orElse: () => _modelField);
       try {

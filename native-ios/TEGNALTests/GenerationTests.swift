@@ -199,9 +199,25 @@ final class GenerationTests: XCTestCase {
         XCTAssertEqual(try family("sd1"), .sd1)
         XCTAssertEqual(try family("sd15"), .sd1)
         for sdxl in ["sdxl", "illustrious", "pony", "noobai"] { XCTAssertEqual(try family(sdxl), .sdxl, sdxl) }
+        XCTAssertEqual(try family("anima"), .anima)
         XCTAssertNil(try family("flux1"))
         XCTAssertNil(try family("sd3"))
         XCTAssertNil(GenerationAIR("civitai:1")?.family, "No ecosystem, no family")
+    }
+
+    func testAnimaIdentifierParsesAndRoundTrips() throws {
+        let text = "urn:air:anima:checkpoint:civitai:2458426@2945208+2824391"
+        let air = try XCTUnwrap(GenerationAIR(text))
+        XCTAssertEqual(air.ecosystem, "anima")
+        XCTAssertEqual(air.type, "checkpoint")
+        XCTAssertEqual(air.source, "civitai")
+        XCTAssertEqual(air.id, "2458426")
+        XCTAssertEqual(air.version, "2945208")
+        XCTAssertEqual(air.file, "2824391")
+        XCTAssertEqual(air.family, .anima)
+        XCTAssertEqual(air.kind, .checkpoint)
+        XCTAssertEqual(air.text, text)
+        XCTAssertEqual(GenerationAIR(air.text), air)
     }
 
     func testVersionIDFromANumberAPageAddressAnAPIAddressAndGarbage() {
@@ -229,6 +245,87 @@ final class GenerationTests: XCTestCase {
         settings.quantity = 1; settings.steps = 40
         XCTAssertEqual(settings.roughCost, 16)
         XCTAssertEqual(GenerationSettings().roughCost, 10, "832x1216 at 25 steps is 9.65 Buzz, rounded up")
+    }
+
+    func testRoughCostDividesStepsBy25ForAnimaAndBy20ForOthers() {
+        var anima = GenerationSettings()
+        anima.use(.recommended)
+        anima.width = 1024; anima.height = 1024; anima.steps = 50; anima.quantity = 1
+        XCTAssertEqual(anima.roughCost, 16, "8 x 50 / 25")
+        anima.quantity = 3
+        XCTAssertEqual(anima.roughCost, 48)
+        anima.quantity = 1; anima.steps = 30
+        XCTAssertEqual(anima.roughCost, 10, "8 x 30 / 25 = 9.6, rounded up")
+        var sdxl = settings()
+        sdxl.width = 1024; sdxl.height = 1024; sdxl.steps = 50
+        XCTAssertEqual(sdxl.roughCost, 20, "8 x 50 / 20")
+    }
+
+    func testSchedulesIncludeSimple() {
+        XCTAssertTrue(GenerationSettings.schedules.contains("simple"))
+    }
+
+    func testTheRecommendedModelIsAnimaBaseV1() throws {
+        let model = GenerationModel.recommended
+        XCTAssertEqual(model.air, "urn:air:anima:checkpoint:civitai:2458426@2945208+2824391")
+        XCTAssertEqual(model.name, "Anima · base-v1.0")
+        XCTAssertEqual(GenerationAIR(model.air)?.family, .anima)
+        XCTAssertTrue(model.isRecommended)
+    }
+
+    func testIsRecommendedIgnoresTheFilePartButNotTheModelOrVersion() {
+        func model(_ air: String) -> GenerationModel { GenerationModel(air: air, name: "M") }
+        XCTAssertTrue(model("urn:air:anima:checkpoint:civitai:2458426@2945208").isRecommended, "Without the file part")
+        XCTAssertFalse(model("urn:air:anima:checkpoint:civitai:2458426@999").isRecommended, "Another version")
+        XCTAssertFalse(model("urn:air:anima:checkpoint:civitai:777@2945208").isRecommended, "Another model")
+        XCTAssertFalse(model(testCheckpoint).isRecommended)
+        XCTAssertFalse(model("").isRecommended)
+        XCTAssertFalse(model("garbage").isRecommended)
+    }
+
+    func testStartingSettingsChooseTheRecommendedModelWithAnimaValues() {
+        let starting = GenerationSettings.starting
+        XCTAssertEqual(starting.model, GenerationModel.recommended)
+        XCTAssertEqual(starting.steps, 30)
+        XCTAssertEqual(starting.guidance, 4)
+        XCTAssertEqual(starting.sampler, "euler")
+        XCTAssertEqual(starting.schedule, "simple")
+    }
+
+    func testChoosingAnAnimaModelSetsItsValuesAndChoosingSDXLRestoresTheOthers() {
+        var settings = GenerationSettings()
+        settings.model = GenerationModel(air: testCheckpoint, name: "SDXL")
+        settings.use(.recommended)
+        XCTAssertEqual(settings.model, GenerationModel.recommended)
+        XCTAssertEqual(settings.steps, 30)
+        XCTAssertEqual(settings.guidance, 4)
+        XCTAssertEqual(settings.sampler, "euler")
+        XCTAssertEqual(settings.schedule, "simple")
+
+        settings.use(GenerationModel(air: "urn:air:sdxl:checkpoint:civitai:1@2", name: "SDXL"))
+        XCTAssertEqual(settings.steps, 25)
+        XCTAssertEqual(settings.guidance, 5.5)
+        XCTAssertEqual(settings.sampler, "euler_a")
+        XCTAssertEqual(settings.schedule, "discrete")
+    }
+
+    func testChoosingAModelOfTheSameFamilyKeepsTheUsersValues() {
+        var anima = GenerationSettings.starting
+        anima.steps = 40; anima.guidance = 3; anima.sampler = "dpm++2m"; anima.schedule = "karras"
+        anima.use(GenerationModel(air: "urn:air:anima:checkpoint:civitai:5@6", name: "Other Anima"))
+        XCTAssertEqual(anima.model?.air, "urn:air:anima:checkpoint:civitai:5@6")
+        XCTAssertEqual(anima.steps, 40)
+        XCTAssertEqual(anima.guidance, 3)
+        XCTAssertEqual(anima.sampler, "dpm++2m")
+        XCTAssertEqual(anima.schedule, "karras")
+
+        var sdxl = settings()
+        sdxl.steps = 33; sdxl.guidance = 7; sdxl.sampler = "lcm"; sdxl.schedule = "karras"
+        sdxl.use(GenerationModel(air: "urn:air:illustrious:checkpoint:civitai:9@9", name: "Illustrious"))
+        XCTAssertEqual(sdxl.steps, 33)
+        XCTAssertEqual(sdxl.guidance, 7)
+        XCTAssertEqual(sdxl.sampler, "lcm")
+        XCTAssertEqual(sdxl.schedule, "karras")
     }
 
     // MARK: Request body
@@ -303,6 +400,70 @@ final class GenerationTests: XCTestCase {
         let input = try XCTUnwrap((body["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
         XCTAssertEqual(input["checkpointModel"] as? String, testCheckpoint)
         XCTAssertNil(input["model"])
+    }
+
+    private func animaSettings(air: String? = nil) -> GenerationSettings {
+        var settings = GenerationSettings()
+        settings.use(air.map { GenerationModel(air: $0, name: "Anima model") } ?? .recommended)
+        return settings
+    }
+
+    func testAnimaBodyHasNoCheckpointFieldForTheRecommendedModel() throws {
+        let body = try GenerationClient.body(prompt: "1girl", settings: animaSettings())
+        let input = try XCTUnwrap((body["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
+        XCTAssertEqual(input["engine"] as? String, "sdcpp")
+        XCTAssertEqual(input["ecosystem"] as? String, "anima")
+        XCTAssertEqual(input["operation"] as? String, "createImage")
+        XCTAssertNil(input["model"])
+        XCTAssertNil(input["checkpointModel"])
+        XCTAssertNil(input["diffuserModel"])
+        XCTAssertEqual(input["steps"] as? Int, 30)
+        XCTAssertEqual(input["cfgScale"] as? Double, 4)
+        XCTAssertEqual(input["sampleMethod"] as? String, "euler")
+        XCTAssertEqual(input["schedule"] as? String, "simple")
+        for field in GenerationClient.modelFields {
+            let named = try GenerationClient.body(prompt: "x", settings: animaSettings(), field: field)
+            let namedInput = try XCTUnwrap((named["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
+            XCTAssertNil(namedInput[field], "The field name asked for makes no difference to Anima")
+            XCTAssertNil(namedInput["diffuserModel"])
+        }
+    }
+
+    func testAnimaBodySendsAnotherCheckpointAsDiffuserModel() throws {
+        let other = "urn:air:anima:checkpoint:civitai:5@6"
+        let body = try GenerationClient.body(prompt: "x", settings: animaSettings(air: other))
+        let input = try XCTUnwrap((body["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
+        XCTAssertEqual(input["ecosystem"] as? String, "anima")
+        XCTAssertEqual(input["diffuserModel"] as? String, other)
+        XCTAssertNil(input["model"])
+        XCTAssertNil(input["checkpointModel"])
+    }
+
+    func testAnimaBodyCarriesLorasNegativeSeedQuantityAndMatureFlagLikeOthers() throws {
+        var settings = animaSettings()
+        settings.loras = [GenerationLora(model: GenerationModel(air: "urn:air:anima:lora:civitai:1@2", name: "A"), strength: 0.7),
+                          GenerationLora(model: GenerationModel(air: "nonsense", name: "B"), strength: 0.5)]
+        settings.negative = "blurry"; settings.seed = 123; settings.quantity = 3
+        var body = try GenerationClient.body(prompt: "x", settings: settings)
+        var input = try XCTUnwrap((body["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
+        XCTAssertEqual(input["loras"] as? [String: Double], ["urn:air:anima:lora:civitai:1@2": 0.7])
+        XCTAssertEqual(input["negativePrompt"] as? String, "blurry")
+        XCTAssertEqual((input["seed"] as? NSNumber)?.int64Value, 123)
+        XCTAssertEqual(input["quantity"] as? Int, 3)
+        XCTAssertEqual(body["allowMatureContent"] as? Bool, false)
+        settings.mature = true; settings.negative = " "; settings.seed = nil
+        body = try GenerationClient.body(prompt: "x", settings: settings)
+        input = try XCTUnwrap((body["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
+        XCTAssertNil(body["allowMatureContent"])
+        XCTAssertNil(input["negativePrompt"])
+        XCTAssertNil(input["seed"])
+    }
+
+    func testSDXLBodyStillSendsTheCheckpointFieldAndNoDiffuserModel() throws {
+        let body = try GenerationClient.body(prompt: "x", settings: settings())
+        let input = try XCTUnwrap((body["steps"] as? [[String: Any]])?.first?["input"] as? [String: Any])
+        XCTAssertEqual(input["model"] as? String, testCheckpoint)
+        XCTAssertNil(input["diffuserModel"])
     }
 
     func testBodyRefusesWithoutAModelAndForModelsItCannotRun() {
@@ -470,6 +631,24 @@ final class GenerationTests: XCTestCase {
         XCTAssertEqual(accepted, "model", "Nothing was accepted, so nothing changes")
     }
 
+    func testARefusedAnimaRequestIsNotRetriedUnderAnotherFieldName() async throws {
+        let wire = Wire { _, _ in .init(status: 400, json: ["errors": ["input.steps": ["Out of range"]]]) }
+        let client = GenerationClient(key: "k", transport: wire.transport)
+        await assertThrows(.invalid("input.steps: Out of range")) { try await client.submit(prompt: "x", settings: self.animaSettings()) }
+        XCTAssertEqual(wire.requests.count, 1, "Anima has no checkpoint field to rename")
+        await assertThrows(.invalid("input.steps: Out of range")) { try await client.estimate(prompt: "x", settings: self.animaSettings()) }
+        XCTAssertEqual(wire.requests.count, 2)
+        let accepted = await client.acceptedModelField
+        XCTAssertEqual(accepted, "model")
+    }
+
+    func testARefusedSDXLRequestIsStillRetriedOnce() async {
+        let wire = Wire { _, _ in .init(status: 400, json: ["detail": "No"]) }
+        let client = GenerationClient(key: "k", transport: wire.transport)
+        await assertThrows(.invalid("No")) { try await client.submit(prompt: "x", settings: self.settings()) }
+        XCTAssertEqual(wire.requests.count, 2)
+    }
+
     func testOtherRefusalsAreNotRetried() async {
         let unauthorized = Wire { _, _ in .init(status: 401, json: ["title": "Unauthorized"]) }
         await assertThrows(.invalidKey) { try await GenerationClient(key: "k", transport: unauthorized.transport).submit(prompt: "x", settings: self.settings()) }
@@ -484,6 +663,8 @@ final class GenerationTests: XCTestCase {
         let client = GenerationClient(key: "k", transport: wire.transport)
         await assertThrows(.noModel) { try await client.submit(prompt: "x", settings: self.settings(air: nil)) }
         await assertThrows(.unsupportedModel) { try await client.estimate(prompt: "x", settings: self.settings(air: "urn:air:flux1:checkpoint:civitai:1@2")) }
+        XCTAssertTrue(wire.requests.isEmpty)
+        await assertThrows(.unsupportedModel) { try await client.submit(prompt: "x", settings: self.settings(air: "urn:air:flux1:checkpoint:civitai:1@2")) }
         XCTAssertTrue(wire.requests.isEmpty)
     }
 
@@ -771,6 +952,15 @@ final class GenerationTests: XCTestCase {
         XCTAssertEqual(illustrious.applied(to: " 1girl ,, smile , "), "masterpiece, best quality, 1girl, smile")
     }
 
+    func testPresetsStartWithAnima() throws {
+        let first = try XCTUnwrap(GenerationPreset.all.first)
+        XCTAssertEqual(first.name, "Anima")
+        XCTAssertEqual(first.front, "masterpiece, best quality")
+        XCTAssertEqual(first.steps, 30)
+        XCTAssertEqual(first.guidance, 4)
+        XCTAssertEqual(first.applied(to: "1girl"), "masterpiece, best quality, 1girl")
+    }
+
     func testEveryPresetHasUsableSettings() {
         XCTAssertFalse(GenerationPreset.all.isEmpty)
         XCTAssertEqual(Set(GenerationPreset.all.map(\.id)).count, GenerationPreset.all.count)
@@ -795,9 +985,30 @@ final class GenerationTests: XCTestCase {
         XCTAssertEqual(second.settings, changed)
     }
 
+    func testASavedSettingWithoutAModelGetsTheRecommendedOneAndKeepsTheRest() {
+        let defaults = makeDefaults()
+        var saved = GenerationSettings()
+        saved.width = 1024; saved.height = 1024; saved.negative = "bad"; saved.seed = 5; saved.quantity = 2; saved.mature = true
+        saved.model = nil
+        makeStore(defaults: defaults).settings = saved
+        let loaded = makeStore(defaults: defaults).settings
+        XCTAssertEqual(loaded.model, GenerationModel.recommended)
+        XCTAssertEqual(loaded.width, 1024)
+        XCTAssertEqual(loaded.height, 1024)
+        XCTAssertEqual(loaded.negative, "bad")
+        XCTAssertEqual(loaded.seed, 5)
+        XCTAssertEqual(loaded.quantity, 2)
+        XCTAssertTrue(loaded.mature)
+        XCTAssertEqual(loaded.steps, 30, "Choosing the Anima model applies its values")
+        XCTAssertEqual(loaded.guidance, 4)
+        XCTAssertEqual(loaded.sampler, "euler")
+        XCTAssertEqual(loaded.schedule, "simple")
+    }
+
     func testAFreshStoreStartsWithDefaultSettingsAndNoPictures() {
         let store = makeStore()
-        XCTAssertEqual(store.settings, GenerationSettings())
+        XCTAssertEqual(store.settings, GenerationSettings.starting)
+        XCTAssertEqual(store.settings.model, GenerationModel.recommended)
         XCTAssertTrue(store.pictures.isEmpty)
         XCTAssertTrue(store.recentModels.isEmpty)
         XCTAssertFalse(store.hasKey)

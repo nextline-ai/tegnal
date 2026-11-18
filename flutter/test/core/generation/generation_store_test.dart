@@ -43,7 +43,7 @@ void main() {
     GenerationPreset preset(String name) => GenerationPreset.all.firstWhere((preset) => preset.name == name);
 
     test('carry the exact tags each model card recommends', () {
-      expect(GenerationPreset.all.map((preset) => preset.name), ['NoobAI-XL', 'Illustrious XL', 'Animagine XL 4.0', 'Pony Diffusion V6 XL']);
+      expect(GenerationPreset.all.map((preset) => preset.name), ['Anima', 'NoobAI-XL', 'Illustrious XL', 'Animagine XL 4.0', 'Pony Diffusion V6 XL']);
       expect(preset('NoobAI-XL').front, noob);
       expect(preset('NoobAI-XL').steps, 28);
       expect(preset('NoobAI-XL').guidance, 5.5);
@@ -141,7 +141,7 @@ void main() {
     test('persist across stores', () {
       final defaults = MemoryPreferences();
       final store = open(defaults: defaults);
-      expect(store.settings, const GenerationSettings());
+      expect(store.settings, GenerationSettings.starting);
       store.settings = store.settings.copyWith(model: checkpoint, steps: 33, seed: 5, loras: [const GenerationLora(model: lora, strength: 0.5)], mature: true);
       final again = open(defaults: defaults);
       expect(again.settings.model, checkpoint);
@@ -156,7 +156,7 @@ void main() {
       final store = open(defaults: defaults);
       var notified = 0;
       store.addListener(() => notified++);
-      store.settings = const GenerationSettings();
+      store.settings = GenerationSettings.starting;
       expect(defaults.written, isEmpty);
       expect(notified, 0);
       store.settings = store.settings.copyWith(steps: 10);
@@ -167,8 +167,20 @@ void main() {
     test('survive unreadable stored values', () {
       final defaults = MemoryPreferences({'generation.settings': 'not json', 'generation.recentModels': '{'});
       final store = open(defaults: defaults);
-      expect(store.settings, const GenerationSettings());
+      expect(store.settings, GenerationSettings.starting);
       expect(store.recentModels, isEmpty);
+    });
+
+    test('start with the suggested model, and give it to saved settings that have none', () {
+      expect(open().settings.model, GenerationModel.recommended);
+      expect(open().settings.steps, 30);
+      final saved = MemoryPreferences({'generation.settings': jsonEncode(const GenerationSettings(steps: 12).toJson())});
+      final store = open(defaults: saved);
+      expect(store.settings.model, GenerationModel.recommended);
+      expect(store.settings.schedule, 'simple');
+      final kept = MemoryPreferences({'generation.settings': jsonEncode(const GenerationSettings(model: checkpoint, steps: 12).toJson())});
+      expect(open(defaults: kept).settings.model, checkpoint);
+      expect(open(defaults: kept).settings.steps, 12);
     });
 
     test('keep recent models without duplicates, newest first, at most 12', () {

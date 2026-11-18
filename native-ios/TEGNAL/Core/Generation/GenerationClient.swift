@@ -9,6 +9,14 @@ struct GenerationModel: Codable, Hashable, Identifiable, Sendable {
     var base: String?
     var versionID: Int?
     var id: String { air.isEmpty ? "version:\(versionID ?? 0)" : air }
+
+    /// The model a new generator starts with and suggests: Anima, base v1.0.
+    static let recommended = GenerationModel(air: "urn:air:anima:checkpoint:civitai:2458426@2945208+2824391", name: "Anima · base-v1.0", base: "Anima", versionID: 2945208)
+    /// True for the suggested model, however the identifier's optional parts are written.
+    var isRecommended: Bool {
+        guard let air = GenerationAIR(air), let ours = GenerationAIR(Self.recommended.air) else { return false }
+        return air.source == ours.source && air.id == ours.id && air.version == ours.version
+    }
 }
 
 struct GenerationLora: Codable, Hashable, Identifiable, Sendable {
@@ -28,6 +36,19 @@ struct GenerationSettings: Codable, Equatable, Sendable {
     var guidance = 5.5
     var sampler = "euler_a"
     var schedule = "discrete"
+
+    /// The settings a new generator starts with: the suggested model and what it runs best at.
+    static var starting: GenerationSettings { var settings = GenerationSettings(); settings.use(.recommended); return settings }
+
+    /// Chooses a model. Moving between Anima and the Stable Diffusion families also moves the steps, the guidance,
+    /// the sampler and the schedule to what the new family runs best at, since one family's values spoil the other's pictures.
+    mutating func use(_ chosen: GenerationModel) {
+        let before = model.flatMap { GenerationAIR($0.air)?.family }, after = GenerationAIR(chosen.air)?.family
+        model = chosen
+        guard before != after else { return }
+        if after == .anima { steps = 30; guidance = 4; sampler = "euler"; schedule = "simple" }
+        else if before == .anima || before == nil && schedule == "simple" { steps = 25; guidance = 5.5; sampler = "euler_a"; schedule = "discrete" }
+    }
     /// Nil draws a new seed each time.
     var seed: Int64?
     var quantity = 1
@@ -36,13 +57,15 @@ struct GenerationSettings: Codable, Equatable, Sendable {
 
     static let sizes: [(width: Int, height: Int)] = [(832, 1216), (896, 1152), (1024, 1024), (1152, 896), (1216, 832)]
     static let samplers = ["euler_a", "euler", "dpm++2m", "dpm++2s_a", "lcm"]
-    static let schedules = ["discrete", "karras", "sgm_uniform"]
+    static let schedules = ["simple", "discrete", "karras", "sgm_uniform"]
     static let stepRange = 8...50
     static let quantityRange = 1...4
 
     /// The service's own estimate comes from a dry run; this is the published formula, for when there is none yet.
     var roughCost: Int {
-        Int((8.0 * Double(width * height) / Double(1024 * 1024) * Double(steps) / 20.0 * Double(quantity)).rounded(.up))
+        // Anima is priced per 25 steps, the Stable Diffusion families per 20.
+        let unit = model.flatMap { GenerationAIR($0.air)?.family } == .anima ? 25.0 : 20.0
+        return Int((8.0 * Double(width * height) / Double(1024 * 1024) * Double(steps) / unit * Double(quantity)).rounded(.up))
     }
 }
 
@@ -105,7 +128,7 @@ enum GenerationError: Error, Equatable {
         case .busy: L10n.text("Too many requests. Wait a moment and try again.")
         case .blocked(let detail): L10n.text("Civitai's moderation refused this prompt. Change it before trying again; repeated refusals can get an account muted.") + (detail.isEmpty ? "" : "\n" + detail)
         case .failed(let detail): detail.isEmpty ? L10n.text("The picture could not be generated.") : detail
-        case .unsupportedModel: L10n.text("This generator runs Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.")
+        case .unsupportedModel: L10n.text("This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.")
         case .noModel: L10n.text("Choose a model first.")
         case .notFound: L10n.text("Nothing was found for this.")
         case .unreadable: L10n.text("The answer could not be read.")
@@ -152,10 +175,15 @@ actor GenerationClient {
         guard let model = settings.model, let air = GenerationAIR(model.air) else { throw GenerationError.noModel }
         guard let family = air.family, air.kind == .checkpoint || air.type == nil else { throw GenerationError.unsupportedModel }
         var input: [String: Any] = [
-            "engine": "sdcpp", "ecosystem": family.rawValue, "operation": "createImage", field: air.text,
+            "engine": "sdcpp", "ecosystem": family.rawValue, "operation": "createImage",
             "prompt": prompt, "width": settings.width, "height": settings.height, "steps": settings.steps,
             "cfgScale": settings.guidance, "sampleMethod": settings.sampler, "schedule": settings.schedule, "quantity": settings.quantity,
         ]
+        if family == .anima {
+            // Anima ships with the service and takes no checkpoint field: sending one is refused. Its base model is the
+            // one built in, so nothing names it; any other Anima checkpoint is named as an override of the built-in one.
+            if !model.isRecommended { input["diffuserModel"] = air.text }
+        } else { input[field] = air.text }
         let negative = settings.negative.trimmingCharacters(in: .whitespacesAndNewlines)
         if !negative.isEmpty { input["negativePrompt"] = negative }
         if let seed = settings.seed { input["seed"] = seed }
@@ -255,6 +283,8 @@ actor GenerationClient {
         do {
             return try Self.job(await send(request(url, method: "POST", query: query, body: Self.body(prompt: prompt, settings: settings, field: modelField))))
         } catch GenerationError.invalid(let first) {
+            // Anima's request has no checkpoint field to rename, so its refusal stands.
+            if settings.model.flatMap({ GenerationAIR($0.air)?.family }) == .anima { throw GenerationError.invalid(first) }
             // The service's guide and its schema name the checkpoint field differently; a refusal is retried once under the other name.
             let other = Self.modelFields.first { $0 != modelField } ?? modelField
             do {
