@@ -16,6 +16,8 @@ import 'booru_account_views.dart';
 import 'booru_common.dart';
 import 'booru_feed_view.dart';
 import 'booru_post_view.dart' show openExternalLink;
+import '../study/study_tag_view.dart';
+import '../study/study_widgets.dart' show StudyPresentation, StudySymbols;
 
 /// `BooruPostView.details`: the post's facts, its tags by category, pools, notes and content
 /// controls. Tags and pools open their feeds inside the sheet.
@@ -52,9 +54,13 @@ class BooruPostDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sheet = Navigator.of(context);
-    return Navigator(
-      onGenerateRoute: (_) => CupertinoPageRoute<void>(
-        builder: (context) => _DetailsPage(details: this, done: () => sheet.pop()),
+    // Study pages pushed inside the sheet take the sheet's look.
+    return StudyPresentation(
+      sheet: true,
+      child: Navigator(
+        onGenerateRoute: (_) => CupertinoPageRoute<void>(
+          builder: (context) => _DetailsPage(details: this, done: () => sheet.pop()),
+        ),
       ),
     );
   }
@@ -219,6 +225,24 @@ class _DetailsPageState extends State<_DetailsPage> {
                   FormRow(
                     onTap: () => openExternalLink(_server.pageURLFor(_post)),
                     child: Text(L10n.text('Open on Website'), style: TegnalType.style(17, color: tint)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+              FormSection(
+                rowColor: row,
+                children: [
+                  FormRow(
+                    key: const Key('booru.prompt'),
+                    onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => StudyPromptView(booru: _booru, post: _post))),
+                    child: Row(
+                      children: [
+                        Icon(StudySymbols.prompt, size: 22, color: tint),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(L10n.text('View as a Prompt'))),
+                        Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -387,6 +411,11 @@ class _DetailsPageState extends State<_DetailsPage> {
                         onSelected: () => _saveTag(tag.query, kind),
                       ),
                       ContextMenuAction(title: L10n.text('Save Artist'), icon: CupertinoIcons.person, onSelected: () => _saveTag(tag.query, 'artist')),
+                      ContextMenuAction(
+                        title: L10n.text('About This Tag'),
+                        icon: StudySymbols.graduationCap,
+                        onSelected: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => StudyTagView(booru: _booru, name: tag.query))),
+                      ),
                       ContextMenuAction(title: L10n.text('Blacklist Tag'), icon: CupertinoIcons.eye_slash, onSelected: () => _hide(tag.query)),
                     ],
                   ),

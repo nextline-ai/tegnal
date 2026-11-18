@@ -24,7 +24,10 @@ void main() {
     final covers = Directory.systemTemp.createTempSync('tegnal-recent-');
     addTearDown(() => covers.deleteSync(recursive: true));
     final recent = RecentWorks(MemoryPreferences(), covers: covers);
-    final work = RecentWork(item: ReadingQueueItem.fromGallery(id: 7000001, title: 'Work'), openedAt: DateTime.now());
+    final work = RecentWork(
+      item: ReadingQueueItem.fromGallery(id: 7000001, title: 'Work'),
+      openedAt: DateTime.now(),
+    );
 
     PrivacySettings.setIncognito(true);
     expect(PrivacySettings.isIncognito, isTrue);

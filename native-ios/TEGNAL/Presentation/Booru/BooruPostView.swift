@@ -161,6 +161,9 @@ struct BooruViewerAccessNavigation {
     }
 }
 
+/// A tag opened from the details for its study page.
+struct BooruStudiedTag: Identifiable, Hashable { let name: String; var id: String { name } }
+
 enum BooruViewerSheet: Equatable, Identifiable {
     case information, settings, folder, downloads, note(BooruNote)
     var id: String {
@@ -177,6 +180,7 @@ enum BooruViewerSheet: Equatable, Identifiable {
 struct BooruPostView: View {
     @Environment(\.discoveryContext) private var discovery
     @State private var sheet: BooruViewerSheet?
+    @State private var studiedTag: BooruStudiedTag?
     private var showDownloads: Bool {
         get { sheet == .downloads }
         nonmutating set { setSheet(.downloads, visible: newValue) }
@@ -740,6 +744,10 @@ struct BooruPostView: View {
                     }
                     Link(L10n.text("Open on Website"), destination: server.pageURL(post: post))
                 }
+                Section {
+                    NavigationLink { StudyPromptView(post: post, source: source) } label: { Label(L10n.text("View as a Prompt"), systemImage: "text.cursor") }
+                        .accessibilityIdentifier("booru.prompt")
+                }
                 ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:])) { group in
                     Section {
                         ForEach(group.tags) { tag in
@@ -780,6 +788,7 @@ struct BooruPostView: View {
                 }
             }.navigationTitle(L10n.text("Details")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { info = false }.keyboardShortcut(.cancelAction) } }
+                .navigationDestination(item: $studiedTag) { StudyTagView(name: $0.name, source: source) }
         }.presentationDragIndicator(.visible)
             .task(id: post.id) {
                 guard server.engine.usesGelbooruPages, post.tagCategories == nil else { return }
@@ -808,6 +817,7 @@ struct BooruPostView: View {
             Menu {
                 Button(L10n.text(store.savedTags(serverID: server.id, kind: SavedCollectionKind(category: category).rawValue).contains(tag) ? "Remove Saved Tag" : "Save Tag"), systemImage: "tag") { saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) }
                 Button(L10n.text("Save Artist"), systemImage: "person") { saveTag(tag, kind: "artist") }
+                Button(L10n.text("About This Tag"), systemImage: "graduationcap") { studiedTag = BooruStudiedTag(name: tag) }
                 Button(L10n.text("Blacklist Tag"), systemImage: "eye.slash") {
                     store.perform {
                         let old = store.blacklist(serverID: server.id)
@@ -959,7 +969,7 @@ private final class VideoMenuGestureView: UIView, UIGestureRecognizerDelegate {
 }
 
 /// A note opens directly into Apple Translation using the image viewer's target language.
-private struct BooruNoteTranslationView: View {
+struct BooruNoteTranslationView: View {
     let text: String
     var body: some View {
         if #available(iOS 18.0, *) {

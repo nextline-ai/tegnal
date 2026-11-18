@@ -74,7 +74,13 @@ struct LibrarySyncAdapter {
         "booru.servers": ["id", "payload", "position"], "booru.folders": ["id", "name", "color", "position", "server_id"],
         "booru.favorites": ["server_id", "post_id", "payload", "saved_at", "folder_id"],
         "booru.history": ["server_id", "query", "used_at"], "booru.saved_tags": ["server_id", "name", "kind"],
-        "booru.settings": ["key", "value"]
+        "booru.settings": ["key", "value"],
+        // What has been learned travels; what servers said about tags is a cache and stays on the device.
+        "booru.study_progress": ["tag", "step", "due", "correct", "wrong", "seen"],
+        "booru.study_days": ["day", "answered", "correct", "xp"],
+        "booru.study_lessons": ["lesson", "stars", "runs", "finished"],
+        "booru.study_awards": ["id", "earned", "seen"],
+        "booru.study_stats": ["name", "value"]
     ]
     /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
     static let keepsKnownValue: Set<String> = ["site", "page_count"]
@@ -245,9 +251,28 @@ struct LibrarySyncAdapter {
                 }
             }
             servers.removeAll()
-            for table in ["folders", "favorites", "history", "saved_tags", "settings", "challenges"] {
+            for table in ["folders", "favorites", "history", "saved_tags", "settings", "challenges", "study_progress", "study_days", "study_lessons", "study_awards", "study_stats"] {
                 for change in values where change.row.table == "booru." + table {
                     var row = change.row
+                    if table == "study_progress", !change.deleted {
+                        guard let tag = row.values["tag"]?.string, !tag.isEmpty, tag.count <= 200,
+                              let step = row.values["step"]?.integer, (0...Int64(StudyProgress.lastStep)).contains(step) else { continue }
+                    }
+                    if table == "study_days", !change.deleted {
+                        guard let day = row.values["day"]?.string, day.count == 10, (row.values["answered"]?.integer ?? -1) >= 0 else { continue }
+                    }
+                    if table == "study_lessons", !change.deleted {
+                        guard let lesson = row.values["lesson"]?.string, !lesson.isEmpty, lesson.count <= 200,
+                              (row.values["stars"]?.integer ?? -1) >= 0, (row.values["runs"]?.integer ?? -1) >= 0 else { continue }
+                    }
+                    if table == "study_awards", !change.deleted {
+                        guard let id = row.values["id"]?.string, !id.isEmpty, id.count <= 200 else { continue }
+                        // It was celebrated on the device that earned it; it is not celebrated again here.
+                        row.values["seen"] = .integer(1)
+                    }
+                    if table == "study_stats", !change.deleted {
+                        guard let name = row.values["name"]?.string, !name.isEmpty, name.count <= 200, (row.values["value"]?.integer ?? -1) >= 0 else { continue }
+                    }
                     // The shared Uncategorized from before folder ownership never comes back; its images go to their servers' own.
                     if table == "folders", row.values["id"]?.string == "unsorted" { continue }
                     if let address = row.values["server_id"]?.string {
@@ -360,6 +385,10 @@ struct LibrarySyncAdapter {
         // A folder holds a work once, saved when it was last saved there.
         let updates = fields.filter { !keys.contains($0) }.map {
             row.table == "manga.folder_works" && $0 == "added_at" ? "added_at = MAX(added_at, excluded.added_at)"
+                // A day studied on two devices keeps the larger count instead of the later one.
+                : ["booru.study_days", "booru.study_lessons", "booru.study_stats"].contains(row.table) ? "\($0) = MAX(\($0), excluded.\($0))"
+                // A badge keeps the earlier time and, once seen anywhere, stays seen.
+                : row.table == "booru.study_awards" ? ($0 == "earned" ? "earned = MIN(earned, excluded.earned)" : "seen = MAX(seen, excluded.seen)")
                 : keepsKnownValue.contains($0) ? "\($0) = COALESCE(excluded.\($0), \($0))" : "\($0) = excluded.\($0)"
         }.joined(separator: ",")
         let sql = "INSERT INTO \(row.table.split(separator: ".")[1]) (\(fields.joined(separator: ","))) VALUES (\(fields.map { _ in "?" }.joined(separator: ","))) ON CONFLICT(\(keys.joined(separator: ","))) DO " + (updates.isEmpty ? "NOTHING" : "UPDATE SET " + updates)

@@ -36,6 +36,7 @@ struct TasteDashboard: View {
                 if !sources.isEmpty, env.taste.control.enabled, !picks.isEmpty {
                     SmartPicksView(items: picks, open: { opened = $0 }, toggle: toggle, bookmarks: bookmarks, feedback: feedback, inset: layout.margin - 20).padding(.bottom, SmartSpacing.section)
                 }
+                if mode == .booru, feed.focus == nil { StudyReviewCard(source: TasteSources.booru).padding(.horizontal, layout.margin - 20) }
                 if env.taste.control.enabled, feed.focus == nil { RecapEntryCard(mode: mode).padding(.horizontal, layout.margin - 20).padding(.bottom, SmartSpacing.section) }
                 if !sources.isEmpty, env.taste.control.enabled {
                     SmartSteering(feed: feed, refresh: refresh, focus: setFocus).padding(.bottom, SmartSpacing.section)

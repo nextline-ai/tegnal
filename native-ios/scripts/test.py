@@ -35,6 +35,8 @@ SCOPES = {
     "taste-recap": ["TasteRecapTests"],
     "taste-learning": ["TasteLearningTests"],
     "challenge": ["ChallengeTests"],
+    "study": ["StudyTests", "StudyGuideTests", "StudyPathTests", "StudyAwardsTests"],
+    "generation": ["GenerationTests"],
     "presentation": ["AppPresentationTests"],
 }
 

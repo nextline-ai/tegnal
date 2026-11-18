@@ -129,6 +129,8 @@ class LibrarySyncRow {
     'booru.saved_tags': ['server_id', 'name', 'kind'],
     'booru.history': ['server_id', 'query'],
     'booru.settings': ['key'],
+    'booru.study_progress': ['tag'],
+    'booru.study_days': ['day'],
     'preferences.manga': ['key'],
     'preferences.booru': ['key'],
     'recent.works': ['id'],

@@ -58,7 +58,7 @@ TasteRecommendation _candidate(int id, List<String> tags, {double score = 0.2}) 
 );
 
 /// A server whose first page always holds the same rainy posts.
-class _PairSource implements BooruProviding {
+class _PairSource with BooruTagStudyUnsupported implements BooruProviding {
   final queries = <String>[];
   @override
   Future<BooruBatch> posts(BooruServer server, String query, int page) async {
@@ -122,7 +122,9 @@ void main() {
   });
 
   test("today's picks stay all day, change the next day and favor newer works", () {
-    final items = [for (var id = 1; id <= 12; id++) _candidate(id, ['tag$id'], score: 1 - id / 20)];
+    final items = [
+      for (var id = 1; id <= 12; id++) _candidate(id, ['tag$id'], score: 1 - id / 20),
+    ];
     final first = TodayPicks.choose(items, stored: null, today: '2026-11-05');
     expect(first.picks, hasLength(3));
     final again = TodayPicks.choose(items, stored: first.stored, today: '2026-11-05');

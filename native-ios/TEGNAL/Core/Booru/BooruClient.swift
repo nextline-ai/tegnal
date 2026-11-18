@@ -7,10 +7,19 @@ protocol BooruProviding: Sendable {
     func poolPosts(server: BooruServer, poolID: Int64, page: Int) async throws -> BooruBatch
     func notes(server: BooruServer, postID: Int64) async throws -> [BooruNote]
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost
+    /// Post counts and kinds for tags named exactly; names the server does not know are left out.
+    func tags(server: BooruServer, names: [String]) async throws -> [BooruTag]
+    /// The server's own page about a tag, or nil when it has none.
+    func wiki(server: BooruServer, tag: String) async throws -> StudyWiki?
+    /// Tags that most often appear together with a tag.
+    func relatedTags(server: BooruServer, tag: String) async throws -> [StudyRelatedTag]
 }
 
 extension BooruProviding {
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost { post }
+    func tags(server: BooruServer, names: [String]) async throws -> [BooruTag] { throw BooruError.unsupported }
+    func wiki(server: BooruServer, tag: String) async throws -> StudyWiki? { throw BooruError.unsupported }
+    func relatedTags(server: BooruServer, tag: String) async throws -> [StudyRelatedTag] { throw BooruError.unsupported }
 }
 
 struct BooruTagSuggestionSearch: Sendable {
@@ -76,6 +85,7 @@ final class BooruRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Se
 actor BooruClient: BooruProviding {
     static let shared = BooruClient()
     static let pageSize = 40
+    static let tagBatch = 100
     // Request only the fields consumed by BooruDecoder, including blocking and media metadata.
     static let postFields = "id,file_url,large_file_url,preview_file_url,media_asset[variants],tag_string_copyright,tag_string_character,image_width,image_height,tag_string,tag_string_artist,tag_string_meta,rating,score,file_ext,pool_ids,fav_count,up_score,comment_count,is_banned,is_deleted"
     private struct PostPage { let data: Data; let date: Date }
@@ -448,6 +458,48 @@ actor BooruClient: BooruProviding {
         return try BooruLegacyHTML.post(raw, server: server, id: post.postID, preview: post.previewURL)
     }
 
+    func tags(server: BooruServer, names: [String]) async throws -> [BooruTag] {
+        let names = Array(Set(names.filter { !$0.isEmpty && !$0.contains(",") && !$0.contains(" ") })).sorted()
+        var found: [BooruTag] = []
+        // A long list is asked in parts so that no address grows past what servers accept.
+        for start in stride(from: 0, to: names.count, by: Self.tagBatch) {
+            try Task.checkCancellation()
+            let part = Array(names[start..<min(start + Self.tagBatch, names.count)])
+            let raw: Data
+            switch server.engine {
+            case .danbooru:
+                raw = try await data(server, "tags.json", [("search[name_comma]", part.joined(separator: ",")), ("only", "name,post_count,category"), ("limit", String(part.count))])
+            case .gelbooru:
+                // Only the Gelbooru website looks several names up at once. Servers on the older
+                // engine ignore that field and answer with unrelated tags, so they are asked one name at a time.
+                if server.isGelbooruWebsite {
+                    raw = try await data(server, "index.php", [("page", "dapi"), ("s", "tag"), ("q", "index"), ("json", "1"), ("names", part.joined(separator: " ")), ("limit", String(part.count))])
+                } else if names.count == 1 {
+                    raw = try await data(server, "index.php", [("page", "dapi"), ("s", "tag"), ("q", "index"), ("name", part[0])])
+                } else { throw BooruError.unsupported }
+            case .moebooru, .oldGelbooru:
+                throw BooruError.unsupported
+            }
+            let asked = Set(part)
+            // Filter before counting: a server may answer with rows that were not asked for.
+            found += try BooruDecoder.suggestions(raw, server: server, limit: .max).filter { asked.contains($0.name) }
+        }
+        return found
+    }
+
+    func wiki(server: BooruServer, tag: String) async throws -> StudyWiki? {
+        guard server.engine == .danbooru else { throw BooruError.unsupported }
+        // Searching by title answers an empty list for a tag without a page, where the page's own address answers 404.
+        let raw = try await data(server, "wiki_pages.json", [("search[title]", tag), ("only", "title,body,other_names,is_deleted"), ("limit", "1")])
+        return try BooruDecoder.wiki(raw)
+    }
+
+    func relatedTags(server: BooruServer, tag: String) async throws -> [StudyRelatedTag] {
+        guard server.engine == .danbooru else { throw BooruError.unsupported }
+        let raw = try await data(server, "related_tag.json", [("query", tag), ("limit", "24")])
+        return try BooruDecoder.relatedTags(raw, excluding: tag)
+    }
+
     private func checkDanbooruAccess(server: BooruServer, postID: Int64) async throws {
         try Task.checkCancellation()
         let credentials = try BooruKeychain.read(serverID: server.id)
@@ -644,9 +696,9 @@ enum BooruDecoder {
                      animated: variants.contains { $0["type"] as? String == "full" } ? false : nil, animationVideoURL: animationVideo,
                      isDeleted: row["is_deleted"] as? Bool, isBanned: row["is_banned"] as? Bool)
     }
-    static func suggestions(_ data: Data, server: BooruServer) throws -> [BooruTag] {
+    static func suggestions(_ data: Data, server: BooruServer, limit: Int = 12) throws -> [BooruTag] {
         if let names = try? JSONSerialization.jsonObject(with: data) as? [String] {
-            return Array(names.filter { !$0.isEmpty }.prefix(12)).map { BooruTag(name: $0, count: 0, category: 0) }
+            return Array(names.filter { !$0.isEmpty }.prefix(limit)).map { BooruTag(name: $0, count: 0, category: 0) }
         }
         var seen = Set<String>()
         return Array(try rows(data, key: "tag").compactMap { row -> BooruTag? in
@@ -660,7 +712,26 @@ enum BooruDecoder {
             } else { count = 0 }
             let category = integer(row["category"] ?? row["type"])
             return BooruTag(name: name, count: count, category: category, isMetadata: server.engine == .danbooru && category == 5)
-        }.prefix(12))
+        }.prefix(limit))
+    }
+
+    static func wiki(_ data: Data) throws -> StudyWiki? {
+        guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw BooruError.invalidResponse }
+        guard let row = rows.first(where: { $0["is_deleted"] as? Bool != true }), let title = row["title"] as? String else { return nil }
+        let body = (row["body"] as? String ?? "").replacingOccurrences(of: "\r\n", with: "\n")
+        let names = (row["other_names"] as? [String] ?? []).filter { !$0.isEmpty }
+        guard !body.isEmpty || !names.isEmpty else { return nil }
+        return StudyWiki(title: title, body: String(body.prefix(40_000)), otherNames: Array(names.prefix(24)))
+    }
+
+    static func relatedTags(_ data: Data, excluding asked: String) throws -> [StudyRelatedTag] {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = object["related_tags"] as? [[String: Any]] else { throw BooruError.invalidResponse }
+        return rows.compactMap { row in
+            guard let tag = row["tag"] as? [String: Any], let name = tag["name"] as? String, !name.isEmpty, name != asked else { return nil }
+            return StudyRelatedTag(name: name, category: integer(tag["category"]), count: integer(tag["post_count"]),
+                                   frequency: (row["frequency"] as? NSNumber)?.doubleValue ?? 0)
+        }
     }
 
     static func note(_ row: [String: Any]) -> BooruNote? {

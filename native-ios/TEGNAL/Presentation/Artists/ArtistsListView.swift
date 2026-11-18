@@ -171,11 +171,14 @@ struct SavedCollectionsBrowser: View {
     @State private var opened: SavedCollectionEntry?
     @State private var editMode = EditMode.inactive
     let source: any BooruProviding
-    init(database: AppDatabase, booru: BooruStore, server: BooruServer? = nil, source: any BooruProviding = BooruClient.shared) {
-        _model = State(initialValue: SavedCollectionsModel(database: database, booru: booru, server: server)); self.source = source
+    /// Sections shown above the saved tags, such as the way into tag study.
+    let header: AnyView?
+    init(database: AppDatabase, booru: BooruStore, server: BooruServer? = nil, source: any BooruProviding = BooruClient.shared, header: AnyView? = nil) {
+        _model = State(initialValue: SavedCollectionsModel(database: database, booru: booru, server: server)); self.source = source; self.header = header
     }
     var body: some View {
         List {
+            if let header { header }
             ForEach(model.sections) { section in
                 SavedCollectionSection(model: model, kind: section, full: false, open: { opened = $0 })
             }

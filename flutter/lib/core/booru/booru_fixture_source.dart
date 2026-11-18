@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:characters/characters.dart';
+
 import '../content/content_errors.dart';
+import '../study/study_models.dart';
 import '../taste/taste_models.dart';
 import 'booru_client.dart';
 import 'booru_models.dart';
@@ -45,6 +48,9 @@ enum BooruFixtureOption {
 
   /// `--no-sites-test`: no servers are connected.
   noSites,
+
+  /// `--study-ui-test`: a search for one tag answers with pictures that carry it, and its neighbours.
+  studyUITest,
 }
 
 /// Synthetic posts keep image-mode automation independent of private data and the network.
@@ -88,6 +94,16 @@ class BooruFixtureSource implements BooruProviding {
     }
     if (options.contains(BooruFixtureOption.tagLimit) && query.contains('mountain')) throw const BooruError(BooruErrorKind.unavailable, 422);
     if (query == 'empty') return const BooruBatch(posts: [], hasMore: false);
+    if (options.contains(BooruFixtureOption.studyUITest) && query.isNotEmpty && !query.contains(' ')) {
+      // Three examples of the asked tag, and one of each neighbouring tag for picture choices.
+      final siblings = (StudyCurriculum.bundled.groupOf(query)?.tags.map((tag) => tag.name) ?? const <String>[]).where((name) => name != query).take(3).toList();
+      final base = query.runes.fold<int>(0, (hash, rune) => (hash * 31 + rune) % 9000).abs() * 10 + 20000;
+      final posts = [
+        for (var index = 0; index < 3; index++) post(base + index, server, tags: [query, '1girl', 'solo'])..fileExtension = 'png',
+        for (final (index, sibling) in siblings.indexed) post(base + 5 + index, server, tags: [sibling, '1girl', 'solo'])..fileExtension = 'png',
+      ];
+      return BooruBatch(posts: posts, hasMore: false);
+    }
     if (options.contains(BooruFixtureOption.tasteRecapDemo)) {
       const extra = ['lantern', 'snow', 'shrine', 'fox', 'aurora', 'rain', 'neon', 'harbor', 'forest', 'mist'];
       final terms = query.split(' ').where((term) => term.isNotEmpty && !term.contains(':')).toList();
@@ -166,6 +182,23 @@ class BooruFixtureSource implements BooruProviding {
   Future<List<BooruNote>> notes(BooruServer server, int postID) async => const [
     BooruNote(id: 1, x: 120, y: 90, width: 700, height: 180, body: 'A mountain in the morning.'),
   ];
+
+  @override
+  Future<List<BooruTag>> tags(BooruServer server, List<String> names) async => [for (final name in names) BooruTag(name: name, count: 1000 * name.characters.length, category: 0)];
+
+  @override
+  Future<StudyWiki?> wiki(BooruServer server, String tag) async => StudyWiki(
+    title: tag,
+    body: 'A synthetic page about [[${tag.replaceAll('_', ' ')}]].\n\nh4. See also\n\n* [[upper body]]\n* [[full body]]',
+    otherNames: const ['フィクスチャ'],
+  );
+
+  @override
+  Future<List<StudyRelatedTag>> relatedTags(BooruServer server, String tag) async => const [
+    StudyRelatedTag(name: 'upper_body', category: 0, count: 12000, frequency: 0.42),
+    StudyRelatedTag(name: 'sample_artist', category: 1, count: 42, frequency: 0.3),
+    StudyRelatedTag(name: 'full_body', category: 0, count: 9000, frequency: 0.2),
+  ].where((related) => related.name != tag).toList();
 
   @override
   Future<BooruPost> details(BooruServer server, BooruPost post) async {

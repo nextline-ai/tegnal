@@ -17,7 +17,7 @@ abstract final class ChallengeMediaFilter {
 
 /// `ChallengeFolderSource`: a saved folder served through the same search, grid and
 /// paging as a server, without making list requests online.
-class ChallengeFolderSource implements BooruProviding {
+class ChallengeFolderSource with BooruTagStudyUnsupported implements BooruProviding {
   ChallengeFolderSource({required this.store, required this.folderID, required this.source});
   final BooruStore store;
   final String folderID;

@@ -116,6 +116,22 @@ final class BooruUITests: XCTestCase {
         element(app, "taste.tuner").tap()
         reveal(app, "taste.evidence").tap()
     }
+    /// The "Choose How to Start" step: pick Viewing Mode (harmless if already selected) and go on.
+    private func chooseViewingMode(_ app: XCUIApplication) {
+        XCTAssertTrue(element(app, "onboarding.mode").waitForExistence(timeout: 5))
+        let viewing = element(app, "onboarding.mode.viewing")
+        XCTAssertTrue(viewing.waitForExistence(timeout: 5))
+        viewing.tap()
+        element(app, "onboarding.continue").tap()
+    }
+    /// Walks every onboarding step from the first one, choosing Viewing Mode.
+    private func finishOnboarding(_ app: XCUIApplication) {
+        element(app, "onboarding.continue").tap()
+        element(app, "onboarding.continue").tap()
+        chooseViewingMode(app)
+        XCTAssertTrue(element(app, "onboarding.tutorial").waitForExistence(timeout: 5))
+        element(app, "onboarding.continue").tap()
+    }
     private func capture(_ app: XCUIApplication, _ name: String) {
         // UIKit's glass morph can outlive accessibility idleness after tab changes.
         Thread.sleep(forTimeInterval: 1)
@@ -476,8 +492,8 @@ final class BooruUITests: XCTestCase {
         for mode in ["manga", "booru"] {
             selectMode(app, mode)
             app.tabBars.buttons["Tags"].tap()
-            let name = element(app, mode + ".savedName")
-            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            // Tag study heads the image library's list, so the field may start below the screen.
+            let name = reveal(app, mode + ".savedName")
             name.tap()
             name.typeText("sample")
             element(app, mode + ".saveTag").tap()
@@ -1547,6 +1563,7 @@ final class BooruUITests: XCTestCase {
         element(app, "onboarding.continue").tap()
         XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
         element(app, "onboarding.continue").tap()
+        chooseViewingMode(app)
         XCTAssertTrue(element(app, "onboarding.tutorial").waitForExistence(timeout: 5))
         element(app, "onboarding.continue").tap()
         XCTAssertTrue(app.tabBars.buttons["Saved"].waitForExistence(timeout: 5))
@@ -1812,6 +1829,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Backup Contents"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         element(app, "onboarding.continue").tap()
+        chooseViewingMode(app)
         XCTAssertTrue(element(app, "onboarding.tutorial").waitForExistence(timeout: 5))
         selectMode(app, "manga")
         XCTAssertTrue(app.staticTexts["Comics Mode"].waitForExistence(timeout: 5))
@@ -1987,6 +2005,8 @@ final class BooruUITests: XCTestCase {
         element(app, "onboarding.continue").tap()
         capture(app, "Concise onboarding imports")
         element(app, "onboarding.continue").tap()
+        capture(app, "Concise onboarding mode choice")
+        chooseViewingMode(app)
         capture(app, "Concise onboarding mode tutorial")
         element(app, "onboarding.continue").tap()
         assertMode(app, "manga")
@@ -1994,11 +2014,24 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(element(app, "comics.enterAddress").exists)
     }
 
-    func testEmptyLibraryCanConnectWithOnlyAnAddress() {
+    func testChoosingLearningModeOnFirstRunOpensLearningMode() {
         let app = launch(extra: ["--onboarding-test"])
         element(app, "onboarding.continue").tap()
         element(app, "onboarding.continue").tap()
+        XCTAssertTrue(element(app, "onboarding.mode").waitForExistence(timeout: 5))
+        let learning = element(app, "onboarding.mode.learning")
+        XCTAssertTrue(learning.waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "onboarding.continue").isEnabled, "Nothing is chosen yet on a first run")
+        learning.tap()
+        XCTAssertTrue(element(app, "onboarding.continue").isEnabled)
         element(app, "onboarding.continue").tap()
+        XCTAssertTrue(element(app, "study.dock.path").waitForExistence(timeout: 10), "Learning mode should open")
+        XCTAssertFalse(element(app, "onboarding.tutorial").exists)
+    }
+
+    func testEmptyLibraryCanConnectWithOnlyAnAddress() {
+        let app = launch(extra: ["--onboarding-test"])
+        finishOnboarding(app)
         XCTAssertTrue(element(app, "booru.setupAddress").waitForExistence(timeout: 5))
         capture(app, "No default sites - useful empty library")
         app.tabBars.buttons["Explore"].tap()
@@ -2018,7 +2051,7 @@ final class BooruUITests: XCTestCase {
 
     func testSkippedOnboardingAutoDetectsDocumentCatalogFromTheInitialAddressForm() {
         let app = launch(extra: ["--onboarding-test"])
-        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        finishOnboarding(app)
         XCTAssertTrue(element(app, "booru.setupAddress").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "website.modeGuide").exists)
         element(app, "booru.setupAddress").tap()
@@ -2063,7 +2096,7 @@ final class BooruUITests: XCTestCase {
 
     func testFirstUseModeSwitchCyclesColorsAndStopsAfterUserSwitches() {
         let app = launch(extra: ["--onboarding-test", "--mode-hint-test"])
-        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        finishOnboarding(app)
         let control = element(app, "app.mode")
         XCTAssertTrue(control.waitForExistence(timeout: 5))
         var initial = (count: 0, color: [0, 0, 0])
@@ -2119,7 +2152,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(waitForDetectedMode(app, "Comics Mode"))
         element(app, "booru.serverSave").tap()
         XCTAssertTrue(element(app, "onboarding.comicsConnected").waitForExistence(timeout: 5))
-        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        finishOnboarding(app)
         assertMode(app, "manga")
         app.tabBars.buttons["Explore"].tap()
         XCTAssertTrue(element(app, "content.search").waitForExistence(timeout: 5))
@@ -2174,7 +2207,7 @@ final class BooruUITests: XCTestCase {
         waitForExpectations(timeout: 2.5)
         XCTAssertTrue(waitForDetectedMode(app, "Image Mode"))
         element(app, "booru.serverSave").tap()
-        for _ in 0..<3 { element(app, "onboarding.continue").tap() }
+        finishOnboarding(app)
         assertMode(app, "booru")
     }
 

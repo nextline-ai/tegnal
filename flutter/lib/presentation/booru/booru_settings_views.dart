@@ -39,6 +39,7 @@ import '../../core/content/recent_works.dart';
 import '../settings/recent_works_page.dart';
 import '../../core/support/app_platform.dart';
 import '../settings/privacy_security_view.dart';
+import '../study/study_home_view.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -1304,26 +1305,30 @@ class BooruSavedServersView extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: servers.isEmpty
-                  ? const Center(child: BooruNoSelectionView())
-                  : ListView(
-                      padding: EdgeInsets.only(top: top + 35, bottom: tabBarClearance(context)),
+              // Tag study needs no server for its lessons, so it stays reachable with none or several chosen.
+              child: ListView(
+                padding: EdgeInsets.only(top: top + 35, bottom: tabBarClearance(context)),
+                children: [
+                  StudyEntrySection(booru: booru),
+                  const SizedBox(height: 28),
+                  if (servers.isEmpty)
+                    const BooruNoSelectionView()
+                  else
+                    FormSection(
+                      rowColor: FormColors.listRow.resolveFrom(context),
                       children: [
-                        FormSection(
-                          rowColor: FormColors.listRow.resolveFrom(context),
-                          children: [
-                            for (final server in servers)
-                              SettingsLinkRow(
-                                title: server.displayName,
-                                symbol: (color) => ServerRackSymbol(color: color),
-                                onTap: () =>
-                                    Navigator.of(context)
-                                        .push(CupertinoPageRoute<void>(builder: (context) => tags(context, server, onBack: () => Navigator.of(context).pop()))),
-                              ),
-                          ],
-                        ),
+                        for (final server in servers)
+                          SettingsLinkRow(
+                            title: server.displayName,
+                            symbol: (color) => ServerRackSymbol(color: color),
+                            onTap: () =>
+                                Navigator.of(context)
+                                    .push(CupertinoPageRoute<void>(builder: (context) => tags(context, server, onBack: () => Navigator.of(context).pop()))),
+                          ),
                       ],
                     ),
+                ],
+              ),
             ),
             Positioned(
               left: 0,

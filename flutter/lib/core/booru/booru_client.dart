@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:characters/characters.dart';
+
 import '../content/content_errors.dart';
 import '../content/content_transport.dart';
 import '../support/perf_trace.dart';
+import '../study/study_models.dart';
 import '../support/swift_json.dart';
 import 'booru_browser.dart';
 import 'booru_html.dart';
@@ -21,6 +24,26 @@ abstract interface class BooruProviding {
 
   /// The post with refreshed media; sources without details return [post] itself.
   Future<BooruPost> details(BooruServer server, BooruPost post);
+
+  /// Post counts and kinds for tags named exactly; names the server does not know are left out.
+  Future<List<BooruTag>> tags(BooruServer server, List<String> names);
+
+  /// The server's own page about a tag, or null when it has none.
+  Future<StudyWiki?> wiki(BooruServer server, String tag);
+
+  /// Tags that most often appear together with a tag.
+  Future<List<StudyRelatedTag>> relatedTags(BooruServer server, String tag);
+}
+
+/// The tag-study calls of a source that has no tag pages: they answer that the server does not
+/// expose them, as the native protocol extension does. Mix it into a source with `with`.
+mixin BooruTagStudyUnsupported implements BooruProviding {
+  @override
+  Future<List<BooruTag>> tags(BooruServer server, List<String> names) async => throw const BooruError(BooruErrorKind.unsupported);
+  @override
+  Future<StudyWiki?> wiki(BooruServer server, String tag) async => throw const BooruError(BooruErrorKind.unsupported);
+  @override
+  Future<List<StudyRelatedTag>> relatedTags(BooruServer server, String tag) async => throw const BooruError(BooruErrorKind.unsupported);
 }
 
 class BooruTagSuggestionResponse {
@@ -213,6 +236,9 @@ class BooruClient implements BooruProviding {
 
   static BooruClient shared = BooruClient();
   static const pageSize = 40;
+
+  /// Tag names asked in one request.
+  static const tagBatch = 100;
 
   /// Request only the fields consumed by [BooruDecoder], including blocking and media metadata.
   static const postFields =
@@ -723,6 +749,62 @@ class BooruClient implements BooruProviding {
     return BooruLegacyHTML.post(raw, server, post.postID, preview: post.previewURL, modernRatings: _usesModernRatings(server));
   }
 
+  @override
+  Future<List<BooruTag>> tags(BooruServer server, List<String> names) async {
+    final asked = {
+      for (final name in names)
+        if (name.isNotEmpty && !name.contains(',') && !name.contains(' ')) name,
+    }.toList()..sort();
+    final found = <BooruTag>[];
+    // A long list is asked in parts so that no address grows past what servers accept.
+    for (var start = 0; start < asked.length; start += tagBatch) {
+      final part = asked.sublist(start, start + tagBatch < asked.length ? start + tagBatch : asked.length);
+      final Uint8List raw;
+      switch (server.engine) {
+        case BooruEngine.danbooru:
+          raw = await _data(server, 'tags.json', [('search[name_comma]', part.join(',')), ('only', 'name,post_count,category'), ('limit', '${part.length}')]);
+        case BooruEngine.gelbooru:
+          // Only the Gelbooru website looks several names up at once. Servers on the older
+          // engine ignore that field and answer with unrelated tags, so they are asked one name at a time.
+          if (server.isGelbooruWebsite) {
+            raw = await _data(server, 'index.php', [
+              ('page', 'dapi'),
+              ('s', 'tag'),
+              ('q', 'index'),
+              ('json', '1'),
+              ('names', part.join(' ')),
+              ('limit', '${part.length}'),
+            ]);
+          } else if (asked.length == 1) {
+            raw = await _data(server, 'index.php', [('page', 'dapi'), ('s', 'tag'), ('q', 'index'), ('name', part[0])]);
+          } else {
+            throw const BooruError(BooruErrorKind.unsupported);
+          }
+        case BooruEngine.moebooru || BooruEngine.oldGelbooru:
+          throw const BooruError(BooruErrorKind.unsupported);
+      }
+      final wanted = part.toSet();
+      // Filter before counting: a server may answer with rows that were not asked for.
+      found.addAll(BooruDecoder.suggestions(raw, server, limit: 1 << 62).where((tag) => wanted.contains(tag.name)));
+    }
+    return found;
+  }
+
+  @override
+  Future<StudyWiki?> wiki(BooruServer server, String tag) async {
+    if (server.engine != BooruEngine.danbooru) throw const BooruError(BooruErrorKind.unsupported);
+    // Searching by title answers an empty list for a tag without a page, where the page's own address answers 404.
+    final raw = await _data(server, 'wiki_pages.json', [('search[title]', tag), ('only', 'title,body,other_names,is_deleted'), ('limit', '1')]);
+    return BooruDecoder.wiki(raw);
+  }
+
+  @override
+  Future<List<StudyRelatedTag>> relatedTags(BooruServer server, String tag) async {
+    if (server.engine != BooruEngine.danbooru) throw const BooruError(BooruErrorKind.unsupported);
+    final raw = await _data(server, 'related_tag.json', [('query', tag), ('limit', '24')]);
+    return BooruDecoder.relatedTags(raw, excluding: tag);
+  }
+
   Future<void> _checkDanbooruAccess(BooruServer server, int postID) async {
     final credentials = this.credentials.read(server.id);
     final cookies = session.cookies(server).toList()
@@ -955,11 +1037,11 @@ abstract final class BooruDecoder {
     );
   }
 
-  static List<BooruTag> suggestions(Uint8List data, BooruServer server) {
+  static List<BooruTag> suggestions(Uint8List data, BooruServer server, {int limit = 12}) {
     try {
       final names = jsonDecode(utf8.decode(data));
       if (names is List && names.every((name) => name is String)) {
-        return [for (final name in names.cast<String>().where((name) => name.isNotEmpty).take(12)) BooruTag(name: name, count: 0, category: 0)];
+        return [for (final name in names.cast<String>().where((name) => name.isNotEmpty).take(limit)) BooruTag(name: name, count: 0, category: 0)];
       }
     } on FormatException {
       // Rows below.
@@ -981,9 +1063,55 @@ abstract final class BooruDecoder {
       }
       final category = integer(_first(row, ['category', 'type']));
       result.add(BooruTag(name: name, count: count, category: category, isMetadata: server.engine == BooruEngine.danbooru && category == 5));
-      if (result.length == 12) break;
+      if (result.length == limit) break;
     }
     return result;
+  }
+
+  static StudyWiki? wiki(Uint8List data) {
+    final Object? rows;
+    try {
+      rows = jsonDecode(utf8.decode(data));
+    } on FormatException {
+      throw const BooruError(BooruErrorKind.invalidResponse);
+    }
+    if (rows is! List || !rows.every((row) => row is Map)) throw const BooruError(BooruErrorKind.invalidResponse);
+    for (final row in rows.cast<Map>()) {
+      if (row['is_deleted'] == true) continue;
+      final title = row['title'];
+      if (title is! String) return null;
+      final body = (row['body'] is String ? row['body'] as String : '').replaceAll('\r\n', '\n');
+      final names = [
+        if (row['other_names'] is List)
+          for (final name in row['other_names'] as List)
+            if (name is String && name.isNotEmpty) name,
+      ];
+      if (body.isEmpty && names.isEmpty) return null;
+      return StudyWiki(title: title, body: body.characters.take(40000).toString(), otherNames: names.take(24).toList());
+    }
+    return null;
+  }
+
+  static List<StudyRelatedTag> relatedTags(Uint8List data, {required String excluding}) {
+    final Object? object;
+    try {
+      object = jsonDecode(utf8.decode(data));
+    } on FormatException {
+      throw const BooruError(BooruErrorKind.invalidResponse);
+    }
+    if (object is! Map || object['related_tags'] is! List || !(object['related_tags'] as List).every((row) => row is Map)) {
+      throw const BooruError(BooruErrorKind.invalidResponse);
+    }
+    return [
+      for (final row in (object['related_tags'] as List).cast<Map>())
+        if (row['tag'] case final Map tag when tag['name'] is String && (tag['name'] as String).isNotEmpty && tag['name'] != excluding)
+          StudyRelatedTag(
+            name: tag['name'] as String,
+            category: integer(tag['category']),
+            count: integer(tag['post_count']),
+            frequency: row['frequency'] is num ? (row['frequency'] as num).toDouble() : 0,
+          ),
+    ];
   }
 
   static BooruNote? note(Map<String, Object?> row) {

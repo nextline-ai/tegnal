@@ -30,6 +30,39 @@ struct BooruBackup: Codable, Sendable {
     var folderRules: [FolderRule]?
     /// Optional so backups from before recent images still read.
     var recentImages: [Recent]?
+    /// Tag study progress. Times are seconds since 1970, as both apps write them.
+    struct Learned: Codable, Sendable { var tag: String; var step: Int; var due: Double; var correct: Int; var wrong: Int; var seen: Double }
+    struct Lesson: Codable, Sendable { var lesson: String; var stars: Int; var runs: Int; var finished: Double }
+    struct Award: Codable, Sendable { var id: String; var earned: Double }
+    struct Study: Codable, Sendable {
+        var progress: [Learned]; var days: [StudyDay]
+        /// Optional so backups from before learning mode still read.
+        var lessons: [Lesson]?; var awards: [Award]?; var stats: [String: Int]?
+        init(progress: [Learned], days: [StudyDay], lessons: [Lesson]? = nil, awards: [Award]? = nil, stats: [String: Int]? = nil) {
+            self.progress = progress; self.days = days; self.lessons = lessons; self.awards = awards; self.stats = stats
+        }
+        /// A day written before learning mode has no experience.
+        private struct Day: Codable { var day: String; var answered: Int; var correct: Int; var xp: Int? }
+        private enum Keys: String, CodingKey { case progress, days, lessons, awards, stats }
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: Keys.self)
+            progress = try container.decode([Learned].self, forKey: .progress)
+            days = try container.decode([Day].self, forKey: .days).map { StudyDay(day: $0.day, answered: $0.answered, correct: $0.correct, xp: $0.xp ?? 0) }
+            lessons = try container.decodeIfPresent([Lesson].self, forKey: .lessons)
+            awards = try container.decodeIfPresent([Award].self, forKey: .awards)
+            stats = try container.decodeIfPresent([String: Int].self, forKey: .stats)
+        }
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: Keys.self)
+            try container.encode(progress, forKey: .progress)
+            try container.encode(days.map { Day(day: $0.day, answered: $0.answered, correct: $0.correct, xp: $0.xp) }, forKey: .days)
+            try container.encodeIfPresent(lessons, forKey: .lessons)
+            try container.encodeIfPresent(awards, forKey: .awards)
+            try container.encodeIfPresent(stats, forKey: .stats)
+        }
+    }
+    /// Optional so backups from before tag study still read.
+    var study: Study?
 
     static func read(_ url: URL) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
@@ -62,7 +95,14 @@ struct BooruBackup: Codable, Sendable {
               Set(blacklist.keys).isSubset(of: serverIDs), Set(selectedServerIDs).isSubset(of: serverIDs),
               folders.allSatisfy({ $0.serverID.map(serverIDs.contains) ?? true }),
               (folderRules ?? []).allSatisfy({ folderIDs.contains($0.folder) && !$0.query.isEmpty }),
-              (recentImages ?? []).allSatisfy({ serverIDs.contains($0.post.serverID) && $0.post.postID > 0 && $0.openedAt.isFinite })
+              (recentImages ?? []).allSatisfy({ serverIDs.contains($0.post.serverID) && $0.post.postID > 0 && $0.openedAt.isFinite }),
+              (study?.progress ?? []).allSatisfy({ !$0.tag.isEmpty && $0.tag.count <= 200 && (0...StudyProgress.lastStep).contains($0.step) && $0.correct >= 0 && $0.wrong >= 0 && $0.due.isFinite && $0.seen.isFinite }),
+              (study?.days ?? []).allSatisfy({ $0.day.count == 10 && $0.answered >= 0 && (0...$0.answered).contains($0.correct) && $0.xp >= 0 }),
+              (study?.lessons ?? []).allSatisfy({ !$0.lesson.isEmpty && $0.lesson.count <= 200 && $0.stars >= 0 && $0.runs >= 0 && $0.finished.isFinite }),
+              Set((study?.lessons ?? []).map(\.lesson)).count == (study?.lessons ?? []).count,
+              (study?.awards ?? []).allSatisfy({ !$0.id.isEmpty && $0.id.count <= 200 && $0.earned.isFinite }),
+              Set((study?.awards ?? []).map(\.id)).count == (study?.awards ?? []).count,
+              (study?.stats ?? [:]).allSatisfy({ !$0.key.isEmpty && $0.key.count <= 200 && $0.value >= 0 })
         else { throw BooruError.invalidResponse }
         for server in servers { _ = try BooruServer.validatedURL(server.baseURL.absoluteString) }
         for post in favorites.map(\.post) + (recentImages ?? []).map(\.post) {
@@ -99,7 +139,17 @@ extension BooruStore {
             let tags = try Row.fetchAll(db, sql: "SELECT * FROM saved_tags ORDER BY server_id, kind, name").map { BooruBackup.Tag(serverID: $0["server_id"], name: $0["name"], kind: $0["kind"]) }
             var blacklist: [String: String] = [:]
             for server in servers { blacklist[server.id] = try String.fetchOne(db, sql: "SELECT value FROM settings WHERE key = ?", arguments: ["blacklist." + server.id]) ?? "" }
-            return BooruBackup(servers: servers, folders: folders, favorites: favorites, history: history, savedTags: tags, blacklist: blacklist, selectedServerIDs: selectedServerIDs, folderRules: try Self.fetchFolderRules(db).filter { rule in folders.contains { $0.id == rule.folder } })
+            let learned = try Row.fetchAll(db, sql: "SELECT * FROM study_progress ORDER BY tag").map {
+                BooruBackup.Learned(tag: $0["tag"], step: $0["step"], due: $0["due"], correct: $0["correct"], wrong: $0["wrong"], seen: $0["seen"])
+            }
+            let days = try Row.fetchAll(db, sql: "SELECT * FROM study_days ORDER BY day").map { StudyDay(day: $0["day"], answered: $0["answered"], correct: $0["correct"], xp: $0["xp"] ?? 0) }
+            let lessons = try Row.fetchAll(db, sql: "SELECT * FROM study_lessons ORDER BY lesson").map { BooruBackup.Lesson(lesson: $0["lesson"], stars: $0["stars"], runs: $0["runs"], finished: $0["finished"]) }
+            let awards = try Row.fetchAll(db, sql: "SELECT id, earned FROM study_awards ORDER BY id").map { BooruBackup.Award(id: $0["id"], earned: $0["earned"]) }
+            var stats: [String: Int] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT name, value FROM study_stats") { stats[row["name"]] = row["value"] }
+            return BooruBackup(servers: servers, folders: folders, favorites: favorites, history: history, savedTags: tags, blacklist: blacklist, selectedServerIDs: selectedServerIDs, folderRules: try Self.fetchFolderRules(db).filter { rule in folders.contains { $0.id == rule.folder } },
+                               study: learned.isEmpty && days.isEmpty && lessons.isEmpty && awards.isEmpty && stats.isEmpty ? nil
+                                : .init(progress: learned, days: days, lessons: lessons, awards: awards, stats: stats))
         }
     }
 
@@ -157,6 +207,40 @@ extension BooruStore {
             try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: ["blacklist." + targetServerID, rules])
         }
         for rule in backup.folderRules ?? [] { try Self.storeFolderRule(rule, db: db) }
+        // Study progress merges: a tag keeps whichever answer came later, and a day its larger count.
+        for value in backup.study?.progress ?? [] {
+            try db.execute(sql: """
+                INSERT INTO study_progress (tag, step, due, correct, wrong, seen) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(tag) DO UPDATE SET step = excluded.step, due = excluded.due, correct = excluded.correct, wrong = excluded.wrong, seen = excluded.seen
+                WHERE excluded.seen > study_progress.seen
+                """, arguments: [value.tag, value.step, value.due, value.correct, value.wrong, value.seen])
+        }
+        for value in backup.study?.days ?? [] {
+            try db.execute(sql: """
+                INSERT INTO study_days (day, answered, correct, xp) VALUES (?, ?, ?, ?)
+                ON CONFLICT(day) DO UPDATE SET answered = MAX(answered, excluded.answered), correct = MAX(correct, excluded.correct), xp = MAX(xp, excluded.xp)
+                """, arguments: [value.day, value.answered, value.correct, value.xp])
+        }
+        // A lesson finished anywhere stays finished, with its best stars, most runs and latest finish.
+        for value in backup.study?.lessons ?? [] {
+            try db.execute(sql: """
+                INSERT INTO study_lessons (lesson, stars, runs, finished) VALUES (?, ?, ?, ?)
+                ON CONFLICT(lesson) DO UPDATE SET stars = MAX(stars, excluded.stars), runs = MAX(runs, excluded.runs), finished = MAX(finished, excluded.finished)
+                """, arguments: [value.lesson, value.stars, value.runs, value.finished])
+        }
+        // A badge keeps its earliest time; one from a backup was celebrated where it was earned.
+        for value in backup.study?.awards ?? [] {
+            try db.execute(sql: """
+                INSERT INTO study_awards (id, earned, seen) VALUES (?, ?, 1)
+                ON CONFLICT(id) DO UPDATE SET earned = MIN(earned, excluded.earned), seen = 1
+                """, arguments: [value.id, value.earned])
+        }
+        for (name, value) in backup.study?.stats ?? [:] {
+            try db.execute(sql: """
+                INSERT INTO study_stats (name, value) VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)
+                """, arguments: [name, value])
+        }
         // Folders of an older backup go where their images are, and every image to a folder of its server.
         try Self.assignFolderServers(db: db, only: Set(backup.folders.filter(\.isLegacy).map(\.id)))
         // The order kept is the one the folders now have, each server's Uncategorized included, so a

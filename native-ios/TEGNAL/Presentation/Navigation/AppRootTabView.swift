@@ -9,13 +9,15 @@ public struct AppRootTabView: View {
     public init() {}
 
     public var body: some View {
-        RetainedModeContainer(mode: env.mode,
-            manga: AnyView(mangaTabs.environment(\.displayedAppMode, .manga).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()),
-            booru: AnyView(BooruRootView(selectedTab: $selectedTab).environment(\.displayedAppMode, .booru).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
-        .clearTopScrollEdge()
-        .toolbarBackground(.hidden, for: .navigationBar)
+        let studying = StudyMode.shared.active
+        ZStack {
+            library.accessibilityHidden(studying).allowsHitTesting(!studying)
+            // Learning mode takes over the whole screen, dock included; the library waits underneath.
+            if studying {
+                StudyModeRoot().environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language))
+                    .transition(.opacity.combined(with: .scale(scale: 1.03))).zIndex(1)
+            }
+        }
         .onAppear {
             guard !didSetup else { return }
             didSetup = true
@@ -30,6 +32,16 @@ public struct AppRootTabView: View {
                 env.startCoverQueue()
             }
         }
+    }
+
+    private var library: some View {
+        RetainedModeContainer(mode: env.mode,
+            manga: AnyView(mangaTabs.environment(\.displayedAppMode, .manga).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()),
+            booru: AnyView(BooruRootView(selectedTab: $selectedTab).environment(\.displayedAppMode, .booru).environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language)).clearTopScrollEdge()))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .clearTopScrollEdge()
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var mangaTabs: some View { ComicsRootTabs(selection: $selectedTab) }

@@ -32,6 +32,18 @@ actor BooruFixtureSource: BooruProviding {
         if ProcessInfo.processInfo.arguments.contains("--booru-initial-error") && !failed { failed = true; throw URLError(.notConnectedToInternet) }
         if ProcessInfo.processInfo.arguments.contains("--booru-tag-limit-test") && query.contains("mountain") { throw BooruError.unavailable(422) }
         if query == "empty" { return .init(posts: [], hasMore: false) }
+        if ProcessInfo.processInfo.arguments.contains("--study-ui-test"), !query.isEmpty, !query.contains(" ") {
+            // Three examples of the asked tag, and one of each neighbouring tag for picture choices.
+            let siblings = (StudyCurriculum.bundled.group(of: query)?.tags.map(\.name) ?? []).filter { $0 != query }.prefix(3)
+            let base = Int64(abs(query.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) % 9_000 })) * 10 + 20_000
+            var posts = (0..<3).map { index in
+                var post = Self.post(base + Int64(index), server: server, tags: [query, "1girl", "solo"]); post.fileExtension = "png"; return post
+            }
+            for (index, sibling) in siblings.enumerated() {
+                var post = Self.post(base + 5 + Int64(index), server: server, tags: [sibling, "1girl", "solo"]); post.fileExtension = "png"; posts.append(post)
+            }
+            return .init(posts: posts, hasMore: false)
+        }
         if ProcessInfo.processInfo.arguments.contains("--taste-recap-demo") {
             let extra = ["lantern", "snow", "shrine", "fox", "aurora", "rain", "neon", "harbor", "forest", "mist"]
             let terms = query.split(separator: " ").map(String.init).filter { !$0.contains(":") }
@@ -88,6 +100,16 @@ actor BooruFixtureSource: BooruProviding {
     }
     func notes(server: BooruServer, postID: Int64) async throws -> [BooruNote] {
         [.init(id: 1, x: 120, y: 90, width: 700, height: 180, body: "A mountain in the morning.")]
+    }
+    func tags(server: BooruServer, names: [String]) async throws -> [BooruTag] {
+        names.map { BooruTag(name: $0, count: 1_000 * $0.count, category: 0) }
+    }
+    func wiki(server: BooruServer, tag: String) async throws -> StudyWiki? {
+        StudyWiki(title: tag, body: "A synthetic page about [[\(tag.replacingOccurrences(of: "_", with: " "))]].\n\nh4. See also\n\n* [[upper body]]\n* [[full body]]", otherNames: ["フィクスチャ"])
+    }
+    func relatedTags(server: BooruServer, tag: String) async throws -> [StudyRelatedTag] {
+        [.init(name: "upper_body", category: 0, count: 12_000, frequency: 0.42), .init(name: "sample_artist", category: 1, count: 42, frequency: 0.3),
+         .init(name: "full_body", category: 0, count: 9_000, frequency: 0.2)].filter { $0.name != tag }
     }
     func details(server: BooruServer, post: BooruPost) async throws -> BooruPost {
         if ProcessInfo.processInfo.arguments.contains("--booru-connection-lost-test"), post.postID == 106 {

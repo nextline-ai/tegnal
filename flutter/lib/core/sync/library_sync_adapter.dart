@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:characters/characters.dart';
 import 'package:collection/collection.dart';
 
 import '../../domain/models.dart';
@@ -8,6 +9,7 @@ import '../booru/booru_models.dart';
 import '../booru/booru_store.dart';
 import '../challenge/challenge_models.dart';
 import '../content/recent_works.dart';
+import '../study/study_models.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
 import '../support/preferences.dart';
@@ -139,6 +141,9 @@ class LibrarySyncAdapter {
     'booru.history': ['server_id', 'query', 'used_at'],
     'booru.saved_tags': ['server_id', 'name', 'kind'],
     'booru.settings': ['key', 'value'],
+    // What has been learned travels; what servers said about tags is a cache and stays on the device.
+    'booru.study_progress': ['tag', 'step', 'due', 'correct', 'wrong', 'seen'],
+    'booru.study_days': ['day', 'answered', 'correct'],
   };
 
   /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
@@ -372,10 +377,18 @@ class LibrarySyncAdapter {
           _upsert(row, db);
         }
       }
-      for (final table in ['folders', 'favorites', 'history', 'saved_tags', 'settings', 'challenges']) {
+      for (final table in ['folders', 'favorites', 'history', 'saved_tags', 'settings', 'challenges', 'study_progress', 'study_days']) {
         for (final change in values) {
           if (change.row.table != 'booru.$table') continue;
           final row = change.row.copy();
+          if (table == 'study_progress' && !change.deleted) {
+            final tag = row.values['tag']?.string, step = row.values['step']?.integer;
+            if (tag == null || tag.isEmpty || tag.characters.length > 200 || step == null || step < 0 || step > StudyProgress.lastStep) continue;
+          }
+          if (table == 'study_days' && !change.deleted) {
+            final day = row.values['day']?.string;
+            if (day == null || day.characters.length != 10 || (row.values['answered']?.integer ?? -1) < 0) continue;
+          }
           // The shared Uncategorized from before folder ownership never comes back; its images go to their servers' own.
           if (table == 'folders' && row.values['id']?.string == 'unsorted') continue;
           final address = row.values['server_id']?.string;
@@ -546,6 +559,9 @@ class LibrarySyncAdapter {
         .map(
           (field) => row.table == 'manga.folder_works' && field == 'added_at'
               ? 'added_at = MAX(added_at, excluded.added_at)'
+              // A day studied on two devices keeps the larger count instead of the later one.
+              : row.table == 'booru.study_days'
+              ? '$field = MAX($field, excluded.$field)'
               : keepsKnownValue.contains(field)
               ? '$field = COALESCE(excluded.$field, $field)'
               : '$field = excluded.$field',

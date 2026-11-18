@@ -21,6 +21,7 @@ import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import '../works/artwork_grid.dart';
+import '../study/study_home_view.dart' show StudyReviewCard;
 import 'recap/recap_home_view.dart';
 import 'taste_context.dart';
 import 'taste_presentation.dart';
@@ -259,6 +260,14 @@ class _TasteDashboardState extends State<TasteDashboard> {
           child: Padding(
             padding: EdgeInsets.fromLTRB(geometry.margin, 0, geometry.margin, SmartSpacing.section),
             child: SmartPicksView(taste: _taste, items: picks, open: _open, toggle: _toggle, saved: _saved, feedback: _feedback, inset: 20 - geometry.margin),
+          ),
+        ),
+      // A reminder while tags are due again; nothing at all otherwise, so the tab stays as it is for people who do not study.
+      if (_mode == TasteMode.booru && feed.focus == null)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: geometry.margin),
+            child: StudyReviewCard(booru: _taste.booru),
           ),
         ),
       if (enabled && feed.focus == null)

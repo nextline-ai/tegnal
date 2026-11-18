@@ -42,7 +42,11 @@ class SettingsLinkRow extends StatelessWidget implements FormSeparatorInset {
     this.value,
     this.destructive = false,
     this.help,
+    this.color,
   });
+
+  /// The tint of the icon and tinted title when a screen sets its own.
+  final Color? color;
   final String title;
 
   /// A help button after the title, as `SettingsInfoButton` beside a button.
@@ -61,7 +65,7 @@ class SettingsLinkRow extends StatelessWidget implements FormSeparatorInset {
 
   @override
   Widget build(BuildContext context) {
-    final tint = destructive ? CupertinoColors.systemRed.resolveFrom(context) : TegnalColors.tint.resolveFrom(context);
+    final tint = destructive ? CupertinoColors.systemRed.resolveFrom(context) : color ?? TegnalColors.tint.resolveFrom(context);
     final enabled = onTap != null;
     final hasIcon = icon != null || symbol != null;
     final row = FormRow(
@@ -103,7 +107,10 @@ class SettingsLinkRow extends StatelessWidget implements FormSeparatorInset {
 
 /// `Toggle` with an optional help button, its switch at the trailing edge.
 class SettingsToggleRow extends StatelessWidget implements FormSeparatorInset {
-  const SettingsToggleRow({super.key, required this.title, required this.value, required this.onChanged, this.help, this.icon});
+  const SettingsToggleRow({super.key, required this.title, required this.value, required this.onChanged, this.help, this.icon, this.tint});
+
+  /// The on track's color when a screen sets its own tint.
+  final Color? tint;
   final String title;
   final String? help;
   final bool value;
@@ -133,7 +140,7 @@ class SettingsToggleRow extends StatelessWidget implements FormSeparatorInset {
         // Native switches sit 2 pt closer to the row's trailing edge than text does.
         Transform.translate(
           offset: const Offset(2, 0),
-          child: TegnalSwitch(value: value, onChanged: onChanged),
+          child: TegnalSwitch(value: value, onChanged: onChanged, tint: tint),
         ),
       ],
     ),
@@ -152,7 +159,11 @@ class SettingsPickerRow<T> extends StatelessWidget {
     this.help,
     this.tinted = false,
     this.enabled = true,
+    this.color,
   });
+
+  /// The choice's and chevrons' color when a screen sets its own; otherwise grey, or the tint when [tinted].
+  final Color? color;
   final String title;
   final String? help;
   final List<(T, String)> options;
@@ -163,7 +174,7 @@ class SettingsPickerRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = tinted ? TegnalColors.tint.resolveFrom(context) : TegnalColors.secondaryLabel.resolveFrom(context);
+    final color = this.color ?? (tinted ? TegnalColors.tint.resolveFrom(context) : TegnalColors.secondaryLabel.resolveFrom(context));
     final current = options.where((option) => option.$1 == selected).firstOrNull?.$2 ?? '';
     return Builder(
       builder: (context) => FormRow(
