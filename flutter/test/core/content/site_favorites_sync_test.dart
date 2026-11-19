@@ -85,6 +85,13 @@ void main() {
   });
 
   int folderNamed(String name) => database.listFolders().firstWhere((folder) => folder.name == name).id!;
+
+  /// Sets the sync up as someone who chooses to bring the website's favorites in.
+  Future<void> bringIn({bool requested = false}) async {
+    await sync.setUp(host, requested: requested);
+    await sync.answer(SiteFavoritesSetupChoice.bringIn);
+  }
+
   List<int> worksIn(String name) => database.galleryIDsInFolder(folderNamed(name))..sort();
 
   test('favorites sync follows the side that changed a category', () {
@@ -239,7 +246,7 @@ void main() {
   test('a first sign-in makes a folder for each category with favorites, and both sides stay the same', () async {
     final unfiled = database.unfiledFolderID();
     database.upsertWork(galleryId: 9, folderId: unfiled);
-    await sync.setUp(host);
+    await bringIn();
     expect(worksIn('Favorites 0'), [1, 2]);
     expect(worksIn('Favorites 1'), [3]);
     expect(database.listFolders().where((folder) => folder.name == 'Favorites 2'), isEmpty, reason: 'An empty category gets no folder');
@@ -282,7 +289,7 @@ void main() {
       exclusive: false,
       names: {10: 'Later', 11: 'Best', 12: 'Empty'},
     );
-    await sync.setUp(host);
+    await bringIn();
     expect(worksIn('Later'), [1]);
     expect(worksIn('Best'), [1, 2]);
     expect(sync.store.state(host)?.unassigned, 12, reason: 'Works in other folders go to the list without a folder');
@@ -297,7 +304,7 @@ void main() {
   });
 
   test('a category folder that went missing comes back with its works, and the website keeps them', () async {
-    await sync.setUp(host);
+    await bringIn();
     database.deleteFolder(folderNamed('Favorites 0'));
     expect(database.folderIDs(1), [database.unfiledFolderID()]);
     await sync.sync(host, pull: false);
@@ -311,7 +318,7 @@ void main() {
   });
 
   test('a category emptied on the website takes its folder with it', () async {
-    await sync.setUp(host);
+    await bringIn();
     site.members.remove(3);
     await sync.sync(host);
     expect(database.listFolders().where((folder) => folder.name == 'Favorites 1'), isEmpty);
@@ -319,7 +326,7 @@ void main() {
   });
 
   test('a folder emptied in the app goes once Sync Now reads the website, and the category is free again', () async {
-    await sync.setUp(host);
+    await bringIn();
     final mine = database.createFolder(name: 'Mine');
     database.addWork(3, mine.id!);
     database.removeWorkFromFolder(3, folderNamed('Favorites 1'));
@@ -333,7 +340,7 @@ void main() {
   });
 
   test('an emptied smart folder stays, so its tags are not lost', () async {
-    await sync.setUp(host);
+    await bringIn();
     database.saveRule(FolderRule(folder: database.identityOfFolder(folderNamed('Favorites 1')), query: 'language:korean', excluded: ''));
     site.members.remove(3);
     await sync.sync(host);
@@ -341,7 +348,7 @@ void main() {
   });
 
   test('a category filled on the website later gets its own folder', () async {
-    await sync.setUp(host);
+    await bringIn();
     expect(sync.store.state(host)?.unassigned, 2);
     site.members[7] = {3};
     await sync.sync(host);
@@ -349,7 +356,7 @@ void main() {
   });
 
   test('a synced folder is kept only while signed in, and signing in again sets the sync up afresh', () async {
-    await sync.setUp(host);
+    await bringIn();
     final folder = folderNamed('Favorites 0');
     expect(sync.isSiteFavoritesFolder(folder), isTrue);
     expect(sync.isSiteFavoritesFolder(database.unfiledFolderID()), isFalse);
@@ -359,26 +366,151 @@ void main() {
     expect(sync.store.state(host), isNull);
     expect(sync.store.isDeclined(host), isFalse, reason: 'Signing out is not turning the sync off');
     expect(SiteAccount.signIn(const [SiteCookie(name: 'ipb_member_id', value: '7'), SiteCookie(name: 'ipb_pass_hash', value: 'x')], host: host), isTrue);
-    await sync.setUp(host);
+    await bringIn();
     expect(database.listFolders().where((folder) => folder.name == 'Favorites 0'), hasLength(1), reason: 'The folder of the same name is used again');
     expect(sync.isSiteFavoritesFolder(folder), isTrue);
   });
 
   test('a website that keeps the account out gets no folders, and turning the sync off keeps it off', () async {
     site.refuses = true;
-    await sync.setUp(host);
+    await bringIn();
     expect(sync.store.state(host), isNull);
     expect(database.listFolders().where((folder) => folder.name == 'Favorites 0'), isEmpty);
 
     site.refuses = false;
-    await sync.setUp(host);
+    await bringIn();
     expect(sync.store.state(host), isNotNull);
     sync.stop(host);
     expect(sync.store.isDeclined(host), isTrue);
-    await sync.setUp(host);
+    await bringIn();
     expect(sync.store.state(host), isNull, reason: 'Turned off, it is not set up again on its own');
-    await sync.setUp(host, requested: true);
+    await bringIn(requested: true);
     expect(sync.store.state(host), isNotNull);
+  });
+
+  test('the first sync asks how to start and changes nothing until then', () async {
+    final unfiled = database.unfiledFolderID();
+    database.upsertWork(galleryId: 1, folderId: unfiled);
+    await sync.setUp(host);
+    final offer = sync.offer!;
+    expect(offer.favoriteCount, 3);
+    expect(offer.newWorks, 2, reason: '2 and 3 are not in the library yet');
+    expect(offer.filedWorks, 1, reason: '1 would also go into its category folder');
+    expect(offer.newFolders, ['Favorites 0', 'Favorites 1']);
+    expect(sync.store.state(host), isNull);
+    expect(database.listFolders().where((folder) => folder.name.startsWith('Favorites')), isEmpty);
+    expect(database.getWork(2), isNull);
+
+    await sync.answer(null);
+    expect(sync.store.state(host), isNull, reason: 'Closed without a choice, it asks again next time');
+    expect(sync.store.isDeclined(host), isFalse);
+
+    await sync.setUp(host);
+    await sync.answer(SiteFavoritesSetupChoice.off);
+    expect(sync.store.state(host), isNull);
+    expect(sync.store.isDeclined(host), isTrue, reason: "Don't Sync is turning it off");
+  });
+
+  test('keeping the library leaves both sides as they are and syncs only later changes', () async {
+    final unfiled = database.unfiledFolderID();
+    final mine = database.createFolder(name: 'Mine');
+    database.upsertWork(galleryId: 1, folderId: mine.id!);
+    database.upsertWork(galleryId: 9, folderId: unfiled);
+    await sync.setUp(host);
+    await sync.answer(SiteFavoritesSetupChoice.keepLibrary);
+    expect(sync.store.state(host)?.ignored, {1, 2, 3});
+    expect(sync.store.state(host)?.setUpAt, isNotNull);
+    expect(database.getWork(2), isNull, reason: 'Nothing comes into the library');
+    expect(database.folderIDs(1), [mine.id], reason: 'and nothing moves');
+    expect(database.listFolders().where((folder) => folder.name.startsWith('Favorites')), isEmpty);
+    expect(site.writes, 0, reason: 'Nothing changes on the website');
+
+    site.members[4] = {0};
+    await sync.sync(host);
+    expect(worksIn('Favorites 0'), [4], reason: 'A favorite added afterwards comes in');
+    expect(site.members[1], {0});
+
+    database.deleteWork(1);
+    await sync.sync(host, pull: false);
+    expect(site.members[1], {0}, reason: 'A favorite left alone stays on the website when deleted here');
+  });
+
+  test('deleting in the app only keeps the work on the website', () async {
+    await bringIn();
+    expect(sync.syncsAny({1}), isTrue);
+    expect(sync.syncsAny({99}), isFalse);
+    sync.deleteSavedWorks({1}, keepOnWebsite: true);
+    await sync.sync(host, pull: false);
+    await sync.sync(host);
+    expect(site.members[1], {0});
+    expect(database.getWork(1), isNull, reason: 'It does not come back either');
+    expect(sync.syncsAny({1}), isFalse);
+
+    sync.deleteSavedWorks({2}, keepOnWebsite: false);
+    await sync.sync(host, pull: false);
+    expect(site.members.containsKey(2), isFalse, reason: 'Deleted here and on the website');
+  });
+
+  test('ignored favorites stay as they are until put in a category folder', () {
+    final kept = FavoriteSyncPlan.make(
+      local: {
+        2: {_unassigned},
+        9: {_unassigned},
+      },
+      remote: {
+        1: {0},
+        2: {0},
+      },
+      base: null,
+      folders: {},
+      unassigned: 5,
+      localOnly: {},
+      ignored: {1, 2},
+    );
+    expect(kept.isEmpty, isTrue);
+    expect(kept.keepLocal, [9]);
+    final filed = FavoriteSyncPlan.make(
+      local: {
+        2: {_category(1)},
+      },
+      remote: {
+        2: {0},
+      },
+      base: {},
+      folders: {1},
+      unassigned: null,
+      localOnly: {},
+      ignored: {2},
+    );
+    expect(filed.stopIgnoring, [2], reason: 'Put in a category folder by hand, it is synced after all');
+    expect(filed.site, [const FavoriteSiteChange(2, 1, adds: true)]);
+    final gone = FavoriteSyncPlan.make(
+      local: {
+        2: {_unassigned},
+      },
+      remote: {},
+      base: {},
+      folders: {0},
+      unassigned: 5,
+      localOnly: {},
+      ignored: {2},
+    );
+    expect(gone.stopIgnoring, [2]);
+    expect(gone.keepLocal, [2], reason: "Gone from the website, it stays in the app and isn't sent back");
+    expect(gone.site, isEmpty);
+  });
+
+  test('sync states keep ignored favorites and the set-up time, and older ones still read', () {
+    final state = SiteFavoriteState(folders: {0: 'folder-1'}, ignored: {3, 1}, setUpAt: DateTime.fromMillisecondsSinceEpoch(1786780800000));
+    final read = SiteFavoriteState.fromJson(state.toJson())!;
+    expect(read.ignored, {1, 3});
+    expect(read.setUpAt, state.setUpAt);
+    final old = SiteFavoriteState.fromJson({
+      'folders': {'0': 'folder-1'},
+      'localOnly': [7],
+    })!;
+    expect(old.ignored, isEmpty);
+    expect(old.setUpAt, isNull);
   });
 
   test('website priority reorders the connected websites', () {

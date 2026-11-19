@@ -246,6 +246,13 @@ void main() {
     final sync = BooruAccountSync(store: store, accounts: accounts, client: client)..sendGap = Duration.zero;
 
     await sync.setUp(dan);
+    final offer = sync.setupOffer!;
+    expect(offer.favoriteCount, 3, reason: 'The first sync asks how to start before changing anything');
+    expect(offer.newImages, 3);
+    expect(offer.newFolders, ['my group']);
+    expect(accounts.favorites.state(dan.id), isNull);
+    expect(store.favoriteFolders(dan.id).keys.toSet(), {9});
+    await sync.answerSetup(SiteFavoritesSetupChoice.bringIn);
     final state = accounts.favorites.state(dan.id)!;
     final groupFolder = state.folders[7]!;
     expect(state.folders.containsKey(8), isFalse, reason: 'An empty group gets no folder');
@@ -292,6 +299,83 @@ void main() {
     expect(store.folderIDs(), isNot(contains(groupFolder)), reason: 'An emptied group and its emptied folder go together');
   });
 
+  test('keeping the library leaves server favorites alone, and deleting in the app only keeps them', () async {
+    final directory = await Directory.systemTemp.createTemp('booru-account-keep');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = BooruStore(path: '${directory.path}/booru.sqlite', preferences: AppPreferences.memory());
+    store.saveServer(dan);
+    final accounts = BooruAccounts(MemoryPreferences());
+    accounts.setIdentity(const BooruAccountIdentity(userID: 42, name: 'me'), dan.id);
+    final log = <String>[];
+    var favorites = '[{"post_id":1},{"post_id":2}]';
+    final client = BooruAccountClient(
+      fetcher: FixtureFetcher((request) {
+        final path = request.url.path.replaceFirst('/booru/', '');
+        log.add('${request.method} $path ${request.url.query}');
+        return FixtureReply.text(200, switch (path) {
+          'favorites.json' when request.method == 'GET' => favorites,
+          'favorite_groups.json' => '[]',
+          'posts.json' => () {
+            final ids = (request.url.queryParameters['tags'] ?? '').replaceFirst('id:', '').split(',');
+            return '[${ids.map((id) => '{"id":$id,"file_url":"https://cdn.example.com/$id.jpg"}').join(',')}]';
+          }(),
+          'profile' => '<html><head><meta name="csrf-token" content="tok"></head></html>',
+          _ => '{}',
+        });
+      }),
+      credentials: MemoryCredentialStore(),
+      session: BooruBrowserSession(),
+      pause: Duration.zero,
+    );
+    final sync = BooruAccountSync(store: store, accounts: accounts, client: client)..sendGap = Duration.zero;
+
+    await sync.setUp(dan);
+    await sync.answerSetup(SiteFavoritesSetupChoice.keepLibrary);
+    expect(accounts.favorites.state(dan.id)?.ignored, {1, 2});
+    expect(store.favoriteFolders(dan.id), isEmpty, reason: 'Nothing comes into the library');
+    expect(log.where((entry) => entry.startsWith('POST') || entry.startsWith('DELETE')), isEmpty, reason: 'Nothing changes on the website');
+
+    favorites = '[{"post_id":1},{"post_id":2},{"post_id":5}]';
+    await sync.sync(dan);
+    expect(store.favoriteFolders(dan.id).keys.toSet(), {5}, reason: 'A favorite added afterwards comes in');
+
+    final five = store.savedPost(dan.id, 5)!;
+    expect(sync.syncsAny([five]), isTrue);
+    log.clear();
+    sync.removeFavorites([five], keepOnServer: true);
+    await sync.sync(dan, pull: false);
+    await sync.sync(dan);
+    expect(log.where((entry) => entry.startsWith('DELETE')), isEmpty, reason: 'Deleted in the app only, it stays on the website');
+    expect(store.favoriteFolders(dan.id), isEmpty, reason: "and doesn't come back");
+  });
+
+  test('turning the first sync down declines it', () async {
+    final directory = await Directory.systemTemp.createTemp('booru-account-off');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = BooruStore(path: '${directory.path}/booru.sqlite', preferences: AppPreferences.memory());
+    store.saveServer(dan);
+    final accounts = BooruAccounts(MemoryPreferences());
+    accounts.setIdentity(const BooruAccountIdentity(userID: 42, name: 'me'), dan.id);
+    final client = BooruAccountClient(
+      fetcher: FixtureFetcher(
+        (request) => FixtureReply.text(200, switch (request.url.path.replaceFirst('/booru/', '')) {
+          'favorites.json' => '[{"post_id":1}]',
+          'favorite_groups.json' => '[]',
+          _ => '[]',
+        }),
+      ),
+      credentials: MemoryCredentialStore(),
+      session: BooruBrowserSession(),
+      pause: Duration.zero,
+    );
+    final sync = BooruAccountSync(store: store, accounts: accounts, client: client)..sendGap = Duration.zero;
+    await sync.setUp(dan);
+    await sync.answerSetup(SiteFavoritesSetupChoice.off);
+    expect(accounts.favorites.state(dan.id), isNull);
+    expect(accounts.favorites.isDeclined(dan.id), isTrue);
+    expect(store.favoriteFolders(dan.id), isEmpty);
+  });
+
   test('saved API keys sign in, and a Gelbooru key only reads', () async {
     final directory = await Directory.systemTemp.createTemp('booru-account-key');
     addTearDown(() => directory.delete(recursive: true));
@@ -317,6 +401,8 @@ void main() {
     await sync.discover(gel);
     expect(accounts.identity(gel.id)?.userID, 77, reason: 'A saved user id and API key sign the account in');
     expect(client.canChange(gel), isFalse, reason: "Gelbooru's API key reads; changes need the website's sign-in");
+    expect(sync.setupOffer, isNotNull, reason: 'The first sync asks how to start');
+    await sync.answerSetup(SiteFavoritesSetupChoice.bringIn);
     expect(store.favoriteFolders(gel.id).keys.toSet(), {5}, reason: "The key reads the account's favorites");
     expect(log.any((entry) => entry.contains('api_key=key') && entry.contains('user_id=77')), isTrue);
 

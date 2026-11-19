@@ -6,20 +6,20 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/content/site_fallback_content.dart';
+import '../../core/content/site_favorites_sync.dart';
 import '../../core/content/gallery_content.dart';
 import '../../core/storage/folder_rules.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
 import '../content/gallery_preview_models.dart';
-import '../design/app_sheet.dart';
 import '../design/context_menu.dart';
-import '../design/grouped_form.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import '../navigation/app_header.dart';
 import '../navigation/root_tab_view.dart';
 import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
+import '../works/saved_date_view.dart';
 import '../works/works_models.dart';
 import 'folder_name_prompt.dart';
 import 'folders_view.dart';
@@ -176,30 +176,60 @@ class _WorksGridViewState extends State<WorksGridView> {
       context: context,
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Work')),
-        content: Text(L10n.text('Delete this work (number: %@)?', ['${work.galleryId}'])),
+        content: Text([
+          L10n.text('Delete this work (number: %@)?', ['${work.galleryId}']),
+          if (_syncsAny({work.galleryId})) L10n.text('It is also a favorite on a website synced with your folders.'),
+        ].join('\n')),
         actions: [
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          ..._deleteActions(context, {work.galleryId}),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
         ],
       ),
     );
-    if (delete == true) widget.routes.database.deleteWork(work.galleryId);
+    if (delete != null) _delete({work.galleryId}, keepOnWebsite: delete);
+  }
+
+  /// Delete, or with favorites a website keeps in step, a choice of taking them off the website too.
+  /// The dialog answers whether to keep them on the website; null cancels.
+  List<Widget> _deleteActions(BuildContext context, Set<int> ids) => [
+    if (_syncsAny(ids)) ...[
+      CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Delete Here and on Website'))),
+      CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete in App Only'))),
+    ] else
+      CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Delete'))),
+  ];
+
+  bool _syncsAny(Set<int> ids) => SiteFavoritesSync.shared?.syncsAny(ids) ?? false;
+
+  void _delete(Set<int> ids, {required bool keepOnWebsite}) {
+    final sync = SiteFavoritesSync.shared;
+    if (sync != null) {
+      sync.deleteSavedWorks(ids, keepOnWebsite: keepOnWebsite);
+    } else {
+      widget.routes.database.deleteSelectedWorks(ids);
+    }
   }
 
   Future<void> _confirmDeleteSelection() async {
-    final delete = await showCupertinoDialog<bool>(
+    final ids = {..._selection};
+    final synced = _syncsAny(ids);
+    final keepOnWebsite = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Selected Items?')),
+        content: Text([
+          L10n.text('%@ works will be deleted.', ['${ids.length}']),
+          if (synced) L10n.text('Some of them are favorites on a website synced with your folders.'),
+        ].join('\n')),
         actions: [
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          ..._deleteActions(context, ids),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
         ],
       ),
     );
-    if (delete != true) return;
+    if (keepOnWebsite == null) return;
     try {
-      widget.routes.database.deleteSelectedWorks(_selection);
+      _delete(ids, keepOnWebsite: keepOnWebsite);
       setState(() {
         _selection = {};
         _selecting = false;
@@ -311,19 +341,24 @@ class _WorksGridViewState extends State<WorksGridView> {
           icon: CupertinoIcons.arrow_down_to_line,
           onSelected: () => _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut),
         ),
-        ContextMenuAction(title: L10n.text('Jump to Saved Month'), icon: CupertinoIcons.calendar, onSelected: _showMonths),
+        ContextMenuAction(title: L10n.text('Browse by Saved Date'), icon: CupertinoIcons.calendar, onSelected: _showMonths),
       ],
     );
   }
 
   Future<void> _showMonths() async {
     final months = WorkMonthDestination.make(_works);
-    final chosen = await showAppSheet<int>(
-      context,
-      grabber: true,
-      builder: (context, controller) => _MonthJumpView(months: months, controller: controller),
-    );
-    if (chosen != null && mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _jumpTo(chosen));
+    final batches = WorkSaveBatch.make(_works);
+    final chosen = await SavedDateView.show(context, months: months, runs: batches, broughtIn: SiteFavoritesSync.shared?.setUpTimes ?? const [], identifier: 'works');
+    if (chosen == null || !mounted) return;
+    if (chosen.select) {
+      setState(() {
+        _selection = {...chosen.ids};
+        _selecting = true;
+      });
+    }
+    final first = chosen.select ? _works.where((work) => _selection.contains(work.galleryId)).firstOrNull?.galleryId : chosen.ids.firstOrNull;
+    if (first != null) WidgetsBinding.instance.addPostFrameCallback((_) => _jumpTo(first));
   }
 
   void _selectionMenu(BuildContext buttonContext) => showActionMenu(
@@ -668,46 +703,6 @@ class WorkContextPreview extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// `WorkMonthJumpView`: each save month with its count; choosing one returns its first work.
-class _MonthJumpView extends StatelessWidget {
-  const _MonthJumpView({required this.months, required this.controller});
-  final List<WorkMonthDestination> months;
-  final ScrollController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    return ScrollEdgeSheet(
-      bar: SheetNavigationBar(
-        title: L10n.text('Jump to Saved Month'),
-        leading: GlassTextButton(label: L10n.text('Close'), onPressed: () => Navigator.of(context).pop()),
-      ),
-      child: ListView(
-        controller: controller,
-        padding: EdgeInsets.only(top: 76 + 4, bottom: 32 + MediaQuery.paddingOf(context).bottom),
-        children: [
-          FormSection(
-            children: [
-              for (final month in months)
-                FormRow(
-                  onTap: () => Navigator.of(context).pop(month.firstGalleryID),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(month.title)),
-                      Text(L10n.text('%@ items', ['${month.count}']), style: TegnalType.style(17, color: secondary)),
-                      const SizedBox(width: 8),
-                      Icon(CupertinoIcons.chevron_right, size: 13, color: secondary),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../domain/models.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
 import '../support/preferences.dart';
@@ -36,9 +37,10 @@ class FavoritePlace {
 
 /// What `SiteFavoriteFolders` keeps for one website.
 class SiteFavoriteState {
-  SiteFavoriteState({Map<int, String>? folders, this.unassigned, this.baseline, Set<int>? localOnly, this.lastPull, this.exclusive})
+  SiteFavoriteState({Map<int, String>? folders, this.unassigned, this.baseline, Set<int>? localOnly, this.lastPull, this.exclusive, Set<int>? ignored, this.setUpAt})
     : folders = folders ?? {},
-      localOnly = localOnly ?? {};
+      localOnly = localOnly ?? {},
+      ignored = ignored ?? {};
 
   /// Favorites category or list → the sync identity of its folder.
   final Map<int, String> folders;
@@ -57,6 +59,14 @@ class SiteFavoriteState {
   /// Whether a favorite sits in one category at a time; null reads as true.
   bool? exclusive;
 
+  /// Favorites left as they are on both sides: the ones already on the website when the person chose
+  /// to keep the library as it was, and works deleted in the app only. Put in a category's folder by
+  /// hand, a work is synced after all.
+  final Set<int> ignored;
+
+  /// When the sync was set up, so works brought in then can be told apart later.
+  DateTime? setUpAt;
+
   Map<String, Object?> toJson() => {
     'folders': {for (final MapEntry(:key, :value) in folders.entries) '$key': value},
     'unassigned': ?unassigned,
@@ -64,6 +74,8 @@ class SiteFavoriteState {
     'localOnly': localOnly.toList()..sort(),
     if (lastPull case final lastPull?) 'lastPull': lastPull.millisecondsSinceEpoch / 1000,
     'exclusive': ?exclusive,
+    if (ignored.isNotEmpty) 'ignored': ignored.toList()..sort(),
+    if (setUpAt case final setUpAt?) 'setUpAt': setUpAt.millisecondsSinceEpoch / 1000,
   };
 
   static SiteFavoriteState? fromJson(Object? json) {
@@ -81,6 +93,7 @@ class SiteFavoriteState {
       baseline = {for (final MapEntry(:key, :value) in map.entries) ?int.tryParse('$key'): ints(value)};
     }
     final pulled = json['lastPull'];
+    final setUp = json['setUpAt'];
     return SiteFavoriteState(
       folders: folders,
       unassigned: (json['unassigned'] as num?)?.toInt(),
@@ -88,6 +101,8 @@ class SiteFavoriteState {
       localOnly: ints(json['localOnly']),
       lastPull: pulled is num ? DateTime.fromMillisecondsSinceEpoch((pulled * 1000).round()) : null,
       exclusive: json['exclusive'] as bool?,
+      ignored: ints(json['ignored']),
+      setUpAt: setUp is num ? DateTime.fromMillisecondsSinceEpoch((setUp * 1000).round()) : null,
     );
   }
 }
@@ -174,6 +189,9 @@ class FavoriteSyncPlan {
   final keepLocal = <int>[];
   final stopKeepingLocal = <int>[];
 
+  /// Ignored works that join the sync again: put in a category's folder, or gone from the website.
+  final stopIgnoring = <int>[];
+
   bool get isEmpty => local.isEmpty && site.isEmpty;
 
   /// [local] is where each saved work sits; [remote] the categories holding each favorite, or the
@@ -187,6 +205,7 @@ class FavoriteSyncPlan {
     required int? unassigned,
     required Set<int> localOnly,
     bool exclusive = true,
+    Set<int> ignored = const {},
   }) {
     Set<FavoritePlace> places(Set<int> categories) =>
         FavoritePlace.normalized({for (final category in categories) folders.contains(category) ? FavoritePlace.category(category) : FavoritePlace.unassigned});
@@ -197,6 +216,18 @@ class FavoriteSyncPlan {
       final rawRemote = remote[id] ?? const <int>{};
       final r = places(rawRemote);
       var b = base == null ? null : places(base[id] ?? const {});
+      if (ignored.contains(id)) {
+        if (rawRemote.isEmpty) {
+          // Gone from the website, it stays where it is in the app and isn't sent back.
+          plan.stopIgnoring.add(id);
+          if (l.isNotEmpty) plan.keepLocal.add(id);
+          continue;
+        }
+        if (!l.any((place) => place.category != null)) continue;
+        // Put in a category folder by hand, it is synced after all.
+        plan.stopIgnoring.add(id);
+        b = {};
+      }
       if (localOnly.contains(id)) {
         if (rawRemote.isNotEmpty) {
           plan.stopKeepingLocal.add(id);
@@ -307,22 +338,122 @@ class SiteFavoritesSync extends ChangeNotifier {
     return host;
   }
 
-  /// Sets up the folders once; turned off by hand, only [requested] sets it up again.
+  /// A website whose favorites can be synced, waiting for the person to choose how to start.
+  SiteFavoritesSetupOffer? offer;
+
+  /// The first time a website's favorites can be read, nothing changes yet: the person is shown what
+  /// bringing them in would do and chooses ([answer]). Turned off by hand, only [requested] offers it again.
   Future<void> setUp(String site, {bool requested = false}) async {
     if (store.state(site) != null || (!requested && store.isDeclined(site)) || accountHost(site) == null) return;
-    // Read before anything is made, so a website that keeps the account out gets no folders.
+    if (offer != null && offer!.site != site) return;
+    // Read before anything is offered, so a website that keeps the account out asks nothing.
     final AccountFavorites favorites;
     try {
       favorites = await _siteContent(site).accountFavoriteLists();
     } on Object {
       return;
     }
+    final made = setUpOffer(site, favorites);
+    // A website with no favorites has nothing to bring in or leave alone.
+    if (made.favoriteCount == 0) return _start(made, SiteFavoritesSetupChoice.bringIn);
+    if ((offer != null && offer!.site != site) || store.state(site) != null) return;
+    offer = made;
+    notifyListeners();
+  }
+
+  /// What bringing a website's favorites in would change, worked out without changing anything.
+  SiteFavoritesSetupOffer setUpOffer(String site, AccountFavorites favorites) {
     final state = SiteFavoriteState(exclusive: favorites.exclusive);
+    final matches = _categoryFolderMatches(favorites, state);
+    final reused = <int, int>{for (final match in matches) match.category: ?match.folder?.id};
+    final categories = {for (final match in matches) match.category};
+    final plan = FavoriteSyncPlan.make(
+      local: _savedPlaces(reused),
+      remote: favorites.members,
+      base: null,
+      folders: categories,
+      unassigned: favorites.spareCategory(besides: categories),
+      localOnly: const {},
+      exclusive: favorites.exclusive,
+    );
+    var newWorks = 0;
+    var filedWorks = 0;
+    for (final MapEntry(key: id, value: places) in plan.local.entries) {
+      if (places.isEmpty) continue;
+      if (database.getWork(id) == null) {
+        newWorks += 1;
+      } else {
+        filedWorks += 1;
+      }
+    }
+    final host = SiteScope.run(site, () => MangaUrls.configuredHost);
+    return SiteFavoritesSetupOffer(
+      site: site,
+      host: host.isEmpty ? site : host,
+      favorites: favorites,
+      favoriteCount: favorites.members.length,
+      newWorks: newWorks,
+      filedWorks: filedWorks,
+      newFolders: [for (final match in matches) if (match.folder == null) match.name],
+    );
+  }
+
+  /// The person's answer to how a website's favorites start syncing; null asks again next time.
+  Future<void> answer(SiteFavoritesSetupChoice? choice) async {
+    final made = offer;
+    if (made == null) return;
+    offer = null;
+    notifyListeners();
+    if (choice == null) return;
+    if (choice == SiteFavoritesSetupChoice.off) {
+      stop(made.site);
+    } else {
+      await _start(made, choice);
+    }
+    // Another signed-in website waiting to be asked comes next.
+    for (final site in ComicSites.all) {
+      if (site == made.site || offer != null) continue;
+      await setUp(site);
+    }
+  }
+
+  /// Bringing in fills a folder for each category that holds works and adds the favorites the app
+  /// lacks. Keeping the library leaves every favorite already on the website alone on both sides, so
+  /// only what is added or removed from now on is synced.
+  Future<void> _start(SiteFavoritesSetupOffer offer, SiteFavoritesSetupChoice choice) async {
+    if (store.state(offer.site) != null || accountHost(offer.site) == null) return;
+    final favorites = offer.favorites;
+    final state = SiteFavoriteState(
+      exclusive: favorites.exclusive,
+      setUpAt: DateTime.now(),
+      ignored: choice == SiteFavoritesSetupChoice.keepLibrary ? favorites.members.keys.toSet() : null,
+    );
     _linkCategoryFolders(favorites, state);
     state.unassigned = favorites.spareCategory(besides: state.folders.keys.toSet());
-    store.setState(state, site);
+    store.setState(state, offer.site);
     notifyListeners();
-    await sync(site, remote: favorites);
+    await sync(offer.site, remote: favorites);
+  }
+
+  /// Each favorites category holding works the sync looks after, with the unlinked folder already
+  /// named so, if there is one, apart from the category kept for other folders.
+  List<({int category, String name, Folder? folder})> _categoryFolderMatches(AccountFavorites favorites, SiteFavoriteState state) {
+    final folders = database.listFolders();
+    final held = favorites.heldCategories(ignoring: state.ignored);
+    final taken = state.folders.values.toSet();
+    final matches = <({int category, String name, Folder? folder})>[];
+    for (final category in favorites.categories) {
+      if (!held.contains(category.id) || state.folders.containsKey(category.id) || category.id == state.unassigned) continue;
+      final index = folders.indexWhere((folder) => folder.name == category.name && folder.id != null && !taken.contains(database.identityOfFolder(folder.id!)));
+      if (index < 0) {
+        matches.add((category: category.id, name: category.name, folder: null));
+        continue;
+      }
+      final folder = folders.removeAt(index);
+      taken.add(database.identityOfFolder(folder.id!));
+      matches.add((category: category.id, name: category.name, folder: folder));
+    }
+    return matches;
   }
 
   /// Gives each favorites category that holds works a folder of its name, or the unlinked folder
@@ -330,19 +461,12 @@ class SiteFavoritesSync extends ChangeNotifier {
   /// now, whose works the next merge takes from the website.
   Set<int> _linkCategoryFolders(AccountFavorites favorites, SiteFavoriteState state) {
     final linked = <int>{};
-    final folders = database.listFolders();
-    final taken = state.folders.values.toSet();
-    for (final category in favorites.categories) {
-      if (category.count == 0 || state.folders.containsKey(category.id) || category.id == state.unassigned) continue;
-      final reusable = folders
-          .where((folder) => folder.name == category.name && folder.id != null && !taken.contains(database.identityOfFolder(folder.id!)))
-          .firstOrNull;
-      final folder = reusable ?? database.createFolder(name: category.name);
+    for (final match in _categoryFolderMatches(favorites, state)) {
+      final folder = match.folder ?? database.createFolder(name: match.name);
       final id = folder.id;
       if (id == null) continue;
-      if (reusable == null) folders.add(folder);
-      state.folders[category.id] = database.identityOfFolder(id);
-      linked.add(category.id);
+      state.folders[match.category] = database.identityOfFolder(id);
+      linked.add(match.category);
     }
     return linked;
   }
@@ -373,6 +497,33 @@ class SiteFavoritesSync extends ChangeNotifier {
   void forget(String site) {
     store.remove(site, declined: false);
     notifyListeners();
+  }
+
+  /// When each synced website's favorites were brought in, to tell those works apart later.
+  List<DateTime> get setUpTimes => [for (final site in store.syncedSites) ?store.state(site)?.setUpAt];
+
+  /// Whether any of these works is a favorite a signed-in website keeps in step with the app, so
+  /// deleting it here would take it off the website too.
+  bool syncsAny(Set<int> ids) => store.syncedSites.any((site) {
+    final state = store.state(site);
+    if (state == null || accountHost(site) == null) return false;
+    return ids.any((id) => (state.baseline?.containsKey(id) ?? false) && !state.ignored.contains(id));
+  });
+
+  /// Deletes works from the library. [keepOnWebsite] leaves the synced websites' favorites as they
+  /// are: those works are left alone by the sync from then on.
+  void deleteSavedWorks(Set<int> ids, {required bool keepOnWebsite}) {
+    if (keepOnWebsite) {
+      for (final site in store.syncedSites) {
+        final state = store.state(site);
+        if (state == null) continue;
+        final kept = ids.where((id) => state.baseline?.containsKey(id) ?? false);
+        if (kept.isEmpty) continue;
+        state.ignored.addAll(kept);
+        store.setState(state, site);
+      }
+    }
+    database.deleteSelectedWorks(ids);
   }
 
   /// Stops keeping a website's favorites and its folders the same; both keep what they hold.
@@ -448,6 +599,8 @@ class SiteFavoritesSync extends ChangeNotifier {
       final folders = <int, int>{
         for (final MapEntry(key: category, value: identity) in state.folders.entries) category: ?database.folderIDForIdentity(identity),
       };
+      // Works deleted in the app only while the website was read are left alone too.
+      state.ignored.addAll(store.state(site)?.ignored ?? const {});
       // Read after the website answers, so a change made meanwhile is not lost.
       final plan = FavoriteSyncPlan.make(
         local: _savedPlaces(folders),
@@ -457,11 +610,13 @@ class SiteFavoritesSync extends ChangeNotifier {
         unassigned: state.unassigned,
         localOnly: state.localOnly,
         exclusive: state.exclusive ?? true,
+        ignored: state.ignored,
       );
       final settled = {...plan.settled};
       state.localOnly
         ..addAll(plan.keepLocal)
         ..removeAll(plan.stopKeepingLocal);
+      state.ignored.removeAll(plan.stopIgnoring);
       // Recorded first, so the folder changes below are not taken for new ones made by hand.
       state.baseline = {...settled};
       store.setState(state, site);
@@ -546,6 +701,7 @@ class SiteFavoritesSync extends ChangeNotifier {
       }
       if (favorites != null) _dropEmptiedCategoryFolders(state, settled);
       state.baseline = settled;
+      state.ignored.addAll((store.state(site)?.ignored ?? const <int>{}).difference(plan.stopIgnoring.toSet()));
       store.setState(state, site);
       if (placed) startCoverQueue?.call();
       notifyListeners();
@@ -598,4 +754,44 @@ class SiteFavoritesSync extends ChangeNotifier {
     _settle?.cancel();
     super.dispose();
   }
+}
+
+/// What the first sync with a website's favorites would do, shown before anything changes.
+class SiteFavoritesSetupOffer {
+  const SiteFavoritesSetupOffer({
+    required this.site,
+    required this.host,
+    required this.favorites,
+    required this.favoriteCount,
+    required this.newWorks,
+    required this.filedWorks,
+    required this.newFolders,
+  });
+  final String site;
+
+  /// The website's address, as the person sees it.
+  final String host;
+  final AccountFavorites favorites;
+  final int favoriteCount;
+
+  /// Favorites the library doesn't have yet.
+  final int newWorks;
+
+  /// Saved works that would also go into a category's folder.
+  final int filedWorks;
+
+  /// Folders that would be made, one for each category without a folder of its name.
+  final List<String> newFolders;
+}
+
+/// How a website's favorites start syncing.
+enum SiteFavoritesSetupChoice {
+  /// Brings the favorites into the library, a folder for each category.
+  bringIn,
+
+  /// Leaves the library and the website as they are, and syncs only later changes.
+  keepLibrary,
+
+  /// Doesn't sync; the website's settings can turn it on.
+  off,
 }

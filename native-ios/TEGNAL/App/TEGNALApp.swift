@@ -266,6 +266,20 @@ struct TEGNALApp: App {
             )) {
                 CloudSyncTurnOffView(alreadyOff: true)
             }
+            // A signed-in website's favorites wait for the person to choose how they start syncing.
+            .appSheet(item: Binding(
+                get: { env.isOnboardingCompleted && !env.sync.needsOffReminder && !stage.coversScreen ? env.favoriteSetupOffer : nil },
+                set: { _ in }
+            )) { offer in
+                SiteFavoritesSetupSheet(offer: offer, env: env)
+            }
+            // The same for a signed-in image server.
+            .appSheet(item: Binding(
+                get: { env.isOnboardingCompleted && !env.sync.needsOffReminder && !stage.coversScreen && env.favoriteSetupOffer == nil ? env.booruAccounts.setupOffer : nil },
+                set: { _ in }
+            )) { offer in
+                SiteFavoritesSetupSheet(offer: offer, sync: env.booruAccounts)
+            }
             // Include the presenting root and its sheets, not just the tab content.
             // Retained UIKit hosts also inject these same instances at their own roots.
             .environment(env)

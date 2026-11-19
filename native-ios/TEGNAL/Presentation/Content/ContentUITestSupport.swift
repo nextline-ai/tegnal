@@ -128,6 +128,17 @@ enum ContentUITestSupport {
                 _ = try! env.database.upsertWork(galleryId: Int64(910000001 + index), folderId: folder.id,
                     title: "샘플 작품 \(index + 1)", bookmarkedAt: String(format: "2026-%02d-%02dT12:00:00Z", month, day))
             }
+            // Six works saved within seconds of each other, as favorites brought in at once are.
+            for index in 0..<6 {
+                _ = try! env.database.upsertWork(galleryId: Int64(920000001 + index), folderId: folder.id,
+                    title: "함께 저장 \(index + 1)", bookmarkedAt: String(format: "2026-08-15T08:00:%02dZ", 5 - index))
+            }
+        }
+        if ProcessInfo.processInfo.arguments.contains("--favorites-setup-test") {
+            let favorites = AccountFavorites(categories: [FavoriteCategory(id: 0, name: "Favorites 0", count: 80), FavoriteCategory(id: 3, name: "Favorites 3", count: 40)],
+                                             members: [:], exclusive: true)
+            env.favoriteSetupOffer = SiteFavoritesSetupOffer(site: "keyed.example", host: "keyed.example", favorites: favorites, favoriteCount: 120,
+                                                             newWorks: 35, filedWorks: 40, newFolders: ["Favorites 0", "Favorites 3"])
         }
         if ProcessInfo.processInfo.arguments.contains("--icloud-off-reminder-test") { env.sync.simulateSyncLeftOffBeforeReminder() }
         return env

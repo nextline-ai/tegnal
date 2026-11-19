@@ -230,6 +230,67 @@ final class CombinedCatalogTests: XCTestCase {
         XCTAssertEqual(moved.site, [Change(id: 7, category: 0, adds: true)])
     }
 
+    func testFavoritesLeftAloneStayAsTheyAreUntilPutInACategoryFolder() {
+        // The person kept the library: 1 and 2 were on the website then, 2 also saved in an app folder.
+        let kept = FavoriteSyncPlan.make(local: [2: [.unassigned], 9: [.unassigned]], remote: [1: [0], 2: [0]], base: nil,
+                                         folders: [], unassigned: 5, localOnly: [], ignored: [1, 2])
+        XCTAssertTrue(kept.local.isEmpty, "Nothing comes into the library")
+        XCTAssertTrue(kept.site.isEmpty, "Nothing changes on the website")
+        XCTAssertEqual(kept.keepLocal, [9], "The library saved before is not sent either")
+        XCTAssertTrue(kept.settled.isEmpty)
+
+        let later = FavoriteSyncPlan.make(local: [2: [.unassigned]], remote: [1: [0], 2: [0], 3: [0]], base: [:],
+                                          folders: [0], unassigned: 5, localOnly: [], ignored: [1, 2])
+        XCTAssertEqual(later.local, [.place(3, [.category(0)])], "A favorite added afterwards comes in")
+        XCTAssertTrue(later.site.isEmpty)
+
+        let filed = FavoriteSyncPlan.make(local: [2: [.category(1)]], remote: [2: [0]], base: [:],
+                                          folders: [1], unassigned: nil, localOnly: [], ignored: [2])
+        XCTAssertEqual(filed.stopIgnoring, [2], "Put in a category's folder by hand, it is synced after all")
+        XCTAssertEqual(filed.site, [Change(id: 2, category: 1, adds: true)])
+
+        let deleted = FavoriteSyncPlan.make(local: [:], remote: [4: [0]], base: [4: [0]], folders: [0], unassigned: nil, localOnly: [], ignored: [4])
+        XCTAssertTrue(deleted.isEmpty, "Deleted in the app only, it stays on the website")
+
+        let gone = FavoriteSyncPlan.make(local: [2: [.unassigned]], remote: [:], base: [:], folders: [0], unassigned: 5, localOnly: [], ignored: [2])
+        XCTAssertEqual(gone.stopIgnoring, [2])
+        XCTAssertEqual(gone.keepLocal, [2], "Gone from the website, it stays in the app and isn't sent back")
+        XCTAssertTrue(gone.site.isEmpty)
+    }
+
+    func testOnlyCategoriesWithFavoritesTheSyncLooksAfterGetFolders() {
+        let favorites = AccountFavorites(categories: [FavoriteCategory(id: 0, name: "A", count: 2), FavoriteCategory(id: 1, name: "B", count: 1),
+                                                      FavoriteCategory(id: 2, name: "C", count: 0)],
+                                         members: [1: [0], 2: [0], 3: [1]], exclusive: true)
+        XCTAssertEqual(favorites.heldCategories(ignoring: []), [0, 1])
+        XCTAssertEqual(favorites.heldCategories(ignoring: [1, 3]), [0], "A category holding only favorites left alone gets no folder")
+    }
+
+    func testSyncStatesSavedBeforeIgnoredFavoritesStillRead() throws {
+        let old = Data(#"{"folders":{"0":"folder-1"},"unassigned":1,"localOnly":[7],"exclusive":true}"#.utf8)
+        let state = try JSONDecoder().decode(SiteFavoriteFolders.State.self, from: old)
+        XCTAssertEqual(state.folders, [0: "folder-1"])
+        XCTAssertNil(state.ignored)
+        XCTAssertNil(state.setUpAt)
+    }
+
+    func testWorksSavedTogetherAreFoundByTheirSavedTimes() {
+        func work(_ id: Int64, _ time: String) -> Work {
+            Work(galleryId: id, bookmarkedAt: time)
+        }
+        // Newest first, as the library lists them.
+        let works = [work(1, "2026-11-15T14:00:30Z"), work(2, "2026-11-15T14:00:10Z"), work(3, "2026-11-15T14:00:05Z"),
+                     work(4, "2026-11-15T13:59:50Z"), work(5, "2026-11-15T13:59:20Z"), work(6, "2026-11-15T12:00:00Z"),
+                     work(7, "2026-11-01T09:00:02Z"), work(8, "2026-11-01T09:00:01Z"), work(9, "not a date")]
+        let batches = WorkSaveBatch.make(works, minimum: 2)
+        XCTAssertEqual(batches.map(\.ids), [[1, 2, 3, 4, 5], [7, 8]], "Each saved within a minute of the one before, newest run first")
+        XCTAssertEqual(batches[0].firstGalleryID, 1)
+        XCTAssertTrue(batches[0].broughtIn(at: [ISO8601DateFormatter().date(from: "2026-11-15T13:59:00Z")!]))
+        XCTAssertFalse(batches[1].broughtIn(at: [ISO8601DateFormatter().date(from: "2026-11-15T13:59:00Z")!]))
+        XCTAssertTrue(WorkSaveBatch.make(works).allSatisfy { $0.ids.count >= WorkSaveBatch.minimum }, "A couple of saves are not a run")
+        XCTAssertEqual(WorkMonthDestination.make(works).first?.ids, [1, 2, 3, 4, 5, 6, 7, 8])
+    }
+
     func testFavoriteFoldersRememberStatesAndATurnedOffSync() {
         let defaults = UserDefaults(suiteName: "site-favorites-\(UUID().uuidString)")!
         let store = SiteFavoriteFolders(defaults: defaults)

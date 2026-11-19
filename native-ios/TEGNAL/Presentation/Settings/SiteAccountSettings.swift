@@ -561,3 +561,88 @@ private struct SiteFavoritesSyncRows: View {
     }
 }
 
+
+/// Asked the first time a signed-in website's or image server's favorites can be synced, before
+/// anything changes: bring them into the library, keep the library as it is and sync only later
+/// changes, or don't sync.
+struct SiteFavoritesSetupSheet: View {
+    let host: String
+    let favoriteCount: Int
+    let bringInDetail: String
+    let newFolders: [String]
+    let answer: (SiteFavoritesSetupChoice) -> Void
+
+    /// A comics website's favorites.
+    init(offer: SiteFavoritesSetupOffer, env: AppEnvironment) {
+        let lists = !offer.favorites.exclusive
+        var parts: [String] = []
+        if offer.newWorks > 0 { parts.append(L10n.text("Adds %@ works your library doesn't have.", offer.newWorks.formatted())) }
+        if offer.filedWorks > 0 {
+            parts.append(L10n.text(lists ? "Also puts %@ saved works in folders named after the website's lists." : "Also puts %@ saved works in folders named after the website's categories.", offer.filedWorks.formatted()))
+        }
+        parts.append(L10n.text(lists ? "From then on, each list and its folder hold the same works." : "From then on, each category and its folder hold the same works."))
+        self.init(host: offer.host, favoriteCount: offer.favoriteCount, bringInDetail: parts.joined(separator: " "), newFolders: offer.newFolders,
+                  answer: { env.answerSiteFavoritesSetup($0) })
+    }
+
+    /// An image server's favorites.
+    init(offer: BooruFavoritesSetupOffer, sync: BooruAccountSync) {
+        var parts: [String] = []
+        if offer.newImages > 0 { parts.append(L10n.text("Adds %@ images your library doesn't have.", offer.newImages.formatted())) }
+        if offer.filedImages > 0 { parts.append(L10n.text("Also puts %@ saved images in folders named after the website's favorite groups.", offer.filedImages.formatted())) }
+        parts.append(L10n.text("From then on, your favorites and these folders hold the same images."))
+        self.init(host: offer.serverName, favoriteCount: offer.favoriteCount, bringInDetail: parts.joined(separator: " "), newFolders: offer.newFolders,
+                  answer: { choice in Task { await sync.answerSetup(choice) } })
+    }
+
+    init(host: String, favoriteCount: Int, bringInDetail: String, newFolders: [String], answer: @escaping (SiteFavoritesSetupChoice) -> Void) {
+        self.host = host
+        self.favoriteCount = favoriteCount
+        self.bringInDetail = bringInDetail
+        self.newFolders = newFolders
+        self.answer = answer
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text(L10n.text("%@ has %@ favorites. Choose how they start syncing with your folders.", host, favoriteCount.formatted()))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                }
+                Section {
+                    choice(.bringIn, title: "Bring In Favorites", systemImage: "square.and.arrow.down", detail: bringInDetail)
+                } footer: {
+                    if !newFolders.isEmpty { Text(L10n.text("New folders: %@", newFolders.joined(separator: ", "))) }
+                }
+                Section {
+                    choice(.keepLibrary, title: "Keep My Library As It Is", systemImage: "lock",
+                           detail: L10n.text("Nothing changes now, in the app or on the website. Favorites already on the website are left alone; only what you add or remove from now on is synced. To bring them in later, turn the sync off and on again in the website's settings."))
+                }
+                Section {
+                    choice(.off, title: "Don't Sync", systemImage: "xmark.circle",
+                           detail: L10n.text("The app and the website stay apart. You can turn the sync on later in the website's settings."))
+                }
+            }
+            .navigationTitle(L10n.text("Website Favorites")).navigationBarTitleDisplayMode(.inline)
+        }
+        .interactiveDismissDisabled()
+        .accessibilityIdentifier("favoritesSetup.sheet")
+    }
+
+    private func choice(_ choice: SiteFavoritesSetupChoice, title: String, systemImage: String, detail: String) -> some View {
+        Button { answer(choice) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Image(systemName: systemImage).foregroundStyle(choice == .off ? Color.secondary : Color.accentColor).frame(width: 24)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text(title)).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                    Text(detail).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }.padding(.vertical, 4).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("favoritesSetup.\(choice)")
+    }
+}

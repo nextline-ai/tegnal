@@ -592,6 +592,12 @@ final class SiteFavoriteFolders: @unchecked Sendable {
         var lastPull: Date?
         /// Whether a favorite sits in one category at a time; nil reads as true.
         var exclusive: Bool?
+        /// Favorites left as they are on both sides: the ones already on the website when the person
+        /// chose to keep the library as it was, and works deleted in the app only. Put in a category's
+        /// folder by hand, a work is synced after all. Optional so states saved before still read.
+        var ignored: Set<Int64>?
+        /// When the sync was set up, so works brought in then can be told apart later.
+        var setUpAt: Date?
     }
 
     private let defaults: UserDefaults
@@ -639,6 +645,14 @@ final class SiteFavoriteFolders: @unchecked Sendable {
 }
 
 extension AccountFavorites {
+    /// The categories or lists holding favorites the sync looks after, leaving out ignored ones.
+    func heldCategories(ignoring ignored: Set<Int64>) -> Set<Int> {
+        let counted = Set(categories.filter { $0.count > 0 }.map(\.id))
+        guard !ignored.isEmpty else { return counted }
+        let held = members.reduce(into: Set<Int>()) { if !ignored.contains($1.key) { $0.formUnion($1.value) } }
+        return counted.intersection(held)
+    }
+
     /// A category or list the account doesn't use and no folder stands for, to keep works from other
     /// folders in; nil when there is none, as when all ten fixed categories hold favorites.
     func spareCategory(besides folders: Set<Int>) -> Int? {
@@ -669,6 +683,8 @@ struct FavoriteSyncPlan: Equatable, Sendable {
     /// Works that stop being sent, and works that start being sent again.
     var keepLocal: [Int64] = []
     var stopKeepingLocal: [Int64] = []
+    /// Ignored works that join the sync again: put in a category's folder, or gone from the website.
+    var stopIgnoring: [Int64] = []
 
     var isEmpty: Bool { local.isEmpty && site.isEmpty }
 
@@ -676,7 +692,7 @@ struct FavoriteSyncPlan: Equatable, Sendable {
     /// baseline to send only changes made in the app. A category without a folder counts as
     /// anywhere else, and a work kept anywhere else stays in the categories without folders it is in.
     static func make(local: [Int64: Set<FavoritePlace>], remote: [Int64: Set<Int>], base: [Int64: Set<Int>]?, folders: Set<Int>,
-                     unassigned: Int?, localOnly: Set<Int64>, exclusive: Bool = true) -> FavoriteSyncPlan {
+                     unassigned: Int?, localOnly: Set<Int64>, exclusive: Bool = true, ignored: Set<Int64> = []) -> FavoriteSyncPlan {
         func places(_ categories: Set<Int>) -> Set<FavoritePlace> {
             FavoritePlace.normalized(Set(categories.map { folders.contains($0) ? .category($0) : .unassigned }))
         }
@@ -685,6 +701,18 @@ struct FavoriteSyncPlan: Equatable, Sendable {
         for id in ids.sorted() {
             let l = FavoritePlace.normalized(local[id] ?? []), rawRemote = remote[id] ?? [], r = places(rawRemote)
             var b = base.map { places($0[id] ?? []) }
+            if ignored.contains(id) {
+                if rawRemote.isEmpty {
+                    // Gone from the website, it stays where it is in the app and isn't sent back.
+                    plan.stopIgnoring.append(id)
+                    if !l.isEmpty { plan.keepLocal.append(id) }
+                    continue
+                }
+                guard l.contains(where: { $0.category != nil }) else { continue }
+                // Put in a category folder by hand, it is synced after all.
+                plan.stopIgnoring.append(id)
+                b = []
+            }
             if localOnly.contains(id) {
                 if !rawRemote.isEmpty { plan.stopKeepingLocal.append(id) }
                 else if l.contains(where: { $0.category != nil }) {

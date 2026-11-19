@@ -254,7 +254,7 @@ struct BooruFolderContentsView: View {
                     Menu {
                         Button(L10n.text("Jump to Top"), systemImage: "arrow.up.to.line") { if let first = posts.first { proxy.scrollTo(first.id, anchor: .top) } }
                         Button(L10n.text("Jump to Bottom"), systemImage: "arrow.down.to.line") { if let last = posts.last { proxy.scrollTo(last.id, anchor: .bottom) } }
-                        if !recents { Button(L10n.text("Jump to Saved Month"), systemImage: "calendar") { showJump = true } }
+                        if !recents { Button(L10n.text("Browse by Saved Date"), systemImage: "calendar") { showJump = true } }
                     } label: { Image(systemName: "arrow.up.arrow.down") }.disabled(posts.isEmpty).accessibilityLabel(L10n.text("Quick Jump"))
                 }
                 Button { selecting.toggle(); selection.removeAll() } label: { Image(systemName: selecting ? "xmark" : "checkmark.circle") }
@@ -262,22 +262,26 @@ struct BooruFolderContentsView: View {
             }
         } }
         .alert(L10n.text("Delete Selected Items?"), isPresented: $confirmingDelete) {
-            Button(L10n.text("Delete"), role: .destructive) {
-                if recents { for id in selection { env.recentImages.remove(id) } }
-                else { store.perform { try store.removeFavorites(posts.filter { selection.contains($0.id) }) } }
-                selection.removeAll(); selecting = false
+            if recents {
+                Button(L10n.text("Delete"), role: .destructive) {
+                    for id in selection { env.recentImages.remove(id) }
+                    selection.removeAll(); selecting = false
+                }
+            } else if env.booruAccounts.syncsAny(chosenPosts) {
+                Button(L10n.text("Delete Here and on Website"), role: .destructive) { deleteChosen(keepOnServer: false) }
+                    .accessibilityIdentifier("booru.delete.everywhere")
+                Button(L10n.text("Delete in App Only"), role: .destructive) { deleteChosen(keepOnServer: true) }
+                    .accessibilityIdentifier("booru.delete.appOnly")
+            } else {
+                Button(L10n.text("Delete"), role: .destructive) { deleteChosen(keepOnServer: false) }
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
         } message: {
             if recents { Text(L10n.text("They leave Recently Opened Images. Favorites stay saved.")) }
+            else { Text(deleteMessage) }
         }
         .appSheet(isPresented: $showJump, onDismiss: { if let pendingJump { proxy.scrollTo(pendingJump, anchor: .top); self.pendingJump = nil } }) {
-            NavigationStack {
-                List(months, id: \.month) { item in
-                    Button(item.month) { pendingJump = item.id; showJump = false }
-                }.navigationTitle(L10n.text("Jump to Saved Month"))
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { showJump = false } } }
-            }.presentationDetents([.medium, .large])
+            savedDateSheet
         }
         .appFullScreenCover(item: $selectedPost) { post in
             if let server = store.servers.first(where: { $0.id == post.serverID }) { BooruPostView(post: viewerPosition ?? post, posts: posts, server: server, source: source, positionChanged: { viewerPosition = $0 }, willClose: { viewed in
@@ -286,14 +290,35 @@ struct BooruFolderContentsView: View {
         }
         }
     }
-    private var months: [(month: String, id: String)] {
+    private var chosenPosts: [BooruPost] { posts.filter { selection.contains($0.id) } }
+
+    private var deleteMessage: String {
+        let count = L10n.text("%@ images will be deleted.", selection.count.formatted())
+        guard env.booruAccounts.syncsAny(chosenPosts) else { return count }
+        return count + "\n" + L10n.text("Some of them are favorites on a website synced with your folders.")
+    }
+
+    private func deleteChosen(keepOnServer: Bool) {
+        let chosen = chosenPosts
+        store.perform { try env.booruAccounts.removeFavorites(chosen, keepOnServer: keepOnServer) }
+        selection.removeAll(); selecting = false
+    }
+
+    /// Favorites by when they were saved: runs saved together, and months.
+    private var savedDateSheet: some View {
         let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM"
         let dates = store.favoriteSavedDates()
-        var seen = Set<String>()
-        return posts.compactMap { post in
-            let month = dates[post.id].map(formatter.string(from:)) ?? L10n.text("No Date")
-            return seen.insert(month).inserted ? (month, post.id) : nil
-        }
+        let shown = posts.map { (id: $0.id, date: dates[$0.id]) }
+        let setUp = env.booruAccounts.setUpTimes
+        let servers = Set(posts.map(\.serverID))
+        return SavedDateView(months: SavedMonth.make(items: shown.map { ($0.id, $0.date.map(formatter.string(from:)) ?? "") }),
+                             runs: SavedRun.make(items: shown), broughtIn: servers.compactMap { setUp[$0] }, identifier: "booru", images: true, jump: { id in
+            pendingJump = id; showJump = false
+        }, select: { ids in
+            selection = Set(ids); selecting = true
+            pendingJump = posts.first { selection.contains($0.id) }?.id
+            showJump = false
+        })
     }
 }
 

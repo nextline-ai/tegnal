@@ -946,14 +946,42 @@ final class NativeContentUITests: XCTestCase {
         app.buttons["맨 위로"].tap()
         XCTAssertTrue(element(app, "works.card.910000001").isHittable)
         jump.tap()
-        app.buttons["저장한 달로 이동"].tap()
+        app.buttons["저장한 날짜로 보기"].tap()
         let august = element(app, "works.month.2026-08")
         XCTAssertTrue(august.waitForExistence(timeout: 5))
-        capture(app, "Folder month picker")
+        capture(app, "Folder saved date picker")
         august.tap()
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: element(app, "works.card.910000061"))
         waitForExpectations(timeout: 10)
         capture(app, "Folder jumped to August")
+
+        // Works saved together are picked all at once, to move or delete together.
+        jump.tap()
+        app.buttons["저장한 날짜로 보기"].tap()
+        let together = element(app, "works.batch.1786780800.select")
+        XCTAssertTrue(together.waitForExistence(timeout: 5))
+        together.tap()
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: element(app, "works.card.920000001"))
+        waitForExpectations(timeout: 10)
+        capture(app, "Works saved together selected")
+        element(app, "works.selection.delete").tap()
+        XCTAssertTrue(app.alerts.staticTexts["작품 6개를 삭제합니다."].waitForExistence(timeout: 5))
+        app.alerts.buttons["취소"].tap()
+    }
+
+    /// The first time a website's favorites can be synced, nothing changes until the person chooses how.
+    func testFavoritesSyncAsksHowToStartFirst() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--favorites-setup-test"]
+        app.launch()
+        let keep = element(app, "favoritesSetup.keepLibrary")
+        XCTAssertTrue(keep.waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "favoritesSetup.bringIn").exists)
+        XCTAssertTrue(element(app, "favoritesSetup.off").exists)
+        capture(app, "Favorites sync first choice")
+        keep.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: keep)
+        waitForExpectations(timeout: 10)
     }
 
     /// A comics translation add-on names `female:` tags by their `tag:` translation, and Korean typed into the search

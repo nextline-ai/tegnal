@@ -128,6 +128,81 @@ final class BooruAccountTests: XCTestCase {
         XCTAssertEqual(places[4], [.unassigned])
     }
 
+    @MainActor func testKeepingTheLibraryLeavesServerFavoritesAloneAndDeletingInTheAppOnlyKeepsThem() async throws {
+        let store = try BooruStore()
+        try store.saveServer(dan)
+        let suite = "booru-account-tests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accounts = BooruAccounts(defaults: defaults)
+        accounts.setIdentity(BooruAccountIdentity(userID: 42, name: "me"), serverID: dan.id)
+        let log = RequestLog()
+        func serve(_ favorites: String) {
+            BooruAccountURLProtocol.handler = { request in
+                let url = request.url!
+                log.append("\(request.httpMethod ?? "GET") \(url.path.replacingOccurrences(of: "/booru/", with: "")) \(url.query ?? "")")
+                switch url.path {
+                case "/booru/favorites.json" where request.httpMethod == "GET": return (200, favorites)
+                case "/booru/favorite_groups.json": return (200, "[]")
+                case "/booru/posts.json":
+                    let ids = (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "tags" }?.value ?? "")
+                        .replacingOccurrences(of: "id:", with: "").split(separator: ",")
+                    return (200, "[" + ids.map { #"{"id":\#($0),"file_url":"https://cdn.example.com/\#($0).jpg"}"# }.joined(separator: ",") + "]")
+                case "/booru/profile": return (200, #"<html><head><meta name="csrf-token" content="tok"></head></html>"#)
+                default: return (200, "{}")
+                }
+            }
+        }
+        serve(#"[{"post_id":1},{"post_id":2}]"#)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [BooruAccountURLProtocol.self]
+        let sync = BooruAccountSync(store: store, accounts: accounts, client: BooruAccountClient(session: URLSession(configuration: config)))
+
+        await sync.setUp(dan)
+        await sync.answerSetup(.keepLibrary)
+        XCTAssertEqual(accounts.favorites.state(for: dan.id)?.ignored, [1, 2])
+        XCTAssertTrue(try store.favoriteFolders(serverID: dan.id).isEmpty, "Nothing comes into the library")
+        XCTAssertFalse(log.entries.contains { $0.hasPrefix("POST") || $0.hasPrefix("DELETE") }, "Nothing changes on the website")
+
+        serve(#"[{"post_id":1},{"post_id":2},{"post_id":5}]"#)
+        _ = try await sync.sync(dan)
+        XCTAssertEqual(Set(try store.favoriteFolders(serverID: dan.id).keys), [5], "A favorite added afterwards comes in")
+
+        let five = try XCTUnwrap(store.savedPost(serverID: dan.id, postID: 5))
+        XCTAssertTrue(sync.syncsAny([five]))
+        log.removeAll()
+        try sync.removeFavorites([five], keepOnServer: true)
+        _ = try await sync.sync(dan, pull: false)
+        _ = try await sync.sync(dan)
+        XCTAssertFalse(log.entries.contains { $0.hasPrefix("DELETE") }, "Deleted in the app only, it stays on the website")
+        XCTAssertTrue(try store.favoriteFolders(serverID: dan.id).isEmpty, "and doesn't come back")
+    }
+
+    @MainActor func testTurningTheFirstSyncDownDeclinesIt() async throws {
+        let store = try BooruStore()
+        try store.saveServer(dan)
+        let suite = "booru-account-tests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accounts = BooruAccounts(defaults: defaults)
+        accounts.setIdentity(BooruAccountIdentity(userID: 42, name: "me"), serverID: dan.id)
+        BooruAccountURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/booru/favorites.json": return (200, #"[{"post_id":1}]"#)
+            case "/booru/favorite_groups.json": return (200, "[]")
+            default: return (200, "[]")
+            }
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [BooruAccountURLProtocol.self]
+        let sync = BooruAccountSync(store: store, accounts: accounts, client: BooruAccountClient(session: URLSession(configuration: config)))
+        await sync.setUp(dan)
+        await sync.answerSetup(.off)
+        XCTAssertNil(accounts.favorites.state(for: dan.id))
+        XCTAssertTrue(accounts.favorites.isDeclined(dan.id))
+        XCTAssertTrue(try store.favoriteFolders(serverID: dan.id).isEmpty)
+    }
+
     @MainActor func testDanbooruSyncBringsInFavoritesAndGroupsThenSendsChangesMadeInTheApp() async throws {
         let store = try BooruStore()
         try store.saveServer(dan)
@@ -160,6 +235,13 @@ final class BooruAccountTests: XCTestCase {
         let sync = BooruAccountSync(store: store, accounts: accounts, client: BooruAccountClient(session: URLSession(configuration: config)))
 
         await sync.setUp(dan)
+        let offer = try XCTUnwrap(sync.setupOffer, "The first sync asks how to start before changing anything")
+        XCTAssertEqual(offer.favoriteCount, 3)
+        XCTAssertEqual(offer.newImages, 3)
+        XCTAssertEqual(offer.newFolders, ["my group"])
+        XCTAssertNil(accounts.favorites.state(for: dan.id))
+        XCTAssertEqual(Set(try store.favoriteFolders(serverID: dan.id).keys), [9])
+        await sync.answerSetup(.bringIn)
         let state = try XCTUnwrap(accounts.favorites.state(for: dan.id))
         let groupFolder = try XCTUnwrap(state.folders[7])
         XCTAssertNil(state.folders[8], "An empty group gets no folder")
@@ -239,6 +321,8 @@ final class BooruAccountTests: XCTestCase {
         XCTAssertEqual(accounts.identity(serverID: gel.id)?.userID, 77, "A saved user id and API key sign the account in")
         let canChange = await client.canChange(gel)
         XCTAssertFalse(canChange, "Gelbooru's API key reads; changes need the website's sign-in")
+        XCTAssertNotNil(sync.setupOffer, "The first sync asks how to start")
+        await sync.answerSetup(.bringIn)
         XCTAssertEqual(Set(try store.favoriteFolders(serverID: gel.id).keys), [5], "The key reads the account's favorites")
         XCTAssertTrue(log.entries.contains { $0.contains("api_key=key") && $0.contains("user_id=77") })
 

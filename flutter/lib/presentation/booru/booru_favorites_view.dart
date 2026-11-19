@@ -12,7 +12,6 @@ import '../content/explore_view.dart' show ScrollSearchVisibility;
 import '../content/work_save_feedback.dart';
 import '../design/app_sheet.dart';
 import '../design/context_menu.dart';
-import '../design/grouped_form.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import '../library/folder_color_sheet.dart';
@@ -25,7 +24,9 @@ import '../library/library_routes.dart' show showTransientMessage;
 import '../navigation/app_header.dart';
 import '../navigation/root_tab_view.dart';
 import '../works/artwork_grid.dart';
+import '../works/saved_date_view.dart';
 import '../works/search_controls.dart';
+import '../works/works_models.dart' show SavedMonth, SavedRun;
 import 'booru_common.dart';
 import 'booru_post_view.dart';
 import '../design/alert_dialog.dart';
@@ -564,57 +565,37 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
           icon: CupertinoIcons.arrow_down_to_line,
           onSelected: () => _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut),
         ),
-        if (!widget.recents) ContextMenuAction(title: L10n.text('Jump to Saved Month'), icon: CupertinoIcons.calendar, onSelected: _showMonths),
+        if (!widget.recents) ContextMenuAction(title: L10n.text('Browse by Saved Date'), icon: CupertinoIcons.calendar, onSelected: _showMonths),
       ],
     );
   }
 
-  /// Each save month, newest first by the order favorites appear.
-  List<(String, String)> get _months {
-    String format(double? seconds) {
-      if (seconds == null) return L10n.text('No Date');
-      final date = DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}';
-    }
-
-    final dates = _booru.store.favoriteSavedDates();
-    final seen = <String>{};
-    return [
-      for (final post in _posts)
-        if (format(dates[post.id]) case final month when seen.add(month)) (month, post.id),
-    ];
-  }
-
+  /// Favorites by when they were saved: runs saved together, and months.
   Future<void> _showMonths() async {
-    final months = _months;
-    final chosen = await showAppSheet<String>(
+    final dates = _booru.store.favoriteSavedDates();
+    DateTime? date(String id) => dates[id] == null ? null : DateTime.fromMillisecondsSinceEpoch((dates[id]! * 1000).round());
+    String month(DateTime? date) => date == null ? '' : '${date.year}-${date.month.toString().padLeft(2, '0')}';
+    final shown = [for (final post in _posts) (id: post.id, date: date(post.id))];
+    final setUp = BooruAccountSync.shared?.setUpTimes ?? const <String, DateTime>{};
+    final chosen = await SavedDateView.show<String>(
       context,
-      grabber: true,
-      builder: (context, controller) => ScrollEdgeSheet(
-        bar: SheetNavigationBar(
-          title: L10n.text('Jump to Saved Month'),
-          leading: GlassTextButton(label: L10n.text('Close'), onPressed: () => Navigator.of(context).pop()),
-        ),
-        child: ListView(
-          controller: controller,
-          padding: EdgeInsets.only(top: 76 + 4, bottom: 32 + MediaQuery.paddingOf(context).bottom),
-          children: [
-            FormSection(
-              children: [
-                for (final (month, id) in months)
-                  FormRow(
-                    onTap: () => Navigator.of(context).pop(id),
-                    child: Text(month, style: TegnalType.style(17, color: TegnalColors.tint.resolveFrom(context))),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      months: SavedMonth.group([for (final item in shown) (id: item.id, month: month(item.date))]),
+      runs: SavedRun.group(shown),
+      broughtIn: [for (final server in {for (final post in _posts) post.serverID}) ?setUp[server]],
+      identifier: 'booru',
+      images: true,
     );
     if (chosen == null || !mounted) return;
+    if (chosen.select) {
+      setState(() {
+        _selection = {...chosen.ids};
+        _selecting = true;
+      });
+    }
+    final first = _posts.where((post) => chosen.ids.contains(post.id)).firstOrNull?.id;
+    if (first == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final target = _keys[chosen]?.currentContext;
+      final target = _keys[first]?.currentContext;
       if (target != null) Scrollable.ensureVisible(target, duration: const Duration(milliseconds: 300));
     });
   }
@@ -644,25 +625,42 @@ class _BooruFolderContentsViewState extends State<BooruFolderContentsView> {
   }
 
   Future<void> _confirmDelete() async {
-    final delete = await showCupertinoDialog<bool>(
+    final chosen = _posts.where((post) => _selection.contains(post.id)).toList();
+    final accounts = BooruAccountSync.shared;
+    final synced = !widget.recents && (accounts?.syncsAny(chosen) ?? false);
+    // The dialog answers whether to keep the images on the website; null cancels.
+    final keepOnServer = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Delete Selected Items?')),
-        content: widget.recents ? Text(L10n.text('They leave Recently Opened Images. Favorites stay saved.')) : null,
+        content: Text(
+          widget.recents
+              ? L10n.text('They leave Recently Opened Images. Favorites stay saved.')
+              : [
+                  L10n.text('%@ images will be deleted.', ['${_selection.length}']),
+                  if (synced) L10n.text('Some of them are favorites on a website synced with your folders.'),
+                ].join('\n'),
+        ),
         actions: [
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          if (synced) ...[
+            CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Delete Here and on Website'))),
+            CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete in App Only'))),
+          ] else
+            CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Delete'))),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
         ],
       ),
     );
-    if (delete != true) return;
+    if (keepOnServer == null) return;
     final recents = _recents;
     if (recents != null) {
       for (final id in _selection) {
         recents.remove(id);
       }
+    } else if (accounts != null) {
+      accounts.removeFavorites(chosen, keepOnServer: keepOnServer);
     } else {
-      _booru.store.removeFavorites(_posts.where((post) => _selection.contains(post.id)).toList());
+      _booru.store.removeFavorites(chosen);
     }
     setState(() {
       _selection = {};

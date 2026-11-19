@@ -794,6 +794,8 @@ final class BooruAccountSync {
     private(set) var expired = Set<String>()
     /// The names of each server's favorites lists, as last read.
     private(set) var listNames: [String: [Int: String]] = [:]
+    /// A server whose favorites can be synced, waiting for the person to choose how to start.
+    var setupOffer: BooruFavoritesSetupOffer?
     @ObservationIgnored private var syncing = Set<String>()
     /// At most this many favorites change on a server in one sync; the rest wait for the next.
     static let sendsPerSync = 30
@@ -885,8 +887,8 @@ final class BooruAccountSync {
         store.clearGoldRestrictions(serverID: server.id)
     }
 
-    /// The first time a signed-in server's favorites can be read: each named list that holds images
-    /// becomes a folder of the same name, and the account's favorites keep images saved elsewhere.
+    /// The first time a signed-in server's favorites can be read, nothing changes yet: the person is
+    /// shown what bringing them in would do and chooses (`answerSetup`).
     func setUp(_ server: BooruServer, requested: Bool = false) async {
         try? await setUpSync(server, requested: requested)
     }
@@ -895,6 +897,7 @@ final class BooruAccountSync {
     func setUpSync(_ server: BooruServer, requested: Bool) async throws {
         let favorites = accounts.favorites
         guard favorites.state(for: server.id) == nil, requested || !favorites.isDeclined(server.id),
+              setupOffer == nil || setupOffer?.serverID == server.id,
               let identity = accounts.identity(serverID: server.id) else { return }
         let fetched: BooruAccountFavorites
         do { fetched = try await client.favorites(server, account: identity) }
@@ -904,13 +907,92 @@ final class BooruAccountSync {
             return
         }
         remember(fetched, server: server)
+        let offer = try self.offer(server, read: fetched)
+        // A server with no favorites has nothing to bring in or leave alone.
+        if offer.favoriteCount == 0 { await start(offer, choice: .bringIn); return }
+        guard setupOffer == nil || setupOffer?.serverID == server.id, favorites.state(for: server.id) == nil else { return }
+        setupOffer = offer
+    }
+
+    /// What bringing a server's favorites in would change, worked out without changing anything.
+    private func offer(_ server: BooruServer, read: BooruAccountFavorites) throws -> BooruFavoritesSetupOffer {
+        var state = SiteFavoriteFolders.State(unassigned: BooruAccounts.favoritesList, exclusive: false)
+        let matches = try listFolderMatches(read.favorites, server: server, state: state)
+        for match in matches { state.folders[match.list] = match.folder ?? "new-\(match.list)" }
+        let saved = try store.favoriteFolders(serverID: server.id)
+        let plan = FavoriteSyncPlan.make(local: Self.places(saved: saved, state: state), remote: read.favorites.members, base: nil,
+                                         folders: Set(state.folders.keys), unassigned: state.unassigned, localOnly: [], exclusive: false)
+        var newImages = 0, filedImages = 0
+        for change in plan.local {
+            guard case .place(let id, _) = change else { continue }
+            if saved[id] == nil { newImages += 1 } else { filedImages += 1 }
+        }
+        return BooruFavoritesSetupOffer(serverID: server.id, serverName: server.displayName, read: read,
+                                        favoriteCount: read.favorites.members.count, newImages: newImages, filedImages: filedImages,
+                                        newFolders: matches.filter { $0.folder == nil }.map(\.name))
+    }
+
+    /// The person's answer to how a server's favorites start syncing.
+    func answerSetup(_ choice: SiteFavoritesSetupChoice) async {
+        guard let offer = setupOffer else { return }
+        setupOffer = nil
+        if choice == .off { if let server = store.servers.first(where: { $0.id == offer.serverID }) { stop(server) } }
+        else { await start(offer, choice: choice) }
+        // Another signed-in server waiting to be asked comes next.
+        for server in store.servers where server.id != offer.serverID && setupOffer == nil && accounts.identity(serverID: server.id) != nil {
+            await setUp(server)
+        }
+    }
+
+    /// Bringing in fills a folder for each list that holds images and adds the favorites the app
+    /// lacks. Keeping the library leaves every favorite already on the server alone on both sides.
+    private func start(_ offer: BooruFavoritesSetupOffer, choice: SiteFavoritesSetupChoice) async {
+        let favorites = accounts.favorites
+        guard favorites.state(for: offer.serverID) == nil, accounts.identity(serverID: offer.serverID) != nil,
+              let server = store.servers.first(where: { $0.id == offer.serverID }) else { return }
         do {
             var state = SiteFavoriteFolders.State(unassigned: BooruAccounts.favoritesList, exclusive: false)
-            _ = try linkListFolders(fetched.favorites, server: server, state: &state)
+            state.setUpAt = Date()
+            if choice == .keepLibrary { state.ignored = Set(offer.read.favorites.members.keys) }
+            _ = try linkListFolders(offer.read.favorites, server: server, state: &state)
             favorites.setState(state, for: server.id)
             revision += 1
-            try await sync(server, remote: fetched)
+            try await sync(server, remote: offer.read)
         } catch {}
+    }
+
+    /// When each synced server's favorites were brought in, to tell those images apart later.
+    var setUpTimes: [String: Date] {
+        _ = revision
+        var times: [String: Date] = [:]
+        for server in store.servers { if let date = accounts.favorites.state(for: server.id)?.setUpAt { times[server.id] = date } }
+        return times
+    }
+
+    /// Whether any of these saved images is a favorite a signed-in server keeps in step with the app,
+    /// so deleting it here would take it off the server too.
+    func syncsAny(_ posts: [BooruPost]) -> Bool {
+        _ = revision
+        return posts.contains { post in
+            guard accounts.identity(serverID: post.serverID) != nil, let state = accounts.favorites.state(for: post.serverID) else { return false }
+            return state.baseline?[post.postID] != nil && state.ignored?.contains(post.postID) != true
+        }
+    }
+
+    /// Deletes saved images. `keepOnServer` leaves the servers' favorites as they are: those images
+    /// are left alone by the sync from then on.
+    func removeFavorites(_ posts: [BooruPost], keepOnServer: Bool) throws {
+        if keepOnServer {
+            for (serverID, chosen) in Dictionary(grouping: posts, by: \.serverID) {
+                guard var state = accounts.favorites.state(for: serverID) else { continue }
+                let kept = chosen.map(\.postID).filter { state.baseline?[$0] != nil }
+                guard !kept.isEmpty else { continue }
+                state.ignored = (state.ignored ?? []).union(kept)
+                accounts.favorites.setState(state, for: serverID)
+            }
+            revision += 1
+        }
+        try store.removeFavorites(posts)
     }
 
     func stop(_ server: BooruServer) {
@@ -942,18 +1024,29 @@ final class BooruAccountSync {
         list.id == BooruAccounts.favoritesList ? L10n.text("%@ Favorites", server.displayName) : list.name
     }
 
+    /// Each list holding images the sync looks after, with this server's unlinked folder already
+    /// named so, if there is one, apart from the list kept for other folders.
+    private func listFolderMatches(_ favorites: AccountFavorites, server: BooruServer, state: SiteFavoriteFolders.State) throws -> [(list: Int, name: String, folder: String?)] {
+        var taken = Set(store.servers.flatMap { accounts.favorites.state(for: $0.id)?.folders.values.map { $0 } ?? [] }).union(state.folders.values)
+        let held = favorites.heldCategories(ignoring: state.ignored ?? [])
+        var matches: [(list: Int, name: String, folder: String?)] = []
+        for list in favorites.categories where held.contains(list.id) && state.folders[list.id] == nil && list.id != state.unassigned {
+            // Only this server's own folders: another server's folder of the same name is its own.
+            let name = listFolderName(list, server: server)
+            let folder = store.folders().first { $0.serverID == server.id && $0.plainName == name && !$0.isUncategorized && !taken.contains($0.id) }?.id
+            if let folder { taken.insert(folder) }
+            matches.append((list.id, name, folder))
+        }
+        return matches
+    }
+
     /// Gives each list that holds images a folder of its name, or the unlinked folder already named
     /// so, apart from the list kept for other folders. Returns the lists linked now.
     private func linkListFolders(_ favorites: AccountFavorites, server: BooruServer, state: inout SiteFavoriteFolders.State) throws -> Set<Int> {
         var linked = Set<Int>()
-        let taken = Set(store.servers.flatMap { accounts.favorites.state(for: $0.id)?.folders.values.map { $0 } ?? [] }).union(state.folders.values)
-        for list in favorites.categories where list.count > 0 && state.folders[list.id] == nil && list.id != state.unassigned {
-            // Only this server's own folders: another server's folder of the same name is its own.
-            let name = listFolderName(list, server: server)
-            let id = try store.folders().first { $0.serverID == server.id && $0.plainName == name && !$0.isUncategorized && !taken.contains($0.id) }?.id
-                ?? store.saveFolder(name: name, serverID: server.id)
-            state.folders[list.id] = id
-            linked.insert(list.id)
+        for match in try listFolderMatches(favorites, server: server, state: state) {
+            state.folders[match.list] = try match.folder ?? store.saveFolder(name: match.name, serverID: server.id)
+            linked.insert(match.list)
         }
         return linked
     }
@@ -1017,11 +1110,15 @@ final class BooruAccountSync {
             let linked = try linkListFolders(read.favorites, server: server, state: &state)
             if !linked.isEmpty, let baseline = state.baseline { state.baseline = baseline.mapValues { $0.subtracting(linked) } }
         } else { remote = state.baseline ?? [:] }
+        // Images deleted in the app only while the server was read are left alone too.
+        if let stored = favoritesStore.state(for: server.id)?.ignored { state.ignored = (state.ignored ?? []).union(stored) }
         let plan = FavoriteSyncPlan.make(local: try localPlaces(server, state: state), remote: remote, base: state.baseline,
-                                         folders: Set(state.folders.keys), unassigned: state.unassigned, localOnly: state.localOnly, exclusive: false)
+                                         folders: Set(state.folders.keys), unassigned: state.unassigned, localOnly: state.localOnly, exclusive: false,
+                                         ignored: state.ignored ?? [])
         var settled = plan.settled
         state.localOnly.formUnion(plan.keepLocal)
         state.localOnly.subtract(plan.stopKeepingLocal)
+        if !plan.stopIgnoring.isEmpty { state.ignored?.subtract(plan.stopIgnoring) }
         state.baseline = settled
         favoritesStore.setState(state, for: server.id)
 
@@ -1078,6 +1175,9 @@ final class BooruAccountSync {
         for id in refused { state.localOnly.insert(id); settled[id] = remote[id] }
         if read != nil { try dropEmptiedListFolders(state: &state, settled: settled) }
         state.baseline = settled
+        if let stored = favoritesStore.state(for: server.id)?.ignored {
+            state.ignored = (state.ignored ?? []).union(stored.subtracting(plan.stopIgnoring))
+        }
         favoritesStore.setState(state, for: server.id)
         revision += 1
         return plan
@@ -1107,4 +1207,19 @@ final class BooruAccountSync {
             }
         } catch {}
     }
+}
+
+/// What the first sync with an image server's favorites would do, shown before anything changes.
+struct BooruFavoritesSetupOffer: Identifiable {
+    var id: String { serverID }
+    let serverID: String
+    let serverName: String
+    let read: BooruAccountFavorites
+    let favoriteCount: Int
+    /// Favorites the library doesn't have yet.
+    let newImages: Int
+    /// Saved images that would also go into a list's folder.
+    let filedImages: Int
+    /// Folders that would be made, one for each list without a folder of its name.
+    let newFolders: [String]
 }
