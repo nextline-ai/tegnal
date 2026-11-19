@@ -386,4 +386,18 @@ final class AddonTests: XCTestCase {
         XCTAssertEqual(completion.inserting("character:teitoku"), "language:korean -character:teitoku ")
         XCTAssertNil(AddonSearchCompletion("제독 "))
     }
+
+    /// The official Korean comics names, as published, name the tags a work page shows, gender tags included.
+    func testTheOfficialComicsNamesReachTheWorkPage() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/addons/market/official/comics-tags-ko.tegnaladdon")
+        try XCTSkipIf(!FileManager.default.fileExists(atPath: url.path), "The official files are local only")
+        let (addon, digest) = try Addon.read(url)
+        XCTAssertFalse(addon.contents.tagTranslations!.entries.keys.contains { $0.split(separator: ":").count > 2 }, "No key carries two namespaces")
+        AddonRuntime.shared.apply(AddonEffects([InstalledAddon(addon: addon, enabled: true, installed: .now, digest: digest)]))
+        let tags = ArtworkTagGroup.make(tags: ["female:big breasts", "male:sole male", "character:reimu hakurei", "series:touhou project", "tag:full color"], mode: .comics)
+            .flatMap(\.tags)
+        for tag in tags { XCTAssertNotNil(tag.original, tag.query + " is shown in Korean") }
+        XCTAssertEqual(AddonRuntime.shared.effects.tags(matching: "거유", mode: .comics).first?.tag, "female:big_breasts", "A gender tag is suggested with its own namespace")
+    }
 }
