@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 
+import 'pull_down_menu.dart' show menuPlacement;
 import 'symbols.dart';
 import 'system_colors.dart';
 import 'tegnal_theme.dart';
@@ -97,11 +98,18 @@ class _ActionMenuLayoutState extends State<_ActionMenuLayout> {
       return painter.computeLineMetrics().length > 1 ? _rowHeight + 22 : _rowHeight;
     }
 
-    final height = math.min(screen.height - 32, rows.fold<double>(0, (sum, row) => sum + extent(row)) + _verticalPadding * 2);
+    // The panel keeps inside the safe area and scrolls when its rows need more room than that.
+    final place = menuPlacement(
+      anchorTop: widget.anchor.top,
+      height: rows.fold<double>(0, (sum, row) => sum + extent(row)) + _verticalPadding * 2,
+      screen: screen,
+      padding: MediaQuery.paddingOf(context),
+    );
+    final height = place.height;
     final left = (widget.anchor.center.dx > screen.width / 2 ? widget.anchor.right - _menuWidth : widget.anchor.left)
         .clamp(_margin, screen.width - _margin - _menuWidth)
         .toDouble();
-    final top = math.min(widget.anchor.top, screen.height - height - 16);
+    final top = place.top;
     final origin = Alignment(((widget.anchor.center.dx - left) / _menuWidth) * 2 - 1, -1);
     return Stack(
       children: [
@@ -226,7 +234,10 @@ class _ContextMenuLayoutState extends State<_ContextMenuLayout> {
     final screen = media.size;
     final style = TegnalType.style(17, color: TegnalColors.label.resolveFrom(context));
     final rows = [if (_submenu != null) ContextMenuAction(title: _submenu!.title), ..._rows];
-    final menuHeight = rows.fold<double>(0, (sum, row) => sum + _rowExtent(context, row, style)) + _verticalPadding * 2;
+    final top = media.padding.top + 8;
+    final bottom = screen.height - math.max(media.padding.bottom, 34) - 8;
+    // A menu taller than the room between the safe area's edges scrolls inside its panel.
+    final menuHeight = math.min(bottom - top, rows.fold<double>(0, (sum, row) => sum + _rowExtent(context, row, style)) + _verticalPadding * 2);
 
     // The lifted view grows around its center but stays inside the screen margins.
     final size = widget.previewSize ?? widget.anchor.size * widget.lift;
@@ -234,8 +245,6 @@ class _ContextMenuLayoutState extends State<_ContextMenuLayout> {
     previewLeft = previewLeft.clamp(_margin, math.max(_margin, screen.width - _margin - size.width)).toDouble();
     // The preview centers on the held view, as iOS places a lifted or custom preview.
     var previewTop = widget.anchor.center.dy - size.height / 2;
-    final top = media.padding.top + 8;
-    final bottom = screen.height - math.max(media.padding.bottom, 34) - 8;
     final menuBelow = previewTop + size.height + _gap + menuHeight <= bottom || previewTop - _gap - menuHeight < top;
     if (menuBelow) {
       previewTop = math.min(previewTop, bottom - menuHeight - _gap - size.height);

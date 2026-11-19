@@ -405,10 +405,12 @@ actor DocumentCatalogSource {
         let languages = pairs.filter { $0[0] == "language" }.map { $0[1] }
         let language = languages.first { !languageQualifiers.contains($0) } ?? ""
         let category = (object["category"] as? NSNumber)?.intValue ?? 0
-        return NativeGallery(id: id, title: NativeGallery.decodeEntities(title(object, id: id, language: language, translated: languages.contains("translated"))),
+        var work = NativeGallery(id: id, title: NativeGallery.decodeEntities(title(object, id: id, language: language, translated: languages.contains("translated"))),
             artists: pairs.filter { $0[0] == "artist" }.map { $0[1] },
             language: language, type: categoryNames[category] ?? "",
             tags: pairs.filter { $0[0] != "language" && $0[0] != "artist" }.map { localNamespace($0[0]) + ":" + $0[1] }, pages: pages)
+        work.uploader = (object["uploader"] as? String).map(NativeGallery.decodeEntities).flatMap { $0.isEmpty ? nil : $0 }
+        return work
     }
 
     private nonisolated static let languageQualifiers: Set<String> = ["translated", "rewrite"]

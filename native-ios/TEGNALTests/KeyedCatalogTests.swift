@@ -166,6 +166,7 @@ final class KeyedCatalogTests: XCTestCase {
         let works = try await [first, second, third]
         XCTAssertEqual(works.map(\.id), [3000, 3001, 3002])
         XCTAssertEqual(works[0].pageCount, 3)
+        XCTAssertEqual(works[0].uploader, "uploader & 3000", "The uploader comes with the details, decoded")
         XCTAssertEqual(works[0].pages.first?.thumbnailURL?.absoluteString, "https://covers.example/3000.jpg")
         XCTAssertEqual(fixture.count(path: "/api.php") - detailsBefore, 1, "Cards asking together share one details request")
         XCTAssertEqual(fixture.requests.filter { $0.path.hasPrefix("/g/") }.count, workPagesBefore, "A card never opens the work's own page")
@@ -592,7 +593,7 @@ private final class KeyedFixture: @unchecked Sendable {
             if id == 3002 { tags.append("female:marked tag") }
             return ["gid": id, "token": Self.key(id), "title": "Sample \(id)", "title_jpn": "原題 \(id)",
                     "category": id == 3001 ? "Manga" : "Doujinshi", "thumb": "https://covers.example/\(id).jpg",
-                    "filecount": "3", "tags": tags]
+                    "filecount": "3", "uploader": "uploader &amp; \(id)", "tags": tags]
         }
         return try JSONSerialization.data(withJSONObject: ["gmetadata": items])
     }

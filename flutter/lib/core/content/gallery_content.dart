@@ -111,6 +111,7 @@ class NativeGallery {
     this.versions,
     this.relatedIDs,
     this.pageCount,
+    this.uploader,
   });
 
   final int id;
@@ -128,6 +129,16 @@ class NativeGallery {
   /// How many pages the work has, when a list knows it apart from `pages`: lists carry only a
   /// cover. Zero means a list row that did not say.
   final int? pageCount;
+
+  /// The account that put the work up, on websites that say so.
+  final String? uploader;
+
+  /// A website's uploader name, decoded, or null when it gives none.
+  static String? uploaderFrom(Object? value) {
+    if (value is! String) return null;
+    final name = decodeEntities(value).trim();
+    return name.isEmpty ? null : name;
+  }
 
   /// The page count worth showing on a card, if known.
   int? get displayedPageCount {
@@ -297,6 +308,7 @@ class NativeGallery {
     versions: json.listOrNull('versions', (value) => GalleryVersion.fromJson(jsonObject(value))),
     relatedIDs: json.listOrNull('relatedIDs', jsonInteger),
     pageCount: json.integerOrNull('pageCount'),
+    uploader: json.stringOrNull('uploader'),
   );
 
   JsonObject toJson() =>
@@ -311,9 +323,10 @@ class NativeGallery {
         }
         ..putIfPresent('versions', versions?.map((version) => version.toJson()).toList())
         ..putIfPresent('relatedIDs', relatedIDs)
-        ..putIfPresent('pageCount', pageCount);
+        ..putIfPresent('pageCount', pageCount)
+        ..putIfPresent('uploader', uploader);
 
-  NativeGallery copyWith({List<GalleryPage>? pages, int? pageCount}) => NativeGallery(
+  NativeGallery copyWith({List<GalleryPage>? pages, int? pageCount, String? uploader}) => NativeGallery(
     id: id,
     title: title,
     artists: artists,
@@ -324,6 +337,7 @@ class NativeGallery {
     versions: versions,
     relatedIDs: relatedIDs,
     pageCount: pageCount ?? this.pageCount,
+    uploader: uploader ?? this.uploader,
   );
 }
 

@@ -51,6 +51,7 @@ class BooruSettingsDependencies {
     required this.content,
     required this.version,
     this.openLibraryManagement,
+    this.openOnboarding,
     this.resetSettings,
     this.sync,
     this.invitation,
@@ -64,6 +65,9 @@ class BooruSettingsDependencies {
   final ContentEnvironment content;
   final String version;
   final void Function(BuildContext context)? openLibraryManagement;
+
+  /// "Replay Onboarding" under Help & Privacy.
+  final void Function(BuildContext context)? openOnboarding;
   final VoidCallback? resetSettings;
   final Widget Function(BuildContext context)? sync;
   final Widget Function(BuildContext context)? invitation;
@@ -246,11 +250,6 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                         _booru.state.appearanceChanged();
                       },
                     ),
-                    SettingsToggleRow(
-                      title: L10n.text('Play Animation When Returning'),
-                      value: preferences.boolean('app.resumeAnimation') ?? true,
-                      onChanged: (value) => _setBrowser('app.resumeAnimation', value),
-                    ),
                     SettingsSegmentedRow<int>(
                       title: L10n.text('Folder Columns'),
                       help: L10n.text(columnHelp),
@@ -365,6 +364,14 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                 section(
                   header: L10n.text('Help & Privacy'),
                   children: [
+                    if (_deps.openOnboarding case final open?)
+                      SettingsLinkRow(
+                        key: const Key('settings.onboarding'),
+                        title: L10n.text('Replay Onboarding'),
+                        icon: CupertinoIcons.sparkles,
+                        chevron: false,
+                        onTap: () => open(context),
+                      ),
                     SettingsLinkRow(title: L10n.text('Privacy Policy'), icon: CupertinoIcons.hand_raised, onTap: () => _push((_) => const PrivacyPolicyPage())),
                     SettingsLinkRow(title: L10n.text('Open Source Licenses'), icon: CupertinoIcons.doc_text, onTap: () => _push((_) => const LicensesPage())),
                     SettingsValueRow(title: L10n.text('Version'), value: _deps.version),

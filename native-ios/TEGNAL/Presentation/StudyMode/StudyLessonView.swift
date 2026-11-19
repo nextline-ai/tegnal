@@ -3,7 +3,10 @@ import SwiftUI
 /// A lesson played from its first step to its results.
 struct StudyPlayView: View {
     @State var session: StudyLessonSession
-    @Environment(\.dismiss) private var dismiss
+    /// Where the play goes when it ends or is closed, in place of dismissing its cover: the welcome plays the placement test in place.
+    var leave: (() -> Void)? = nil
+    @Environment(\.dismiss) private var dismissCover
+    private func dismiss() { if let leave { leave() } else { dismissCover() } }
     @State private var confirmingQuit = false
     /// Counts right answers, to set off the sparks and the bounce of the bar.
     @State private var cheers = 0
@@ -25,7 +28,9 @@ struct StudyPlayView: View {
                         Text(L10n.text("Getting the pictures ready…")).font(StudyTheme.body(17, .bold)).foregroundStyle(StudyTheme.muted)
                         ProgressView()
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .finished: StudyLessonResult(session: session) { dismiss() }
+                case .finished:
+                    if session.isPlacement { StudyPlacementResult(session: session) { dismiss() } }
+                    else { StudyLessonResult(session: session) { dismiss() } }
                 default:
                     if let step = session.step {
                         content(step).id(step.id)
@@ -84,7 +89,8 @@ struct StudyPlayView: View {
 
     private var bar: some View {
         HStack(spacing: 14) {
-            Button { if session.index == 0 { dismiss() } else { confirmingQuit = true } } label: {
+            // Nothing of the placement test is kept until it ends, so it closes without asking.
+            Button { if session.index == 0 || session.isPlacement { dismiss() } else { confirmingQuit = true } } label: {
                 Image(systemName: "xmark").font(.system(size: 17, weight: .heavy)).foregroundStyle(StudyTheme.muted).frame(width: 36, height: 36)
             }.buttonStyle(.plain).accessibilityLabel(L10n.text("Close")).accessibilityIdentifier("study.close")
             StudyBar(value: session.progress).accessibilityIdentifier("study.progress")
@@ -105,7 +111,7 @@ struct StudyPlayView: View {
             case .card(let card): StudyCardStep(card: card) { session.proceed() }
             case .teach(let tag, let posts): StudyTeachStep(tag: tag, posts: posts, server: session.server) { session.proceed() }
             case .quiz(let question): StudyQuizStep(question: question, server: session.server, revealed: revealed) { session.answer($0, tag: question.tag.name) }
-            case .ask(let ask): StudyAskStep(ask: ask, revealed: revealed) { session.answer($0) }
+            case .ask(let ask): StudyAskStep(ask: ask, revealed: revealed, unsure: session.isPlacement ? { session.answer(false) } : nil) { session.answer($0) }
             case .match(let tags): StudyMatchStep(tags: tags, revealed: revealed) { session.answer($0) }
             case .build(let build): StudyBuildStep(build: build, picture: session.builtPictures[build], server: session.server, revealed: revealed) { session.answer($0) }
             case .order(let order): StudyOrderStep(order: order, revealed: revealed) { session.answer($0) }
@@ -224,6 +230,8 @@ private struct StudyStepFrame<Content: View>: View {
     let button: String
     var enabled = true
     var hidden = false
+    /// A quieter way on above the main button, such as "I Don't Know" in the placement test.
+    var secondary: (title: String, action: () -> Void)? = nil
     let action: () -> Void
     @ViewBuilder let content: Content
     var body: some View {
@@ -234,9 +242,17 @@ private struct StudyStepFrame<Content: View>: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !hidden {
-                StudyMainButton(title: L10n.text(button), action: action).disabled(!enabled)
-                    .frame(maxWidth: 600).padding(.horizontal, 18).padding(.vertical, 10).frame(maxWidth: .infinity)
-                    .background(StudyTheme.background).accessibilityIdentifier("study.check")
+                VStack(spacing: 6) {
+                    if let secondary {
+                        Button { StudySound.tap.play(); secondary.action() } label: {
+                            Text(L10n.text(secondary.title)).font(StudyTheme.body(16, .heavy)).foregroundStyle(StudyTheme.muted)
+                                .frame(maxWidth: .infinity).padding(.vertical, 8).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityIdentifier("study.unsure")
+                    }
+                    StudyMainButton(title: L10n.text(button), action: action).disabled(!enabled).accessibilityIdentifier("study.check")
+                }
+                .frame(maxWidth: 600).padding(.horizontal, 18).padding(.vertical, 10).frame(maxWidth: .infinity)
+                .background(StudyTheme.background)
             }
         }
     }
@@ -501,10 +517,13 @@ private struct StudyQuizStep: View {
 private struct StudyAskStep: View {
     let ask: StudyPathLesson.Ask
     let revealed: Bool
+    /// Offered in the placement test: answers as missed, without a guess.
+    var unsure: (() -> Void)? = nil
     let answer: (Bool) -> Void
     @State private var picked: Int?
     var body: some View {
-        StudyStepFrame(button: "Check", enabled: picked != nil, hidden: revealed, action: { if let picked { answer(picked == ask.answer) } }) {
+        StudyStepFrame(button: "Check", enabled: picked != nil, hidden: revealed, secondary: unsure.map { ("I Don't Know", $0) },
+                       action: { if let picked { answer(picked == ask.answer) } }) {
             HStack(alignment: .top, spacing: 12) {
                 StudyMascot(pose: .think, size: 76)
                 StudyCard(padding: 14) { StudyRichText(source: ask.question.resolved(), size: 19) }
@@ -1112,6 +1131,84 @@ struct StudyLessonResult: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(color, lineWidth: 2) }
         .studyPop(stage >= 5, delay: Double(index) * 0.1, from: 0.5)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Placement result
+
+/// Where the placement test put the learner: how it went, the section they begin at, and how many lessons it passed by.
+struct StudyPlacementResult: View {
+    let session: StudyLessonSession
+    let done: () -> Void
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var section: StudyPathSection? { StudyPlacement.section(.bundled, placed: session.placed) }
+    private var ahead: Bool { session.placed > 0 }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    StudyMascot(pose: ahead ? .cheer : .wave, size: 160).padding(.top, 32)
+                        .phaseAnimator([0.0, -18.0, 0.0], trigger: shown) { view, lift in view.offset(y: lift) } animation: { _ in .spring(duration: 0.3, bounce: 0.6) }
+                        .studyPop(shown, from: 0.2)
+                        .overlay { if ahead { StudyBurst(trigger: shown ? 1 : 0, count: 24, reach: 130) } }
+                    VStack(spacing: 8) {
+                        Text(L10n.text(ahead ? "You Know Your Stuff!" : "Let's Start from the Beginning"))
+                            .font(StudyTheme.title(30)).foregroundStyle(StudyTheme.ink).multilineTextAlignment(.center)
+                            .accessibilityIdentifier("study.placement.title")
+                        Text(L10n.text(ahead ? "You can skip ahead on the path." : "We'll learn the basics together, one short lesson at a time."))
+                            .font(StudyTheme.body(16, .medium)).foregroundStyle(StudyTheme.muted).multilineTextAlignment(.center)
+                    }.studyRise(shown, delay: 0.1)
+                    HStack(spacing: 10) {
+                        tile(L10n.text("Right Answers"), "checkmark.circle.fill", StudyTheme.good, "\(session.asked - session.mistakes) / \(session.asked)")
+                        tile(L10n.text("Lessons Skipped"), "forward.fill", StudyTheme.primary, String(session.placed))
+                    }.studyRise(shown, delay: 0.2)
+                    if let section {
+                        let color = Color(studyHex: section.color)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label(L10n.text("Start Here"), systemImage: "flag.fill").font(StudyTheme.body(14, .heavy)).foregroundStyle(.white.opacity(0.9))
+                            Text(section.title.resolved()).font(StudyTheme.title(24)).foregroundStyle(.white)
+                            Text(section.summary.resolved()).font(StudyTheme.body(15, .medium)).foregroundStyle(.white.opacity(0.9))
+                        }
+                        .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(color, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .background { RoundedRectangle(cornerRadius: 22, style: .continuous).fill(color.studyEdge()).offset(y: 5) }
+                        .studyPop(shown, delay: 0.35, from: 0.6)
+                        .accessibilityElement(children: .combine).accessibilityIdentifier("study.placement.section")
+                    }
+                    if ahead {
+                        Text(L10n.text("The lessons before it stay open on the map, to play whenever you like."))
+                            .font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted).multilineTextAlignment(.center)
+                            .studyRise(shown, delay: 0.45)
+                    }
+                }
+                .padding(.horizontal, 18).padding(.bottom, 20).frame(maxWidth: 560).frame(maxWidth: .infinity)
+            }
+            if ahead, !reduceMotion { StudyConfetti(pieces: 90).allowsHitTesting(false).accessibilityHidden(true) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            StudyMainButton(title: L10n.text("Start Learning"), symbol: "play.fill") { StudySound.tap.play(); done() }
+                .frame(maxWidth: 560).padding(.horizontal, 18).padding(.vertical, 10).frame(maxWidth: .infinity)
+                .background(StudyTheme.background).accessibilityIdentifier("study.done")
+        }
+        .sensoryFeedback(.success, trigger: shown)
+        .onAppear {
+            shown = true
+            (ahead ? StudySound.levelup : StudySound.complete).play()
+        }
+    }
+
+    private func tile(_ title: String, _ symbol: String, _ color: Color, _ value: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 20, weight: .bold)).foregroundStyle(color)
+            Text(verbatim: value).font(StudyTheme.title(22)).foregroundStyle(StudyTheme.ink).monospacedDigit()
+            Text(title).font(StudyTheme.body(12, .bold)).foregroundStyle(StudyTheme.muted).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 14)
+        .background(StudyTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 2) }
         .accessibilityElement(children: .combine)
     }
 }

@@ -98,7 +98,15 @@ class StudyZoom extends StatelessWidget {
 
 /// A step's scrolling body with its button pinned below (`StudyStepFrame`). [button] is the English L10n key.
 class StudyStepFrame extends StatelessWidget {
-  const StudyStepFrame({super.key, required this.button, this.enabled = true, this.hidden = false, required this.onPressed, required this.children});
+  const StudyStepFrame({
+    super.key,
+    required this.button,
+    this.enabled = true,
+    this.hidden = false,
+    this.secondary,
+    required this.onPressed,
+    required this.children,
+  });
 
   /// The button's title, as an English L10n key.
   final String button;
@@ -108,6 +116,9 @@ class StudyStepFrame extends StatelessWidget {
 
   /// Hides the button, once an answer is in.
   final bool hidden;
+
+  /// A quieter way on above the main button, such as "I Don't Know" in the placement test: its English L10n key and action.
+  final (String, VoidCallback)? secondary;
 
   /// Called when the button is pressed.
   final VoidCallback onPressed;
@@ -153,7 +164,38 @@ class StudyStepFrame extends StatelessWidget {
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 600),
-                    child: StudyMainButton(key: const Key('study.check'), title: L10n.text(button), onPressed: enabled ? onPressed : null),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 6,
+                      children: [
+                        if (secondary case (final title, final action))
+                          Semantics(
+                            button: true,
+                            label: L10n.text(title),
+                            excludeSemantics: true,
+                            child: GestureDetector(
+                              key: const Key('study.unsure'),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                StudySound.tap.play();
+                                action();
+                              },
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Text(
+                                    L10n.text(title),
+                                    textAlign: TextAlign.center,
+                                    style: StudyTheme.body(16, StudyTheme.heavy).copyWith(color: theme.muted),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        StudyMainButton(key: const Key('study.check'), title: L10n.text(button), onPressed: enabled ? onPressed : null),
+                      ],
+                    ),
                   ),
                 ),
               ),

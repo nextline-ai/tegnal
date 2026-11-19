@@ -71,6 +71,21 @@ class StudyModeModel extends ChangeNotifier {
   /// How many tags have been missed at least once, for Weak Spots.
   int weak = 0;
 
+  /// How many lessons at the start of the main path the placement test passed by.
+  int placed = 0;
+
+  /// What the shown path counts as passed by: the placement belongs to the main path only.
+  int get shownPlaced => track == null ? placed : 0;
+
+  /// True until the learner has been welcomed, on a first visit and again after a reset.
+  bool get needsWelcome => StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: booru.booruDefaults);
+
+  /// Marks the welcome as gone through on this device.
+  void welcomed() => booru.booruDefaults.set(StudyPlacement.welcomedKey, true);
+
+  /// Lets the welcome show again, after a reset.
+  void forgetWelcome() => booru.booruDefaults.set(StudyPlacement.welcomedKey, null);
+
   int _goal = StudyGame.defaultGoal;
   int get goal => _goal;
   set goal(int value) {
@@ -135,7 +150,9 @@ class StudyModeModel extends ChangeNotifier {
     needsServer = StudyServer.needsChoice(booru.store, defaults: booru.booruDefaults);
     if (awards.isEmpty) awards = StudyAward.all(path);
     earned = _read(study.awards, const {});
-    facts = StudyFacts.of(path: path, records: records, days: days, progress: progress, stats: _read(study.stats, const {}));
+    final stats = _read(study.stats, const <String, int>{});
+    placed = stats[StudyPlacement.counter] ?? 0;
+    facts = StudyFacts.of(path: path, records: records, days: days, progress: progress, stats: stats);
     weak = progress.values.where((value) => value.wrong > 0 && curriculum.contains(value.tag)).length;
     notifyListeners();
   }

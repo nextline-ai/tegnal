@@ -89,7 +89,7 @@ struct WorkExtrasSection: View {
     }
 
     static func hasContent(_ extras: WorkExtras) -> Bool {
-        extras.rating != nil || extras.favorited != nil || extras.uploader != nil || extras.fileSize != nil || !extras.comments.isEmpty
+        extras.rating != nil || extras.favorited != nil || extras.fileSize != nil || !extras.comments.isEmpty
             || extras.canComment || extras.canRate
     }
 
@@ -168,7 +168,6 @@ struct WorkExtrasSection: View {
         }
         if let size = extras.fileSize { stat(size, systemImage: "internaldrive") }
         if let posted = extras.posted { stat(posted.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar") }
-        if let uploader = extras.uploader { stat(uploader, systemImage: "person") }
     }
 
     private func stat(_ text: String, systemImage: String, tint: Color = .secondary) -> some View {

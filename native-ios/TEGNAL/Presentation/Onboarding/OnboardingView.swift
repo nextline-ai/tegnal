@@ -8,15 +8,13 @@ public struct OnboardingView: View {
     @State private var tutorialMode: AppMode = .booru
     @State private var addingServer = false
     @State private var validating: BooruServer?
-    /// True for learning mode, false for viewing mode; nil until one is picked.
-    @State private var startsLearning: Bool?
     private var hasConnection: Bool { env.isSiteVerified || !env.booru.servers.isEmpty }
     private let importsOnly: Bool
     public init(importsOnly: Bool = false) {
         self.importsOnly = importsOnly
         _step = State(initialValue: importsOnly ? 1 : 0)
     }
-    private static let last = 3
+    private static let last = 2
     public var body: some View {
         NavigationStack {
             ScrollView {
@@ -30,7 +28,6 @@ public struct OnboardingView: View {
                     }
                     if step == 0 { setup }
                     else if step == 1 { imports }
-                    else if step == 2 { modes }
                     else { tutorial }
                 }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
             }
@@ -38,9 +35,9 @@ public struct OnboardingView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
                     Button(action: next) {
-                        Text(L10n.text(importsOnly ? "Done" : step == Self.last ? "Get Started" : step == 2 && startsLearning == true ? "Start Learning" : (step == 0 && !hasConnection ? "Set Up Later" : "Continue"))).font(.headline)
+                        Text(L10n.text(importsOnly ? "Done" : step == Self.last ? "Get Started" : (step == 0 && !hasConnection ? "Set Up Later" : "Continue"))).font(.headline)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    }.buttonStyle(.borderedProminent).controlSize(.large).disabled(step == 2 && !importsOnly && startsLearning == nil)
+                    }.buttonStyle(.borderedProminent).controlSize(.large)
                         .tint(step == 0 && !hasConnection ? Color.secondary : Color.accentColor)
                         .accessibilityIdentifier("onboarding.continue")
                     if step == 0 {
@@ -113,45 +110,6 @@ public struct OnboardingView: View {
         }
     }
 
-    /// The first choice of how the app opens: learning to make pictures, or the library. It becomes the default.
-    private var modes: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(L10n.text("Choose How to Start")).font(.largeTitle.bold())
-            Text(L10n.text("The app opens in the mode you choose here. You can change it anytime in Settings.")).foregroundStyle(.secondary)
-            mode(true, title: "Learning Mode", detail: "Learn to make anime-style pictures with AI from the very start, one short lesson at a time.") {
-                StudyMascot(pose: .fullBody, size: 84, lively: startsLearning == true).frame(width: 64)
-            }
-            mode(false, title: "Viewing Mode", detail: "Find, save and enjoy comics and images in your own library.") {
-                Image(systemName: "books.vertical.fill").font(.system(size: 38)).foregroundStyle(.tint).frame(width: 64, height: 84)
-            }
-        }
-        .accessibilityElement(children: .contain).accessibilityIdentifier("onboarding.mode")
-        .onAppear { if startsLearning == nil, env.isOnboardingCompleted { startsLearning = StudyMode.shared.startsActive } }
-    }
-
-    private func mode<Picture: View>(_ learning: Bool, title: String, detail: String, @ViewBuilder picture: () -> Picture) -> some View {
-        let chosen = startsLearning == learning
-        return Button { withAnimation(.spring(duration: 0.35, bounce: 0.4)) { startsLearning = learning } } label: {
-            HStack(spacing: 14) {
-                picture()
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text(title)).font(.title2.bold()).foregroundStyle(Color.primary)
-                    Text(L10n.text(detail)).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: chosen ? "checkmark.circle.fill" : "circle").font(.title2).foregroundStyle(chosen ? Color.accentColor : Color.secondary.opacity(0.4))
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
-            .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(chosen ? Color.accentColor : Color.clear, lineWidth: 3) }
-            .scaleEffect(chosen ? 1.02 : 1)
-        }
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: chosen)
-        .accessibilityAddTraits(chosen ? .isSelected : []).accessibilityIdentifier(learning ? "onboarding.mode.learning" : "onboarding.mode.viewing")
-    }
-
     private var tutorial: some View {
         VStack(alignment: .leading, spacing: 24) {
             Text(L10n.text("Switch Modes")).font(.largeTitle.bold())
@@ -176,22 +134,6 @@ public struct OnboardingView: View {
 
     private func next() {
         if importsOnly { dismiss(); return }
-        if step == 0 {
-            step = 1
-        } else if step == 1 { step = 2 }
-        else if step == 2 {
-            // What is chosen here is how the app opens from now on.
-            let learning = startsLearning == true
-            StudyMode.shared.startsActive = learning
-            StudyMode.shared.startsInLibrary = !learning
-            if learning {
-                env.isOnboardingCompleted = true
-                StudyMode.shared.enter()
-                dismiss()
-            } else {
-                StudyMode.shared.leave()
-                step = 3
-            }
-        } else { env.isOnboardingCompleted = true; dismiss() }
+        if step < Self.last { step += 1 } else { env.isOnboardingCompleted = true; dismiss() }
     }
 }

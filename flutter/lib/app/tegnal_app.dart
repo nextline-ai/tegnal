@@ -55,12 +55,11 @@ import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
 import '../presentation/study_mode/study_mode_root.dart';
 import '../presentation/settings/site_account_section.dart';
-import '../presentation/settings/start_choice_view.dart';
+import '../presentation/onboarding/onboarding_view.dart';
 import '../presentation/settings/website_setup.dart';
 import '../core/content/reading_queue.dart';
 import '../presentation/design/app_sheet.dart';
 import '../presentation/content/reading_queue_views.dart';
-import 'privacy_cover.dart';
 import '../core/content/recent_works.dart';
 import '../core/support/app_platform.dart';
 import '../presentation/design/desktop_input.dart';
@@ -85,7 +84,7 @@ class AppServices {
     this.booruDownloads,
     this.version = '',
     this.isTesting = false,
-    this.showsStartChoice = false,
+    this.showsOnboarding = false,
   }) : images = PageImageStore(source: content.source) {
     // Fixture runs and tests never fill covers from the network, as in the native app.
     coverQueue = isTesting
@@ -128,8 +127,8 @@ class AppServices {
   final PageImageStore images;
   final bool isTesting;
 
-  /// Fixture runs: show the first-run "Choose How to Start" page at launch (`TEGNAL_FIXTURE=startChoice`).
-  final bool showsStartChoice;
+  /// Fixture runs: show the first-run onboarding at launch (`TEGNAL_FIXTURE=onboarding`).
+  final bool showsOnboarding;
 
   /// Image mode's posts, previews and viewer media, and how its downloads fetch files.
   final BooruProviding booruSource;
@@ -213,10 +212,7 @@ class _TegnalAppState extends State<TegnalApp> {
           theme: tegnalTheme(brightness),
           builder: (context, child) => ReadingQueueScope(
             queue: widget.services.readingQueue,
-            child: PrivacyCoverSync(
-              preferences: widget.services.preferences.defaults,
-              child: AppLockGate(child: child!),
-            ),
+            child: AppLockGate(child: child!),
           ),
           home: _Root(state: _state, services: widget.services, homeFreeze: widget.homeFreeze),
         );
@@ -327,34 +323,40 @@ class _RootState extends State<_Root> {
   /// Whether the first-run website page is what the app shows: no comics website and no image server yet.
   bool get _isFirstRun => !services.content.isSiteVerified && services.booru.servers.isEmpty;
 
-  /// Asks, once, how the app should open. Only a new user is asked, at the first launch: learning mode needs no
-  /// website, so the question does not wait for one to be connected. It waits for the home scene's opening blur,
-  /// as onboarding does on iOS. Fixture runs ask only when `startChoice` names it.
+  /// Shows onboarding once, at a new user's first launch, after the home scene's opening blur, as on iOS.
+  /// Someone who already has a website or an image server (an update from a version without onboarding)
+  /// is counted as done. Fixture runs show it only when `onboarding` names it.
   void _watchFirstRun() {
-    final preferences = services.preferences.booruDefaults;
+    final content = services.content;
     if (services.isTesting) {
-      if (services.showsStartChoice) WidgetsBinding.instance.addPostFrameCallback((_) => _askStartChoice());
+      if (services.showsOnboarding) WidgetsBinding.instance.addPostFrameCallback((_) => _showOnboarding());
       return;
     }
-    if (StartChoiceView.isAnswered(preferences) || !_isFirstRun) return;
+    if (content.isOnboardingCompleted) return;
+    if (!_isFirstRun) {
+      content.isOnboardingCompleted = true;
+      return;
+    }
     if (!_stage.enabled || _stage.introFinished) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _askStartChoice());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showOnboarding());
       return;
     }
     void opened() {
       if (!_stage.introFinished) return;
       _stage.removeListener(opened);
-      _askStartChoice();
+      _showOnboarding();
     }
 
     _stage.addListener(opened);
   }
 
-  void _askStartChoice() {
-    if (!mounted || StartChoiceView.isAnswered(services.preferences.booruDefaults)) return;
-    Navigator.of(context)
-        .push(CupertinoPageRoute<void>(fullscreenDialog: true, builder: (_) => StartChoiceView(preferences: services.preferences.booruDefaults)));
+  void _showOnboarding() {
+    if (!mounted || (!services.isTesting && services.content.isOnboardingCompleted)) return;
+    OnboardingView.show(context, content: services.content, imports: _imports, state: state);
   }
+
+  /// "Replay Onboarding" in either mode's Settings.
+  void _replayOnboarding(BuildContext context) => OnboardingView.show(context, content: services.content, imports: _imports, state: state);
 
   @override
   void dispose() {
@@ -417,6 +419,7 @@ class _RootState extends State<_Root> {
       booru: _booru,
       content: services.content,
       version: services.version,
+      openOnboarding: _replayOnboarding,
       tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.booru),
       openLibraryManagement: (context) => Navigator.of(context).push(
         CupertinoPageRoute<void>(
@@ -477,6 +480,7 @@ class _RootState extends State<_Root> {
     library: _library,
     version: services.version,
     openDownloads: (context) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => DownloadsView(downloads: _downloads))),
+    openOnboarding: _replayOnboarding,
     openLibraryManagement: (context) => Navigator.of(context).push(
       CupertinoPageRoute<void>(
         builder: (_) => LibraryManagementView(

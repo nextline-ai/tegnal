@@ -115,6 +115,8 @@ struct NativeGallery: Codable, Identifiable, Sendable {
     /// How many pages the work has, when a list knows it apart from `pages`: lists carry only a
     /// cover. Zero means a list row that did not say.
     var pageCount: Int? = nil
+    /// The account that put the work up, on websites that say so.
+    var uploader: String? = nil
 
     /// The page count worth showing on a card, if known.
     var displayedPageCount: Int? {

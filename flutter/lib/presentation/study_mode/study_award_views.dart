@@ -1431,7 +1431,8 @@ class _StudyAwardParadeState extends State<StudyAwardParade> {
               child: AnimatedSwitcher(
                 duration: reduce ? Duration.zero : _slide.settle,
                 switchInCurve: _slide,
-                switchOutCurve: _slide,
+                // Flipped, so the page leaving goes as quickly as the next one comes instead of lingering under it.
+                switchOutCurve: _slide.flipped,
                 layoutBuilder: (currentChild, previous) => Stack(fit: StackFit.expand, children: [...previous, ?currentChild]),
                 // In from the trailing edge, out to the leading edge, fading as they go.
                 transitionBuilder: (child, animation) {

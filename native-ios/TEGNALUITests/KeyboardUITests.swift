@@ -4,19 +4,10 @@ final class KeyboardUITests: XCTestCase {
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
-    /// The "Choose How to Start" step: pick Viewing Mode (harmless if already selected) and go on.
-    private func chooseViewingMode(_ app: XCUIApplication) {
-        XCTAssertTrue(element(app, "onboarding.mode").waitForExistence(timeout: 5))
-        let viewing = element(app, "onboarding.mode.viewing")
-        XCTAssertTrue(viewing.waitForExistence(timeout: 5))
-        viewing.tap()
-        element(app, "onboarding.continue").tap()
-    }
-    /// Walks every onboarding step from the first one, choosing Viewing Mode.
+    /// Walks every onboarding step from the first one.
     private func finishOnboarding(_ app: XCUIApplication) {
         element(app, "onboarding.continue").tap()
         element(app, "onboarding.continue").tap()
-        chooseViewingMode(app)
         XCTAssertTrue(element(app, "onboarding.tutorial").waitForExistence(timeout: 5))
         element(app, "onboarding.continue").tap()
     }

@@ -432,6 +432,7 @@ class KeyedCatalogSource {
       type: preview.type,
       tags: preview.tags,
       pages: pages,
+      uploader: preview.uploader,
     );
   }
 
@@ -1451,6 +1452,7 @@ class KeyedCatalogSource {
       ],
       pages: pages,
       pageCount: (_number(item['filecount']) ?? 0).clamp(0, 10000),
+      uploader: NativeGallery.uploaderFrom(item['uploader']),
     );
     final files = _number(item['filecount']) ?? 0;
     return (work, files.clamp(0, 10000));

@@ -29,9 +29,6 @@ class PrivacyCover(private val activity: Activity) {
     private var hiddenContent: View? = null
     private var priorAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
 
-    /** "Play Animation When Returning": without it the cover leaves at once. */
-    var resumeAnimation: Boolean = true
-
     val isVisible: Boolean get() = cover?.parent != null && !hiding
 
     /**

@@ -468,6 +468,95 @@ void main() {
     });
   });
 
+  group('placement', () {
+    test('the placement test asks one question for every section in path order', () {
+      final questions = StudyPlacement.questions(path, curriculum: curriculum, language: 'en', random: Random(7));
+      expect(questions.map((question) => question.section), List.generate(path.sections.length, (index) => index), reason: 'Every section is checked once, in order');
+      for (final question in questions) {
+        final ask = question.ask;
+        expect(ask.answer, inInclusiveRange(0, ask.choices.length - 1));
+        expect({for (final choice in ask.choices) choice.resolved('en')}.length, ask.choices.length, reason: 'Choices are distinct');
+        final section = path.sections[question.section];
+        final hasAsks = section.lessons.any((lesson) => (lesson.steps ?? const <StudyPathStep>[]).any((step) => step.ask != null));
+        if (!hasAsks) {
+          // A section that only teaches tags is checked by a meaning and that lesson's own tags.
+          expect(ask.code, isTrue);
+          final taught = {for (final lesson in section.lessons) for (final name in lesson.tags ?? const <String>[]) StudyPrompt.words(name)};
+          expect(ask.choices.every((choice) => taught.contains(choice.resolved('en'))), isTrue, reason: "Wrong answers come from the section's own tags");
+        }
+      }
+    });
+
+    test('the placement test passes by the lessons before the first missed section', () {
+      expect(StudyPlacement.skipped(path, stoppedAt: 0), 0, reason: 'Missing the first question starts at the beginning');
+      expect(StudyPlacement.skipped(path, stoppedAt: 2), path.sections[0].lessons.length + path.sections[1].lessons.length);
+      expect(StudyPlacement.skipped(path, stoppedAt: null), path.lessons.length - path.sections.last.lessons.length, reason: 'Nothing missed begins at the last section');
+      expect(StudyPlacement.skipped(const StudyPath(), stoppedAt: null), 0);
+      expect(StudyPlacement.section(path, placed: 0)?.id, path.sections[0].id);
+      expect(StudyPlacement.section(path, placed: StudyPlacement.skipped(path, stoppedAt: 3))?.id, path.sections[3].id);
+    });
+
+    test('a placed learner starts at the placement and the lessons passed by stay open', () {
+      final lessons = path.lessons;
+      final placed = StudyPlacement.skipped(path, stoppedAt: 2);
+      expect(path.current({}, placed: placed)?.id, lessons[placed].id);
+      for (final (index, lesson) in lessons.indexed) {
+        expect(path.isOpen(lesson, {}, placed: placed), index <= placed, reason: 'lesson $index');
+        expect(path.isSkipped(lesson, {}, placed: placed), index < placed, reason: 'lesson $index');
+      }
+      expect(path.current({lessons[placed].id: record(lessons[placed])}, placed: placed)?.id, lessons[placed + 1].id);
+      expect(path.isSkipped(lessons[0], {lessons[0].id: record(lessons[0])}, placed: placed), isFalse, reason: 'A passed-by lesson played since is finished');
+      // With everything from the placement on finished, the learner is sent back to what was passed by.
+      final rest = {for (final lesson in lessons.skip(placed)) lesson.id: record(lesson)};
+      expect(path.current(rest, placed: placed)?.id, lessons[0].id);
+      expect(path.current({}, placed: 10000)?.id, lessons[0].id, reason: 'A count beyond the path falls back to the first lesson');
+    });
+
+    test('the welcome shows only before anything is played, placed or welcomed', () {
+      final defaults = MemoryPreferences();
+      expect(StudyPlacement.needsWelcome(records: {}, xp: 0, placed: 0, defaults: defaults), isTrue);
+      expect(StudyPlacement.needsWelcome(records: {'a': const StudyLessonRecord(lesson: 'a', stars: 1, runs: 1)}, xp: 0, placed: 0, defaults: defaults), isFalse);
+      expect(StudyPlacement.needsWelcome(records: {}, xp: 5, placed: 0, defaults: defaults), isFalse);
+      expect(StudyPlacement.needsWelcome(records: {}, xp: 0, placed: 4, defaults: defaults), isFalse, reason: 'A placement synced from another device counts');
+      defaults.set(StudyPlacement.welcomedKey, true);
+      expect(StudyPlacement.needsWelcome(records: {}, xp: 0, placed: 0, defaults: defaults), isFalse);
+    });
+
+    test('the placement session stops at the first miss, earns nothing and records where it placed', () async {
+      final store = BooruStore.inMemory();
+      final session = StudyLessonSession(plan: StudyLessonPlan.placement, store: store, source: PathFakeSource(), server: pathServer, engine: StudyEngine(curriculum: curriculum));
+      await session.start();
+      expect(session.steps.length, path.sections.length);
+      for (var index = 0; index < 3; index++) {
+        session.answer(true);
+        session.next();
+      }
+      session.answer(false);
+      expect(session.phase, const StudyLessonPhase.feedback(false));
+      session.next();
+      expect(session.phase, StudyLessonPhase.finished, reason: 'The first miss ends the test');
+      expect(session.stoppedAt, 3);
+      expect(session.placed, StudyPlacement.skipped(path, stoppedAt: 3));
+      expect(store.studyStore.stats()[StudyPlacement.counter], session.placed);
+      expect(store.studyStore.lessons(), isEmpty);
+      expect(store.studyStore.days().fold<int>(0, (total, day) => total + day.xp), 0, reason: 'The test earns no experience');
+      expect(store.studyStore.progress(), isEmpty, reason: 'No tag is scheduled by the test');
+      store.studyStore.reset();
+      expect(store.studyStore.stats()[StudyPlacement.counter], isNull, reason: 'A reset clears the placement');
+    });
+
+    test('a placement missed at the first question starts at the beginning and records nothing', () async {
+      final store = BooruStore.inMemory();
+      final session = StudyLessonSession(plan: StudyLessonPlan.placement, store: store, source: PathFakeSource(), server: pathServer, engine: StudyEngine(curriculum: curriculum));
+      await session.start();
+      session.answer(false);
+      session.next();
+      expect(session.phase, StudyLessonPhase.finished);
+      expect(session.placed, 0);
+      expect(store.studyStore.stats()[StudyPlacement.counter], isNull);
+    });
+  });
+
   group('Ask.shuffled', () {
     test('keeps the choices and the right answer points at the same text', () {
       for (final original in [ask(), ask(answer: 2), ask(answer: 1, count: 4, code: true), ask(count: 2)]) {

@@ -25,15 +25,20 @@ import 'study_lesson_result.dart';
 import 'study_lesson_steps.dart';
 import 'study_mode_model.dart';
 import 'study_reactions.dart';
+import 'study_welcome_view.dart';
 
 /// A lesson played from its first step to its results (`StudyPlayView`). A full page: it pops itself when the
 /// learner leaves or presses the last Continue.
 class StudyPlayView extends StatefulWidget {
-  const StudyPlayView({super.key, required this.booru, required this.session, required this.model});
+  const StudyPlayView({super.key, required this.booru, required this.session, required this.model, this.leave});
 
   final BooruContext booru;
   final StudyLessonSession session;
   final StudyModeModel model;
+
+  /// Where the play goes when it ends or is closed, in place of popping its page: the welcome plays the placement
+  /// test in place.
+  final VoidCallback? leave;
 
   @override
   State<StudyPlayView> createState() => _StudyPlayViewState();
@@ -132,10 +137,11 @@ class _StudyPlayViewState extends State<StudyPlayView> {
     BooruPostView.open(context, booru: widget.booru, post: post, posts: posts, discovery: DiscoveryContext.unknown, source: _session.source);
   }
 
-  void _leave() => Navigator.of(context).pop();
+  void _leave() => widget.leave != null ? widget.leave!() : Navigator.of(context).pop();
 
   Future<void> _close() async {
-    if (_session.index == 0) return _leave();
+    // Nothing of the placement test is kept until it ends, so it closes without asking.
+    if (_session.index == 0 || _session.isPlacement) return _leave();
     final leave = await showCupertinoModalPopup<bool>(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -168,13 +174,17 @@ class _StudyPlayViewState extends State<StudyPlayView> {
         ),
       );
     } else if (finished) {
-      body = StudyLessonResult(booru: widget.booru, session: _session, model: widget.model, done: _leave);
+      body = _session.isPlacement
+          ? StudyPlacementResult(session: _session, done: _leave)
+          : StudyLessonResult(booru: widget.booru, session: _session, model: widget.model, done: _leave);
     } else if (step != null) {
       body = AnimatedSwitcher(
         duration: _snappy.settle,
         switchInCurve: _snappy,
-        switchOutCurve: _snappy,
+        switchOutCurve: _snappy.flipped,
         layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, ?current]),
+        // The step leaving runs its spring backwards, flipped, so it is gone as quickly as the new one arrives;
+        // run unflipped it would stay whole for most of the change and sit under the new step.
         transitionBuilder: (child, animation) {
           // A new step slides in from the trailing edge; the old one slides out to the leading edge.
           final incoming = child.key == ValueKey(step.id);
@@ -217,7 +227,7 @@ class _StudyPlayViewState extends State<StudyPlayView> {
                   child: AnimatedSwitcher(
                     duration: _bannerSpring.settle,
                     switchInCurve: _bannerSpring,
-                    switchOutCurve: _bannerSpring,
+                    switchOutCurve: _bannerSpring.flipped,
                     transitionBuilder: (child, animation) => ScaleTransition(
                       scale: animation.drive(Tween(begin: 0.3, end: 1.0)),
                       child: FadeTransition(opacity: animation.drive(_Clamped()), child: child),
@@ -272,7 +282,7 @@ class _StudyPlayViewState extends State<StudyPlayView> {
             child: AnimatedSwitcher(
               duration: _comboSpring.settle,
               switchInCurve: _comboSpring,
-              switchOutCurve: _comboSpring,
+              switchOutCurve: _comboSpring.flipped,
               transitionBuilder: (child, animation) => ScaleTransition(
                 scale: animation,
                 child: FadeTransition(opacity: animation.drive(_Clamped()), child: child),
@@ -311,7 +321,12 @@ class _StudyPlayViewState extends State<StudyPlayView> {
         revealed: revealed,
         answer: (right) => session.answer(right, tag: question.tag.name),
       ),
-      StudyStepAsk(:final ask) => _StudyAskStep(ask: ask, revealed: revealed, answer: session.answer),
+      StudyStepAsk(:final ask) => _StudyAskStep(
+        ask: ask,
+        revealed: revealed,
+        answer: session.answer,
+        unsure: session.isPlacement ? () => session.answer(false) : null,
+      ),
       StudyStepMatch(:final tags) => StudyMatchStep(tags: tags, revealed: revealed, answer: session.answer),
       StudyStepBuild(:final build) => StudyBuildStep(
         booru: widget.booru,
@@ -1183,10 +1198,13 @@ class _StudyQuizStepState extends State<_StudyQuizStep> {
 
 /// A question about an idea, with its choices written out (`StudyAskStep`).
 class _StudyAskStep extends StatefulWidget {
-  const _StudyAskStep({required this.ask, required this.revealed, required this.answer});
+  const _StudyAskStep({required this.ask, required this.revealed, required this.answer, this.unsure});
   final StudyPathAsk ask;
   final bool revealed;
   final ValueChanged<bool> answer;
+
+  /// Offered in the placement test: answers as missed, without a guess.
+  final VoidCallback? unsure;
 
   @override
   State<_StudyAskStep> createState() => _StudyAskStepState();
@@ -1202,6 +1220,7 @@ class _StudyAskStepState extends State<_StudyAskStep> {
       button: 'Check',
       enabled: _picked != null,
       hidden: widget.revealed,
+      secondary: widget.unsure == null ? null : ("I Don't Know", widget.unsure!),
       onPressed: () {
         final picked = _picked;
         if (picked != null) widget.answer(picked == ask.answer);

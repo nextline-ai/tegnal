@@ -1361,6 +1361,10 @@ private struct GalleryDetailMetadata: View {
                     savedQueries: savedTagQueries,
                     save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) })
             }
+            // Who put the work up, where the website says so. Searches for it differ from site to site, so it copies like the number.
+            if let uploader = gallery.uploader?.trimmingCharacters(in: .whitespacesAndNewlines), !uploader.isEmpty {
+                GalleryCopyValue(title: "Uploader", value: uploader, identifier: "content.detail.uploader")
+            }
             GalleryWorkNumber(number: gallery.id)
         }.frame(maxWidth: .infinity, alignment: .leading)
         .task { reloadSavedTags() }
@@ -1429,17 +1433,28 @@ struct MetadataPlaceholder: View {
 
 struct GalleryWorkNumber: View {
     let number: Int64
+    var body: some View {
+        GalleryCopyValue(title: "Number", value: String(number), identifier: "content.detail.workNumber")
+    }
+}
+
+/// A value under its own heading that copies itself when tapped or held, such as the work's number or its uploader.
+struct GalleryCopyValue: View {
+    let title: String
+    let value: String
+    let identifier: String
+    var color = ArtworkTagCategory.general.color
     @State private var copied = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.text("Number")).font(.headline).padding(.leading, GalleryDetailInset.label)
+            Text(L10n.text(title)).font(.headline).padding(.leading, GalleryDetailInset.label)
             HStack {
                 Button(action: copy) {
-                    Text(String(number)).foregroundStyle(ArtworkTagCategory.general.color)
-                        .modifier(ArtworkTagPill(color: ArtworkTagCategory.general.color))
+                    Text(value).foregroundStyle(color)
+                        .modifier(ArtworkTagPill(color: color))
                 }.buttonStyle(.plain)
                     .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in copy() })
-                    .accessibilityIdentifier("content.detail.workNumber")
+                    .accessibilityIdentifier(identifier)
                     .accessibilityHint(L10n.text("Hold to copy"))
                     .accessibilityAction(named: L10n.text("Copy"), copy)
                 if copied { Label(L10n.text("Copied"), systemImage: "checkmark").font(.caption).foregroundStyle(.secondary) }
@@ -1452,7 +1467,7 @@ struct GalleryWorkNumber: View {
         }
     }
     private func copy() {
-        UIPasteboard.general.string = String(number); copied = true
+        UIPasteboard.general.string = value; copied = true
         WorkSaveFeedback.haptic(.added(.comics))
     }
 }

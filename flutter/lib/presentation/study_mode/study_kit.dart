@@ -964,6 +964,7 @@ abstract final class StudyGlyph {
     'figure.stand' => CupertinoIcons.person_alt,
     'figure.walk' => CupertinoIcons.person_alt,
     'flag.fill' => CupertinoIcons.flag_fill,
+    'forward.fill' => CupertinoIcons.forward_fill,
     'flame.fill' => CupertinoIcons.flame_fill,
     'function' => CupertinoIcons.function,
     'gauge.with.dots.needle.33percent' => CupertinoIcons.gauge,

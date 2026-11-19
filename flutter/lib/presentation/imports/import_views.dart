@@ -125,7 +125,7 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
             ),
             SettingsLinkRow(
               title: L10n.text(backup == null ? 'Choose File' : 'Choose Another File'),
-              symbol: (color) => _DocumentBadgePlus(color: color),
+              symbol: (color) => DocumentBadgePlus(color: color),
               tinted: true,
               chevron: false,
               onTap: _loading ? null : _choose,
@@ -467,7 +467,7 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
             ),
             SettingsLinkRow(
               title: L10n.text(library == null && _database == null ? 'Choose File' : 'Choose Another File'),
-              symbol: (color) => _DocumentBadgePlus(color: color),
+              symbol: (color) => DocumentBadgePlus(color: color),
               tinted: true,
               chevron: false,
               onTap: _loading ? null : () => _read(_chooseFile),
@@ -817,7 +817,7 @@ class ImportDataView extends StatelessWidget {
   const ImportDataView({super.key, required this.imports});
   final ImportContext imports;
 
-  static const _borderedFill = CupertinoDynamicColor.withBrightness(color: Color(0x1F767680), darkColor: Color(0x3D767680));
+  static const borderedFill = CupertinoDynamicColor.withBrightness(color: Color(0x1F767680), darkColor: Color(0x3D767680));
 
   Widget _card(BuildContext context, {required IconData icon, required String title, required String kinds, required WidgetBuilder page}) {
     final label = TegnalColors.label.resolveFrom(context);
@@ -855,11 +855,11 @@ class ImportDataView extends StatelessWidget {
                 height: 36,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 // `.bordered`: the tertiary system fill under tinted text.
-                decoration: ShapeDecoration(color: _borderedFill.resolveFrom(context), shape: const StadiumBorder()),
+                decoration: ShapeDecoration(color: borderedFill.resolveFrom(context), shape: const StadiumBorder()),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _DocumentBadgePlus(color: tint),
+                    DocumentBadgePlus(color: tint),
                     const SizedBox(width: 6),
                     Text(L10n.text('Import'), style: TegnalType.style(17, color: tint)),
                   ],
@@ -1109,8 +1109,8 @@ class WebsiteImportLinks extends StatelessWidget {
 }
 
 /// `doc.badge.plus`: a page with a folded corner and a filled plus badge at its lower left.
-class _DocumentBadgePlus extends StatelessWidget {
-  const _DocumentBadgePlus({required this.color});
+class DocumentBadgePlus extends StatelessWidget {
+  const DocumentBadgePlus({super.key, required this.color});
   final Color color;
 
   @override

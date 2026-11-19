@@ -672,11 +672,15 @@ class _WebsiteConnectionEditorState extends State<WebsiteConnectionEditor> {
                               Icon(CupertinoIcons.folder, size: 22, color: tint),
                               const SizedBox(width: 12),
                               Expanded(child: Text(L10n.text('Default Save Folder'))),
-                              Flexible(
+                              const SizedBox(width: 8),
+                              // Capped rather than `Flexible`, so the folder name sits at the trailing edge.
+                              ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
                                 child: Text(
                                   (_saveFolder == null ? null : widget.booru?.folder(_saveFolder!))?.displayName ?? L10n.text('Uncategorized'),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.right,
                                   style: TegnalType.style(17, color: secondary),
                                 ),
                               ),

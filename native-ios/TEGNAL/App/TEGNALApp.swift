@@ -131,7 +131,6 @@ struct TEGNALApp: App {
     @State private var stage = HomeStage.shared
     /// The home scene opens from a blur, as the splash once slid away; what waited for the splash waits for that.
     private var isSplashScreenVisible: Bool { stage.enabled && !stage.introFinished }
-    @SwiftUI.AppStorage("app.resumeAnimation", store: ContentPreferences.defaults) private var resumeAnimation = true
     @State private var isResumeSplashVisible = false
     @State private var backgroundSync = BackgroundLibrarySync()
     @State private var launchThermalAllowed = ProcessInfo.processInfo.thermalState != .serious && ProcessInfo.processInfo.thermalState != .critical
@@ -249,7 +248,7 @@ struct TEGNALApp: App {
                 PrivacyCoverManager.shared.show()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                PrivacyCoverManager.shared.hide(animated: splashEnabled && resumeAnimation && !isSplashScreenVisible) { isResumeSplashVisible = false }
+                PrivacyCoverManager.shared.hide(animated: splashEnabled && !isSplashScreenVisible) { isResumeSplashVisible = false }
             }
             .appFullScreenCover(isPresented: Binding(
                 get: {

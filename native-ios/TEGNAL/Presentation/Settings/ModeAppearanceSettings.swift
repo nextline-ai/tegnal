@@ -2,7 +2,6 @@ import SwiftUI
 
 /// Bindings resolve to the current mode; the two libraries keep independent preferences.
 struct ModeAppearanceSettings: View {
-    @SwiftUI.AppStorage("app.resumeAnimation", store: ContentPreferences.defaults) private var resumeAnimation = true
     @Environment(AppEnvironment.self) private var env
     @SwiftUI.AppStorage("booru.fitThumbnails", store: ReaderPreferences.booruDefaults) private var fitThumbnails = false
     var body: some View {
@@ -11,7 +10,6 @@ struct ModeAppearanceSettings: View {
             Picker(L10n.text("Appearance"), selection: $env.appTheme) {
                 ForEach(AppTheme.allCases) { Text($0.title).tag($0) }
             }.pickerStyle(.segmented).labelsHidden()
-            Toggle(L10n.text("Play Animation When Returning"), isOn: $resumeAnimation)
             columnPicker("Folder Columns", selection: $env.folderColumns, identifier: "settings.folderColumns")
             columnPicker("Grid Columns", selection: $env.gridColumns, identifier: "settings.gridColumns")
             Toggle(isOn: $env.removesGridPadding) {
