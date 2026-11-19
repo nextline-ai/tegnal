@@ -1,3 +1,4 @@
+import '../../domain/models.dart';
 import '../storage/app_database.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
@@ -15,11 +16,12 @@ class VioletImportResult {
   final int opened;
 }
 
-/// Reads the bookmark backup Violet exports on Android: its groups become folders, its
-/// bookmarked works are saved into them, bookmarked artists, groups, series and characters
-/// become saved collections, and the reading log sets when each saved work was last opened.
-/// The backup holds no work information; the cover queue fills titles, tags and covers from
-/// the connected website afterwards. The file is only read.
+/// Reads a comics viewer's bookmark backup (`user.db`, or the file Violet exports on Android):
+/// its groups become folders, its bookmarked works are saved into them, bookmarked artists,
+/// groups, series and characters become saved collections, and the reading log sets when each
+/// saved work was last opened. The backup holds no work information; works the offline catalog
+/// knows take theirs from it, and the cover queue fills the rest from the connected website
+/// afterwards. The file is only read.
 class VioletImportService {
   VioletImportService(this.database);
   final AppDatabase database;
@@ -90,9 +92,9 @@ class VioletImportService {
     final source = SqlDatabase.openReadOnly(path);
     late final List<Map<String, Object?>> groups, articles, artistRows, reads;
     try {
-      if (!source.tableExists('BookmarkGroup') || !source.tableExists('BookmarkArticle')) throw const VioletFormatError();
-      // One consistent snapshot of the backup.
-      groups = source.rows('SELECT * FROM BookmarkGroup ORDER BY Gorder ASC, Id ASC');
+      if (!source.tableExists('BookmarkArticle')) throw const VioletFormatError();
+      // One consistent snapshot of the backup. A backup without groups files everything as unfiled.
+      groups = source.tableExists('BookmarkGroup') ? source.rows('SELECT * FROM BookmarkGroup ORDER BY Gorder ASC, Id ASC') : const [];
       articles = source.rows('SELECT * FROM BookmarkArticle ORDER BY DateTime ASC, Id ASC');
       artistRows = source.tableExists('BookmarkArtist') ? source.rows('SELECT * FROM BookmarkArtist ORDER BY DateTime ASC, Id ASC') : const [];
       reads = source.tableExists('ArticleReadLog')
@@ -135,20 +137,39 @@ class VioletImportService {
 
     final total = articles.length;
     final saved = <int>{};
+    // Works the offline catalog already knows are saved with its information.
+    final hasCatalog = database.catalogCount() > 0;
     // A few dozen works per transaction, with a frame between them for progress and Cancel.
     for (var start = 0; start < total; start += _chunk) {
       progress?.call(start, total);
       await Future<void>.delayed(Duration.zero);
       check();
+      final chunk = articles.skip(start).take(_chunk).toList();
+      final catalog = <int, CatalogWork>{
+        if (hasCatalog)
+          for (final article in chunk)
+            if (_int(article['Article']) case final int id when id > 0) id: ?database.getCatalog(id),
+      };
       database.dbWriter.write((_) {
-        for (final article in articles.skip(start).take(_chunk)) {
+        for (final article in chunk) {
           final galleryId = _int(article['Article']);
           if (galleryId == null || galleryId <= 0) continue;
           final groupId = _int(article['GroupId']);
+          final known = catalog[galleryId];
           database.upsertWork(
             galleryId: galleryId,
             folderId: (groupId == null ? null : folderIds[groupId]) ?? defaultFolderId,
+            title: known?.title,
+            artists: known?.artists,
+            language: known?.language,
+            type: known?.type,
+            series: known?.series,
+            groups: known?.groups,
+            tags: known?.tags,
+            publishedAt: known?.published,
             bookmarkedAt: date(article['DateTime']),
+            metadataSource: known == null ? null : 'catalog',
+            catalogMatched: known != null,
           );
           saved.add(galleryId);
         }
@@ -186,9 +207,9 @@ class VioletImportService {
   }
 }
 
-/// The chosen file is not a Violet bookmark backup.
+/// The chosen file is not a bookmark backup.
 class VioletFormatError implements Exception {
   const VioletFormatError();
   @override
-  String toString() => 'Not a Violet bookmark backup';
+  String toString() => 'Not a bookmark backup';
 }

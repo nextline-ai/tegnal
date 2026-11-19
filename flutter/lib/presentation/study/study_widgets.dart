@@ -145,13 +145,17 @@ class StudyPresentation extends InheritedWidget {
 
 /// A pushed study page: an inline title over an inset-grouped list, as the app's other pushed pages.
 class StudyPage extends StatelessWidget {
-  const StudyPage({super.key, required this.title, required this.children, this.trailing});
+  const StudyPage({super.key, required this.title, required this.children, this.trailing, this.leading});
   final String title;
   final List<Widget> children;
   final Widget? trailing;
 
+  /// Home scene seam: the way out when the page is the root of learning mode's own place.
+  final Widget? leading;
+
   @override
-  Widget build(BuildContext context) => SettingsPage(title: title, sheet: StudyPresentation.sheetOf(context), trailing: trailing, children: children);
+  Widget build(BuildContext context) =>
+      SettingsPage(title: title, sheet: StudyPresentation.sheetOf(context), trailing: trailing, leading: leading, children: children);
 }
 
 /// A section break, as between the app's other grouped sections.

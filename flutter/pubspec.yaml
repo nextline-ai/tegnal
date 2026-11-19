@@ -43,6 +43,8 @@ flutter:
     - assets/developer/
     - assets/legal/
     - assets/study/
+    - assets/home/
+    - assets/home/art/
   fonts:
     - family: Pretendard
       fonts:

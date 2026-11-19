@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.KeyguardManager
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.os.CancellationSignal
 import android.content.Intent
@@ -11,6 +12,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.view.WindowManager
@@ -33,8 +36,11 @@ class MainActivity : FlutterActivity() {
     private var topResumed = true
     private var focused = false
 
-    /// The launch splash plays once per process, after Flutter's first frame is on screen.
+    /// The launch cover (the home scene's blurred still) stays until the Dart side reports the
+    /// still on screen (`launchReady`), or a safety timeout ends it, once per process.
     private var launchSplashPending = true
+    private val handler = Handler(Looper.getMainLooper())
+    private val launchTimeout = Runnable { launchReady() }
     private var pendingCreate: Pair<File, MethodChannel.Result>? = null
     private var pendingOpen: MethodChannel.Result? = null
     private var pendingFolder: MethodChannel.Result? = null
@@ -61,6 +67,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onFlutterUiDisplayed() {
         super.onFlutterUiDisplayed()
+        if (!uiDisplayed && launchSplashPending) handler.postDelayed(launchTimeout, LAUNCH_TIMEOUT_MILLIS)
         uiDisplayed = true
         revealContent()
     }
@@ -96,16 +103,21 @@ class MainActivity : FlutterActivity() {
         super.onStop()
     }
 
-    /// The first reveal is the launch splash; later ones follow "Play Animation When Returning".
+    /// While the launch cover is pending, focus and resume changes leave it alone; afterwards
+    /// returning only fades, following "Play Animation When Returning".
     private fun revealContent() {
-        if (!uiDisplayed || !resumed || !topResumed || !focused) return
-        val timing = when {
-            launchSplashPending -> PrivacyCover.Timing.launch
-            privacyCover.resumeAnimation -> PrivacyCover.Timing.resume
-            else -> PrivacyCover.Timing.none
-        }
+        if (!uiDisplayed || !resumed || !topResumed || !focused || launchSplashPending) return
+        privacyCover.hide(if (privacyCover.resumeAnimation) PrivacyCover.RESUME_FADE else 0L)
+    }
+
+    /// The home scene's first picture is on screen (or the safety timeout ran out): the launch
+    /// cover fades out once, as soon as the window is also in front and focused.
+    private fun launchReady() {
+        if (!launchSplashPending) return
         launchSplashPending = false
-        privacyCover.hide(timing)
+        handler.removeCallbacks(launchTimeout)
+        if (!uiDisplayed || !resumed || !topResumed || !focused) return
+        privacyCover.hide(PrivacyCover.LAUNCH_FADE)
     }
 
     /// Asks for the display's fastest mode at its current resolution, as iOS gives ProMotion
@@ -155,14 +167,15 @@ class MainActivity : FlutterActivity() {
                 "shareImage" -> shareImage(call.argument<String>("path"), call.argument<String>("title"), result)
                 // `TimeZone.current.identifier`: taste statistics divide days in this zone.
                 "timeZone" -> result.success(java.util.TimeZone.getDefault().id)
+                // The home scene stays silent while the user is already listening to something.
+                "musicActive" -> result.success((getSystemService(AUDIO_SERVICE) as AudioManager).isMusicActive)
                 else -> result.notImplemented()
             }
         }
-        // Flutter reports the resolved appearance and the returning-animation setting.
+        // Flutter reports the returning-animation setting and when the launch picture is on screen.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "work.nextline.tegnal/privacy").setMethodCallHandler { call, result ->
             when (call.method) {
                 "configure" -> {
-                    call.argument<Boolean>("dark")?.let { privacyCover.dark = it }
                     call.argument<Boolean>("resumeAnimation")?.let { privacyCover.resumeAnimation = it }
                     result.success(null)
                 }
@@ -182,11 +195,17 @@ class MainActivity : FlutterActivity() {
                 // App lock: only offered when the device itself has a screen lock.
                 "canAuthenticate" -> result.success(getSystemService(KeyguardManager::class.java)?.isKeyguardSecure == true)
                 "authenticate" -> authenticate(call.argument<String>("title") ?: "", call.argument<String>("subtitle"), result)
-                // Screen comparison runs start without the splash, as the native UI tests do.
+                // The home scene's still is on screen: the launch cover fades out.
+                "launchReady" -> {
+                    launchReady()
+                    result.success(null)
+                }
+                // Screen comparison runs start without the cover, as the native UI tests do.
                 "skipLaunchSplash" -> {
                     if (launchSplashPending) {
                         launchSplashPending = false
-                        privacyCover.hide(PrivacyCover.Timing.none)
+                        handler.removeCallbacks(launchTimeout)
+                        privacyCover.hide(0L)
                     }
                     result.success(null)
                 }
@@ -404,5 +423,8 @@ class MainActivity : FlutterActivity() {
         const val OPEN_DOCUMENT = 41002
         const val PICK_FOLDER = 41003
         const val CONFIRM_CREDENTIAL = 41004
+
+        /// The launch cover never stays longer than this after the Flutter UI is displayed.
+        const val LAUNCH_TIMEOUT_MILLIS = 6000L
     }
 }

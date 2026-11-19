@@ -18,7 +18,6 @@ import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import '../settings/settings_page.dart';
 import '../settings/settings_rows.dart';
-import '../design/alert_dialog.dart';
 
 /// What the import screens change: both libraries, and the cover queue that fills
 /// imported comics afterwards.
@@ -32,14 +31,11 @@ class ImportContext {
   final VoidCallback? libraryChanged;
 }
 
-/// `AnimeBoxesImportView`: reads an Anime Boxes backup, shows what it holds and merges it.
+/// `AnimeBoxesImportView`: reads a backup or export from another image viewer. One button takes
+/// every kind of file: what the file is, is worked out from the file.
 class AnimeBoxesImportView extends StatefulWidget {
-  const AnimeBoxesImportView({super.key, required this.booru, this.inSheet = false, this.otherApps = false});
+  const AnimeBoxesImportView({super.key, required this.booru, this.inSheet = false});
   final BooruContext booru;
-
-  /// Opened for the other image apps: bookmark exports and app databases instead of `.abbj`.
-  /// Either screen reads every supported file.
-  final bool otherApps;
 
   /// Pushed inside the import sheet, the page keeps the sheet's colors.
   final bool inSheet;
@@ -109,45 +105,26 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
     final row = (widget.inSheet ? FormColors.row : FormColors.listRow).resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    final label = TegnalColors.label.resolveFrom(context);
     final backup = _backup;
     final result = _result;
     final folders = widget.booru.store.folders();
-    final otherApps = widget.otherApps;
     return SettingsPage(
-      title: otherApps ? L10n.text('Another App') : 'Anime Boxes',
+      title: L10n.text('Other Image Viewer'),
       sheet: widget.inSheet,
       children: [
         FormSection(
           rowColor: row,
+          footer: Text(L10n.text('Supported: Anime Boxes backups (.abbj), bookmark exports (.json) and database backups (.db).')),
           children: [
-            FormRow(
-              separatorInset: settingsIconInset,
-              child: Row(
-                children: [
-                  Icon(otherApps ? CupertinoIcons.square_arrow_down_on_square_fill : CupertinoIcons.cube_box_fill, size: 22, color: tint),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    child: Text(
-                      L10n.text(otherApps ? 'Import from Another Image App' : 'Import from Anime Boxes'),
-                      style: TegnalType.style(17, weight: FontWeight.w600, color: label),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _ImportHeadline(title: L10n.text('Import from Another Image Viewer')),
             FormRow(
               child: Text(
-                L10n.text(
-                  otherApps
-                      ? 'Choose a bookmark export (.json) or a database backup (.db) from another image app. Review its contents before importing.'
-                      : 'Export a backup in Anime Boxes, then choose the .abbj file here. Review its contents before importing.',
-                ),
+                L10n.text('Choose a backup or export from another image viewer. TEGNAL recognizes what the file holds and shows it before importing.'),
                 style: TegnalType.style(15, color: secondary),
               ),
             ),
             SettingsLinkRow(
-              title: L10n.text(backup == null ? 'Choose Backup File' : 'Choose Another File'),
+              title: L10n.text(backup == null ? 'Choose File' : 'Choose Another File'),
               symbol: (color) => _DocumentBadgePlus(color: color),
               tinted: true,
               chevron: false,
@@ -155,48 +132,14 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
             ),
           ],
         ),
-        if (_loading) ...[
-          settingsSectionGap,
-          FormSection(
-            rowColor: row,
-            children: [
-              FormRow(
-                child: Row(
-                  children: [
-                    const CupertinoActivityIndicator(),
-                    const SizedBox(width: 10),
-                    Text(L10n.text('Importing…'), style: TegnalType.style(17, color: secondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (_error case final error?) ...[
-          settingsSectionGap,
-          FormSection(
-            rowColor: row,
-            children: [
-              FormRow(
-                child: Text(error, style: TegnalType.style(17, color: SystemColors.red.resolveFrom(context))),
-              ),
-            ],
-          ),
-        ],
+        if (_loading) ...[settingsSectionGap, _ProgressSection(rowColor: row, message: L10n.text('Importing…'))],
+        if (_error case final error?) ...[settingsSectionGap, _ErrorSection(rowColor: row, message: error)],
         if (result != null) ...[
           settingsSectionGap,
           FormSection(
             rowColor: row,
             children: [
-              FormRow(
-                child: Row(
-                  children: [
-                    Icon(CupertinoIcons.checkmark_circle_fill, size: 22, color: SystemColors.green.resolveFrom(context)),
-                    const SizedBox(width: 12),
-                    Text(L10n.text('Import Complete'), style: TegnalType.style(17, color: SystemColors.green.resolveFrom(context))),
-                  ],
-                ),
-              ),
+              const _CompleteRow(),
               FormRow(
                 child: Text(
                   L10n.text('%@ favorites added · %@ duplicates preserved · %@ servers added', [
@@ -294,16 +237,20 @@ class _AnimeBoxesImportViewState extends State<AnimeBoxesImportView> {
   }
 }
 
-/// `OtherAppImportView`: reads a backup, export, download folder or link list from another
-/// comics app, shows what it holds, and merges it into the library when the person confirms.
+/// `OtherAppImportView`: reads a backup, export, database, download folder or link list from
+/// another comics viewer, shows what it holds, and merges it into the library when the person
+/// confirms. One button takes every kind of file; what the file is, is worked out from the file.
 class OtherAppImportView extends StatefulWidget {
-  const OtherAppImportView({super.key, required this.database, this.startCoverQueue, this.libraryChanged, this.inSheet = false});
+  const OtherAppImportView({super.key, required this.database, this.startCoverQueue, this.libraryChanged, this.inSheet = false, this.done = false});
   final AppDatabase database;
   final VoidCallback? startCoverQueue;
   final VoidCallback? libraryChanged;
 
   /// Pushed inside the import sheet, the page keeps the sheet's colors.
   final bool inSheet;
+
+  /// The first page of its own sheet ends with Done, which closes the sheet.
+  final bool done;
 
   @override
   State<OtherAppImportView> createState() => _OtherAppImportViewState();
@@ -321,16 +268,47 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
   OtherAppImportResult? _result;
   String? _error;
 
-  Future<void> _read(Future<OtherAppLibrary?> Function() pick) async {
+  /// The picked file, when it is a viewer's own database, kept until it is imported or replaced.
+  (ViewerDatabase, File)? _database;
+
+  /// What a viewer database import is doing, or how it ended.
+  String? _status;
+
+  /// Saved works, which the catalog's fill-in needs.
+  late var _saved = widget.database.worksCount();
+
+  /// Set when the screen goes away, so a running import stops before its next write.
+  var _closed = false;
+
+  @override
+  void dispose() {
+    _closed = true;
+    // A running import removes its file when it ends.
+    if (!_loading) _discardDatabase();
+    super.dispose();
+  }
+
+  void _discardDatabase() {
+    _database?.$2.delete().ignore();
+    _database = null;
+  }
+
+  Future<void> _read(Future<Object?> Function() pick) async {
     setState(() {
+      _discardDatabase();
       _loading = true;
       _result = null;
       _error = null;
       _library = null;
+      _status = null;
     });
     try {
-      final library = await pick();
-      if (library != null && mounted) {
+      final picked = await pick();
+      if (!mounted) {
+        if (picked case (ViewerDatabase _, final File file)) file.delete().ignore();
+      } else if (picked case (final ViewerDatabase kind, final File file)) {
+        setState(() => _database = (kind, file));
+      } else if (picked case final OtherAppLibrary library) {
         setState(() {
           _library = library;
           _destination = _fromFile;
@@ -344,9 +322,12 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<OtherAppLibrary?> _chooseFile() async {
+  /// A viewer's own database is recognized first, by the tables it holds; every other file is read
+  /// as a library to preview.
+  Future<Object?> _chooseFile() async {
     final file = await const DocumentFiles().openDocument();
     if (file == null) return null;
+    if (ViewerDatabase.recognize(file) case final kind?) return (kind, file);
     try {
       return OtherAppImport.read(file);
     } finally {
@@ -354,7 +335,7 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
     }
   }
 
-  Future<OtherAppLibrary?> _chooseFolder() async {
+  Future<Object?> _chooseFolder() async {
     final folder = await const DocumentFiles().pickFolder();
     return folder == null ? null : OtherAppImport.readDownloadFolder(Directory(folder.path));
   }
@@ -382,46 +363,110 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// Its bookmarks are imported as they are, into folders made from its groups.
+  void _importBookmarks() {
+    final message = L10n.text('Importing library from user.db…');
+    _run(message, (file) async {
+      final found = await VioletImportService(widget.database).import(
+        file.path,
+        cancelled: () => _closed,
+        progress: (done, total) {
+          if (mounted && _loading) setState(() => _status = '$message ($done/$total)');
+        },
+      );
+      return L10n.text('user.db imported: %@ folders, %@ works, %@ artists', ['${found.folders}', '${found.works}', '${found.artists}']);
+    });
+  }
+
+  /// Its catalogue either fills in the works already saved or is kept whole.
+  void _importCatalog({required bool matchOnly}) {
+    _run(L10n.text(matchOnly ? 'Matching metadata for your library…' : 'Caching large file… Please wait.'), (file) async {
+      final importer = MangaViewerImportService(widget.database);
+      if (matchOnly) {
+        final found = importer.matchAndFillWorks(file.path, cancelled: () => _closed);
+        return L10n.text('Metadata matched! Filled %2\$@ of %1\$@ saved works.', ['${found.totalWorks}', '${found.matched}']);
+      }
+      final total = importer.importDataDatabase(
+        file.path,
+        cancelled: () => _closed,
+        progress: (count) {
+          if (mounted && _loading) setState(() => _status = L10n.text('Importing entire catalog… (%@ records)', ['$count']));
+        },
+      );
+      return L10n.text('data.db imported: %@ catalog records applied', ['$total']);
+    });
+  }
+
+  /// Runs one viewer database import and reports how it ended. Leaving the screen stops it before
+  /// its next write; what was saved by then stays.
+  Future<void> _run(String message, Future<String> Function(File file) work) async {
+    final picked = _database;
+    if (picked == null) return;
+    final file = picked.$2;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _status = message;
+    });
+    // Let the status appear before the import holds the database.
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    var finished = false;
+    String outcome;
+    try {
+      outcome = await work(file);
+      finished = true;
+      widget.startCoverQueue?.call();
+    } on ImportCancelled {
+      outcome = L10n.text('The task was canceled.');
+    } on Object catch (error) {
+      outcome = L10n.text('Import failed: %@', ['$error']);
+    }
+    // Even a stopped import may have saved some works.
+    widget.libraryChanged?.call();
+    if (finished || !mounted) file.delete().ignore();
+    if (!mounted) return;
+    setState(() {
+      _status = outcome;
+      // A failed import keeps the file, so it can be tried again.
+      if (finished) _database = null;
+      _saved = widget.database.worksCount();
+      _loading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final row = (widget.inSheet ? FormColors.row : FormColors.listRow).resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    final label = TegnalColors.label.resolveFrom(context);
     final library = _library;
     final result = _result;
     return SettingsPage(
-      title: L10n.text('Another App'),
+      title: L10n.text('Other Comics Viewer'),
       sheet: widget.inSheet,
+      trailing: widget.done
+          ? GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context, rootNavigator: true).pop())
+          : null,
       children: [
         FormSection(
           rowColor: row,
           footer: Text(
             L10n.text(
-              'Supported: database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html).',
+              'Supported: bookmark backups and work catalogs (user.db, data.db), database exports (.db), app data exports (.json), download folders with manifest.json, manga reader backups (.tachibk), and link lists or browser bookmarks (.txt, .html).',
             ),
           ),
           children: [
-            FormRow(
-              separatorInset: settingsIconInset,
-              child: Row(
-                children: [
-                  Icon(CupertinoIcons.square_arrow_down_on_square_fill, size: 22, color: tint),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    child: Text(L10n.text('Import from Another Comics App'), style: TegnalType.style(17, weight: FontWeight.w600, color: label)),
-                  ),
-                ],
-              ),
-            ),
+            _ImportHeadline(title: L10n.text('Import from Another Comics Viewer')),
             FormRow(
               child: Text(
-                L10n.text('Choose a backup, export or link list from another comics app. TEGNAL recognizes what the file holds and shows it before importing.'),
+                L10n.text(
+                  'Choose a backup, export, database or link list from another comics viewer. TEGNAL recognizes what the file holds and shows it before importing.',
+                ),
                 style: TegnalType.style(15, color: secondary),
               ),
             ),
             SettingsLinkRow(
-              title: L10n.text(library == null ? 'Choose File' : 'Choose Another File'),
+              title: L10n.text(library == null && _database == null ? 'Choose File' : 'Choose Another File'),
               symbol: (color) => _DocumentBadgePlus(color: color),
               tinted: true,
               chevron: false,
@@ -438,47 +483,62 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
         ),
         if (_loading) ...[
           settingsSectionGap,
-          FormSection(
-            rowColor: row,
-            children: [
-              FormRow(
-                child: Row(
-                  children: [
-                    const CupertinoActivityIndicator(),
-                    const SizedBox(width: 10),
-                    Text(L10n.text('Importing…'), style: TegnalType.style(17, color: secondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (_error case final error?) ...[
+          _ProgressSection(rowColor: row, message: _status ?? L10n.text('Importing…')),
+        ] else if (_status case final status?) ...[
           settingsSectionGap,
           FormSection(
             rowColor: row,
-            children: [
-              FormRow(
-                child: Text(error, style: TegnalType.style(17, color: SystemColors.red.resolveFrom(context))),
-              ),
-            ],
+            children: [FormRow(child: Text(status))],
           ),
         ],
+        if (_database case (final kind, _) when !_loading) ...[
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            header: Text(L10n.text('File Contents')),
+            children: [SettingsValueRow(title: L10n.text('Kind'), value: kind.title)],
+          ),
+          settingsSectionGap,
+          if (kind == ViewerDatabase.bookmarks)
+            FormSection(
+              rowColor: row,
+              footer: Text(L10n.text('Titles, tags and covers are filled in from the connected website in the background.')),
+              children: [
+                SettingsLinkRow(title: L10n.text('Import'), icon: CupertinoIcons.square_arrow_down, tinted: true, chevron: false, onTap: _importBookmarks),
+              ],
+            )
+          else
+            FormSection(
+              rowColor: row,
+              footer: _saved == 0
+                  ? Text(
+                      L10n.text('There are no saved works to match. Import user.db (bookmarks) first, then import data.db to fill the information you need.'),
+                    )
+                  : null,
+              children: [
+                SettingsLinkRow(
+                  title: L10n.text('⚡️ Fill Only My Library (Recommended)'),
+                  tinted: true,
+                  chevron: false,
+                  onTap: _saved == 0 ? null : () => _importCatalog(matchOnly: true),
+                ),
+                SettingsLinkRow(
+                  title: L10n.text('📦 Save Entire Catalog (Background Import)'),
+                  tinted: true,
+                  chevron: false,
+                  onTap: () => _importCatalog(matchOnly: false),
+                ),
+              ],
+            ),
+        ],
+        if (_error case final error?) ...[settingsSectionGap, _ErrorSection(rowColor: row, message: error)],
         if (result != null) ...[
           settingsSectionGap,
           FormSection(
             rowColor: row,
             footer: Text(L10n.text('Titles, tags and covers are filled in from the connected website in the background.')),
             children: [
-              FormRow(
-                child: Row(
-                  children: [
-                    Icon(CupertinoIcons.checkmark_circle_fill, size: 22, color: SystemColors.green.resolveFrom(context)),
-                    const SizedBox(width: 12),
-                    Text(L10n.text('Import Complete'), style: TegnalType.style(17, color: SystemColors.green.resolveFrom(context))),
-                  ],
-                ),
-              ),
+              const _CompleteRow(),
               FormRow(
                 child: Text(
                   L10n.text('%@ works added · %@ already saved · %@ folders created', ['${result.added}', '${result.existing}', '${result.folders}']),
@@ -568,6 +628,93 @@ class _OtherAppImportViewState extends State<OtherAppImportView> {
   }
 }
 
+/// A screen's first row: the import symbol before its title in semibold.
+class _ImportHeadline extends StatelessWidget implements FormSeparatorInset {
+  const _ImportHeadline({required this.title});
+  final String title;
+
+  @override
+  double get separatorInset => settingsIconInset;
+
+  @override
+  Widget build(BuildContext context) => FormRow(
+    separatorInset: settingsIconInset,
+    child: Row(
+      children: [
+        Icon(CupertinoIcons.square_arrow_down_on_square_fill, size: 22, color: TegnalColors.tint.resolveFrom(context)),
+        const SizedBox(width: 18),
+        Expanded(
+          child: Text(
+            title,
+            style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// `ProgressView(message)` in its own section.
+class _ProgressSection extends StatelessWidget {
+  const _ProgressSection({required this.rowColor, required this.message});
+  final Color rowColor;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => FormSection(
+    rowColor: rowColor,
+    children: [
+      FormRow(
+        child: Row(
+          children: [
+            const CupertinoActivityIndicator(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(message, style: TegnalType.style(17, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+/// What went wrong, in red, in its own section.
+class _ErrorSection extends StatelessWidget {
+  const _ErrorSection({required this.rowColor, required this.message});
+  final Color rowColor;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => FormSection(
+    rowColor: rowColor,
+    children: [
+      FormRow(
+        child: Text(message, style: TegnalType.style(17, color: SystemColors.red.resolveFrom(context))),
+      ),
+    ],
+  );
+}
+
+/// `Label("Import Complete", systemImage: "checkmark.circle.fill")` in green.
+class _CompleteRow extends StatelessWidget {
+  const _CompleteRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final green = SystemColors.green.resolveFrom(context);
+    return FormRow(
+      child: Row(
+        children: [
+          Icon(CupertinoIcons.checkmark_circle_fill, size: 22, color: green),
+          const SizedBox(width: 12),
+          Text(L10n.text('Import Complete'), style: TegnalType.style(17, color: green)),
+        ],
+      ),
+    );
+  }
+}
+
 class _Toggle extends StatelessWidget {
   const _Toggle({required this.title, required this.value, required this.onChanged});
   final String title;
@@ -585,330 +732,142 @@ class _Toggle extends StatelessWidget {
   );
 }
 
-/// Imports from another manga viewer's databases, one at a time, reporting progress.
-class _MangaViewerImporter {
-  _MangaViewerImporter(this.database);
-  final AppDatabase database;
-  bool cancelling = false;
-
-  /// The picked file, or null when the person cancelled.
-  Future<File?> pick() => const DocumentFiles().openDocument();
-
-  ({int folders, int works, int artists}) importUser(File file) =>
-      MangaViewerImportService(database).importUserDatabase(file.path, cancelled: () => cancelling);
-
-  ({int matched, int totalWorks}) match(File file) => MangaViewerImportService(database).matchAndFillWorks(file.path, cancelled: () => cancelling);
-
-  int importCatalog(File file, void Function(int count) progress) =>
-      MangaViewerImportService(database).importDataDatabase(file.path, progress: progress, cancelled: () => cancelling);
-
-  static String failure(Object error) => error is ImportCancelled ? L10n.text('The task was canceled.') : L10n.text('Import failed: %@', ['$error']);
-}
-
-/// `MangaLibraryToolsView(importOnly:)`: user.db and data.db from another manga viewer.
-class MangaViewerImportView extends StatefulWidget {
-  const MangaViewerImportView({super.key, required this.database, this.startCoverQueue, this.libraryChanged, this.inSheet = false});
-  final AppDatabase database;
-  final VoidCallback? startCoverQueue;
-  final VoidCallback? libraryChanged;
-
-  /// In a sheet the page ends with Done instead of going back.
-  final bool inSheet;
-
-  @override
-  State<MangaViewerImportView> createState() => _MangaViewerImportViewState();
-}
-
-class _MangaViewerImportViewState extends State<MangaViewerImportView> {
-  late final _importer = _MangaViewerImporter(widget.database);
-  bool _importing = false;
-  String? _status;
-
-  Future<void> _run(String start, Future<String> Function() work) async {
-    setState(() {
-      _importing = true;
-      _importer.cancelling = false;
-      _status = start;
-    });
-    // Let the status appear before the import holds the database.
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-    String message;
-    try {
-      message = await work();
-    } on Object catch (error) {
-      message = _MangaViewerImporter.failure(error);
-    }
-    widget.libraryChanged?.call();
-    if (!mounted) return;
-    setState(() {
-      _importing = false;
-      _status = message;
-    });
-  }
-
-  Future<void> _userDatabase() async {
-    final file = await _importer.pick();
-    if (file == null) return;
-    await _run(L10n.text('Preparing user.db…'), () async {
-      final result = _importer.importUser(file);
-      widget.startCoverQueue?.call();
-      return L10n.text('user.db imported: %@ folders, %@ works, %@ artists', ['${result.folders}', '${result.works}', '${result.artists}']);
-    });
-  }
-
-  Future<void> _dataDatabase() async {
-    final file = await _importer.pick();
-    if (file == null || !mounted) return;
-    final works = widget.database.worksCount();
-    final bool? matchOnly;
-    if (works > 0) {
-      matchOnly = await showCupertinoModalPopup<bool>(
-        context: context,
-        builder: (context) => CupertinoActionSheet(
-          title: Text(L10n.text('How to Import data.db (Catalog)')),
-          message: Text(
-            L10n.text(
-              "data.db is a large catalog that can exceed 500 MB.\n\nChoose 'Fill Only My Library' to extract information for your %@ saved works. This avoids storing hundreds of thousands of unnecessary records.",
-              ['$works'],
-            ),
-          ),
-          actions: [
-            CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('⚡️ Fill Only My Library (Recommended)'))),
-            CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('📦 Save Entire Catalog (Background Import)'))),
-          ],
-          cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context), child: Text(L10n.text('Cancel'))),
-        ),
-      );
-    } else {
-      final whole = await showCupertinoDialog<bool>(
-        context: context,
-        builder: (context) => TegnalAlertDialog(
-          title: Text(L10n.text('Your Library Is Empty')),
-          content: Text(
-            L10n.text('There are no saved works to match. Import user.db (bookmarks) first, then import data.db to fill the information you need.'),
-          ),
-          actions: [
-            CupertinoDialogAction(onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Save Entire Catalog'))),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(L10n.text('Cancel (Import user.db First)')),
-            ),
-          ],
-        ),
-      );
-      matchOnly = whole == true ? false : null;
-    }
-    if (matchOnly == null) return;
-    if (matchOnly) {
-      await _run(L10n.text('Matching metadata for your library…'), () async {
-        final result = _importer.match(file);
-        widget.startCoverQueue?.call();
-        return '${L10n.text('Metadata matched! Filled %2\$@ of %1\$@ saved works.', ['${result.totalWorks}', '${result.matched}'])}\n'
-            '${L10n.text('Missing covers are downloaded separately in the background.')}';
-      });
-    } else {
-      await _run(L10n.text('Preparing catalog import…'), () async {
-        final total = _importer.importCatalog(file, (count) {
-          if (mounted && _importing && !_importer.cancelling) setState(() => _status = L10n.text('Importing entire catalog… (%@ records)', ['$count']));
-        });
-        widget.startCoverQueue?.call();
-        return L10n.text('data.db imported: %@ catalog records applied', ['$total']);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final row = (widget.inSheet ? FormColors.row : FormColors.listRow).resolveFrom(context);
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    return SettingsPage(
-      title: L10n.text('Import from Another Manga Viewer'),
-      sheet: widget.inSheet,
-      trailing: widget.inSheet ? GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()) : null,
-      children: [
-        FormSection(
-          rowColor: row,
-          prominentHeader: true,
-          header: Text(L10n.text('Import Data (Other Manga Viewer)')),
-          children: [
-            SettingsLinkRow(
-              title: L10n.text('Import user.db (Bookmarks, Folders, Artists)'),
-              icon: CupertinoIcons.person_crop_rectangle,
-              tinted: true,
-              chevron: false,
-              onTap: _importing ? null : _userDatabase,
-            ),
-            SettingsLinkRow(
-              title: L10n.text('Import data.db (Work Metadata Catalog)'),
-              icon: CupertinoIcons.layers,
-              tinted: true,
-              chevron: false,
-              onTap: _importing ? null : _dataDatabase,
-            ),
-          ],
-        ),
-        settingsSectionGap,
-        FormSection(
-          rowColor: row,
-          prominentHeader: true,
-          header: Text(L10n.text('Other Comics Apps')),
-          footer: Text(L10n.text('Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks.')),
-          children: [
-            SettingsLinkRow(
-              title: L10n.text('Import from Another Comics App'),
-              icon: CupertinoIcons.square_arrow_down_on_square,
-              onTap: _importing
-                  ? null
-                  : () => Navigator.of(context).push(
-                      CupertinoPageRoute<void>(
-                        builder: (_) => OtherAppImportView(
-                          database: widget.database,
-                          startCoverQueue: widget.startCoverQueue,
-                          libraryChanged: widget.libraryChanged,
-                          inSheet: widget.inSheet,
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-        if (_importing || _status != null) ...[
-          settingsSectionGap,
-          FormSection(
-            rowColor: row,
-            prominentHeader: true,
-            header: Text(L10n.text('Task Status')),
-            children: [
-              FormRow(
-                child: _importing
-                    ? Row(
-                        children: [
-                          const CupertinoActivityIndicator(),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(_status ?? L10n.text('Processing…'), style: TegnalType.style(13, color: TegnalColors.label.resolveFrom(context))),
-                          ),
-                          GestureDetector(
-                            onTap: _importer.cancelling
-                                ? null
-                                : () => setState(() {
-                                    _importer.cancelling = true;
-                                    _status = '${L10n.text('Cancel')}…';
-                                  }),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: ShapeDecoration(color: SystemColors.red.resolveFrom(context).withValues(alpha: 0.15), shape: const StadiumBorder()),
-                              child: Text(L10n.text('Cancel'), style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context))),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(_status!, style: TegnalType.style(13, color: secondary)),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// `OnboardingView(importsOnly:)`, on Android with Violet's bookmark backup only. Anime Boxes
-/// and the other manga viewer's databases stay in settings.
-Future<void> showImportData(BuildContext context, ImportContext imports) => showAppSheet<void>(
-  context,
-  builder: (context, controller) => Navigator(
-    onGenerateRoute: (_) => CupertinoPageRoute<void>(builder: (context) => ImportDataView(imports: imports)),
-  ),
-);
-
-class ImportDataView extends StatefulWidget {
-  const ImportDataView({super.key, required this.imports});
+/// `MangaLibraryToolsView`'s import section in the comics library's settings: one way in, which
+/// takes every kind of file from another comics viewer and works out what it is.
+class ComicsImportSection extends StatelessWidget {
+  const ComicsImportSection({super.key, required this.imports});
   final ImportContext imports;
 
   @override
-  State<ImportDataView> createState() => _ImportDataViewState();
-}
-
-class _ImportDataViewState extends State<ImportDataView> {
-  static const _borderedFill = CupertinoDynamicColor.withBrightness(color: Color(0x1F767680), darkColor: Color(0x3D767680));
-
-  bool _importing = false;
-  bool _cancelling = false;
-  String _status = '';
-  String? _summary;
-
-  /// Imports a Violet bookmark backup, then lets the cover queue fill titles and covers.
-  Future<void> _choose() async {
-    final file = await const DocumentFiles().openDocument();
-    if (file == null || !mounted) return;
-    setState(() {
-      _importing = true;
-      _cancelling = false;
-      _summary = null;
-      _status = L10n.text('Checking file…');
-    });
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-    try {
-      if (!VioletImportService.isBackup(file.path)) {
-        _status = L10n.text('This file is not a Violet bookmark backup.');
-      } else {
-        if (mounted) setState(() => _status = L10n.text('Importing bookmarks from Violet…'));
-        final result = await VioletImportService(widget.imports.database).import(
-          file.path,
-          cancelled: () => _cancelling || !mounted,
-          progress: (done, total) {
-            if (mounted && !_cancelling) setState(() => _status = '${L10n.text('Importing bookmarks from Violet…')} ($done/$total)');
-          },
-        );
-        _summary =
-            '${L10n.text('Violet data imported!\n%@ folders, %@ works, %@ artists', ['${result.folders}', '${result.works}', '${result.artists}'])}\n'
-            '${L10n.text('Titles, tags and covers are filled in from the connected website in the background.')}';
-        _status = '';
-        widget.imports.startCoverQueue?.call();
-      }
-    } on ImportCancelled {
-      _status = L10n.text('The task was canceled.');
-      widget.imports.startCoverQueue?.call();
-    } on Object catch (error) {
-      _status = L10n.text('Import error: %@', ['$error']);
-    }
-    // Even a cancelled import may have saved some works.
-    widget.imports.libraryChanged?.call();
-    if (mounted) setState(() => _importing = false);
-  }
-
-  Widget _card({required Widget child}) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(20),
-    decoration: ShapeDecoration(
-      color: FormColors.row.resolveFrom(context),
-      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(20)),
+  Widget build(BuildContext context) => FormSection(
+    prominentHeader: true,
+    rowColor: FormColors.listRow.resolveFrom(context),
+    header: Text(L10n.text('Import Data')),
+    footer: Text(
+      L10n.text(
+        "Bookmark backups, work catalogs, database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks. The file's kind is recognized automatically.",
+      ),
     ),
-    child: child,
-  );
-
-  Widget _bordered(String title, VoidCallback? onTap, {IconData? icon}) {
-    final tint = TegnalColors.tint.resolveFrom(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: onTap == null ? 0.4 : 1,
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          // `.bordered`: the tertiary system fill under tinted text.
-          decoration: ShapeDecoration(color: _borderedFill.resolveFrom(context), shape: const StadiumBorder()),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) Icon(icon, size: 20, color: tint) else _DocumentBadgePlus(color: tint),
-              const SizedBox(width: 6),
-              Text(title, style: TegnalType.style(17, color: tint)),
-            ],
+    children: [
+      SettingsLinkRow(
+        title: L10n.text('Import from Another Comics Viewer'),
+        icon: CupertinoIcons.square_arrow_down_on_square,
+        onTap: () => Navigator.of(context).push(
+          CupertinoPageRoute<void>(
+            builder: (_) => OtherAppImportView(database: imports.database, startCoverQueue: imports.startCoverQueue, libraryChanged: imports.libraryChanged),
           ),
         ),
+      ),
+    ],
+  );
+}
+
+/// `BooruBackupView`'s import section in the image library's settings: the rows before it (the
+/// challenge backup) and one way in for every other image viewer's files.
+class ImageImportSection extends StatelessWidget {
+  const ImageImportSection({super.key, required this.booru, this.leading});
+  final BooruContext booru;
+
+  /// Rows that share the section, above the import row.
+  final List<Widget> Function(BuildContext context)? leading;
+
+  @override
+  Widget build(BuildContext context) => FormSection(
+    prominentHeader: true,
+    rowColor: FormColors.listRow.resolveFrom(context),
+    children: [
+      ...?leading?.call(context),
+      SettingsLinkRow(
+        title: L10n.text('Import from Another Image Viewer'),
+        icon: CupertinoIcons.square_arrow_down_on_square,
+        onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: booru))),
+      ),
+    ],
+  );
+}
+
+/// `OnboardingView(importsOnly:)`: one way in for each kind of library. Either screen takes any
+/// file and works out what it is.
+Future<void> showImportData(BuildContext context, ImportContext imports) =>
+    showAppSheet<void>(context, builder: (context, controller) => _ImportSheetNavigator(imports: imports));
+
+/// The sheet's own pages. The system back gesture goes back a page inside the sheet before it closes the sheet.
+class _ImportSheetNavigator extends StatefulWidget {
+  const _ImportSheetNavigator({required this.imports});
+  final ImportContext imports;
+
+  @override
+  State<_ImportSheetNavigator> createState() => _ImportSheetNavigatorState();
+}
+
+class _ImportSheetNavigatorState extends State<_ImportSheetNavigator> {
+  final _navigator = GlobalKey<NavigatorState>();
+
+  @override
+  Widget build(BuildContext context) => NavigatorPopHandler<Object?>(
+    onPopWithResult: (_) => _navigator.currentState?.maybePop(),
+    child: Navigator(
+      key: _navigator,
+      onGenerateRoute: (_) => CupertinoPageRoute<void>(builder: (context) => ImportDataView(imports: widget.imports)),
+    ),
+  );
+}
+
+class ImportDataView extends StatelessWidget {
+  const ImportDataView({super.key, required this.imports});
+  final ImportContext imports;
+
+  static const _borderedFill = CupertinoDynamicColor.withBrightness(color: Color(0x1F767680), darkColor: Color(0x3D767680));
+
+  Widget _card(BuildContext context, {required IconData icon, required String title, required String kinds, required WidgetBuilder page}) {
+    final label = TegnalColors.label.resolveFrom(context);
+    final tint = TegnalColors.tint.resolveFrom(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: ShapeDecoration(
+        color: FormColors.row.resolveFrom(context),
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 22, color: label),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  title,
+                  style: TegnalType.style(17, weight: FontWeight.w600, color: label),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(kinds, style: TegnalType.style(15, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+          const SizedBox(height: 12),
+          Semantics(
+            button: true,
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: page)),
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                // `.bordered`: the tertiary system fill under tinted text.
+                decoration: ShapeDecoration(color: _borderedFill.resolveFrom(context), shape: const StadiumBorder()),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _DocumentBadgePlus(color: tint),
+                    const SizedBox(width: 6),
+                    Text(L10n.text('Import'), style: TegnalType.style(17, color: tint)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -917,8 +876,8 @@ class _ImportDataViewState extends State<ImportDataView> {
   Widget build(BuildContext context) {
     final tint = TegnalColors.tint.resolveFrom(context);
     final label = TegnalColors.label.resolveFrom(context);
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final media = MediaQuery.of(context);
+    void close() => Navigator.of(context, rootNavigator: true).pop();
     return ColoredBox(
       color: FormColors.background.resolveFrom(context),
       child: Stack(
@@ -938,110 +897,23 @@ class _ImportDataViewState extends State<ImportDataView> {
                 ),
                 const SizedBox(height: 20),
                 _card(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Symbols.bookFill, size: 22, color: label),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Violet',
-                            style: TegnalType.style(17, weight: FontWeight.w600, color: label),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(L10n.text('Export your bookmarks in Violet, then choose the saved file.'), style: TegnalType.style(15, color: secondary)),
-                      const SizedBox(height: 12),
-                      _bordered(L10n.text('Choose File'), _importing ? null : _choose),
-                      if (_importing) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const CupertinoActivityIndicator(),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(_status, style: TegnalType.style(15, color: secondary)),
-                            ),
-                            GestureDetector(
-                              onTap: _cancelling ? null : () => setState(() => _cancelling = true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: ShapeDecoration(color: SystemColors.red.resolveFrom(context).withValues(alpha: 0.15), shape: const StadiumBorder()),
-                                child: Text(L10n.text('Cancel'), style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context))),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else if (_summary case final summary?) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(CupertinoIcons.checkmark_circle_fill, size: 18, color: SystemColors.green.resolveFrom(context)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(summary, style: TegnalType.style(15, color: SystemColors.green.resolveFrom(context))),
-                            ),
-                          ],
-                        ),
-                      ] else if (_status.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(_status, style: TegnalType.style(15, color: SystemColors.red.resolveFrom(context))),
-                      ],
-                    ],
-                  ),
+                  context,
+                  icon: Symbols.photoFill,
+                  title: L10n.text('Other Image Viewer'),
+                  kinds: '.abbj · .json · .db',
+                  page: (_) => AnimeBoxesImportView(booru: imports.booru, inSheet: true),
                 ),
                 const SizedBox(height: 20),
                 _card(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(CupertinoIcons.square_arrow_down_on_square_fill, size: 22, color: label),
-                          const SizedBox(width: 8),
-                          Text(L10n.text('Other Apps'), style: TegnalType.style(17, weight: FontWeight.w600, color: label)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text('.db · .json · .tachibk · .html', style: TegnalType.style(15, color: secondary)),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _bordered(
-                            L10n.text('Comics'),
-                            _importing
-                                ? null
-                                : () => Navigator.of(context).push(
-                                    CupertinoPageRoute<void>(
-                                      builder: (_) => OtherAppImportView(
-                                        database: widget.imports.database,
-                                        startCoverQueue: widget.imports.startCoverQueue,
-                                        libraryChanged: widget.imports.libraryChanged,
-                                        inSheet: true,
-                                      ),
-                                    ),
-                                  ),
-                            icon: CupertinoIcons.book,
-                          ),
-                          _bordered(
-                            L10n.text('Images'),
-                            _importing
-                                ? null
-                                : () => Navigator.of(context).push(
-                                    CupertinoPageRoute<void>(
-                                      builder: (_) => AnimeBoxesImportView(booru: widget.imports.booru, inSheet: true, otherApps: true),
-                                    ),
-                                  ),
-                            icon: CupertinoIcons.photo,
-                          ),
-                        ],
-                      ),
-                    ],
+                  context,
+                  icon: Symbols.bookFill,
+                  title: L10n.text('Other Comics Viewer'),
+                  kinds: '.db · .json · .tachibk · .html · .txt',
+                  page: (_) => OtherAppImportView(
+                    database: imports.database,
+                    startCoverQueue: imports.startCoverQueue,
+                    libraryChanged: imports.libraryChanged,
+                    inSheet: true,
                   ),
                 ),
               ],
@@ -1053,7 +925,7 @@ class _ImportDataViewState extends State<ImportDataView> {
             top: 0,
             child: SheetNavigationBar(
               title: '',
-              trailing: GlassTextButton(label: L10n.text('Done'), onPressed: _importing ? null : () => Navigator.of(context, rootNavigator: true).pop()),
+              trailing: GlassTextButton(label: L10n.text('Done'), onPressed: close),
             ),
           ),
           Positioned(
@@ -1065,18 +937,15 @@ class _ImportDataViewState extends State<ImportDataView> {
               // `.bar` over the sheet.
               color: FormColors.row.resolveFrom(context).withValues(alpha: 0.94),
               child: GestureDetector(
-                onTap: _importing ? null : () => Navigator.of(context, rootNavigator: true).pop(),
-                child: Opacity(
-                  opacity: _importing ? 0.4 : 1,
-                  child: Container(
-                    // A large prominent button with 10 pt of extra vertical padding.
-                    height: 69,
-                    alignment: Alignment.center,
-                    decoration: ShapeDecoration(color: tint, shape: const StadiumBorder()),
-                    child: Text(
-                      L10n.text('Done'),
-                      style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
-                    ),
+                onTap: close,
+                child: Container(
+                  // A large prominent button with 10 pt of extra vertical padding.
+                  height: 69,
+                  alignment: Alignment.center,
+                  decoration: ShapeDecoration(color: tint, shape: const StadiumBorder()),
+                  child: Text(
+                    L10n.text('Done'),
+                    style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
                   ),
                 ),
               ),
@@ -1147,11 +1016,16 @@ class _ImportReminderBannerState extends State<ImportReminderBanner> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              L10n.text('Import from Violet'),
+                              L10n.text('Import from Other Apps'),
                               style: TegnalType.style(15, weight: FontWeight.w600, color: label),
                             ),
                             const SizedBox(height: 3),
-                            Text(L10n.text('Bookmarks, folders and artists'), style: TegnalType.style(12, color: secondary)),
+                            Text(
+                              '${L10n.text('Other Image Viewer')} · ${L10n.text('Other Comics Viewer')}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TegnalType.style(12, color: secondary),
+                            ),
                           ],
                         ),
                       ),
@@ -1177,7 +1051,8 @@ class _ImportReminderBannerState extends State<ImportReminderBanner> {
   }
 }
 
-/// `WebsiteImportLinks`: the setup screen's way to bring a library from Violet.
+/// `WebsiteImportLinks`: the setup screen's ways to bring a library from another image or comics
+/// viewer. The image importer opens on the same stack; the comics one in a sheet that ends with Done.
 class WebsiteImportLinks extends StatelessWidget {
   const WebsiteImportLinks({super.key, required this.imports});
   final ImportContext imports;
@@ -1201,7 +1076,35 @@ class WebsiteImportLinks extends StatelessWidget {
         ),
       ),
     );
-    return link(CupertinoIcons.square_arrow_down, L10n.text('Import from Violet'), () => showImportData(context, imports));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        link(
+          CupertinoIcons.square_arrow_down_on_square,
+          L10n.text('Import from Another Image Viewer'),
+          () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: imports.booru))),
+        ),
+        const SizedBox(height: 14),
+        link(
+          CupertinoIcons.square_arrow_down,
+          L10n.text('Import from Another Comics Viewer'),
+          () => showAppSheet<void>(
+            context,
+            builder: (context, controller) => Navigator(
+              onGenerateRoute: (_) => CupertinoPageRoute<void>(
+                builder: (context) => OtherAppImportView(
+                  database: imports.database,
+                  startCoverQueue: imports.startCoverQueue,
+                  libraryChanged: imports.libraryChanged,
+                  inSheet: true,
+                  done: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

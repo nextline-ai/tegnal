@@ -30,6 +30,7 @@ import '../../core/content/recent_works.dart';
 import 'recent_works_page.dart';
 import '../../core/support/app_platform.dart';
 import 'privacy_security_view.dart';
+import '../home/home_settings.dart';
 
 /// What the Settings screens read and change.
 class SettingsDependencies {
@@ -400,6 +401,9 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
                 if (_deps.safeMode != null) ...[settingsSectionGap, _deps.safeMode!(context)],
+                // `StudyModeSettings`: where the app opens, beside Safe Mode as on iOS.
+                settingsSectionGap,
+                HomeStartSettings(rowColor: row),
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
                 settingsSectionGap,
                 section(
