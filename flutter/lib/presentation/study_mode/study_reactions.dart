@@ -272,8 +272,7 @@ class StudyBurstPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(StudyBurstPainter old) =>
-      old.count != count || old.reach != reach || !listEquals(old.colors, colors) || old.progress != progress;
+  bool shouldRepaint(StudyBurstPainter old) => old.count != count || old.reach != reach || !listEquals(old.colors, colors) || old.progress != progress;
 }
 
 /// Shakes its child from side to side, ±9 points over two full waves, each time [travel] increases (`StudyShake`).
@@ -367,8 +366,7 @@ class StudyCount extends StatelessWidget {
       tween: Tween<double>(begin: from, end: value),
       duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration,
       curve: curve,
-      builder: (context, shown, _) =>
-          Text('$prefix${shown.round()}$suffix', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]).merge(style)),
+      builder: (context, shown, _) => Text('$prefix${shown.round()}$suffix', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]).merge(style)),
     );
   }
 }
@@ -397,8 +395,7 @@ class _SpringShownState extends State<_SpringShown> with SingleTickerProviderSta
     final elapsed = _controller.value * total / Duration.microsecondsPerSecond;
     if (elapsed <= widget.delay) return _from;
     return _from +
-        (_to - _from) *
-            widget.spring.transform(((elapsed - widget.delay) / (total / Duration.microsecondsPerSecond - widget.delay)).clamp(0.0, 1.0));
+        (_to - _from) * widget.spring.transform(((elapsed - widget.delay) / (total / Duration.microsecondsPerSecond - widget.delay)).clamp(0.0, 1.0));
   }
 
   @override

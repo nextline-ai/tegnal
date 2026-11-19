@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../../core/generation/generation_air.dart' show GenerationKind;
 import '../../core/generation/generation_client.dart';
 import '../../core/generation/generation_store.dart';
+import '../../core/study/study_awards.dart';
+import '../../core/study/study_store.dart';
 import '../../core/support/l10n.dart';
 import '../booru/booru_common.dart';
 import '../design/grouped_form.dart';
@@ -24,15 +26,26 @@ import 'generator_sheet.dart';
 
 /// Writes a prompt and has Civitai draw it, with the user's own API key and models named by AIR (`GeneratorView`).
 class GeneratorView extends StatefulWidget {
-  const GeneratorView({super.key, required this.store, required this.safeMode, this.prompt = ''});
+  const GeneratorView({super.key, required this.store, required this.safeMode, this.prompt = '', this.study});
 
   /// The generator over the app's own store, as the study screens open it.
-  factory GeneratorView.forBooru(BooruContext booru, {Key? key, String prompt = ''}) =>
-      GeneratorView(key: key, store: GenerationStore.shared(booru.booruDefaults), safeMode: () => booru.safeMode, prompt: prompt);
+  factory GeneratorView.forBooru(BooruContext booru, {Key? key, String prompt = ''}) => GeneratorView(
+    key: key,
+    store: GenerationStore.shared(booru.booruDefaults),
+    safeMode: () => booru.safeMode,
+    prompt: prompt,
+    study: booru.store.studyStore,
+  );
 
   final GenerationStore store;
   final bool Function() safeMode;
   final String prompt;
+
+  /// The study store that counts every picture ever made; without one the count is the gallery's size.
+  final StudyStore? study;
+
+  /// `GeneratorView.advancedKey`.
+  static const advancedKey = 'generation.showsAdvanced';
 
   @override
   State<GeneratorView> createState() => _GeneratorViewState();
@@ -48,6 +61,10 @@ class _GeneratorViewState extends State<GeneratorView> {
   final _errorKey = GlobalKey();
   Timer? _scrollTimer;
   int _madeCount = 0;
+
+  /// Pictures generated so far, ever: the advanced settings open after the first few.
+  int _made = 0;
+  late bool _showsAdvanced = _store.defaults.boolean(GeneratorView.advancedKey) ?? true;
   GenerationError? _shownError;
   Timer? _estimateTimer;
   int _estimateToken = 0;
@@ -57,6 +74,10 @@ class _GeneratorViewState extends State<GeneratorView> {
   GenerationStore get _store => widget.store;
   GenerationSettings get _settings => _store.settings;
   GeneratorEnvironment get _environment => GeneratorEnvironment(store: _store, safeMode: widget.safeMode);
+
+  /// A beginner sees a prompt, a model and a button. Size, steps, LoRAs and the rest open once a few pictures are made.
+  bool get _unlocked => _made >= StudyAward.advancedPictures;
+  bool get _advanced => _unlocked && _showsAdvanced;
   String get _trimmed => _prompt.text.trim();
 
   /// Safe Mode never asks for mature results, whatever the switch says.
@@ -72,6 +93,7 @@ class _GeneratorViewState extends State<GeneratorView> {
     _prompt.addListener(_changed);
     _seed.text = _settings.seed?.toString() ?? '';
     _store.load();
+    _count();
     _changed();
   }
 
@@ -94,11 +116,29 @@ class _GeneratorViewState extends State<GeneratorView> {
     if (_negative.text != _settings.negative) _negative.text = _settings.negative;
     if (_settings.seed case final seed? when int.tryParse(_seed.text) != seed) _seed.text = '$seed';
     _refreshEstimate();
-    if (_run.made.length > _madeCount) _scrollTo(_resultsKey);
+    if (_run.made.length > _madeCount) {
+      _count();
+      _scrollTo(_resultsKey);
+    }
     if (_run.error != null && _run.error != _shownError) _scrollTo(_errorKey);
     _madeCount = _run.made.length;
     _shownError = _run.error;
     setState(() {});
+  }
+
+  /// Reads how many pictures have ever been generated. Deleting pictures later does not lock the settings again.
+  void _count() {
+    final study = widget.study;
+    var made = _store.pictures.length;
+    if (study != null) {
+      try {
+        study.raise(StudyCounter.pictures, _store.pictures.length);
+        made = study.stats()[StudyCounter.pictures] ?? made;
+      } on Object {
+        // The count stays what the gallery shows.
+      }
+    }
+    _made = made;
   }
 
   /// Brings a part of the list into view a moment after it appears, with its bottom edge at the bottom of the screen.
@@ -155,10 +195,7 @@ class _GeneratorViewState extends State<GeneratorView> {
   }
 
   Future<void> _openPicture(GeneratedPicture picture) async {
-    await showGeneratorSheet(
-      context,
-      (context) => GeneratedPictureView(environment: _environment, picture: picture, removed: () => _run.forget(picture)),
-    );
+    await showGeneratorSheet(context, (context) => GeneratedPictureView(environment: _environment, picture: picture, removed: () => _run.forget(picture)));
     if (mounted) setState(() {});
   }
 
@@ -217,7 +254,9 @@ class _GeneratorViewState extends State<GeneratorView> {
           FormSection(
             rowColor: rowColor,
             footer: Text(L10n.text("Pictures are drawn by Civitai on your own account and paid for with your Buzz. The key stays in this device's keychain.")),
-            children: [StudyActionRow(key: const Key('generator.addKey'), title: L10n.text('Add Your Civitai API Key'), icon: CupertinoIcons.lock, onTap: _openAccount)],
+            children: [
+              StudyActionRow(key: const Key('generator.addKey'), title: L10n.text('Add Your Civitai API Key'), icon: CupertinoIcons.lock, onTap: _openAccount),
+            ],
           ),
           settingsSectionGap,
         ],
@@ -225,7 +264,9 @@ class _GeneratorViewState extends State<GeneratorView> {
           prominentHeader: true,
           rowColor: rowColor,
           header: Text(L10n.text('Prompt')),
-          footer: Text(L10n.text('Round brackets are read as emphasis, as in (rain:1.3). Brackets that belong to a tag are written \\( and \\).')),
+          footer: _advanced
+              ? Text(L10n.text('Round brackets are read as emphasis, as in (rain:1.3). Brackets that belong to a tag are written \\( and \\).'))
+              : null,
           children: [
             FormRow(
               child: Padding(
@@ -250,20 +291,27 @@ class _GeneratorViewState extends State<GeneratorView> {
             ),
           ],
         ),
-        settingsSectionGap,
-        FormSection(
-          prominentHeader: true,
-          rowColor: rowColor,
-          header: Text(L10n.text('Things to Avoid')),
-          children: [
-            FormRow(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: _field(key: const Key('generator.negative'), controller: _negative, minLines: 3, onChanged: (value) => _set(_settings.copyWith(negative: value))),
+        if (_advanced) ...[
+          settingsSectionGap,
+          FormSection(
+            prominentHeader: true,
+            rowColor: rowColor,
+            header: Text(L10n.text('Things to Avoid')),
+            children: [
+              FormRow(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: _field(
+                    key: const Key('generator.negative'),
+                    controller: _negative,
+                    minLines: 3,
+                    onChanged: (value) => _set(_settings.copyWith(negative: value)),
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         settingsSectionGap,
         FormSection(
           prominentHeader: true,
@@ -286,7 +334,11 @@ class _GeneratorViewState extends State<GeneratorView> {
                         children: [
                           Text(
                             settings.model?.name ?? L10n.text('Choose a Model'),
-                            style: TegnalType.style(17, weight: FontWeight.w500, color: settings.model == null ? StudyStyle.accent(context) : TegnalColors.label.resolveFrom(context)),
+                            style: TegnalType.style(
+                              17,
+                              weight: FontWeight.w500,
+                              color: settings.model == null ? StudyStyle.accent(context) : TegnalColors.label.resolveFrom(context),
+                            ),
                           ),
                           if (settings.model case final model?) ...[
                             const SizedBox(height: 3),
@@ -305,33 +357,68 @@ class _GeneratorViewState extends State<GeneratorView> {
                 ),
               ),
             ),
-            for (final (index, lora) in settings.loras.indexed) _loraRow(context, index, lora),
-            SettingsLinkRow(
-              color: StudyStyle.accent(context),
-              key: const Key('generator.addLora'),
-              title: L10n.text('Add a LoRA'),
-              icon: CupertinoIcons.plus,
-              onTap: () => pushGenerator<void>(
-                context,
-                (context) => GeneratorModelPicker(
-                  environment: _environment,
-                  kind: GenerationKind.lora,
-                  choose: (model) {
-                    if (!_settings.loras.any((lora) => lora.model.air == model.air)) _set(_settings.copyWith(loras: [..._settings.loras, GenerationLora(model: model)]));
-                  },
+            if (_advanced) ...[
+              for (final (index, lora) in settings.loras.indexed) _loraRow(context, index, lora),
+              SettingsLinkRow(
+                color: StudyStyle.accent(context),
+                key: const Key('generator.addLora'),
+                title: L10n.text('Add a LoRA'),
+                icon: CupertinoIcons.plus,
+                onTap: () => pushGenerator<void>(
+                  context,
+                  (context) => GeneratorModelPicker(
+                    environment: _environment,
+                    kind: GenerationKind.lora,
+                    choose: (model) {
+                      if (!_settings.loras.any((lora) => lora.model.air == model.air)) {
+                        _set(
+                          _settings.copyWith(
+                            loras: [
+                              ..._settings.loras,
+                              GenerationLora(model: model),
+                            ],
+                          ),
+                        );
+                      }
+                    },
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
         settingsSectionGap,
-        ..._options(context, rowColor),
+        if (_advanced) ...[..._options(context, rowColor), settingsSectionGap],
+        if (_unlocked)
+          FormSection(
+            rowColor: rowColor,
+            children: [
+              SettingsToggleRow(
+                tint: StudyStyle.accent(context),
+                key: const Key('generator.advancedToggle'),
+                title: L10n.text('Show Advanced Settings'),
+                value: _showsAdvanced,
+                onChanged: (shown) {
+                  setState(() => _showsAdvanced = shown);
+                  _store.defaults.set(GeneratorView.advancedKey, shown);
+                },
+              ),
+            ],
+          )
+        else
+          FormSection(
+            key: const Key('generator.advancedLocked'),
+            rowColor: rowColor,
+            children: [FormRow(child: _lockedCard(context))],
+          ),
         settingsSectionGap,
         FormSection(
           rowColor: rowColor,
           footer: _run.lastCost != null && !_run.isRunning ? Text(L10n.text('The last request cost %@ Buzz.', ['${_run.lastCost!.ceil()}'])) : null,
           children: [
-            FormRow(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _generateButton(context))),
+            FormRow(
+              child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _generateButton(context)),
+            ),
             if (_run.isRunning)
               FormRow(
                 key: const Key('generator.cancel'),
@@ -351,7 +438,11 @@ class _GeneratorViewState extends State<GeneratorView> {
                       Icon(CupertinoIcons.exclamationmark_triangle, size: 15, color: SystemColors.red.resolveFrom(context)),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(error.message, key: const Key('generator.error'), style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context))),
+                        child: Text(
+                          error.message,
+                          key: const Key('generator.error'),
+                          style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context)),
+                        ),
                       ),
                     ],
                   ),
@@ -398,19 +489,72 @@ class _GeneratorViewState extends State<GeneratorView> {
     );
   }
 
-  Widget _field({required Key key, required TextEditingController controller, required int minLines, ValueChanged<String>? onChanged}) => CupertinoTextField.borderless(
-    key: key,
-    controller: controller,
-    padding: EdgeInsets.zero,
-    minLines: minLines,
-    maxLines: null,
-    keyboardType: TextInputType.multiline,
-    textCapitalization: TextCapitalization.none,
-    autocorrect: false,
-    enableSuggestions: false,
-    style: generatorMonospace(context),
-    onChanged: onChanged,
-  );
+  Widget _lockedCard(BuildContext context) {
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final goal = StudyAward.advancedPictures;
+    final shown = _made < goal ? _made : goal;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(CupertinoIcons.lock_fill, size: 15, color: TegnalColors.label.resolveFrom(context)),
+              const SizedBox(width: 6),
+              Text(
+                L10n.text('Advanced Settings'),
+                style: TegnalType.style(15, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            L10n.text('Size, steps, LoRAs and things to avoid open once you have generated %@ pictures. Until then the recommended settings are used.', [
+              '$goal',
+            ]),
+            style: TegnalType.style(13, color: secondary),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: SizedBox(
+              height: 4,
+              child: Stack(
+                children: [
+                  ColoredBox(color: TegnalColors.tertiaryLabel.resolveFrom(context), child: const SizedBox.expand()),
+                  FractionallySizedBox(
+                    widthFactor: shown / goal,
+                    child: ColoredBox(color: StudyStyle.accent(context), child: const SizedBox.expand()),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$shown / $goal',
+            style: TegnalType.style(12, weight: FontWeight.w600, color: secondary).digits,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field({required Key key, required TextEditingController controller, required int minLines, ValueChanged<String>? onChanged}) =>
+      CupertinoTextField.borderless(
+        key: key,
+        controller: controller,
+        padding: EdgeInsets.zero,
+        minLines: minLines,
+        maxLines: null,
+        keyboardType: TextInputType.multiline,
+        textCapitalization: TextCapitalization.none,
+        autocorrect: false,
+        enableSuggestions: false,
+        style: generatorMonospace(context),
+        onChanged: onChanged,
+      );
 
   Widget _loraRow(BuildContext context, int index, GenerationLora lora) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
@@ -436,7 +580,12 @@ class _GeneratorViewState extends State<GeneratorView> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(lora.model.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context))),
+                      child: Text(
+                        lora.model.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+                      ),
                     ),
                     Text(lora.strength.toStringAsFixed(2), style: TegnalType.style(15, color: secondary).digits),
                   ],
@@ -449,7 +598,9 @@ class _GeneratorViewState extends State<GeneratorView> {
                   max: 1.5,
                   step: 0.05,
                   digits: 2,
-                  onChanged: (next) => _set(_settings.copyWith(loras: [for (final item in _settings.loras) item.model.id == lora.model.id ? item.copyWith(strength: next) : item])),
+                  onChanged: (next) => _set(
+                    _settings.copyWith(loras: [for (final item in _settings.loras) item.model.id == lora.model.id ? item.copyWith(strength: next) : item]),
+                  ),
                 ),
               ],
             ),
@@ -467,7 +618,9 @@ class _GeneratorViewState extends State<GeneratorView> {
         children: [
           Row(
             children: [
-              Expanded(child: Text(title, style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context)))),
+              Expanded(
+                child: Text(title, style: TegnalType.style(17, color: TegnalColors.label.resolveFrom(context))),
+              ),
               Text(value, style: TegnalType.style(17, color: secondary).digits),
               if (trailing != null) ...[const SizedBox(width: 12), trailing],
             ],
@@ -621,7 +774,12 @@ class _GeneratorViewState extends State<GeneratorView> {
                 if (!_run.isRunning && _store.hasKey && _settings.model != null) ...[
                   const SizedBox(width: 6),
                   Flexible(
-                    child: Text('· $_cost', maxLines: 1, overflow: TextOverflow.ellipsis, style: TegnalType.style(15, color: white.withValues(alpha: 0.85))),
+                    child: Text(
+                      '· $_cost',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TegnalType.style(15, color: white.withValues(alpha: 0.85)),
+                    ),
                   ),
                 ],
               ],
@@ -665,7 +823,10 @@ class GeneratorStepper extends StatelessWidget {
       child: SizedBox(
         width: 46,
         height: 32,
-        child: Opacity(opacity: onTap == null ? 0.3 : 1, child: Center(child: glyph)),
+        child: Opacity(
+          opacity: onTap == null ? 0.3 : 1,
+          child: Center(child: glyph),
+        ),
       ),
     );
     return Semantics(
@@ -694,7 +855,16 @@ class GeneratorStepper extends StatelessWidget {
 
 /// `Slider(value:in:step:)`: the iOS slider snapping to a step, read out with its own value.
 class GeneratorSlider extends StatelessWidget {
-  const GeneratorSlider({super.key, required this.label, required this.value, required this.min, required this.max, required this.step, required this.digits, required this.onChanged});
+  const GeneratorSlider({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.step,
+    required this.digits,
+    required this.onChanged,
+  });
   final String label;
   final double value;
   final double min;

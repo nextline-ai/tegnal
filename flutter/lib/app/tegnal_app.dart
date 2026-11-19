@@ -51,7 +51,9 @@ import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
 import '../presentation/settings/drive_sync_section.dart';
 import '../presentation/settings/library_management_view.dart';
+import '../presentation/settings/settings_page.dart' show settingsSectionGap;
 import '../presentation/settings/settings_view.dart';
+import '../presentation/study_mode/study_mode_root.dart';
 import '../presentation/settings/site_account_section.dart';
 import '../presentation/settings/website_setup.dart';
 import '../core/content/reading_queue.dart';
@@ -472,7 +474,14 @@ class _RootState extends State<_Root> {
       ),
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
-    safeMode: (context) => SafeModeSection(booru: _booru),
+    safeMode: (context) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SafeModeSection(booru: _booru),
+        settingsSectionGap,
+        StudyModeSettings(booru: _booru),
+      ],
+    ),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
@@ -490,38 +499,42 @@ class _RootState extends State<_Root> {
       database: services.database,
       images: services.booru,
       isTesting: services.isTesting,
-      child: CupertinoPageScaffold(
-        resizeToAvoidBottomInset: false,
-        child: ListenableBuilder(
-          listenable: state,
-          builder: (context, _) => ListenableBuilder(
-            listenable: services.taste,
-            builder: (context, _) => RootBanner(
-              banner: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ImportReminderBanner(imports: _imports),
-                  if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
-                ],
-              ),
-              height:
-                  (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
-                  (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
-              child: IndexedStack(
-                index: state.mode == AppMode.manga ? 0 : 1,
-                children: [
-                  _mangaTabs(),
-                  RootTabView(
-                    state: state,
-                    pages: {
-                      ..._booruPages.pages(),
-                      AppTab.insights: TabNavigator(
-                        active: state.mode == AppMode.booru && state.tab == AppTab.insights,
-                        builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
-                      ),
-                    },
-                  ),
-                ],
+      // Learning mode covers the whole screen, the libraries' tab bars included, while it is on.
+      child: StudyModeOverlay(
+        booru: _booru,
+        child: CupertinoPageScaffold(
+          resizeToAvoidBottomInset: false,
+          child: ListenableBuilder(
+            listenable: state,
+            builder: (context, _) => ListenableBuilder(
+              listenable: services.taste,
+              builder: (context, _) => RootBanner(
+                banner: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ImportReminderBanner(imports: _imports),
+                    if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
+                  ],
+                ),
+                height:
+                    (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
+                    (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
+                child: IndexedStack(
+                  index: state.mode == AppMode.manga ? 0 : 1,
+                  children: [
+                    _mangaTabs(),
+                    RootTabView(
+                      state: state,
+                      pages: {
+                        ..._booruPages.pages(),
+                        AppTab.insights: TabNavigator(
+                          active: state.mode == AppMode.booru && state.tab == AppTab.insights,
+                          builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
+                        ),
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

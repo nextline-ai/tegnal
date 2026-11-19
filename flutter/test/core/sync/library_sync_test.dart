@@ -8,12 +8,14 @@ import 'package:tegnal/core/content/reading_queue.dart';
 import 'package:tegnal/core/content/recent_works.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/storage/folder_rules.dart';
+import 'package:tegnal/core/study/study_store.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/support/swift_json.dart';
 import 'package:tegnal/core/sync/library_sync_adapter.dart';
 import 'package:tegnal/core/sync/library_sync_record.dart';
 
 import '../../support/backup_fixtures.dart';
+import '../booru/booru_backup_test.dart' show awardRows, seedGame;
 
 /// Ported from `LibrarySyncTests` (the record, ledger and adapter cases).
 void main() {
@@ -471,5 +473,89 @@ void main() {
     expect(deletion.row.values.keys.toSet(), {'gallery_id'});
     final data = LibrarySyncDocument(changes: ledger.changes).encode();
     expect(changesEquality.equals(LibrarySyncDocument.decode(data).changes, ledger.changes), isTrue);
+  });
+
+  test('learning mode travels between devices and merges by their rules', () {
+    final a = adapter(), b = adapter();
+    seedGame(a.booru, day: '2026-11-01', xp: 40, answered: 3, lesson: ('l1', 3, 2, 500), award: ('first', 100, 0), stat: ('best', 9));
+    seedGame(a.booru, day: '2026-11-02', xp: 5);
+    seedGame(b.booru, day: '2026-11-01', xp: 70, answered: 1, lesson: ('l1', 1, 5, 900), award: ('first', 300, 1), stat: ('best', 4));
+    final rows = a.snapshot().values.where((row) => row.table.startsWith('booru.study_')).toList();
+    expect(rows.map((row) => row.table).toSet(), {'booru.study_days', 'booru.study_lessons', 'booru.study_awards', 'booru.study_stats'});
+    b.apply({for (final row in rows) row.key: LibrarySyncChange(row: row, timestamp: 100, device: 'A', deleted: false)});
+    final days = {for (final day in StudyStore(b.booru).days()) day.day: day};
+    expect(days['2026-11-01']?.xp, 70, reason: 'The larger experience of a day stays');
+    expect(days['2026-11-01']?.answered, 3);
+    expect(days['2026-11-02']?.xp, 5, reason: 'A day only the other device studied arrives with its experience');
+    final lesson = b.booru.database.read((db) => db.rows("SELECT * FROM study_lessons WHERE lesson = 'l1'").single);
+    expect(lesson['stars'], 3);
+    expect(lesson['runs'], 5);
+    expect(lesson['finished'], 900);
+    final award = awardRows(b.booru).first;
+    expect(award['earned'], 100, reason: 'The earlier time stays');
+    expect(award['seen'], 1);
+    expect(b.booru.database.read((db) => db.value<int>("SELECT value FROM study_stats WHERE name = 'best'")), 9);
+
+    // A badge that arrives new is not celebrated again, and one seen here stays seen.
+    final fresh = LibrarySyncRow(
+      table: 'booru.study_awards',
+      values: {'id': const SyncValue.text('second'), 'earned': const SyncValue.real(50), 'seen': const SyncValue.integer(0)},
+    );
+    b.apply({fresh.key: LibrarySyncChange(row: fresh, timestamp: 200, device: 'A', deleted: false)});
+    expect(awardRows(b.booru).map((row) => row['seen']), [1, 1]);
+    final unseen = LibrarySyncRow(
+      table: 'booru.study_awards',
+      values: {'id': const SyncValue.text('first'), 'earned': const SyncValue.real(400), 'seen': const SyncValue.integer(0)},
+    );
+    b.apply({unseen.key: LibrarySyncChange(row: unseen, timestamp: 300, device: 'A', deleted: false)});
+    expect(awardRows(b.booru).first['seen'], 1);
+    expect(awardRows(b.booru).first['earned'], 100);
+
+    // A row from an older device has no experience column; the day keeps its own.
+    final old = LibrarySyncRow(
+      table: 'booru.study_days',
+      values: {'day': const SyncValue.text('2026-11-01'), 'answered': const SyncValue.integer(1), 'correct': const SyncValue.integer(0)},
+    );
+    b.apply({old.key: LibrarySyncChange(row: old, timestamp: 400, device: 'A', deleted: false)});
+    expect(StudyStore(b.booru).days().firstWhere((day) => day.day == '2026-11-01').xp, 70);
+
+    // Reset is carried like study_progress: removals reach the other device.
+    final ledger = LibrarySyncLedger();
+    ledger.capture(a.snapshot(), device: 'A', now: 1000);
+    StudyStore(a.booru).reset();
+    ledger.capture(a.snapshot(), device: 'A', now: 2000);
+    final removals = {
+      for (final entry in ledger.changes.entries)
+        if (entry.value.deleted && entry.value.row.table.startsWith('booru.study_')) entry.key: entry.value,
+    };
+    expect(removals.values.map((change) => change.row.table).toSet(), {'booru.study_days', 'booru.study_lessons', 'booru.study_awards', 'booru.study_stats'});
+    b.apply(removals);
+    // "second" reached this device by a row of its own that the other device never held, so only "first" is removed.
+    expect(awardRows(b.booru).map((row) => row['id']), ['second']);
+    expect(StudyStore(b.booru).days(), isEmpty);
+    expect(b.booru.database.read((db) => db.value<int>('SELECT COUNT(*) FROM study_lessons')), 0);
+    expect(b.booru.database.read((db) => db.value<int>('SELECT COUNT(*) FROM study_stats')), 0);
+
+    // Rows that break the rules are left out.
+    final bad = [
+      LibrarySyncRow(
+        table: 'booru.study_lessons',
+        values: {
+          'lesson': const SyncValue.text(''),
+          'stars': const SyncValue.integer(1),
+          'runs': const SyncValue.integer(1),
+          'finished': const SyncValue.real(1),
+        },
+      ),
+      LibrarySyncRow(table: 'booru.study_stats', values: {'name': const SyncValue.text('x'), 'value': const SyncValue.integer(-1)}),
+      LibrarySyncRow(
+        table: 'booru.study_awards',
+        values: {'id': SyncValue.text('x' * 201), 'earned': const SyncValue.real(1), 'seen': const SyncValue.integer(0)},
+      ),
+    ];
+    b.apply({for (final row in bad) row.key: LibrarySyncChange(row: row, timestamp: 500, device: 'A', deleted: false)});
+    expect(b.booru.database.read((db) => db.value<int>('SELECT COUNT(*) FROM study_lessons')), 0);
+    expect(b.booru.database.read((db) => db.value<int>('SELECT COUNT(*) FROM study_stats')), 0);
+    expect(awardRows(b.booru).length, 1);
   });
 }

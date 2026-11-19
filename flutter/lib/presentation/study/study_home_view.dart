@@ -17,6 +17,7 @@ import '../design/system_colors.dart';
 import '../library/folders_view.dart' show LibrarySearchField, anchorOf;
 import '../navigation/app_header.dart';
 import '../generation/generator_view.dart';
+import '../study_mode/study_kit.dart' show StudyMode, StudyTab;
 import 'study_guide_view.dart';
 import 'study_quiz_view.dart';
 import 'study_tag_view.dart';
@@ -40,11 +41,14 @@ class _StudyEntrySectionState extends State<StudyEntrySection> {
     _board.reload(widget.booru.store);
     _board.addListener(_changed);
     widget.booru.state.addListener(_reload);
+    // Back from learning mode, the numbers are read again, as the row's `onAppear` does on iOS.
+    StudyMode.shared.addListener(_reload);
   }
 
   @override
   void dispose() {
     widget.booru.state.removeListener(_reload);
+    StudyMode.shared.removeListener(_reload);
     _board.dispose();
     super.dispose();
   }
@@ -69,10 +73,7 @@ class _StudyEntrySectionState extends State<StudyEntrySection> {
       FormRow(
         key: const Key('study.entry'),
         minHeight: 64,
-        onTap: () async {
-          await pushStudy<void>(context, (context) => StudyHomeView(booru: widget.booru));
-          if (mounted) _reload();
-        },
+        onTap: () => StudyMode.shared.enter(),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
@@ -120,11 +121,14 @@ class _StudyReviewCardState extends State<StudyReviewCard> {
     _board.reload(widget.booru.store);
     _board.addListener(_changed);
     widget.booru.state.addListener(_reload);
+    // Back from learning mode, the numbers are read again, as the row's `onAppear` does on iOS.
+    StudyMode.shared.addListener(_reload);
   }
 
   @override
   void dispose() {
     widget.booru.state.removeListener(_reload);
+    StudyMode.shared.removeListener(_reload);
     _board.dispose();
     super.dispose();
   }
@@ -134,16 +138,6 @@ class _StudyReviewCardState extends State<StudyReviewCard> {
   }
 
   void _reload() => _board.reload(widget.booru.store);
-
-  Future<void> _start() async {
-    final booru = widget.booru;
-    await openStudyQuiz(
-      context,
-      booru: booru,
-      session: StudySession(scope: StudyScope.review, store: booru.store, source: booru.source),
-    );
-    if (mounted) _reload();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +151,7 @@ class _StudyReviewCardState extends State<StudyReviewCard> {
         child: GestureDetector(
           key: const Key('study.reviewCard'),
           behavior: HitTestBehavior.opaque,
-          onTap: _start,
+          onTap: () => StudyMode.shared.enter(StudyTab.practice),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: ShapeDecoration(

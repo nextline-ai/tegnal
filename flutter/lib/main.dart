@@ -42,9 +42,11 @@ import 'presentation/navigation/app_state.dart';
 import 'core/content/recent_works.dart';
 import 'core/study/study_guide.dart';
 import 'core/study/study_models.dart';
+import 'core/study/study_path.dart';
 import 'core/support/app_platform.dart';
 import 'core/support/privacy_settings.dart';
 import 'presentation/settings/site_account_section.dart';
+import 'presentation/study_mode/study_kit.dart';
 
 /// `--dart-define=TEGNAL_FIXTURE=on` (or a comma-separated list of [FixtureOption] names,
 /// plus `setup` to start without a connected website) runs offline with the native UI
@@ -170,11 +172,13 @@ Future<AppServices> _launch() async {
   ContentPreferences.defaults = preferences.defaults;
   PrivacySettings.load();
   ReaderPreferences.install(preferences);
+  // Learning mode reads whether it opens the app, and its sounds' switch, from the image-mode preferences.
+  StudyMode.shared.attach(preferences.booruDefaults);
   // Whether AI translation can be on; asked early, as Translate needs the answer.
   unawaited(AITranslationModel.check());
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
   // The tag study curriculum is empty until its file is read.
-  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled()]);
+  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled(), StudyPath.loadBundled()]);
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
   ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
@@ -247,7 +251,9 @@ Future<AppServices> _launchFixture() async {
   await loadLocalization(preferences.defaults);
   await StudyCurriculum.loadBundled();
   await StudyGuide.loadBundled();
+  await StudyPath.loadBundled();
   final names = _fixture.split(',').map((name) => name.trim()).toSet();
+  StudyMode.shared.attach(preferences.booruDefaults);
   final options = {for (final name in names) ...FixtureOption.values.where((option) => option.name == name)};
   // `setup` starts without a connected website, as `--comics-setup-test` does.
   final content = names.contains('setup')

@@ -100,20 +100,57 @@ class BooruBackupLearned {
   JsonObject toJson() => {'tag': tag, 'step': step, 'due': due, 'correct': correct, 'wrong': wrong, 'seen': seen};
 }
 
-/// Tag study: what has been learned and each day's answers.
+/// One lesson of learning mode; the time is seconds since 1970.
+class BooruBackupLesson {
+  BooruBackupLesson({required this.lesson, required this.stars, required this.runs, required this.finished});
+  final String lesson;
+  final int stars;
+  final int runs;
+  final double finished;
+
+  factory BooruBackupLesson.fromJson(JsonObject json) =>
+      BooruBackupLesson(lesson: json.string('lesson'), stars: json.integer('stars'), runs: json.integer('runs'), finished: json.number('finished'));
+  JsonObject toJson() => {'lesson': lesson, 'stars': stars, 'runs': runs, 'finished': finished};
+}
+
+/// One badge of learning mode and when it was earned; the time is seconds since 1970.
+class BooruBackupAward {
+  BooruBackupAward({required this.id, required this.earned});
+  final String id;
+  final double earned;
+
+  factory BooruBackupAward.fromJson(JsonObject json) => BooruBackupAward(id: json.string('id'), earned: json.number('earned'));
+  JsonObject toJson() => {'id': id, 'earned': earned};
+}
+
+/// Tag study: what has been learned and each day's answers, and learning mode's lessons, badges and counters.
 class BooruBackupStudy {
-  BooruBackupStudy({required this.progress, required this.days});
+  BooruBackupStudy({required this.progress, required this.days, this.lessons, this.awards, this.stats});
   final List<BooruBackupLearned> progress;
+
+  /// A day written before learning mode has no experience.
   final List<StudyDay> days;
+
+  /// Optional so backups from before learning mode still read.
+  final List<BooruBackupLesson>? lessons;
+  final List<BooruBackupAward>? awards;
+  final Map<String, int>? stats;
 
   factory BooruBackupStudy.fromJson(JsonObject json) => BooruBackupStudy(
     progress: json.list('progress', (value) => BooruBackupLearned.fromJson(jsonObject(value))),
     days: json.list('days', (value) => StudyDay.fromJson(jsonObject(value))),
+    lessons: json.listOrNull('lessons', (value) => BooruBackupLesson.fromJson(jsonObject(value))),
+    awards: json.listOrNull('awards', (value) => BooruBackupAward.fromJson(jsonObject(value))),
+    stats: json.dictionaryOrNull('stats', jsonInteger),
   );
-  JsonObject toJson() => {
-    'progress': [for (final value in progress) value.toJson()],
-    'days': [for (final day in days) day.toJson()],
-  };
+  JsonObject toJson() =>
+      <String, Object?>{
+          'progress': [for (final value in progress) value.toJson()],
+          'days': [for (final day in days) day.toJson()],
+        }
+        ..putIfPresent('lessons', lessons == null ? null : [for (final lesson in lessons!) lesson.toJson()])
+        ..putIfPresent('awards', awards == null ? null : [for (final award in awards!) award.toJson()])
+        ..putIfPresent('stats', stats);
 
   bool get isValid =>
       progress.every(
@@ -127,7 +164,14 @@ class BooruBackupStudy {
             value.due.isFinite &&
             value.seen.isFinite,
       ) &&
-      days.every((day) => day.day.characters.length == 10 && day.answered >= 0 && day.correct >= 0 && day.correct <= day.answered);
+      days.every((day) => day.day.characters.length == 10 && day.answered >= 0 && day.correct >= 0 && day.correct <= day.answered && day.xp >= 0) &&
+      (lessons ?? const <BooruBackupLesson>[]).every(
+        (value) => value.lesson.isNotEmpty && value.lesson.characters.length <= 200 && value.stars >= 0 && value.runs >= 0 && value.finished.isFinite,
+      ) &&
+      (lessons ?? const <BooruBackupLesson>[]).map((value) => value.lesson).toSet().length == (lessons ?? const <BooruBackupLesson>[]).length &&
+      (awards ?? const <BooruBackupAward>[]).every((value) => value.id.isNotEmpty && value.id.characters.length <= 200 && value.earned.isFinite) &&
+      (awards ?? const <BooruBackupAward>[]).map((value) => value.id).toSet().length == (awards ?? const <BooruBackupAward>[]).length &&
+      (stats ?? const <String, int>{}).entries.every((entry) => entry.key.isNotEmpty && entry.key.characters.length <= 200 && entry.value >= 0);
 }
 
 /// Portable library data only. Credentials, cookies, caches and device preferences stay local.
@@ -318,8 +362,17 @@ extension BooruStoreBackup on BooruStore {
     ];
     final days = [
       for (final row in db.rows('SELECT * FROM study_days ORDER BY day'))
-        StudyDay(day: row['day'] as String, answered: row['answered'] as int, correct: row['correct'] as int),
+        StudyDay(day: row['day'] as String, answered: row['answered'] as int, correct: row['correct'] as int, xp: (row['xp'] as int?) ?? 0),
     ];
+    final lessons = [
+      for (final row in db.rows('SELECT * FROM study_lessons ORDER BY lesson'))
+        BooruBackupLesson(lesson: row['lesson'] as String, stars: row['stars'] as int, runs: row['runs'] as int, finished: (row['finished'] as num).toDouble()),
+    ];
+    final awards = [
+      for (final row in db.rows('SELECT id, earned FROM study_awards ORDER BY id'))
+        BooruBackupAward(id: row['id'] as String, earned: (row['earned'] as num).toDouble()),
+    ];
+    final stats = {for (final row in db.rows('SELECT name, value FROM study_stats')) row['name'] as String: row['value'] as int};
     return BooruBackup(
       servers: servers,
       folders: folders,
@@ -329,7 +382,9 @@ extension BooruStoreBackup on BooruStore {
       blacklist: blacklist,
       selectedServerIDs: selectedServerIDs,
       folderRules: BooruStoreFolderRules.fetchFolderRules(db).where((rule) => folders.any((folder) => folder.id == rule.folder)).toList(),
-      study: learned.isEmpty && days.isEmpty ? null : BooruBackupStudy(progress: learned, days: days),
+      study: learned.isEmpty && days.isEmpty && lessons.isEmpty && awards.isEmpty && stats.isEmpty
+          ? null
+          : BooruBackupStudy(progress: learned, days: days, lessons: lessons, awards: awards, stats: stats),
     );
   });
 
@@ -422,10 +477,39 @@ extension BooruStoreBackup on BooruStore {
     for (final value in backup.study?.days ?? const <StudyDay>[]) {
       db.execute(
         '''
-        INSERT INTO study_days (day, answered, correct) VALUES (?, ?, ?)
-        ON CONFLICT(day) DO UPDATE SET answered = MAX(answered, excluded.answered), correct = MAX(correct, excluded.correct)
+        INSERT INTO study_days (day, answered, correct, xp) VALUES (?, ?, ?, ?)
+        ON CONFLICT(day) DO UPDATE SET answered = MAX(answered, excluded.answered), correct = MAX(correct, excluded.correct), xp = MAX(xp, excluded.xp)
         ''',
-        [value.day, value.answered, value.correct],
+        [value.day, value.answered, value.correct, value.xp],
+      );
+    }
+    // A lesson finished anywhere stays finished, with its best stars, most runs and latest finish.
+    for (final value in backup.study?.lessons ?? const <BooruBackupLesson>[]) {
+      db.execute(
+        '''
+        INSERT INTO study_lessons (lesson, stars, runs, finished) VALUES (?, ?, ?, ?)
+        ON CONFLICT(lesson) DO UPDATE SET stars = MAX(stars, excluded.stars), runs = MAX(runs, excluded.runs), finished = MAX(finished, excluded.finished)
+        ''',
+        [value.lesson, value.stars, value.runs, value.finished],
+      );
+    }
+    // A badge keeps its earliest time; one from a backup was celebrated where it was earned.
+    for (final value in backup.study?.awards ?? const <BooruBackupAward>[]) {
+      db.execute(
+        '''
+        INSERT INTO study_awards (id, earned, seen) VALUES (?, ?, 1)
+        ON CONFLICT(id) DO UPDATE SET earned = MIN(earned, excluded.earned), seen = 1
+        ''',
+        [value.id, value.earned],
+      );
+    }
+    for (final entry in (backup.study?.stats ?? const <String, int>{}).entries) {
+      db.execute(
+        '''
+        INSERT INTO study_stats (name, value) VALUES (?, ?)
+        ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)
+        ''',
+        [entry.key, entry.value],
       );
     }
     // Folders of an older backup go where their images are, and every image to a folder of its server.

@@ -831,6 +831,7 @@ abstract final class StudyGlyph {
   /// The icon for an SF Symbol name; an unknown name gives a circle.
   static IconData icon(String symbol) => switch (symbol) {
     'arrow.left.arrow.right' => CupertinoIcons.arrow_left_right,
+    'scope' => CupertinoIcons.scope,
     'arrow.right.circle' => CupertinoIcons.arrow_right_circle,
     'arrow.triangle.2.circlepath' => CupertinoIcons.arrow_2_circlepath,
     'arrow.triangle.branch' => CupertinoIcons.arrow_branch,

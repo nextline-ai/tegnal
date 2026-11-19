@@ -6,7 +6,10 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/generation/generation_air.dart';
 import 'package:tegnal/core/generation/generation_client.dart';
+import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/generation/generation_store.dart';
+import 'package:tegnal/core/study/study_awards.dart';
+import 'package:tegnal/core/study/study_store.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/support/secure_secret_store.dart';
 import 'package:tegnal/presentation/design/ios_controls.dart';
@@ -21,7 +24,9 @@ Finder key(String name) => find.byKey(Key(name));
 GenerationResponse json(Object? object, {int status = 200}) => GenerationResponse(status, Uint8List.fromList(utf8.encode(jsonEncode(object))));
 
 class Harness {
-  Harness({this.safeMode = false, GenerationTransport? transport, bool keyed = false, bool model = false}) {
+  Harness({this.safeMode = false, GenerationTransport? transport, bool keyed = false, bool model = false, int made = 3}) {
+    study = StudyStore.withDatabase(BooruStore.inMemory().database);
+    if (made > 0) study.raise(StudyCounter.pictures, made);
     directory = Directory.systemTemp.createTempSync('generator-view-');
     addTearDown(() => directory.deleteSync(recursive: true));
     secure = MemorySecureStorage();
@@ -42,6 +47,9 @@ class Harness {
   late final Directory directory;
   late final MemorySecureStorage secure;
   late final GenerationStore store;
+
+  /// The count of pictures ever made lives here; three of them open the advanced settings.
+  late final StudyStore study;
   final requests = <GenerationRequest>[];
 
   Future<void> pump(WidgetTester tester, {String prompt = '', double height = 9000}) async {
@@ -49,7 +57,12 @@ class Harness {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
     await store.load();
-    await tester.pumpWidget(CupertinoApp(theme: tegnalTheme(Brightness.light), home: GeneratorView(store: store, safeMode: () => safeMode, prompt: prompt)));
+    await tester.pumpWidget(
+      CupertinoApp(
+        theme: tegnalTheme(Brightness.light),
+        home: GeneratorView(store: store, safeMode: () => safeMode, prompt: prompt, study: study),
+      ),
+    );
     await tester.pump();
   }
 }
@@ -70,7 +83,10 @@ void main() {
       final harness = Harness(model: true);
       await harness.pump(tester);
       expect(find.text('Add Your Civitai API Key'), findsOneWidget);
-      expect(find.text("Pictures are drawn by Civitai on your own account and paid for with your Buzz. The key stays in this device's keychain."), findsOneWidget);
+      expect(
+        find.text("Pictures are drawn by Civitai on your own account and paid for with your Buzz. The key stays in this device's keychain."),
+        findsOneWidget,
+      );
       // With no prompt, Generate does nothing.
       await tester.tap(key('generator.generate'));
       await tester.pump();
@@ -296,7 +312,13 @@ void main() {
 
     testWidgets('LoRAs are added from the picker, shown with a strength and removed by swiping', (tester) async {
       final harness = Harness(keyed: true, model: true);
-      harness.store.settings = harness.store.settings.copyWith(loras: [const GenerationLora(model: GenerationModel(air: 'urn:air:sdxl:lora:civitai:1@2', name: 'Style LoRA'))]);
+      harness.store.settings = harness.store.settings.copyWith(
+        loras: [
+          const GenerationLora(
+            model: GenerationModel(air: 'urn:air:sdxl:lora:civitai:1@2', name: 'Style LoRA'),
+          ),
+        ],
+      );
       await harness.pump(tester);
       expect(find.text('Style LoRA'), findsOneWidget);
       expect(find.text('0.80'), findsOneWidget);
@@ -304,6 +326,61 @@ void main() {
       await tester.pumpAndSettle();
       expect(harness.store.settings.loras, isEmpty);
       expect(find.text('Style LoRA'), findsNothing);
+    });
+  });
+
+  group('advanced settings', () {
+    final advanced = ['generator.negative', 'generator.addLora', 'generator.size', 'generator.steps', 'generator.guidance'];
+
+    testWidgets('stay hidden behind a locked card with the progress until three pictures are made', (tester) async {
+      final harness = Harness(keyed: true, model: true, made: 1);
+      await harness.pump(tester, prompt: '1girl');
+      expect(key('generator.advancedLocked'), findsOneWidget);
+      expect(find.text('1 / 3'), findsOneWidget);
+      expect(find.text('Advanced Settings'), findsOneWidget);
+      expect(key('generator.advancedToggle'), findsNothing);
+      for (final name in advanced) {
+        expect(key(name), findsNothing, reason: name);
+      }
+      expect(find.text('Things to Avoid'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
+      expect(key('generator.model'), findsOneWidget);
+      expect(key('generator.generate'), findsOneWidget);
+    });
+
+    testWidgets('open at three pictures with a switch that is remembered', (tester) async {
+      final harness = Harness(keyed: true, model: true);
+      await harness.pump(tester, prompt: '1girl');
+      expect(key('generator.advancedLocked'), findsNothing);
+      expect(key('generator.advancedToggle'), findsOneWidget);
+      for (final name in advanced) {
+        expect(key(name), findsOneWidget, reason: name);
+      }
+      await tester.tap(find.descendant(of: key('generator.advancedToggle'), matching: find.byType(TegnalSwitch)));
+      await tester.pump();
+      expect(harness.store.defaults.boolean('generation.showsAdvanced'), isFalse);
+      for (final name in advanced) {
+        expect(key(name), findsNothing, reason: name);
+      }
+      expect(key('generator.advancedToggle'), findsOneWidget);
+    });
+
+    testWidgets('a finished run raises the count', (tester) async {
+      final harness = Harness(keyed: true, model: true, made: 0);
+      await harness.pump(tester, prompt: '1girl');
+      expect(find.text('0 / 3'), findsOneWidget);
+      await tester.tap(key('generator.generate'));
+      await pumpUntil(tester, find.text('Results'));
+      await tester.pumpAndSettle();
+      expect(harness.study.stats()[StudyCounter.pictures], 1);
+      expect(find.text('1 / 3'), findsOneWidget);
+    });
+
+    testWidgets('a count above three stays and deleting pictures does not lock them again', (tester) async {
+      final harness = Harness(keyed: true, model: true, made: 9);
+      await harness.pump(tester);
+      expect(key('generator.advancedToggle'), findsOneWidget);
+      expect(harness.study.stats()[StudyCounter.pictures], 9);
     });
   });
 
@@ -339,7 +416,12 @@ void main() {
 
   group('model picker', () {
     GeneratorModelPicker picker(Harness harness, void Function(GenerationModel) choose, {GenerationKind kind = GenerationKind.checkpoint}) =>
-        GeneratorModelPicker(key: UniqueKey(), environment: GeneratorEnvironment(store: harness.store, safeMode: () => harness.safeMode), kind: kind, choose: choose);
+        GeneratorModelPicker(
+          key: UniqueKey(),
+          environment: GeneratorEnvironment(store: harness.store, safeMode: () => harness.safeMode),
+          kind: kind,
+          choose: choose,
+        );
 
     Future<void> open(WidgetTester tester, Harness harness, Widget page) async {
       tester.view.physicalSize = const Size(1206, 9000);
@@ -429,7 +511,10 @@ void main() {
       await open(tester, harness, picker(harness, (model) => chosen = true));
       for (final (text, message) in [
         ('hello there', 'This is not an AIR, a model page address or a version number.'),
-        ('urn:air:flux1:checkpoint:civitai:1@2', 'This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.'),
+        (
+          'urn:air:flux1:checkpoint:civitai:1@2',
+          'This generator runs Anima, Stable Diffusion 1.5 and SDXL-family checkpoints, such as Illustrious, NoobAI, Pony and Animagine.',
+        ),
         ('urn:air:sdxl:lora:civitai:1@2', 'This is not a checkpoint.'),
       ]) {
         await tester.enterText(key('generator.air'), text);
@@ -461,10 +546,18 @@ void main() {
     tester.view.physicalSize = const Size(1206, 9000);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(CupertinoApp(theme: tegnalTheme(Brightness.light), home: GeneratorAccountView(store: harness.store)));
+    await tester.pumpWidget(
+      CupertinoApp(
+        theme: tegnalTheme(Brightness.light),
+        home: GeneratorAccountView(store: harness.store),
+      ),
+    );
     await tester.pump();
     expect(find.text('Civitai API Key'), findsOneWidget);
     expect(find.text('Open Civitai Account Settings'), findsOneWidget);
-    expect(find.text("Create a key on civitai.com under Account Settings, API Keys. It is kept in this device's keychain and sent only to Civitai."), findsOneWidget);
+    expect(
+      find.text("Create a key on civitai.com under Account Settings, API Keys. It is kept in this device's keychain and sent only to Civitai."),
+      findsOneWidget,
+    );
   });
 }
