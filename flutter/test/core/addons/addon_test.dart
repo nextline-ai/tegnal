@@ -650,4 +650,28 @@ void main() {
     expect(completion.inserting('character:teitoku'), 'language:korean -character:teitoku ');
     expect(AddonSearchCompletion.parse('제독 '), isNull);
   });
+
+  test('the official Korean comics names, as published, name the tags a work page shows, gender tags included', () async {
+    final candidates = [
+      '/Users/juhyungpark/Programming/tegnal/docs/addons/market/official/comics-tags-ko.tegnaladdon',
+      '../docs/addons/market/official/comics-tags-ko.tegnaladdon',
+    ];
+    final file = candidates.map(File.new).where((file) => file.existsSync()).firstOrNull;
+    if (file == null) {
+      markTestSkipped('The official files are local only');
+      return;
+    }
+    final (:addon, :digest) = await Addon.read(file);
+    expect(addon.contents.tagTranslations!.entries.keys.where((key) => key.split(':').length > 2), isEmpty, reason: 'No key carries two namespaces');
+    AddonRuntime.shared.apply(AddonEffects([InstalledAddon(addon: addon, enabled: true, installed: DateTime.now(), digest: digest)]));
+    addTearDown(() => AddonRuntime.shared.apply(AddonEffects()));
+    final tags = ArtworkTagGroup.make(
+      tags: ['female:big breasts', 'male:sole male', 'character:reimu hakurei', 'series:touhou project', 'tag:full color'],
+      mode: AddonMode.comics,
+    ).expand((group) => group.tags);
+    for (final tag in tags) {
+      expect(tag.original, isNotNull, reason: '${tag.query} is shown in Korean');
+    }
+    expect(AddonRuntime.shared.effects.tags(matching: '거유', mode: AddonMode.comics).first.tag, 'female:big_breasts');
+  });
 }
