@@ -7,6 +7,7 @@ import '../../core/storage/library_backup_actions.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import '../design/alert_dialog.dart';
+import '../home/home_stage.dart';
 import 'settings_rows.dart';
 
 /// `BackupReminder`: every seven days the app is opened, a library with something in it
@@ -73,17 +74,29 @@ class _BackupReminderGateState extends State<BackupReminderGate> {
   void initState() {
     super.initState();
     _lifecycle;
+    _covered = HomeStage.shared.coversScreen;
+    HomeStage.shared.addListener(_stageChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _check());
   }
 
   @override
   void dispose() {
+    HomeStage.shared.removeListener(_stageChanged);
     _lifecycle.dispose();
     super.dispose();
   }
 
+  /// Nothing is asked over the home scene; the reminder waits until a place is on screen.
+  bool _covered = false;
+  void _stageChanged() {
+    final covered = HomeStage.shared.coversScreen;
+    if (covered == _covered) return;
+    _covered = covered;
+    if (!covered && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) _check();
+  }
+
   Future<void> _check() async {
-    if (!mounted || _asking) return;
+    if (!mounted || _asking || HomeStage.shared.coversScreen) return;
     if (widget.isTesting && !BackupReminder.forced) return;
     final hasLibrary = widget.database.worksCount() > 0 || widget.images.favoriteIDs.isNotEmpty;
     if (!hasLibrary) return;

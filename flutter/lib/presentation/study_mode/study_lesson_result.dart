@@ -275,7 +275,10 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
                                 // An SF star's frame is about a third wider than its point size.
                                 children: [
                                   for (var index = 0; index < 3; index++)
-                                    SizedBox(width: 64, child: Center(child: _star(theme, index, won: index < stars))),
+                                    SizedBox(
+                                      width: 64,
+                                      child: Center(child: _star(theme, index, won: index < stars)),
+                                    ),
                                 ],
                               ),
                             ),
@@ -608,10 +611,7 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
             builder: (context, constraints) => SingleChildScrollView(
               padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: math.max(0, constraints.maxHeight - MediaQuery.paddingOf(context).top),
-                  minWidth: constraints.maxWidth,
-                ),
+                constraints: BoxConstraints(minHeight: math.max(0, constraints.maxHeight - MediaQuery.paddingOf(context).top), minWidth: constraints.maxWidth),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 560),

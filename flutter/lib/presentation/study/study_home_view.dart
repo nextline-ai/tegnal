@@ -192,8 +192,12 @@ class _StudyReviewCardState extends State<StudyReviewCard> {
 }
 
 class StudyHomeView extends StatefulWidget {
-  const StudyHomeView({super.key, required this.booru});
+  const StudyHomeView({super.key, required this.booru, this.leading, this.moreActions = const []});
   final BooruContext booru;
+
+  /// Home scene seam: as the root of learning mode's own place, the way back to the start, and more ways out in the More menu.
+  final Widget? leading;
+  final List<ContextMenuAction> moreActions;
 
   @override
   State<StudyHomeView> createState() => _StudyHomeViewState();
@@ -275,6 +279,7 @@ class _StudyHomeViewState extends State<StudyHomeView> {
     final searching = _search.text.isNotEmpty;
     return StudyPage(
       title: L10n.text('Tag Study'),
+      leading: widget.leading,
       trailing: Builder(
         builder: (buttonContext) => ToolbarGroup(
           children: [
@@ -286,6 +291,7 @@ class _StudyHomeViewState extends State<StudyHomeView> {
                 buttonContext,
                 anchor: anchorOf(buttonContext),
                 actions: [
+                  ...widget.moreActions,
                   ContextMenuAction(
                     title: L10n.text('Reset Study Progress'),
                     icon: StudySymbols.reset,

@@ -45,6 +45,7 @@ class _StartChoiceViewState extends State<StartChoiceView> {
     if (learning == null) return;
     // What is chosen here is how the app opens from now on.
     _mode.startsActive = learning;
+    _mode.startsInLibrary = !learning;
     widget.preferences.set(startChoiceMadeKey, true);
     Navigator.of(context).pop();
     if (learning) _mode.enter();

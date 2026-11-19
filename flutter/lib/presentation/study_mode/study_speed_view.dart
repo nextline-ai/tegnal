@@ -187,7 +187,11 @@ class _StudySpeedViewState extends State<StudySpeedView> {
       Expanded(
         child: _centered(18, [
           const StudyMascot(pose: StudyMascotPose.fullBody, size: 170),
-          Text(L10n.text('Speed Round'), textAlign: TextAlign.center, style: StudyTheme.title(32).copyWith(color: theme.ink)),
+          Text(
+            L10n.text('Speed Round'),
+            textAlign: TextAlign.center,
+            style: StudyTheme.title(32).copyWith(color: theme.ink),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Text(
@@ -199,9 +203,7 @@ class _StudySpeedViewState extends State<StudySpeedView> {
           if (_round.best > 0) _label('trophy.fill', L10n.text('Your best: %@', ['${_round.best}']), StudyTheme.body(16, StudyTheme.heavy), theme.gold),
         ]),
       ),
-      _mainButton(
-        StudyMainButton(key: const Key('study.speed.go'), title: L10n.text('Go!'), color: theme.flame, symbol: 'bolt.fill', onPressed: _go),
-      ),
+      _mainButton(StudyMainButton(key: const Key('study.speed.go'), title: L10n.text('Go!'), color: theme.flame, symbol: 'bolt.fill', onPressed: _go)),
     ],
   );
 
@@ -217,7 +219,9 @@ class _StudySpeedViewState extends State<StudySpeedView> {
             children: [
               _closeButton(theme),
               const SizedBox(width: 14),
-              Expanded(child: StudyBar(value: left / StudySpeedRound.length, color: left < 10 ? theme.bad : theme.flame)),
+              Expanded(
+                child: StudyBar(value: left / StudySpeedRound.length, color: left < 10 ? theme.bad : theme.flame),
+              ),
               const SizedBox(width: 14),
               StudyStat(key: const Key('study.speed.score'), symbol: 'bolt.fill', color: theme.gold, value: '${_round.score}'),
             ],
@@ -237,7 +241,10 @@ class _StudySpeedViewState extends State<StudySpeedView> {
                 return FadeTransition(
                   opacity: animation,
                   child: incoming
-                      ? SlideTransition(position: animation.drive(Tween(begin: const Offset(1, 0), end: Offset.zero)), child: child)
+                      ? SlideTransition(
+                          position: animation.drive(Tween(begin: const Offset(1, 0), end: Offset.zero)),
+                          child: child,
+                        )
                       : child,
                 );
               },
@@ -281,9 +288,7 @@ class _StudySpeedViewState extends State<StudySpeedView> {
             constraints: const BoxConstraints(minHeight: 72),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(
-                child: StudyFitText(tag.english, style: StudyTheme.body(18, StudyTheme.heavy), maxLines: 2, minimumScale: 0.7),
-              ),
+              child: Center(child: StudyFitText(tag.english, style: StudyTheme.body(18, StudyTheme.heavy), maxLines: 2, minimumScale: 0.7)),
             ),
           ),
         ),
@@ -334,10 +339,7 @@ class _StudySpeedViewState extends State<StudySpeedView> {
                 ],
               ),
               const SizedBox(height: 16),
-              for (var first = 0; first < question.choices.length; first += 2) ...[
-                if (first > 0) const SizedBox(height: 12),
-                row(first),
-              ],
+              for (var first = 0; first < question.choices.length; first += 2) ...[if (first > 0) const SizedBox(height: 12), row(first)],
             ],
           ),
         ),
@@ -383,11 +385,7 @@ class _StudySpeedViewState extends State<StudySpeedView> {
                   style: StudyTheme.title(72).copyWith(color: theme.flame),
                 ),
                 if (round.record)
-                  StudyPop(
-                    shown: _shown,
-                    delay: 1.1,
-                    child: _label('trophy.fill', L10n.text('New Best!'), StudyTheme.title(20), theme.gold),
-                  )
+                  StudyPop(shown: _shown, delay: 1.1, child: _label('trophy.fill', L10n.text('New Best!'), StudyTheme.title(20), theme.gold))
                 else if (round.best > 0)
                   Text(
                     L10n.text('Your best: %@', ['${round.best}']),
@@ -432,7 +430,9 @@ Widget _label(String symbol, String title, TextStyle style, Color color) => Row(
   children: [
     StudyIcon(symbol, size: style.fontSize ?? 17, color: color),
     SizedBox(width: (style.fontSize ?? 17) * 0.35),
-    Flexible(child: Text(title, style: style.copyWith(color: color).merge(_tabular))),
+    Flexible(
+      child: Text(title, style: style.copyWith(color: color).merge(_tabular)),
+    ),
   ],
 );
 

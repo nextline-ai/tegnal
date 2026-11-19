@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
+import '../home/home_stage.dart';
 import 'study_reactions.dart';
 import 'study_symbols.dart';
 
@@ -26,11 +27,13 @@ class StudyMode extends ChangeNotifier {
   static final StudyMode shared = StudyMode._();
 
   /// The image-mode preference that opens learning mode when the app starts.
-  static const startKey = 'study.startInMode';
+  static const startKey = HomeStage.startKey;
 
   Preferences? _preferences;
+  HomeStage? _stage;
   bool _active = false;
   bool _startsActive = false;
+  bool _startsInLibrary = false;
   StudyTab _tab = StudyTab.path;
 
   /// Reads the stored start-up choice from the image-mode preferences (`ReaderPreferences.booruDefaults`). The app
@@ -39,12 +42,36 @@ class StudyMode extends ChangeNotifier {
     _preferences = preferences;
     StudySound.attach(preferences);
     _startsActive = preferences.boolean(startKey) ?? false;
+    _startsInLibrary = !_startsActive && (preferences.boolean(HomeStage.libraryStartKey) ?? false);
     final launchedIn = fixture ?? _fixture.split(',').map((name) => name.trim()).contains('studyMode');
     _active = _startsActive || launchedIn;
     notifyListeners();
   }
 
-  /// Whether learning mode is on screen.
+  /// Ties the mode to the home scene's stage, which from then on says which place is on screen and holds the two
+  /// start switches. The app calls this once, after [attach]; without it the mode stands alone, as in tests.
+  void link(HomeStage stage) {
+    _stage?.removeListener(_follow);
+    _stage = stage;
+    // A run launched straight into learning mode starts there.
+    if (_active && !stage.studying) stage.enterStudy();
+    stage.addListener(_follow);
+    _follow();
+  }
+
+  void _follow() {
+    final stage = _stage;
+    if (stage == null) return;
+    final left = _active && !stage.studying;
+    if (_active == stage.studying && _startsActive == stage.startsLearning && _startsInLibrary == stage.startsInLibrary) return;
+    _active = stage.studying;
+    _startsActive = stage.startsLearning;
+    _startsInLibrary = stage.startsInLibrary;
+    notifyListeners();
+    if (left) StudySound.rest();
+  }
+
+  /// Whether learning mode is the place on screen, or the one under the home scene.
   bool get active => _active;
 
   /// The tab learning mode opens on the next time it is entered.
@@ -55,24 +82,62 @@ class StudyMode extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Open straight into learning mode when the app starts.
+  /// Open straight into learning mode when the app starts. Only one of the two start switches can be on.
   bool get startsActive => _startsActive;
   set startsActive(bool value) {
+    final stage = _stage;
+    if (stage != null) {
+      if (stage.startsLearning != value) stage.startsLearning = value;
+      return;
+    }
     if (_startsActive == value) return;
     _startsActive = value;
     _preferences?.set(startKey, value);
+    if (value && _startsInLibrary) {
+      _startsInLibrary = false;
+      _preferences?.set(HomeStage.libraryStartKey, false);
+    }
     notifyListeners();
   }
 
-  /// Opens learning mode, on [tab].
+  /// Go straight on from the opening scene into the library when the app starts.
+  bool get startsInLibrary => _startsInLibrary;
+  set startsInLibrary(bool value) {
+    final stage = _stage;
+    if (stage != null) {
+      if (stage.startsInLibrary != value) stage.startsInLibrary = value;
+      return;
+    }
+    if (_startsInLibrary == value) return;
+    _startsInLibrary = value;
+    _preferences?.set(HomeStage.libraryStartKey, value);
+    if (value && _startsActive) {
+      _startsActive = false;
+      _preferences?.set(startKey, false);
+    }
+    notifyListeners();
+  }
+
+  /// Opens learning mode, on [tab]. From the library, the way there leads back up through the home scene and on into the sky.
   void enter([StudyTab tab = StudyTab.path]) {
     _tab = tab;
+    final stage = _stage;
+    if (stage != null) {
+      notifyListeners();
+      stage.enterStudy();
+      return;
+    }
     _active = true;
     notifyListeners();
   }
 
-  /// Opens the library again and lets the sounds go.
+  /// Opens the library again, by the same way in the other direction, and lets the sounds go.
   void leave() {
+    final stage = _stage;
+    if (stage != null) {
+      stage.leaveStudy();
+      return;
+    }
     _active = false;
     notifyListeners();
     StudySound.rest();

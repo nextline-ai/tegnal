@@ -10,8 +10,11 @@ import '../navigation/root_tab_view.dart';
 /// A screen pushed from Settings: an inline title between a glass back button and
 /// optional trailing controls, over an inset-grouped list on the system background.
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key, required this.title, required this.children, this.trailing, this.controller, this.sheet = false});
+  const SettingsPage({super.key, required this.title, required this.children, this.trailing, this.leading, this.controller, this.sheet = false});
   final String title;
+
+  /// In place of the back button, for a page that is the root of a place of its own.
+  final Widget? leading;
 
   /// A page inside a sheet: the sheet's grouped background, its 76 pt bar and lighter glass.
   final bool sheet;
@@ -49,7 +52,7 @@ class SettingsPage extends StatelessWidget {
                     data: media.copyWith(padding: media.padding.copyWith(top: 16)),
                     child: InlineTitleHeader(title: title, trailing: trailing, elevated: true),
                   )
-                : InlineTitleHeader(title: title, trailing: trailing),
+                : InlineTitleHeader(title: title, trailing: trailing, leading: leading),
           ),
         ],
       ),
@@ -59,9 +62,12 @@ class SettingsPage extends StatelessWidget {
 
 /// `.navigationBarTitleDisplayMode(.inline)` on a pushed screen: the back circle, the title centered.
 class InlineTitleHeader extends StatelessWidget {
-  const InlineTitleHeader({super.key, required this.title, this.trailing, this.back = true, this.elevated = false});
+  const InlineTitleHeader({super.key, required this.title, this.trailing, this.leading, this.back = true, this.elevated = false});
   final String title;
   final Widget? trailing;
+
+  /// Shown where the back button would be, in its place.
+  final Widget? leading;
 
   /// In a sheet the back button uses the lighter glass.
   final bool elevated;
@@ -78,7 +84,10 @@ class InlineTitleHeader extends StatelessWidget {
         height: rootBarHeight,
         child: Stack(
           children: [
-            if (back)
+            if (leading != null)
+              Positioned(left: 16, top: 0, child: leading!)
+            // The first page of a sheet's own pages has nothing to go back to.
+            else if (back && Navigator.canPop(context))
               Positioned(
                 left: 16,
                 top: 0,

@@ -14,12 +14,11 @@ import '../../core/study/study_store.dart';
 import '../../core/support/l10n.dart';
 import '../booru/booru_common.dart';
 import '../design/app_sheet.dart';
-import '../design/grouped_form.dart';
 import '../design/ios_controls.dart';
 import '../generation/generator_account_view.dart';
 import '../generation/generator_sheet.dart';
 import '../generation/generator_view.dart';
-import '../settings/settings_rows.dart';
+import '../home/home_stage.dart';
 import '../study/study_guide_view.dart';
 import '../study/study_tag_view.dart';
 import '../study/study_widgets.dart';
@@ -82,62 +81,6 @@ Future<void> _showStudySheet(BuildContext context, WidgetBuilder builder) => sho
   },
 );
 
-// MARK: - Over the library
-
-/// Lays learning mode over the library, as `AppRootTabView` does: while [StudyMode.active], [StudyModeRoot] covers the
-/// whole screen, the library's tab bar included, and the library waits underneath, out of reach of taps and of
-/// VoiceOver. Entering and leaving fade and settle from a slightly larger size (`.snappy(duration: 0.35)`).
-class StudyModeOverlay extends StatelessWidget {
-  const StudyModeOverlay({super.key, required this.booru, required this.child, this.mode});
-
-  /// The image library's context, which learning mode reads from.
-  final BooruContext booru;
-
-  /// The library.
-  final Widget child;
-
-  /// The mode to follow; null is [StudyMode.shared].
-  final StudyMode? mode;
-
-  static final _spring = StudySpring(0.35, 0.15);
-
-  @override
-  Widget build(BuildContext context) {
-    final mode = this.mode ?? StudyMode.shared;
-    return ListenableBuilder(
-      listenable: mode,
-      builder: (context, _) {
-        final studying = mode.active;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            IgnorePointer(
-              ignoring: studying,
-              child: ExcludeSemantics(excluding: studying, child: child),
-            ),
-            AnimatedSwitcher(
-              duration: _spring.settle,
-              layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, ?current]),
-              transitionBuilder: (child, animation) => AnimatedBuilder(
-                animation: animation,
-                child: child,
-                builder: (context, child) {
-                  final t = _spring.transform(animation.value);
-                  return Opacity(
-                    opacity: t.clamp(0.0, 1.0),
-                    child: Transform.scale(scale: 1.03 - 0.03 * t, child: child),
-                  );
-                },
-              ),
-              child: studying ? StudyModeRoot(key: const ValueKey('study.root'), booru: booru, mode: mode) : const SizedBox.shrink(),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
 // MARK: - Root
 
 /// `StudyModeRoot`: learning mode's own screens and its own dock, in place of the library's.
@@ -186,6 +129,9 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   /// The dock's height with the bottom safe area, which the tabs keep clear of.
   double? _dockHeight;
 
+  /// The home scene's stage, which says when the learner has arrived.
+  final HomeStage _stage = HomeStage.shared;
+
   @override
   void initState() {
     super.initState();
@@ -193,6 +139,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     model.reload();
     model.addListener(_changed);
     mode.addListener(_changed);
+    _stage.addListener(_greet);
     booru.store.addListener(_storeChanged);
     booru.state.addListener(_storeChanged);
     StudySound.warm();
@@ -205,6 +152,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   void dispose() {
     model.removeListener(_changed);
     mode.removeListener(_changed);
+    _stage.removeListener(_greet);
     booru.store.removeListener(_storeChanged);
     booru.state.removeListener(_storeChanged);
     _session?.removeListener(_sessionChanged);
@@ -245,8 +193,9 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     }
   }
 
+  /// Asks or celebrates once the learner has arrived, not while the home scene is still on the way out.
   void _greet() {
-    if (_greeted || !mounted) return;
+    if (_greeted || !mounted || _stage.coversScreen) return;
     _greeted = true;
     if (model.needsServer) {
       _chooseServer();
@@ -648,20 +597,22 @@ class StudyHUD extends StatelessWidget {
     final theme = StudyTheme.of(context);
     final game = model.game;
     final streak = model.summary.streak;
+    final home = HomeStage.shared.enabled;
     return ColoredBox(
       color: theme.background,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         child: Row(
           children: [
+            // Learning mode is left for the home scene it was reached from. Where that scene is not in use, the library is next door.
             Semantics(
               button: true,
-              label: L10n.text('Back to the Library'),
+              label: L10n.text(home ? 'Back to the Start' : 'Back to the Library'),
               excludeSemantics: true,
               child: GestureDetector(
                 key: const Key('study.exit'),
                 behavior: HitTestBehavior.opaque,
-                onTap: () => (mode ?? StudyMode.shared).leave(),
+                onTap: () => home ? HomeStage.shared.goHome?.call() : (mode ?? StudyMode.shared).leave(),
                 child: Container(
                   width: 40,
                   height: 40,
@@ -669,7 +620,7 @@ class StudyHUD extends StatelessWidget {
                   foregroundDecoration: ShapeDecoration(
                     shape: CircleBorder(side: BorderSide(color: theme.line, width: 2)),
                   ),
-                  child: Center(child: StudyIcon('books.vertical.fill', size: 17, color: theme.muted)),
+                  child: Center(child: StudyIcon(home ? 'house.fill' : 'books.vertical.fill', size: 17, color: theme.muted)),
                 ),
               ),
             ),
@@ -1274,7 +1225,9 @@ class StudyStars extends StatelessWidget {
             // An SF star's frame is about a third wider than its point size, which spaces the stars apart.
             SizedBox(
               width: size * 1.33,
-              child: Center(child: StudyIcon('star.fill', size: size, color: index < count ? theme.gold : theme.line)),
+              child: Center(
+                child: StudyIcon('star.fill', size: size, color: index < count ? theme.gold : theme.line),
+              ),
             ),
           ],
         ],
@@ -1613,29 +1566,22 @@ class _StudyLabViewState extends State<StudyLabView> {
         children: [
           _connection(context),
           const SizedBox(height: 16),
-          _tool(
-            context,
-            'generator',
-            'wand.and.stars',
-            'Generate a Picture',
-            'Try a prompt with your own Civitai API key.',
-            () {
-              // Without the generator's store (as in a fixture run without its stand-in) there is nothing to open.
-              final store = _generation;
-              if (store == null) return;
-              _open(
-                () => _showStudySheet(
-                  context,
-                  (context) => GeneratorView(
-                    store: store,
-                    safeMode: () => booru.safeMode,
-                    study: booru.store.studyStore,
-                    onClose: () => Navigator.of(context, rootNavigator: true).pop(),
-                  ),
+          _tool(context, 'generator', 'wand.and.stars', 'Generate a Picture', 'Try a prompt with your own Civitai API key.', () {
+            // Without the generator's store (as in a fixture run without its stand-in) there is nothing to open.
+            final store = _generation;
+            if (store == null) return;
+            _open(
+              () => _showStudySheet(
+                context,
+                (context) => GeneratorView(
+                  store: store,
+                  safeMode: () => booru.safeMode,
+                  study: booru.store.studyStore,
+                  onClose: () => Navigator.of(context, rootNavigator: true).pop(),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          }),
           const SizedBox(height: 16),
           _tool(
             context,
@@ -2117,52 +2063,6 @@ class StudyServerPicker extends StatelessWidget {
             if (chosen) ...[const SizedBox(width: 10), StudyIcon('checkmark.circle.fill', size: 20, color: theme.primary)],
           ],
         ),
-      ),
-    );
-  }
-}
-
-// MARK: - Settings
-
-/// `StudyModeSettings`: the setting that opens the app straight into learning mode, and the way in, shown after
-/// Safe Mode in both libraries' settings.
-class StudyModeSettings extends StatelessWidget {
-  const StudyModeSettings({super.key, required this.booru, this.rowColor, this.mode});
-  final BooruContext booru;
-
-  /// The rows' colour, as the neighbouring sections use; null is the list row colour.
-  final Color? rowColor;
-
-  /// The mode to change; null is [StudyMode.shared].
-  final StudyMode? mode;
-
-  @override
-  Widget build(BuildContext context) {
-    final mode = this.mode ?? StudyMode.shared;
-    return ListenableBuilder(
-      listenable: mode,
-      builder: (context, _) => FormSection(
-        prominentHeader: true,
-        rowColor: rowColor ?? FormColors.listRow.resolveFrom(context),
-        header: Text(L10n.text('Learning Mode')),
-        children: [
-          SettingsToggleRow(
-            key: const Key('settings.startInStudyMode'),
-            title: L10n.text('Open in Learning Mode'),
-            help: L10n.text(
-              'Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away.',
-            ),
-            value: mode.startsActive,
-            onChanged: (value) => mode.startsActive = value,
-          ),
-          SettingsLinkRow(
-            key: const Key('settings.enterStudyMode'),
-            title: L10n.text('Enter Learning Mode'),
-            tinted: true,
-            chevron: false,
-            onTap: () => mode.enter(),
-          ),
-        ],
       ),
     );
   }

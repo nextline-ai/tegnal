@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -39,6 +40,8 @@ import 'presentation/content/page_image_store.dart';
 import 'presentation/content/image_translation.dart';
 import 'presentation/content/reader_models.dart';
 import 'presentation/navigation/app_state.dart';
+import 'presentation/home/home_media.dart';
+import 'presentation/home/home_stage.dart';
 import 'core/content/recent_works.dart';
 import 'core/study/study_guide.dart';
 import 'core/study/study_models.dart';
@@ -62,6 +65,11 @@ const _language = String.fromEnvironment('TEGNAL_LANGUAGE');
 const _tab = String.fromEnvironment('TEGNAL_TAB');
 const _theme = String.fromEnvironment('TEGNAL_THEME');
 const _details = bool.fromEnvironment('TEGNAL_DETAILS');
+
+/// `TEGNAL_HOME`: fixture runs start without the home scene unless it is `on`; `blur` holds the opening
+/// blur without its still (with the system bars hidden, to capture the still), and `library:0.5` or
+/// `study:0.6` hold a journey at that moment for screenshots, as `--home-freeze` does on iOS.
+const _home = String.fromEnvironment('TEGNAL_HOME');
 
 /// The native UI tests' saved libraries: `localLibrary` (`--comics-local-library-test`),
 /// `categoryLibrary` (`--category-library-test`) and `libraryJump` (`--library-jump-test`).
@@ -99,8 +107,16 @@ Future<void> main() async {
   // An empty first frame ends the system launch screen at once, so the native splash
   // artwork shows while the services below load; the app replaces it when they are ready.
   if (_fixture.isEmpty) runApp(const ColoredBox(color: Color(0xFF000000)));
+  final sceneOn = _fixture.isEmpty || _home == 'on' || _home == 'blur' || _home.startsWith('library:') || _home.startsWith('study:');
+  // The blurred still is ready before the first real frame, so that frame already shows it.
+  final still = sceneOn ? HomeStill.load() : Future<void>.value();
   final services = _fixture.isEmpty ? await PerfTrace.span('launch services', _launch) : await _launchFixture();
   if (_fixture.isNotEmpty) PrivacyCover.skipLaunchSplash();
+  HomeStage.shared = HomeStage(defaults: services.preferences.defaults, booruDefaults: services.preferences.booruDefaults, enabled: sceneOn);
+  if (sceneOn) HomeStage.shared.onSceneShown = PrivacyCover.launchReady;
+  // Learning mode follows the stage from here on: the place on screen and the two start switches are the stage's.
+  StudyMode.shared.link(HomeStage.shared);
+  await still;
   if (PerfTrace.enabled) {
     PerfTrace.log('launch until first frame scheduled', launch.elapsed);
     // Frames slower than the display's budget, split into the UI thread's build and the raster thread's paint.
@@ -130,8 +146,17 @@ Future<void> main() async {
       services: services,
       initialTab: AppTab.values.where((tab) => tab.name == _tab).firstOrNull ?? AppTab.folders,
       initialMode: _mode == 'booru' ? AppMode.booru : AppMode.manga,
+      homeFreeze: kReleaseMode || _home == 'on' ? '' : _home,
     ),
   );
+  // The native launch cover stays until the home scene's first picture, the blurred still, has been drawn,
+  // or, without the scene, until the app's first frames have.
+  if (!sceneOn) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => PrivacyCover.launchReady());
+      WidgetsBinding.instance.scheduleFrame();
+    });
+  }
 }
 
 /// The installed version name, as Settings shows the bundle version.

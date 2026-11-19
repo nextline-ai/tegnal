@@ -51,7 +51,6 @@ import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
 import '../presentation/settings/drive_sync_section.dart';
 import '../presentation/settings/library_management_view.dart';
-import '../presentation/settings/settings_page.dart' show settingsSectionGap;
 import '../presentation/settings/settings_view.dart';
 import '../presentation/study_mode/study_mode_root.dart';
 import '../presentation/settings/site_account_section.dart';
@@ -64,6 +63,8 @@ import 'privacy_cover.dart';
 import '../core/content/recent_works.dart';
 import '../core/support/app_platform.dart';
 import '../presentation/design/desktop_input.dart';
+import '../presentation/home/home_root_view.dart';
+import '../presentation/home/home_stage.dart';
 import 'app_lock.dart';
 import 'localization.dart';
 
@@ -170,10 +171,13 @@ class AppServices {
 }
 
 class TegnalApp extends StatefulWidget {
-  const TegnalApp({super.key, required this.services, this.initialTab = AppTab.folders, this.initialMode = AppMode.manga});
+  const TegnalApp({super.key, required this.services, this.initialTab = AppTab.folders, this.initialMode = AppMode.manga, this.homeFreeze = ''});
   final AppServices services;
   final AppTab initialTab;
   final AppMode initialMode;
+
+  /// `TEGNAL_HOME` for screenshots of the home scene; see `main.dart`.
+  final String homeFreeze;
 
   @override
   State<TegnalApp> createState() => _TegnalAppState();
@@ -213,7 +217,7 @@ class _TegnalAppState extends State<TegnalApp> {
               child: AppLockGate(child: child!),
             ),
           ),
-          home: _Root(state: _state, services: widget.services),
+          home: _Root(state: _state, services: widget.services, homeFreeze: widget.homeFreeze),
         );
       },
     );
@@ -221,9 +225,10 @@ class _TegnalAppState extends State<TegnalApp> {
 }
 
 class _Root extends StatefulWidget {
-  const _Root({required this.state, required this.services});
+  const _Root({required this.state, required this.services, this.homeFreeze = ''});
   final AppState state;
   final AppServices services;
+  final String homeFreeze;
 
   @override
   State<_Root> createState() => _RootState();
@@ -274,7 +279,8 @@ class _RootState extends State<_Root> {
         addWebsite: () => showWebsiteConnectionEditor(context, content: services.content, state: state),
       );
     };
-    if (!services.isTesting) services.coverQueue.start();
+    // Filling in covers is the library's work: it waits until the library has been on screen.
+    if (!services.isTesting) _stage.libraryOpened ? services.coverQueue.start() : services.coverQueue.setActive(false);
     _watchFirstRun();
     // Sync and the cover queue run only while the app is in front, as on iOS.
     _lifecycle = AppLifecycleListener(
@@ -282,23 +288,47 @@ class _RootState extends State<_Root> {
         final active = value == AppLifecycleState.resumed;
         services.sync.setActive(active);
         services.downloads.setBackground(!active);
-        if (!services.isTesting) services.coverQueue.setActive(active);
-        if (!services.isTesting) unawaited(services.favorites.setActive(active));
-        if (!services.isTesting) unawaited(services.booruAccounts.setActive(active));
+        if (!services.isTesting) services.coverQueue.setActive(active && _stage.libraryOpened);
+        // Website favorites reach the network only for someone on the way to the library.
+        if (!services.isTesting) unawaited(services.favorites.setActive(active && _stage.libraryWarm));
+        if (!services.isTesting) unawaited(services.booruAccounts.setActive(active && _stage.libraryWarm));
       },
     );
-    if (!services.isTesting) unawaited(services.favorites.setActive(true));
-    if (!services.isTesting) unawaited(services.booruAccounts.setActive(true));
+    _libraryWarm = _stage.libraryWarm;
+    _libraryOpened = _stage.libraryOpened;
+    _stage.addListener(_stageChanged);
+    if (!services.isTesting && _libraryWarm) unawaited(services.favorites.setActive(true));
+    if (!services.isTesting && _libraryWarm) unawaited(services.booruAccounts.setActive(true));
     if (!services.isTesting) services.sync.restore().then((_) => services.sync.setActive(true));
   }
 
   late final AppLifecycleListener _lifecycle;
+  HomeStage get _stage => HomeStage.shared;
+  bool _libraryWarm = false;
+  bool _libraryOpened = false;
+
+  /// Starts the library's background work as the home scene allows it.
+  void _stageChanged() {
+    if (services.isTesting) return;
+    final resumed = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (_stage.libraryWarm && !_libraryWarm) {
+      _libraryWarm = true;
+      unawaited(services.favorites.setActive(resumed));
+      unawaited(services.booruAccounts.setActive(resumed));
+    }
+    if (_stage.libraryOpened && !_libraryOpened) {
+      _libraryOpened = true;
+      services.coverQueue.setActive(resumed);
+      services.coverQueue.start();
+    }
+  }
 
   /// Whether the first-run website page is what the app shows: no comics website and no image server yet.
   bool get _isFirstRun => !services.content.isSiteVerified && services.booru.servers.isEmpty;
 
   /// Asks, once, how the app should open. Only a new user is asked, at the first launch: learning mode needs no
-  /// website, so the question does not wait for one to be connected. Fixture runs ask only when `startChoice` names it.
+  /// website, so the question does not wait for one to be connected. It waits for the home scene's opening blur,
+  /// as onboarding does on iOS. Fixture runs ask only when `startChoice` names it.
   void _watchFirstRun() {
     final preferences = services.preferences.booruDefaults;
     if (services.isTesting) {
@@ -306,18 +336,28 @@ class _RootState extends State<_Root> {
       return;
     }
     if (StartChoiceView.isAnswered(preferences) || !_isFirstRun) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _askStartChoice());
+    if (!_stage.enabled || _stage.introFinished) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _askStartChoice());
+      return;
+    }
+    void opened() {
+      if (!_stage.introFinished) return;
+      _stage.removeListener(opened);
+      _askStartChoice();
+    }
+
+    _stage.addListener(opened);
   }
 
   void _askStartChoice() {
     if (!mounted || StartChoiceView.isAnswered(services.preferences.booruDefaults)) return;
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(fullscreenDialog: true, builder: (_) => StartChoiceView(preferences: services.preferences.booruDefaults)),
-    );
+    Navigator.of(context)
+        .push(CupertinoPageRoute<void>(fullscreenDialog: true, builder: (_) => StartChoiceView(preferences: services.preferences.booruDefaults)));
   }
 
   @override
   void dispose() {
+    _stage.removeListener(_stageChanged);
     _lifecycle.dispose();
     _booruPages.dispose();
     super.dispose();
@@ -383,28 +423,15 @@ class _RootState extends State<_Root> {
             library: _management,
             booru: true,
             extraSections: [
-              Builder(
-                builder: (context) => FormSection(
-                  prominentHeader: true,
-                  rowColor: FormColors.listRow.resolveFrom(context),
-                  children: [
-                    SettingsLinkRow(
-                      title: L10n.text('Challenge Backup and Import'),
-                      symbol: (_) => DiceSymbol(color: SystemColors.purple.resolveFrom(context)),
-                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => ChallengeBackupView(booru: services.booru))),
-                    ),
-                    SettingsLinkRow(
-                      title: L10n.text('Import from Anime Boxes'),
-                      icon: CupertinoIcons.cube_box,
-                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: _booru))),
-                    ),
-                    SettingsLinkRow(
-                      title: L10n.text('Import from Another Image App'),
-                      icon: CupertinoIcons.square_arrow_down_on_square,
-                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AnimeBoxesImportView(booru: _booru, otherApps: true))),
-                    ),
-                  ],
-                ),
+              ImageImportSection(
+                booru: _booru,
+                leading: (context) => [
+                  SettingsLinkRow(
+                    title: L10n.text('Challenge Backup and Import'),
+                    symbol: (_) => DiceSymbol(color: SystemColors.purple.resolveFrom(context)),
+                    onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => ChallengeBackupView(booru: services.booru))),
+                  ),
+                ],
               ),
             ],
           ),
@@ -453,63 +480,12 @@ class _RootState extends State<_Root> {
       CupertinoPageRoute<void>(
         builder: (_) => LibraryManagementView(
           library: _management,
-          extraSections: [
-            Builder(
-              builder: (context) => FormSection(
-                prominentHeader: true,
-                rowColor: FormColors.listRow.resolveFrom(context),
-                header: Text(L10n.text('Import Data (Other Manga Viewer)')),
-                children: [
-                  SettingsLinkRow(title: L10n.text('Import from Violet'), icon: CupertinoIcons.book, onTap: () => showImportData(context, _imports)),
-                  SettingsLinkRow(
-                    title: L10n.text('Import from Another Manga Viewer'),
-                    icon: CupertinoIcons.square_arrow_down,
-                    onTap: () => Navigator.of(context).push(
-                      CupertinoPageRoute<void>(
-                        builder: (_) => MangaViewerImportView(
-                          database: services.database,
-                          startCoverQueue: services.coverQueue.start,
-                          libraryChanged: _library.notifyChanged,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Builder(
-              builder: (context) => FormSection(
-                prominentHeader: true,
-                rowColor: FormColors.listRow.resolveFrom(context),
-                header: Text(L10n.text('Other Comics Apps')),
-                footer: Text(L10n.text('Database exports, app data exports, download folders, manga reader backups, link lists and browser bookmarks.')),
-                children: [
-                  SettingsLinkRow(
-                    title: L10n.text('Import from Another Comics App'),
-                    icon: CupertinoIcons.square_arrow_down_on_square,
-                    onTap: () => Navigator.of(context).push(
-                      CupertinoPageRoute<void>(
-                        builder: (_) =>
-                            OtherAppImportView(database: services.database, startCoverQueue: services.coverQueue.start, libraryChanged: _library.notifyChanged),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          extraSections: [ComicsImportSection(imports: _imports)],
         ),
       ),
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
-    safeMode: (context) => Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SafeModeSection(booru: _booru),
-        settingsSectionGap,
-        StudyModeSettings(booru: _booru),
-      ],
-    ),
+    safeMode: (context) => SafeModeSection(booru: _booru),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
@@ -522,48 +498,52 @@ class _RootState extends State<_Root> {
 
   @override
   Widget build(BuildContext context) {
-    // `RetainedModeContainer`: both libraries stay alive while the other one shows.
+    // The home scene lies over the library and learning mode until one of them is chosen.
     return BackupReminderGate(
       database: services.database,
       images: services.booru,
       isTesting: services.isTesting,
-      // Learning mode covers the whole screen, the libraries' tab bars included, while it is on.
-      child: StudyModeOverlay(
-        booru: _booru,
-        child: CupertinoPageScaffold(
-          resizeToAvoidBottomInset: false,
-          child: ListenableBuilder(
-            listenable: state,
-            builder: (context, _) => ListenableBuilder(
-              listenable: services.taste,
-              builder: (context, _) => RootBanner(
-                banner: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ImportReminderBanner(imports: _imports),
-                    if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
-                  ],
-                ),
-                height:
-                    (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
-                    (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
-                child: IndexedStack(
-                  index: state.mode == AppMode.manga ? 0 : 1,
-                  children: [
-                    _mangaTabs(),
-                    RootTabView(
-                      state: state,
-                      pages: {
-                        ..._booruPages.pages(),
-                        AppTab.insights: TabNavigator(
-                          active: state.mode == AppMode.booru && state.tab == AppTab.insights,
-                          builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
-                        ),
-                      },
+      child: HomeRoot(stage: _stage, freeze: widget.homeFreeze, library: _libraryPlace, study: (context) => _studyPlace()),
+    );
+  }
+
+  /// Learning mode as a place of its own: it takes the whole screen, its own dock included.
+  Widget _studyPlace() => StudyModeRoot(booru: _booru);
+
+  Widget _libraryPlace(BuildContext context) {
+    // `RetainedModeContainer`: both libraries stay alive while the other one shows.
+    return CupertinoPageScaffold(
+      resizeToAvoidBottomInset: false,
+      child: ListenableBuilder(
+        listenable: state,
+        builder: (context, _) => ListenableBuilder(
+          listenable: services.taste,
+          builder: (context, _) => RootBanner(
+            banner: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ImportReminderBanner(imports: _imports),
+                if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
+              ],
+            ),
+            height:
+                (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
+                (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
+            child: IndexedStack(
+              index: state.mode == AppMode.manga ? 0 : 1,
+              children: [
+                _mangaTabs(),
+                RootTabView(
+                  state: state,
+                  pages: {
+                    ..._booruPages.pages(),
+                    AppTab.insights: TabNavigator(
+                      active: state.mode == AppMode.booru && state.tab == AppTab.insights,
+                      builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
                     ),
-                  ],
+                  },
                 ),
-              ),
+              ],
             ),
           ),
         ),

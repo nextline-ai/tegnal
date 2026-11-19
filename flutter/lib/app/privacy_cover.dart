@@ -1,27 +1,31 @@
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import '../core/support/mode_settings.dart';
 import '../core/support/preferences.dart';
 
-/// Tells the Android window cover (the native app's launch splash and app switcher privacy
-/// cover) which artwork matches the app's appearance and whether returning animates.
+/// Tells the Android window cover (the native app's launch screen and app switcher privacy
+/// cover: the home scene's blurred still) whether returning animates, and when the home
+/// scene's first picture is on screen so the launch cover can leave.
 abstract final class PrivacyCover {
   static const _channel = MethodChannel('work.nextline.tegnal/privacy');
-  static (bool, bool)? _sent;
+  static bool? _sent;
 
-  static void configure({required bool dark, required bool resumeAnimation}) {
-    if (_sent == (dark, resumeAnimation)) return;
-    _sent = (dark, resumeAnimation);
-    _channel.invokeMethod<void>('configure', {'dark': dark, 'resumeAnimation': resumeAnimation}).catchError((Object _) {});
+  static void configure({required bool resumeAnimation}) {
+    if (_sent == resumeAnimation) return;
+    _sent = resumeAnimation;
+    _channel.invokeMethod<void>('configure', {'resumeAnimation': resumeAnimation}).catchError((Object _) {});
   }
 
-  /// Screen comparison runs start without the splash, as the native UI tests do.
+  /// Screen comparison runs start without the launch cover, as the native UI tests do.
   static void skipLaunchSplash() => _channel.invokeMethod<void>('skipLaunchSplash').catchError((Object _) {});
+
+  /// The home scene's still is on screen: the launch cover fades out (call once).
+  static void launchReady() => _channel.invokeMethod<void>('launchReady').catchError((Object _) {});
 }
 
-/// Keeps [PrivacyCover] in step with the app: on every appearance change, and whenever the
-/// app is about to leave, when the returning-animation setting is read afresh.
+/// Keeps [PrivacyCover] in step with the app: after every build, and whenever the app is
+/// about to leave, when the returning-animation setting is read afresh.
 class PrivacyCoverSync extends StatefulWidget {
   const PrivacyCoverSync({super.key, required this.preferences, required this.child});
   final Preferences preferences;
@@ -48,12 +52,11 @@ class _PrivacyCoverSyncState extends State<PrivacyCoverSync> {
 
   void _send() {
     if (!mounted) return;
-    PrivacyCover.configure(dark: CupertinoTheme.brightnessOf(context) == Brightness.dark, resumeAnimation: ResumeAnimationSetting.stored(widget.preferences));
+    PrivacyCover.configure(resumeAnimation: ResumeAnimationSetting.stored(widget.preferences));
   }
 
   @override
   Widget build(BuildContext context) {
-    // Sent after the frame, so the appearance is the one now on screen.
     WidgetsBinding.instance.addPostFrameCallback((_) => _send());
     return widget.child;
   }

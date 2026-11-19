@@ -7,11 +7,14 @@ import 'package:tegnal/core/booru/anime_boxes_import.dart';
 import 'package:tegnal/core/booru/booru_models.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/content/site_account.dart';
+import 'package:tegnal/core/migration/manga_viewer_import.dart';
 import 'package:tegnal/core/migration/other_app_import.dart';
+import 'package:tegnal/core/migration/violet_import.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/storage/folder_rules.dart';
 import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/sql_database.dart';
+import 'package:tegnal/domain/models.dart';
 
 void main() {
   late Directory temp;
@@ -82,6 +85,51 @@ void main() {
       final images = SqlDatabase.open('${temp.path}/images.db')..execute('CREATE TABLE BooruItem (id INTEGER)');
       images.close();
       expect(() => OtherAppImport.readDatabase('${temp.path}/images.db'), throwsA(OtherAppImportError.imageAppBackup));
+    });
+
+    test('a viewer\'s own databases are recognized by what they hold', () {
+      // Whatever the file is called, a bookmark backup is known by its bookmark table.
+      final bookmarks = '${temp.path}/saved.backup';
+      SqlDatabase.open(bookmarks)
+        ..execute('CREATE TABLE BookmarkArticle (Id INTEGER)')
+        ..close();
+      expect(ViewerDatabase.recognize(File(bookmarks)), ViewerDatabase.bookmarks);
+      // A catalogue is known by its table of works with titles and artists.
+      final catalog = '${temp.path}/works.sqlite';
+      SqlDatabase.open(catalog)
+        ..execute('CREATE TABLE Works (Id INTEGER, Title TEXT, Artists TEXT)')
+        ..close();
+      expect(ViewerDatabase.recognize(File(catalog)), ViewerDatabase.catalog);
+      // Any other database, and any file that is not one, goes on to the other readers.
+      final other = '${temp.path}/other.db';
+      SqlDatabase.open(other)
+        ..execute('CREATE TABLE Unrelated (id INTEGER)')
+        ..close();
+      expect(ViewerDatabase.recognize(File(other)), isNull);
+      final text = File('${temp.path}/notes.db')..writeAsStringSync('not a database');
+      expect(ViewerDatabase.recognize(text), isNull);
+      expect(ViewerDatabase.recognize(File('${temp.path}/missing.db')), isNull);
+      expect(ViewerDatabase.recognize(File(temp.path)), isNull);
+      // What is neither gets the readers' own messages, as on iOS.
+      expect(() => OtherAppImport.read(File(other)), throwsA(OtherAppImportError.unrecognized));
+      expect(() => OtherAppImport.read(text), throwsA(OtherAppImportError.empty));
+    });
+
+    test('a bookmark backup without groups files its works as unfiled, with what the catalog knows', () async {
+      final path = '${temp.path}/user.db';
+      SqlDatabase.open(path)
+        ..execute('CREATE TABLE BookmarkArticle (Id INTEGER PRIMARY KEY, Article TEXT, DateTime TEXT, GroupId INTEGER)')
+        ..execute("INSERT INTO BookmarkArticle VALUES (1, '1001', '2024-06-10 10:00:00', 1), (2, '1002', '2024-06-11 10:00:00', 1)")
+        ..close();
+      final database = AppDatabase.inMemory();
+      database.upsertCatalogBatch(const [CatalogWork(id: 1001, title: 'Known', artists: 'mira', tags: 'female:glasses')]);
+      final result = await VioletImportService(database).import(path);
+      expect(result.works, 2);
+      expect(result.folders, 0);
+      expect(database.getWork(1001)?.title, 'Known');
+      expect(database.getWork(1001)?.metadataSource, 'catalog');
+      expect(database.getWork(1002)?.title, isNull);
+      expect(database.getWork(1002)!.folders, hasLength(1));
     });
   });
 

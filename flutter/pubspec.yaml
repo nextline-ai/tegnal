@@ -45,6 +45,8 @@ flutter:
     - assets/study/
     - assets/study/mascot/
     - assets/study/sounds/
+    - assets/home/
+    - assets/home/art/
   fonts:
     - family: Pretendard
       fonts:

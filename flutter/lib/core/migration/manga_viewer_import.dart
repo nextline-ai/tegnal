@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import '../../domain/models.dart';
 import '../storage/app_database.dart';
 import '../support/l10n.dart';
@@ -266,6 +269,35 @@ class MangaViewerImportService {
     } finally {
       source.close();
     }
+  }
+}
+
+/// A database of a comics viewer that keeps its bookmarks in one file and its catalogue of works
+/// in another. Each is recognized by the tables it holds, whatever the file is called.
+enum ViewerDatabase {
+  bookmarks,
+  catalog;
+
+  String get title => L10n.text(this == bookmarks ? 'Bookmark Backup' : 'Work Information Catalog');
+
+  /// The kind of viewer database [file] is, or null for any other file, a folder or a file that
+  /// isn't SQLite at all; those go on to the other readers.
+  static ViewerDatabase? recognize(File file) {
+    try {
+      if (FileSystemEntity.isDirectorySync(file.path)) return null;
+      final handle = file.openSync();
+      final List<int> head;
+      try {
+        head = handle.readSync(16);
+      } finally {
+        handle.closeSync();
+      }
+      if (!utf8.decode(head, allowMalformed: true).startsWith('SQLite format 3')) return null;
+    } on FileSystemException {
+      return null;
+    }
+    if (MangaViewerImportService.isUserDatabase(file.path)) return bookmarks;
+    return MangaViewerImportService.isDataDatabase(file.path) ? catalog : null;
   }
 }
 

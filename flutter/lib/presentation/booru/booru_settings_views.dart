@@ -40,7 +40,7 @@ import '../settings/recent_works_page.dart';
 import '../../core/support/app_platform.dart';
 import '../settings/privacy_security_view.dart';
 import '../study/study_home_view.dart';
-import '../study_mode/study_mode_root.dart' show StudyModeSettings;
+import '../home/home_settings.dart';
 
 /// What the More tab shares with comics Settings.
 class BooruSettingsDependencies {
@@ -334,7 +334,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                 settingsSectionGap,
                 SafeModeSection(booru: _booru, rowColor: row),
                 settingsSectionGap,
-                StudyModeSettings(booru: _booru, rowColor: row),
+                HomeStartSettings(rowColor: row),
                 settingsSectionGap,
                 section(
                   header: L10n.text('Data & Storage'),

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The home scene's dusk colour (`HomePalette.dusk`): behind the blurred still, and the
+         whole system launch screen on Android 12 and later, which can only show a colour. -->
+    <color name="home_dusk">#2A1E51</color>
+</resources>
