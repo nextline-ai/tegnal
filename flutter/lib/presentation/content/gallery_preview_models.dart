@@ -1,3 +1,5 @@
+import '../../core/addons/addon_store.dart';
+
 import 'dart:math' as math;
 import 'dart:ui' show Color, Rect;
 
@@ -132,7 +134,7 @@ enum ArtworkTagCategory {
 }
 
 class ArtworkTag {
-  const ArtworkTag({required this.query, required this.name, required this.category});
+  const ArtworkTag({required this.query, required this.name, required this.category, this.original});
 
   /// What a search for this tag uses, namespace included.
   final String query;
@@ -140,6 +142,9 @@ class ArtworkTag {
   /// What the pill shows: without the namespace, underscores as spaces.
   final String name;
   final ArtworkTagCategory category;
+
+  /// The tag itself, with spaces, when [name] is a translation from an add-on.
+  final String? original;
 
   String get id => query;
 
@@ -196,7 +201,11 @@ class ArtworkTagGroup {
       }
       name = name.replaceAll('_', ' ');
       if (!seen.add('${category.rawValue}:$name')) continue;
-      result.putIfAbsent(category, () => []).add(ArtworkTag(query: query, name: name, category: category));
+      // A translation add-on shows its words in place of the tag; the tag itself is still what is searched.
+      final translated = AddonRuntime.shared.translation(query);
+      result
+          .putIfAbsent(category, () => [])
+          .add(ArtworkTag(query: query, name: translated ?? name, category: category, original: translated == null ? null : name));
     }
     return [
       for (final category in ArtworkTagCategory.values)

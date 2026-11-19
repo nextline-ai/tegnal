@@ -245,7 +245,7 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   }
 
   void _updateBlacklists() {
-    _loader.setBlacklists({for (final server in _servers) server.id: _booru.store.blacklist(server.id)});
+    _loader.setBlacklists({for (final server in _servers) server.id: _booru.store.filteringBlacklist(server.id)});
     _loader.setExcludedPostIDs(_booru.store.confirmedGoldRestrictedIDs);
   }
 

@@ -30,7 +30,7 @@ class ChallengeFolderSource with BooruTagStudyUnsupported implements BooruProvid
     final terms = splitWhitespace(query);
     final tags = terms.where((term) => !term.startsWith('order:') && !term.startsWith('sort:')).toList();
     final popular = terms.contains('order:score') || terms.contains('sort:score:desc');
-    final blacklist = store.blacklist(server.id);
+    final blacklist = store.filteringBlacklist(server.id);
     final all = store.visibleFavorites(folderID: folderID).where((post) {
       final available = {for (final tag in post.tags) tag.toLowerCase()};
       final matches = tags.every((term) {

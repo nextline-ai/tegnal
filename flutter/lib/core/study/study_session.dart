@@ -27,7 +27,7 @@ abstract final class StudyLookup {
         if (StudyEngine.usable(post) &&
             store.isVisible(post) &&
             store.isShownInSafeMode(post) &&
-            !(blacklists[post.serverID] ??= BooruBlacklist(store.blacklist(post.serverID))).contains(post))
+            !(blacklists[post.serverID] ??= BooruBlacklist(store.filteringBlacklist(post.serverID))).contains(post))
           post,
     ];
   }

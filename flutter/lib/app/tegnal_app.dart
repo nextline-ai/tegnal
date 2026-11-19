@@ -45,6 +45,7 @@ import '../presentation/library/library_routes.dart';
 import '../presentation/navigation/app_state.dart';
 import '../presentation/navigation/root_tab_view.dart';
 import '../presentation/navigation/tab_navigator.dart';
+import '../presentation/settings/addons_view.dart';
 import '../presentation/settings/backup_reminder.dart';
 import '../presentation/settings/cover_fill_warning.dart';
 import '../presentation/settings/discord_invitation_banner.dart';
@@ -486,6 +487,8 @@ class _RootState extends State<_Root> {
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
     safeMode: (context) => SafeModeSection(booru: _booru),
+    addons: (context) => AddonsSettingsSection(booru: services.booru),
+    openAddons: (context) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: services.booru))),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),

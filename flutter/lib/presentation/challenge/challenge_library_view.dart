@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/addons/addon_store.dart' show AddonEffects;
 import '../../core/booru/booru_store.dart';
 import '../../core/challenge/challenge_models.dart';
 import '../../core/challenge/challenge_store.dart';
@@ -170,6 +171,7 @@ class _ChallengeLibraryViewState extends State<ChallengeLibraryView> {
                                 icon: game.goal.mode == ChallengeGoalMode.time ? CupertinoIcons.timer : null,
                                 title: game.title,
                                 detail: game.detail,
+                                fromAddon: game.id.startsWith(AddonEffects.challengePrefix),
                                 trailing: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -263,7 +265,10 @@ class _ChallengeLibraryViewState extends State<ChallengeLibraryView> {
 
 /// One challenge: a purple symbol in a soft tile, the title and its instructions.
 class _GameRow extends StatelessWidget {
-  const _GameRow({required this.icon, required this.title, required this.detail, this.trailing});
+  const _GameRow({required this.icon, required this.title, required this.detail, this.trailing, this.fromAddon = false});
+
+  /// The challenge came with an add-on.
+  final bool fromAddon;
 
   /// Null draws `dice`.
   final IconData? icon;
@@ -296,6 +301,22 @@ class _GameRow extends StatelessWidget {
                   title,
                   style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
                 ),
+                if (fromAddon) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PuzzlePieceSymbol(size: 12, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          L10n.text('From an Add-on'),
+                          style: TegnalType.style(11, weight: FontWeight.w600, color: TegnalColors.secondaryLabel.resolveFrom(context)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (detail.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(

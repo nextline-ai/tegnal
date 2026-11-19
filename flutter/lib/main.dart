@@ -1,3 +1,5 @@
+import 'core/addons/addon_store.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -239,6 +241,7 @@ Future<AppServices> _launch() async {
   WorkSiteMemory.shared = WorkSiteMemory(file: File('${support.path}/work-missing-sites.json'));
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
+  AddonRuntime.shared.reload(booru);
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
   booru.warmSavedPreview = (post, server) {
     final url = post.previewURL ?? post.sampleURL;

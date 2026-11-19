@@ -157,7 +157,7 @@ class _ExploreViewState extends State<ExploreView> {
     final content = widget.content;
     return _query
         .filteredTo(category)
-        .applyingDefaults(tags: content.defaultTags, excluded: content.defaultExcludedTags)
+        .applyingDefaults(tags: content.searchDefaultTags, excluded: content.searchExcludedTags)
         // A ranking chosen on another website, or before signing out, falls back to the latest works.
         .copyWith(allowsLanguageExceptions: content.allowsMangaLanguageExceptions, sort: _availableSort);
   }

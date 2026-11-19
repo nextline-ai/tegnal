@@ -509,3 +509,38 @@ class _BookPagesPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BookPagesPainter old) => old.color != color;
 }
+
+/// `puzzlepiece.extension`: a puzzle piece with a knob on its top and another on its right.
+class PuzzlePieceSymbol extends StatelessWidget {
+  const PuzzlePieceSymbol({super.key, this.size = 22, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ?? IconTheme.of(context).color ?? const Color(0xFFFFFFFF);
+    return CustomPaint(size: Size.square(size), painter: _PuzzlePiecePainter(resolved));
+  }
+}
+
+class _PuzzlePiecePainter extends CustomPainter {
+  _PuzzlePiecePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * unit
+      ..strokeJoin = StrokeJoin.round;
+    final body = Path()..addRRect(RRect.fromLTRBR(3 * unit, 8 * unit, 17 * unit, 22 * unit, Radius.circular(2.4 * unit)));
+    final top = Path()..addOval(Rect.fromCircle(center: Offset(10 * unit, 5.2 * unit), radius: 3 * unit));
+    final right = Path()..addOval(Rect.fromCircle(center: Offset(19.6 * unit, 15 * unit), radius: 3 * unit));
+    canvas.drawPath(Path.combine(PathOperation.union, Path.combine(PathOperation.union, body, top), right), stroke);
+  }
+
+  @override
+  bool shouldRepaint(_PuzzlePiecePainter old) => old.color != color;
+}
