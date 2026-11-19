@@ -231,6 +231,39 @@ const List<double> _palette = [
 ];
 
 final Map<String, void Function(_Pen)> _symbols = {
+  // The heavy marks that the font draws too thin: the lesson's close button, the finished stop's tick, the locked
+  // stop, row chevrons, the start button's triangle and the stars, measured from the heavy SF Symbols.
+  'xmark': (p) {
+    p.line([88, 88, 167, 167], 25, close: false);
+    p.line([167, 88, 88, 167], 25, close: false);
+  },
+  'checkmark': (p) => p.line([80, 130, 110, 172, 175, 83], 24),
+  'chevron.right': (p) => p.line([112, 81, 159, 127.5, 112, 174], 24),
+  'chevron.left': (p) => p.line([143, 81, 96, 127.5, 143, 174], 24),
+  'lock.fill': (p) {
+    p.stroke(
+      Path()
+        ..moveTo(101, 118)
+        ..lineTo(101, 98)
+        ..arcToPoint(const Offset(153, 98), radius: const Radius.circular(26))
+        ..lineTo(153, 118),
+      18,
+      cap: StrokeCap.butt,
+    );
+    p.box(81, 112, 173, 192, 13);
+  },
+  'play.fill': (p) => p.fill(roundPoly([77, 60, 197, 127.5, 77, 195], 20)),
+  'star.fill': (p) {
+    const cx = 127.5, cy = 134.5, outer = 84.0, inner = 40.0;
+    p.fill(
+      roundPoly([
+        for (var i = 0; i < 10; i++) ...[
+          cx + (i.isEven ? outer : inner) * math.sin(i * math.pi / 5),
+          cy - (i.isEven ? outer : inner) * math.cos(i * math.pi / 5),
+        ],
+      ], 14),
+    );
+  },
   'dumbbell.fill': (p) {
     p.box(38, 92, 61, 165, 11);
     p.box(196, 92, 218, 165, 11);

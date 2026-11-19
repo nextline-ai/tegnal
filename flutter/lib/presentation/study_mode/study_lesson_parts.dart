@@ -119,41 +119,47 @@ class StudyStepFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = StudyTheme.of(context);
     final bottom = MediaQuery.paddingOf(context).bottom;
-    return Column(
-      children: [
-        Expanded(
-          child: MediaQuery.removePadding(
-            context: context,
-            removeBottom: !hidden,
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.only(bottom: hidden ? bottom : 0),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 18, right: 18, top: 8, bottom: 20),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 18, children: children),
+    // The keyboard pushes the step up, as SwiftUI's keyboard avoidance does: the button rides on top of it and the
+    // focused field scrolls into the room left above.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: Column(
+        children: [
+          Expanded(
+            child: MediaQuery.removePadding(
+              context: context,
+              removeBottom: !hidden,
+              child: SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.only(bottom: hidden ? bottom : 0),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 18, right: 18, top: 8, bottom: 20),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 18, children: children),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-        if (!hidden)
-          ColoredBox(
-            color: theme.background,
-            child: Padding(
-              padding: EdgeInsets.only(left: 18, right: 18, top: 10, bottom: 10 + bottom),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: StudyMainButton(key: const Key('study.check'), title: L10n.text(button), onPressed: enabled ? onPressed : null),
+          if (!hidden)
+            ColoredBox(
+              color: theme.background,
+              child: Padding(
+                padding: EdgeInsets.only(left: 18, right: 18, top: 10, bottom: 10 + bottom),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: StudyMainButton(key: const Key('study.check'), title: L10n.text(button), onPressed: enabled ? onPressed : null),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

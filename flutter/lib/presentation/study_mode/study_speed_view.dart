@@ -319,11 +319,11 @@ class _StudySpeedViewState extends State<StudySpeedView> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (L10n.language != 'en') ...[
-                            Text(question.tag.title(), style: StudyTheme.title(24).copyWith(color: theme.primary)),
+                            Text(studyWords(question.tag.title()), style: StudyTheme.title(24).copyWith(color: theme.primary)),
                             const SizedBox(height: 6),
                           ],
                           Text(
-                            question.tag.note.resolved(),
+                            studyWords(question.tag.note.resolved()),
                             style: StudyTheme.body(18, StudyTheme.semibold).copyWith(color: theme.ink, height: (18 * 1.2 + 3) / 18),
                           ),
                         ],

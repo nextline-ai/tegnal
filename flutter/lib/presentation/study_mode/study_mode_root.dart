@@ -174,6 +174,9 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   String? _finished;
   bool _paradeOpen = false;
 
+  /// The wait before the badge parade goes up, cancelled if the mode goes away first.
+  Timer? _paradeTimer;
+
   /// Whether this visit's opening question or celebration has been shown.
   bool _greeted = false;
 
@@ -205,6 +208,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     booru.store.removeListener(_storeChanged);
     booru.state.removeListener(_storeChanged);
     _session?.removeListener(_sessionChanged);
+    _paradeTimer?.cancel();
     model.dispose();
     super.dispose();
   }
@@ -254,6 +258,8 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   Future<void> _chooseServer() => showAppSheet<void>(
     context,
     medium: true,
+    // Its medium and large detents show the grabber on iOS.
+    grabber: true,
     builder: (context, controller) => StudyServerPicker(model: model, controller: controller),
   );
 
@@ -271,7 +277,9 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     // A cover cannot go up while another is on its way down. A long backlog, as after an update, shows only its last few.
     final shown = unseen.sublist(math.max(0, unseen.length - 3));
     _paradeOpen = true;
-    Future<void>.delayed(const Duration(milliseconds: 450), () async {
+    _paradeTimer?.cancel();
+    _paradeTimer = Timer(const Duration(milliseconds: 450), () async {
+      _paradeTimer = null;
       if (!mounted) {
         _paradeOpen = false;
         return;
@@ -401,9 +409,14 @@ class _StudyModeRootState extends State<StudyModeRoot> {
                       onSize: (size) {
                         if (_dockHeight != size.height) setState(() => _dockHeight = size.height);
                       },
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: media.padding.bottom),
-                        child: StudyDock(selection: mode.tab, onSelected: (tab) => mode.tab = tab),
+                      // As on iOS, the content stops at the dock: its margins and the strip below it are the
+                      // background, so nothing scrolling shows through under the dock.
+                      child: ColoredBox(
+                        color: theme.background,
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: media.padding.bottom),
+                          child: StudyDock(selection: mode.tab, onSelected: (tab) => mode.tab = tab),
+                        ),
                       ),
                     ),
                   ),
@@ -897,9 +910,9 @@ class _StudyPathViewState extends State<StudyPathView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(section.title.resolved(), style: StudyTheme.title(22).copyWith(color: white)),
+                  Text(studyWords(section.title.resolved()), style: StudyTheme.title(22).copyWith(color: white)),
                   const SizedBox(height: 6),
-                  Text(section.summary.resolved(), style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: white.withValues(alpha: 0.9))),
+                  Text(studyWords(section.summary.resolved()), style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: white.withValues(alpha: 0.9))),
                   if (!empty) ...[
                     const SizedBox(height: 6 + 4),
                     Row(
@@ -1068,7 +1081,7 @@ class _StudyPathViewState extends State<StudyPathView> {
         if (record != null) ...[const SizedBox(height: 8), StudyStars(count: record.stars, size: 13)],
         const SizedBox(height: 8),
         Text(
-          lesson.title.resolved(),
+          studyWords(lesson.title.resolved()),
           textAlign: TextAlign.center,
           style: StudyTheme.body(13, StudyTheme.bold).copyWith(color: open ? theme.ink : theme.muted),
         ),
@@ -1082,7 +1095,7 @@ class _StudyPathViewState extends State<StudyPathView> {
     final record = model.records[lesson.id];
     final detail = switch (lesson.kind) {
       StudyPathLessonKind.tags => L10n.text('New tags: %@', ['${lesson.tags?.length ?? 0}']),
-      StudyPathLessonKind.concept => lesson.summary?.resolved() ?? L10n.text('An idea, explained from the start'),
+      StudyPathLessonKind.concept => studyWords(lesson.summary?.resolved() ?? L10n.text('An idea, explained from the start')),
       StudyPathLessonKind.boss => L10n.text('Put prompts together yourself'),
     };
     return Padding(
@@ -1102,7 +1115,7 @@ class _StudyPathViewState extends State<StudyPathView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(lesson.title.resolved(), style: StudyTheme.title(21).copyWith(color: theme.ink)),
+                          Text(studyWords(lesson.title.resolved()), style: StudyTheme.title(21).copyWith(color: theme.ink)),
                           const SizedBox(height: 4),
                           Text(detail, style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: theme.muted)),
                         ],
@@ -1258,7 +1271,11 @@ class StudyStars extends StatelessWidget {
         children: [
           for (var index = 0; index < 3; index++) ...[
             if (index > 0) const SizedBox(width: 3),
-            StudyIcon('star.fill', size: size, color: index < count ? theme.gold : theme.line),
+            // An SF star's frame is about a third wider than its point size, which spaces the stars apart.
+            SizedBox(
+              width: size * 1.33,
+              child: Center(child: StudyIcon('star.fill', size: size, color: index < count ? theme.gold : theme.line)),
+            ),
           ],
         ],
       ),
@@ -1502,7 +1519,7 @@ class StudyDexView extends StatelessWidget {
             if (L10n.language != 'en') ...[
               const SizedBox(height: 6),
               Text(
-                tag.title(),
+                studyWords(tag.title()),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: StudyTheme.body(13, StudyTheme.medium).copyWith(color: theme.muted),
@@ -1602,7 +1619,22 @@ class _StudyLabViewState extends State<StudyLabView> {
             'wand.and.stars',
             'Generate a Picture',
             'Try a prompt with your own Civitai API key.',
-            () => _open(() => _showStudySheet(context, (context) => GeneratorView.forBooru(booru))),
+            () {
+              // Without the generator's store (as in a fixture run without its stand-in) there is nothing to open.
+              final store = _generation;
+              if (store == null) return;
+              _open(
+                () => _showStudySheet(
+                  context,
+                  (context) => GeneratorView(
+                    store: store,
+                    safeMode: () => booru.safeMode,
+                    study: booru.store.studyStore,
+                    onClose: () => Navigator.of(context, rootNavigator: true).pop(),
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 16),
           _tool(

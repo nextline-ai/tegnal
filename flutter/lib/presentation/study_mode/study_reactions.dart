@@ -553,10 +553,21 @@ class _StudyComboBannerState extends State<StudyComboBanner> with SingleTickerPr
                 children: [
                   ScaleTransition(
                     scale: _pulse.drive(_scale),
-                    child: Icon(StudyGlyph.icon('flame.fill'), size: 22, color: white),
+                    child: const StudyIcon('flame.fill', size: 22, color: white),
                   ),
                   const SizedBox(width: 8),
-                  Text(L10n.text('%@ in a row!', ['${widget.combo}']), style: StudyTheme.title(20).copyWith(color: white)),
+                  // On a narrow screen with large text the words shrink, then end in an ellipsis, rather than overflow.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        L10n.text('%@ in a row!', ['${widget.combo}']),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: StudyTheme.title(20).copyWith(color: white),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

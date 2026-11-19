@@ -198,7 +198,9 @@ class _GeneratorModelPickerState extends State<GeneratorModelPicker> {
           prominentHeader: true,
           rowColor: rowColor,
           header: Text(L10n.text('AIR or Model Page')),
-          footer: Text(L10n.text('An AIR names a model exactly: urn:air:ecosystem:type:source:id@version. A Civitai model page address or version number works too.')),
+          footer: Text(
+            L10n.text('An AIR names a model exactly: urn:air:ecosystem:type:source:id@version. A Civitai model page address or version number works too.'),
+          ),
           children: [
             FormRow(
               child: Padding(
@@ -226,7 +228,9 @@ class _GeneratorModelPickerState extends State<GeneratorModelPicker> {
                 opacity: canUse || _working ? 1 : 0.4,
                 child: Row(
                   children: [
-                    Expanded(child: Text(L10n.text('Use This Model'), style: TegnalType.style(17, color: StudyStyle.accent(context)))),
+                    Expanded(
+                      child: Text(L10n.text('Use This Model'), style: TegnalType.style(17, color: StudyStyle.accent(context))),
+                    ),
                     if (_working) const CupertinoActivityIndicator(),
                   ],
                 ),
@@ -240,7 +244,11 @@ class _GeneratorModelPickerState extends State<GeneratorModelPicker> {
                     Icon(CupertinoIcons.exclamationmark_triangle, size: 15, color: SystemColors.red.resolveFrom(context)),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(message, key: const Key('generator.pickerMessage'), style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context))),
+                      child: Text(
+                        message,
+                        key: const Key('generator.pickerMessage'),
+                        style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context)),
+                      ),
                     ),
                   ],
                 ),
@@ -274,7 +282,10 @@ class _GeneratorModelPickerState extends State<GeneratorModelPicker> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: ShapeDecoration(color: StudyStyle.accent(context), shape: const StadiumBorder()),
-                        child: Text(L10n.text('Suggested'), style: TegnalType.style(12, color: const Color(0xFFFFFFFF)).copyWith(fontWeight: FontWeight.w700)),
+                        child: Text(
+                          L10n.text('Suggested'),
+                          style: TegnalType.style(12, color: const Color(0xFFFFFFFF)).copyWith(fontWeight: FontWeight.w700),
+                        ),
                       ),
                     ],
                   ),

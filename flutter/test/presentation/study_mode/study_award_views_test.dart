@@ -248,6 +248,28 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
     });
+    testWidgets('in a medium sheet a locked badge keeps the family row in sight by making its medal smaller', (tester) async {
+      tester.view.physicalSize = const Size(1206, 2622);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final family = StudyAward.all().where((award) => award.family == StudyAwardFamily.lessons).toList();
+      expect(family.length, greaterThan(1));
+      await tester.pumpWidget(
+        host(
+          SizedBox(
+            width: 386,
+            height: 451,
+            child: StudyAwardDetail(award: family[1], record: null, facts: StudyFacts(), family: family, earned: const {}),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+      final sheet = tester.getRect(find.byType(StudyAwardDetail));
+      final medals = find.descendant(of: find.byType(StudyAwardDetail), matching: find.byType(StudyMedal));
+      // The last of the family's small medals ends inside the sheet.
+      expect(tester.getRect(medals.last).bottom, lessThanOrEqualTo(sheet.bottom));
+    });
   });
 
   group('StudyAwardCelebration and StudyAwardParade', () {

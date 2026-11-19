@@ -101,7 +101,7 @@ class _StartChoiceViewState extends State<StartChoiceView> {
                               picture: SizedBox(
                                 width: 64,
                                 height: 84,
-                                child: Icon(CupertinoIcons.book_fill, size: 38, color: tint),
+                                child: Center(child: StudyIcon('books.vertical.fill', size: 38, color: tint)),
                               ),
                             ),
                           ],
@@ -191,6 +191,9 @@ class _StartChoiceViewState extends State<StartChoiceView> {
 /// `.borderedProminent` with `.controlSize(.large)`: a filled tint capsule, dimmed while disabled.
 class _ContinueButton extends StatelessWidget {
   const _ContinueButton({super.key, required this.label, required this.onPressed});
+
+  /// `quaternarySystemFill`, behind a disabled prominent button.
+  static const _disabledFill = CupertinoDynamicColor.withBrightness(color: Color(0x14747480), darkColor: Color(0x2E767680));
   final String label;
   final VoidCallback? onPressed;
 
@@ -203,15 +206,20 @@ class _ContinueButton extends StatelessWidget {
     child: CupertinoButton(
       padding: EdgeInsets.zero,
       onPressed: onPressed,
-      child: Opacity(
-        opacity: onPressed == null ? 0.4 : 1,
-        child: Container(
-          height: 52,
-          alignment: Alignment.center,
-          decoration: ShapeDecoration(color: TegnalColors.tint.resolveFrom(context), shape: const StadiumBorder()),
-          child: Text(
-            label,
-            style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
+      // Disabled, iOS draws it in a faint grey fill with grey words rather than a dimmed tint.
+      child: Container(
+        height: 52,
+        alignment: Alignment.center,
+        decoration: ShapeDecoration(
+          color: onPressed == null ? _disabledFill.resolveFrom(context) : TegnalColors.tint.resolveFrom(context),
+          shape: const StadiumBorder(),
+        ),
+        child: Text(
+          label,
+          style: TegnalType.style(
+            17,
+            weight: FontWeight.w600,
+            color: onPressed == null ? TegnalColors.tertiaryLabel.resolveFrom(context) : const Color(0xFFFFFFFF),
           ),
         ),
       ),

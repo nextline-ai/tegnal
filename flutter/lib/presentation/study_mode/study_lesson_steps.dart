@@ -96,7 +96,7 @@ class _StudyMatchStepState extends State<StudyMatchStep> {
   bool _slipped = false;
   final List<Timer> _timers = [];
 
-  String _meaning(StudyTag tag) => L10n.language == 'en' ? tag.note.resolved() : tag.title();
+  String _meaning(StudyTag tag) => studyWords(L10n.language == 'en' ? tag.note.resolved() : tag.title());
 
   @override
   void dispose() {
@@ -275,7 +275,7 @@ class _StudyBuildStepState extends State<StudyBuildStep> {
               child: StudyCard(
                 padding: 14,
                 child: Text(
-                  widget.build.brief.resolved(),
+                  studyWords(widget.build.brief.resolved()),
                   style: StudyTheme.body(18, StudyTheme.bold).copyWith(color: theme.ink, height: (18 * 1.2 + 3) / 18),
                 ),
               ),
@@ -556,7 +556,7 @@ class _StudyOrderStepState extends State<StudyOrderStep> with SingleTickerProvid
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         child: Align(
           alignment: AlignmentDirectional.centerStart,
-          child: Text(widget.order.items[item].resolved(), style: StudyTheme.body(16, StudyTheme.bold)),
+          child: Text(studyWords(widget.order.items[item].resolved()), style: StudyTheme.body(16, StudyTheme.bold)),
         ),
       ),
     );
@@ -655,11 +655,11 @@ class _StudyOrderStepState extends State<StudyOrderStep> with SingleTickerProvid
         hidden: widget.revealed,
         onPressed: () => widget.answer(StudyLessonSession.judgeOrder([for (final item in _chosen) order.items[item]], order)),
         children: [
-          Text(order.brief.resolved(), style: StudyTheme.title(22).copyWith(color: theme.ink)),
+          Text(studyWords(order.brief.resolved()), style: StudyTheme.title(22).copyWith(color: theme.ink)),
           if (!widget.revealed)
             Row(
               children: [
-                StudyIcon('hand.draw.fill', size: 13, color: theme.muted),
+                StudyIcon('hand.draw.fill', size: 16, color: theme.muted),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
@@ -847,7 +847,7 @@ class _StudySortStepState extends State<StudySortStep> with SingleTickerProvider
           decoration: ShapeDecoration(color: theme.surface, shape: _rounded(24)),
           foregroundDecoration: ShapeDecoration(shape: _rounded(24, BorderSide(color: theme.primary, width: 3))),
           child: Text(
-            widget.sort.items[current].text.resolved(),
+            studyWords(widget.sort.items[current].text.resolved()),
             textAlign: TextAlign.center,
             style: StudyTheme.title(21).copyWith(color: theme.ink),
           ),
@@ -911,7 +911,7 @@ class _StudySortStepState extends State<StudySortStep> with SingleTickerProvider
                     children: [
                       const StudyIcon('tray.and.arrow.down.fill', size: 18),
                       StudyShrinkingText(
-                        (right ? widget.sort.right : widget.sort.left).resolved(),
+                        studyWords((right ? widget.sort.right : widget.sort.left).resolved()),
                         maxLines: 2,
                         minScale: 0.7,
                         style: StudyTheme.body(17, StudyTheme.heavy),
@@ -942,7 +942,7 @@ class _StudySortStepState extends State<StudySortStep> with SingleTickerProvider
                       if (wrong) StudyIcon('xmark.circle.fill', size: 13, color: theme.bad),
                       Flexible(
                         child: Text(
-                          widget.sort.items[item].text.resolved(),
+                          studyWords(widget.sort.items[item].text.resolved()),
                           textAlign: TextAlign.center,
                           style: StudyTheme.body(13, StudyTheme.bold).copyWith(color: theme.ink),
                         ),
@@ -966,7 +966,7 @@ class _StudySortStepState extends State<StudySortStep> with SingleTickerProvider
       hidden: true,
       onPressed: () {},
       children: [
-        Text(widget.sort.brief.resolved(), style: StudyTheme.title(22).copyWith(color: theme.ink)),
+        Text(studyWords(widget.sort.brief.resolved()), style: StudyTheme.title(22).copyWith(color: theme.ink)),
         Row(
           spacing: 6,
           children: [

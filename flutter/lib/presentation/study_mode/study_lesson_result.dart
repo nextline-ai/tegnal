@@ -214,6 +214,8 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
       children: [
         Positioned.fill(
           child: SingleChildScrollView(
+            // As SwiftUI's scroll view does, the content starts below the status bar.
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 560),
@@ -270,7 +272,11 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 spacing: 10,
-                                children: [for (var index = 0; index < 3; index++) _star(theme, index, won: index < stars)],
+                                // An SF star's frame is about a third wider than its point size.
+                                children: [
+                                  for (var index = 0; index < 3; index++)
+                                    SizedBox(width: 64, child: Center(child: _star(theme, index, won: index < stars))),
+                                ],
                               ),
                             ),
                             Row(
@@ -600,8 +606,12 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
         Positioned.fill(
           child: LayoutBuilder(
             builder: (context, constraints) => SingleChildScrollView(
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight, minWidth: constraints.maxWidth),
+                constraints: BoxConstraints(
+                  minHeight: math.max(0, constraints.maxHeight - MediaQuery.paddingOf(context).top),
+                  minWidth: constraints.maxWidth,
+                ),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 560),

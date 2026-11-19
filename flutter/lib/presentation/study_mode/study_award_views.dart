@@ -145,7 +145,9 @@ class StudyMetal {
         light: studyHex('E9E4FF'),
         mid: studyHex('9B8CFF'),
         dark: studyHex('4A2FB8'),
-        hues: [for (final hex in ['9B8CFF', '5CE1E6', '8DF5B6', 'FFE27A', 'FF8AD8', '9B8CFF']) studyHex(hex)],
+        hues: [
+          for (final hex in ['9B8CFF', '5CE1E6', '8DF5B6', 'FFE27A', 'FF8AD8', '9B8CFF']) studyHex(hex),
+        ],
       ),
     };
   }
@@ -254,11 +256,8 @@ class _StudyMedalState extends State<StudyMedal> with SingleTickerProviderStateM
               ),
               ShaderMask(
                 blendMode: BlendMode.srcIn,
-                shaderCallback: (rect) => LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [_white, metal.light],
-                ).createShader(rect),
+                shaderCallback: (rect) =>
+                    LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_white, metal.light]).createShader(rect),
                 child: StudyIcon(award.symbol, size: glyph, color: _white),
               ),
             ],
@@ -272,13 +271,7 @@ class _StudyMedalState extends State<StudyMedal> with SingleTickerProviderStateM
         clipBehavior: Clip.none,
         children: [
           CustomPaint(
-            painter: _MedalPainter(
-              family: award.family,
-              earned: earned,
-              metal: metal,
-              line: theme.line,
-              sunken: theme.sunken,
-            ),
+            painter: _MedalPainter(family: award.family, earned: earned, metal: metal, line: theme.line, sunken: theme.sunken),
           ),
           Center(
             child: Transform.translate(offset: Offset(0, lift), child: symbol),
@@ -309,12 +302,7 @@ class _StudyMedalState extends State<StudyMedal> with SingleTickerProviderStateM
             Positioned(left: pad, top: pad, width: size, height: size, child: body),
             Positioned.fill(
               child: CustomPaint(
-                painter: _ProgressRingPainter(
-                  progress: widget.progress,
-                  width: size * 0.045,
-                  track: _alpha(theme.line, 0.6),
-                  fill: theme.primary,
-                ),
+                painter: _ProgressRingPainter(progress: widget.progress, width: size * 0.045, track: _alpha(theme.line, 0.6), fill: theme.primary),
               ),
             ),
             Positioned(
@@ -333,13 +321,7 @@ class _StudyMedalState extends State<StudyMedal> with SingleTickerProviderStateM
         ),
       );
     }
-    return Semantics(
-      container: true,
-      excludeSemantics: true,
-      label: award.name,
-      value: L10n.text(earned ? 'Earned' : 'Locked'),
-      child: medal,
-    );
+    return Semantics(container: true, excludeSemantics: true, label: award.name, value: L10n.text(earned ? 'Earned' : 'Locked'), child: medal);
   }
 }
 
@@ -383,15 +365,9 @@ class _MedalPainter extends CustomPainter {
 
     // The edge the badge stands on gives it thickness.
     canvas.drawPath(shape.shift(Offset(0, size * 0.05)), Paint()..color = metal.dark);
-    canvas.drawPath(
-      shape,
-      fill(LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [metal.light, metal.mid, metal.dark]), rect),
-    );
+    canvas.drawPath(shape, fill(LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [metal.light, metal.mid, metal.dark]), rect));
     if (metal.hues case final hues?) {
-      canvas.drawPath(
-        shape,
-        fill(SweepGradient(colors: [for (final hue in hues) _alpha(hue, 0.75)]), rect)..blendMode = BlendMode.softLight,
-      );
+      canvas.drawPath(shape, fill(SweepGradient(colors: [for (final hue in hues) _alpha(hue, 0.75)]), rect)..blendMode = BlendMode.softLight);
       canvas.drawPath(shape, fill(SweepGradient(colors: [for (final hue in hues) _alpha(hue, 0.35)]), rect));
     }
     // The bevel: lit from above, shaded below.
@@ -401,11 +377,7 @@ class _MedalPainter extends CustomPainter {
     canvas.drawPath(
       shape,
       stroke(
-        LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_alpha(_white, 0.95), _alpha(_white, 0.1), const Color(0x4D000000)],
-        ),
+        LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_alpha(_white, 0.95), _alpha(_white, 0.1), const Color(0x4D000000)]),
         rect,
         size * 0.09,
       ),
@@ -418,10 +390,7 @@ class _MedalPainter extends CustomPainter {
       ..translate(center.dx, center.dy)
       ..scale(0.74)
       ..translate(-center.dx, -center.dy);
-    canvas.drawPath(
-      shape,
-      fill(LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [metal.dark, metal.mid]), rect),
-    );
+    canvas.drawPath(shape, fill(LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [metal.dark, metal.mid]), rect));
     canvas.drawPath(
       shape,
       stroke(
@@ -468,11 +437,7 @@ class _SweepPainter extends CustomPainter {
       ..save()
       ..translate(canvasSize.width / 2 + x, canvasSize.height / 2)
       ..rotate(22 * math.pi / 180);
-    canvas.drawRect(
-      band,
-      Paint()
-        ..shader = const LinearGradient(colors: [_clearWhite, Color(0xBFFFFFFF), _clearWhite]).createShader(band),
-    );
+    canvas.drawRect(band, Paint()..shader = const LinearGradient(colors: [_clearWhite, Color(0xBFFFFFFF), _clearWhite]).createShader(band));
     canvas.restore();
   }
 
@@ -514,8 +479,7 @@ class _ProgressRingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ProgressRingPainter old) =>
-      old.progress != progress || old.width != width || old.track != track || old.fill != fill;
+  bool shouldRepaint(_ProgressRingPainter old) => old.progress != progress || old.width != width || old.track != track || old.fill != fill;
 }
 
 /// Text that shrinks, down to [minimumScale] of its size, before it is cut off (`.minimumScaleFactor`).
@@ -565,7 +529,9 @@ Widget _label(String symbol, String title, TextStyle style, Color color, {double
   children: [
     StudyIcon(symbol, size: iconSize ?? (style.fontSize ?? 17), color: color),
     SizedBox(width: (style.fontSize ?? 17) * 0.35),
-    Flexible(child: Text(title, style: style.copyWith(color: color))),
+    Flexible(
+      child: Text(title, style: style.copyWith(color: color)),
+    ),
   ],
 );
 
@@ -633,12 +599,7 @@ class StudyAwardsCard extends StatelessWidget {
                     for (final award in shown(model))
                       Expanded(
                         child: Center(
-                          child: StudyMedal(
-                            award: award,
-                            earned: model.earned[award.id] != null,
-                            progress: model.facts.progress(award),
-                            size: 62,
-                          ),
+                          child: StudyMedal(award: award, earned: model.earned[award.id] != null, progress: model.facts.progress(award), size: 62),
                         ),
                       ),
                   ],
@@ -669,6 +630,8 @@ class StudyAwardsGallery extends StatelessWidget {
     showAppSheet<void>(
       context,
       medium: true,
+      // A sheet with a medium and a large detent shows its grabber on iOS.
+      grabber: true,
       builder: (context, controller) => ColoredBox(
         color: StudyTheme.of(context).background,
         child: StudyAwardDetail(
@@ -809,27 +772,25 @@ class StudyAwardsGallery extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: ShapeDecoration(color: theme.surface, shape: shape),
       foregroundDecoration: ShapeDecoration(
-        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: theme.line, width: 2)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: theme.line, width: 2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(child: Text(family.title, style: StudyTheme.title(19).copyWith(color: theme.ink))),
+              Expanded(
+                child: Text(family.title, style: StudyTheme.title(19).copyWith(color: theme.ink)),
+              ),
               const SizedBox(width: 8),
               Text('$count / ${awards.length}', style: StudyTheme.body(13, StudyTheme.heavy).copyWith(color: theme.muted).merge(_tabular)),
             ],
           ),
           const SizedBox(height: 14),
-          _AdaptiveGrid(
-            minimum: 96,
-            spacing: 10,
-            runSpacing: 18,
-            children: [
-              for (final award in awards) _cell(context, theme, award),
-            ],
-          ),
+          _AdaptiveGrid(minimum: 96, spacing: 10, runSpacing: 18, children: [for (final award in awards) _cell(context, theme, award)]),
         ],
       ),
     );
@@ -1002,6 +963,7 @@ class _StudyAwardDetailState extends State<StudyAwardDetail> with SingleTickerPr
   late final AnimationController _spring = AnimationController(vsync: this, duration: _back.settle)..addListener(_springing);
   Offset _tilt = Offset.zero;
   Offset _from = Offset.zero;
+
   /// How far the finger has gone since it touched down.
   Offset _start = Offset.zero;
   bool _shown = false;
@@ -1070,106 +1032,133 @@ class _StudyAwardDetailState extends State<StudyAwardDetail> with SingleTickerPr
         ),
       ),
     );
-    return SingleChildScrollView(
-      controller: widget.controller,
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      child: SizedBox(
-        width: double.infinity,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 30, bottom: 6),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  StudyPop(shown: _shown, from: 0.3, child: medal),
-                  if (record != null)
-                    Positioned.fill(
-                      child: StudyBurst(trigger: _shown ? 1 : 0, count: 20, reach: 120, colors: [theme.gold, _white, theme.primary]),
-                    ),
-                ],
-              ),
+    final top = Padding(
+      padding: const EdgeInsets.only(top: 30, bottom: 6),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          StudyPop(shown: _shown, from: 0.3, child: medal),
+          if (record != null)
+            Positioned.fill(
+              child: StudyBurst(trigger: _shown ? 1 : 0, count: 20, reach: 120, colors: [theme.gold, _white, theme.primary]),
             ),
-            const SizedBox(height: 16),
-            Text(
-              award.name,
-              key: const Key('study.award.name'),
-              textAlign: TextAlign.center,
-              style: StudyTheme.title(26).copyWith(color: theme.ink),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              award.explanation,
-              textAlign: TextAlign.center,
-              style: StudyTheme.body(16, StudyTheme.medium).copyWith(color: theme.muted),
-            ),
-            const SizedBox(height: 16),
-            if (record != null)
-              _label(
-                'checkmark.seal.fill',
-                L10n.text('Earned on %@', [_earnedDate(record.earned)]),
-                StudyTheme.body(14, StudyTheme.heavy),
-                theme.good,
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    StudyBar(value: widget.facts.progress(award), color: theme.primary, height: 14),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${math.min(widget.facts.value(award), award.goal)} / ${award.goal}',
-                      style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.primary).merge(_tabular),
-                    ),
-                  ],
-                ),
-              ),
-            if (widget.family.length > 1 && award.family != StudyAwardFamily.sections) ...[
-              const SizedBox(height: 16 + 14),
-              // The rest of the family, so that the next rung is in sight.
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final (index, other) in widget.family.indexed) ...[
-                      if (index > 0) const SizedBox(width: 14),
-                      Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.bottomCenter,
-                        children: [
-                          Opacity(
-                            opacity: other.id == award.id ? 1 : 0.75,
-                            child: StudyMedal(
-                              award: other,
-                              earned: widget.earned[other.id] != null,
-                              progress: widget.facts.progress(other),
-                              size: 46,
-                              shines: false,
-                            ),
-                          ),
-                          if (other.id == award.id)
-                            Positioned(
-                              bottom: -12,
-                              child: Container(
-                                width: 18,
-                                height: 4,
-                                decoration: ShapeDecoration(color: theme.primary, shape: const StadiumBorder()),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              // Room for the mark below the current badge.
-              const SizedBox(height: 12),
-            ],
-          ],
-        ),
+        ],
       ),
+    );
+    final family = widget.family.length > 1 && award.family != StudyAwardFamily.sections;
+    return LayoutBuilder(
+      builder: (context, box) {
+        // On iOS the sheet grows to its large detent when its content is taller than the medium one. This sheet
+        // keeps its medium height, so the big medal gives way first, down to about half its size, and every row
+        // below it, the family's other badges included, stays in sight. Only when even that is not enough (very
+        // large text) does the sheet scroll.
+        final scale = MediaQuery.textScalerOf(context).scale(1);
+        final rest = (160 + (family ? 30 + 46 * 1.18 + 12 : 0)) * scale;
+        final fits = box.hasBoundedHeight && box.maxHeight - 24 - rest >= 100;
+        return SingleChildScrollView(
+          controller: widget.controller,
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: SizedBox(
+            width: double.infinity,
+            height: fits ? box.maxHeight - 24 : null,
+            child: _detailColumn(
+              context,
+              theme,
+              fits
+                  ? Flexible(
+                      child: FittedBox(fit: BoxFit.scaleDown, child: top),
+                    )
+                  : top,
+              family,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _detailColumn(BuildContext context, StudyTheme theme, Widget top, bool family) {
+    final award = widget.award;
+    final record = widget.record;
+    return Column(
+      children: [
+        top,
+        const SizedBox(height: 16),
+        Text(
+          award.name,
+          key: const Key('study.award.name'),
+          textAlign: TextAlign.center,
+          style: StudyTheme.title(26).copyWith(color: theme.ink),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          award.explanation,
+          textAlign: TextAlign.center,
+          style: StudyTheme.body(16, StudyTheme.medium).copyWith(color: theme.muted),
+        ),
+        const SizedBox(height: 16),
+        if (record != null)
+          _label('checkmark.seal.fill', L10n.text('Earned on %@', [_earnedDate(record.earned)]), StudyTheme.body(14, StudyTheme.heavy), theme.good)
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              // The bar runs the width of the sheet, as SwiftUI's does.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                StudyBar(value: widget.facts.progress(award), color: theme.primary, height: 14),
+                const SizedBox(height: 6),
+                Text(
+                  '${math.min(widget.facts.value(award), award.goal)} / ${award.goal}',
+                  textAlign: TextAlign.center,
+                  style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.primary).merge(_tabular),
+                ),
+              ],
+            ),
+          ),
+        if (family) ...[
+          const SizedBox(height: 16 + 14),
+          // The rest of the family, so that the next rung is in sight.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (index, other) in widget.family.indexed) ...[
+                  if (index > 0) const SizedBox(width: 14),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.bottomCenter,
+                    children: [
+                      Opacity(
+                        opacity: other.id == award.id ? 1 : 0.75,
+                        child: StudyMedal(
+                          award: other,
+                          earned: widget.earned[other.id] != null,
+                          progress: widget.facts.progress(other),
+                          size: 46,
+                          shines: false,
+                        ),
+                      ),
+                      if (other.id == award.id)
+                        Positioned(
+                          bottom: -12,
+                          child: Container(
+                            width: 18,
+                            height: 4,
+                            decoration: ShapeDecoration(color: theme.primary, shape: const StadiumBorder()),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Room for the mark below the current badge.
+          const SizedBox(height: 12),
+        ],
+      ],
     );
   }
 }
@@ -1179,8 +1168,9 @@ class _StudyAwardDetailState extends State<StudyAwardDetail> with SingleTickerPr
 /// Lays [children] out with [gap] between them, centred in the height there is and scrolling when it is too little.
 Widget _centered({required double gap, required double edge, required List<Widget> children}) => LayoutBuilder(
   builder: (context, constraints) {
+    // Centred in the safe area, below the status bar, as SwiftUI lays out a stack between spacers.
     final column = Padding(
-      padding: EdgeInsets.symmetric(vertical: edge),
+      padding: EdgeInsets.only(top: edge + MediaQuery.paddingOf(context).top, bottom: edge),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -1191,7 +1181,10 @@ Widget _centered({required double gap, required double edge, required List<Widge
     if (!constraints.hasBoundedHeight) return column;
     return SingleChildScrollView(
       clipBehavior: Clip.none,
-      child: ConstrainedBox(constraints: BoxConstraints(minHeight: constraints.maxHeight), child: column),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: column,
+      ),
     );
   },
 );
@@ -1439,10 +1432,7 @@ class _StudyAwardParadeState extends State<StudyAwardParade> {
                 duration: reduce ? Duration.zero : _slide.settle,
                 switchInCurve: _slide,
                 switchOutCurve: _slide,
-                layoutBuilder: (currentChild, previous) => Stack(
-                  fit: StackFit.expand,
-                  children: [...previous, ?currentChild],
-                ),
+                layoutBuilder: (currentChild, previous) => Stack(fit: StackFit.expand, children: [...previous, ?currentChild]),
                 // In from the trailing edge, out to the leading edge, fading as they go.
                 transitionBuilder: (child, animation) {
                   final incoming = child.key == current;
@@ -1456,7 +1446,10 @@ class _StudyAwardParadeState extends State<StudyAwardParade> {
                 },
                 child: widget.awards.isEmpty || _page >= widget.awards.length
                     ? const SizedBox.expand()
-                    : KeyedSubtree(key: current, child: StudyAwardCelebration(award: widget.awards[_page])),
+                    : KeyedSubtree(
+                        key: current,
+                        child: StudyAwardCelebration(award: widget.awards[_page]),
+                      ),
               ),
             ),
           ),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
 import 'package:tegnal/presentation/study_mode/study_reactions.dart';
@@ -93,13 +94,21 @@ void main() {
     testWidgets('main button shows its title and icon', (tester) async {
       await tester.pumpWidget(host(StudyMainButton(title: 'Start', symbol: 'play.fill', onPressed: () {})));
       expect(find.text('Start'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.play_fill), findsOneWidget);
+      expect(find.byWidgetPredicate((widget) => widget is StudyIcon && widget.symbol == 'play.fill'), findsOneWidget);
     });
   });
 
   group('StudyBar', () {
     double fillWidth(WidgetTester tester) =>
-        tester.getSize(find.descendant(of: find.byType(StudyBar), matching: find.byType(SizedBox)).at(1)).width;
+        tester.getSize(find.descendant(of: find.byType(StudyBar), matching: find.byType(SizedBox)).at(2)).width;
+
+    testWidgets('its track takes the whole width even where the parent centres it', (tester) async {
+      await tester.pumpWidget(
+        host(const SizedBox(width: 200, child: Column(children: [StudyBar(value: 0.1)]))),
+      );
+      expect(tester.getSize(find.byType(StudyBar)).width, 200);
+      expect(fillWidth(tester), 20);
+    });
 
     testWidgets('clamps its value', (tester) async {
       await tester.pumpWidget(host(const SizedBox(width: 200, child: StudyBar(value: 3))));
@@ -330,6 +339,33 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(host(const SizedBox()));
+    });
+
+    testWidgets('combo banner fits a narrow screen with large text', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        CupertinoApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(320, 640), textScaler: TextScaler.linear(2.5)),
+            child: const Center(child: StudyComboBanner(combo: 125)),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byKey(const Key('study.combo'))).width, lessThanOrEqualTo(320));
+      await tester.pumpWidget(host(const SizedBox()));
+    });
+
+    test('studyWords keeps Korean words whole and leaves other languages alone', () {
+      final before = L10n.language;
+      addTearDown(() => L10n.language = before);
+      L10n.language = 'ko';
+      expect(studyWords('쉽다 어렵다'), '쉽\u2060다 어\u2060렵\u2060다');
+      L10n.language = 'en';
+      expect(studyWords('easy hard'), 'easy hard');
     });
 
     test('praise follows the run and the seed', () {

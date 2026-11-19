@@ -389,4 +389,19 @@ void main() {
     await tester.tap(find.byKey(const Key('study.zoom')).last);
     expect(opened.last, (2, 0));
   });
+
+  testWidgets('the keyboard pushes a step up: its button stays above the keyboard', (tester) async {
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(402, 874), viewInsets: EdgeInsets.only(bottom: 300)),
+          child: StudyStepFrame(button: 'Check', onPressed: () {}, children: const [SizedBox(height: 900)]),
+        ),
+      ),
+    );
+    expect(tester.getRect(find.byKey(const Key('study.check'))).bottom, lessThanOrEqualTo(874 - 300));
+  });
 }

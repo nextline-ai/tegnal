@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/booru/booru_models.dart';
 import '../../core/generation/generation_store.dart';
+import '../../core/study/study_store.dart';
 import '../../core/study/study_engine.dart';
 import '../../core/study/study_models.dart';
 import '../../core/study/study_path.dart';
@@ -14,6 +15,7 @@ import '../../core/support/l10n.dart';
 import '../../core/taste/taste_models.dart';
 import '../booru/booru_common.dart';
 import '../booru/booru_post_view.dart';
+import '../design/app_sheet.dart';
 import '../generation/generator_account_view.dart';
 import '../generation/generator_sheet.dart';
 import '../generation/generator_view.dart';
@@ -801,7 +803,7 @@ class _StudyCardStepState extends State<_StudyCardStep> with _Appearing {
                   spacing: 12,
                   children: [
                     Text(
-                      _card.title.resolved(),
+                      studyWords(_card.title.resolved()),
                       key: const Key('study.cardTitle'),
                       style: StudyTheme.title(25).copyWith(color: theme.ink),
                     ),
@@ -820,12 +822,20 @@ class _StudyCardStepState extends State<_StudyCardStep> with _Appearing {
 
   /// Something to do from the card itself, so that what was just read can be done at once.
   Widget _button(String action) {
-    final generation = GenerationStore.shared(widget.booru.booruDefaults);
+    // The generator's store can be missing (a fixture run without its stand-in); the button then shows no key and
+    // opens only what needs no store.
+    GenerationStore? generation;
+    try {
+      generation = GenerationStore.shared(widget.booru.booruDefaults);
+      unawaited(generation.load());
+    } on Object {
+      generation = null;
+    }
     return ListenableBuilder(
-      listenable: generation,
+      listenable: generation ?? const AlwaysStoppedAnimation<double>(0),
       builder: (context, _) {
         final theme = StudyTheme.of(context);
-        final connected = generation.hasKey;
+        final connected = generation?.hasKey ?? false;
         final symbol = action == 'civitai' ? 'safari.fill' : (action == 'key' ? (connected ? 'checkmark.seal.fill' : 'key.fill') : 'wand.and.stars');
         final title = action == 'civitai'
             ? 'Open Civitai Account Settings'
@@ -839,14 +849,27 @@ class _StudyCardStepState extends State<_StudyCardStep> with _Appearing {
               case 'civitai':
                 unawaited(launchUrl(Uri.parse('https://civitai.com/user/account'), mode: LaunchMode.externalApplication));
               case 'key':
-                unawaited(showGeneratorSheet<void>(context, (context) => GeneratorAccountView(store: generation)));
+                if (generation case final store?) unawaited(showGeneratorSheet<void>(context, (context) => GeneratorAccountView(store: store)));
               default:
-                unawaited(
-                  Navigator.of(
-                    context,
-                    rootNavigator: true,
-                  ).push<void>(CupertinoPageRoute(builder: (context) => GeneratorView.forBooru(widget.booru, prompt: _card.code ?? ''))),
-                );
+                // `.appSheet { NavigationStack { GeneratorView(…).toolbar { Close } } }`.
+                if (generation case final store?) {
+                  unawaited(
+                    showAppSheet<void>(
+                      context,
+                      builder: (sheetContext, controller) => Navigator(
+                        onGenerateRoute: (_) => CupertinoPageRoute<void>(
+                          builder: (context) => GeneratorView(
+                            store: store,
+                            safeMode: () => widget.booru.safeMode,
+                            prompt: _card.code ?? '',
+                            study: widget.booru.store.studyStore,
+                            onClose: () => Navigator.of(sheetContext).pop(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
             }
           },
           child: Padding(
@@ -937,9 +960,9 @@ class _StudyTeachStepState extends State<_StudyTeachStep> with _Appearing {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 6,
               children: [
-                if (L10n.language != 'en') Text(tag.title(), style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: theme.primary)),
+                if (L10n.language != 'en') Text(studyWords(tag.title()), style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: theme.primary)),
                 Text(
-                  tag.note.resolved(),
+                  studyWords(tag.note.resolved()),
                   style: StudyTheme.body(17, StudyTheme.medium).copyWith(color: theme.ink, height: (17 * 1.2 + 3) / 17),
                 ),
               ],
@@ -1064,7 +1087,7 @@ class _StudyQuizStepState extends State<_StudyQuizStep> {
         children.add(
           StudyCard(
             child: Text(
-              question.tag.note.resolved(),
+              studyWords(question.tag.note.resolved()),
               style: StudyTheme.body(19, StudyTheme.semibold).copyWith(color: theme.ink, height: (19 * 1.2 + 3) / 19),
             ),
           ),
@@ -1214,7 +1237,7 @@ class _StudyAskStepState extends State<_StudyAskStep> {
                     constraints: const BoxConstraints(minHeight: 50, minWidth: double.infinity),
                     child: Align(
                       alignment: AlignmentDirectional.centerStart,
-                      child: Text(choice.resolved(), style: ask.code == true ? StudyTheme.code : StudyTheme.body(18, StudyTheme.bold)),
+                      child: Text(studyWords(choice.resolved()), style: ask.code == true ? StudyTheme.code : StudyTheme.body(18, StudyTheme.bold)),
                     ),
                   ),
                 ),
@@ -1367,9 +1390,9 @@ class _StudySpellStepState extends State<_StudySpellStep> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: 4,
                   children: [
-                    if (L10n.language != 'en') Text(tag.title(), style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: theme.primary)),
+                    if (L10n.language != 'en') Text(studyWords(tag.title()), style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: theme.primary)),
                     Text(
-                      tag.note.resolved(),
+                      studyWords(tag.note.resolved()),
                       style: StudyTheme.body(16, StudyTheme.medium).copyWith(color: theme.ink, height: (16 * 1.2 + 3) / 16),
                     ),
                   ],

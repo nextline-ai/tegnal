@@ -109,7 +109,9 @@ class _GeneratorAccountViewState extends State<GeneratorAccountView> {
       children: [
         FormSection(
           rowColor: rowColor,
-          footer: Text(L10n.text("Create a key on civitai.com under Account Settings, API Keys. It is kept in this device's keychain and sent only to Civitai.")),
+          footer: Text(
+            L10n.text("Create a key on civitai.com under Account Settings, API Keys. It is kept in this device's keychain and sent only to Civitai."),
+          ),
           children: [
             FormRow(
               child: CupertinoTextField.borderless(
@@ -133,7 +135,9 @@ class _GeneratorAccountViewState extends State<GeneratorAccountView> {
                 opacity: canCheck || _checking ? 1 : 0.4,
                 child: Row(
                   children: [
-                    Expanded(child: Text(L10n.text('Check and Save'), style: TegnalType.style(17, color: StudyStyle.accent(context)))),
+                    Expanded(
+                      child: Text(L10n.text('Check and Save'), style: TegnalType.style(17, color: StudyStyle.accent(context))),
+                    ),
                     if (_checking) const CupertinoActivityIndicator(),
                   ],
                 ),
@@ -146,7 +150,11 @@ class _GeneratorAccountViewState extends State<GeneratorAccountView> {
                     Icon(CupertinoIcons.checkmark_circle_fill, size: 20, color: green),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(L10n.text('Signed in as %@', [account.name]), key: const Key('generator.signedIn'), style: TegnalType.style(17, color: green)),
+                      child: Text(
+                        L10n.text('Signed in as %@', [account.name]),
+                        key: const Key('generator.signedIn'),
+                        style: TegnalType.style(17, color: green),
+                      ),
                     ),
                   ],
                 ),
@@ -159,7 +167,11 @@ class _GeneratorAccountViewState extends State<GeneratorAccountView> {
                     Icon(CupertinoIcons.exclamationmark_triangle, size: 15, color: red),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(message, key: const Key('generator.keyMessage'), style: TegnalType.style(13, color: red)),
+                      child: Text(
+                        message,
+                        key: const Key('generator.keyMessage'),
+                        style: TegnalType.style(13, color: red),
+                      ),
                     ),
                   ],
                 ),
@@ -189,7 +201,9 @@ class _GeneratorAccountViewState extends State<GeneratorAccountView> {
           settingsSectionGap,
           FormSection(
             rowColor: rowColor,
-            children: [SettingsLinkRow(key: const Key('generator.removeKey'), title: L10n.text('Remove API Key'), destructive: true, chevron: false, onTap: _remove)],
+            children: [
+              SettingsLinkRow(key: const Key('generator.removeKey'), title: L10n.text('Remove API Key'), destructive: true, chevron: false, onTap: _remove),
+            ],
           ),
         ],
       ],

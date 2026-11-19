@@ -100,6 +100,11 @@ enum StudyTab {
   IconData get icon => StudyGlyph.icon(symbol);
 }
 
+/// iOS wraps Korean between words, never inside one. Lesson text that does not pass through [L10n.text] (the path's
+/// wording, tag names, answers) goes through this before it is shown, so that narrow chips and buttons break at
+/// spaces too (e.g. "쉽다" stays whole). Other languages are returned as they are.
+String studyWords(String text) => L10n.language == 'ko' ? L10n.keepingWords(text) : text;
+
 /// A colour from six hexadecimal digits (`Color(studyHex:)`); unreadable text gives the primary violet.
 Color studyHex(String hex) {
   final value = int.tryParse(hex, radix: 16) ?? 0x7C5CFF;
@@ -120,14 +125,7 @@ Color studyLifted(Color color) {
 
 /// Learning mode's own colours and type, as functions of the appearance (`StudyTheme`).
 class StudyTheme {
-  const StudyTheme._({
-    required this.background,
-    required this.surface,
-    required this.sunken,
-    required this.line,
-    required this.ink,
-    required this.muted,
-  });
+  const StudyTheme._({required this.background, required this.surface, required this.sunken, required this.line, required this.ink, required this.muted});
 
   /// The theme for the current appearance of [context].
   static StudyTheme of(BuildContext context) => resolve(CupertinoTheme.brightnessOf(context));
@@ -222,8 +220,7 @@ class StudyTheme {
 }
 
 /// A `.continuous` rounded rectangle, optionally stroked inside.
-ShapeBorder _shape(double radius, [BorderSide side = BorderSide.none]) =>
-    RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(radius), side: side);
+ShapeBorder _shape(double radius, [BorderSide side = BorderSide.none]) => RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(radius), side: side);
 
 /// `Animation.spring(duration:bounce:)` as a curve: the spring settles to 1 and may overshoot on the way. Use
 /// [settle] as the duration of the animation it drives; the curve can leave the 0...1 range, so clamp it for opacity.
@@ -231,11 +228,7 @@ class StudySpring extends Curve {
   /// A spring whose oscillation lasts [duration] seconds and whose [bounce] is 0 (none) to 1.
   StudySpring(this.duration, this.bounce)
     : _simulation = SpringSimulation(
-        SpringDescription(
-          mass: 1,
-          stiffness: math.pow(2 * math.pi / duration, 2).toDouble(),
-          damping: 4 * math.pi * (1 - bounce) / duration,
-        ),
+        SpringDescription(mass: 1, stiffness: math.pow(2 * math.pi / duration, 2).toDouble(), damping: 4 * math.pi * (1 - bounce) / duration),
         0,
         1,
         0,
@@ -364,9 +357,7 @@ class _StudyPressButtonState extends State<StudyPressButton> {
                 curve: Curves.easeOut,
                 transform: Matrix4.translationValues(0, _down && enabled ? depth : 0, 0),
                 decoration: ShapeDecoration(color: fill, shape: _shape(widget.radius)),
-                foregroundDecoration: widget.outlined && enabled
-                    ? ShapeDecoration(shape: _shape(widget.radius, BorderSide(color: edge, width: 2)))
-                    : null,
+                foregroundDecoration: widget.outlined && enabled ? ShapeDecoration(shape: _shape(widget.radius, BorderSide(color: edge, width: 2))) : null,
                 child: DefaultTextStyle.merge(
                   style: TextStyle(color: foreground),
                   child: IconTheme.merge(
@@ -413,7 +404,7 @@ class StudyMainButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (symbol != null) ...[Icon(StudyGlyph.icon(symbol!), size: 20), const SizedBox(width: 8)],
+              if (symbol != null) ...[StudyIcon(symbol!, size: 19), const SizedBox(width: 8)],
               Flexible(
                 child: Text(title, style: StudyTheme.body(18, StudyTheme.heavy), textAlign: TextAlign.center),
               ),
@@ -456,35 +447,40 @@ class StudyBar extends StatelessWidget {
         builder: (context, shown, _) => LayoutBuilder(
           builder: (context, constraints) {
             final width = math.max(height, constraints.maxWidth * shown);
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: ShapeDecoration(color: track ?? theme.sunken, shape: const StadiumBorder()),
+            // The track takes all the width there is, as SwiftUI's bar does, even where the parent allows less
+            // (a column that centres its children); otherwise the track shrinks to the filled part.
+            return SizedBox(
+              width: constraints.hasBoundedWidth ? constraints.maxWidth : width,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(color: track ?? theme.sunken, shape: const StadiumBorder()),
+                    ),
                   ),
-                ),
-                SizedBox(
-                  width: width,
-                  height: height,
-                  child: DecoratedBox(
-                    decoration: ShapeDecoration(color: fill, shape: const StadiumBorder()),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 6, right: 6, top: 3),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: SizedBox(
-                          height: height * 0.3,
-                          child: const DecoratedBox(
-                            decoration: ShapeDecoration(color: Color(0x47FFFFFF), shape: StadiumBorder()),
-                            child: SizedBox.expand(),
+                  SizedBox(
+                    width: width,
+                    height: height,
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(color: fill, shape: const StadiumBorder()),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 6, right: 6, top: 3),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            height: height * 0.3,
+                            child: const DecoratedBox(
+                              decoration: ShapeDecoration(color: Color(0x47FFFFFF), shape: StadiumBorder()),
+                              child: SizedBox.expand(),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             );
           },
         ),
@@ -542,7 +538,7 @@ class StudyRichText extends StatelessWidget {
         children: [
           for (final piece in pieces(source))
             TextSpan(
-              text: piece.text,
+              text: piece.code ? piece.text : studyWords(piece.text),
               style: piece.code
                   ? StudyTheme.code.copyWith(fontSize: size - 1, fontWeight: StudyTheme.bold, color: theme.primary)
                   : StudyTheme.body(size, StudyTheme.medium).copyWith(color: theme.ink),
@@ -783,7 +779,7 @@ class _StudyStatState extends State<StudyStat> with SingleTickerProviderStateMix
               final lift = t < 0.3 ? Curves.easeOut.transform(t / 0.3) : 1 - Curves.bounceOut.transform((t - 0.3) / 0.7);
               return Transform.translate(offset: Offset(0, -6 * lift), child: child);
             },
-            child: Icon(StudyGlyph.icon(widget.symbol), size: 19, color: widget.color),
+            child: StudyIcon(widget.symbol, size: 19, color: widget.color),
           ),
           const SizedBox(width: 5),
           AnimatedSwitcher(
@@ -830,7 +826,9 @@ class StudyIcon extends StatelessWidget {
     var resolved = color ?? theme.color ?? const Color(0xFF000000);
     final opacity = theme.opacity ?? 1;
     if (opacity != 1) resolved = resolved.withValues(alpha: resolved.a * opacity);
-    return ExcludeSemantics(child: studySymbol(symbol, size: size, color: resolved));
+    return ExcludeSemantics(
+      child: studySymbol(symbol, size: size, color: resolved),
+    );
   }
 }
 

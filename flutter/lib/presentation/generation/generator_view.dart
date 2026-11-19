@@ -19,6 +19,7 @@ import '../navigation/app_header.dart';
 import '../settings/settings_page.dart';
 import '../settings/settings_rows.dart';
 import '../study/study_widgets.dart' show StudyActionRow, StudyStyle, StudyDigits;
+import '../study_mode/study_kit.dart' show StudyIcon;
 import 'generator_account_view.dart';
 import 'generator_gallery.dart';
 import 'generator_model_picker.dart';
@@ -26,7 +27,7 @@ import 'generator_sheet.dart';
 
 /// Writes a prompt and has Civitai draw it, with the user's own API key and models named by AIR (`GeneratorView`).
 class GeneratorView extends StatefulWidget {
-  const GeneratorView({super.key, required this.store, required this.safeMode, this.prompt = '', this.study});
+  const GeneratorView({super.key, required this.store, required this.safeMode, this.prompt = '', this.study, this.onClose});
 
   /// The generator over the app's own store, as the study screens open it.
   factory GeneratorView.forBooru(BooruContext booru, {Key? key, String prompt = ''}) => GeneratorView(
@@ -44,6 +45,10 @@ class GeneratorView extends StatefulWidget {
   /// The study store that counts every picture ever made; without one the count is the gallery's size.
   final StudyStore? study;
 
+  /// Set where the generator is the first page of a sheet, as learning mode's Studio opens it: the bar then shows a
+  /// Close button (`ToolbarItem(placement: .cancellationAction)`) instead of a back button.
+  final VoidCallback? onClose;
+
   /// `GeneratorView.advancedKey`.
   static const advancedKey = 'generation.showsAdvanced';
 
@@ -52,6 +57,9 @@ class GeneratorView extends StatefulWidget {
 }
 
 class _GeneratorViewState extends State<GeneratorView> {
+  /// `quaternarySystemFill`, behind a disabled prominent button.
+  static const _disabledFill = CupertinoDynamicColor.withBrightness(color: Color(0x14747480), darkColor: Color(0x2E767680));
+
   final _run = GenerationRun();
   late final TextEditingController _prompt = TextEditingController(text: widget.prompt);
   late final TextEditingController _negative = TextEditingController(text: _store.settings.negative);
@@ -232,261 +240,269 @@ class _GeneratorViewState extends State<GeneratorView> {
 
   @override
   Widget build(BuildContext context) {
-    final rowColor = FormColors.listRow.resolveFrom(context);
+    // In a sheet the rows stand on the sheet's grouped background in the lighter row colour.
+    final rowColor = (widget.onClose == null ? FormColors.listRow : FormColors.row).resolveFrom(context);
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final settings = _settings;
-    return SettingsPage(
-      controller: _scroll,
-      title: L10n.text('Generate a Picture'),
-      trailing: ToolbarGroup(
+    final account = ToolbarGroup(
+      children: [
+        ToolbarIconButton(
+          key: const Key('generator.account'),
+          label: L10n.text('Civitai API Key'),
+          // `Image(systemName: store.hasKey ? "key.fill" : "key")`.
+          symbol: (color) => StudyIcon(_store.hasKey ? 'key.fill' : 'key', size: 20, color: widget.onClose == null ? color : StudyStyle.accent(context)),
+          onPressed: _openAccount,
+        ),
+      ],
+    );
+    final children = <Widget>[
+      const SizedBox(height: 25),
+      if (!_store.hasKey) ...[
+        FormSection(
+          rowColor: rowColor,
+          footer: Text(L10n.text("Pictures are drawn by Civitai on your own account and paid for with your Buzz. The key stays in this device's keychain.")),
+          children: [
+            StudyActionRow(key: const Key('generator.addKey'), title: L10n.text('Add Your Civitai API Key'), icon: CupertinoIcons.lock, onTap: _openAccount),
+          ],
+        ),
+        settingsSectionGap,
+      ],
+      FormSection(
+        prominentHeader: true,
+        rowColor: rowColor,
+        header: Text(L10n.text('Prompt')),
+        footer: _advanced
+            ? Text(L10n.text('Round brackets are read as emphasis, as in (rain:1.3). Brackets that belong to a tag are written \\( and \\).'))
+            : null,
         children: [
-          ToolbarIconButton(
-            key: const Key('generator.account'),
-            label: L10n.text('Civitai API Key'),
-            icon: _store.hasKey ? CupertinoIcons.lock_fill : CupertinoIcons.lock,
-            onPressed: _openAccount,
+          FormRow(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: _field(key: const Key('generator.prompt'), controller: _prompt, minLines: 5),
+            ),
+          ),
+          Builder(
+            builder: (menuContext) => StudyActionRow(
+              key: const Key('generator.preset'),
+              title: L10n.text("Apply a Model's Recommended Tags"),
+              icon: CupertinoIcons.sparkles,
+              onTap: () async {
+                final preset = await showPullDownMenu<GenerationPreset>(
+                  menuContext,
+                  anchor: anchorRectOf(menuContext),
+                  items: [for (final preset in GenerationPreset.all) PullDownMenuItem(value: preset, title: preset.name)],
+                );
+                if (preset != null) _applyPreset(preset);
+              },
+            ),
           ),
         ],
       ),
-      children: [
-        const SizedBox(height: 25),
-        if (!_store.hasKey) ...[
-          FormSection(
-            rowColor: rowColor,
-            footer: Text(L10n.text("Pictures are drawn by Civitai on your own account and paid for with your Buzz. The key stays in this device's keychain.")),
-            children: [
-              StudyActionRow(key: const Key('generator.addKey'), title: L10n.text('Add Your Civitai API Key'), icon: CupertinoIcons.lock, onTap: _openAccount),
-            ],
-          ),
-          settingsSectionGap,
-        ],
+      if (_advanced) ...[
+        settingsSectionGap,
         FormSection(
           prominentHeader: true,
           rowColor: rowColor,
-          header: Text(L10n.text('Prompt')),
-          footer: _advanced
-              ? Text(L10n.text('Round brackets are read as emphasis, as in (rain:1.3). Brackets that belong to a tag are written \\( and \\).'))
-              : null,
+          header: Text(L10n.text('Things to Avoid')),
           children: [
             FormRow(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: _field(key: const Key('generator.prompt'), controller: _prompt, minLines: 5),
-              ),
-            ),
-            Builder(
-              builder: (menuContext) => StudyActionRow(
-                key: const Key('generator.preset'),
-                title: L10n.text("Apply a Model's Recommended Tags"),
-                icon: CupertinoIcons.sparkles,
-                onTap: () async {
-                  final preset = await showPullDownMenu<GenerationPreset>(
-                    menuContext,
-                    anchor: anchorRectOf(menuContext),
-                    items: [for (final preset in GenerationPreset.all) PullDownMenuItem(value: preset, title: preset.name)],
-                  );
-                  if (preset != null) _applyPreset(preset);
-                },
+                child: _field(
+                  key: const Key('generator.negative'),
+                  controller: _negative,
+                  minLines: 3,
+                  onChanged: (value) => _set(_settings.copyWith(negative: value)),
+                ),
               ),
             ),
           ],
         ),
-        if (_advanced) ...[
-          settingsSectionGap,
-          FormSection(
-            prominentHeader: true,
-            rowColor: rowColor,
-            header: Text(L10n.text('Things to Avoid')),
-            children: [
-              FormRow(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: _field(
-                    key: const Key('generator.negative'),
-                    controller: _negative,
-                    minLines: 3,
-                    onChanged: (value) => _set(_settings.copyWith(negative: value)),
+      ],
+      settingsSectionGap,
+      FormSection(
+        prominentHeader: true,
+        rowColor: rowColor,
+        header: Text(L10n.text('Model')),
+        children: [
+          FormRow(
+            key: const Key('generator.model'),
+            onTap: () => pushGenerator<void>(
+              context,
+              (context) => GeneratorModelPicker(environment: _environment, kind: GenerationKind.checkpoint, choose: (model) => _set(_settings.use(model))),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          settings.model?.name ?? L10n.text('Choose a Model'),
+                          style: TegnalType.style(
+                            17,
+                            weight: FontWeight.w500,
+                            color: settings.model == null ? StudyStyle.accent(context) : TegnalColors.label.resolveFrom(context),
+                          ),
+                        ),
+                        if (settings.model case final model?) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            [?model.base, model.air].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TegnalType.style(12, color: secondary),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
+                  Icon(CupertinoIcons.chevron_right, size: 15, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                ],
               ),
-            ],
+            ),
           ),
-        ],
-        settingsSectionGap,
-        FormSection(
-          prominentHeader: true,
-          rowColor: rowColor,
-          header: Text(L10n.text('Model')),
-          children: [
-            FormRow(
-              key: const Key('generator.model'),
+          if (_advanced) ...[
+            for (final (index, lora) in settings.loras.indexed) _loraRow(context, index, lora),
+            SettingsLinkRow(
+              color: StudyStyle.accent(context),
+              key: const Key('generator.addLora'),
+              title: L10n.text('Add a LoRA'),
+              icon: CupertinoIcons.plus,
               onTap: () => pushGenerator<void>(
                 context,
-                (context) => GeneratorModelPicker(environment: _environment, kind: GenerationKind.checkpoint, choose: (model) => _set(_settings.use(model))),
+                (context) => GeneratorModelPicker(
+                  environment: _environment,
+                  kind: GenerationKind.lora,
+                  choose: (model) {
+                    if (!_settings.loras.any((lora) => lora.model.air == model.air)) {
+                      _set(
+                        _settings.copyWith(
+                          loras: [
+                            ..._settings.loras,
+                            GenerationLora(model: model),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                ),
               ),
+            ),
+          ],
+        ],
+      ),
+      settingsSectionGap,
+      if (_advanced) ...[..._options(context, rowColor), settingsSectionGap],
+      if (_unlocked)
+        FormSection(
+          rowColor: rowColor,
+          children: [
+            SettingsToggleRow(
+              tint: StudyStyle.accent(context),
+              key: const Key('generator.advancedToggle'),
+              title: L10n.text('Show Advanced Settings'),
+              value: _showsAdvanced,
+              onChanged: (shown) {
+                setState(() => _showsAdvanced = shown);
+                _store.defaults.set(GeneratorView.advancedKey, shown);
+              },
+            ),
+          ],
+        )
+      else
+        FormSection(
+          key: const Key('generator.advancedLocked'),
+          rowColor: rowColor,
+          children: [FormRow(child: _lockedCard(context))],
+        ),
+      settingsSectionGap,
+      FormSection(
+        rowColor: rowColor,
+        footer: _run.lastCost != null && !_run.isRunning ? Text(L10n.text('The last request cost %@ Buzz.', ['${_run.lastCost!.ceil()}'])) : null,
+        children: [
+          FormRow(
+            child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _generateButton(context)),
+          ),
+          if (_run.isRunning)
+            FormRow(
+              key: const Key('generator.cancel'),
+              onTap: () => _run.cancel(_store),
+              child: Center(
+                child: Text(L10n.text('Cancel'), style: TegnalType.style(17, color: CupertinoColors.systemRed.resolveFrom(context))),
+              ),
+            ),
+          if (_run.error case final error?)
+            FormRow(
+              key: _errorKey,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Icon(CupertinoIcons.exclamationmark_triangle, size: 15, color: SystemColors.red.resolveFrom(context)),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            settings.model?.name ?? L10n.text('Choose a Model'),
-                            style: TegnalType.style(
-                              17,
-                              weight: FontWeight.w500,
-                              color: settings.model == null ? StudyStyle.accent(context) : TegnalColors.label.resolveFrom(context),
-                            ),
-                          ),
-                          if (settings.model case final model?) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              [?model.base, model.air].join(' · '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TegnalType.style(12, color: secondary),
-                            ),
-                          ],
-                        ],
+                      child: Text(
+                        error.message,
+                        key: const Key('generator.error'),
+                        style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context)),
                       ),
                     ),
-                    Icon(CupertinoIcons.chevron_right, size: 15, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
                   ],
                 ),
               ),
             ),
-            if (_advanced) ...[
-              for (final (index, lora) in settings.loras.indexed) _loraRow(context, index, lora),
-              SettingsLinkRow(
-                color: StudyStyle.accent(context),
-                key: const Key('generator.addLora'),
-                title: L10n.text('Add a LoRA'),
-                icon: CupertinoIcons.plus,
-                onTap: () => pushGenerator<void>(
-                  context,
-                  (context) => GeneratorModelPicker(
-                    environment: _environment,
-                    kind: GenerationKind.lora,
-                    choose: (model) {
-                      if (!_settings.loras.any((lora) => lora.model.air == model.air)) {
-                        _set(
-                          _settings.copyWith(
-                            loras: [
-                              ..._settings.loras,
-                              GenerationLora(model: model),
-                            ],
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ),
+        ],
+      ),
+      if (_run.made.isNotEmpty) ...[
+        settingsSectionGap,
+        FormSection(
+          prominentHeader: true,
+          rowColor: rowColor,
+          header: Text(L10n.text('Results')),
+          children: [
+            FormRow(
+              key: _resultsKey,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: GeneratedGrid(pictures: _run.made, store: _store, open: _openPicture),
               ),
-            ],
+            ),
           ],
         ),
-        settingsSectionGap,
-        if (_advanced) ...[..._options(context, rowColor), settingsSectionGap],
-        if (_unlocked)
-          FormSection(
-            rowColor: rowColor,
-            children: [
-              SettingsToggleRow(
-                tint: StudyStyle.accent(context),
-                key: const Key('generator.advancedToggle'),
-                title: L10n.text('Show Advanced Settings'),
-                value: _showsAdvanced,
-                onChanged: (shown) {
-                  setState(() => _showsAdvanced = shown);
-                  _store.defaults.set(GeneratorView.advancedKey, shown);
-                },
-              ),
-            ],
-          )
-        else
-          FormSection(
-            key: const Key('generator.advancedLocked'),
-            rowColor: rowColor,
-            children: [FormRow(child: _lockedCard(context))],
-          ),
+      ],
+      if (_store.pictures.isNotEmpty) ...[
         settingsSectionGap,
         FormSection(
           rowColor: rowColor,
-          footer: _run.lastCost != null && !_run.isRunning ? Text(L10n.text('The last request cost %@ Buzz.', ['${_run.lastCost!.ceil()}'])) : null,
           children: [
-            FormRow(
-              child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _generateButton(context)),
+            SettingsLinkRow(
+              color: StudyStyle.accent(context),
+              key: const Key('generator.gallery'),
+              title: L10n.text('Generated Pictures'),
+              icon: CupertinoIcons.photo_on_rectangle,
+              value: '${_store.pictures.length}',
+              onTap: () => pushGenerator<void>(context, (context) => GeneratedGalleryView(environment: _environment)).then((_) {
+                if (mounted) setState(() {});
+              }),
             ),
-            if (_run.isRunning)
-              FormRow(
-                key: const Key('generator.cancel'),
-                onTap: () => _run.cancel(_store),
-                child: Center(
-                  child: Text(L10n.text('Cancel'), style: TegnalType.style(17, color: CupertinoColors.systemRed.resolveFrom(context))),
-                ),
-              ),
-            if (_run.error case final error?)
-              FormRow(
-                key: _errorKey,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(CupertinoIcons.exclamationmark_triangle, size: 15, color: SystemColors.red.resolveFrom(context)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          error.message,
-                          key: const Key('generator.error'),
-                          style: TegnalType.style(13, color: SystemColors.red.resolveFrom(context)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
-        if (_run.made.isNotEmpty) ...[
-          settingsSectionGap,
-          FormSection(
-            prominentHeader: true,
-            rowColor: rowColor,
-            header: Text(L10n.text('Results')),
-            children: [
-              FormRow(
-                key: _resultsKey,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: GeneratedGrid(pictures: _run.made, store: _store, open: _openPicture),
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (_store.pictures.isNotEmpty) ...[
-          settingsSectionGap,
-          FormSection(
-            rowColor: rowColor,
-            children: [
-              SettingsLinkRow(
-                color: StudyStyle.accent(context),
-                key: const Key('generator.gallery'),
-                title: L10n.text('Generated Pictures'),
-                icon: CupertinoIcons.photo_on_rectangle,
-                value: '${_store.pictures.length}',
-                onTap: () => pushGenerator<void>(context, (context) => GeneratedGalleryView(environment: _environment)).then((_) {
-                  if (mounted) setState(() {});
-                }),
-              ),
-            ],
-          ),
-        ],
       ],
-    );
+    ];
+    if (widget.onClose case final close?) {
+      return GeneratorSheetPage(
+        title: L10n.text('Generate a Picture'),
+        controller: _scroll,
+        leading: GlassTextButton(key: const Key('generator.close'), label: L10n.text('Close'), onPressed: close),
+        trailing: account,
+        children: children,
+      );
+    }
+    return SettingsPage(controller: _scroll, title: L10n.text('Generate a Picture'), trailing: account, children: children);
   }
 
   Widget _lockedCard(BuildContext context) {
@@ -500,7 +516,8 @@ class _GeneratorViewState extends State<GeneratorView> {
         children: [
           Row(
             children: [
-              Icon(CupertinoIcons.lock_fill, size: 15, color: TegnalColors.label.resolveFrom(context)),
+              // A list row's label takes the tint for its symbol.
+              Icon(CupertinoIcons.lock_fill, size: 15, color: StudyStyle.accent(context)),
               const SizedBox(width: 6),
               Text(
                 L10n.text('Advanced Settings'),
@@ -745,6 +762,9 @@ class _GeneratorViewState extends State<GeneratorView> {
     final accent = StudyStyle.accent(context);
     const white = Color(0xFFFFFFFF);
     final enabled = !_run.isRunning && _trimmed.isNotEmpty;
+    // Disabled, a prominent button is drawn in a faint grey fill with grey words, as iOS draws it.
+    final dimmed = !enabled && !_run.isRunning;
+    final ink = dimmed ? TegnalColors.tertiaryLabel.resolveFrom(context) : white;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -752,38 +772,35 @@ class _GeneratorViewState extends State<GeneratorView> {
         key: const Key('generator.generate'),
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? _generate : null,
-        child: Opacity(
-          opacity: enabled || _run.isRunning ? 1 : 0.4,
-          child: Container(
-            height: 50,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: ShapeDecoration(color: accent, shape: const StadiumBorder()),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (_run.isRunning) const CupertinoActivityIndicator(color: white) else const Icon(CupertinoIcons.wand_stars, size: 19, color: white),
-                const SizedBox(width: 8),
+        child: Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: ShapeDecoration(color: dimmed ? _disabledFill.resolveFrom(context) : accent, shape: const StadiumBorder()),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_run.isRunning) const CupertinoActivityIndicator(color: white) else Icon(CupertinoIcons.wand_stars, size: 19, color: ink),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _run.isRunning ? _status : L10n.text('Generate'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(17, weight: FontWeight.w600, color: ink),
+                ),
+              ),
+              if (!_run.isRunning && _store.hasKey && _settings.model != null) ...[
+                const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    _run.isRunning ? _status : L10n.text('Generate'),
+                    '· $_cost',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TegnalType.style(17, weight: FontWeight.w600, color: white),
+                    style: TegnalType.style(15, color: ink.withValues(alpha: 0.85)),
                   ),
                 ),
-                if (!_run.isRunning && _store.hasKey && _settings.model != null) ...[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '· $_cost',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TegnalType.style(15, color: white.withValues(alpha: 0.85)),
-                    ),
-                  ),
-                ],
               ],
-            ),
+            ],
           ),
         ),
       ),

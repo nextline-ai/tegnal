@@ -102,7 +102,8 @@ class _GeneratedGalleryViewState extends State<GeneratedGalleryView> {
         child: GeneratedGrid(
           pictures: _store.pictures,
           store: _store,
-          open: (picture) => showGeneratorSheet<void>(context, (context) => GeneratedPictureView(environment: widget.environment, picture: picture, removed: () {})),
+          open: (picture) =>
+              showGeneratorSheet<void>(context, (context) => GeneratedPictureView(environment: widget.environment, picture: picture, removed: () {})),
         ),
       ),
     ],
@@ -142,9 +143,16 @@ class _GeneratedPictureViewState extends State<GeneratedPictureView> {
       final extension = _picture.file.split('.').last;
       final copy = await source.copy('${folder.path}/TEGNAL Generated.$extension');
       if (AppPlatform.isDesktop) {
-        await const DocumentFiles().createDocument(name: 'TEGNAL Generated.$extension', source: copy, mimeType: extension == 'jpg' ? 'image/jpeg' : 'image/$extension');
+        await const DocumentFiles().createDocument(
+          name: 'TEGNAL Generated.$extension',
+          source: copy,
+          mimeType: extension == 'jpg' ? 'image/jpeg' : 'image/$extension',
+        );
       } else {
-        await AppAway.run(() => const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('shareImage', {'path': copy.path, 'title': L10n.text('Generated Picture')}));
+        await AppAway.run(
+          () =>
+              const MethodChannel('work.nextline.tegnal/screen').invokeMethod<void>('shareImage', {'path': copy.path, 'title': L10n.text('Generated Picture')}),
+        );
       }
     } on Object catch (error) {
       if (mounted) showTransientMessage(context, '$error');
@@ -184,7 +192,12 @@ class _GeneratedPictureViewState extends State<GeneratedPictureView> {
       builder: (context) => CupertinoActionSheet(
         title: Text(L10n.text('Delete this picture?')),
         actions: [
-          CupertinoActionSheetAction(key: const Key('generator.confirmDelete'), isDestructiveAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Delete'))),
+          CupertinoActionSheetAction(
+            key: const Key('generator.confirmDelete'),
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(L10n.text('Delete')),
+          ),
         ],
         cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
       ),
@@ -251,7 +264,12 @@ class _GeneratedPictureViewState extends State<GeneratedPictureView> {
               icon: _copied ? CupertinoIcons.checkmark : CupertinoIcons.doc_on_doc,
               onTap: _copy,
             ),
-            StudyActionRow(key: const Key('generator.useSettings'), title: L10n.text('Use These Settings'), icon: CupertinoIcons.slider_horizontal_3, onTap: _useSettings),
+            StudyActionRow(
+              key: const Key('generator.useSettings'),
+              title: L10n.text('Use These Settings'),
+              icon: CupertinoIcons.slider_horizontal_3,
+              onTap: _useSettings,
+            ),
           ],
         ),
         settingsSectionGap,
@@ -265,7 +283,9 @@ class _GeneratedPictureViewState extends State<GeneratedPictureView> {
                 width: double.infinity,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: StudySelectable(child: Text(picture.prompt, key: const Key('generator.promptText'), style: generatorMonospace(context))),
+                  child: StudySelectable(
+                    child: Text(picture.prompt, key: const Key('generator.promptText'), style: generatorMonospace(context)),
+                  ),
                 ),
               ),
             ),
