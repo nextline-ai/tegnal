@@ -200,7 +200,8 @@ struct NativeReaderView: View {
         .background(ReaderWorkSwipeGesture(enabled: continuousWorkSwipe && mode == ReaderMode.continuous.rawValue && readerActive && sheet == nil && !zoomed && !menuVisible && !showJump, excludesLeadingEdge: continuousBackSwipe) { delta in
             if changeWork?(delta) != true { toast = L10n.text("No More Works in This List") }
         })
-        .background(ReaderBackSwipeGesture(enabled: continuousBackSwipe && mode == ReaderMode.continuous.rawValue && readerActive && sheet == nil && !zoomed && !menuVisible && !showJump, back: closeReader))
+        // The quick menu does not stop the way back: a swipe from the left edge leaves with the menu open too.
+        .background(ReaderBackSwipeGesture(enabled: continuousBackSwipe && mode == ReaderMode.continuous.rawValue && readerActive && sheet == nil && !zoomed && !showJump, back: closeReader))
         .background(ReaderKeyboardCommands(enabled: readerActive && sheet == nil && !showJump, action: shortcut))
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)

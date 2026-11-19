@@ -1267,7 +1267,6 @@
 /* Library maintenance and viewer feedback */
 "Removed from Tags" = "Removed from Tags";
 "Remove Saved Tag" = "Remove Saved Tag";
-"Play Animation When Returning" = "Play Animation When Returning";
 "Reset Settings to Defaults" = "Reset Settings to Defaults";
 "Reset Settings to Defaults?" = "Reset Settings to Defaults?";
 "Resets this mode’s viewer options. Saved works and reading progress are kept." = "Resets this mode’s viewer options. Saved works and reading progress are kept.";
@@ -2174,11 +2173,7 @@
 "Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key.";
 "Learn What an API Key Is" = "Learn What an API Key Is";
 "Sound Effects" = "Sound Effects";
-"Choose How to Start" = "Choose How to Start";
-"The app opens in the mode you choose here. You can change it anytime in Settings." = "The app opens in the mode you choose here. You can change it anytime in Settings.";
-"Learn to make anime-style pictures with AI from the very start, one short lesson at a time." = "Learn to make anime-style pictures with AI from the very start, one short lesson at a time.";
 "Viewing Mode" = "Viewing Mode";
-"Find, save and enjoy comics and images in your own library." = "Find, save and enjoy comics and images in your own library.";
 
 /* Learning mode: achievements, speed round, new steps, generator unlock */
 "First Step" = "First Step";
@@ -2344,3 +2339,33 @@
 "Track Completed" = "Track Completed";
 "Add-on Track" = "Add-on Track";
 "You finished every lesson of this track." = "You finished every lesson of this track.";
+"Which tag fits “%@”?" = "Which tag fits “%@”?";
+"Skipped" = "Skipped";
+"I Don't Know" = "I Don't Know";
+"You Know Your Stuff!" = "You Know Your Stuff!";
+"Let's Start from the Beginning" = "Let's Start from the Beginning";
+"You can skip ahead on the path." = "You can skip ahead on the path.";
+"We'll learn the basics together, one short lesson at a time." = "We'll learn the basics together, one short lesson at a time.";
+"Right Answers" = "Right Answers";
+"Lessons Skipped" = "Lessons Skipped";
+"Start Here" = "Start Here";
+"The lessons before it stay open on the map, to play whenever you like." = "The lessons before it stay open on the map, to play whenever you like.";
+"Welcome to Learning Mode!" = "Welcome to Learning Mode!";
+"Learn the tags that AI pictures are ordered with, from the very start, one short lesson at a time." = "Learn the tags that AI pictures are ordered with, from the very start, one short lesson at a time.";
+"Follow the map, one short lesson at a time" = "Follow the map, one short lesson at a time";
+"Meet a daily goal and keep your streak going" = "Meet a daily goal and keep your streak going";
+"Practise with games and collect badges" = "Practise with games and collect badges";
+"Pick a Daily Goal" = "Pick a Daily Goal";
+"How much would you like to learn each day? You can change it on the Me tab anytime." = "How much would you like to learn each day? You can change it on the Me tab anytime.";
+"Casual" = "Casual";
+"Regular" = "Regular";
+"Serious" = "Serious";
+"Intense" = "Intense";
+"%@ XP a day" = "%@ XP a day";
+"How much do you know about AI pictures?" = "How much do you know about AI pictures?";
+"Tell us, and the path starts in the right place." = "Tell us, and the path starts in the right place.";
+"I'm New to This" = "I'm New to This";
+"Start from the very first lesson." = "Start from the very first lesson.";
+"I Know Some Already" = "I Know Some Already";
+"Answer a few short questions to find where to begin. A question you can't answer ends the test." = "Answer a few short questions to find where to begin. A question you can't answer ends the test.";
+"Take the Test" = "Take the Test";

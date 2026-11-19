@@ -29,6 +29,14 @@ final class StudyModeModel {
     private(set) var facts = StudyFacts()
     /// How many tags have been missed at least once, for Weak Spots.
     private(set) var weak = 0
+    /// How many lessons at the start of the main path the placement test passed by.
+    private(set) var placed = 0
+    /// What the shown path counts as passed by: the placement belongs to the main path only.
+    var shownPlaced: Int { track == nil ? placed : 0 }
+    /// True until the learner has been welcomed, on a first visit and again after a reset.
+    var needsWelcome: Bool { StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: defaults) }
+    /// Marks the welcome as gone through on this device.
+    func welcomed() { defaults.set(true, forKey: StudyPlacement.welcomedKey) }
     var goal: Int { didSet { defaults.set(goal, forKey: Self.goalKey) } }
 
     init() {
@@ -69,7 +77,9 @@ final class StudyModeModel {
         needsServer = StudyServer.needsChoice(store, defaults: defaults)
         if awards.isEmpty { awards = StudyAward.all(path) }
         earned = (try? study.awards()) ?? [:]
-        facts = StudyFacts(path: path, records: records, days: days, progress: progress, stats: (try? study.stats()) ?? [:])
+        let stats = (try? study.stats()) ?? [:]
+        placed = stats[StudyPlacement.counter] ?? 0
+        facts = StudyFacts(path: path, records: records, days: days, progress: progress, stats: stats)
         weak = progress.values.filter { $0.wrong > 0 && curriculum.contains($0.tag) }.count
     }
 
@@ -99,12 +109,26 @@ struct StudyModeRoot: View {
 
     /// Whether this visit's opening question or celebration has been shown.
     @State private var greeted = false
+    /// The welcome and placement test, shown on a first visit and after a reset.
+    @State private var welcoming = false
 
     /// Asks or celebrates once the learner has arrived, not while the home scene is still on the way out.
+    /// A learner new to the mode is welcomed first; the server question waits until the welcome closes.
     private func greet() {
         guard !greeted, !HomeStage.shared.coversScreen else { return }
         greeted = true
+        if model.needsWelcome { welcoming = true; return }
         if model.needsServer { choosingServer = true } else { celebrate() }
+    }
+
+    /// After the welcome: the path glides to where the learner begins, then the server question if one is due.
+    private func welcomeClosed() {
+        model.welcomed()
+        withAnimation(.spring(duration: 0.5, bounce: 0.3)) { model.reload(store) }
+        mode.tab = .path
+        if model.needsServer {
+            Task { try? await Task.sleep(for: .milliseconds(450)); choosingServer = true }
+        } else { celebrate() }
     }
 
     /// The tabs opened so far. A tab is built the first time it is opened and kept from then on.
@@ -116,7 +140,13 @@ struct StudyModeRoot: View {
         case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
         case .dex: StudyDexView(model: model, source: source)
         case .lab: StudyLabView(model: model, start: start, closed: celebrate)
-        case .me: StudyMeView(model: model, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true })
+        case .me: StudyMeView(model: model, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true }, reset: {
+            // A reset starts learning mode over, welcome and placement test included.
+            ReaderPreferences.booruDefaults.removeObject(forKey: StudyPlacement.welcomedKey)
+            model.reload(store)
+            mode.tab = .path
+            welcoming = true
+        })
         }
     }
 
@@ -139,6 +169,9 @@ struct StudyModeRoot: View {
         // What learning mode opens over itself is handed the app's models outright. On the Mac a cover or sheet
         // left to inherit them comes up without the image library, which ends the app.
         .appFullScreenCover(item: $session, onDismiss: closed) { StudyPlayView(session: $0) }
+        .appFullScreenCover(isPresented: $welcoming, onDismiss: welcomeClosed) {
+            StudyWelcomeView(model: model, source: source) { welcoming = false }
+        }
         .appSheet(isPresented: $choosingServer) { StudyServerPicker(model: model).presentationDetents([.medium, .large]) }
         .appFullScreenCover(item: $speed, onDismiss: { withAnimation { model.reload(store) }; celebrate() }) { StudySpeedView(round: $0) }
         .appFullScreenCover(isPresented: $showingAwards) { StudyAwardsGallery(model: model) }
@@ -152,6 +185,8 @@ struct StudyModeRoot: View {
             if let target = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--study-seed-path=") })?.dropFirst(18) {
                 for lesson in model.path.lessons.prefix(while: { $0.id != target }) { try? store.studyStore.earn(15, lesson: lesson.id, stars: 3) }
                 ReaderPreferences.booruDefaults.set(StudyServer.recommended(StudyServer.choices(store)).id, forKey: StudyServer.key)
+                // A seeded learner has been welcomed already; the welcome has tests of its own.
+                ReaderPreferences.booruDefaults.set(true, forKey: StudyPlacement.welcomedKey)
             }
             // `--study-seed-xp=<n>` starts with that much experience earned today, to reach a level's edge.
             if let xp = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--study-seed-xp=") })?.dropFirst(16), let amount = Int(xp), model.game.xp == 0 {
@@ -300,7 +335,7 @@ struct StudyPathView: View {
     private static let sway: [CGFloat] = [0, 58, 86, 58, 0, -58, -86, -58]
 
     var body: some View {
-        let current = model.shownPath.current(model.records)
+        let current = model.shownPath.current(model.records, placed: model.shownPlaced)
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
@@ -370,7 +405,9 @@ struct StudyPathView: View {
 
     private func node(_ lesson: StudyPathLesson, _ color: Color, current: Bool) -> some View {
         let record = model.records[lesson.id]
-        let open = record != nil || current
+        // A lesson the placement test passed by stays open, to be played whenever the learner likes.
+        let skipped = model.shownPath.isSkipped(lesson, model.records, placed: model.shownPlaced)
+        let open = record != nil || current || skipped
         let size: CGFloat = lesson.kind == .boss ? 92 : 76
         return VStack(spacing: 8) {
             if current {
@@ -396,7 +433,7 @@ struct StudyPathView: View {
             .phaseAnimator([1.0, 1.3, 1.0], trigger: celebrating == lesson.id) { view, scale in view.scaleEffect(scale) } animation: { _ in .spring(duration: 0.3, bounce: 0.6) }
             .overlay { if celebrating == lesson.id { StudyBurst(trigger: 1, count: 22, reach: 110, onAppear: true) } }
             .accessibilityLabel(lesson.title.resolved())
-            .accessibilityValue(L10n.text(record != nil ? "Lesson Done" : current ? "Next" : "Locked"))
+            .accessibilityValue(L10n.text(record != nil ? "Lesson Done" : current ? "Next" : skipped ? "Skipped" : "Locked"))
             .accessibilityIdentifier("study.node.\(lesson.id)")
             if let record { StudyStars(count: record.stars, size: 13) }
             Text(lesson.title.resolved()).font(StudyTheme.body(13, .bold)).foregroundStyle(open ? StudyTheme.ink : StudyTheme.muted)
@@ -632,6 +669,8 @@ struct StudyMeView: View {
     @Bindable var model: StudyModeModel
     let chooseServer: () -> Void
     var openAwards: () -> Void = {}
+    /// Called after progress is reset, so learning mode can welcome the learner again.
+    var reset: () -> Void = {}
     @Environment(BooruStore.self) private var store
     @State private var mode = StudyMode.shared
     @State private var confirmingReset = false
@@ -689,12 +728,12 @@ struct StudyMeView: View {
                 StudyMainButton(title: L10n.text("Back to the Library"), color: StudyTheme.muted, symbol: "books.vertical.fill") { mode.leave() }
                     .accessibilityIdentifier("study.leave")
                 Button(L10n.text("Reset Study Progress"), role: .destructive) { confirmingReset = true }
-                    .font(StudyTheme.body(14, .bold)).padding(.top, 4).disabled(model.game.xp == 0 && model.summary.started == 0)
+                    .font(StudyTheme.body(14, .bold)).padding(.top, 4).disabled(model.game.xp == 0 && model.summary.started == 0 && model.placed == 0)
             }
             .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
         .confirmationDialog(L10n.text("Reset study progress?"), isPresented: $confirmingReset, titleVisibility: .visible) {
-            Button(L10n.text("Reset"), role: .destructive) { try? store.studyStore.reset(); model.reload(store) }
+            Button(L10n.text("Reset"), role: .destructive) { try? store.studyStore.reset(); model.reload(store); reset() }
         } message: { Text(L10n.text("Every tag goes back to not started. This cannot be undone.")) }
     }
 
@@ -772,5 +811,191 @@ struct StudyModeSettings: View {
                 SettingsHelpLabel("Open in Viewing Mode", help: "Turning this on takes the app straight on from its opening scene into viewing mode, without waiting for a swipe.")
             }.accessibilityIdentifier("settings.startInViewingMode")
         } header: { Text(L10n.text("Viewing Mode")) }
+    }
+}
+
+// MARK: - Welcome
+
+/// What learning mode shows on a first visit and after a reset: a hello, a daily goal, and how much the learner already
+/// knows. Someone who knows some of it takes the placement test, played in place, which can start them further along.
+struct StudyWelcomeView: View {
+    @Bindable var model: StudyModeModel
+    let source: any BooruProviding
+    let finish: () -> Void
+    @Environment(BooruStore.self) private var store
+    @State private var page = 0
+    /// True for "I Know Some Already", false for "I'm New to This"; nil until one is picked.
+    @State private var knowsSome: Bool?
+    @State private var test: StudyLessonSession?
+    private static let last = 2
+    private static let goalNames = [10: "Casual", 20: "Regular", 30: "Serious", 50: "Intense"]
+
+    var body: some View {
+        ZStack {
+            if let test {
+                StudyPlayView(session: test, leave: { closeTest(test) })
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                VStack(spacing: 0) {
+                    header
+                    ScrollView {
+                        Group {
+                            switch page {
+                            case 0: hello
+                            case 1: goals
+                            default: level
+                            }
+                        }
+                        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
+                        .frame(maxWidth: 560).frame(maxWidth: .infinity)
+                    }
+                    .id(page)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    StudyMainButton(title: L10n.text(buttonTitle), symbol: page == Self.last && knowsSome == true ? "scope" : nil, action: next)
+                        .disabled(page == Self.last && knowsSome == nil)
+                        .frame(maxWidth: 560).padding(.horizontal, 18).padding(.vertical, 10).frame(maxWidth: .infinity)
+                        .background(StudyTheme.background).accessibilityIdentifier("study.welcome.next")
+                }
+                .transition(.opacity)
+            }
+        }
+        .background(StudyTheme.background.ignoresSafeArea())
+        .tint(StudyTheme.primary)
+        .animation(.snappy(duration: 0.32), value: page)
+        .animation(.snappy(duration: 0.35), value: test?.id)
+        .accessibilityElement(children: .contain).accessibilityIdentifier("study.welcome")
+    }
+
+    private var buttonTitle: String {
+        guard page == Self.last else { return "Continue" }
+        return knowsSome == true ? "Take the Test" : "Start Learning"
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            Button { StudySound.tap.play(); page -= 1 } label: {
+                Image(systemName: "chevron.left").font(.system(size: 17, weight: .heavy)).foregroundStyle(StudyTheme.muted).frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain).opacity(page > 0 ? 1 : 0).disabled(page == 0)
+            .accessibilityLabel(L10n.text("Back")).accessibilityIdentifier("study.welcome.back")
+            StudyBar(value: Double(page + 1) / Double(Self.last + 1), color: StudyTheme.primary)
+            Color.clear.frame(width: 36, height: 36)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private var hello: some View {
+        VStack(spacing: 18) {
+            StudyMascot(pose: .wave, size: 170).padding(.top, 10)
+            VStack(spacing: 8) {
+                Text(L10n.text("Welcome to Learning Mode!")).font(StudyTheme.title(30)).foregroundStyle(StudyTheme.ink).multilineTextAlignment(.center)
+                Text(L10n.text("Learn the tags that AI pictures are ordered with, from the very start, one short lesson at a time."))
+                    .font(StudyTheme.body(17, .medium)).foregroundStyle(StudyTheme.muted).multilineTextAlignment(.center)
+            }
+            StudyCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    feature("map.fill", StudyTheme.primary, "Follow the map, one short lesson at a time")
+                    feature("flame.fill", StudyTheme.flame, "Meet a daily goal and keep your streak going")
+                    feature("trophy.fill", StudyTheme.gold, "Practise with games and collect badges")
+                }
+            }
+        }
+    }
+
+    private func feature(_ symbol: String, _ color: Color, _ text: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+                .frame(width: 44, height: 44).background(color, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            Text(L10n.text(text)).font(StudyTheme.body(16, .bold)).foregroundStyle(StudyTheme.ink).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var goals: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                StudyMascot(pose: .read, size: 86)
+                StudyCard(padding: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.text("Pick a Daily Goal")).font(StudyTheme.title(22)).foregroundStyle(StudyTheme.ink)
+                        Text(L10n.text("How much would you like to learn each day? You can change it on the Me tab anytime."))
+                            .font(StudyTheme.body(15, .medium)).foregroundStyle(StudyTheme.muted)
+                    }
+                }
+            }
+            VStack(spacing: 12) {
+                ForEach(StudyGame.goals, id: \.self) { goal in
+                    let chosen = model.goal == goal
+                    Button { StudySound.pick.play(); withAnimation(.spring(duration: 0.3, bounce: 0.4)) { model.goal = goal } } label: {
+                        HStack {
+                            Text(L10n.text(Self.goalNames[goal] ?? "")).font(StudyTheme.body(18, .heavy))
+                            Spacer()
+                            Text(L10n.text("%@ XP a day", String(goal))).font(StudyTheme.body(15, .bold)).opacity(0.85)
+                            Image(systemName: chosen ? "checkmark.circle.fill" : "circle").font(.system(size: 20, weight: .bold))
+                        }
+                        .padding(.horizontal, 18).frame(minHeight: 56)
+                    }
+                    .buttonStyle(StudyPressStyle(color: StudyTheme.gold, radius: 16, depth: 4, outlined: !chosen))
+                    .scaleEffect(chosen ? 1.02 : 1)
+                    .accessibilityAddTraits(chosen ? .isSelected : []).accessibilityIdentifier("study.welcome.goal.\(goal)")
+                }
+            }
+        }
+    }
+
+    private var level: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                StudyMascot(pose: .think, size: 86)
+                StudyCard(padding: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.text("How much do you know about AI pictures?")).font(StudyTheme.title(22)).foregroundStyle(StudyTheme.ink)
+                        Text(L10n.text("Tell us, and the path starts in the right place."))
+                            .font(StudyTheme.body(15, .medium)).foregroundStyle(StudyTheme.muted)
+                    }
+                }
+            }
+            VStack(spacing: 12) {
+                levelChoice(false, symbol: "leaf.fill", title: "I'm New to This", detail: "Start from the very first lesson.")
+                levelChoice(true, symbol: "scope", title: "I Know Some Already", detail: "Answer a few short questions to find where to begin. A question you can't answer ends the test.")
+            }
+        }
+    }
+
+    private func levelChoice(_ some: Bool, symbol: String, title: String, detail: String) -> some View {
+        let chosen = knowsSome == some
+        return Button { StudySound.pick.play(); withAnimation(.spring(duration: 0.3, bounce: 0.4)) { knowsSome = some } } label: {
+            HStack(spacing: 14) {
+                Image(systemName: symbol).font(.system(size: 24, weight: .bold))
+                    .frame(width: 50, height: 50)
+                    .background(chosen ? Color.white.opacity(0.22) : StudyTheme.primary.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .foregroundStyle(chosen ? Color.white : StudyTheme.primary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text(title)).font(StudyTheme.body(18, .heavy))
+                    Text(L10n.text(detail)).font(StudyTheme.body(14, .medium)).opacity(0.85).multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(StudyPressStyle(color: StudyTheme.primary, radius: 20, depth: 5, outlined: !chosen))
+        .scaleEffect(chosen ? 1.02 : 1)
+        .accessibilityAddTraits(chosen ? .isSelected : []).accessibilityIdentifier(some ? "study.welcome.some" : "study.welcome.new")
+    }
+
+    private func next() {
+        StudySound.tap.play()
+        if page < Self.last { page += 1; return }
+        if knowsSome == true {
+            // The test is about the main path, so it asks with the app's own curriculum.
+            test = StudyLessonSession(plan: .placement, store: store, source: source, server: model.server, engine: StudyEngine(curriculum: .bundled))
+        } else { finish() }
+    }
+
+    /// A finished test ends the welcome; a test closed early goes back to the question, to be taken again or skipped.
+    private func closeTest(_ session: StudyLessonSession) {
+        if session.phase == .finished { finish() } else { test = nil }
     }
 }

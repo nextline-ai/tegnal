@@ -287,6 +287,98 @@ final class StudyPathTests: XCTestCase {
         XCTAssertFalse(path.isOpen(lessons[1], skipped))
     }
 
+    // MARK: - Placement
+
+    func testThePlacementTestAsksOneQuestionForEverySectionInPathOrder() {
+        let path = StudyPath.bundled
+        var generator = SystemRandomNumberGenerator()
+        let questions = StudyPlacement.questions(path, curriculum: .bundled, language: "en", using: &generator)
+        XCTAssertEqual(questions.map(\.section), Array(path.sections.indices), "Every section with lessons is checked once, in order")
+        for question in questions {
+            let ask = question.ask
+            XCTAssertTrue(ask.choices.indices.contains(ask.answer))
+            XCTAssertEqual(Set(ask.choices.map { $0.resolved("en") }).count, ask.choices.count, "Choices are distinct")
+            let section = path.sections[question.section]
+            if section.lessons.allSatisfy({ ($0.steps ?? []).allSatisfy { $0.ask == nil } }) {
+                // A section that only teaches tags is checked by a meaning and that lesson's own tags.
+                XCTAssertEqual(ask.code, true)
+                let taught = Set(section.lessons.flatMap { $0.tags ?? [] }.map(StudyPrompt.words))
+                XCTAssertTrue(ask.choices.allSatisfy { taught.contains($0.resolved("en")) }, "Wrong answers come from the section's own tags")
+                XCTAssertGreaterThanOrEqual(ask.choices.count, 2)
+            }
+        }
+    }
+
+    func testThePlacementTestPassesByTheLessonsBeforeTheFirstMissedSection() {
+        let path = StudyPath.bundled
+        XCTAssertEqual(StudyPlacement.skipped(path, stoppedAt: 0), 0, "Missing the first question starts at the beginning")
+        XCTAssertEqual(StudyPlacement.skipped(path, stoppedAt: 2), path.sections[0].lessons.count + path.sections[1].lessons.count)
+        XCTAssertEqual(StudyPlacement.skipped(path, stoppedAt: nil), path.lessons.count - path.sections.last!.lessons.count,
+                       "Nothing missed begins at the last section")
+        XCTAssertEqual(StudyPlacement.skipped(StudyPath(), stoppedAt: nil), 0)
+        XCTAssertEqual(StudyPlacement.section(path, placed: 0)?.id, path.sections[0].id)
+        XCTAssertEqual(StudyPlacement.section(path, placed: StudyPlacement.skipped(path, stoppedAt: 3))?.id, path.sections[3].id)
+    }
+
+    func testAPlacedLearnerStartsAtThePlacementAndTheLessonsPassedByStayOpen() {
+        let path = StudyPath.bundled
+        let lessons = path.lessons
+        let placed = StudyPlacement.skipped(path, stoppedAt: 2)
+        XCTAssertEqual(path.current([:], placed: placed)?.id, lessons[placed].id)
+        for (index, lesson) in lessons.enumerated() {
+            XCTAssertEqual(path.isOpen(lesson, [:], placed: placed), index <= placed, "lesson \(index)")
+            XCTAssertEqual(path.isSkipped(lesson, [:], placed: placed), index < placed, "lesson \(index)")
+        }
+        let first = [lessons[placed].id: record(lessons[placed])]
+        XCTAssertEqual(path.current(first, placed: placed)?.id, lessons[placed + 1].id)
+        XCTAssertFalse(path.isSkipped(lessons[0], [lessons[0].id: record(lessons[0])], placed: placed), "A passed-by lesson played since is finished")
+        // With everything from the placement on finished, the learner is sent back to what was passed by.
+        let rest = Dictionary(uniqueKeysWithValues: lessons.dropFirst(placed).map { ($0.id, record($0)) })
+        XCTAssertEqual(path.current(rest, placed: placed)?.id, lessons[0].id)
+        XCTAssertEqual(path.current([:], placed: 10_000)?.id, lessons[0].id, "A count beyond the path falls back to the first lesson")
+    }
+
+    func testTheWelcomeShowsOnlyBeforeAnythingIsPlayedPlacedOrWelcomed() {
+        let defaults = freshDefaults()
+        XCTAssertTrue(StudyPlacement.needsWelcome(records: [:], xp: 0, placed: 0, defaults: defaults))
+        XCTAssertFalse(StudyPlacement.needsWelcome(records: ["a": .init(lesson: "a", stars: 1, runs: 1)], xp: 0, placed: 0, defaults: defaults))
+        XCTAssertFalse(StudyPlacement.needsWelcome(records: [:], xp: 5, placed: 0, defaults: defaults))
+        XCTAssertFalse(StudyPlacement.needsWelcome(records: [:], xp: 0, placed: 4, defaults: defaults), "A placement synced from another device counts")
+        defaults.set(true, forKey: StudyPlacement.welcomedKey)
+        XCTAssertFalse(StudyPlacement.needsWelcome(records: [:], xp: 0, placed: 0, defaults: defaults))
+    }
+
+    @MainActor func testThePlacementSessionStopsAtTheFirstMissEarnsNothingAndRecordsWhereItPlaced() async throws {
+        let store = try BooruStore()
+        let session = StudyLessonSession(plan: .placement, store: store, source: PathFakeSource(), server: pathServer, engine: StudyEngine(curriculum: .bundled))
+        await session.start()
+        XCTAssertEqual(session.steps.count, StudyPath.bundled.sections.count)
+        // Right for the first three sections, then missed.
+        for _ in 0..<3 { session.answer(true); session.next() }
+        session.answer(false)
+        XCTAssertEqual(session.phase, .feedback(false))
+        session.next()
+        XCTAssertEqual(session.phase, .finished, "The first miss ends the test")
+        XCTAssertEqual(session.stoppedAt, 3)
+        XCTAssertEqual(session.placed, StudyPlacement.skipped(.bundled, stoppedAt: 3))
+        XCTAssertEqual(try store.studyStore.stats()[StudyPlacement.counter], session.placed)
+        XCTAssertTrue(try store.studyStore.lessons().isEmpty)
+        XCTAssertEqual(try todaysXP(store), 0, "The test earns no experience")
+        XCTAssertTrue(try store.studyStore.progress().isEmpty, "No tag is scheduled by the test")
+        try store.studyStore.reset()
+        XCTAssertNil(try store.studyStore.stats()[StudyPlacement.counter], "A reset clears the placement")
+    }
+
+    @MainActor func testAPlacementMissedAtTheFirstQuestionStartsAtTheBeginningAndRecordsNothing() async throws {
+        let store = try BooruStore()
+        let session = StudyLessonSession(plan: .placement, store: store, source: PathFakeSource(), server: pathServer, engine: StudyEngine(curriculum: .bundled))
+        await session.start()
+        session.answer(false); session.next()
+        XCTAssertEqual(session.phase, .finished)
+        XCTAssertEqual(session.placed, 0)
+        XCTAssertNil(try store.studyStore.stats()[StudyPlacement.counter])
+    }
+
     // MARK: - Ask.shuffled
 
     private func ask(answer: Int = 0, count: Int = 3, code: Bool? = nil) -> StudyPathLesson.Ask {

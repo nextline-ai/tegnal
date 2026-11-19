@@ -8,7 +8,17 @@ final class StudyUITests: XCTestCase {
         tab(app, "Tags").tap()
         let entry = element(app, "study.entry")
         XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
-        XCTAssertTrue(app.staticTexts["Where should the pictures come from?"].waitForExistence(timeout: 5), "A learner with servers chooses one")
+        // A first visit is welcomed: a hello, a daily goal, and how much the learner knows.
+        XCTAssertTrue(app.staticTexts["Welcome to Learning Mode!"].waitForExistence(timeout: 5), "A first visit is welcomed")
+        element(app, "study.welcome.next").tap()
+        XCTAssertTrue(element(app, "study.welcome.goal.20").waitForExistence(timeout: 5))
+        element(app, "study.welcome.goal.30").tap()
+        element(app, "study.welcome.next").tap()
+        XCTAssertTrue(element(app, "study.welcome.new").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "study.welcome.next").isEnabled, "Nothing is chosen yet")
+        element(app, "study.welcome.new").tap()
+        element(app, "study.welcome.next").tap()
+        XCTAssertTrue(app.staticTexts["Where should the pictures come from?"].waitForExistence(timeout: 5), "A learner with servers chooses one after the welcome")
         XCTAssertTrue(app.staticTexts["Suggested"].exists, "Danbooru is suggested when it is there")
         element(app, "study.serverChoice.Danbooru").tap()
         XCTAssertTrue(element(app, "study.dock.path").waitForExistence(timeout: 5), "Learning mode brings its own dock")
@@ -25,6 +35,29 @@ final class StudyUITests: XCTestCase {
         // Learning mode slides away over a moment; the library can be touched once it has gone.
         let free = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: entry)
         XCTAssertEqual(XCTWaiter.wait(for: [free], timeout: 5), .completed)
+    }
+
+    func testThePlacementTestEndsAtTheFirstQuestionNotKnown() {
+        let app = launch()
+        XCTAssertTrue(app.staticTexts["Welcome to Learning Mode!"].waitForExistence(timeout: 10))
+        element(app, "study.welcome.next").tap()
+        element(app, "study.welcome.next").tap()
+        XCTAssertTrue(element(app, "study.welcome.some").waitForExistence(timeout: 5))
+        element(app, "study.welcome.some").tap()
+        element(app, "study.welcome.next").tap()
+        // The test asks without pictures; "I Don't Know" answers as missed and ends it.
+        XCTAssertTrue(element(app, "study.choice.0").waitForExistence(timeout: 10), "The test asks at once")
+        XCTAssertTrue(element(app, "study.unsure").exists)
+        element(app, "study.unsure").tap()
+        XCTAssertEqual(element(app, "study.verdict").value as? String, "wrong")
+        element(app, "study.next").tap()
+        XCTAssertTrue(element(app, "study.placement.title").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Let's Start from the Beginning"].exists, "Missing the first question starts at the beginning")
+        element(app, "study.done").tap()
+        if app.staticTexts["Where should the pictures come from?"].waitForExistence(timeout: 3) { element(app, "study.serverChoice.Danbooru").tap() }
+        XCTAssertTrue(element(app, "study.node.s0-order").waitForExistence(timeout: 5))
+        XCTAssertEqual(element(app, "study.node.s0-tags").value as? String, "Locked")
+        XCTAssertFalse(app.staticTexts["Welcome to Learning Mode!"].exists, "The welcome has closed")
     }
 
     func testAFirstLessonExplainsFromNothingAsksAndPaysOut() {

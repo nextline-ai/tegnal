@@ -94,14 +94,21 @@ struct StudyPath: Codable, Sendable {
 
     var lessons: [StudyPathLesson] { sections.flatMap(\.lessons) }
 
-    /// The first lesson not finished yet: the one the learner is on. Nil once every lesson is done.
-    func current(_ records: [String: StudyLessonRecord]) -> StudyPathLesson? {
-        lessons.first { records[$0.id] == nil }
+    /// The lesson the learner is on: the first one not finished from where the placement test put them, then the
+    /// first one not finished anywhere. Nil once every lesson is done. `placed` counts the lessons the test passed by.
+    func current(_ records: [String: StudyLessonRecord], placed: Int = 0) -> StudyPathLesson? {
+        let all = lessons
+        return all.dropFirst(min(max(0, placed), all.count)).first { records[$0.id] == nil } ?? all.first { records[$0.id] == nil }
     }
 
-    /// A lesson opens once every lesson before it is finished.
-    func isOpen(_ lesson: StudyPathLesson, _ records: [String: StudyLessonRecord]) -> Bool {
-        records[lesson.id] != nil || current(records)?.id == lesson.id
+    /// A lesson opens once every lesson before it is finished, or once the placement test has passed it by.
+    func isOpen(_ lesson: StudyPathLesson, _ records: [String: StudyLessonRecord], placed: Int = 0) -> Bool {
+        records[lesson.id] != nil || current(records, placed: placed)?.id == lesson.id || isSkipped(lesson, records, placed: placed)
+    }
+
+    /// True for a lesson the placement test passed by that has not been played since.
+    func isSkipped(_ lesson: StudyPathLesson, _ records: [String: StudyLessonRecord], placed: Int) -> Bool {
+        records[lesson.id] == nil && lessons.prefix(max(0, placed)).contains { $0.id == lesson.id }
     }
 }
 
@@ -275,6 +282,8 @@ enum StudyLessonPlan: Hashable, Sendable {
     case review
     /// The tags missed most often, asked again whether or not they are due.
     case weak
+    /// The short test, taken at the start, that finds where on the path a learner who already knows some of this begins.
+    case placement
     var lesson: StudyPathLesson? { if case .lesson(let lesson) = self { return lesson }; return nil }
 }
 
@@ -300,6 +309,13 @@ final class StudyLessonSession: Identifiable {
     private(set) var tags: [StudyTag] = []
     /// Where the learner stood before this lesson paid out, so that its end can celebrate what changed.
     private(set) var before = StudyStanding()
+    /// The section each placement question checks, by the question's step.
+    private var checks: [UUID: Int] = [:]
+    /// The section the placement test stopped at: the first one whose question was missed.
+    private(set) var stoppedAt: Int?
+    /// How many lessons the placement test passed by.
+    private(set) var placed = 0
+    var isPlacement: Bool { plan == .placement }
 
     private let store: BooruStore
     let source: any BooruProviding
@@ -319,6 +335,12 @@ final class StudyLessonSession: Identifiable {
         guard steps.isEmpty, phase == .loading else { return }
         before.studiedToday = ((try? store.studyStore.days()) ?? []).first { $0.day == StudyDay.key(.now) }?.isStudied ?? false
         switch plan {
+        case .placement:
+            for question in StudyPlacement.questions(.bundled, curriculum: engine.curriculum, using: &generator) {
+                let step = StudyStep(kind: .ask(question.ask))
+                checks[step.id] = question.section
+                steps.append(step)
+            }
         case .review:
             let progress = (try? store.studyStore.progress()) ?? [:]
             tags = engine.round(.review, progress: progress, count: Self.reviewSize, now: .now, using: &generator)
@@ -479,6 +501,12 @@ final class StudyLessonSession: Identifiable {
         guard phase == .asking, let step, step.isAsked else { return }
         asked += 1
         if right { combo += 1; bestCombo = max(bestCombo, combo) } else { combo = 0; mistakes += 1 }
+        if isPlacement {
+            // The test stops at the first section it finds unknown; nothing is asked again and no tag is scheduled.
+            if !right, stoppedAt == nil { stoppedAt = checks[step.id] }
+            phase = .feedback(right)
+            return
+        }
         if !step.again {
             if let tag { try? store.studyStore.answer(tag, right: right) }
             // A missed step comes back once, at the end.
@@ -494,12 +522,18 @@ final class StudyLessonSession: Identifiable {
 
     private func advance() {
         index += 1
-        if index >= steps.count { finish() } else { phase = .asking }
+        if index >= steps.count || (isPlacement && stoppedAt != nil) { finish() } else { phase = .asking }
     }
 
     private func finish() {
         guard phase != .finished else { return }
         phase = .finished
+        if isPlacement {
+            // The test earns no experience; it only says where the path begins.
+            placed = StudyPlacement.skipped(.bundled, stoppedAt: stoppedAt)
+            if placed > 0 { try? store.studyStore.raise(StudyPlacement.counter, to: placed) }
+            return
+        }
         guard asked > 0 || plan.lesson != nil else { return }
         stars = StudyGame.stars(mistakes: mistakes)
         earned = StudyGame.earned(mistakes: mistakes, bestCombo: bestCombo)
@@ -508,5 +542,66 @@ final class StudyLessonSession: Identifiable {
         before.today = days.first { $0.day == StudyDay.key(.now) }?.xp ?? 0
         try? store.studyStore.raise(StudyCounter.combo, to: bestCombo)
         try? store.studyStore.earn(earned, lesson: plan.lesson?.id, stars: stars)
+    }
+}
+
+// MARK: - Placement
+
+/// The short test a learner can take when learning mode first opens: one question for each section, in the path's
+/// order, ending at the first one missed. The lessons before that section are passed by: open, but not finished.
+enum StudyPlacement {
+    /// The counter (in `study_stats`) holding how many lessons at the start of the main path the test passed by.
+    /// Counters only go up, travel in sync and backups, and are cleared by a reset.
+    static let counter = "placed"
+    /// Set on this device once the welcome has been gone through; cleared when progress is reset.
+    static let welcomedKey = "study.welcomed"
+
+    struct Question: Sendable {
+        /// The section of the path the question checks.
+        let section: Int
+        let ask: StudyPathLesson.Ask
+    }
+
+    /// One question for each section: one of the section's own questions, or, for a section that only teaches tags,
+    /// which of a lesson's tags a meaning names, with the lesson's other tags as the wrong answers.
+    static func questions<G: RandomNumberGenerator>(_ path: StudyPath, curriculum: StudyCurriculum, language: String = L10n.language,
+                                                    using generator: inout G) -> [Question] {
+        path.sections.enumerated().compactMap { index, section in
+            let asks = section.lessons.flatMap { ($0.steps ?? []).compactMap(\.ask) }
+            if let ask = asks.randomElement(using: &generator) { return Question(section: index, ask: ask.shuffled(using: &generator)) }
+            let taught = section.lessons.filter { $0.kind == .tags }.map { ($0.tags ?? []).compactMap(curriculum.tag) }.filter { $0.count >= 2 }
+            guard let tags = taught.randomElement(using: &generator), let tag = tags.randomElement(using: &generator) else { return nil }
+            let choices = ([tag] + tags.filter { $0 != tag }.shuffled(using: &generator).prefix(3)).shuffled(using: &generator)
+            // Tags are never translated in a question; what they mean is, as in a match step.
+            let meaning = language == "en" ? tag.note.resolved(language) : tag.title(language)
+            let ask = StudyPathLesson.Ask(question: ["en": L10n.text("Which tag fits “%@”?", meaning)],
+                                          choices: choices.map { ["en": $0.english] },
+                                          answer: choices.firstIndex(of: tag) ?? 0,
+                                          why: ["en": "`\(tag.english)` · " + tag.note.resolved(language)], code: true)
+            return Question(section: index, ask: ask)
+        }
+    }
+
+    /// How many lessons come before the section the test stopped at. With nothing missed the learner begins at the last section.
+    static func skipped(_ path: StudyPath, stoppedAt section: Int?) -> Int {
+        guard !path.sections.isEmpty else { return 0 }
+        let target = min(section ?? path.sections.count - 1, path.sections.count - 1)
+        return path.sections.prefix(max(0, target)).reduce(0) { $0 + $1.lessons.count }
+    }
+
+    /// The section the learner begins at after passing `placed` lessons by.
+    static func section(_ path: StudyPath, placed: Int) -> StudyPathSection? {
+        guard placed > 0 else { return path.sections.first }
+        var count = 0
+        for section in path.sections {
+            if count >= placed { return section }
+            count += section.lessons.count
+        }
+        return path.sections.last
+    }
+
+    /// True while learning mode should greet the learner: never welcomed on this device, and nothing played or placed yet.
+    static func needsWelcome(records: [String: StudyLessonRecord], xp: Int, placed: Int, defaults: UserDefaults) -> Bool {
+        !defaults.bool(forKey: welcomedKey) && records.isEmpty && xp == 0 && placed == 0
     }
 }

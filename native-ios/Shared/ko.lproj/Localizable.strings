@@ -1267,7 +1267,6 @@
 /* Library maintenance and viewer feedback */
 "Removed from Tags" = "태그 저장을 해제했습니다";
 "Remove Saved Tag" = "태그 저장 해제";
-"Play Animation When Returning" = "앱 복귀 시 애니메이션 재생";
 "Reset Settings to Defaults" = "설정을 기본값으로 초기화";
 "Reset Settings to Defaults?" = "설정을 기본값으로 초기화할까요?";
 "Resets this mode’s viewer options. Saved works and reading progress are kept." = "이 모드의 뷰어 설정을 초기화합니다. 저장한 작품과 읽던 위치는 유지됩니다.";
@@ -2174,11 +2173,7 @@
 "Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "그림은 Civitai의 서버가 그립니다. 그래서 실전에는 내 Civitai API 키가 필요합니다.";
 "Learn What an API Key Is" = "API 키가 뭔지 배우기";
 "Sound Effects" = "효과음";
-"Choose How to Start" = "어떻게 시작할까요?";
-"The app opens in the mode you choose here. You can change it anytime in Settings." = "여기서 고른 모드로 앱이 열립니다. 설정에서 언제든 바꿀 수 있습니다.";
-"Learn to make anime-style pictures with AI from the very start, one short lesson at a time." = "AI로 2D 일러스트를 만드는 법을 완전 처음부터, 짧은 레슨으로 배웁니다.";
 "Viewing Mode" = "감상 모드";
-"Find, save and enjoy comics and images in your own library." = "만화와 이미지를 찾고, 저장하고, 내 라이브러리에서 감상합니다.";
 
 /* Learning mode: achievements, speed round, new steps, generator unlock */
 "First Step" = "첫걸음";
@@ -2344,3 +2339,33 @@
 "Track Completed" = "트랙 수료";
 "Add-on Track" = "애드온 트랙";
 "You finished every lesson of this track." = "이 트랙의 레슨을 모두 마쳤어요.";
+"Which tag fits “%@”?" = "“%@”에 맞는 태그는?";
+"Skipped" = "건너뜀";
+"I Don't Know" = "잘 모르겠어요";
+"You Know Your Stuff!" = "꽤 알고 계시네요!";
+"Let's Start from the Beginning" = "처음부터 시작해요";
+"You can skip ahead on the path." = "길의 앞부분은 건너뛰어도 돼요.";
+"We'll learn the basics together, one short lesson at a time." = "짧은 레슨으로 기초부터 함께 배워 봐요.";
+"Right Answers" = "맞힌 문제";
+"Lessons Skipped" = "건너뛴 레슨";
+"Start Here" = "여기서 시작";
+"The lessons before it stay open on the map, to play whenever you like." = "앞의 레슨은 지도에 열려 있어서 언제든 해 볼 수 있어요.";
+"Welcome to Learning Mode!" = "학습 모드에 오신 걸 환영해요!";
+"Learn the tags that AI pictures are ordered with, from the very start, one short lesson at a time." = "AI 그림을 주문하는 말, 태그를 처음부터 짧은 레슨으로 하나씩 배워요.";
+"Follow the map, one short lesson at a time" = "지도를 따라 짧은 레슨을 하나씩";
+"Meet a daily goal and keep your streak going" = "하루 목표를 채우고 연속 학습을 이어 가기";
+"Practise with games and collect badges" = "게임으로 연습하고 배지 모으기";
+"Pick a Daily Goal" = "하루 목표 정하기";
+"How much would you like to learn each day? You can change it on the Me tab anytime." = "하루에 얼마나 배울까요? ‘나’ 탭에서 언제든 바꿀 수 있어요.";
+"Casual" = "가볍게";
+"Regular" = "보통";
+"Serious" = "열심히";
+"Intense" = "아주 열심히";
+"%@ XP a day" = "하루 %@ XP";
+"How much do you know about AI pictures?" = "AI 그림을 얼마나 알고 있나요?";
+"Tell us, and the path starts in the right place." = "알려 주시면 알맞은 곳에서 시작할게요.";
+"I'm New to This" = "처음이에요";
+"Start from the very first lesson." = "첫 레슨부터 차근차근 시작해요.";
+"I Know Some Already" = "조금 알고 있어요";
+"Answer a few short questions to find where to begin. A question you can't answer ends the test." = "짧은 문제 몇 개로 시작할 곳을 찾아요. 모르는 문제가 나오면 테스트가 끝나요.";
+"Take the Test" = "테스트 보기";

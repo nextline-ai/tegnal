@@ -307,8 +307,10 @@ actor KeyedCatalogSource {
                                imageURL: nil, thumbnailURL: index == 0 ? cover : entry?.thumb.flatMap(Self.encoded),
                                index: index, sourceSite: site)
         }
-        return NativeGallery(id: id, title: preview.title, artists: preview.artists, language: preview.language,
-                             type: preview.type, tags: preview.tags, pages: pages)
+        var work = NativeGallery(id: id, title: preview.title, artists: preview.artists, language: preview.language,
+                                 type: preview.type, tags: preview.tags, pages: pages)
+        work.uploader = preview.uploader
+        return work
     }
 
     /// A work's details row with the key the site accepted for it. A remembered key the site no
@@ -1161,6 +1163,7 @@ actor KeyedCatalogSource {
                                  tags: tags.filter { $0.0 != "language" && $0.0 != "artist" }.map { localNamespace($0.0) + ":" + $0.1 }, pages: pages)
         let fileCount = max(0, min(10_000, Int(number(item["filecount"]) ?? 0)))
         work.pageCount = fileCount
+        work.uploader = (item["uploader"] as? String).map(NativeGallery.decodeEntities).flatMap { $0.isEmpty ? nil : $0 }
         return (work, fileCount)
     }
 

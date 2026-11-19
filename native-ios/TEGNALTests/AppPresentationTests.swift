@@ -96,7 +96,7 @@ final class AppPresentationTests: XCTestCase {
         XCTAssertGreaterThan(Int(pixel[1]), Int(pixel[2]) + 30)
     }
 
-    @MainActor func testDisabledResumeAnimationRemovesPrivacyCoverImmediately() {
+    @MainActor func testUnanimatedHideRemovesPrivacyCoverImmediately() {
         let manager = PrivacyCoverManager(), window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
         window.rootViewController = UIViewController()
         manager.show(in: [window])
