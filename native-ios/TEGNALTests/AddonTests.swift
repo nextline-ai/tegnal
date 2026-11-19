@@ -11,8 +11,8 @@ final class AddonTests: XCTestCase {
 
     // MARK: - Files
 
-    private func file(_ contents: [String: Any], extra: [String: Any] = [:], id: String = "maker.sample-pack", version: String = "1.0.0") -> Data {
-        var top: [String: Any] = ["format": "tegnal-addon", "schemaVersion": 1, "id": id, "version": version,
+    private func file(_ contents: [String: Any], extra: [String: Any] = [:], id: String = "maker.sample-pack", version: String = "1.0.0", mode: String = "images") -> Data {
+        var top: [String: Any] = ["format": "tegnal-addon", "schemaVersion": 1, "id": id, "version": version, "mode": mode,
                                   "name": ["en": "Sample Pack", "ko": "샘플 팩"], "author": "Maker", "contents": contents]
         for (key, value) in extra { top[key] = value }
         return try! JSONSerialization.data(withJSONObject: top)
@@ -80,8 +80,9 @@ final class AddonTests: XCTestCase {
     }
 
     func testSearchTagsCannotWidenOrRewriteASearch() {
-        func search(_ value: [String: Any]) -> Data { file(["searchTags": value]) }
-        XCTAssertNoThrow(try Addon.decode(search(["comics": ["include": ["language:korean"], "exclude": ["tag:gore", "female:guro"]], "images": ["exclude": ["gore", "blood -scenery", "rating:explicit", "artist:someone"]]])))
+        func search(_ value: [String: Any]) -> Data { file(["searchTags": value], mode: value["images"] == nil ? "comics" : "images") }
+        XCTAssertNoThrow(try Addon.decode(search(["comics": ["include": ["language:korean"], "exclude": ["tag:gore", "female:guro"]]])))
+        XCTAssertNoThrow(try Addon.decode(search(["images": ["exclude": ["gore", "blood -scenery", "rating:explicit", "artist:someone"]]])))
         XCTAssertThrowsError(try Addon.decode(search(["comics": ["include": ["two words"]]])))
         XCTAssertThrowsError(try Addon.decode(search(["comics": ["include": ["-gore"]]])))
         XCTAssertThrowsError(try Addon.decode(search(["comics": ["include": ["\"quoted\""]]])))
@@ -124,16 +125,20 @@ final class AddonTests: XCTestCase {
         let store = AddonStore(booru)
         var game = ChallengeDefinition.croquis(); game.id = "sketch"
         let challenge = try JSONSerialization.jsonObject(with: JSONEncoder().encode(game))
-        let (addon, digest) = try Addon.decode(file(Self.translations.merging(["challenges": [challenge], "searchTags": ["comics": ["exclude": ["tag:gore"]], "images": ["exclude": ["blood"]]]]) { $1 }))
+        let (addon, digest) = try Addon.decode(file(Self.translations.merging(["challenges": [challenge], "searchTags": ["images": ["exclude": ["blood"]]]]) { $1 }))
         try store.install(addon, digest: digest)
         AddonRuntime.shared.reload(booru)
 
-        XCTAssertEqual(AddonRuntime.shared.translation("long_hair"), "긴 머리")
-        XCTAssertEqual(AddonRuntime.shared.translation("Long Hair"), "긴 머리")
-        XCTAssertEqual(AddonRuntime.shared.translation("female:glasses"), "안경")
-        XCTAssertEqual(AddonRuntime.shared.translation("tag:long_hair"), "긴 머리", "A namespaced tag falls back to its name")
-        XCTAssertNil(AddonRuntime.shared.translation("short_hair"))
-        let group = ArtworkTagGroup.make(tags: ["long_hair"]).first?.tags.first
+        XCTAssertEqual(AddonRuntime.shared.translation("long_hair", mode: .images), "긴 머리")
+        XCTAssertEqual(AddonRuntime.shared.translation("Long Hair", mode: .images), "긴 머리")
+        XCTAssertEqual(AddonRuntime.shared.translation("female:glasses", mode: .images), "안경")
+        XCTAssertEqual(AddonRuntime.shared.translation("tag:long_hair", mode: .images), "긴 머리", "A namespaced tag falls back to its name")
+        XCTAssertNil(AddonRuntime.shared.translation("short_hair", mode: .images))
+        XCTAssertNil(AddonRuntime.shared.translation("long_hair", mode: .comics), "An image add-on never renames comics tags")
+        XCTAssertEqual(AddonRuntime.shared.effects.enabledCount(.images), 1)
+        XCTAssertEqual(AddonRuntime.shared.effects.enabledCount(.comics), 0)
+        let group = ArtworkTagGroup.make(tags: ["long_hair"], mode: .images).first?.tags.first
+        XCTAssertNil(ArtworkTagGroup.make(tags: ["long_hair"], mode: .comics).first?.tags.first?.original)
         XCTAssertEqual(group?.name, "긴 머리")
         XCTAssertEqual(group?.query, "long_hair", "Searches still use the tag itself")
         XCTAssertEqual(group?.original, "long hair")
@@ -147,7 +152,7 @@ final class AddonTests: XCTestCase {
 
         try store.setEnabled(addon.id, false)
         AddonRuntime.shared.reload(booru)
-        XCTAssertNil(AddonRuntime.shared.translation("long_hair"))
+        XCTAssertNil(AddonRuntime.shared.translation("long_hair", mode: .images))
         XCTAssertEqual(booru.filteringBlacklist(serverID: "s"), "spoilers")
         XCTAssertEqual(try challenges.definitions(), [], "A challenge of an add-on that is off is hidden")
 
@@ -197,7 +202,7 @@ final class AddonTests: XCTestCase {
         let second = try Addon.decode(file(["tagTranslations": ["language": "ko", "entries": ["long_hair": "장발"]]], id: "maker.second")).addon
         let effects = AddonEffects([InstalledAddon(addon: second, enabled: true, installed: Date(timeIntervalSince1970: 2), digest: ""),
                                     InstalledAddon(addon: first, enabled: true, installed: Date(timeIntervalSince1970: 1), digest: "")])
-        XCTAssertEqual(effects.translation("long_hair"), "장발")
+        XCTAssertEqual(effects.translation("long_hair", mode: .images), "장발")
     }
 
     func testTheSampleAddonsInTheDocsFolderPass() throws {
@@ -210,7 +215,7 @@ final class AddonTests: XCTestCase {
     // MARK: - Official add-ons
 
     private func listing(_ data: Data, id: String = "maker.sample-pack", version: String = "1.0.0") -> [String: Any] {
-        ["id": id, "version": version, "name": ["en": "Sample Pack"], "author": "TEGNAL", "kinds": ["translations"],
+        ["id": id, "version": version, "mode": "images", "grade": "recommended", "name": ["en": "Sample Pack"], "author": "TEGNAL", "kinds": ["translations"],
          "size": data.count, "sha256": Addon.digest(data)]
     }
 
@@ -295,5 +300,50 @@ final class AddonTests: XCTestCase {
         for entry in catalog.addons {
             XCTAssertNoThrow(try AddonMarket.check(try Data(contentsOf: folder.appendingPathComponent(entry.path)), against: entry), entry.id)
         }
+    }
+
+    // MARK: - Modes and grades
+
+    func testComicsAndImageAddonsStayApart() throws {
+        XCTAssertThrowsError(try Addon.decode(file(Self.translations, mode: "both"))) { XCTAssertEqual($0 as? AddonError, .invalid("mode")) }
+        var noMode = try JSONSerialization.jsonObject(with: file(Self.translations)) as! [String: Any]
+        noMode["mode"] = nil
+        XCTAssertThrowsError(try Addon.decode(JSONSerialization.data(withJSONObject: noMode))) { XCTAssertEqual($0 as? AddonError, .invalid("mode")) }
+        XCTAssertThrowsError(try Addon.decode(file(Self.track, mode: "comics"))) { XCTAssertEqual($0 as? AddonError, .invalid("learningTrack")) }
+        var game = ChallengeDefinition.croquis(); game.id = "sketch"
+        XCTAssertThrowsError(try Addon.decode(file(["challenges": [try JSONSerialization.jsonObject(with: JSONEncoder().encode(game))]], mode: "comics"))) {
+            XCTAssertEqual($0 as? AddonError, .invalid("challenges"))
+        }
+        XCTAssertThrowsError(try Addon.decode(file(["searchTags": ["images": ["exclude": ["gore"]]]], mode: "comics"))) { XCTAssertEqual($0 as? AddonError, .invalid("searchTags.images")) }
+        XCTAssertThrowsError(try Addon.decode(file(["searchTags": ["comics": ["exclude": ["tag:gore"]]]]))) { XCTAssertEqual($0 as? AddonError, .invalid("searchTags.comics")) }
+
+        let comics = try Addon.decode(file(["tagTranslations": ["language": "ko", "entries": ["character:reimu_hakurei": "하쿠레이 레이무"]], "searchTags": ["comics": ["exclude": ["female:guro"]]]],
+                                           id: "maker.comics", mode: "comics")).addon
+        let images = try Addon.decode(file(["tagTranslations": ["language": "ko", "entries": ["reimu_hakurei": "레이무"]]], id: "maker.images")).addon
+        let effects = AddonEffects([InstalledAddon(addon: comics, enabled: true, installed: .now, digest: ""), InstalledAddon(addon: images, enabled: true, installed: .now, digest: "")])
+        XCTAssertEqual(effects.translation("character:reimu hakurei", mode: .comics), "하쿠레이 레이무")
+        XCTAssertEqual(effects.translation("reimu_hakurei", mode: .images), "레이무")
+        XCTAssertNil(effects.translation("hakurei", mode: .comics))
+        XCTAssertEqual(effects.comicsExclude, ["female:guro"])
+        XCTAssertEqual(effects.enabledCount(.comics), 1)
+        XCTAssertEqual(effects.enabledCount(.images), 1)
+        XCTAssertEqual(AddonMode(AppMode.manga), .comics)
+        XCTAssertEqual(AddonMode(TasteMode.booru), .images)
+    }
+
+    func testCatalogEntriesCarryTheirModeAndGrade() throws {
+        let data = file(Self.translations)
+        var entry = try JSONDecoder().decode(AddonListing.self, from: JSONSerialization.data(withJSONObject: listing(data)))
+        XCTAssertEqual(entry.addonGrade, .recommended)
+        entry.grade = "unheard-of"
+        XCTAssertEqual(entry.addonGrade, .optional, "An unknown grade is shown as optional")
+        entry.grade = nil
+        XCTAssertEqual(entry.addonGrade, .optional)
+        XCTAssertEqual(AddonGrade.allCases, [.recommended, .suggested, .optional], "The list shows grades in this order")
+        XCTAssertNoThrow(try AddonMarket.check(data, against: entry))
+        entry.mode = .comics
+        XCTAssertThrowsError(try AddonMarket.check(data, against: entry), "A file must be for the mode the list names") { XCTAssertEqual($0 as? AddonMarketError, .damaged) }
+        var missing = listing(data); missing["mode"] = nil
+        XCTAssertThrowsError(try JSONDecoder().decode(AddonListing.self, from: JSONSerialization.data(withJSONObject: missing)), "An entry with no mode is left out")
     }
 }

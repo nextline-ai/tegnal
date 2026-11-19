@@ -1,3 +1,4 @@
+import '../../core/addons/addon_models.dart';
 import '../../core/content/site_fallback_content.dart';
 import 'work_extras_views.dart';
 
@@ -877,11 +878,10 @@ class _GalleryDetailMetadata extends StatelessWidget {
   List<String> get _artists {
     final seen = <String>{};
     final tagged =
-        ArtworkTagGroup.make(tags: gallery.tags)
-            .where((group) => group.category == ArtworkTagCategory.artist)
-            .firstOrNull
-            ?.tags
-            .map((tag) => tag.query.substring('artist:'.length)) ??
+        ArtworkTagGroup.make(
+          tags: gallery.tags,
+          mode: AddonMode.comics,
+        ).where((group) => group.category == ArtworkTagCategory.artist).firstOrNull?.tags.map((tag) => tag.query.substring('artist:'.length)) ??
         const <String>[];
     return [...gallery.artists, ...tagged].where((name) => MangaArtistFavorite.key(name).isNotEmpty && seen.add(MangaArtistFavorite.key(name))).toList();
   }
@@ -1102,7 +1102,12 @@ class _GalleryCopyValueState extends State<GalleryCopyValue> {
         Row(
           children: [
             Flexible(
-              child: ArtworkTagPill(color: color, onTap: _copy, onLongPress: _copy, child: Text(widget.value, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              child: ArtworkTagPill(
+                color: color,
+                onTap: _copy,
+                onLongPress: _copy,
+                child: Text(widget.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
             ),
             if (_copied) ...[
               const SizedBox(width: 8),

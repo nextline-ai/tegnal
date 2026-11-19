@@ -19,8 +19,8 @@ struct MangaDefaultTagsSettings: View {
                         TextField("tag:spoilers", text: $env.defaultExcludedTags, axis: .vertical)
                             .lineLimit(3...6).accessibilityIdentifier("manga.defaultExcludedTags")
                     } header: { SettingsHelpLabel("Default Excluded Tags", help: "Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you.") }
-                    AddonAddedTermsSection(title: "Added by Add-ons", terms: AddonRuntime.shared.effects.comicsInclude)
-                    AddonAddedTermsSection(title: "Excluded by Add-ons", terms: AddonRuntime.shared.effects.comicsExclude)
+                    AddonAddedTermsSection(title: "Added by Add-ons", terms: AddonRuntime.shared.effects.comicsInclude, mode: .comics)
+                    AddonAddedTermsSection(title: "Excluded by Add-ons", terms: AddonRuntime.shared.effects.comicsExclude, mode: .comics)
                 }
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
                 .navigationTitle(L10n.text("Default Search Tags")).navigationBarTitleDisplayMode(.inline)
@@ -34,11 +34,12 @@ struct MangaDefaultTagsSettings: View {
 struct AddonAddedTermsSection: View {
     let title: String
     let terms: [String]
+    let mode: AddonMode
     var body: some View {
         if !terms.isEmpty {
             Section {
                 Text(terms.joined(separator: terms.contains { $0.contains(" ") } ? "\n" : "  ")).font(.footnote.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
-                NavigationLink(L10n.text("Add-ons")) { AddonsView() }
+                NavigationLink(L10n.text("Add-ons")) { AddonsView(mode: mode) }
             } header: { Text(L10n.text(title)) } footer: { Text(L10n.text("Turn the add-on off to stop using these.")) }
         }
     }

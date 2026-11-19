@@ -34,8 +34,10 @@ struct StudyTrack: Identifiable, Sendable {
 /// What the add-ons that are on change, gathered in one place.
 struct AddonEffects: Sendable {
     var enabledIDs: Set<String> = []
-    /// Tag (lowercase, underscores) to the words shown for it.
-    var translations: [String: String] = [:]
+    /// The add-ons that are on, by the mode they belong to.
+    var enabledModes: [String: AddonMode] = [:]
+    /// Tag (lowercase, underscores) to the words shown for it, kept apart for each mode.
+    var translations: [AddonMode: [String: String]] = [:]
     var comicsInclude: [String] = []
     var comicsExclude: [String] = []
     var imageExclude: [String] = []
@@ -51,7 +53,8 @@ struct AddonEffects: Sendable {
         for item in installed.sorted(by: { $0.installed < $1.installed }) where item.enabled {
             let addon = item.addon, contents = addon.contents
             enabledIDs.insert(addon.id)
-            for (tag, words) in contents.tagTranslations?.entries ?? [:] { translations[AddonCheck.tagKey(tag)] = words }
+            enabledModes[addon.id] = addon.mode
+            for (tag, words) in contents.tagTranslations?.entries ?? [:] { translations[addon.mode, default: [:]][AddonCheck.tagKey(tag)] = words }
             for term in contents.searchTags?.comics?.include ?? [] where seenInclude.insert(term.lowercased()).inserted { comicsInclude.append(term) }
             for term in contents.searchTags?.comics?.exclude ?? [] where seenExclude.insert(term.lowercased()).inserted { comicsExclude.append(term) }
             for rule in contents.searchTags?.images?.exclude ?? [] where seenRules.insert(rule.lowercased()).inserted { imageExclude.append(rule) }
@@ -59,9 +62,12 @@ struct AddonEffects: Sendable {
         }
     }
 
-    /// The words shown for a tag, by its full name (`female:glasses`) or, failing that, its name without the namespace.
-    func translation(_ tag: String) -> String? {
-        guard !translations.isEmpty else { return nil }
+    func enabledCount(_ mode: AddonMode) -> Int { enabledModes.values.filter { $0 == mode }.count }
+
+    /// The words shown for a tag in a mode, by its full name (`female:glasses`) or, failing that, its name without the namespace.
+    /// Only that mode's add-ons are read: a comics translation never renames an image tag.
+    func translation(_ tag: String, mode: AddonMode) -> String? {
+        guard let translations = translations[mode], !translations.isEmpty else { return nil }
         let key = AddonCheck.tagKey(tag)
         if let words = translations[key] { return words }
         if let colon = key.firstIndex(of: ":"), key.index(after: colon) < key.endIndex { return translations[String(key[key.index(after: colon)...])] }
@@ -102,6 +108,14 @@ final class AddonRuntime: @unchecked Sendable {
     static let shared = AddonRuntime()
     @ObservationIgnored private let lock = NSLock()
     @ObservationIgnored private var state = AddonEffects()
+    @ObservationIgnored private var shownMode = AddonMode.comics
+
+    /// The mode on screen, for tag names drawn where the mode is not passed along (taste and recap texts,
+    /// which always belong to the mode shown). Set by `AppEnvironment.mode`.
+    var displayedMode: AddonMode {
+        get { lock.withLock { shownMode } }
+        set { lock.withLock { shownMode = newValue } }
+    }
 
     var effects: AddonEffects {
         access(keyPath: \.effects)
@@ -117,9 +131,9 @@ final class AddonRuntime: @unchecked Sendable {
         apply(AddonEffects((try? AddonStore(booru).installed()) ?? []))
     }
 
-    /// The words to show for a tag, or nil to show the tag itself.
-    func translation(_ tag: String) -> String? {
-        lock.withLock { state.translations.isEmpty } ? nil : effects.translation(tag)
+    /// The words to show for a tag in a mode, or nil to show the tag itself.
+    func translation(_ tag: String, mode: AddonMode) -> String? {
+        lock.withLock { state.translations[mode]?.isEmpty ?? true } ? nil : effects.translation(tag, mode: mode)
     }
 }
 

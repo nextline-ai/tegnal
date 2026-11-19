@@ -613,7 +613,7 @@ final class ReaderUXTests: XCTestCase {
 
     func testTagGroupsKeepSearchQueriesAndDifferentiateNamespacesAndAPICategories() {
         let groups = ArtworkTagGroup.make(tags: ["artist:sample", "parody:series_one", "character:hero", "female:long_hair", "male:glasses", "sky", "hero", "sample"],
-                                          artists: ["sample"], categories: ["hero": 4])
+                                          artists: ["sample"], categories: ["hero": 4], mode: .images)
         XCTAssertEqual(groups.first?.category, .artist)
         XCTAssertEqual(groups.first?.tags.count, 1)
         XCTAssertEqual(groups.first { $0.category == .series }?.tags.first?.query, "parody:series_one")

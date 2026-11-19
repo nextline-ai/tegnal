@@ -32,6 +32,8 @@ class AddonListing {
   AddonListing({
     required this.id,
     required this.version,
+    required this.mode,
+    this.grade,
     required this.name,
     required this.author,
     this.summary,
@@ -43,6 +45,10 @@ class AddonListing {
 
   String id;
   String version;
+  final AddonMode mode;
+
+  /// `recommended`, `suggested` or `optional`. Anything else is shown as optional.
+  final String? grade;
   final StudyText name;
   final String author;
   final StudyText? summary;
@@ -56,6 +62,7 @@ class AddonListing {
   final int? schemaVersion;
 
   String get title => name.addonResolved();
+  AddonGrade get addonGrade => AddonGrade.values.where((value) => value.name == grade).firstOrNull ?? AddonGrade.optional;
   List<AddonKind> get addonKinds => [for (final kind in kinds) ?AddonKind.values.where((value) => value.name == kind).firstOrNull];
   String get path => 'files/$id/$version.${Addon.fileExtension}';
   bool get supported => (schemaVersion ?? 1) <= Addon.schemaVersion;
@@ -80,6 +87,9 @@ class AddonListing {
       return value.cast<String, String>();
     }
 
+    final mode = AddonMode.values.where((value) => value.name == json['mode']).firstOrNull;
+    final grade = json['grade'];
+    if (mode == null || (grade != null && grade is! String)) return null;
     final id = json['id'], version = json['version'], name = text(json['name']), author = json['author'];
     final kinds = json['kinds'], size = json['size'], sha256 = json['sha256'], schema = json['schemaVersion'];
     if (id is! String || version is! String || name == null || author is! String || size is! int || sha256 is! String) return null;
@@ -89,6 +99,8 @@ class AddonListing {
     return AddonListing(
       id: id,
       version: version,
+      mode: mode,
+      grade: grade as String?,
       name: name,
       author: author,
       summary: text(json['summary']),
@@ -98,6 +110,25 @@ class AddonListing {
       schemaVersion: schema as int?,
     );
   }
+}
+
+/// How strongly TEGNAL suggests an official add-on. The list is grouped by grade, in this order (`AddonGrade`).
+enum AddonGrade {
+  recommended,
+  suggested,
+  optional;
+
+  String get title => switch (this) {
+    recommended => L10n.text('addon.grade.recommended'),
+    suggested => L10n.text('addon.grade.suggested'),
+    optional => L10n.text('addon.grade.optional'),
+  };
+
+  String get detail => switch (this) {
+    recommended => L10n.text('TEGNAL advises these for almost everyone.'),
+    suggested => L10n.text('Useful for many people.'),
+    optional => L10n.text('For particular tastes and uses.'),
+  };
 }
 
 /// How an official add-on in the catalog stands against what is installed (`AddonListingState`).
@@ -221,7 +252,7 @@ class AddonMarket {
   static ({Addon addon, String digest}) check(List<int> data, AddonListing listing) {
     if (data.length != listing.size || Addon.digest(data) != listing.sha256) throw const AddonMarketError.damaged();
     final read = Addon.decode(data);
-    if (read.addon.id != listing.id || read.addon.version != listing.version) throw const AddonMarketError.damaged();
+    if (read.addon.id != listing.id || read.addon.version != listing.version || read.addon.mode != listing.mode) throw const AddonMarketError.damaged();
     return read;
   }
 

@@ -222,7 +222,7 @@ struct WorkContextPreview: View {
     }
     private var tags: [ArtworkTag] {
         let names = (work.tags ?? "").components(separatedBy: ", ")
-        return ArtworkTagGroup.make(tags: names).flatMap(\.tags).filter { $0.category != .language && $0.category != .artist }
+        return ArtworkTagGroup.make(tags: names, mode: .comics).flatMap(\.tags).filter { $0.category != .language && $0.category != .artist }
     }
     var body: some View {
         HStack(alignment: .top, spacing: 14) {

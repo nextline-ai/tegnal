@@ -417,7 +417,7 @@ struct GalleryContextPreview: View {
     let image: UIImage?
     var width: CGFloat = 340
     private var visibleTags: [String] {
-        ArtworkTagGroup.make(tags: tags).flatMap(\.tags).filter { $0.category != .language && $0.category != .artist }.prefix(6).map(\.name)
+        ArtworkTagGroup.make(tags: tags, mode: .comics).flatMap(\.tags).filter { $0.category != .language && $0.category != .artist }.prefix(6).map(\.name)
     }
     var body: some View {
         HStack(alignment: .top, spacing: 14) {

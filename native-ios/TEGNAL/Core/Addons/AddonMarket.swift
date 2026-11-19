@@ -37,6 +37,9 @@ struct AddonCatalog: Codable, Equatable, Sendable {
 struct AddonListing: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var version: String
+    var mode: AddonMode
+    /// `recommended`, `suggested` or `optional`. Anything else is shown as optional.
+    var grade: String?
     var name: StudyText
     var author: String
     var summary: StudyText?
@@ -48,6 +51,7 @@ struct AddonListing: Codable, Equatable, Identifiable, Sendable {
     var schemaVersion: Int?
 
     var title: String { name.addonResolved() }
+    var addonGrade: AddonGrade { grade.flatMap(AddonGrade.init(rawValue:)) ?? .optional }
     var addonKinds: [AddonKind] { kinds.compactMap(AddonKind.init(rawValue:)) }
     var path: String { "files/\(id)/\(version).\(Addon.fileExtension)" }
     var supported: Bool { (schemaVersion ?? 1) <= Addon.schemaVersion }
@@ -58,6 +62,26 @@ struct AddonListing: Codable, Equatable, Identifiable, Sendable {
             && (1...Addon.maximumBytes).contains(size)
             && sha256.count == 64 && sha256.allSatisfy { $0.isHexDigit && !$0.isUppercase }
             && kinds.count <= 8 && (schemaVersion ?? 1) >= 1
+    }
+}
+
+/// How strongly TEGNAL suggests an official add-on. The list is grouped by grade, in this order.
+enum AddonGrade: String, CaseIterable, Sendable {
+    case recommended, suggested, optional
+
+    var title: String {
+        switch self {
+        case .recommended: return L10n.text("addon.grade.recommended")
+        case .suggested: return L10n.text("addon.grade.suggested")
+        case .optional: return L10n.text("addon.grade.optional")
+        }
+    }
+    var detail: String {
+        switch self {
+        case .recommended: return L10n.text("TEGNAL advises these for almost everyone.")
+        case .suggested: return L10n.text("Useful for many people.")
+        case .optional: return L10n.text("For particular tastes and uses.")
+        }
     }
 }
 
@@ -135,7 +159,7 @@ struct AddonMarket: Sendable {
     static func check(_ data: Data, against listing: AddonListing) throws -> (addon: Addon, digest: String) {
         guard data.count == listing.size, Addon.digest(data) == listing.sha256 else { throw AddonMarketError.damaged }
         let read = try Addon.decode(data)
-        guard read.addon.id == listing.id, read.addon.version == listing.version else { throw AddonMarketError.damaged }
+        guard read.addon.id == listing.id, read.addon.version == listing.version, read.addon.mode == listing.mode else { throw AddonMarketError.damaged }
         return read
     }
 

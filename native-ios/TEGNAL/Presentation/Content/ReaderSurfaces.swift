@@ -270,7 +270,7 @@ struct ArtworkTagGroup: Identifiable {
     let category: ArtworkTagCategory
     let tags: [ArtworkTag]
     var id: ArtworkTagCategory { category }
-    static func make(tags: [String], artists: [String] = [], categories: [String: Int] = [:]) -> [Self] {
+    static func make(tags: [String], artists: [String] = [], categories: [String: Int] = [:], mode: AddonMode) -> [Self] {
         var result: [ArtworkTagCategory: [ArtworkTag]] = [:], seen = Set<String>()
         let artistNames = Set(artists)
         let namespaces: [String: ArtworkTagCategory] = ["artist": .artist, "series": .series, "parody": .series,
@@ -289,7 +289,7 @@ struct ArtworkTagGroup: Identifiable {
             name = name.replacingOccurrences(of: "_", with: " ")
             guard seen.insert(category.rawValue + ":" + name).inserted else { continue }
             // A translation add-on shows its words in place of the tag; the tag itself is still what is searched.
-            if let translated = AddonRuntime.shared.translation(query) {
+            if let translated = AddonRuntime.shared.translation(query, mode: mode) {
                 result[category, default: []].append(.init(query: query, name: translated, category: category, original: name))
             } else {
                 result[category, default: []].append(.init(query: query, name: name, category: category))

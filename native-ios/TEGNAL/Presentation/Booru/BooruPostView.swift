@@ -748,7 +748,7 @@ struct BooruPostView: View {
                     NavigationLink { StudyPromptView(post: post, source: source) } label: { Label(L10n.text("View as a Prompt"), systemImage: "text.cursor") }
                         .accessibilityIdentifier("booru.prompt")
                 }
-                ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:])) { group in
+                ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:], mode: .images)) { group in
                     Section {
                         ForEach(group.tags) { tag in
                             tagRow(tag.query, category: group.category, title: tag.name, original: tag.original).tint(group.category.color).foregroundStyle(group.category.color)

@@ -1288,7 +1288,7 @@ private struct GalleryDetailMetadata: View {
     /// before the language; the descriptive tags follow together, set apart by color.
     static let creditCategories: [ArtworkTagCategory] = [.group, .series, .character]
     static let tagCategories: [ArtworkTagCategory] = [.female, .male, .general, .metadata, .type]
-    private var tagGroups: [ArtworkTagGroup] { ArtworkTagGroup.make(tags: gallery.tags) }
+    private var tagGroups: [ArtworkTagGroup] { ArtworkTagGroup.make(tags: gallery.tags, mode: .comics) }
     private var credits: [ArtworkTagGroup] {
         let groups = tagGroups
         return Self.creditCategories.compactMap { category in groups.first { $0.category == category } }
@@ -1299,7 +1299,7 @@ private struct GalleryDetailMetadata: View {
     }
     private var artists: [String] {
         var seen = Set<String>()
-        let tagged = ArtworkTagGroup.make(tags: gallery.tags).first { $0.category == .artist }?.tags.map { String($0.query.dropFirst("artist:".count)) } ?? []
+        let tagged = ArtworkTagGroup.make(tags: gallery.tags, mode: .comics).first { $0.category == .artist }?.tags.map { String($0.query.dropFirst("artist:".count)) } ?? []
         return (gallery.artists + tagged).filter { !MangaArtistFavorite.key($0).isEmpty && seen.insert(MangaArtistFavorite.key($0)).inserted }
     }
     var body: some View {

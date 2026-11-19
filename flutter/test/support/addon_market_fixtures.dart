@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart';
 import 'package:tegnal/core/addons/addon_market.dart';
+import 'package:tegnal/core/addons/addon_models.dart';
 
 /// A P-256 key pair for signing test catalogs, as CryptoKit's `P256.Signing.PrivateKey()`.
 class TestSigningKey {
@@ -56,3 +57,17 @@ AddonMarket memoryMarket(TestSigningKey key, {required List<Map<String, Object?>
     },
   );
 }
+
+/// A catalog entry for [file], as the catalog lists it, for a mode and grade.
+Map<String, Object?> addonListing(List<int> file, {required String id, required String name, String mode = 'images', String? grade, String version = '1.0'}) =>
+    {
+      'id': id,
+      'version': version,
+      'mode': mode,
+      'grade': ?grade,
+      'name': {'en': name},
+      'author': 'TEGNAL',
+      'kinds': ['translations'],
+      'size': file.length,
+      'sha256': Addon.digest(file),
+    };

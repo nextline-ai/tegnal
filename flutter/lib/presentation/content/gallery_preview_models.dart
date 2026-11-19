@@ -1,3 +1,4 @@
+import '../../core/addons/addon_models.dart';
 import '../../core/addons/addon_store.dart';
 
 import 'dart:math' as math;
@@ -175,7 +176,12 @@ class ArtworkTagGroup {
     'other': ArtworkTagCategory.general,
   };
 
-  static List<ArtworkTagGroup> make({required List<String> tags, List<String> artists = const [], Map<String, int> categories = const {}}) {
+  static List<ArtworkTagGroup> make({
+    required List<String> tags,
+    required AddonMode mode,
+    List<String> artists = const [],
+    Map<String, int> categories = const {},
+  }) {
     final result = <ArtworkTagCategory, List<ArtworkTag>>{};
     final seen = <String>{};
     final artistNames = artists.toSet();
@@ -202,7 +208,7 @@ class ArtworkTagGroup {
       name = name.replaceAll('_', ' ');
       if (!seen.add('${category.rawValue}:$name')) continue;
       // A translation add-on shows its words in place of the tag; the tag itself is still what is searched.
-      final translated = AddonRuntime.shared.translation(query);
+      final translated = AddonRuntime.shared.translation(query, mode);
       result
           .putIfAbsent(category, () => [])
           .add(ArtworkTag(query: query, name: translated ?? name, category: category, original: translated == null ? null : name));
@@ -229,13 +235,13 @@ abstract final class GalleryDetailMetadata {
 
   /// Groups, series and characters that the work has, in that order.
   static List<ArtworkTagGroup> credits(NativeGallery gallery) {
-    final groups = ArtworkTagGroup.make(tags: gallery.tags);
+    final groups = ArtworkTagGroup.make(tags: gallery.tags, mode: AddonMode.comics);
     return [for (final category in creditCategories) ?groups.where((group) => group.category == category).firstOrNull];
   }
 
   /// Every descriptive tag in one group, possibly empty.
   static ArtworkTagGroup tags(NativeGallery gallery) {
-    final groups = ArtworkTagGroup.make(tags: gallery.tags);
+    final groups = ArtworkTagGroup.make(tags: gallery.tags, mode: AddonMode.comics);
     return ArtworkTagGroup(
       category: ArtworkTagCategory.general,
       tags: [for (final category in tagCategories) ...?groups.where((group) => group.category == category).firstOrNull?.tags],
@@ -246,11 +252,10 @@ abstract final class GalleryDetailMetadata {
   static List<String> artists(NativeGallery gallery) {
     final seen = <String>{};
     final tagged =
-        ArtworkTagGroup.make(tags: gallery.tags)
-            .where((group) => group.category == ArtworkTagCategory.artist)
-            .firstOrNull
-            ?.tags
-            .map((tag) => tag.query.substring('artist:'.length)) ??
+        ArtworkTagGroup.make(
+          tags: gallery.tags,
+          mode: AddonMode.comics,
+        ).where((group) => group.category == ArtworkTagCategory.artist).firstOrNull?.tags.map((tag) => tag.query.substring('artist:'.length)) ??
         const <String>[];
     return [...gallery.artists, ...tagged].where((name) => MangaArtistFavorite.key(name).isNotEmpty && seen.add(MangaArtistFavorite.key(name))).toList();
   }

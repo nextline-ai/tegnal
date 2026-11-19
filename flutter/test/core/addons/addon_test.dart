@@ -11,19 +11,22 @@ import 'package:tegnal/core/challenge/challenge_store.dart';
 import 'package:tegnal/core/content/content_environment.dart';
 import 'package:tegnal/core/study/study_models.dart';
 import 'package:tegnal/core/study/study_path.dart';
+import 'package:tegnal/core/taste/taste_models.dart' show TasteMode;
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/presentation/content/gallery_preview_models.dart';
+import 'package:tegnal/presentation/navigation/app_state.dart' show AppMode;
 
 final _rlo = String.fromCharCode(0x202E), _lri = String.fromCharCode(0x2066);
 
 typedef Json = Map<String, Object?>;
 
-List<int> _file(Json contents, {Json extra = const {}, String id = 'maker.sample-pack', String version = '1.0.0'}) => utf8.encode(
+List<int> _file(Json contents, {Json extra = const {}, String id = 'maker.sample-pack', String version = '1.0.0', String mode = 'images'}) => utf8.encode(
   jsonEncode({
     'format': 'tegnal-addon',
     'schemaVersion': 1,
     'id': id,
     'version': version,
+    'mode': mode,
     'name': {'en': 'Sample Pack', 'ko': '샘플 팩'},
     'author': 'Maker',
     'contents': contents,
@@ -187,7 +190,7 @@ void main() {
   });
 
   test('search tags cannot widen or rewrite a search', () {
-    List<int> search(Json value) => _file({'searchTags': value});
+    List<int> search(Json value) => _file({'searchTags': value}, mode: value['images'] == null ? 'comics' : 'images');
     expect(
       () => Addon.decode(
         search({
@@ -195,6 +198,13 @@ void main() {
             'include': ['language:korean'],
             'exclude': ['tag:gore', 'female:guro'],
           },
+        }),
+      ),
+      returnsNormally,
+    );
+    expect(
+      () => Addon.decode(
+        search({
           'images': {
             'exclude': ['gore', 'blood -scenery', 'rating:explicit', 'artist:someone'],
           },
@@ -331,9 +341,6 @@ void main() {
         ..._translations(),
         'challenges': [_game('sketch')],
         'searchTags': {
-          'comics': {
-            'exclude': ['tag:gore'],
-          },
           'images': {
             'exclude': ['blood'],
           },
@@ -344,12 +351,16 @@ void main() {
     AddonRuntime.shared.reload(booru);
 
     final runtime = AddonRuntime.shared;
-    expect(runtime.translation('long_hair'), '긴 머리');
-    expect(runtime.translation('Long Hair'), '긴 머리');
-    expect(runtime.translation('female:glasses'), '안경');
-    expect(runtime.translation('tag:long_hair'), '긴 머리', reason: 'A namespaced tag falls back to its name');
-    expect(runtime.translation('short_hair'), isNull);
-    final group = ArtworkTagGroup.make(tags: ['long_hair']).first.tags.first;
+    expect(runtime.translation('long_hair', AddonMode.images), '긴 머리');
+    expect(runtime.translation('Long Hair', AddonMode.images), '긴 머리');
+    expect(runtime.translation('female:glasses', AddonMode.images), '안경');
+    expect(runtime.translation('tag:long_hair', AddonMode.images), '긴 머리', reason: 'A namespaced tag falls back to its name');
+    expect(runtime.translation('short_hair', AddonMode.images), isNull);
+    expect(runtime.translation('long_hair', AddonMode.comics), isNull, reason: 'An image add-on never renames comics tags');
+    expect(runtime.effects.enabledCount(AddonMode.images), 1);
+    expect(runtime.effects.enabledCount(AddonMode.comics), 0);
+    expect(ArtworkTagGroup.make(tags: ['long_hair'], mode: AddonMode.comics).first.tags.first.original, isNull);
+    final group = ArtworkTagGroup.make(tags: ['long_hair'], mode: AddonMode.images).first.tags.first;
     expect(group.name, '긴 머리');
     expect(group.query, 'long_hair', reason: 'Searches still use the tag itself');
     expect(group.original, 'long hair');
@@ -361,17 +372,14 @@ void main() {
     final content = ContentEnvironment(browserPreferences: MemoryPreferences());
     content.defaultTags = 'language:english';
     expect(content.searchDefaultTags, 'language:english');
-    expect(content.searchExcludedTags.split(' '), contains('tag:gore'));
-    expect(content.defaultExcludedTags.contains('tag:gore'), isFalse);
 
     final challenges = ChallengeStore(booru);
     expect(challenges.definitions().map((game) => game.id), ['addon:maker.sample-pack:sketch']);
 
     store.setEnabled(addon.id, false);
     AddonRuntime.shared.reload(booru);
-    expect(runtime.translation('long_hair'), isNull);
+    expect(runtime.translation('long_hair', AddonMode.images), isNull);
     expect(booru.filteringBlacklist('s'), 'spoilers');
-    expect(content.searchExcludedTags.contains('tag:gore'), isFalse);
     expect(challenges.definitions(), isEmpty, reason: 'A challenge of an add-on that is off is hidden');
 
     store.setEnabled(addon.id, true);
@@ -494,7 +502,7 @@ void main() {
     final first = Addon.decode(_file(_translations({'long_hair': '긴 머리'}), id: 'maker.first')).addon;
     final second = Addon.decode(_file(_translations({'long_hair': '장발'}), id: 'maker.second')).addon;
     final effects = AddonEffects([_installed(second, at: 2), _installed(first, at: 1)]);
-    expect(effects.translation('long_hair'), '장발');
+    expect(effects.translation('long_hair', AddonMode.images), '장발');
   });
 
   test('the sample add-ons in the docs folder pass', () async {
@@ -508,5 +516,86 @@ void main() {
     for (final file in files) {
       await expectLater(Addon.read(file), completes, reason: file.path);
     }
+  });
+
+  // MARK: Modes and grades
+
+  test('comics and image add-ons stay apart', () {
+    _refused(_file(_translations(), mode: 'both'), const AddonError.invalid('mode'));
+    final noMode = jsonDecode(utf8.decode(_file(_translations()))) as Json..remove('mode');
+    _refused(utf8.encode(jsonEncode(noMode)), const AddonError.invalid('mode'));
+    _refused(_file(_track(), mode: 'comics'), const AddonError.invalid('learningTrack'));
+    _refused(
+      _file({
+        'challenges': [_game('sketch')],
+      }, mode: 'comics'),
+      const AddonError.invalid('challenges'),
+    );
+    _refused(
+      _file({
+        'searchTags': {
+          'images': {
+            'exclude': ['gore'],
+          },
+        },
+      }, mode: 'comics'),
+      const AddonError.invalid('searchTags.images'),
+    );
+    _refused(
+      _file({
+        'searchTags': {
+          'comics': {
+            'exclude': ['tag:gore'],
+          },
+        },
+      }),
+      const AddonError.invalid('searchTags.comics'),
+    );
+    expect(Addon.decode(_file(_translations())).addon.json['mode'], 'images', reason: 'The kept copy holds its mode');
+
+    final comics = Addon.decode(
+      _file(
+        {
+          ..._translations({'character:reimu_hakurei': '하쿠레이 레이무'}),
+          'searchTags': {
+            'comics': {
+              'exclude': ['female:guro'],
+            },
+          },
+        },
+        id: 'maker.comics',
+        mode: 'comics',
+      ),
+    ).addon;
+    final images = Addon.decode(_file(_translations({'reimu_hakurei': '레이무'}), id: 'maker.images')).addon;
+    final effects = AddonEffects([_installed(comics), _installed(images)]);
+    expect(effects.translation('character:reimu hakurei', AddonMode.comics), '하쿠레이 레이무');
+    expect(effects.translation('reimu_hakurei', AddonMode.images), '레이무');
+    expect(effects.translation('hakurei', AddonMode.comics), isNull);
+    expect(effects.comicsExclude, ['female:guro']);
+    expect(effects.enabledCount(AddonMode.comics), 1);
+    expect(effects.enabledCount(AddonMode.images), 1);
+    expect(AddonMode.fromApp(AppMode.manga), AddonMode.comics);
+    expect(AddonMode.fromTaste(TasteMode.booru), AddonMode.images);
+    expect(const AddonError.otherMode(AddonMode.comics).errorDescription, contains('Comics Mode'));
+    expect(const AddonError.otherMode(AddonMode.images).errorDescription, contains('Image Mode'));
+
+    final booru = BooruStore.inMemory();
+    final (addon: kept, :digest) = Addon.decode(
+      _file({
+        'searchTags': {
+          'comics': {
+            'exclude': ['tag:gore'],
+          },
+        },
+      }, mode: 'comics'),
+    );
+    AddonStore(booru.database).install(kept, digest: digest);
+    AddonRuntime.shared.reload(booru);
+    addTearDown(() => AddonRuntime.shared.apply(AddonEffects()));
+    expect(AddonStore(booru.database).installed().single.addon.mode, AddonMode.comics, reason: 'The mode is read back');
+    final content = ContentEnvironment(browserPreferences: MemoryPreferences());
+    expect(content.searchExcludedTags.split(' '), contains('tag:gore'));
+    expect(content.defaultExcludedTags.contains('tag:gore'), isFalse);
   });
 }

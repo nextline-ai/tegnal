@@ -863,8 +863,15 @@ final class BooruUITests: XCTestCase {
             XCTAssertEqual(addons.frame.minY, gestures.frame.maxY, accuracy: 2, "Add-ons is the row right after Thumbnail Gestures, last in Browsing")
             capture(app, mode + " add-ons in browsing")
             addons.tap()
-            XCTAssertTrue(element(app, "addons.market").waitForExistence(timeout: 5))
+            XCTAssertTrue(element(app, "addons.installed").waitForExistence(timeout: 5), "Installed Add-ons comes first")
             XCTAssertTrue(element(app, "addons.import").exists)
+            XCTAssertLessThan(element(app, "addons.installed").frame.minY, element(app, "addons.import").frame.minY)
+            let title = mode == "booru" ? "Image Mode Add-ons" : "Comics Mode Add-ons"
+            XCTAssertTrue(app.navigationBars.staticTexts[title].exists, "Each mode's add-ons are named after the mode")
+            // Official comics add-ons are listed only in Comics Mode. The list comes from the network, so a missing one is not a failure.
+            let comicsOfficial = element(app, "market.row.tegnal.comics-tags-ko")
+            if mode == "manga" { _ = comicsOfficial.waitForExistence(timeout: 15) } else { sleep(3); XCTAssertFalse(comicsOfficial.exists) }
+            capture(app, mode + " add-ons")
             app.navigationBars.buttons.firstMatch.tap()
         }
     }

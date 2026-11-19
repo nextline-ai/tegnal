@@ -5,7 +5,9 @@ import 'package:characters/characters.dart';
 import 'package:crypto/crypto.dart';
 
 import '../challenge/challenge_models.dart';
+import '../../presentation/navigation/app_state.dart' show AppMode;
 import '../study/study_models.dart';
+import '../taste/taste_models.dart' show TasteMode;
 import '../support/l10n.dart';
 import '../support/swift_json.dart';
 
@@ -22,6 +24,7 @@ class Addon {
   Addon._({
     required this.id,
     required this.version,
+    required this.mode,
     required this.name,
     required this.author,
     required this.summary,
@@ -39,6 +42,9 @@ class Addon {
 
   /// Digits and dots, such as `1.2.0`.
   final String version;
+
+  /// The mode it works in. Comics and image add-ons are kept, listed and applied apart.
+  final AddonMode mode;
   final StudyText name;
   final String author;
   final StudyText? summary;
@@ -49,7 +55,7 @@ class Addon {
 
   String get title => name.addonResolved();
 
-  static const _topKeys = {'format', 'schemaVersion', 'id', 'version', 'name', 'author', 'summary', 'contents'};
+  static const _topKeys = {'format', 'schemaVersion', 'id', 'version', 'mode', 'name', 'author', 'summary', 'contents'};
 
   /// Reads a file the person picked. Nothing in it is used until it has passed every check.
   static Future<({Addon addon, String digest})> read(File file) async {
@@ -95,10 +101,13 @@ class Addon {
   static Addon fromJson(JsonObject json) {
     final Addon addon;
     try {
+      final mode = AddonMode.values.where((value) => value.name == json['mode']).firstOrNull;
+      if (mode == null) throw const AddonError.invalid('mode');
       final contents = AddonContents._fromJson(json.object('contents'));
       addon = Addon._(
         id: json.string('id'),
         version: json.string('version'),
+        mode: mode,
         name: json.dictionary('name', jsonString),
         author: json.string('author'),
         summary: json.dictionaryOrNull('summary', jsonString),
@@ -108,6 +117,7 @@ class Addon {
           'schemaVersion': json.integer('schemaVersion'),
           'id': json.string('id'),
           'version': json.string('version'),
+          'mode': mode.name,
           'name': json.dictionary('name', jsonString),
           'author': json.string('author'),
           'summary': ?json.dictionaryOrNull('summary', jsonString),
@@ -156,6 +166,15 @@ class Addon {
     );
     require(AddonCheck.identifier(id), 'id');
     require(AddonCheck.version(version), 'version');
+    // A comics add-on cannot reach image servers, challenges or learning mode, and an image add-on cannot reach comics searches.
+    switch (mode) {
+      case AddonMode.comics:
+        require(contents.challenges == null, 'challenges');
+        require(contents.learningTrack == null, 'learningTrack');
+        require(contents.searchTags?.imageExclude == null, 'searchTags.images');
+      case AddonMode.images:
+        require(contents.searchTags?.comicsInclude == null && contents.searchTags?.comicsExclude == null, 'searchTags.comics');
+    }
     require(AddonCheck.text(name, max: 80), 'name');
     require(AddonCheck.line(author, max: 80), 'author');
     if (summary case final summary?) require(AddonCheck.text(summary, max: 600, multiline: true), 'summary');
@@ -208,6 +227,18 @@ class Addon {
 
     contents.learningTrack?.validate();
   }
+}
+
+/// The mode an add-on belongs to. Comics add-ons bring tag translations and comics search tags; image add-ons
+/// bring tag translations, image blacklist rules, challenges and learning tracks.
+enum AddonMode {
+  comics,
+  images;
+
+  static AddonMode fromApp(AppMode mode) => mode == AppMode.manga ? comics : images;
+  static AddonMode fromTaste(TasteMode mode) => mode == TasteMode.comics ? comics : images;
+
+  String get title => L10n.text(this == comics ? 'Comics Mode' : 'Image Mode');
 }
 
 enum AddonKind {
@@ -549,15 +580,17 @@ class AddonTrack {
 // MARK: - Errors
 
 class AddonError implements Exception {
-  const AddonError.tooLarge() : kind = 'tooLarge', detail = null;
-  const AddonError.notAddon() : kind = 'notAddon', detail = null;
-  const AddonError.newerFormat() : kind = 'newerFormat', detail = null;
-  const AddonError.unknownContent(String key) : kind = 'unknownContent', detail = key;
-  const AddonError.empty() : kind = 'empty', detail = null;
-  const AddonError.invalid(String field) : kind = 'invalid', detail = field;
+  const AddonError.tooLarge() : kind = 'tooLarge', detail = null, mode = null;
+  const AddonError.notAddon() : kind = 'notAddon', detail = null, mode = null;
+  const AddonError.newerFormat() : kind = 'newerFormat', detail = null, mode = null;
+  const AddonError.unknownContent(String key) : kind = 'unknownContent', detail = key, mode = null;
+  const AddonError.empty() : kind = 'empty', detail = null, mode = null;
+  const AddonError.invalid(String field) : kind = 'invalid', detail = field, mode = null;
+  const AddonError.otherMode(AddonMode this.mode) : kind = 'otherMode', detail = null;
 
   final String kind;
   final String? detail;
+  final AddonMode? mode;
 
   String get errorDescription => switch (kind) {
     'tooLarge' => L10n.text('This add-on file is too large.'),
@@ -565,15 +598,20 @@ class AddonError implements Exception {
     'newerFormat' => L10n.text('This add-on needs a newer version of TEGNAL.'),
     'unknownContent' => L10n.text('This add-on contains something TEGNAL does not support: %@', [detail!]),
     'empty' => L10n.text('This add-on contains nothing to add.'),
+    'otherMode' => L10n.text(
+      mode == AddonMode.comics
+          ? 'This add-on is for Comics Mode. Open it from Settings → Add-ons in Comics Mode.'
+          : 'This add-on is for Image Mode. Open it from Settings → Add-ons in Image Mode.',
+    ),
     _ => L10n.text('This add-on was not added because a part of it is not allowed: %@', [detail!]),
   };
 
   @override
-  bool operator ==(Object other) => other is AddonError && other.kind == kind && other.detail == detail;
+  bool operator ==(Object other) => other is AddonError && other.kind == kind && other.detail == detail && other.mode == mode;
   @override
-  int get hashCode => Object.hash(kind, detail);
+  int get hashCode => Object.hash(kind, detail, mode);
   @override
-  String toString() => 'AddonError.$kind${detail == null ? '' : '($detail)'}';
+  String toString() => 'AddonError.$kind${detail == null ? (mode == null ? '' : '(${mode!.name})') : '($detail)'}';
 }
 
 // MARK: - Rules for every piece of text

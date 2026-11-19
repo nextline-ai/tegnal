@@ -56,9 +56,10 @@ class AddonEffects {
       if (!item.enabled) continue;
       final contents = item.addon.contents;
       enabledIDs.add(item.id);
+      enabledModes[item.id] = item.addon.mode;
       // Add-ons installed later win where two translate the same tag.
       for (final MapEntry(key: tag, value: words) in (contents.tagTranslations?.entries ?? const <String, String>{}).entries) {
-        translations[AddonCheck.tagKey(tag)] = words;
+        translations.putIfAbsent(item.addon.mode, () => {})[AddonCheck.tagKey(tag)] = words;
       }
       for (final term in contents.searchTags?.comicsInclude ?? const <String>[]) {
         if (seenInclude.add(term.toLowerCase())) comicsInclude.add(term);
@@ -82,8 +83,11 @@ class AddonEffects {
 
   final enabledIDs = <String>{};
 
-  /// Tag (lowercase, underscores) to the words shown for it.
-  final translations = <String, String>{};
+  /// The add-ons that are on, by the mode they belong to.
+  final enabledModes = <String, AddonMode>{};
+
+  /// Tag (lowercase, underscores) to the words shown for it, kept apart for each mode.
+  final translations = <AddonMode, Map<String, String>>{};
   final comicsInclude = <String>[];
   final comicsExclude = <String>[];
   final imageExclude = <String>[];
@@ -145,9 +149,13 @@ class AddonEffects {
     );
   }
 
-  /// The words shown for a tag, by its full name (`female:glasses`) or, failing that, its name without the namespace.
-  String? translation(String tag) {
-    if (translations.isEmpty) return null;
+  int enabledCount(AddonMode mode) => enabledModes.values.where((value) => value == mode).length;
+
+  /// The words shown for a tag in a mode, by its full name (`female:glasses`) or, failing that, its name without the namespace.
+  /// Only that mode's add-ons are read: a comics translation never renames an image tag.
+  String? translation(String tag, AddonMode mode) {
+    final translations = this.translations[mode];
+    if (translations == null || translations.isEmpty) return null;
     final key = AddonCheck.tagKey(tag);
     if (translations[key] case final words?) return words;
     final colon = key.indexOf(':');
@@ -162,6 +170,10 @@ class AddonRuntime extends ChangeNotifier {
   static final shared = AddonRuntime._();
 
   AddonEffects _effects = AddonEffects();
+
+  /// The mode on screen, for tag names drawn where the mode is not passed along (taste and recap texts,
+  /// which always belong to the mode shown). Set whenever the app's mode changes.
+  AddonMode displayedMode = AddonMode.comics;
   AddonEffects get effects => _effects;
 
   void apply(AddonEffects next) {
@@ -187,7 +199,7 @@ class AddonRuntime extends ChangeNotifier {
   }
 
   /// The words to show for a tag, or null to show the tag itself.
-  String? translation(String tag) => _effects.translation(tag);
+  String? translation(String tag, AddonMode mode) => _effects.translation(tag, mode);
 }
 
 /// Add-ons kept in the image-mode database, beside the challenges they may bring (`AddonStore`).

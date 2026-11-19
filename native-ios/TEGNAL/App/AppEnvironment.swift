@@ -282,6 +282,7 @@ public final class AppEnvironment: @unchecked Sendable {
         get { selectedMode }
         set {
             selectedMode = newValue
+            AddonRuntime.shared.displayedMode = AddonMode(newValue)
             browserPreferences.set(selectedMode.rawValue, forKey: "content_mode")
             // Observation notifies before storing, and SwiftUI can reevaluate the root
             // inside that notification. Notify again so it cannot keep the old mode.
@@ -687,6 +688,7 @@ public final class AppEnvironment: @unchecked Sendable {
             if booru.selectedServers.isEmpty { try? booru.selectSafebooru() }
         }
         self.selectedMode = AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru
+        AddonRuntime.shared.displayedMode = AddonMode(AppMode(rawValue: browserPreferences.string(forKey: "content_mode") ?? "") ?? .booru)
         self.database = database
         self.coverQueueActor = coverQueue ?? CoverQueueActor(database: database)
         self.coverQueueState = CoverQueueState()

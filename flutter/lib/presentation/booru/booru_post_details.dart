@@ -1,3 +1,5 @@
+import '../../core/addons/addon_models.dart';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -150,7 +152,7 @@ class _DetailsPageState extends State<_DetailsPage> {
   Widget build(BuildContext context) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
-    final groups = ArtworkTagGroup.make(tags: _post.tags, artists: _post.artists, categories: _post.tagCategories ?? const {});
+    final groups = ArtworkTagGroup.make(mode: AddonMode.images, tags: _post.tags, artists: _post.artists, categories: _post.tagCategories ?? const {});
     final row = FormColors.row.resolveFrom(context);
     Widget value(String title, String value) => FormRow(
       child: Row(

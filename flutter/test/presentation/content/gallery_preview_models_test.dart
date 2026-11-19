@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tegnal/core/addons/addon_models.dart';
 import 'package:tegnal/core/content/gallery_content.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/support/l10n.dart';
@@ -45,6 +46,7 @@ void main() {
 
   test('tag groups keep search queries and differentiate namespaces and API categories', () {
     final groups = ArtworkTagGroup.make(
+      mode: AddonMode.images,
       tags: ['artist:sample', 'parody:series_one', 'character:hero', 'female:long_hair', 'male:glasses', 'sky', 'hero', 'sample'],
       artists: ['sample'],
       categories: {'hero': 4},

@@ -215,7 +215,7 @@ final class NativeContentTests: XCTestCase {
         let gallery = try NativeGallery.parse(Data("var galleryinfo = ".utf8) + JSONSerialization.data(withJSONObject: json), id: 7)
         XCTAssertEqual(gallery.tags, ["group:circle one", "series:some show", "character:hero", "tag:full color"])
 
-        let groups = ArtworkTagGroup.make(tags: gallery.tags)
+        let groups = ArtworkTagGroup.make(tags: gallery.tags, mode: .comics)
         XCTAssertEqual(Set(groups.map(\.category)), [.group, .series, .character, .general])
         let database = try AppDatabase.inMemory()
         for tag in groups.flatMap(\.tags) where tag.category != .general {

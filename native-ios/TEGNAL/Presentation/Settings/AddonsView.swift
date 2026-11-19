@@ -6,12 +6,13 @@ extension UTType {
     static let tegnalAddon = UTType(exportedAs: "work.nextline.tegnal.addon", conformingTo: .json)
 }
 
-/// The row that leads to the add-ons, last in the Browsing section of both modes' settings.
+/// The row that leads to a mode's add-ons, last in the Browsing section of that mode's settings.
 struct AddonsSettingsRow: View {
+    let mode: AddonMode
     var body: some View {
-        NavigationLink { AddonsView() } label: {
+        NavigationLink { AddonsView(mode: mode) } label: {
             LabeledContent {
-                let count = AddonRuntime.shared.effects.enabledIDs.count
+                let count = AddonRuntime.shared.effects.enabledCount(mode)
                 if count > 0 { Text(String(count)) }
             } label: { Label(L10n.text("Add-ons"), systemImage: "puzzlepiece.extension") }
         }.accessibilityIdentifier("settings.addons")
@@ -28,48 +29,49 @@ struct AddonCandidate: Identifiable {
     var id: String { addon.id + digest }
 }
 
+/// One mode's add-ons: the installed ones and a file to open at the top, then TEGNAL's official add-ons by grade.
+/// Comics and image add-ons never meet: each mode lists, opens and installs only its own.
 struct AddonsView: View {
+    let mode: AddonMode
     @Environment(AppEnvironment.self) private var env
     @State private var installed: [InstalledAddon] = []
     @State private var picking = false
     @State private var reading = false
     @State private var candidate: AddonCandidate?
     @State private var error: String?
+    @State private var catalog: AddonCatalog?
+    @State private var loadError: String?
+    @State private var downloading: String?
     private var store: AddonStore { AddonStore(env.booru) }
+    private var market: AddonMarket { .live }
+    private var listings: [AddonListing] { catalog?.addons.filter { $0.mode == mode } ?? [] }
 
     var body: some View {
         List {
             Section {
-                NavigationLink { AddonMarketView(changed: applyChanges) } label: {
-                    Label { Text(L10n.text("Official Add-ons")) } icon: { Image(systemName: "checkmark.seal").foregroundStyle(.blue) }
-                }.accessibilityIdentifier("addons.market")
+                NavigationLink { AddonInstalledListView(mode: mode) } label: {
+                    LabeledContent {
+                        if !installed.isEmpty { Text(String(installed.count)) }
+                    } label: { Label(L10n.text("Installed Add-ons"), systemImage: "checkmark.circle") }
+                }.accessibilityIdentifier("addons.installed")
                 Button { picking = true } label: { Label(L10n.text("Open Add-on File"), systemImage: "doc.badge.plus") }
                     .disabled(reading)
                     .accessibilityIdentifier("addons.import")
             } footer: {
-                Text(L10n.text("Official add-ons are made by TEGNAL and downloaded from its server. Others are files made by other people that you download and open yourself. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed."))
-            }
-            if installed.isEmpty {
-                Section {
-                    ContentUnavailableView(L10n.text("No Add-ons"), systemImage: "puzzlepiece.extension",
-                                           description: Text(L10n.text("Open a .tegnaladdon file to add tag translations, search tags, challenges or learning tracks.")))
-                }
-            } else {
-                Section {
-                    ForEach(installed) { item in
-                        NavigationLink { AddonDetailView(id: item.id, changed: reload) } label: { AddonRow(item: item) }
-                            .accessibilityIdentifier("addons.row." + item.id)
-                    }
-                } header: { Text(L10n.text("Installed")) } footer: {
-                    Text(L10n.text("Turning an add-on off or removing it takes back everything it added. Your own settings are never changed."))
-                }
+                Text(L10n.text(mode == .comics
+                               ? "These add-ons work in Comics Mode only. Image Mode keeps its own add-ons in its settings."
+                               : "These add-ons work in Image Mode only. Comics Mode keeps its own add-ons in its settings.")
+                     + " " + L10n.text("Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed."))
             }
             if let error {
                 Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).accessibilityIdentifier("addons.error") }
             }
+            officialSections
         }
-        .navigationTitle(L10n.text("Add-ons")).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(L10n.text(mode == .comics ? "Comics Mode Add-ons" : "Image Mode Add-ons")).navigationBarTitleDisplayMode(.inline)
         .overlay { if reading { ProgressView() } }
+        .refreshable { await load() }
+        .task { if catalog == nil { await load() } }
         .onAppear(perform: reload)
         .fileImporter(isPresented: $picking, allowedContentTypes: [.tegnalAddon, .json]) { result in
             switch result {
@@ -88,24 +90,144 @@ struct AddonsView: View {
         }
     }
 
+    /// The official add-ons of this mode, one section per grade, or why they could not be shown.
+    @ViewBuilder private var officialSections: some View {
+        if catalog != nil {
+            let groups = AddonGrade.allCases.map { grade in (grade, listings.filter { $0.addonGrade == grade }) }.filter { !$0.1.isEmpty }
+            if groups.isEmpty {
+                Section {
+                    ContentUnavailableView(L10n.text("No Official Add-ons Yet"), systemImage: "checkmark.seal",
+                                           description: Text(L10n.text("Official add-ons appear here as TEGNAL publishes them.")))
+                } header: { officialHeader(nil) }
+            } else {
+                ForEach(Array(groups.enumerated()), id: \.element.0) { index, group in
+                    Section {
+                        ForEach(group.1) { listing in row(listing) }
+                    } header: { officialHeader(index == 0 ? group.0 : nil, grade: group.0) } footer: {
+                        Text(index == groups.count - 1
+                             ? group.0.detail + "\n\n" + L10n.text("Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed.")
+                             : group.0.detail)
+                    }
+                    .accessibilityIdentifier("addons.grade." + group.0.rawValue)
+                }
+            }
+        } else if let loadError {
+            Section {
+                VStack(spacing: 10) {
+                    Label(L10n.text("Couldn’t Load Official Add-ons"), systemImage: "wifi.exclamationmark").font(.headline)
+                    Text(loadError).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Button(L10n.text("Try Again")) { Task { await load() } }.accessibilityIdentifier("market.retry")
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+            } header: { officialHeader(nil) }
+        } else {
+            Section { HStack { Spacer(); ProgressView(); Spacer() } } header: { officialHeader(nil) }
+        }
+    }
+
+    /// "Official Add-ons", with the first grade's name under it once the list is in.
+    @ViewBuilder private func officialHeader(_ first: AddonGrade?, grade: AddonGrade? = nil) -> some View {
+        if let grade, first == nil {
+            Text(grade.title)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Label { Text(L10n.text("Official Add-ons")) } icon: { Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue) }
+                    .font(.headline).foregroundStyle(.primary).textCase(nil)
+                if let first { Text(first.title) }
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ listing: AddonListing) -> some View {
+        let item = installed.first { $0.id == listing.id }
+        let state = AddonListingState(listing, installed: item)
+        if state == .installed, let item {
+            NavigationLink { AddonDetailView(id: item.id, changed: reload) } label: {
+                AddonListingRow(listing: listing, state: state, downloading: false)
+            }.accessibilityIdentifier("market.row." + listing.id)
+        } else {
+            Button { get(listing) } label: { AddonListingRow(listing: listing, state: state, downloading: downloading == listing.id) }
+                .buttonStyle(.plain)
+                .disabled(state == .unsupported || downloading != nil)
+                .accessibilityIdentifier("market.row." + listing.id)
+        }
+    }
+
+    private func load() async {
+        do {
+            let next = try await market.catalog()
+            catalog = next
+            loadError = nil
+        } catch is CancellationError {
+        } catch let failure {
+            if catalog == nil { loadError = failure.localizedDescription } else { error = failure.localizedDescription }
+        }
+    }
+
+    private func get(_ listing: AddonListing) {
+        downloading = listing.id
+        Task {
+            defer { downloading = nil }
+            do {
+                let (addon, digest) = try await market.download(listing)
+                error = nil
+                candidate = AddonCandidate(addon: addon, digest: digest, existing: installed.first { $0.id == addon.id }, official: true)
+            } catch is CancellationError {
+            } catch let failure { error = failure.localizedDescription }
+        }
+    }
+
     private func open(_ url: URL) {
         reading = true
         Task {
             defer { reading = false }
             do {
                 let (addon, digest) = try await Task.detached { try Addon.read(url) }.value
+                // An add-on for the other mode is opened from that mode's settings, so that it is never mistaken for this one's.
+                guard addon.mode == mode else { throw AddonError.otherMode(addon.mode) }
                 error = nil
                 candidate = AddonCandidate(addon: addon, digest: digest, existing: installed.first { $0.id == addon.id })
             } catch let failure { error = failure.localizedDescription }
         }
     }
 
-    private func reload() { installed = ((try? store.installed()) ?? []).reversed() }
+    private func reload() { installed = ((try? store.installed()) ?? []).filter { $0.addon.mode == mode } }
 
     private func applyChanges() {
         reload()
         AddonRuntime.apply(env.booru)
     }
+}
+
+/// The add-ons of one mode that are installed, newest first.
+struct AddonInstalledListView: View {
+    let mode: AddonMode
+    @Environment(AppEnvironment.self) private var env
+    @State private var installed: [InstalledAddon] = []
+
+    var body: some View {
+        List {
+            if installed.isEmpty {
+                Section {
+                    ContentUnavailableView(L10n.text("No Add-ons"), systemImage: "puzzlepiece.extension",
+                                           description: Text(L10n.text("Get an official add-on or open a .tegnaladdon file.")))
+                }
+            } else {
+                Section {
+                    ForEach(installed) { item in
+                        NavigationLink { AddonDetailView(id: item.id, changed: reload) } label: { AddonRow(item: item) }
+                            .accessibilityIdentifier("addons.row." + item.id)
+                    }
+                } footer: {
+                    Text(L10n.text("Turning an add-on off or removing it takes back everything it added. Your own settings are never changed."))
+                }
+            }
+        }
+        .navigationTitle(L10n.text("Installed Add-ons")).navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: reload)
+    }
+
+    private func reload() { installed = ((try? AddonStore(env.booru).installed()) ?? []).filter { $0.addon.mode == mode }.reversed() }
 }
 
 extension AddonRuntime {
@@ -274,6 +396,7 @@ private struct AddonOriginSection: View {
     var body: some View {
         Section {
             LabeledContent(L10n.text("Identifier"), value: addon.id)
+            LabeledContent(L10n.text("Mode"), value: addon.mode.title).accessibilityIdentifier("addons.mode")
             LabeledContent(L10n.text("Source"), value: L10n.text(official ? "Official Add-ons" : "Opened File"))
                 .accessibilityIdentifier("addons.source")
             if let installed { LabeledContent(L10n.text("Installed"), value: installed.formatted(date: .abbreviated, time: .shortened)) }
@@ -366,109 +489,6 @@ struct AddonContentsSections: View {
 
     private static func language(_ code: String) -> String {
         switch code { case "ko": return "한국어"; case "ja": return "日本語"; default: return "English" }
-    }
-}
-
-// MARK: - Official add-ons
-
-/// The official add-ons, read from TEGNAL's signed catalog. Each one is downloaded, matched against the
-/// catalog and shown in full before it is installed, like a file the learner opens.
-struct AddonMarketView: View {
-    let changed: () -> Void
-    @Environment(AppEnvironment.self) private var env
-    @State private var catalog: AddonCatalog?
-    @State private var installed: [InstalledAddon] = []
-    @State private var loadError: String?
-    @State private var error: String?
-    @State private var downloading: String?
-    @State private var candidate: AddonCandidate?
-    private var market: AddonMarket { .live }
-    private var store: AddonStore { AddonStore(env.booru) }
-
-    var body: some View {
-        List {
-            if let catalog {
-                if catalog.addons.isEmpty {
-                    Section {
-                        ContentUnavailableView(L10n.text("No Official Add-ons Yet"), systemImage: "checkmark.seal",
-                                               description: Text(L10n.text("Official add-ons appear here as TEGNAL publishes them.")))
-                    }
-                } else {
-                    Section {
-                        ForEach(catalog.addons) { listing in row(listing) }
-                    } footer: {
-                        Text(L10n.text("Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed."))
-                    }
-                }
-                if let error {
-                    Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).accessibilityIdentifier("market.error") }
-                }
-            } else if let loadError {
-                Section {
-                    ContentUnavailableView {
-                        Label(L10n.text("Couldn’t Load Official Add-ons"), systemImage: "wifi.exclamationmark")
-                    } description: { Text(loadError) } actions: {
-                        Button(L10n.text("Try Again")) { Task { await load() } }.accessibilityIdentifier("market.retry")
-                    }
-                }
-            }
-        }
-        .navigationTitle(L10n.text("Official Add-ons")).navigationBarTitleDisplayMode(.inline)
-        .overlay { if catalog == nil && loadError == nil { ProgressView() } }
-        .refreshable { await load() }
-        .task { if catalog == nil { await load() } }
-        .onAppear(perform: reloadInstalled)
-        .sheet(item: $candidate) { candidate in
-            AddonInstallSheet(candidate: candidate) {
-                do {
-                    try store.install(candidate.addon, digest: candidate.digest, official: true)
-                    error = nil
-                    reloadInstalled()
-                    changed()
-                } catch let failure { error = failure.localizedDescription }
-            }
-        }
-    }
-
-    @ViewBuilder private func row(_ listing: AddonListing) -> some View {
-        let item = installed.first { $0.id == listing.id }
-        let state = AddonListingState(listing, installed: item)
-        if state == .installed, let item {
-            NavigationLink { AddonDetailView(id: item.id, changed: { reloadInstalled(); changed() }) } label: {
-                AddonListingRow(listing: listing, state: state, downloading: false)
-            }.accessibilityIdentifier("market.row." + listing.id)
-        } else {
-            Button { get(listing) } label: { AddonListingRow(listing: listing, state: state, downloading: downloading == listing.id) }
-                .buttonStyle(.plain)
-                .disabled(state == .unsupported || downloading != nil)
-                .accessibilityIdentifier("market.row." + listing.id)
-        }
-    }
-
-    private func load() async {
-        do {
-            let next = try await market.catalog()
-            catalog = next
-            loadError = nil
-        } catch is CancellationError {
-        } catch let failure {
-            if catalog == nil { loadError = failure.localizedDescription } else { error = failure.localizedDescription }
-        }
-    }
-
-    private func reloadInstalled() { installed = (try? store.installed()) ?? [] }
-
-    private func get(_ listing: AddonListing) {
-        downloading = listing.id
-        Task {
-            defer { downloading = nil }
-            do {
-                let (addon, digest) = try await market.download(listing)
-                error = nil
-                candidate = AddonCandidate(addon: addon, digest: digest, existing: installed.first { $0.id == addon.id }, official: true)
-            } catch is CancellationError {
-            } catch let failure { error = failure.localizedDescription }
-        }
     }
 }
 

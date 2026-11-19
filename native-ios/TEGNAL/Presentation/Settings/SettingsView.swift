@@ -36,7 +36,7 @@ public struct SettingsView: View {
                 NavigationLink { ThumbnailGestureSettings() } label: {
                     Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
                 }.accessibilityIdentifier("settings.thumbnailGestures")
-                AddonsSettingsRow()
+                AddonsSettingsRow(mode: .comics)
             } header: { Text(L10n.text("Browsing")) }
             ReaderSettingsSection(booru: false, isPresented: $showReader)
             Section {
