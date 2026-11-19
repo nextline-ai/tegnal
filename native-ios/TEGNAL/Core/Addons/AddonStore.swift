@@ -38,6 +38,11 @@ struct AddonEffects: Sendable {
     var enabledModes: [String: AddonMode] = [:]
     /// Tag (lowercase, underscores) to the words shown for it, kept apart for each mode.
     var translations: [AddonMode: [String: String]] = [:]
+    /// Translated words (folded: lowercase, single spaces, no width or diacritic differences) back to their tag, for searches typed in them.
+    /// The first tag given a wording keeps it.
+    var tagsByWords: [AddonMode: [String: String]] = [:]
+    /// Every translation of a mode as (folded words, tag, words), for suggestions while a search is typed.
+    var searchable: [AddonMode: [(folded: String, tag: String, words: String)]] = [:]
     var comicsInclude: [String] = []
     var comicsExclude: [String] = []
     var imageExclude: [String] = []
@@ -50,7 +55,8 @@ struct AddonEffects: Sendable {
     /// Add-ons installed later win where two translate the same tag.
     init(_ installed: [InstalledAddon] = []) {
         var seenInclude = Set<String>(), seenExclude = Set<String>(), seenRules = Set<String>()
-        for item in installed.sorted(by: { $0.installed < $1.installed }) where item.enabled {
+        let enabled = installed.sorted(by: { $0.installed < $1.installed }).filter(\.enabled)
+        for item in enabled {
             let addon = item.addon, contents = addon.contents
             enabledIDs.insert(addon.id)
             enabledModes[addon.id] = addon.mode
@@ -60,18 +66,78 @@ struct AddonEffects: Sendable {
             for rule in contents.searchTags?.images?.exclude ?? [] where seenRules.insert(rule.lowercased()).inserted { imageExclude.append(rule) }
             if let track = contents.learningTrack { tracks.append(Self.track(track, addon: addon.id)) }
         }
+        for (mode, entries) in translations {
+            var byWords: [String: String] = [:], list: [(folded: String, tag: String, words: String)] = []
+            for (tag, words) in entries.sorted(by: { $0.key < $1.key }) {
+                let folded = Self.fold(words)
+                if byWords[folded] == nil { byWords[folded] = tag }
+                list.append((folded, tag, words))
+            }
+            tagsByWords[mode] = byWords
+            searchable[mode] = list
+        }
+    }
+
+    /// Namespaces of general tags. Comics pages name a general tag by who has it (`female:`, `male:`, `mixed:`, `other:`),
+    /// while a translation may list it once as `tag:` or with no namespace.
+    static let generalNamespaces: Set<String> = ["female", "male", "mixed", "other", "tag", "f", "m", "x", "o"]
+
+    static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     func enabledCount(_ mode: AddonMode) -> Int { enabledModes.values.filter { $0 == mode }.count }
 
-    /// The words shown for a tag in a mode, by its full name (`female:glasses`) or, failing that, its name without the namespace.
+    /// The words shown for a tag in a mode: by its full name (`female:glasses`); a general tag (`female:`, `male:`, …)
+    /// also by its `tag:` name; then by its name without the namespace.
     /// Only that mode's add-ons are read: a comics translation never renames an image tag.
     func translation(_ tag: String, mode: AddonMode) -> String? {
         guard let translations = translations[mode], !translations.isEmpty else { return nil }
         let key = AddonCheck.tagKey(tag)
         if let words = translations[key] { return words }
-        if let colon = key.firstIndex(of: ":"), key.index(after: colon) < key.endIndex { return translations[String(key[key.index(after: colon)...])] }
-        return nil
+        guard let colon = key.firstIndex(of: ":") else { return translations["tag:" + key] }
+        let name = String(key[key.index(after: colon)...])
+        guard !name.isEmpty else { return nil }
+        if Self.generalNamespaces.contains(String(key[..<colon])), let words = translations["tag:" + name] { return words }
+        return translations[name]
+    }
+
+    /// Tags whose translation holds what was typed, those starting with it first. Typed text in plain ASCII letters
+    /// is left to the website's own suggestions unless it matches the start of a translation.
+    func tags(matching text: String, mode: AddonMode, limit: Int = 8) -> [(tag: String, words: String)] {
+        let folded = Self.fold(text)
+        guard !folded.isEmpty, let list = searchable[mode] else { return [] }
+        var starts: [(tag: String, words: String)] = [], contains: [(tag: String, words: String)] = []
+        for item in list {
+            if item.folded.hasPrefix(folded) { starts.append((item.tag, item.words)) }
+            else if !folded.allSatisfy(\.isASCII), item.folded.contains(folded) { contains.append((item.tag, item.words)) }
+        }
+        starts.sort { $0.words.count < $1.words.count }
+        contains.sort { $0.words.count < $1.words.count }
+        return Array((starts + contains).prefix(limit))
+    }
+
+    /// A search with every translated name in it written as its tag, so that `제독 -안경` searches `character:teitoku -tag:glasses`.
+    /// Only names with letters outside ASCII are turned, so that English searches stay as typed. Names of up to four words are found.
+    func searchQuery(_ text: String, mode: AddonMode) -> String {
+        guard let index = tagsByWords[mode], !index.isEmpty, !text.allSatisfy(\.isASCII) else { return text }
+        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        var result: [String] = [], position = 0
+        while position < words.count {
+            var matched = false
+            for length in stride(from: min(4, words.count - position), through: 1, by: -1) {
+                var phrase = words[position..<position + length].joined(separator: " ")
+                let negative = phrase.hasPrefix("-")
+                if negative { phrase.removeFirst() }
+                guard !phrase.allSatisfy(\.isASCII), let tag = index[Self.fold(phrase)] else { continue }
+                result.append((negative ? "-" : "") + tag)
+                position += length; matched = true
+                break
+            }
+            if !matched { result.append(words[position]); position += 1 }
+        }
+        return result.joined(separator: " ")
     }
 
     private static func symbol(_ name: String?, fallback: String) -> String {
@@ -213,5 +279,27 @@ struct AddonStore {
             try db.execute(sql: "INSERT INTO challenges (id, payload) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
                            arguments: [game.id, try JSONEncoder().encode(game)])
         }
+    }
+}
+
+/// The word being typed at the end of a search, matched against the translations of the mode's add-ons.
+struct AddonSearchCompletion: Equatable {
+    let prefix: String
+    let excluded: Bool
+    let term: String
+
+    init?(_ input: String) {
+        guard input.last?.isWhitespace == false, let tail = input.split(whereSeparator: \.isWhitespace).last else { return nil }
+        prefix = String(input.dropLast(tail.count))
+        excluded = tail.hasPrefix("-")
+        term = String(excluded ? tail.dropFirst() : tail[...])
+        guard !term.isEmpty, term.count <= 64 else { return nil }
+    }
+
+    func inserting(_ tag: String) -> String { prefix + (excluded ? "-" : "") + tag + " " }
+
+    /// Tags whose translation starts with or holds the word, from the add-ons of a mode.
+    func suggestions(mode: AddonMode, limit: Int = 6) -> [(tag: String, words: String)] {
+        AddonRuntime.shared.effects.tags(matching: term, mode: mode, limit: limit)
     }
 }

@@ -123,12 +123,6 @@ enum AddonGrade {
     suggested => L10n.text('addon.grade.suggested'),
     optional => L10n.text('addon.grade.optional'),
   };
-
-  String get detail => switch (this) {
-    recommended => L10n.text('TEGNAL advises these for almost everyone.'),
-    suggested => L10n.text('Useful for many people.'),
-    optional => L10n.text('For particular tastes and uses.'),
-  };
 }
 
 /// How an official add-on in the catalog stands against what is installed (`AddonListingState`).

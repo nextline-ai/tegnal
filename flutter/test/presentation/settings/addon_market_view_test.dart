@@ -6,6 +6,7 @@ import 'package:tegnal/core/addons/addon_models.dart';
 import 'package:tegnal/core/addons/addon_store.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/support/l10n.dart';
+import 'package:tegnal/presentation/design/grouped_form.dart' show FormHelpButton;
 import 'package:tegnal/presentation/settings/addons_view.dart';
 
 import '../../support/addon_market_fixtures.dart';
@@ -35,7 +36,7 @@ void main() {
     AddonRuntime.shared.apply(AddonEffects());
   });
 
-  testWidgets("a mode's page lists its own official add-ons by grade and installs one as official", (tester) async {
+  testWidgets("a mode's page lists its own official add-ons in one section with their grades and installs one as official", (tester) async {
     final booru = BooruStore.inMemory();
     final comics = _file('tegnal.ko-tags', 'Korean Tag Names', 'comics');
     final images = _file('tegnal.ko-image-tags', 'Korean Image Tag Names', 'images');
@@ -60,7 +61,14 @@ void main() {
     expect(find.text('Comics Mode Add-ons'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Installed Add-ons')).dy, lessThan(tester.getTopLeft(find.text('Open Add-on File')).dy));
     expect(find.text('Official Add-ons'), findsOneWidget);
-    expect(find.text('Recommended'), findsOneWidget);
+    expect(find.text('Recommended'), findsOneWidget, reason: 'The grade is a badge beside the name, not a section header');
+    expect(find.text('Suggested'), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('Korean Tag Names')).dy,
+      lessThan(tester.getTopLeft(find.text('Recommended')).dy + 24),
+      reason: 'The badge sits on the name\'s line',
+    );
+    expect(find.byType(FormHelpButton), findsNWidgets(2), reason: 'My Add-ons and Official Add-ons each have an info button');
     expect(find.text('Korean Tag Names'), findsOneWidget);
     expect(find.text('Korean Image Tag Names'), findsNothing, reason: 'Image add-ons are not listed in Comics Mode');
     expect(find.text('Get'), findsOneWidget);

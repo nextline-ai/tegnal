@@ -956,6 +956,43 @@ final class NativeContentUITests: XCTestCase {
         capture(app, "Folder jumped to August")
     }
 
+    /// A comics translation add-on names `female:` tags by their `tag:` translation, and Korean typed into the search
+    /// is suggested and searched as the tag.
+    func testComicsTranslationsNameGenderTagsAndTranslateSearches() throws {
+        let addon: [String: Any] = ["format": "tegnal-addon", "schemaVersion": 1, "id": "uitest.comics-ko", "version": "1.0", "mode": "comics",
+                                    "name": ["en": "Test Names"], "author": "Test",
+                                    "contents": ["tagTranslations": ["language": "ko", "entries": ["tag:sample": "샘플 태그", "tag:example": "예시"]]]]
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("uitest-comics-ko.tegnaladdon")
+        try JSONSerialization.data(withJSONObject: addon).write(to: file)
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR",
+                               "--addon-install=" + file.path]
+        app.launch()
+        let card = element(app, "content.gallery.900000001")
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        let tag = app.descendants(matching: .any).matching(NSPredicate(format: "identifier ENDSWITH %@", ".female:sample")).firstMatch
+        XCTAssertTrue(tag.waitForExistence(timeout: 10))
+        for _ in 0..<3 where !tag.isHittable { app.swipeUp() }
+        XCTAssertTrue(tag.label.contains("샘플 태그"), "female:sample is named by its tag: translation, got \(tag.label)")
+        capture(app, "Comics translation on a female tag")
+        app.terminate()
+        app.launch()
+
+        let search = element(app, "content.search")
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText("language:korean 예")
+        let suggestion = element(app, "content.suggestion.tag:example")
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5), "Korean words are suggested as their tag at once")
+        capture(app, "Korean suggestion from a translation add-on")
+        suggestion.tap()
+        XCTAssertEqual(search.value as? String, "language:korean tag:example ")
+        search.typeText("샘플 태그\n")
+        XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
+        XCTAssertEqual(search.value as? String, "language:korean tag:example tag:sample", "A typed Korean name is searched as its tag")
+    }
+
     func testExploreScrollSearchAndTagCompletion() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "-manga.showInformationBeforeReading", "YES", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--native-content-long-feed"]
