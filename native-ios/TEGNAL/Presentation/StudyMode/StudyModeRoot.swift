@@ -136,12 +136,14 @@ struct StudyModeRoot: View {
         .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
         .safeAreaInset(edge: .bottom, spacing: 0) { StudyDock(selection: $mode.tab) }
         .tint(StudyTheme.primary)
-        .fullScreenCover(item: $session, onDismiss: closed) { StudyPlayView(session: $0) }
-        .sheet(isPresented: $choosingServer) { StudyServerPicker(model: model).presentationDetents([.medium, .large]) }
-        .fullScreenCover(item: $speed, onDismiss: { withAnimation { model.reload(store) }; celebrate() }) { StudySpeedView(round: $0) }
-        .fullScreenCover(isPresented: $showingAwards) { StudyAwardsGallery(model: model) }
-        .fullScreenCover(item: $graduated) { StudyTrackCertificate(track: $0) { graduated = nil } }
-        .fullScreenCover(isPresented: Binding(get: { !parade.isEmpty }, set: { if !$0 { parade = [] } })) {
+        // What learning mode opens over itself is handed the app's models outright. On the Mac a cover or sheet
+        // left to inherit them comes up without the image library, which ends the app.
+        .appFullScreenCover(item: $session, onDismiss: closed) { StudyPlayView(session: $0) }
+        .appSheet(isPresented: $choosingServer) { StudyServerPicker(model: model).presentationDetents([.medium, .large]) }
+        .appFullScreenCover(item: $speed, onDismiss: { withAnimation { model.reload(store) }; celebrate() }) { StudySpeedView(round: $0) }
+        .appFullScreenCover(isPresented: $showingAwards) { StudyAwardsGallery(model: model) }
+        .appFullScreenCover(item: $graduated) { StudyTrackCertificate(track: $0) { graduated = nil } }
+        .appFullScreenCover(isPresented: Binding(get: { !parade.isEmpty }, set: { if !$0 { parade = [] } })) {
             StudyAwardParade(awards: parade) { parade = []; model.reload(store) }
         }
         .onAppear {
@@ -539,7 +541,7 @@ struct StudyDexView: View {
             }
             .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 720).frame(maxWidth: .infinity)
         }
-        .sheet(item: $opened) { tag in
+        .appSheet(item: $opened) { tag in
             NavigationStack {
                 StudyTagView(name: tag.name, source: source)
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { opened = nil } } }
@@ -568,7 +570,7 @@ struct StudyLabView: View {
             }
             .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
-        .sheet(item: $opened, onDismiss: closed) { tool in
+        .appSheet(item: $opened, onDismiss: closed) { tool in
             NavigationStack {
                 switch tool {
                 case .key: GeneratorAccountView()

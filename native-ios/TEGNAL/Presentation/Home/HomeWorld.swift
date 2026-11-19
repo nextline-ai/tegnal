@@ -149,8 +149,15 @@ enum HomeArt {
 
     static func ground(_ size: CGSize) -> Request { Request(art: "HomeGroundEdge", width: Int(size.width.rounded(.up)), detail: 2) }
     static func lantern(_ size: CGSize) -> Request { Request(art: "HomeLantern", width: Int((unit(size) * 0.4).rounded(.up)), detail: 2) }
+    /// The world's edge is drawn at a phone's scale and laid side by side across a wider screen, rather than
+    /// stretched over it: stretched, a tablet's cave roof hung halfway down the screen.
+    static func edgeTile(_ size: CGSize) -> CGFloat {
+        let count = max(1, (size.width / unit(size)).rounded())
+        return size.width / count
+    }
+
     static func edge(_ realm: HomeRealm, size: CGSize, wide: Bool) -> Request {
-        Request(art: HomeWorld.edge(realm), width: Int((size.width * (wide ? 1.3 : 1.04)).rounded(.up)), detail: 2)
+        Request(art: HomeWorld.edge(realm), width: Int((edgeTile(size) * (wide ? 1.3 : 1)).rounded(.up)) + 1, detail: 2)
     }
 
     static func request(_ sprite: HomeSprite, depth: Double, size: CGSize) -> Request {
@@ -234,16 +241,23 @@ enum HomeArt {
                 edge.addSublayer(lantern)
             }
         }
-        // The edge is two deep: a wider copy, turned round, stands a little behind the nearer one.
+        // The edge is two deep: larger copies stand a little behind the nearer ones. Each row is the same
+        // drawing laid side by side, every other one turned round, so that neighbours meet edge to edge.
         for wide in [true, false] {
             let request = HomeArt.edge(realm, size: size, wide: wide)
             guard let image = images[request] else { continue }
-            let width = CGFloat(request.width), tall = width * CGFloat(image.height) / CGFloat(image.width)
-            let piece = CALayer()
-            piece.contents = image
-            piece.frame = CGRect(x: (size.width - width) / 2, y: line - tall * HomeWorld.edgeLine(realm) - (wide ? height * 0.035 : 0), width: width, height: tall)
-            if wide { piece.transform = CATransform3DMakeScale(-1, 1, 1); piece.opacity = realm == .library ? 1 : 0.85 }
-            edge.addSublayer(piece)
+            let step = HomeArt.edgeTile(size) * (wide ? 1.3 : 1)
+            let width = step + 1, tall = width * CGFloat(image.height) / CGFloat(image.width)
+            var x = wide ? -step * 0.45 : 0, index = wide ? 1 : 0
+            while x < size.width {
+                let piece = CALayer()
+                piece.contents = image
+                piece.frame = CGRect(x: x, y: line - tall * HomeWorld.edgeLine(realm) - (wide ? height * 0.035 : 0), width: width, height: tall)
+                if index % 2 == 1 { piece.transform = CATransform3DMakeScale(-1, 1, 1) }
+                if wide, realm == .study { piece.opacity = 0.85 }
+                edge.addSublayer(piece)
+                x += step; index += 1
+            }
         }
         container.addSublayer(edge)
 
