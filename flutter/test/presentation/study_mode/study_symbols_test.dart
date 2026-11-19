@@ -37,11 +37,11 @@ void main() {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Row(children: [StudyIcon('dumbbell.fill', size: 24), StudyIcon('wand.and.stars', size: 24)]),
+        child: Row(children: [StudyIcon('dumbbell.fill', size: 24), StudyIcon('sparkles', size: 24)]),
       ),
     );
     expect(find.byIcon(CupertinoIcons.gamecontroller_fill), findsNothing);
-    expect(find.byIcon(CupertinoIcons.wand_stars), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.sparkles), findsOneWidget);
     final drawn = find.descendant(of: find.byType(StudyIcon).first, matching: find.byType(CustomPaint));
     expect(drawn, findsOneWidget);
     expect(tester.getSize(find.byType(StudyIcon).first), const Size(24, 24));
@@ -49,9 +49,7 @@ void main() {
 
   testWidgets('a drawn StudyIcon with no colour takes the surrounding icon colour', (tester) async {
     Color? painted(WidgetTester tester) {
-      final paint = tester.widget<CustomPaint>(
-        find.descendant(of: find.byType(StudyIcon), matching: find.byType(CustomPaint)),
-      );
+      final paint = tester.widget<CustomPaint>(find.descendant(of: find.byType(StudyIcon), matching: find.byType(CustomPaint)));
       // The painter is private; its colour shows in how it describes itself.
       return (paint.painter! as dynamic).color as Color;
     }
@@ -59,7 +57,10 @@ void main() {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: IconTheme(data: IconThemeData(color: Color(0xFF123456)), child: StudyIcon('dumbbell.fill')),
+        child: IconTheme(
+          data: IconThemeData(color: Color(0xFF123456)),
+          child: StudyIcon('dumbbell.fill'),
+        ),
       ),
     );
     expect(painted(tester), const Color(0xFF123456));
@@ -89,8 +90,7 @@ void main() {
 
   test('writes PNGs for comparison', () async {
     final out = _out!;
-    final font = FontLoader('packages/cupertino_icons/CupertinoIcons')
-      ..addFont(rootBundle.load('packages/cupertino_icons/assets/CupertinoIcons.ttf'));
+    final font = FontLoader('packages/cupertino_icons/CupertinoIcons')..addFont(rootBundle.load('packages/cupertino_icons/assets/CupertinoIcons.ttf'));
     await font.load();
     final names = File('$out/names.txt').readAsLinesSync().where((n) => n.isNotEmpty);
     Future<void> write(String folder, String name, void Function(Canvas) paint) async {
@@ -105,12 +105,9 @@ void main() {
     for (final name in names) {
       final glyph = StudyGlyph.icon(name);
       await write('glyph', name, (canvas) {
-        final builder =
-            ui.ParagraphBuilder(
-                ui.ParagraphStyle(fontFamily: 'packages/cupertino_icons/CupertinoIcons', fontSize: 128, height: 1),
-              )
-              ..pushStyle(ui.TextStyle(color: const Color(0xFF000000)))
-              ..addText(String.fromCharCode(glyph.codePoint));
+        final builder = ui.ParagraphBuilder(ui.ParagraphStyle(fontFamily: 'packages/cupertino_icons/CupertinoIcons', fontSize: 128, height: 1))
+          ..pushStyle(ui.TextStyle(color: const Color(0xFF000000)))
+          ..addText(String.fromCharCode(glyph.codePoint));
         final paragraph = builder.build()..layout(const ui.ParagraphConstraints(width: 1000));
         canvas.drawParagraph(paragraph, Offset(64 + (128 - paragraph.maxIntrinsicWidth) / 2, 64));
       });
