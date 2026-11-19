@@ -98,6 +98,15 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
         bookmarkedAt: '2026-${'$month'.padLeft(2, '0')}-${'$day'.padLeft(2, '0')}T12:00:00Z',
       );
     }
+    // Six works saved within seconds of each other, as favorites brought in at once are.
+    for (var index = 0; index < 6; index++) {
+      database.upsertWork(
+        galleryId: 920000001 + index,
+        folderId: folder.id,
+        title: '함께 저장 ${index + 1}',
+        bookmarkedAt: '2026-08-15T08:00:${'${5 - index}'.padLeft(2, '0')}Z',
+      );
+    }
   }
 }
 

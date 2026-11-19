@@ -49,6 +49,7 @@ import '../presentation/navigation/root_tab_view.dart';
 import '../presentation/navigation/tab_navigator.dart';
 import '../presentation/settings/addons_view.dart';
 import '../presentation/settings/backup_reminder.dart';
+import '../presentation/settings/site_favorites_setup_sheet.dart';
 import '../presentation/settings/cover_fill_warning.dart';
 import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
@@ -532,7 +533,11 @@ class _RootState extends State<_Root> {
       database: services.database,
       images: services.booru,
       isTesting: services.isTesting,
-      child: HomeRoot(stage: _stage, freeze: widget.homeFreeze, library: _libraryPlace, study: (context) => _studyPlace()),
+      child: SiteFavoritesSetupGate(
+        sync: services.favorites,
+        images: services.booruAccounts,
+        child: HomeRoot(stage: _stage, freeze: widget.homeFreeze, library: _libraryPlace, study: (context) => _studyPlace()),
+      ),
     );
   }
 

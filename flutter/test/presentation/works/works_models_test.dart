@@ -36,6 +36,32 @@ void main() {
     expect(months.last.title, L10n.text('%@-%@', ['2025', '12']));
     expect(WorkMonthDestination.make([]), isEmpty);
     expect(WorkMonthDestination.make([works[1]]).first.firstGalleryID, 20);
-    expect(WorkMonthDestination(id: 'unknown', firstGalleryID: 1, count: 1).title, L10n.text('No Date'));
+    expect(WorkMonthDestination(id: 'unknown', firstGalleryID: 1).title, L10n.text('No Date'));
+  });
+
+  test('works saved together are found by their saved times', () {
+    Work work(int id, String time) => Work(galleryId: id, bookmarkedAt: time);
+    // Newest first, as the library lists them.
+    final works = [
+      work(1, '2026-11-15T14:00:30Z'),
+      work(2, '2026-11-15T14:00:10Z'),
+      work(3, '2026-11-15T14:00:05Z'),
+      work(4, '2026-11-15T13:59:50Z'),
+      work(5, '2026-11-15T13:59:20Z'),
+      work(6, '2026-11-15T12:00:00Z'),
+      work(7, '2026-11-01T09:00:02Z'),
+      work(8, '2026-11-01T09:00:01Z'),
+      work(9, 'not a date'),
+    ];
+    final batches = WorkSaveBatch.make(works, minimum: 2);
+    expect(batches.map((batch) => batch.ids), [
+      [1, 2, 3, 4, 5],
+      [7, 8],
+    ], reason: 'Each saved within a minute of the one before, newest run first');
+    expect(batches.first.firstGalleryID, 1);
+    expect(batches.first.broughtIn([DateTime.parse('2026-11-15T13:59:00Z')]), isTrue);
+    expect(batches.last.broughtIn([DateTime.parse('2026-11-15T13:59:00Z')]), isFalse);
+    expect(WorkSaveBatch.make(works).every((batch) => batch.ids.length >= WorkSaveBatch.minimum), isTrue, reason: 'A couple of saves are not a run');
+    expect(WorkMonthDestination.make(works).first.ids, [1, 2, 3, 4, 5, 6, 7, 8]);
   });
 }

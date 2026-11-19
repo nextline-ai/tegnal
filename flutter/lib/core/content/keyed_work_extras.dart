@@ -42,6 +42,17 @@ class AccountFavorites {
   /// A category or list the account doesn't use and no folder stands for, to keep works from other
   /// folders in; null when there is none, as when all ten fixed categories hold favorites.
   int? spareCategory({required Set<int> besides}) => categories.where((category) => category.count == 0 && !besides.contains(category.id)).firstOrNull?.id;
+
+  /// The categories or lists holding favorites the sync looks after, leaving out ignored ones.
+  Set<int> heldCategories({Set<int> ignoring = const {}}) {
+    final counted = {for (final category in categories) if (category.count > 0) category.id};
+    if (ignoring.isEmpty) return counted;
+    final held = {
+      for (final MapEntry(:key, :value) in members.entries)
+        if (!ignoring.contains(key)) ...value,
+    };
+    return counted.intersection(held);
+  }
 }
 
 /// A work's tag on an account-based catalog, as the website spells it, with the account's vote.

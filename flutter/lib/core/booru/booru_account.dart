@@ -1153,12 +1153,16 @@ class BooruAccountSync extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The first time a signed-in server's favorites can be read: each named list that holds images
-  /// becomes a folder of the same name, and the account's favorites keep images saved elsewhere.
+  /// A server whose favorites can be synced, waiting for the person to choose how to start.
+  BooruFavoritesSetupOffer? setupOffer;
+
+  /// The first time a signed-in server's favorites can be read, nothing changes yet: the person is
+  /// shown what bringing them in would do and chooses ([answerSetup]).
   Future<void> setUp(BooruServer server, {bool requested = false}) async {
     final favorites = accounts.favorites;
     final identity = accounts.identity(server.id);
     if (favorites.state(server.id) != null || !requested && favorites.isDeclined(server.id) || identity == null) return;
+    if (setupOffer != null && setupOffer!.serverID != server.id) return;
     BooruAccountFavorites fetched;
     try {
       fetched = await client.favorites(server, identity);
@@ -1169,15 +1173,126 @@ class BooruAccountSync extends ChangeNotifier {
       return;
     }
     _remember(fetched, server);
+    final offer = _offer(server, fetched);
+    // A server with no favorites has nothing to bring in or leave alone.
+    if (offer.favoriteCount == 0) return _start(offer, SiteFavoritesSetupChoice.bringIn);
+    if ((setupOffer != null && setupOffer!.serverID != server.id) || favorites.state(server.id) != null) return;
+    setupOffer = offer;
+    notifyListeners();
+  }
+
+  /// What bringing a server's favorites in would change, worked out without changing anything.
+  BooruFavoritesSetupOffer _offer(BooruServer server, BooruAccountFavorites read) {
     final state = SiteFavoriteState(unassigned: BooruAccounts.favoritesList, exclusive: false);
-    _linkListFolders(fetched.favorites, server, state);
+    final matches = _listFolderMatches(read.favorites, server, state);
+    for (final match in matches) {
+      state.folders[match.list] = match.folder ?? 'new-${match.list}';
+    }
+    final saved = store.favoriteFolders(server.id);
+    final plan = FavoriteSyncPlan.make(
+      local: places(saved, state),
+      remote: read.favorites.members,
+      base: null,
+      folders: state.folders.keys.toSet(),
+      unassigned: state.unassigned,
+      localOnly: const {},
+      exclusive: false,
+    );
+    var newImages = 0;
+    var filedImages = 0;
+    for (final MapEntry(key: id, value: places) in plan.local.entries) {
+      if (places.isEmpty) continue;
+      saved.containsKey(id) ? filedImages += 1 : newImages += 1;
+    }
+    return BooruFavoritesSetupOffer(
+      serverID: server.id,
+      serverName: server.displayName,
+      read: read,
+      favoriteCount: read.favorites.members.length,
+      newImages: newImages,
+      filedImages: filedImages,
+      newFolders: [for (final match in matches) if (match.folder == null) match.name],
+    );
+  }
+
+  /// The person's answer to how a server's favorites start syncing; null asks again next time.
+  Future<void> answerSetup(SiteFavoritesSetupChoice? choice) async {
+    final offer = setupOffer;
+    if (offer == null) return;
+    setupOffer = null;
+    notifyListeners();
+    if (choice == null) return;
+    if (choice == SiteFavoritesSetupChoice.off) {
+      final server = store.servers.where((server) => server.id == offer.serverID).firstOrNull;
+      if (server != null) stop(server);
+    } else {
+      await _start(offer, choice);
+    }
+    // Another signed-in server waiting to be asked comes next.
+    for (final server in store.servers) {
+      if (server.id == offer.serverID || setupOffer != null || accounts.identity(server.id) == null) continue;
+      try {
+        await setUp(server);
+      } on Object {
+        // Asked again the next time the app comes to the front.
+      }
+    }
+  }
+
+  /// Bringing in fills a folder for each list that holds images and adds the favorites the app
+  /// lacks. Keeping the library leaves every favorite already on the server alone on both sides.
+  Future<void> _start(BooruFavoritesSetupOffer offer, SiteFavoritesSetupChoice choice) async {
+    final favorites = accounts.favorites;
+    final server = store.servers.where((server) => server.id == offer.serverID).firstOrNull;
+    if (server == null || favorites.state(server.id) != null || accounts.identity(server.id) == null) return;
+    final state = SiteFavoriteState(
+      unassigned: BooruAccounts.favoritesList,
+      exclusive: false,
+      setUpAt: DateTime.now(),
+      ignored: choice == SiteFavoritesSetupChoice.keepLibrary ? offer.read.favorites.members.keys.toSet() : null,
+    );
+    _linkListFolders(offer.read.favorites, server, state);
     favorites.setState(state, server.id);
     notifyListeners();
     try {
-      await sync(server, remote: fetched);
+      await sync(server, remote: offer.read);
     } on Object {
       // The next sync tries again.
     }
+  }
+
+  /// When each synced server's favorites were brought in, to tell those images apart later.
+  Map<String, DateTime> get setUpTimes => {
+    for (final server in store.servers) server.id: ?accounts.favorites.state(server.id)?.setUpAt,
+  };
+
+  /// Whether any of these saved images is a favorite a signed-in server keeps in step with the app,
+  /// so deleting it here would take it off the server too.
+  bool syncsAny(Iterable<BooruPost> posts) => posts.any((post) {
+    final state = accounts.favorites.state(post.serverID);
+    if (state == null || accounts.identity(post.serverID) == null) return false;
+    return (state.baseline?.containsKey(post.postID) ?? false) && !state.ignored.contains(post.postID);
+  });
+
+  /// Deletes saved images. [keepOnServer] leaves the servers' favorites as they are: those images
+  /// are left alone by the sync from then on.
+  void removeFavorites(List<BooruPost> posts, {required bool keepOnServer}) {
+    if (keepOnServer) {
+      final byServer = <String, List<BooruPost>>{};
+      for (final post in posts) {
+        (byServer[post.serverID] ??= []).add(post);
+      }
+      for (final MapEntry(key: serverID, value: chosen) in byServer.entries) {
+        final state = accounts.favorites.state(serverID);
+        if (state == null) continue;
+        final kept = [for (final post in chosen) if (state.baseline?.containsKey(post.postID) ?? false) post.postID];
+        if (kept.isEmpty) continue;
+        state.ignored.addAll(kept);
+        accounts.favorites.setState(state, serverID);
+      }
+      notifyListeners();
+    }
+    store.removeFavorites(posts);
   }
 
   void stop(BooruServer server) {
@@ -1205,23 +1320,33 @@ class BooruAccountSync extends ChangeNotifier {
   String _listFolderName(FavoriteCategory list, BooruServer server) =>
       list.id == BooruAccounts.favoritesList ? L10n.text('%@ Favorites', [server.displayName]) : list.name;
 
-  /// Gives each list that holds images a folder of its name, or the unlinked folder already named
-  /// so, apart from the list kept for other folders. Returns the lists linked now.
-  Set<int> _linkListFolders(AccountFavorites favorites, BooruServer server, SiteFavoriteState state) {
-    final linked = <int>{};
+  /// Each list holding images the sync looks after, with this server's unlinked folder already named
+  /// so, if there is one, apart from the list kept for other folders.
+  List<({int list, String name, String? folder})> _listFolderMatches(AccountFavorites favorites, BooruServer server, SiteFavoriteState state) {
     final taken = {for (final other in store.servers) ...?accounts.favorites.state(other.id)?.folders.values, ...state.folders.values};
+    final held = favorites.heldCategories(ignoring: state.ignored);
+    final matches = <({int list, String name, String? folder})>[];
     for (final list in favorites.categories) {
-      if (list.count <= 0 || state.folders.containsKey(list.id) || list.id == state.unassigned) continue;
+      if (!held.contains(list.id) || state.folders.containsKey(list.id) || list.id == state.unassigned) continue;
       final name = _listFolderName(list, server);
       // Only this server's own folders: another server's folder of the same name is its own.
       final reusable = store
           .folders()
           .where((folder) => folder.serverID == server.id && folder.plainName == name && !folder.isUncategorized && !taken.contains(folder.id))
           .firstOrNull;
-      final id = reusable?.id ?? store.saveFolder(name: name, serverID: server.id);
-      state.folders[list.id] = id;
-      taken.add(id);
-      linked.add(list.id);
+      if (reusable != null) taken.add(reusable.id);
+      matches.add((list: list.id, name: name, folder: reusable?.id));
+    }
+    return matches;
+  }
+
+  /// Gives each list that holds images a folder of its name, or the unlinked folder already named
+  /// so, apart from the list kept for other folders. Returns the lists linked now.
+  Set<int> _linkListFolders(AccountFavorites favorites, BooruServer server, SiteFavoriteState state) {
+    final linked = <int>{};
+    for (final match in _listFolderMatches(favorites, server, state)) {
+      state.folders[match.list] = match.folder ?? store.saveFolder(name: match.name, serverID: server.id);
+      linked.add(match.list);
     }
     return linked;
   }
@@ -1307,6 +1432,8 @@ class BooruAccountSync extends ChangeNotifier {
       } else {
         remoteMembers = state.baseline ?? {};
       }
+      // Images deleted in the app only while the server was read are left alone too.
+      state.ignored.addAll(favoritesStore.state(server.id)?.ignored ?? const {});
       final plan = FavoriteSyncPlan.make(
         local: places(store.favoriteFolders(server.id), state),
         remote: remoteMembers,
@@ -1315,11 +1442,13 @@ class BooruAccountSync extends ChangeNotifier {
         unassigned: state.unassigned,
         localOnly: state.localOnly,
         exclusive: false,
+        ignored: state.ignored,
       );
       final settled = {...plan.settled};
       state.localOnly
         ..addAll(plan.keepLocal)
         ..removeAll(plan.stopKeepingLocal);
+      state.ignored.removeAll(plan.stopIgnoring);
       state.baseline = {...settled};
       favoritesStore.setState(state, server.id);
 
@@ -1404,6 +1533,7 @@ class BooruAccountSync extends ChangeNotifier {
       }
       if (read != null) _dropEmptiedListFolders(state, settled);
       state.baseline = settled;
+      state.ignored.addAll((favoritesStore.state(server.id)?.ignored ?? const <int>{}).difference(plan.stopIgnoring.toSet()));
       favoritesStore.setState(state, server.id);
       notifyListeners();
       return plan;
@@ -1467,4 +1597,30 @@ class BooruAccountSync extends ChangeNotifier {
     _settle?.cancel();
     super.dispose();
   }
+}
+
+/// What the first sync with an image server's favorites would do, shown before anything changes.
+class BooruFavoritesSetupOffer {
+  const BooruFavoritesSetupOffer({
+    required this.serverID,
+    required this.serverName,
+    required this.read,
+    required this.favoriteCount,
+    required this.newImages,
+    required this.filedImages,
+    required this.newFolders,
+  });
+  final String serverID;
+  final String serverName;
+  final BooruAccountFavorites read;
+  final int favoriteCount;
+
+  /// Favorites the library doesn't have yet.
+  final int newImages;
+
+  /// Saved images that would also go into a list's folder.
+  final int filedImages;
+
+  /// Folders that would be made, one for each list without a folder of its name.
+  final List<String> newFolders;
 }

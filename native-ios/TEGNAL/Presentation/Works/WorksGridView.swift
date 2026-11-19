@@ -181,6 +181,7 @@ public struct WorksGridView: View {
                             }
                         } label: { Image(systemName: "folder") }.frame(height: 32).accessibilityLabel(L10n.text("Move to Another Folder"))
                         Button(role: .destructive) { confirmingDelete = true } label: { Image(systemName: "trash") }.frame(height: 32).disabled(selection.isEmpty)
+                            .accessibilityLabel(L10n.text("Delete")).accessibilityIdentifier("works.selection.delete")
                     } else {
                     if opensSearch {
                         Button { composingFolder = true } label: { Image(systemName: "folder.badge.plus") }
@@ -192,7 +193,7 @@ public struct WorksGridView: View {
                             isSearchFocused = false
                             if let id = works.last?.galleryId { proxy.scrollTo(id, anchor: .bottom) }
                         }
-                        Button(L10n.text("Jump to Saved Month"), systemImage: "calendar") { isSearchFocused = false; showJumpSheet = true }
+                        Button(L10n.text("Browse by Saved Date"), systemImage: "calendar") { isSearchFocused = false; showJumpSheet = true }
                     } label: { Image(systemName: "arrow.up.arrow.down") }
                     .frame(height: 32)
                     .disabled(works.isEmpty).accessibilityLabel(L10n.text("Quick Jump")).accessibilityIdentifier("works.jump")
@@ -208,18 +209,15 @@ public struct WorksGridView: View {
             }
         }
         .alert(L10n.text("Delete Selected Items?"), isPresented: $confirmingDelete) {
-            Button(L10n.text("Delete"), role: .destructive) {
-                do { try env.database.deleteSelectedWorks(selection); selection.removeAll(); selecting = false; loadWorks() }
-                catch { showToast(error.localizedDescription) }
-            }
+            deleteButtons(selection) { selection.removeAll(); selecting = false }
             Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: {
+            Text(deleteMessage(selection))
         }
         .appSheet(isPresented: $showJumpSheet, onDismiss: {
             if let id = pendingJump { proxy.scrollTo(id, anchor: .top); pendingJump = nil }
         }) {
-            WorkMonthJumpView(months: WorkMonthDestination.make(works)) { id in
-                pendingJump = id; showJumpSheet = false
-            }
+            savedDateSheet
         }
         .appSheet(isPresented: $showAddSheet, onDismiss: { loadWorks() }) {
             AddWorkSheet()
@@ -229,19 +227,14 @@ public struct WorksGridView: View {
             get: { workPendingDelete != nil },
             set: { if !$0 { workPendingDelete = nil } }
         )) {
-            Button(L10n.text("Delete"), role: .destructive) {
-                if let work = workPendingDelete {
-                    deleteWork(work.galleryId)
-                    workPendingDelete = nil
-                }
+            if let work = workPendingDelete {
+                deleteButtons([work.galleryId]) { workPendingDelete = nil }
             }
             Button(L10n.text("Cancel"), role: .cancel) {
                 workPendingDelete = nil
             }
         } message: {
-            if let work = workPendingDelete {
-                Text(L10n.text("Delete this work (number: %@)?", String(describing: String(work.galleryId))))
-            }
+            if let work = workPendingDelete { Text(deleteMessage(work)) }
         }
         .newFolderPrompt(isPresented: $showNewFolderAlert, title: "Create Folder and Move", actionTitle: "Create and Move") { identity in
             if let work = workPendingMoveToNewFolder, let id = try? env.database.folderID(identity: identity),
@@ -377,9 +370,44 @@ public struct WorksGridView: View {
         }
     }
 
-    private func deleteWork(_ galleryId: Int64) {
-        try? env.database.deleteWork(galleryId: galleryId)
-        loadWorks()
+    /// Delete, or with favorites a website keeps in step, a choice of taking them off the website too.
+    @ViewBuilder
+    private func deleteButtons(_ ids: Set<Int64>, done: @escaping () -> Void) -> some View {
+        if env.syncedSiteFavorites(among: ids) {
+            Button(L10n.text("Delete Here and on Website"), role: .destructive) { delete(ids, keepOnWebsite: false); done() }
+                .accessibilityIdentifier("works.delete.everywhere")
+            Button(L10n.text("Delete in App Only"), role: .destructive) { delete(ids, keepOnWebsite: true); done() }
+                .accessibilityIdentifier("works.delete.appOnly")
+        } else {
+            Button(L10n.text("Delete"), role: .destructive) { delete(ids, keepOnWebsite: false); done() }
+        }
+    }
+
+    private var savedDateSheet: some View {
+        SavedDateView(months: WorkMonthDestination.make(works), runs: WorkSaveBatch.make(works),
+                      broughtIn: env.siteFavoritesSetUpTimes, identifier: "works", jump: { id in
+            pendingJump = id; showJumpSheet = false
+        }, select: { ids in
+            selection = Set(ids); selecting = true
+            pendingJump = works.first { selection.contains($0.galleryId) }?.galleryId
+            showJumpSheet = false
+        })
+    }
+
+    private func deleteMessage(_ work: Work) -> String {
+        let question = L10n.text("Delete this work (number: %@)?", String(describing: String(work.galleryId)))
+        guard env.syncedSiteFavorites(among: [work.galleryId]) else { return question }
+        return question + "\n" + L10n.text("It is also a favorite on a website synced with your folders.")
+    }
+
+    private func deleteMessage(_ ids: Set<Int64>) -> String {
+        let count = L10n.text("%@ works will be deleted.", ids.count.formatted())
+        return env.syncedSiteFavorites(among: ids) ? count + "\n" + L10n.text("Some of them are favorites on a website synced with your folders.") : count
+    }
+
+    private func delete(_ ids: Set<Int64>, keepOnWebsite: Bool) {
+        do { try env.deleteSavedWorks(ids, keepOnWebsite: keepOnWebsite); loadWorks() }
+        catch { showToast(error.localizedDescription) }
     }
 
     private static func cover(of work: Work) -> UIImage? {
@@ -536,49 +564,143 @@ struct ScrollSearchBar: View {
     }
 }
 
-struct WorkMonthDestination: Identifiable {
+/// Saved items of one month, in the order the list shows them.
+struct SavedMonth<ItemID: Hashable>: Identifiable {
+    /// The month as `yyyy-MM`.
     let id: String
-    let firstGalleryID: Int64
-    var count: Int
+    var ids: [ItemID]
+    var firstID: ItemID { ids[0] }
+    var count: Int { ids.count }
     var title: String {
         let parts = id.split(separator: "-")
         guard parts.count == 2, let month = Int(parts[1]) else { return L10n.text("No Date") }
         return L10n.text("%@-%@", String(describing: parts[0]), String(describing: month))
     }
-    static func make(_ works: [Work]) -> [Self] {
+    /// Each item with its month, in the order the list shows them.
+    static func make(items: [(id: ItemID, month: String)]) -> [Self] {
         var destinations: [Self] = []
         var positions: [String: Int] = [:]
-        for work in works {
-            let month = String(work.bookmarkedAt.prefix(7))
-            if let index = positions[month] { destinations[index].count += 1 }
+        for item in items {
+            if let index = positions[item.month] { destinations[index].ids.append(item.id) }
             else {
-                positions[month] = destinations.count
-                destinations.append(Self(id: month, firstGalleryID: work.galleryId, count: 1))
+                positions[item.month] = destinations.count
+                destinations.append(Self(id: item.month, ids: [item.id]))
             }
         }
         return destinations
     }
 }
 
-private struct WorkMonthJumpView: View {
+typealias WorkMonthDestination = SavedMonth<Int64>
+extension SavedMonth where ItemID == Int64 {
+    var firstGalleryID: Int64 { firstID }
+    static func make(_ works: [Work]) -> [Self] { make(items: works.map { ($0.galleryId, String($0.bookmarkedAt.prefix(7))) }) }
+}
+
+/// Items saved one right after another, as favorites brought in from a website or an import are:
+/// each was saved within a minute of the one before, and there are at least a few of them.
+struct SavedRun<ItemID: Hashable>: Identifiable {
+    var id: Date { start }
+    let start: Date
+    let end: Date
+    /// In the order the list shows them.
+    let ids: [ItemID]
+    var firstID: ItemID { ids[0] }
+
+    static var gap: TimeInterval { 60 }
+    static var minimum: Int { 5 }
+
+    /// Each item with when it was saved, in the order the list shows them; newest run first.
+    static func make(items: [(id: ItemID, date: Date?)], gap: TimeInterval = gap, minimum: Int = minimum) -> [Self] {
+        let dated = items.compactMap { item in item.date.map { (id: item.id, date: $0) } }.sorted { $0.date < $1.date }
+        var groups: [[(id: ItemID, date: Date)]] = []
+        for item in dated {
+            if let last = groups.last?.last, item.date.timeIntervalSince(last.date) <= gap { groups[groups.count - 1].append(item) }
+            else { groups.append([item]) }
+        }
+        var order: [ItemID: Int] = [:]
+        for (index, item) in items.enumerated() where order[item.id] == nil { order[item.id] = index }
+        return groups.filter { $0.count >= minimum }.reversed().map { group in
+            Self(start: group[0].date, end: group[group.count - 1].date,
+                 ids: group.map(\.id).sorted { order[$0, default: .max] < order[$1, default: .max] })
+        }
+    }
+
+    /// Whether this is the favorites a website brought in when its sync was set up.
+    func broughtIn(at times: [Date]) -> Bool {
+        times.contains { $0 >= start.addingTimeInterval(-Self.gap) && $0 <= end.addingTimeInterval(Self.gap) }
+    }
+}
+
+typealias WorkSaveBatch = SavedRun<Int64>
+extension SavedRun where ItemID == Int64 {
+    var firstGalleryID: Int64 { firstID }
+    static func make(_ works: [Work], gap: TimeInterval = gap, minimum: Int = minimum) -> [Self] {
+        let parser = ISO8601DateFormatter()
+        return make(items: works.map { ($0.galleryId, parser.date(from: $0.bookmarkedAt)) }, gap: gap, minimum: minimum)
+    }
+}
+
+/// Saved items by when they were saved: runs saved together, and months. A row jumps to its first
+/// item; its select button picks all of them, to move or delete together.
+struct SavedDateView<ItemID: Hashable>: View {
     @Environment(\.dismiss) private var dismiss
-    let months: [WorkMonthDestination]
-    let select: (Int64) -> Void
+    let months: [SavedMonth<ItemID>]
+    let runs: [SavedRun<ItemID>]
+    let broughtIn: [Date]
+    /// Starts each row's accessibility identifier, such as `works`.
+    let identifier: String
+    /// Images are named as such; works otherwise.
+    var images = false
+    let jump: (ItemID) -> Void
+    let select: ([ItemID]) -> Void
+
     var body: some View {
         NavigationStack {
-            List(months) { month in
-                Button { select(month.firstGalleryID) } label: {
-                    HStack {
-                        Text(month.title).foregroundStyle(.primary)
-                        Spacer()
-                        Text(L10n.text("%@ items", String(describing: month.count))).foregroundStyle(.secondary)
-                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+            List {
+                if !runs.isEmpty {
+                    Section {
+                        ForEach(runs) { run in
+                            row(title: run.start.formatted(.dateTime.locale(Locale(identifier: L10n.language)).year().month().day().hour().minute()),
+                                subtitle: run.broughtIn(at: broughtIn) ? L10n.text("Brought in from website favorites") : nil,
+                                count: run.ids.count, first: run.firstID, ids: run.ids,
+                                identifier: "\(identifier).batch.\(Int(run.start.timeIntervalSince1970))")
+                        }
+                    } header: {
+                        Text(L10n.text("Saved Together"))
+                    } footer: {
+                        Text(L10n.text(images ? "Images saved within a minute of each other, such as website favorites brought in or an import. Select them to move or delete them together." : "Works saved within a minute of each other, such as website favorites brought in or an import. Select them to move or delete them together."))
                     }
-                }.accessibilityIdentifier("works.month.\(month.id)")
+                }
+                Section(L10n.text("By Month")) {
+                    ForEach(months) { month in
+                        row(title: month.title, subtitle: nil, count: month.count, first: month.firstID, ids: month.ids,
+                            identifier: "\(identifier).month.\(month.id)")
+                    }
+                }
             }
-            .navigationTitle(L10n.text("Jump to Saved Month")).navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(L10n.text("Browse by Saved Date")).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { dismiss() } } }
         }.presentationDetents([.medium, .large])
+    }
+
+    private func row(title: String, subtitle: String?, count: Int, first: ItemID, ids: [ItemID], identifier: String) -> some View {
+        HStack(spacing: 12) {
+            Button { jump(first) } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).foregroundStyle(.primary)
+                        if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+                    }
+                    Spacer()
+                    Text(L10n.text("%@ items", String(describing: count))).foregroundStyle(.secondary)
+                }.contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier(identifier)
+            Button { select(ids) } label: { Image(systemName: "checkmark.circle").font(.title3) }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(L10n.text(images ? "Select These Images" : "Select These Works"))
+                .accessibilityIdentifier(identifier + ".select")
+        }
     }
 }
 
