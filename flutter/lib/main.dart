@@ -241,6 +241,8 @@ Future<AppServices> _launch() async {
   WorkSiteMemory.shared = WorkSiteMemory(file: File('${support.path}/work-missing-sites.json'));
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
+  // A track's symbols that learning mode cannot draw give way to its stand-ins, as iOS does for unknown SF Symbols.
+  AddonEffects.symbolExists = StudyGlyph.knows;
   AddonRuntime.shared.reload(booru);
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
   booru.warmSavedPreview = (post, server) {

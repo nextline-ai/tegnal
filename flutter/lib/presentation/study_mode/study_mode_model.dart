@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/addons/addon_store.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/generation/generation_store.dart';
 import '../../core/study/study_awards.dart';
@@ -14,21 +15,41 @@ class StudyModeModel extends ChangeNotifier {
   StudyModeModel(this.booru) {
     final saved = booru.booruDefaults.integer(goalKey);
     _goal = StudyGame.goals.contains(saved) ? saved : StudyGame.defaultGoal;
+    _trackID = booru.booruDefaults.string(trackKey);
   }
 
   /// `study.goal`: the experience the learner means to earn each day.
   static const goalKey = 'study.goal';
 
+  /// `study.track`: the add-on track the path shows; missing for the main path.
+  static const trackKey = 'study.track';
+
   final BooruContext booru;
 
-  /// The main path.
+  /// The main path. Tracks from add-ons are finished apart from it and never count toward its badges.
   StudyPath get path => StudyPath.bundled;
 
-  /// The path being shown. Today it is the main path; tracks brought by add-ons will show theirs here.
-  StudyPath get shownPath => path;
-
-  /// The app's curriculum. Lessons are started with an engine built from this one.
+  /// The app's curriculum, with the tags of the tracks that are on added after it. Lessons are started with an
+  /// engine built from this one.
   StudyCurriculum curriculum = StudyCurriculum.bundled;
+
+  /// Tracks brought by add-ons that are on.
+  List<StudyTrack> tracks = const [];
+
+  String? _trackID;
+
+  /// The track the path shows, null for the main path.
+  String? get trackID => _trackID;
+  set trackID(String? value) {
+    _trackID = value;
+    booru.booruDefaults.set(trackKey, value);
+    notifyListeners();
+  }
+
+  StudyTrack? get track => tracks.where((track) => track.id == _trackID).firstOrNull;
+
+  /// The path being shown: the chosen track's, or the main one.
+  StudyPath get shownPath => track?.path ?? path;
 
   Map<String, StudyLessonRecord> records = {};
   Map<String, StudyProgress> progress = {};
@@ -69,7 +90,41 @@ class StudyModeModel extends ChangeNotifier {
     }
   }
 
+  /// Takes in the tracks of the add-ons that are on. A track that was turned off or removed hands the path back to the
+  /// main one.
+  void _loadTracks() {
+    final next = AddonRuntime.shared.effects.tracks;
+    if (!listEquals([for (final track in next) track.id], [for (final track in tracks) track.id]) ||
+        !listEquals([for (final track in next) track.path.lessons.length], [for (final track in tracks) track.path.lessons.length])) {
+      tracks = next;
+      final units = [for (final track in next) ?track.unit];
+      curriculum = units.isEmpty
+          ? StudyCurriculum.bundled
+          : StudyCurriculum(version: StudyCurriculum.bundled.version, units: [...StudyCurriculum.bundled.units, ...units]);
+    }
+    if (_trackID != null && !tracks.any((track) => track.id == _trackID)) {
+      _trackID = null;
+      booru.booruDefaults.set(trackKey, null);
+    }
+  }
+
+  /// A track finished for the first time, once: the lessons of an add-on track all done, and not yet celebrated.
+  StudyTrack? newlyCompletedTrack({required String finishing}) {
+    final done = tracks
+        .where(
+          (track) =>
+              track.path.lessons.any((lesson) => lesson.id == finishing) &&
+              track.complete(records) &&
+              !(booru.booruDefaults.boolean('study.trackDone.${track.id}') ?? false),
+        )
+        .firstOrNull;
+    if (done == null) return null;
+    booru.booruDefaults.set('study.trackDone.${done.id}', true);
+    return done;
+  }
+
   void reload() {
+    _loadTracks();
     final study = booru.store.studyStore;
     days = _read(study.days, const []);
     records = _read(study.lessons, const {});

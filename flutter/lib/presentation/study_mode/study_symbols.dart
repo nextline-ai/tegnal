@@ -675,6 +675,14 @@ final Map<String, void Function(_Pen)> _symbols = {
     p.stroke(stem, 20, erase: true);
     p.stroke(stem, 12);
   },
+  'mountain.2.fill': (p) {
+    // Two peaks on one ground: the tall one in front, the low one behind it on the right, parted by a thin gap.
+    const tall = [40.0, 184.0, 112.0, 76.0, 184.0, 184.0];
+    const low = [136.0, 184.0, 180.0, 118.0, 220.0, 184.0];
+    p.fill(roundPoly(low, 9));
+    p.stroke(roundPoly(tall, 10), 12, erase: true);
+    p.fill(roundPoly(tall, 10));
+  },
   'ruler.fill': (p) {
     p.box(48, 91, 208, 165, 13);
     p.line([66, 100, 66, 132], 4.5, erase: true);

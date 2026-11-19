@@ -900,6 +900,9 @@ class StudyIcon extends StatelessWidget {
 /// `Image(systemName:)` for Flutter: the SF Symbol names that the iOS code and the lesson data use, as the closest
 /// `CupertinoIcons` glyph. Some have no close glyph and get a stand-in.
 abstract final class StudyGlyph {
+  /// Whether [symbol] is drawn as itself, by a drawing of its own or a glyph, rather than as the unknown name's circle.
+  static bool knows(String symbol) => studySymbolDrawn(symbol) || symbol == 'circle' || icon(symbol) != CupertinoIcons.circle;
+
   /// The icon for an SF Symbol name; an unknown name gives a circle.
   static IconData icon(String symbol) => switch (symbol) {
     'arrow.left.arrow.right' => CupertinoIcons.arrow_left_right,
@@ -1009,6 +1012,7 @@ abstract final class StudyGlyph {
     'person.crop.circle.badge.plus' => CupertinoIcons.person_crop_circle_badge_plus,
     'person.crop.circle.fill' => CupertinoIcons.person_crop_circle_fill,
     'person.crop.rectangle.badge.plus' => CupertinoIcons.person_crop_rectangle,
+    'photo' => CupertinoIcons.photo,
     'photo.badge.magnifyingglass' => CupertinoIcons.photo,
     'photo.on.rectangle.angled' => CupertinoIcons.photo_on_rectangle,
     'photo.stack' => CupertinoIcons.collections,
@@ -1055,6 +1059,7 @@ abstract final class StudyGlyph {
     'ticket' => CupertinoIcons.ticket,
     'timer' => CupertinoIcons.timer,
     'tortoise' => CupertinoIcons.tortoise,
+    'tree' => CupertinoIcons.tree,
     'tray.and.arrow.down.fill' => CupertinoIcons.tray_arrow_down_fill,
     'tray.and.arrow.up' => CupertinoIcons.tray_arrow_up,
     'tray.full' => CupertinoIcons.tray_full,

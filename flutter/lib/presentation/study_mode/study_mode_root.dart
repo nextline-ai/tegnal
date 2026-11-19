@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../core/addons/addon_store.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/generation/generation_store.dart';
 import '../../core/study/study_engine.dart';
@@ -28,6 +30,7 @@ import 'study_lesson_view.dart';
 import 'study_mode_model.dart';
 import 'study_reactions.dart';
 import 'study_speed_view.dart';
+import 'study_track_views.dart';
 
 // Learning mode's frame: its tabs, its dock and its top bar, laid over the library. Ported from `StudyModeRoot.swift`
 // and the way `AppRootTabView.swift` lays the mode over the library.
@@ -132,6 +135,9 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   /// The home scene's stage, which says when the learner has arrived.
   final HomeStage _stage = HomeStage.shared;
 
+  /// The add-on tracks last seen, so that the path is read again when one is turned on, off or removed.
+  List<String> _trackIDs = const [];
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +148,8 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     _stage.addListener(_greet);
     booru.store.addListener(_storeChanged);
     booru.state.addListener(_storeChanged);
+    _trackIDs = _currentTrackIDs();
+    AddonRuntime.shared.addListener(_addonsChanged);
     StudySound.warm();
     _opened.add(mode.tab);
     // A learner who already has servers says once which one the pictures come from.
@@ -155,6 +163,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     _stage.removeListener(_greet);
     booru.store.removeListener(_storeChanged);
     booru.state.removeListener(_storeChanged);
+    AddonRuntime.shared.removeListener(_addonsChanged);
     _session?.removeListener(_sessionChanged);
     _paradeTimer?.cancel();
     model.dispose();
@@ -167,6 +176,16 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   }
 
   void _storeChanged() => model.reload();
+
+  static List<String> _currentTrackIDs() => [for (final track in AddonRuntime.shared.effects.tracks) track.id];
+
+  /// `.onChange(of: AddonRuntime.shared.effects.tracks.map(\.id))`.
+  void _addonsChanged() {
+    final ids = _currentTrackIDs();
+    if (listEquals(ids, _trackIDs)) return;
+    _trackIDs = ids;
+    model.reload();
+  }
 
   /// For tests and screenshots, when the app runs with a fixture: the seeds the iOS DEBUG launch arguments plant.
   void _seed() {
@@ -276,6 +295,14 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     if (done == null) return;
     _finished = null;
     mode.tab = StudyTab.path;
+    // The last lesson of an add-on track earns its certificate, once, after the stop has burst.
+    if (model.newlyCompletedTrack(finishing: done) case final track?) {
+      unawaited(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1600));
+        if (!mounted || _session != null || _paradeOpen) return;
+        await _cover<void>(context, (context) => StudyTrackCertificate(track: track, close: () => Navigator.of(context).pop()));
+      }());
+    }
     unawaited(() async {
       await Future<void>.delayed(const Duration(milliseconds: 250));
       if (!mounted) return;
@@ -289,7 +316,8 @@ class _StudyModeRootState extends State<StudyModeRoot> {
 
   Future<void> _startSpeed() async {
     if (_speed != null) return;
-    final round = StudySpeedRound(store: booru.store, curriculum: model.curriculum);
+    // As on iOS, the round asks the app's own tags, not those of add-on tracks.
+    final round = StudySpeedRound(store: booru.store, curriculum: StudyCurriculum.bundled);
     _speed = round;
     await _cover<void>(context, (context) => StudySpeedView(round: round));
     _speed = null;
@@ -786,6 +814,16 @@ class _StudyPathViewState extends State<StudyPathView> {
                 constraints: const BoxConstraints(maxWidth: 560),
                 child: Column(
                   children: [
+                    if (model.tracks.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: StudyTrackPicker(model: model),
+                      ),
+                    if (model.track case final track?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: StudyTrackHeader(track: track, records: model.records),
+                      ),
                     for (final section in model.shownPath.sections) ...[
                       Padding(padding: const EdgeInsets.only(top: 18, bottom: 22), child: _banner(section)),
                       if (section.lessons.isEmpty) _Locked(),

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
+import 'package:tegnal/presentation/home/home_stage.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
 import 'package:tegnal/presentation/study_mode/study_reactions.dart';
 
@@ -78,7 +79,15 @@ void main() {
     });
 
     testWidgets('sinks by its depth while pressed', (tester) async {
-      await tester.pumpWidget(host(StudyPressButton(depth: 5, onPressed: () {}, child: const SizedBox(key: Key('face'), width: 100, height: 40))));
+      await tester.pumpWidget(
+        host(
+          StudyPressButton(
+            depth: 5,
+            onPressed: () {},
+            child: const SizedBox(key: Key('face'), width: 100, height: 40),
+          ),
+        ),
+      );
       final face = find.byKey(const Key('face'));
       final rest = tester.getTopLeft(face).dy;
       final gesture = await tester.startGesture(tester.getCenter(face));
@@ -99,13 +108,10 @@ void main() {
   });
 
   group('StudyBar', () {
-    double fillWidth(WidgetTester tester) =>
-        tester.getSize(find.descendant(of: find.byType(StudyBar), matching: find.byType(SizedBox)).at(2)).width;
+    double fillWidth(WidgetTester tester) => tester.getSize(find.descendant(of: find.byType(StudyBar), matching: find.byType(SizedBox)).at(2)).width;
 
     testWidgets('its track takes the whole width even where the parent centres it', (tester) async {
-      await tester.pumpWidget(
-        host(const SizedBox(width: 200, child: Column(children: [StudyBar(value: 0.1)]))),
-      );
+      await tester.pumpWidget(host(const SizedBox(width: 200, child: Column(children: [StudyBar(value: 0.1)]))));
       expect(tester.getSize(find.byType(StudyBar)).width, 200);
       expect(fillWidth(tester), 20);
     });
@@ -312,8 +318,7 @@ void main() {
           ],
         ),
       );
-      double opacity(String text) =>
-          tester.widget<Opacity>(find.ancestor(of: find.text(text), matching: find.byType(Opacity)).first).opacity;
+      double opacity(String text) => tester.widget<Opacity>(find.ancestor(of: find.text(text), matching: find.byType(Opacity)).first).opacity;
       await tester.pumpWidget(both(false));
       expect(opacity('pop'), 0);
       await tester.pumpWidget(both(true));
@@ -460,6 +465,135 @@ void main() {
       expect(mode.active, isTrue);
       expect(mode.startsActive, isFalse);
       expect(preferences.object(StudyMode.startKey), isNull);
+    });
+
+    HomeStage stage({Preferences? booruDefaults}) =>
+        HomeStage(defaults: MemoryPreferences(), booruDefaults: booruDefaults ?? MemoryPreferences(), enabled: false);
+
+    test('linked to the home stage, enter and leave go through it', () {
+      final home = stage();
+      final mode = StudyMode.forTesting()..link(home);
+      var heard = 0;
+      mode.addListener(() => heard++);
+      expect(mode.active, isFalse);
+      expect(home.studying, isFalse);
+
+      mode.enter(StudyTab.dex);
+      expect(home.studying, isTrue);
+      expect(mode.active, isTrue);
+      expect(mode.tab, StudyTab.dex);
+      expect(heard, greaterThan(0));
+
+      heard = 0;
+      mode.leave();
+      expect(home.studying, isFalse);
+      expect(mode.active, isFalse);
+      expect(heard, greaterThan(0));
+    });
+
+    test('linked, the two start switches are kept by the stage and only one is on', () {
+      final preferences = MemoryPreferences();
+      final home = stage(booruDefaults: preferences);
+      final mode = StudyMode.forTesting()..link(home);
+      expect(mode.startsActive, isFalse);
+      expect(mode.startsInLibrary, isFalse);
+
+      mode.startsActive = true;
+      expect(home.startsLearning, isTrue);
+      expect(mode.startsActive, isTrue);
+      expect(preferences.boolean('study.startInMode'), isTrue);
+
+      mode.startsInLibrary = true;
+      expect(mode.startsInLibrary, isTrue);
+      expect(mode.startsActive, isFalse);
+      expect(home.startsInLibrary, isTrue);
+      expect(home.startsLearning, isFalse);
+      expect(preferences.boolean('home.startInLibrary'), isTrue);
+      expect(preferences.boolean('study.startInMode'), isFalse);
+
+      mode.startsActive = true;
+      expect(mode.startsActive, isTrue);
+      expect(mode.startsInLibrary, isFalse);
+      expect(preferences.boolean('home.startInLibrary'), isFalse);
+      expect(preferences.boolean('study.startInMode'), isTrue);
+
+      mode.startsActive = false;
+      expect(mode.startsActive, isFalse);
+      expect(preferences.boolean('study.startInMode'), isFalse);
+    });
+
+    test('a change made on the stage reaches the mode and its listeners', () {
+      final home = stage();
+      final mode = StudyMode.forTesting()..link(home);
+      var heard = 0;
+      mode.addListener(() => heard++);
+
+      home.startsLearning = true;
+      expect(mode.startsActive, isTrue);
+      expect(heard, 1);
+
+      home.startsInLibrary = true;
+      expect(mode.startsInLibrary, isTrue);
+      expect(mode.startsActive, isFalse);
+
+      heard = 0;
+      home.enterStudy();
+      expect(mode.active, isTrue);
+      expect(heard, 1);
+      home.leaveStudy();
+      expect(mode.active, isFalse);
+      expect(heard, 2);
+    });
+
+    test('linking takes the stage\'s state, and a run launched into the mode takes the stage along', () {
+      final starts = StudyMode.forTesting()..link(stage(booruDefaults: MemoryPreferences({'study.startInMode': true})));
+      expect(starts.startsActive, isTrue);
+      expect(starts.active, isTrue, reason: 'A stage that starts in learning mode is studying');
+
+      final home = stage();
+      final launched = StudyMode.forTesting()..attach(MemoryPreferences(), fixture: true);
+      expect(launched.active, isTrue);
+      launched.link(home);
+      expect(home.studying, isTrue);
+      expect(launched.active, isTrue);
+    });
+
+    test('linked to another stage, the first one is no longer followed', () {
+      final first = stage(), second = stage();
+      final mode = StudyMode.forTesting()
+        ..link(first)
+        ..link(second);
+      first.enterStudy();
+      expect(mode.active, isFalse);
+      second.enterStudy();
+      expect(mode.active, isTrue);
+    });
+
+    test('unlinked, the mode keeps its own switches and opens and closes alone', () {
+      final preferences = MemoryPreferences();
+      final mode = StudyMode.forTesting()..attach(preferences, fixture: false);
+      var heard = 0;
+      mode.addListener(() => heard++);
+      mode.startsInLibrary = true;
+      expect(mode.startsInLibrary, isTrue);
+      expect(preferences.boolean('home.startInLibrary'), isTrue);
+      mode.startsActive = true;
+      expect(mode.startsActive, isTrue);
+      expect(mode.startsInLibrary, isFalse);
+      expect(preferences.boolean('home.startInLibrary'), isFalse);
+      expect(preferences.boolean('study.startInMode'), isTrue);
+      mode.startsInLibrary = true;
+      expect(mode.startsActive, isFalse);
+      expect(preferences.boolean('study.startInMode'), isFalse);
+      expect(heard, 3);
+
+      final next = StudyMode.forTesting()..attach(preferences, fixture: false);
+      expect(next.startsInLibrary, isTrue);
+      expect(next.active, isFalse);
+      next.enter();
+      expect(next.active, isTrue);
+      next.leave();
+      expect(next.active, isFalse);
     });
 
     test('tabs have titles and symbols', () {
