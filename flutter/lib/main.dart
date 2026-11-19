@@ -42,12 +42,14 @@ import 'presentation/navigation/app_state.dart';
 import 'core/content/recent_works.dart';
 import 'core/study/study_guide.dart';
 import 'core/study/study_models.dart';
+import 'core/study/study_path.dart';
 import 'core/support/app_platform.dart';
 import 'core/support/privacy_settings.dart';
 import 'presentation/settings/site_account_section.dart';
+import 'presentation/study_mode/study_kit.dart';
 
 /// `--dart-define=TEGNAL_FIXTURE=on` (or a comma-separated list of [FixtureOption] names,
-/// plus `setup` to start without a connected website) runs offline with the native UI
+/// plus `setup` to start without a connected website, and `startChoice` to open "Choose How to Start") runs offline with the native UI
 /// tests' synthetic works and an in-memory library, so screens can be compared with the
 /// native app's. `TEGNAL_LANGUAGE` and `TEGNAL_TAB` pick the language and the first tab
 /// for those runs, `TEGNAL_THEME` (`light`, `dark` or `system`) the comics appearance, and
@@ -170,11 +172,13 @@ Future<AppServices> _launch() async {
   ContentPreferences.defaults = preferences.defaults;
   PrivacySettings.load();
   ReaderPreferences.install(preferences);
+  // Learning mode reads whether it opens the app, and its sounds' switch, from the image-mode preferences.
+  StudyMode.shared.attach(preferences.booruDefaults);
   // Whether AI translation can be on; asked early, as Translate needs the answer.
   unawaited(AITranslationModel.check());
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
   // The tag study curriculum is empty until its file is read.
-  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled()]);
+  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled(), StudyPath.loadBundled()]);
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
   ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
@@ -247,7 +251,9 @@ Future<AppServices> _launchFixture() async {
   await loadLocalization(preferences.defaults);
   await StudyCurriculum.loadBundled();
   await StudyGuide.loadBundled();
+  await StudyPath.loadBundled();
   final names = _fixture.split(',').map((name) => name.trim()).toSet();
+  StudyMode.shared.attach(preferences.booruDefaults);
   final options = {for (final name in names) ...FixtureOption.values.where((option) => option.name == name)};
   // `setup` starts without a connected website, as `--comics-setup-test` does.
   final content = names.contains('setup')
@@ -282,6 +288,7 @@ Future<AppServices> _launchFixture() async {
     syncDirectory: Directory('${Directory.systemTemp.path}/fixture-drive-sync'),
     version: await _version(),
     isTesting: true,
+    showsStartChoice: names.contains('startChoice'),
   );
   // The native taste, recap and challenge UI tests' libraries.
   if (names.contains('tasteRich') || names.contains('tasteRecap') || names.contains('tasteSoleExclusion')) {

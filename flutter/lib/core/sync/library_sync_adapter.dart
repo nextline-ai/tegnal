@@ -143,7 +143,10 @@ class LibrarySyncAdapter {
     'booru.settings': ['key', 'value'],
     // What has been learned travels; what servers said about tags is a cache and stays on the device.
     'booru.study_progress': ['tag', 'step', 'due', 'correct', 'wrong', 'seen'],
-    'booru.study_days': ['day', 'answered', 'correct'],
+    'booru.study_days': ['day', 'answered', 'correct', 'xp'],
+    'booru.study_lessons': ['lesson', 'stars', 'runs', 'finished'],
+    'booru.study_awards': ['id', 'earned', 'seen'],
+    'booru.study_stats': ['name', 'value'],
   };
 
   /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
@@ -377,7 +380,19 @@ class LibrarySyncAdapter {
           _upsert(row, db);
         }
       }
-      for (final table in ['folders', 'favorites', 'history', 'saved_tags', 'settings', 'challenges', 'study_progress', 'study_days']) {
+      for (final table in [
+        'folders',
+        'favorites',
+        'history',
+        'saved_tags',
+        'settings',
+        'challenges',
+        'study_progress',
+        'study_days',
+        'study_lessons',
+        'study_awards',
+        'study_stats',
+      ]) {
         for (final change in values) {
           if (change.row.table != 'booru.$table') continue;
           final row = change.row.copy();
@@ -388,6 +403,26 @@ class LibrarySyncAdapter {
           if (table == 'study_days' && !change.deleted) {
             final day = row.values['day']?.string;
             if (day == null || day.characters.length != 10 || (row.values['answered']?.integer ?? -1) < 0) continue;
+          }
+          if (table == 'study_lessons' && !change.deleted) {
+            final lesson = row.values['lesson']?.string;
+            if (lesson == null ||
+                lesson.isEmpty ||
+                lesson.characters.length > 200 ||
+                (row.values['stars']?.integer ?? -1) < 0 ||
+                (row.values['runs']?.integer ?? -1) < 0) {
+              continue;
+            }
+          }
+          if (table == 'study_awards' && !change.deleted) {
+            final id = row.values['id']?.string;
+            if (id == null || id.isEmpty || id.characters.length > 200) continue;
+            // It was celebrated on the device that earned it; it is not celebrated again here.
+            row.values['seen'] = SyncValue.integer(1);
+          }
+          if (table == 'study_stats' && !change.deleted) {
+            final name = row.values['name']?.string;
+            if (name == null || name.isEmpty || name.characters.length > 200 || (row.values['value']?.integer ?? -1) < 0) continue;
           }
           // The shared Uncategorized from before folder ownership never comes back; its images go to their servers' own.
           if (table == 'folders' && row.values['id']?.string == 'unsorted') continue;
@@ -560,8 +595,11 @@ class LibrarySyncAdapter {
           (field) => row.table == 'manga.folder_works' && field == 'added_at'
               ? 'added_at = MAX(added_at, excluded.added_at)'
               // A day studied on two devices keeps the larger count instead of the later one.
-              : row.table == 'booru.study_days'
+              : const ['booru.study_days', 'booru.study_lessons', 'booru.study_stats'].contains(row.table)
               ? '$field = MAX($field, excluded.$field)'
+              // A badge keeps the earlier time and, once seen anywhere, stays seen.
+              : row.table == 'booru.study_awards'
+              ? (field == 'earned' ? 'earned = MIN(earned, excluded.earned)' : 'seen = MAX(seen, excluded.seen)')
               : keepsKnownValue.contains(field)
               ? '$field = COALESCE(excluded.$field, $field)'
               : '$field = excluded.$field',

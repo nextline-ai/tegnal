@@ -51,8 +51,11 @@ import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
 import '../presentation/settings/drive_sync_section.dart';
 import '../presentation/settings/library_management_view.dart';
+import '../presentation/settings/settings_page.dart' show settingsSectionGap;
 import '../presentation/settings/settings_view.dart';
+import '../presentation/study_mode/study_mode_root.dart';
 import '../presentation/settings/site_account_section.dart';
+import '../presentation/settings/start_choice_view.dart';
 import '../presentation/settings/website_setup.dart';
 import '../core/content/reading_queue.dart';
 import '../presentation/design/app_sheet.dart';
@@ -80,6 +83,7 @@ class AppServices {
     this.booruDownloads,
     this.version = '',
     this.isTesting = false,
+    this.showsStartChoice = false,
   }) : images = PageImageStore(source: content.source) {
     // Fixture runs and tests never fill covers from the network, as in the native app.
     coverQueue = isTesting
@@ -121,6 +125,9 @@ class AppServices {
   final ContentEnvironment content;
   final PageImageStore images;
   final bool isTesting;
+
+  /// Fixture runs: show the first-run "Choose How to Start" page at launch (`TEGNAL_FIXTURE=startChoice`).
+  final bool showsStartChoice;
 
   /// Image mode's posts, previews and viewer media, and how its downloads fetch files.
   final BooruProviding booruSource;
@@ -268,6 +275,7 @@ class _RootState extends State<_Root> {
       );
     };
     if (!services.isTesting) services.coverQueue.start();
+    _watchFirstRun();
     // Sync and the cover queue run only while the app is in front, as on iOS.
     _lifecycle = AppLifecycleListener(
       onStateChange: (value) {
@@ -285,6 +293,28 @@ class _RootState extends State<_Root> {
   }
 
   late final AppLifecycleListener _lifecycle;
+
+  /// Whether the first-run website page is what the app shows: no comics website and no image server yet.
+  bool get _isFirstRun => !services.content.isSiteVerified && services.booru.servers.isEmpty;
+
+  /// Asks, once, how the app should open. Only a new user is asked, at the first launch: learning mode needs no
+  /// website, so the question does not wait for one to be connected. Fixture runs ask only when `startChoice` names it.
+  void _watchFirstRun() {
+    final preferences = services.preferences.booruDefaults;
+    if (services.isTesting) {
+      if (services.showsStartChoice) WidgetsBinding.instance.addPostFrameCallback((_) => _askStartChoice());
+      return;
+    }
+    if (StartChoiceView.isAnswered(preferences) || !_isFirstRun) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _askStartChoice());
+  }
+
+  void _askStartChoice() {
+    if (!mounted || StartChoiceView.isAnswered(services.preferences.booruDefaults)) return;
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(fullscreenDialog: true, builder: (_) => StartChoiceView(preferences: services.preferences.booruDefaults)),
+    );
+  }
 
   @override
   void dispose() {
@@ -472,7 +502,14 @@ class _RootState extends State<_Root> {
       ),
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
-    safeMode: (context) => SafeModeSection(booru: _booru),
+    safeMode: (context) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SafeModeSection(booru: _booru),
+        settingsSectionGap,
+        StudyModeSettings(booru: _booru),
+      ],
+    ),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),
@@ -490,38 +527,42 @@ class _RootState extends State<_Root> {
       database: services.database,
       images: services.booru,
       isTesting: services.isTesting,
-      child: CupertinoPageScaffold(
-        resizeToAvoidBottomInset: false,
-        child: ListenableBuilder(
-          listenable: state,
-          builder: (context, _) => ListenableBuilder(
-            listenable: services.taste,
-            builder: (context, _) => RootBanner(
-              banner: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ImportReminderBanner(imports: _imports),
-                  if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
-                ],
-              ),
-              height:
-                  (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
-                  (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
-              child: IndexedStack(
-                index: state.mode == AppMode.manga ? 0 : 1,
-                children: [
-                  _mangaTabs(),
-                  RootTabView(
-                    state: state,
-                    pages: {
-                      ..._booruPages.pages(),
-                      AppTab.insights: TabNavigator(
-                        active: state.mode == AppMode.booru && state.tab == AppTab.insights,
-                        builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
-                      ),
-                    },
-                  ),
-                ],
+      // Learning mode covers the whole screen, the libraries' tab bars included, while it is on.
+      child: StudyModeOverlay(
+        booru: _booru,
+        child: CupertinoPageScaffold(
+          resizeToAvoidBottomInset: false,
+          child: ListenableBuilder(
+            listenable: state,
+            builder: (context, _) => ListenableBuilder(
+              listenable: services.taste,
+              builder: (context, _) => RootBanner(
+                banner: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ImportReminderBanner(imports: _imports),
+                    if (!_hidesComics) TasteRecapBanner(taste: _taste, mode: _taste.mode, open: () => _openRecap(_taste.mode)),
+                  ],
+                ),
+                height:
+                    (ImportReminderBanner.isVisible(_imports) ? ImportReminderBanner.height : 0) +
+                    (_hidesComics || services.taste.pendingRecap(_taste.mode) == null ? 0 : _recapBannerHeight),
+                child: IndexedStack(
+                  index: state.mode == AppMode.manga ? 0 : 1,
+                  children: [
+                    _mangaTabs(),
+                    RootTabView(
+                      state: state,
+                      pages: {
+                        ..._booruPages.pages(),
+                        AppTab.insights: TabNavigator(
+                          active: state.mode == AppMode.booru && state.tab == AppTab.insights,
+                          builder: (context) => TasteDashboard(taste: _taste, mode: TasteMode.booru, isRoot: true),
+                        ),
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

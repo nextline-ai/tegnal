@@ -131,6 +131,8 @@ class MainActivity : FlutterActivity() {
         EncryptedHelloTransport.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // On-device image translation for the reader and the image viewer.
         ImageTranslator.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Learning mode's sounds, on the media volume.
+        StudySound.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // The reader keeps the screen on while a work is open, as the native app does.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "work.nextline.tegnal/screen").setMethodCallHandler { call, result ->
             when (call.method) {

@@ -24,8 +24,11 @@ Future<T?> showGeneratorSheet<T>(BuildContext context, WidgetBuilder builder) =>
 
 /// A sheet's page: its bar with a title and buttons over a grouped list.
 class GeneratorSheetPage extends StatelessWidget {
-  const GeneratorSheetPage({super.key, required this.title, required this.children, this.leading, this.trailing});
+  const GeneratorSheetPage({super.key, required this.title, required this.children, this.leading, this.trailing, this.controller});
   final String title;
+
+  /// The list's scroll controller.
+  final ScrollController? controller;
   final Widget? leading;
   final Widget? trailing;
   final List<Widget> children;
@@ -38,6 +41,7 @@ class GeneratorSheetPage extends StatelessWidget {
         SheetNavigationBar(title: title, leading: leading, trailing: trailing),
         Expanded(
           child: ListView(
+            controller: controller,
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.only(top: 8, bottom: 32),
             children: children,

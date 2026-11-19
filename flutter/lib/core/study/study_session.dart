@@ -56,12 +56,22 @@ abstract final class StudyLookup {
     return completer.future.whenComplete(timer.cancel);
   }
 
-  /// Pictures carrying a tag from one of the chosen servers.
-  static Future<List<BooruPost>> examples(String tag, {required BooruStore store, required BooruProviding source, int page = 0, Random? random}) async {
+  /// Pictures carrying a tag from one of the chosen servers. With a [server] the choice of browsing servers
+  /// and Safe Mode's own choice do not apply: that server was chosen for learning, so only hidden and
+  /// blacklisted pictures stay out.
+  static Future<List<BooruPost>> examples(String tag, {required BooruStore store, required BooruProviding source, int page = 0, Random? random, BooruServer? server}) async {
+    if (server != null) {
+      final batch = await hurried(() => source.posts(server, tag, page));
+      final blacklist = BooruBlacklist(store.blacklist(server.id));
+      return [
+        for (final post in batch?.$1.posts ?? const <BooruPost>[])
+          if (StudyEngine.usable(post) && store.isVisible(post) && !blacklist.contains(post)) post,
+      ];
+    }
     final servers = store.selectedServers;
     if (servers.isEmpty) return [];
-    final server = servers[(random ?? Random()).nextInt(servers.length)];
-    final batch = await hurried(() => source.posts(server, tag, page));
+    final chosen = servers[(random ?? Random()).nextInt(servers.length)];
+    final batch = await hurried(() => source.posts(chosen, tag, page));
     return shown(batch?.$1.posts ?? [], store: store);
   }
 

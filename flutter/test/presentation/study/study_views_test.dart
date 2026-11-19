@@ -12,6 +12,7 @@ import 'package:tegnal/presentation/study/study_home_view.dart';
 import 'package:tegnal/presentation/study/study_quiz_view.dart';
 import 'package:tegnal/presentation/study/study_tag_view.dart';
 import 'package:tegnal/presentation/study/study_widgets.dart';
+import 'package:tegnal/presentation/study_mode/study_kit.dart';
 
 import 'study_test_support.dart';
 
@@ -22,16 +23,19 @@ void main() {
   tearDown(() => StudyCurriculum.useBundled(null));
 
   group('entry row', () {
-    testWidgets('is reachable with no server chosen, beside the notice, and opens the home screen', (tester) async {
+    testWidgets('is reachable with no server chosen, beside the notice, and enters learning mode on its map', (tester) async {
       final harness = StudyHarness(select: false);
+      StudyMode.shared.tab = StudyTab.me;
+      addTearDown(StudyMode.shared.leave);
       await harness.pump(tester, BooruSavedServersView(booru: harness.booru, tags: (context, server, {onBack}) => const SizedBox()));
       expect(key('study.entry'), findsOneWidget);
       expect(find.text('Tag Study'), findsOneWidget);
       expect(find.text('Learn the tags image AI is prompted with, from real pictures.'), findsOneWidget);
+      expect(StudyMode.shared.active, isFalse);
       await tester.tap(key('study.entry'));
-      await tester.pumpAndSettle();
-      expect(key('study.start'), findsOneWidget);
-      expect(find.text('Choose a server to be asked with real pictures. Without one, questions ask by meaning only.'), findsOneWidget);
+      await tester.pump();
+      expect(StudyMode.shared.active, isTrue);
+      expect(StudyMode.shared.tab, StudyTab.path);
     });
 
     testWidgets('reads three states: not started, due, and learned so far', (tester) async {
@@ -182,7 +186,7 @@ void main() {
   });
 
   group('review card', () {
-    testWidgets('is absent with nothing due, present when a tag is due, and opens a review round', (tester) async {
+    testWidgets('is absent with nothing due, present when a tag is due, and enters learning mode on Practice', (tester) async {
       final harness = StudyHarness();
       await harness.pump(tester, StudyReviewCard(booru: harness.booru));
       expect(key('study.reviewCard'), findsNothing);
@@ -195,18 +199,11 @@ void main() {
       expect(find.text('Tags to Review'), findsOneWidget);
       expect(find.text('Tags due again: 1'), findsOneWidget);
 
+      addTearDown(StudyMode.shared.leave);
       await tester.tap(key('study.reviewCard'));
-      await tester.pumpAndSettle(const Duration(milliseconds: 100));
-      expect(key('study.close'), findsOneWidget);
-      await pumpUntil(tester, key('study.choice.0'));
-      await tester.tap(key('study.choice.0'));
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(key('study.next'));
-      await pumpUntil(tester, key('study.score'));
-      expect((tester.widget(key('study.score')) as Text).data, anyOf('1 / 1', '0 / 1'));
-      await tester.tap(key('study.close'));
-      await tester.pumpAndSettle();
-      expect(key('study.score'), findsNothing);
+      await tester.pump();
+      expect(StudyMode.shared.active, isTrue);
+      expect(StudyMode.shared.tab, StudyTab.practice);
     });
   });
 

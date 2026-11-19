@@ -1,9 +1,12 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import '../booru/booru_store.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
+import 'study_awards.dart';
 import 'study_models.dart';
+import 'study_path.dart';
 
 /// Tag study's rows in the image database: what has been learned, each day's answers and what servers said about tags.
 class StudyStore {
@@ -17,6 +20,22 @@ class StudyStore {
       CREATE TABLE study_progress (tag TEXT PRIMARY KEY NOT NULL, step INTEGER NOT NULL, due DOUBLE NOT NULL, correct INTEGER NOT NULL, wrong INTEGER NOT NULL, seen DOUBLE NOT NULL);
       CREATE TABLE study_days (day TEXT PRIMARY KEY NOT NULL, answered INTEGER NOT NULL, correct INTEGER NOT NULL);
       CREATE TABLE study_tags (address TEXT NOT NULL, name TEXT NOT NULL, payload BLOB NOT NULL, fetched DOUBLE NOT NULL, PRIMARY KEY(address, name));
+      ''');
+  }
+
+  /// Learning mode's lessons and each day's experience.
+  static void migrateGame(SqlDatabase db) {
+    db.execute('''
+      CREATE TABLE study_lessons (lesson TEXT PRIMARY KEY NOT NULL, stars INTEGER NOT NULL, runs INTEGER NOT NULL, finished DOUBLE NOT NULL);
+      ALTER TABLE study_days ADD COLUMN xp INTEGER NOT NULL DEFAULT 0;
+      ''');
+  }
+
+  /// Learning mode's badges and the counters kept for them.
+  static void migrateAwards(SqlDatabase db) {
+    db.execute('''
+      CREATE TABLE study_awards (id TEXT PRIMARY KEY NOT NULL, earned DOUBLE NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE study_stats (name TEXT PRIMARY KEY NOT NULL, value INTEGER NOT NULL);
       ''');
   }
 
@@ -41,9 +60,78 @@ class StudyStore {
   List<StudyDay> days() => database.read(
     (db) => [
       for (final row in db.rows('SELECT * FROM study_days ORDER BY day DESC LIMIT 400'))
-        StudyDay(day: row['day'] as String, answered: row['answered'] as int, correct: row['correct'] as int),
+        StudyDay(day: row['day'] as String, answered: row['answered'] as int, correct: row['correct'] as int, xp: (row['xp'] as int?) ?? 0),
     ],
   );
+
+  Map<String, StudyLessonRecord> lessons() => database.read(
+    (db) => {
+      for (final row in db.rows('SELECT lesson, stars, runs FROM study_lessons'))
+        row['lesson'] as String: StudyLessonRecord(lesson: row['lesson'] as String, stars: row['stars'] as int, runs: row['runs'] as int),
+    },
+  );
+
+  /// Adds experience to a day, and marks a lesson finished when one is named. The best stars are kept.
+  void earn(int xp, {String? lesson, int stars = 0, DateTime? now, Duration? utcOffset}) => database.write((db) {
+    final moment = now ?? DateTime.now();
+    db.execute(
+      '''
+      INSERT INTO study_days (day, answered, correct, xp) VALUES (?, 0, 0, ?)
+      ON CONFLICT(day) DO UPDATE SET xp = xp + excluded.xp
+      ''',
+      [StudyDay.key(moment, utcOffset: utcOffset), max(0, xp)],
+    );
+    if (lesson == null) return;
+    db.execute(
+      '''
+      INSERT INTO study_lessons (lesson, stars, runs, finished) VALUES (?, ?, 1, ?)
+      ON CONFLICT(lesson) DO UPDATE SET stars = MAX(stars, excluded.stars), runs = runs + 1, finished = excluded.finished
+      ''',
+      [lesson, min(3, max(1, stars)), seconds(moment)],
+    );
+  });
+
+  Map<String, StudyAwardRecord> awards() => database.read(
+    (db) => {
+      for (final row in db.rows('SELECT id, earned, seen FROM study_awards'))
+        row['id'] as String: StudyAwardRecord(id: row['id'] as String, earned: date(row['earned'] as num), seen: (row['seen'] as int) != 0),
+    },
+  );
+
+  /// Records badges as earned. One already earned keeps its date.
+  void grant(List<String> ids, {bool seen = false, DateTime? now}) {
+    if (ids.isEmpty) return;
+    final moment = now ?? DateTime.now();
+    database.write((db) {
+      for (final id in ids) {
+        db.execute('INSERT OR IGNORE INTO study_awards (id, earned, seen) VALUES (?, ?, ?)', [id, seconds(moment), seen ? 1 : 0]);
+      }
+    });
+  }
+
+  void markSeen(List<String> ids) {
+    if (ids.isEmpty) return;
+    database.write((db) {
+      for (final id in ids) {
+        db.execute('UPDATE study_awards SET seen = 1 WHERE id = ?', [id]);
+      }
+    });
+  }
+
+  Map<String, int> stats() => database.read(
+    (db) => {for (final row in db.rows('SELECT name, value FROM study_stats')) row['name'] as String: row['value'] as int},
+  );
+
+  /// Raises a counter to a value; a counter never goes down.
+  void raise(String name, int to) => database.write((db) {
+    db.execute(
+      '''
+      INSERT INTO study_stats (name, value) VALUES (?, ?)
+      ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)
+      ''',
+      [name, to],
+    );
+  });
 
   /// Records one answer and returns the tag's new progress.
   StudyProgress answer(String tag, {required bool right, DateTime? now, Duration? utcOffset}) => database.write((db) {
@@ -74,6 +162,9 @@ class StudyStore {
   void reset() => database.write((db) {
     db.execute('DELETE FROM study_progress');
     db.execute('DELETE FROM study_days');
+    db.execute('DELETE FROM study_lessons');
+    db.execute('DELETE FROM study_awards');
+    db.execute('DELETE FROM study_stats');
   });
 
   static StudyTagInfo? _info(Object? payload) {
@@ -137,7 +228,7 @@ class StudySummary {
     }
     final answered = {
       for (final day in days)
-        if (day.answered > 0) day.day: day,
+        if (day.isStudied) day.day: day,
     };
     final todayKey = StudyDay.key(moment, utcOffset: utcOffset);
     // A streak still counts before today's first answer, so that it is not lost at midnight.
