@@ -122,12 +122,11 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   AppState get state => widget.state;
 
   List<_TabItem> get _items {
-    final booru = state.mode == AppMode.booru;
     return [
       _TabItem(AppTab.folders, L10n.text('Saved'), Symbols.folderFill),
       _TabItem(AppTab.works, L10n.text('Explore'), Symbols.globe),
       _TabItem(AppTab.artists, L10n.text('Tags'), Symbols.tagFill),
-      _TabItem(AppTab.settings, L10n.text(booru ? 'More' : 'Settings'), booru ? Symbols.ellipsis : Symbols.gearshapeFill),
+      _TabItem(AppTab.settings, L10n.text('Settings'), Symbols.gearshapeFill),
     ];
   }
 

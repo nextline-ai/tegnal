@@ -220,6 +220,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       symbol: (color) => HandTapSymbol(size: 22, color: color),
                       onTap: () => _push((context) => const ThumbnailGestureSettings(booru: true)),
                     ),
+                    AddonsSettingsRow(booru: _booru.store),
                   ],
                 ),
                 settingsSectionGap,
@@ -337,8 +338,6 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                 settingsSectionGap,
                 HomeStartSettings(rowColor: row),
                 settingsSectionGap,
-                AddonsSettingsSection(booru: _booru.store, rowColor: row),
-                settingsSectionGap,
                 section(
                   header: L10n.text('Data & Storage'),
                   children: [
@@ -393,7 +392,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
             right: 0,
             top: 0,
             child: RootHeader(
-              title: L10n.text('More'),
+              title: L10n.text('Settings'),
               state: _booru.state,
               trailing: BooruServerMenuButton(store: store),
             ),

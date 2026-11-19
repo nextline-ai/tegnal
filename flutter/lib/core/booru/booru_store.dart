@@ -282,6 +282,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     migrations.registerMigration('booru_v15_study_game', StudyStore.migrateGame);
     migrations.registerMigration('booru_v16_study_awards', StudyStore.migrateAwards);
     migrations.registerMigration('booru_v17_addons', AddonStore.migrate);
+    migrations.registerMigration('booru_v18_addon_origin', AddonStore.migrateOrigin);
     return migrations;
   }
 

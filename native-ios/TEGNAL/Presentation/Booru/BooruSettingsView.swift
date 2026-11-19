@@ -379,6 +379,7 @@ struct BooruMoreView: View {
                 NavigationLink { ThumbnailGestureSettings(booru: true) } label: {
                     Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
                 }.accessibilityIdentifier("booru.thumbnailGestures")
+                AddonsSettingsRow()
             }
 
             ReaderSettingsSection(booru: true, isPresented: $showReader)
@@ -393,7 +394,6 @@ struct BooruMoreView: View {
             TasteSettingsSection(mode: .booru)
             BooruSafeModeSettings()
             StudyModeSettings()
-            AddonsSettingsSection()
             Section {
                 NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }
                     .accessibilityIdentifier("booru.libraryManagement")
