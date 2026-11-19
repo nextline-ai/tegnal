@@ -23,6 +23,8 @@ import '../library/folder_rule_editor.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import '../../core/addons/addon_store.dart';
+import '../settings/addons_view.dart';
 import '../settings/downloads_view.dart';
 import '../settings/settings_page.dart';
 import '../settings/settings_rows.dart';
@@ -333,6 +335,8 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                 settingsSectionGap,
                 SafeModeSection(booru: _booru, rowColor: row),
                 settingsSectionGap,
+                AddonsSettingsSection(booru: _booru.store, rowColor: row),
+                settingsSectionGap,
                 section(
                   header: L10n.text('Data & Storage'),
                   children: [
@@ -610,6 +614,15 @@ class _BooruBlacklistViewState extends State<BooruBlacklistView> {
               ),
             ),
           ],
+        ),
+        ListenableBuilder(
+          listenable: AddonRuntime.shared,
+          builder: (context, _) => AddonAddedTermsSection(
+            title: 'Hidden by Add-ons',
+            terms: AddonRuntime.shared.effects.imageExclude,
+            rowColor: row,
+            openAddons: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: widget.booru.store))),
+          ),
         ),
       ],
     );

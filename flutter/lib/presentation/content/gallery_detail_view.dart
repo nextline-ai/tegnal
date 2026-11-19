@@ -815,31 +815,37 @@ Color artworkTagColor(ArtworkTagCategory category, BuildContext context) => swit
 
 /// `ArtworkTagPill`: body text in a capsule tinted 12% with the tag's color.
 class ArtworkTagPill extends StatelessWidget {
-  const ArtworkTagPill({super.key, required this.color, required this.child, this.onTap, this.onLongPress, this.starred = false});
+  const ArtworkTagPill({super.key, required this.color, required this.child, this.onTap, this.onLongPress, this.starred = false, this.hint});
   final Color color;
+
+  /// Read after the label: the tag itself when the pill shows an add-on's translation of it.
+  final String? hint;
   final Widget child;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool starred;
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    onLongPress: onLongPress,
-    child: AnimatedScale(
-      scale: 1,
-      duration: const Duration(milliseconds: 320),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: ShapeDecoration(color: color.withValues(alpha: 0.12), shape: const StadiumBorder()),
-        child: DefaultTextStyle(
-          style: TegnalType.style(17, color: color),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (starred) ...[Icon(Symbols.starFill, size: 15, color: CupertinoColors.systemYellow.resolveFrom(context)), const SizedBox(width: 4)],
-              child,
-            ],
+  Widget build(BuildContext context) => Semantics(
+    hint: hint,
+    child: GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedScale(
+        scale: 1,
+        duration: const Duration(milliseconds: 320),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: ShapeDecoration(color: color.withValues(alpha: 0.12), shape: const StadiumBorder()),
+          child: DefaultTextStyle(
+            style: TegnalType.style(17, color: color),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (starred) ...[Icon(Symbols.starFill, size: 15, color: CupertinoColors.systemYellow.resolveFrom(context)), const SizedBox(width: 4)],
+                child,
+              ],
+            ),
           ),
         ),
       ),
@@ -1030,6 +1036,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
             starred: savedQueries.contains(tag.query.replaceAll(' ', '_')),
             onTap: search == null ? null : () => search!(tag.query.replaceAll(' ', '_')),
             onLongPress: () => toggleSaved(tag.query, tag.category.savedKind),
+            hint: tag.original,
             child: Text(tag.name),
           ),
       ],

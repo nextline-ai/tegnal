@@ -1,3 +1,5 @@
+import '../addons/addon_store.dart';
+
 import 'package:flutter/foundation.dart';
 
 import '../support/l10n.dart';
@@ -178,6 +180,12 @@ class ContentEnvironment extends ChangeNotifier {
   String get defaultExcludedTags => _defaultExcludedTags;
   set defaultExcludedTags(String value) => _defaultExcludedTags = _store('manga.defaultExcludedTags', value);
 
+  /// The tags every comics search adds: the person's own, then those of add-ons that are on.
+  /// Add-on tags are never written into [defaultTags], so turning an add-on off takes them away again.
+  String get searchDefaultTags => _joining(defaultTags, AddonRuntime.shared.effects.comicsInclude);
+  String get searchExcludedTags => _joining(defaultExcludedTags, AddonRuntime.shared.effects.comicsExclude);
+  static String _joining(String own, List<String> added) => added.isEmpty ? own : [own, ...added].where((term) => term.isNotEmpty).join(' ');
+
   /// The category the main comics feed is narrowed to, empty for all.
   String _mangaBrowseCategory;
   String get mangaBrowseCategory => _mangaBrowseCategory;
@@ -279,7 +287,7 @@ class ContentEnvironment extends ChangeNotifier {
   GalleryQuery get launchMangaQuery =>
       GalleryQuery(language: L10n.contentLanguage)
           .filteredTo(mangaBrowseCategory)
-          .applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
+          .applyingDefaults(tags: searchDefaultTags, excluded: searchExcludedTags)
           .copyWith(allowsLanguageExceptions: allowsMangaLanguageExceptions);
 
   static bool supportsComicsAddress(String input) {

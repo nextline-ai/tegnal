@@ -19,7 +19,15 @@ class ChallengeStore {
     ''');
 
   List<ChallengeDefinition> definitions() => database.read(
-    (db) => db.column<Uint8List>('SELECT payload FROM challenges ORDER BY rowid').map((data) => ChallengeDefinition.fromJson(decodeJsonObject(data))).toList(),
+    // A challenge an add-on brought shows only while that add-on is installed and on.
+    (db) => db
+        .column<Uint8List>('''
+      SELECT payload FROM challenges c WHERE substr(c.id, 1, 6) != 'addon:' OR EXISTS (
+        SELECT 1 FROM addons a WHERE a.enabled = 1 AND substr(c.id, 1, length(a.id) + 7) = 'addon:' || a.id || ':')
+      ORDER BY rowid
+      ''')
+        .map((data) => ChallengeDefinition.fromJson(decodeJsonObject(data)))
+        .toList(),
   );
 
   ChallengeDefinition example() => database.write((db) {

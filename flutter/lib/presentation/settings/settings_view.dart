@@ -21,6 +21,8 @@ import '../library/library_routes.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import '../../core/addons/addon_store.dart';
+import 'addons_view.dart';
 import 'comics_cache_settings_view.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
@@ -49,6 +51,8 @@ class SettingsDependencies {
     this.invitation,
     this.tasteSettings,
     this.safeMode,
+    this.addons,
+    this.openAddons,
     this.recentWorks,
     this.openWork,
   });
@@ -64,6 +68,12 @@ class SettingsDependencies {
 
   /// The Safe Mode switch, reachable from Comics Mode too, which Safe Mode keeps to Safebooru's pools.
   final Widget Function(BuildContext context)? safeMode;
+
+  /// The Add-ons row, after Safe Mode and before Data & Storage.
+  final Widget Function(BuildContext context)? addons;
+
+  /// Opens the Add-ons screen, from the read-only add-on terms beside the default search tags.
+  final void Function(BuildContext context)? openAddons;
 
   final AppState state;
   final ContentEnvironment content;
@@ -374,7 +384,11 @@ class _SettingsViewState extends State<SettingsView> {
                     SettingsLinkRow(
                       title: L10n.text('Default Search Tags'),
                       icon: CupertinoIcons.line_horizontal_3_decrease,
-                      onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => DefaultSearchTagsPage(content: _content))),
+                      onTap: () => Navigator.of(context).push(
+                        CupertinoPageRoute<void>(
+                          builder: (_) => DefaultSearchTagsPage(content: _content, openAddons: _deps.openAddons),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -401,6 +415,7 @@ class _SettingsViewState extends State<SettingsView> {
                 if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
                 if (_deps.safeMode != null) ...[settingsSectionGap, _deps.safeMode!(context)],
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
+                if (_deps.addons != null) ...[settingsSectionGap, _deps.addons!(context)],
                 settingsSectionGap,
                 section(
                   header: L10n.text('Data & Storage'),
@@ -482,8 +497,11 @@ class _SettingsViewState extends State<SettingsView> {
 
 /// `MangaDefaultTagsSettings`' form: tags added to and excluded from every comics search.
 class DefaultSearchTagsPage extends StatefulWidget {
-  const DefaultSearchTagsPage({super.key, required this.content});
+  const DefaultSearchTagsPage({super.key, required this.content, this.openAddons});
   final ContentEnvironment content;
+
+  /// Opens the Add-ons screen from the terms add-ons apply beside these.
+  final void Function(BuildContext context)? openAddons;
 
   @override
   State<DefaultSearchTagsPage> createState() => _DefaultSearchTagsPageState();
@@ -538,6 +556,27 @@ class _DefaultSearchTagsPageState extends State<DefaultSearchTagsPage> {
           ),
           children: [_field(_excluded, 'tag:spoilers')],
         ),
+        if (widget.openAddons case final open?)
+          ListenableBuilder(
+            listenable: AddonRuntime.shared,
+            builder: (context, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AddonAddedTermsSection(
+                  title: 'Added by Add-ons',
+                  terms: AddonRuntime.shared.effects.comicsInclude,
+                  rowColor: row,
+                  openAddons: () => open(context),
+                ),
+                AddonAddedTermsSection(
+                  title: 'Excluded by Add-ons',
+                  terms: AddonRuntime.shared.effects.comicsExclude,
+                  rowColor: row,
+                  openAddons: () => open(context),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

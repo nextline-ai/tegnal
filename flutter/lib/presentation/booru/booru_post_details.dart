@@ -234,7 +234,11 @@ class _DetailsPageState extends State<_DetailsPage> {
                 children: [
                   FormRow(
                     key: const Key('booru.prompt'),
-                    onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => StudyPromptView(booru: _booru, post: _post))),
+                    onTap: () => Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (context) => StudyPromptView(booru: _booru, post: _post),
+                      ),
+                    ),
                     child: Row(
                       children: [
                         Icon(StudySymbols.prompt, size: 22, color: tint),
@@ -394,7 +398,18 @@ class _DetailsPageState extends State<_DetailsPage> {
           child: Row(
             children: [
               Expanded(
-                child: Text(tag.name, style: TegnalType.style(17, color: color)),
+                // A translated tag keeps the tag itself beneath it, so that what is searched is never hidden.
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(tag.name, style: TegnalType.style(17, color: color)),
+                    if (tag.original != null) ...[
+                      const SizedBox(height: 2),
+                      Text(tag.original!, style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+                    ],
+                  ],
+                ),
               ),
               Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
               const SizedBox(width: 10),
@@ -414,7 +429,11 @@ class _DetailsPageState extends State<_DetailsPage> {
                       ContextMenuAction(
                         title: L10n.text('About This Tag'),
                         icon: StudySymbols.graduationCap,
-                        onSelected: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (context) => StudyTagView(booru: _booru, name: tag.query))),
+                        onSelected: () => Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (context) => StudyTagView(booru: _booru, name: tag.query),
+                          ),
+                        ),
                       ),
                       ContextMenuAction(title: L10n.text('Blacklist Tag'), icon: CupertinoIcons.eye_slash, onSelected: () => _hide(tag.query)),
                     ],

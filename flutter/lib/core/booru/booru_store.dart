@@ -1,3 +1,5 @@
+import '../addons/addon_store.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -277,6 +279,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       assignFolderServers(db);
     });
     migrations.registerMigration('booru_v14_study', StudyStore.migrate);
+    migrations.registerMigration('booru_v17_addons', AddonStore.migrate);
     return migrations;
   }
 
@@ -495,7 +498,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       final cached = _visibleFavoritesCache[key];
       if (cached != null) return shown(cached);
     }
-    final filters = {for (final server in servers) server.id: BooruBlacklist(blacklist(server.id))};
+    final filters = {for (final server in servers) server.id: BooruBlacklist(filteringBlacklist(server.id))};
     final safebooru = {
       for (final server in servers)
         if (server.isSafebooru) server.id,
@@ -972,6 +975,14 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   }
 
   String blacklist(String serverID) => setting('blacklist.$serverID') ?? '';
+
+  /// The rules that hide images from a server: the person's own, then those of add-ons that are on.
+  /// Only for filtering; the person edits [blacklist], which never holds an add-on's rules.
+  String filteringBlacklist(String serverID) {
+    final own = blacklist(serverID), added = AddonRuntime.shared.effects.imageExclude;
+    return added.isEmpty ? own : [own, ...added].where((rule) => rule.isNotEmpty).join('\n');
+  }
+
   void setBlacklist(String text, {required String serverID}) => setSetting('blacklist.$serverID', text);
 
   String? setting(String key) => database.read((db) => db.value<String>('SELECT value FROM settings WHERE key = ?', [key]));

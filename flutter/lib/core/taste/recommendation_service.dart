@@ -415,7 +415,7 @@ abstract final class RecommendationService {
             ? available.where((tag) => tag.discovery).firstOrNull ?? available.firstOrNull
             : available.firstOrNull;
         final selected = server.engine.usesGelbooruPages ? [?htmlSeed] : available;
-        final blacklist = BooruBlacklist(env.booru.blacklist(server.id));
+        final blacklist = BooruBlacklist(env.booru.filteringBlacklist(server.id));
         final preferences = settings(server.canonicalAddress);
         final scoped = [for (final seed in selected) (seed: seed, key: '${server.id}|${server.engine.rawValue}|${seed.id}')];
         activeSeeds.addAll(scoped.map((value) => value.key));
@@ -470,7 +470,7 @@ abstract final class RecommendationService {
             text: seed.name,
             sort: GallerySort.fromRawValue(preferences.sort.rawValue) ?? GallerySort.latest,
             allowsLanguageExceptions: env.content.allowsMangaLanguageExceptions,
-          ).applyingDefaults(tags: preferences.includedTags.join(' '), excluded: env.content.defaultExcludedTags);
+          ).applyingDefaults(tags: preferences.includedTags.join(' '), excluded: env.content.searchExcludedTags);
           final batch = await env.comicSource.list(query, offset: page * 24, count: 24);
           final fingerprint = batch.ids.join(',');
           final candidates = batch.ids.where((id) => fetched.add(id) && !excluding.contains('$source#$id')).toList();
