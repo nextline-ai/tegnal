@@ -36,6 +36,7 @@ public struct SettingsView: View {
                 NavigationLink { ThumbnailGestureSettings() } label: {
                     Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
                 }.accessibilityIdentifier("settings.thumbnailGestures")
+                AddonsSettingsRow()
             } header: { Text(L10n.text("Browsing")) }
             ReaderSettingsSection(booru: false, isPresented: $showReader)
             Section {
@@ -51,7 +52,6 @@ public struct SettingsView: View {
             // Reachable from Comics Mode too, which Safe Mode keeps to Safebooru's pools.
             BooruSafeModeSettings()
             StudyModeSettings()
-            AddonsSettingsSection()
             Section {
                 NavigationLink { MangaLibraryToolsView() } label: {
                     Label(L10n.text("Library Management"), systemImage: "externaldrive")

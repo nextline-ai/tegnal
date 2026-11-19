@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 import GRDB
 @testable import TEGNAL
 
@@ -204,5 +205,95 @@ final class AddonTests: XCTestCase {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?.filter { $0.pathExtension == Addon.fileExtension } ?? []
         try XCTSkipIf(files.isEmpty, "The samples are local only")
         for url in files { XCTAssertNoThrow(try Addon.read(url), url.lastPathComponent) }
+    }
+
+    // MARK: - Official add-ons
+
+    private func listing(_ data: Data, id: String = "maker.sample-pack", version: String = "1.0.0") -> [String: Any] {
+        ["id": id, "version": version, "name": ["en": "Sample Pack"], "author": "TEGNAL", "kinds": ["translations"],
+         "size": data.count, "sha256": Addon.digest(data)]
+    }
+
+    private func signed(_ object: [String: Any], key: P256.Signing.PrivateKey) throws -> (Data, Data) {
+        let data = try JSONSerialization.data(withJSONObject: object)
+        return (data, try key.signature(for: data).derRepresentation)
+    }
+
+    func testOnlyACatalogSignedWithTheKeyIsReadAndBadEntriesAreLeftOut() throws {
+        let key = P256.Signing.PrivateKey(), other = P256.Signing.PrivateKey()
+        let addon = file(Self.translations)
+        var broken = listing(addon, id: "maker.broken"); broken["sha256"] = "XYZ"
+        let catalog: [String: Any] = ["format": "tegnal-addon-catalog", "schemaVersion": 1,
+                                      "addons": [listing(addon), listing(addon), broken, ["id": 5], listing(addon, id: "maker.later").merging(["schemaVersion": 9]) { $1 }]]
+        let (data, signature) = try signed(catalog, key: key)
+        let read = try AddonMarket.verify(data, signature: signature, key: key.publicKey)
+        XCTAssertEqual(read.addons.map(\.id), ["maker.sample-pack", "maker.later"], "Duplicates and broken entries are left out")
+        XCTAssertEqual(read.addons.last.map { AddonListingState($0, installed: nil) }, .unsupported)
+
+        XCTAssertThrowsError(try AddonMarket.verify(data, signature: signature, key: other.publicKey)) { XCTAssertEqual($0 as? AddonMarketError, .unsigned) }
+        var tampered = data; tampered[tampered.count - 2] ^= 1
+        XCTAssertThrowsError(try AddonMarket.verify(tampered, signature: signature, key: key.publicKey)) { XCTAssertEqual($0 as? AddonMarketError, .unsigned) }
+        XCTAssertThrowsError(try AddonMarket.verify(data, signature: Data("nope".utf8), key: key.publicKey)) { XCTAssertEqual($0 as? AddonMarketError, .unsigned) }
+    }
+
+    func testADownloadIsInstalledOnlyWhenItMatchesTheCatalog() async throws {
+        let key = P256.Signing.PrivateKey()
+        let addon = file(Self.translations)
+        let (data, signature) = try signed(["format": "tegnal-addon-catalog", "schemaVersion": 1, "addons": [listing(addon)]], key: key)
+        let envelope = try JSONSerialization.data(withJSONObject: ["payload": data.base64EncodedString(), "signature": signature.base64EncodedString()])
+        var served: [String: Data] = ["catalog.json": envelope, "files/maker.sample-pack/1.0.0.tegnaladdon": addon]
+        let base = URL(string: "https://addons.invalid/v1/")!
+        let market = { (files: [String: Data]) in
+            AddonMarket(base: base, publicKey: key.publicKey, fetch: { url, limit in
+                let path = String(url.absoluteString.dropFirst(base.absoluteString.count))
+                guard let data = files[path] else { throw AddonMarketError.server(404) }
+                guard data.count <= limit else { throw AddonMarketError.damaged }
+                return data
+            })
+        }
+        let catalog = try await market(served).catalog()
+        let entry = try XCTUnwrap(catalog.addons.first)
+        let (read, digest) = try await market(served).download(entry)
+        XCTAssertEqual(read.id, "maker.sample-pack")
+        XCTAssertEqual(digest, entry.sha256)
+
+        var changed = addon; changed[changed.count - 3] = UInt8(ascii: " ")
+        served["files/maker.sample-pack/1.0.0.tegnaladdon"] = changed
+        do { _ = try await market(served).download(entry); XCTFail("A changed file must be refused") }
+        catch { XCTAssertEqual(error as? AddonMarketError, .damaged) }
+
+        // A file signed into the catalog under another add-on's name is refused too.
+        var renamed = entry; renamed.id = "maker.other"
+        XCTAssertThrowsError(try AddonMarket.check(addon, against: renamed)) { XCTAssertEqual($0 as? AddonMarketError, .damaged) }
+    }
+
+    func testOfficialCopiesAreMarkedAndAFileCopyIsNot() throws {
+        let store = AddonStore(try BooruStore())
+        let data = file(Self.translations)
+        let official = try Addon.decode(data)
+        try store.install(official.addon, digest: official.digest, official: true)
+        let entry = try JSONDecoder().decode(AddonListing.self, from: JSONSerialization.data(withJSONObject: listing(data)))
+        XCTAssertEqual(try store.installed().first?.official, true)
+        XCTAssertEqual(AddonListingState(entry, installed: try store.installed().first), .installed)
+
+        var newer = entry; newer.version = "1.1.0"; newer.sha256 = String(repeating: "a", count: 64)
+        XCTAssertEqual(AddonListingState(newer, installed: try store.installed().first), .update)
+
+        let copy = try Addon.decode(file(Self.translations, extra: ["summary": ["en": "Edited"]]))
+        try store.install(copy.addon, digest: copy.digest)
+        XCTAssertEqual(try store.installed().first?.official, false, "A file opened by hand replaces the official mark")
+        XCTAssertEqual(AddonListingState(entry, installed: try store.installed().first), .fromFile)
+        XCTAssertEqual(AddonListingState(entry, installed: nil), .get)
+    }
+
+    func testThePublishedCatalogInTheDocsFolderVerifiesWithTheAppKey() throws {
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("docs/addons/market/dist/v1")
+        let data = try? Data(contentsOf: folder.appendingPathComponent("catalog.json"))
+        try XCTSkipIf(data == nil, "The published catalog is local only")
+        let catalog = try AddonMarket.open(try XCTUnwrap(data), key: AddonMarket.live.publicKey)
+        XCTAssertFalse(catalog.addons.isEmpty)
+        for entry in catalog.addons {
+            XCTAssertNoThrow(try AddonMarket.check(try Data(contentsOf: folder.appendingPathComponent(entry.path)), against: entry), entry.id)
+        }
     }
 }

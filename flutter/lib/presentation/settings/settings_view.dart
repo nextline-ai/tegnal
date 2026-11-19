@@ -202,6 +202,7 @@ class _SettingsViewState extends State<SettingsView> {
                       symbol: (color) => HandTapSymbol(size: 22, color: color),
                       onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const ThumbnailGestureSettings())),
                     ),
+                    if (_deps.addons != null) _deps.addons!(context),
                   ],
                 ),
                 settingsSectionGap,
@@ -418,7 +419,6 @@ class _SettingsViewState extends State<SettingsView> {
                 settingsSectionGap,
                 HomeStartSettings(rowColor: row),
                 if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
-                if (_deps.addons != null) ...[settingsSectionGap, _deps.addons!(context)],
                 settingsSectionGap,
                 section(
                   header: L10n.text('Data & Storage'),

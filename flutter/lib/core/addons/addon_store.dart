@@ -10,13 +10,16 @@ import 'addon_models.dart';
 
 /// An add-on kept in the app, with whether it is on (`InstalledAddon`).
 class InstalledAddon {
-  const InstalledAddon({required this.addon, required this.enabled, required this.installed, required this.digest});
+  const InstalledAddon({required this.addon, required this.enabled, required this.installed, required this.digest, this.official = false});
   final Addon addon;
   final bool enabled;
   final DateTime installed;
 
   /// SHA-256 of the file as it was opened, so that a person can compare it with what its maker published.
   final String digest;
+
+  /// Installed from the official add-ons, checked against TEGNAL's signed catalog, rather than opened from a file.
+  final bool official;
   String get id => addon.id;
 }
 
@@ -196,16 +199,19 @@ class AddonStore {
     CREATE TABLE addons (id TEXT PRIMARY KEY NOT NULL, payload BLOB NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, installed DOUBLE NOT NULL, digest TEXT NOT NULL);
     ''');
 
+  static void migrateOrigin(SqlDatabase db) => db.execute('ALTER TABLE addons ADD COLUMN official INTEGER NOT NULL DEFAULT 0');
+
   /// Every add-on kept, checked again on the way out. One that no longer passes is left out, never used.
   List<InstalledAddon> installed() => database.read(
     (db) => [
-      for (final row in db.rows('SELECT payload, enabled, installed, digest FROM addons ORDER BY installed'))
+      for (final row in db.rows('SELECT payload, enabled, installed, digest, official FROM addons ORDER BY installed'))
         if (_decode(row['payload']) case final addon?)
           InstalledAddon(
             addon: addon,
             enabled: (row['enabled']! as int) != 0,
             installed: DateTime.fromMicrosecondsSinceEpoch(((row['installed']! as num) * 1e6).round()),
             digest: row['digest']! as String,
+            official: (row['official']! as int) != 0,
           ),
     ],
   );
@@ -219,16 +225,17 @@ class AddonStore {
   }
 
   /// Adds an add-on, or replaces the one with the same identifier. A replaced add-on stays on or off as it was.
-  void install(Addon addon, {required String digest, DateTime? now}) {
+  /// `official` is set only for a copy downloaded from the official add-ons and checked against the signed catalog.
+  void install(Addon addon, {required String digest, bool official = false, DateTime? now}) {
     addon.validate();
     final payload = encodeSwiftJson(addon.json);
     database.write((db) {
       final enabled = db.value<int>('SELECT enabled FROM addons WHERE id = ?', [addon.id]) ?? 1;
       final installed = db.value<num>('SELECT installed FROM addons WHERE id = ?', [addon.id]) ?? unixSeconds(now);
       db.execute(
-        'INSERT INTO addons (id, payload, enabled, installed, digest) VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, digest = excluded.digest',
-        [addon.id, payload, enabled, installed.toDouble(), digest],
+        'INSERT INTO addons (id, payload, enabled, installed, digest, official) VALUES (?, ?, ?, ?, ?, ?) '
+        'ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, digest = excluded.digest, official = excluded.official',
+        [addon.id, payload, enabled, installed.toDouble(), digest, official ? 1 : 0],
       );
       _writeChallenges(addon, db);
     });

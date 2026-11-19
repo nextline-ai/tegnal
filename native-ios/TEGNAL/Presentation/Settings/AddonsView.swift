@@ -6,25 +6,25 @@ extension UTType {
     static let tegnalAddon = UTType(exportedAs: "work.nextline.tegnal.addon", conformingTo: .json)
 }
 
-/// The settings row that leads to the add-ons, in both modes' settings.
-struct AddonsSettingsSection: View {
+/// The row that leads to the add-ons, last in the Browsing section of both modes' settings.
+struct AddonsSettingsRow: View {
     var body: some View {
-        Section {
-            NavigationLink { AddonsView() } label: {
-                LabeledContent {
-                    let count = AddonRuntime.shared.effects.enabledIDs.count
-                    if count > 0 { Text(String(count)) }
-                } label: { Label(L10n.text("Add-ons"), systemImage: "puzzlepiece.extension") }
-            }.accessibilityIdentifier("settings.addons")
-        }
+        NavigationLink { AddonsView() } label: {
+            LabeledContent {
+                let count = AddonRuntime.shared.effects.enabledIDs.count
+                if count > 0 { Text(String(count)) }
+            } label: { Label(L10n.text("Add-ons"), systemImage: "puzzlepiece.extension") }
+        }.accessibilityIdentifier("settings.addons")
     }
 }
 
 /// A checked add-on waiting for the learner to decide.
-private struct AddonCandidate: Identifiable {
+struct AddonCandidate: Identifiable {
     let addon: Addon
     let digest: String
     let existing: InstalledAddon?
+    /// Downloaded from the official add-ons and matched against the signed catalog.
+    var official = false
     var id: String { addon.id + digest }
 }
 
@@ -40,11 +40,14 @@ struct AddonsView: View {
     var body: some View {
         List {
             Section {
+                NavigationLink { AddonMarketView(changed: applyChanges) } label: {
+                    Label { Text(L10n.text("Official Add-ons")) } icon: { Image(systemName: "checkmark.seal").foregroundStyle(.blue) }
+                }.accessibilityIdentifier("addons.market")
                 Button { picking = true } label: { Label(L10n.text("Open Add-on File"), systemImage: "doc.badge.plus") }
                     .disabled(reading)
                     .accessibilityIdentifier("addons.import")
             } footer: {
-                Text(L10n.text("Add-ons are files made by other people that you download yourself. They hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything a file adds before it is installed."))
+                Text(L10n.text("Official add-ons are made by TEGNAL and downloaded from its server. Others are files made by other people that you download and open yourself. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed."))
             }
             if installed.isEmpty {
                 Section {
@@ -77,7 +80,7 @@ struct AddonsView: View {
         .sheet(item: $candidate) { candidate in
             AddonInstallSheet(candidate: candidate) {
                 do {
-                    try store.install(candidate.addon, digest: candidate.digest)
+                    try store.install(candidate.addon, digest: candidate.digest, official: candidate.official)
                     error = nil
                     applyChanges()
                 } catch let failure { error = failure.localizedDescription }
@@ -120,7 +123,10 @@ private struct AddonRow: View {
             Image(systemName: item.addon.contents.kinds.first?.symbol ?? "puzzlepiece.extension")
                 .font(.title3).foregroundStyle(item.enabled ? Color.accentColor : .secondary).frame(width: 32)
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.addon.title).font(.headline).foregroundStyle(item.enabled ? .primary : .secondary)
+                HStack(spacing: 4) {
+                    Text(item.addon.title).font(.headline).foregroundStyle(item.enabled ? .primary : .secondary)
+                    if item.official { AddonOfficialBadge() }
+                }
                 Text(item.addon.contents.kinds.map(\.title).joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
@@ -144,13 +150,13 @@ struct AddonDetailView: View {
     var body: some View {
         List {
             if let item {
-                AddonHeader(addon: item.addon)
+                AddonHeader(addon: item.addon, official: item.official)
                 Section {
                     Toggle(L10n.text("Use This Add-on"), isOn: Binding(get: { item.enabled }, set: { setEnabled($0) }))
                         .accessibilityIdentifier("addons.enabled")
                 }
                 AddonContentsSections(addon: item.addon)
-                AddonOriginSection(addon: item.addon, digest: item.digest, installed: item.installed)
+                AddonOriginSection(addon: item.addon, digest: item.digest, installed: item.installed, official: item.official)
                 Section {
                     Button(L10n.text("Remove Add-on"), systemImage: "trash", role: .destructive) { confirmRemove = true }
                         .accessibilityIdentifier("addons.remove")
@@ -183,7 +189,7 @@ struct AddonDetailView: View {
 }
 
 /// Everything a file adds, shown before it is installed.
-private struct AddonInstallSheet: View {
+struct AddonInstallSheet: View {
     let candidate: AddonCandidate
     let install: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -191,14 +197,27 @@ private struct AddonInstallSheet: View {
         NavigationStack {
             List {
                 Section {
-                    Label {
-                        Text(L10n.text("This add-on was made by someone else. Install it only if you trust where it came from. It holds data only and cannot run code or connect to the internet."))
-                    } icon: { Image(systemName: "checkmark.shield").foregroundStyle(.green) }
-                    .font(.callout)
+                    if candidate.official {
+                        Label {
+                            Text(L10n.text("An official add-on from TEGNAL. The downloaded file matched the copy TEGNAL published. It holds data only and cannot run code or connect to the internet."))
+                        } icon: { Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue) }
+                        .font(.callout)
+                        .accessibilityIdentifier("addons.officialNotice")
+                    } else {
+                        Label {
+                            Text(L10n.text("This add-on was made by someone else. Install it only if you trust where it came from. It holds data only and cannot run code or connect to the internet."))
+                        } icon: { Image(systemName: "checkmark.shield").foregroundStyle(.green) }
+                        .font(.callout)
+                    }
                 }
-                AddonHeader(addon: candidate.addon)
+                AddonHeader(addon: candidate.addon, official: candidate.official)
                 if let existing = candidate.existing {
                     Section {
+                        if existing.official && !candidate.official {
+                            Label(L10n.text("This file is not the official copy. Installing it replaces the official add-on, which is then no longer marked as official."), systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                                .accessibilityIdentifier("addons.replacesOfficial")
+                        }
                         let order = AddonCheck.compare(candidate.addon.version, existing.addon.version)
                         let key = order == .orderedDescending ? "Updates version %@ to %@." : order == .orderedSame ? "Replaces the installed version %@ with this copy (%@)." : "This is older than the installed version %@. Installing it goes back to %@."
                         Label(L10n.text(key, existing.addon.version, candidate.addon.version), systemImage: order == .orderedAscending ? "exclamationmark.triangle" : "arrow.triangle.2.circlepath")
@@ -207,7 +226,7 @@ private struct AddonInstallSheet: View {
                     }
                 }
                 AddonContentsSections(addon: candidate.addon)
-                AddonOriginSection(addon: candidate.addon, digest: candidate.digest, installed: nil)
+                AddonOriginSection(addon: candidate.addon, digest: candidate.digest, installed: nil, official: candidate.official)
             }
             .navigationTitle(L10n.text("Check Before Installing")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -221,12 +240,25 @@ private struct AddonInstallSheet: View {
     }
 }
 
+/// The small seal shown beside an official add-on's name.
+struct AddonOfficialBadge: View {
+    var body: some View {
+        Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(.blue)
+            .accessibilityLabel(L10n.text("Official"))
+            .accessibilityIdentifier("addons.officialBadge")
+    }
+}
+
 private struct AddonHeader: View {
     let addon: Addon
+    var official = false
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
-                Text(addon.title).font(.title3.weight(.semibold)).accessibilityIdentifier("addons.name")
+                HStack(spacing: 6) {
+                    Text(addon.title).font(.title3.weight(.semibold)).accessibilityIdentifier("addons.name")
+                    if official { AddonOfficialBadge() }
+                }
                 Text(L10n.text("By %@ · Version %@", addon.author, addon.version)).font(.subheadline).foregroundStyle(.secondary)
                 if let summary = addon.summary?.addonResolved(), !summary.isEmpty { Text(summary).font(.callout).padding(.top, 2) }
             }.padding(.vertical, 4)
@@ -238,9 +270,12 @@ private struct AddonOriginSection: View {
     let addon: Addon
     let digest: String
     let installed: Date?
+    var official = false
     var body: some View {
         Section {
             LabeledContent(L10n.text("Identifier"), value: addon.id)
+            LabeledContent(L10n.text("Source"), value: L10n.text(official ? "Official Add-ons" : "Opened File"))
+                .accessibilityIdentifier("addons.source")
             if let installed { LabeledContent(L10n.text("Installed"), value: installed.formatted(date: .abbreviated, time: .shortened)) }
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.text("File Fingerprint (SHA-256)")).font(.subheadline)
@@ -257,7 +292,7 @@ private struct AddonOriginSection: View {
 }
 
 /// What each part of an add-on adds, with enough of it shown to judge.
-private struct AddonContentsSections: View {
+struct AddonContentsSections: View {
     let addon: Addon
     private static let shown = 12
 
@@ -331,5 +366,158 @@ private struct AddonContentsSections: View {
 
     private static func language(_ code: String) -> String {
         switch code { case "ko": return "한국어"; case "ja": return "日本語"; default: return "English" }
+    }
+}
+
+// MARK: - Official add-ons
+
+/// The official add-ons, read from TEGNAL's signed catalog. Each one is downloaded, matched against the
+/// catalog and shown in full before it is installed, like a file the learner opens.
+struct AddonMarketView: View {
+    let changed: () -> Void
+    @Environment(AppEnvironment.self) private var env
+    @State private var catalog: AddonCatalog?
+    @State private var installed: [InstalledAddon] = []
+    @State private var loadError: String?
+    @State private var error: String?
+    @State private var downloading: String?
+    @State private var candidate: AddonCandidate?
+    private var market: AddonMarket { .live }
+    private var store: AddonStore { AddonStore(env.booru) }
+
+    var body: some View {
+        List {
+            if let catalog {
+                if catalog.addons.isEmpty {
+                    Section {
+                        ContentUnavailableView(L10n.text("No Official Add-ons Yet"), systemImage: "checkmark.seal",
+                                               description: Text(L10n.text("Official add-ons appear here as TEGNAL publishes them.")))
+                    }
+                } else {
+                    Section {
+                        ForEach(catalog.addons) { listing in row(listing) }
+                    } footer: {
+                        Text(L10n.text("Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed."))
+                    }
+                }
+                if let error {
+                    Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).accessibilityIdentifier("market.error") }
+                }
+            } else if let loadError {
+                Section {
+                    ContentUnavailableView {
+                        Label(L10n.text("Couldn’t Load Official Add-ons"), systemImage: "wifi.exclamationmark")
+                    } description: { Text(loadError) } actions: {
+                        Button(L10n.text("Try Again")) { Task { await load() } }.accessibilityIdentifier("market.retry")
+                    }
+                }
+            }
+        }
+        .navigationTitle(L10n.text("Official Add-ons")).navigationBarTitleDisplayMode(.inline)
+        .overlay { if catalog == nil && loadError == nil { ProgressView() } }
+        .refreshable { await load() }
+        .task { if catalog == nil { await load() } }
+        .onAppear(perform: reloadInstalled)
+        .sheet(item: $candidate) { candidate in
+            AddonInstallSheet(candidate: candidate) {
+                do {
+                    try store.install(candidate.addon, digest: candidate.digest, official: true)
+                    error = nil
+                    reloadInstalled()
+                    changed()
+                } catch let failure { error = failure.localizedDescription }
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ listing: AddonListing) -> some View {
+        let item = installed.first { $0.id == listing.id }
+        let state = AddonListingState(listing, installed: item)
+        if state == .installed, let item {
+            NavigationLink { AddonDetailView(id: item.id, changed: { reloadInstalled(); changed() }) } label: {
+                AddonListingRow(listing: listing, state: state, downloading: false)
+            }.accessibilityIdentifier("market.row." + listing.id)
+        } else {
+            Button { get(listing) } label: { AddonListingRow(listing: listing, state: state, downloading: downloading == listing.id) }
+                .buttonStyle(.plain)
+                .disabled(state == .unsupported || downloading != nil)
+                .accessibilityIdentifier("market.row." + listing.id)
+        }
+    }
+
+    private func load() async {
+        do {
+            let next = try await market.catalog()
+            catalog = next
+            loadError = nil
+        } catch is CancellationError {
+        } catch let failure {
+            if catalog == nil { loadError = failure.localizedDescription } else { error = failure.localizedDescription }
+        }
+    }
+
+    private func reloadInstalled() { installed = (try? store.installed()) ?? [] }
+
+    private func get(_ listing: AddonListing) {
+        downloading = listing.id
+        Task {
+            defer { downloading = nil }
+            do {
+                let (addon, digest) = try await market.download(listing)
+                error = nil
+                candidate = AddonCandidate(addon: addon, digest: digest, existing: installed.first { $0.id == addon.id }, official: true)
+            } catch is CancellationError {
+            } catch let failure { error = failure.localizedDescription }
+        }
+    }
+}
+
+private struct AddonListingRow: View {
+    let listing: AddonListing
+    let state: AddonListingState
+    let downloading: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: listing.addonKinds.first?.symbol ?? "puzzlepiece.extension")
+                .font(.title3).foregroundStyle(Color.accentColor).frame(width: 32)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(listing.title).font(.headline)
+                Text(L10n.text("By %@ · Version %@", listing.author, listing.version)).font(.caption).foregroundStyle(.secondary)
+                if state == .fromFile {
+                    Text(L10n.text("Installed from a File")).font(.caption).foregroundStyle(.orange)
+                }
+                if let summary = listing.summary?.addonResolved(), !summary.isEmpty {
+                    Text(summary).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                }
+                Text((listing.addonKinds.map(\.title) + [ByteCountFormatter.string(fromByteCount: Int64(listing.size), countStyle: .file)]).joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            status
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var status: some View {
+        if downloading {
+            ProgressView()
+        } else {
+            switch state {
+            case .installed:
+                Label(L10n.text("Installed"), systemImage: "checkmark").labelStyle(.iconOnly).foregroundStyle(.secondary)
+                    .accessibilityLabel(L10n.text("Installed"))
+            case .unsupported:
+                Text(L10n.text("Needs a Newer Version")).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+            case .get, .update, .fromFile:
+                Text(L10n.text(state == .update ? "Update" : "Get"))
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
     }
 }

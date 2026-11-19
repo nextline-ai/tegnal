@@ -54,7 +54,7 @@ final class ChallengeUITests: XCTestCase {
             let arrived = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: library)
             XCTAssertEqual(XCTWaiter.wait(for: [arrived], timeout: 8), .completed)
         }
-        let more = language == "ko" ? "더보기" : language == "ja" ? "その他" : "More"
+        let more = language == "ko" ? "설정" : language == "ja" ? "設定" : "Settings"
         let tab = app.tabBars.buttons[more]
         if tab.exists { tab.tap() }
         else { app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", more)).firstMatch.tap() }

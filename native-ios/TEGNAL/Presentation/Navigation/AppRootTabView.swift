@@ -416,8 +416,8 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
     let settings: Settings
     private var collectionsTitle: String { L10n.text("Tags") }
     private var collectionsIcon: String { "tag" }
-    private var settingsTitle: String { L10n.text(mode == .booru ? "More" : "Settings") }
-    private var settingsIcon: String { mode == .booru ? "ellipsis" : "gearshape" }
+    private var settingsTitle: String { L10n.text("Settings") }
+    private var settingsIcon: String { "gearshape" }
     /// Safe Mode keeps Comics Mode to Safebooru's pools, so what comes from comics websites stays out of sight.
     private var hidesComics: Bool { mode == .manga && env.booruSafeMode }
     private var insights: some View {

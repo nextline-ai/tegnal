@@ -163,6 +163,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v15_study_game") { try StudyStore.migrateGame($0) }
         migrations.registerMigration("booru_v16_study_awards") { try StudyStore.migrateAwards($0) }
         migrations.registerMigration("booru_v17_addons") { try AddonStore.migrate($0) }
+        migrations.registerMigration("booru_v18_addon_origin") { try AddonStore.migrateOrigin($0) }
         try migrations.migrate(database)
         try reload()
     }

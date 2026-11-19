@@ -491,7 +491,7 @@ class _RootState extends State<_Root> {
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
     safeMode: (context) => SafeModeSection(booru: _booru),
-    addons: (context) => AddonsSettingsSection(booru: services.booru),
+    addons: (context) => AddonsSettingsRow(booru: services.booru),
     openAddons: (context) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: services.booru))),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),

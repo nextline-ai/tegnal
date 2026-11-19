@@ -10,6 +10,8 @@ struct InstalledAddon: Identifiable, Equatable, Sendable {
     let installed: Date
     /// SHA-256 of the file as it was opened, so that a learner can compare it with what its maker published.
     let digest: String
+    /// Installed from the official add-ons, checked against TEGNAL's signed catalog, rather than opened from a file.
+    var official = false
     var id: String { addon.id }
 }
 
@@ -133,27 +135,33 @@ struct AddonStore {
             """)
     }
 
+    static func migrateOrigin(_ db: Database) throws {
+        try db.execute(sql: "ALTER TABLE addons ADD COLUMN official INTEGER NOT NULL DEFAULT 0")
+    }
+
     /// Every add-on kept, checked again on the way out. One that no longer passes is left out, never used.
     func installed() throws -> [InstalledAddon] {
         try database.read { db in
-            try Row.fetchAll(db, sql: "SELECT payload, enabled, installed, digest FROM addons ORDER BY installed").compactMap { row in
+            try Row.fetchAll(db, sql: "SELECT payload, enabled, installed, digest, official FROM addons ORDER BY installed").compactMap { row in
                 guard let addon = try? JSONDecoder().decode(Addon.self, from: row["payload"] as Data), (try? addon.validate()) != nil else { return nil }
-                return InstalledAddon(addon: addon, enabled: (row["enabled"] as Int) != 0, installed: Date(timeIntervalSince1970: row["installed"]), digest: row["digest"])
+                return InstalledAddon(addon: addon, enabled: (row["enabled"] as Int) != 0, installed: Date(timeIntervalSince1970: row["installed"]), digest: row["digest"],
+                                      official: (row["official"] as Int) != 0)
             }
         }
     }
 
     /// Adds an add-on, or replaces the one with the same identifier. A replaced add-on stays on or off as it was.
-    func install(_ addon: Addon, digest: String, now: Date = .now) throws {
+    /// `official` is set only for a copy downloaded from the official add-ons and checked against the signed catalog.
+    func install(_ addon: Addon, digest: String, official: Bool = false, now: Date = .now) throws {
         try addon.validate()
         let payload = try JSONEncoder().encode(addon)
         try database.write { db in
             let enabled = try Int.fetchOne(db, sql: "SELECT enabled FROM addons WHERE id = ?", arguments: [addon.id]) ?? 1
             let installed = try Double.fetchOne(db, sql: "SELECT installed FROM addons WHERE id = ?", arguments: [addon.id]) ?? now.timeIntervalSince1970
             try db.execute(sql: """
-                INSERT INTO addons (id, payload, enabled, installed, digest) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, digest = excluded.digest
-                """, arguments: [addon.id, payload, enabled, installed, digest])
+                INSERT INTO addons (id, payload, enabled, installed, digest, official) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, digest = excluded.digest, official = excluded.official
+                """, arguments: [addon.id, payload, enabled, installed, digest, official ? 1 : 0])
             try Self.writeChallenges(addon, db: db)
         }
     }

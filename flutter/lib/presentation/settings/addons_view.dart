@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/addons/addon_market.dart';
 import '../../core/addons/addon_models.dart';
 import '../../core/addons/addon_store.dart';
 import '../../core/booru/booru_store.dart';
+import '../../core/downloads/download_store.dart' show FileByteCount;
 import '../../core/support/document_files.dart';
 import '../../core/support/l10n.dart';
 import '../design/app_sheet.dart';
@@ -28,30 +30,42 @@ Widget addonKindSymbol(AddonKind kind, Color color, {double size = 22}) => switc
 TextStyle _mono(double size, {required Color color}) =>
     TextStyle(fontFamily: 'monospace', fontFamilyFallback: TegnalType.fallback, fontSize: size, color: color);
 
-String _message(Object error) => error is AddonError ? error.errorDescription : '$error';
+String _message(Object error) => switch (error) {
+  AddonError() => error.errorDescription,
+  AddonMarketError() => error.errorDescription,
+  _ => '$error',
+};
 
-/// The settings row that leads to the add-ons, in both modes' settings (`AddonsSettingsSection`).
-class AddonsSettingsSection extends StatelessWidget {
-  const AddonsSettingsSection({super.key, required this.booru, this.rowColor});
+/// The small seal shown beside an official add-on's name (`AddonOfficialBadge`).
+class AddonOfficialBadge extends StatelessWidget {
+  const AddonOfficialBadge({super.key, this.size = 13});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: L10n.text('Official'),
+    child: Icon(CupertinoIcons.checkmark_seal_fill, size: size, color: SystemColors.blue.resolveFrom(context)),
+  );
+}
+
+/// The row that leads to the add-ons, last in the Browsing section of both modes' settings (`AddonsSettingsRow`).
+class AddonsSettingsRow extends StatelessWidget implements FormSeparatorInset {
+  const AddonsSettingsRow({super.key, required this.booru});
   final BooruStore booru;
-  final Color? rowColor;
+
+  @override
+  double get separatorInset => settingsIconInset;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: AddonRuntime.shared,
     builder: (context, _) {
       final count = AddonRuntime.shared.effects.enabledIDs.length;
-      return FormSection(
-        prominentHeader: true,
-        rowColor: rowColor ?? FormColors.listRow.resolveFrom(context),
-        children: [
-          SettingsLinkRow(
-            title: L10n.text('Add-ons'),
-            symbol: (color) => PuzzlePieceSymbol(color: color),
-            value: count > 0 ? '$count' : null,
-            onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: booru))),
-          ),
-        ],
+      return SettingsLinkRow(
+        title: L10n.text('Add-ons'),
+        symbol: (color) => PuzzlePieceSymbol(color: color),
+        value: count > 0 ? '$count' : null,
+        onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: booru))),
       );
     },
   );
@@ -93,10 +107,13 @@ class AddonAddedTermsSection extends StatelessWidget {
 
 /// A checked add-on waiting for the person to decide.
 class _AddonCandidate {
-  const _AddonCandidate({required this.addon, required this.digest, required this.existing});
+  const _AddonCandidate({required this.addon, required this.digest, required this.existing, this.official = false});
   final Addon addon;
   final String digest;
   final InstalledAddon? existing;
+
+  /// Downloaded from the official add-ons and matched against the signed catalog.
+  final bool official;
 }
 
 /// The add-ons kept, a way to open a file, and what the add-ons are (`AddonsView`).
@@ -161,7 +178,7 @@ class _AddonsViewState extends State<AddonsView> {
 
   void _install(_AddonCandidate candidate) {
     try {
-      _store.install(candidate.addon, digest: candidate.digest);
+      _store.install(candidate.addon, digest: candidate.digest, official: candidate.official);
       _error = null;
       _reload();
       AddonRuntime.applyChanges(widget.booru);
@@ -184,10 +201,22 @@ class _AddonsViewState extends State<AddonsView> {
               rowColor: row,
               footer: Text(
                 L10n.text(
-                  'Add-ons are files made by other people that you download yourself. They hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything a file adds before it is installed.',
+                  'Official add-ons are made by TEGNAL and downloaded from its server. Others are files made by other people that you download and open yourself. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed.',
                 ),
               ),
               children: [
+                SettingsLinkRow(
+                  title: L10n.text('Official Add-ons'),
+                  symbol: (_) => Icon(CupertinoIcons.checkmark_seal, size: 22, color: SystemColors.blue.resolveFrom(context)),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => AddonMarketView(booru: widget.booru, changed: _reload),
+                      ),
+                    );
+                    _reload();
+                  },
+                ),
                 SettingsLinkRow(
                   title: L10n.text('Open Add-on File'),
                   icon: CupertinoIcons.doc_append,
@@ -308,13 +337,20 @@ class _AddonRow extends StatelessWidget implements FormSeparatorInset {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    item.addon.title,
-                    style: TegnalType.style(
-                      17,
-                      weight: FontWeight.w600,
-                      color: item.enabled ? TegnalColors.label.resolveFrom(context) : TegnalColors.secondaryLabel.resolveFrom(context),
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.addon.title,
+                          style: TegnalType.style(
+                            17,
+                            weight: FontWeight.w600,
+                            color: item.enabled ? TegnalColors.label.resolveFrom(context) : TegnalColors.secondaryLabel.resolveFrom(context),
+                          ),
+                        ),
+                      ),
+                      if (item.official) ...[const SizedBox(width: 4), const AddonOfficialBadge()],
+                    ],
                   ),
                   const SizedBox(height: 3),
                   Text(
@@ -413,7 +449,7 @@ class _AddonDetailViewState extends State<AddonDetailView> {
       title: item?.addon.title ?? L10n.text('Add-ons'),
       children: [
         if (item != null) ...[
-          _AddonHeader(addon: item.addon, rowColor: row),
+          _AddonHeader(addon: item.addon, official: item.official, rowColor: row),
           settingsSectionGap,
           FormSection(
             rowColor: row,
@@ -421,7 +457,7 @@ class _AddonDetailViewState extends State<AddonDetailView> {
           ),
           ..._addonContentsSections(item.addon, context, rowColor: row),
           settingsSectionGap,
-          _AddonOriginSection(addon: item.addon, digest: item.digest, installed: item.installed, rowColor: row),
+          _AddonOriginSection(addon: item.addon, digest: item.digest, installed: item.installed, official: item.official, rowColor: row),
           settingsSectionGap,
           FormSection(
             rowColor: row,
@@ -469,8 +505,24 @@ class _AddonInstallSheet extends StatelessWidget {
         [existing.addon.version, addon.version],
       );
       final color = order < 0 ? SystemColors.orange.resolveFrom(context) : TegnalColors.label.resolveFrom(context);
+      final orange = SystemColors.orange.resolveFrom(context);
       update = FormSection(
         children: [
+          if (existing.official && !candidate.official)
+            FormRow(
+              child: Row(
+                children: [
+                  Icon(CupertinoIcons.exclamationmark_triangle, size: 22, color: orange),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      L10n.text('This file is not the official copy. Installing it replaces the official add-on, which is then no longer marked as official.'),
+                      style: TegnalType.style(17, color: orange),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           FormRow(
             child: Row(
               children: [
@@ -500,12 +552,17 @@ class _AddonInstallSheet extends StatelessWidget {
               FormRow(
                 child: Row(
                   children: [
-                    Icon(CupertinoIcons.checkmark_shield, size: 22, color: SystemColors.green.resolveFrom(context)),
+                    if (candidate.official)
+                      Icon(CupertinoIcons.checkmark_seal_fill, size: 22, color: SystemColors.blue.resolveFrom(context))
+                    else
+                      Icon(CupertinoIcons.checkmark_shield, size: 22, color: SystemColors.green.resolveFrom(context)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         L10n.text(
-                          'This add-on was made by someone else. Install it only if you trust where it came from. It holds data only and cannot run code or connect to the internet.',
+                          candidate.official
+                              ? 'An official add-on from TEGNAL. The downloaded file matched the copy TEGNAL published. It holds data only and cannot run code or connect to the internet.'
+                              : 'This add-on was made by someone else. Install it only if you trust where it came from. It holds data only and cannot run code or connect to the internet.',
                         ),
                         style: TegnalType.style(16),
                       ),
@@ -516,11 +573,11 @@ class _AddonInstallSheet extends StatelessWidget {
             ],
           ),
           settingsSectionGap,
-          _AddonHeader(addon: addon),
+          _AddonHeader(addon: addon, official: candidate.official),
           if (update != null) ...[settingsSectionGap, update],
           ..._addonContentsSections(addon, context),
           settingsSectionGap,
-          _AddonOriginSection(addon: addon, digest: candidate.digest, installed: null),
+          _AddonOriginSection(addon: addon, digest: candidate.digest, installed: null, official: candidate.official),
         ],
       ),
     );
@@ -528,8 +585,9 @@ class _AddonInstallSheet extends StatelessWidget {
 }
 
 class _AddonHeader extends StatelessWidget {
-  const _AddonHeader({required this.addon, this.rowColor});
+  const _AddonHeader({required this.addon, this.official = false, this.rowColor});
   final Addon addon;
+  final bool official;
   final Color? rowColor;
 
   @override
@@ -547,9 +605,16 @@ class _AddonHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    addon.title,
-                    style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          addon.title,
+                          style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                        ),
+                      ),
+                      if (official) ...[const SizedBox(width: 6), const AddonOfficialBadge(size: 15)],
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -571,10 +636,11 @@ class _AddonHeader extends StatelessWidget {
 }
 
 class _AddonOriginSection extends StatelessWidget {
-  const _AddonOriginSection({required this.addon, required this.digest, required this.installed, this.rowColor});
+  const _AddonOriginSection({required this.addon, required this.digest, required this.installed, this.official = false, this.rowColor});
   final Addon addon;
   final String digest;
   final DateTime? installed;
+  final bool official;
   final Color? rowColor;
 
   /// `Date.formatted(date: .abbreviated, time: .shortened)` for the three app languages.
@@ -603,6 +669,7 @@ class _AddonOriginSection extends StatelessWidget {
       footer: Text(L10n.text('If the maker publishes a fingerprint, it should match this one exactly.')),
       children: [
         SettingsValueRow(title: L10n.text('Identifier'), value: addon.id),
+        SettingsValueRow(title: L10n.text('Source'), value: L10n.text(official ? 'Official Add-ons' : 'Opened File')),
         if (installed != null) SettingsValueRow(title: L10n.text('Installed'), value: _date(installed!)),
         FormRow(
           child: SizedBox(
@@ -789,4 +856,317 @@ List<Widget> _addonContentsSections(Addon addon, BuildContext context, {Color? r
   return [
     for (final section in sections) ...[settingsSectionGap, section],
   ];
+}
+
+// MARK: - Official add-ons
+
+/// The official add-ons, read from TEGNAL's signed catalog (`AddonMarketView`). Each one is downloaded,
+/// matched against the catalog and shown in full before it is installed, like a file the person opens.
+class AddonMarketView extends StatefulWidget {
+  const AddonMarketView({super.key, required this.booru, required this.changed, this.market});
+  final BooruStore booru;
+  final VoidCallback changed;
+
+  /// Replaced in tests; the live market otherwise.
+  final AddonMarket? market;
+
+  @override
+  State<AddonMarketView> createState() => _AddonMarketViewState();
+}
+
+class _AddonMarketViewState extends State<AddonMarketView> {
+  AddonCatalog? _catalog;
+  List<InstalledAddon> _installed = [];
+  String? _loadError;
+  String? _error;
+  String? _downloading;
+  AddonMarket get _market => widget.market ?? AddonMarket.live;
+  AddonStore get _store => AddonStore(widget.booru.database);
+
+  @override
+  void initState() {
+    super.initState();
+    _reloadInstalled();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (_loadError != null) setState(() => _loadError = null);
+    try {
+      final catalog = await _market.catalog();
+      if (mounted) setState(() => _catalog = catalog);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _catalog == null ? _loadError = _message(error) : _error = _message(error));
+    }
+  }
+
+  void _reloadInstalled() {
+    List<InstalledAddon> items;
+    try {
+      items = _store.installed();
+    } on Object {
+      items = const [];
+    }
+    if (mounted) setState(() => _installed = items);
+  }
+
+  InstalledAddon? _item(String id) => _installed.where((item) => item.id == id).firstOrNull;
+
+  Future<void> _get(AddonListing listing) async {
+    setState(() => _downloading = listing.id);
+    _AddonCandidate? candidate;
+    try {
+      final (:addon, :digest) = await _market.download(listing);
+      candidate = _AddonCandidate(addon: addon, digest: digest, existing: _item(addon.id), official: true);
+      _error = null;
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _downloading = null);
+    }
+    if (candidate == null || !mounted) return;
+    final install = await showAppSheet<bool>(
+      context,
+      builder: (context, controller) => _AddonInstallSheet(candidate: candidate!, controller: controller),
+    );
+    if (install != true || !mounted) return;
+    try {
+      _store.install(candidate.addon, digest: candidate.digest, official: true);
+      _error = null;
+      _reloadInstalled();
+      AddonRuntime.applyChanges(widget.booru);
+      widget.changed();
+    } on Object catch (error) {
+      setState(() => _error = _message(error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final label = TegnalColors.label.resolveFrom(context);
+    final catalog = _catalog;
+    Widget placeholder({required Widget symbol, required String title, required String detail, Widget? action}) => FormSection(
+      rowColor: row,
+      children: [
+        FormRow(
+          minHeight: 200,
+          child: SizedBox(
+            width: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                symbol,
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TegnalType.style(20, weight: FontWeight.w600, color: label),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  detail,
+                  textAlign: TextAlign.center,
+                  style: TegnalType.style(15, color: secondary),
+                ),
+                if (action != null) ...[const SizedBox(height: 14), action],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    return Stack(
+      children: [
+        SettingsPage(
+          title: L10n.text('Official Add-ons'),
+          children: [
+            if (catalog != null) ...[
+              if (catalog.addons.isEmpty)
+                placeholder(
+                  symbol: Icon(CupertinoIcons.checkmark_seal, size: 44, color: secondary),
+                  title: L10n.text('No Official Add-ons Yet'),
+                  detail: L10n.text('Official add-ons appear here as TEGNAL publishes them.'),
+                )
+              else
+                FormSection(
+                  rowColor: row,
+                  footer: Text(
+                    L10n.text(
+                      'Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed.',
+                    ),
+                  ),
+                  children: [for (final listing in catalog.addons) _listingRow(listing)],
+                ),
+              if (_error != null) ...[
+                settingsSectionGap,
+                FormSection(
+                  rowColor: row,
+                  children: [
+                    FormRow(
+                      child: Row(
+                        children: [
+                          Icon(CupertinoIcons.exclamationmark_triangle, size: 20, color: SystemColors.red.resolveFrom(context)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(_error!, style: TegnalType.style(17, color: SystemColors.red.resolveFrom(context))),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ] else if (_loadError != null)
+              placeholder(
+                symbol: Icon(CupertinoIcons.wifi_exclamationmark, size: 44, color: secondary),
+                title: L10n.text('Couldn’t Load Official Add-ons'),
+                detail: _loadError!,
+                action: CupertinoButton(onPressed: _load, child: Text(L10n.text('Try Again'))),
+              ),
+          ],
+        ),
+        if (catalog == null && _loadError == null)
+          Positioned.fill(
+            child: Center(child: CupertinoActivityIndicator(color: TegnalColors.tint.resolveFrom(context), radius: 14)),
+          ),
+      ],
+    );
+  }
+
+  Widget _listingRow(AddonListing listing) {
+    final item = _item(listing.id);
+    final state = AddonListingState.of(listing, item);
+    if (state == AddonListingState.installed && item != null) {
+      return _AddonListingRow(
+        key: ValueKey(listing.id),
+        listing: listing,
+        state: state,
+        downloading: false,
+        onTap: () async {
+          await Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => AddonDetailView(
+                booru: widget.booru,
+                id: item.id,
+                changed: () {
+                  _reloadInstalled();
+                  widget.changed();
+                },
+              ),
+            ),
+          );
+          _reloadInstalled();
+        },
+      );
+    }
+    return _AddonListingRow(
+      key: ValueKey(listing.id),
+      listing: listing,
+      state: state,
+      downloading: _downloading == listing.id,
+      onTap: state == AddonListingState.unsupported || _downloading != null ? null : () => _get(listing),
+    );
+  }
+}
+
+class _AddonListingRow extends StatelessWidget implements FormSeparatorInset {
+  const _AddonListingRow({super.key, required this.listing, required this.state, required this.downloading, required this.onTap});
+  final AddonListing listing;
+  final AddonListingState state;
+  final bool downloading;
+  final VoidCallback? onTap;
+
+  @override
+  double get separatorInset => 60;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = TegnalColors.tint.resolveFrom(context);
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final kind = listing.addonKinds.firstOrNull;
+    final summary = listing.summary?.addonResolved();
+    final Widget status;
+    if (downloading) {
+      status = CupertinoActivityIndicator(color: tint);
+    } else {
+      status = switch (state) {
+        AddonListingState.installed => Semantics(
+          label: L10n.text('Installed'),
+          child: Icon(CupertinoIcons.checkmark, size: 18, color: secondary),
+        ),
+        AddonListingState.unsupported => Text(
+          L10n.text('Needs a Newer Version'),
+          textAlign: TextAlign.end,
+          style: TegnalType.style(12, color: secondary),
+        ),
+        _ => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          decoration: ShapeDecoration(shape: const StadiumBorder(), color: tint.withValues(alpha: 0.15)),
+          child: Text(
+            L10n.text(state == AddonListingState.update ? 'Update' : 'Get'),
+            style: TegnalType.style(15, weight: FontWeight.w600, color: tint),
+          ),
+        ),
+      };
+    }
+    return Semantics(
+      button: onTap != null,
+      child: FormRow(
+        onTap: onTap,
+        separatorInset: separatorInset,
+        minHeight: 60,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                child: Center(child: kind == null ? PuzzlePieceSymbol(size: 24, color: tint) : addonKindSymbol(kind, tint, size: 24)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      listing.title,
+                      style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(L10n.text('By %@ · Version %@', [listing.author, listing.version]), style: TegnalType.style(12, color: secondary)),
+                    if (state == AddonListingState.fromFile) ...[
+                      const SizedBox(height: 3),
+                      Text(L10n.text('Installed from a File'), style: TegnalType.style(12, color: SystemColors.orange.resolveFrom(context))),
+                    ],
+                    if (summary != null && summary.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        summary,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TegnalType.style(16, color: secondary),
+                      ),
+                    ],
+                    const SizedBox(height: 3),
+                    Text(
+                      [...listing.addonKinds.map((kind) => kind.title), FileByteCount.format(listing.size, language: L10n.language)].join(' · '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TegnalType.style(12, color: secondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              status,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
