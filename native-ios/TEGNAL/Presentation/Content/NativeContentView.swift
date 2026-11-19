@@ -380,7 +380,7 @@ private struct GalleryFeedView: View {
     private var effectiveQuery: GalleryQuery { effectiveQuery(category: category.wrappedValue) }
 
     private func effectiveQuery(category: String) -> GalleryQuery {
-        var result = query.filtered(to: category).applyingDefaults(tags: env.defaultTags, excluded: env.defaultExcludedTags)
+        var result = query.filtered(to: category).applyingDefaults(tags: env.searchDefaultTags, excluded: env.searchExcludedTags)
         result.allowsLanguageExceptions = env.allowsMangaLanguageExceptions
         // A ranking chosen on another website, or before signing out, falls back to the latest works.
         if !GallerySort.available.contains(result.sort) { result.sort = .latest }
@@ -1188,7 +1188,7 @@ private struct GalleryRelatedWorks: View {
             }
         }
         .task(id: gallery.id) {
-            let found = await RelatedWorks.load(for: gallery, source: links.source, hidden: env.hiddenMangaGalleryIDs, excluded: env.defaultExcludedTags)
+            let found = await RelatedWorks.load(for: gallery, source: links.source, hidden: env.hiddenMangaGalleryIDs, excluded: env.searchExcludedTags)
             if !Task.isCancelled { ids = found }
         }
     }

@@ -259,8 +259,11 @@ enum ArtworkTagCategory: String, CaseIterable, Identifiable {
 }
 struct ArtworkTag: Identifiable, Hashable {
     let query: String
+    /// What is shown: a translation from an add-on when one is on, otherwise the tag with spaces.
     let name: String
     let category: ArtworkTagCategory
+    /// The tag itself, with spaces, when `name` is a translation.
+    var original: String? = nil
     var id: String { query }
 }
 struct ArtworkTagGroup: Identifiable {
@@ -285,7 +288,12 @@ struct ArtworkTagGroup: Identifiable {
             }
             name = name.replacingOccurrences(of: "_", with: " ")
             guard seen.insert(category.rawValue + ":" + name).inserted else { continue }
-            result[category, default: []].append(.init(query: query, name: name, category: category))
+            // A translation add-on shows its words in place of the tag; the tag itself is still what is searched.
+            if let translated = AddonRuntime.shared.translation(query) {
+                result[category, default: []].append(.init(query: query, name: translated, category: category, original: name))
+            } else {
+                result[category, default: []].append(.init(query: query, name: name, category: category))
+            }
         }
         return ArtworkTagCategory.allCases.compactMap { category in
             guard let tags = result[category], !tags.isEmpty else { return nil }
@@ -326,6 +334,7 @@ struct ArtworkTagCloud: View {
                             ArtworkTagCloudItem(tag: tag, saved: savedQueries.contains(tag.query.replacingOccurrences(of: " ", with: "_")),
                                 destination: destination, action: action, save: save)
                                 .accessibilityLabel(L10n.text(tag.category.title) + ": " + tag.name)
+                                .accessibilityHint(tag.original ?? "")
                                 .accessibilityIdentifier("tags." + group.category.rawValue + "." + tag.query)
                         }
                     }

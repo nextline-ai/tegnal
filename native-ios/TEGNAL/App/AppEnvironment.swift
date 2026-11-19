@@ -450,6 +450,13 @@ public final class AppEnvironment: @unchecked Sendable {
     var defaultExcludedTags: String {
         didSet { browserPreferences.set(defaultExcludedTags, forKey: "manga.defaultExcludedTags") }
     }
+    /// The tags every comics search adds: the learner's own, then those of add-ons that are on.
+    /// Add-on tags are never written into `defaultTags`, so turning an add-on off takes them away again.
+    var searchDefaultTags: String { Self.joining(defaultTags, AddonRuntime.shared.effects.comicsInclude) }
+    var searchExcludedTags: String { Self.joining(defaultExcludedTags, AddonRuntime.shared.effects.comicsExclude) }
+    private static func joining(_ own: String, _ added: [String]) -> String {
+        added.isEmpty ? own : ([own] + added).filter { !$0.isEmpty }.joined(separator: " ")
+    }
     /// The category the main comics feed is narrowed to, empty for all.
     var mangaBrowseCategory: String {
         didSet { browserPreferences.set(mangaBrowseCategory, forKey: "manga.browseCategory") }
@@ -545,7 +552,7 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     var launchMangaQuery: GalleryQuery {
-        var query = GalleryQuery(language: L10n.contentLanguage).filtered(to: mangaBrowseCategory).applyingDefaults(tags: defaultTags, excluded: defaultExcludedTags)
+        var query = GalleryQuery(language: L10n.contentLanguage).filtered(to: mangaBrowseCategory).applyingDefaults(tags: searchDefaultTags, excluded: searchExcludedTags)
         query.allowsLanguageExceptions = allowsMangaLanguageExceptions
         return query
     }
@@ -656,6 +663,13 @@ public final class AppEnvironment: @unchecked Sendable {
 
     init(database: AppDatabase, browserPreferences: UserDefaults = .standard, booru: BooruStore, coverQueue: CoverQueueActor? = nil) {
         self.browserPreferences = browserPreferences
+        #if DEBUG
+        // For tests and screenshots: `--addon-install=<file path>` installs an add-on file at launch, as if it had been opened.
+        for path in ProcessInfo.processInfo.arguments.filter({ $0.hasPrefix("--addon-install=") }).map({ String($0.dropFirst(16)) }) {
+            if let (addon, digest) = try? Addon.read(URL(fileURLWithPath: path)) { try? AddonStore(booru).install(addon, digest: digest) }
+        }
+        #endif
+        AddonRuntime.shared.reload(booru)
         let discoveredSwitch = browserPreferences.object(forKey: "mode_switch.discovered") as? Bool
             ?? browserPreferences.bool(forKey: "onboarding_completed")
         self.modeSwitchHintPending = !discoveredSwitch

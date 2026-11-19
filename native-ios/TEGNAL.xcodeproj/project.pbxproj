@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AE5142B58CB53FB35ED1277F /* TEGNALTests/AddonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309C4E35C892C99C1FA09F82 /* TEGNALTests/AddonTests.swift */; };
+		A45E4512410AC0594591068F /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5657F8CF36F5F2B1D1D2C4C /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift */; };
+		7A69F1034AD9E5EA10F2FD0C /* TEGNAL/Presentation/Settings/AddonsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAB503971B929358EDA4343 /* TEGNAL/Presentation/Settings/AddonsView.swift */; };
+		46764169D1E156A5E752E52A /* TEGNAL/Core/Addons/AddonStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42AA75947672B1C52D061946 /* TEGNAL/Core/Addons/AddonStore.swift */; };
+		A84A9C6161892A3101B7B288 /* TEGNAL/Core/Addons/AddonModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E28F1DBA5B75CFBEEBDB577E /* TEGNAL/Core/Addons/AddonModels.swift */; };
 		B7AFA29D20A0CE2A37B34366 /* BooruAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 811E6E23CC9A56C5E88F1F61 /* BooruAccountTests.swift */; };
 		1FA66F3829D61F4313648F89 /* BooruAccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDA338A1D16ED0DED0254B6 /* BooruAccountViews.swift */; };
 		B4A107E20B377D5194C0BA92 /* BooruAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9C64DB713069D448C68E0F /* BooruAccount.swift */; };
@@ -281,6 +286,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		309C4E35C892C99C1FA09F82 /* TEGNALTests/AddonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/AddonTests.swift; sourceTree = SOURCE_ROOT; };
+		B5657F8CF36F5F2B1D1D2C4C /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/StudyMode/StudyTrackViews.swift; sourceTree = SOURCE_ROOT; };
+		7FAB503971B929358EDA4343 /* TEGNAL/Presentation/Settings/AddonsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Settings/AddonsView.swift; sourceTree = SOURCE_ROOT; };
+		42AA75947672B1C52D061946 /* TEGNAL/Core/Addons/AddonStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Addons/AddonStore.swift; sourceTree = SOURCE_ROOT; };
+		E28F1DBA5B75CFBEEBDB577E /* TEGNAL/Core/Addons/AddonModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Addons/AddonModels.swift; sourceTree = SOURCE_ROOT; };
 		811E6E23CC9A56C5E88F1F61 /* BooruAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruAccountTests.swift; sourceTree = "<group>"; };
 		8FDA338A1D16ED0DED0254B6 /* BooruAccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruAccountViews.swift; sourceTree = "<group>"; };
 		8F9C64DB713069D448C68E0F /* BooruAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruAccount.swift; sourceTree = "<group>"; };
@@ -885,6 +895,10 @@
 				021C5AB32D2DCCA708DE8DDF /* TEGNAL/Core/Study/StudyModels.swift */,
 				6C04D77C97393EE83DDE4459 /* TEGNAL/Core/Challenge/ChallengeModels.swift */,
 				96769750C5AEC39276B78944 /* TEGNAL/Core/Challenge/ChallengeStore.swift */,
+				B5657F8CF36F5F2B1D1D2C4C /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift */,
+				7FAB503971B929358EDA4343 /* TEGNAL/Presentation/Settings/AddonsView.swift */,
+				42AA75947672B1C52D061946 /* TEGNAL/Core/Addons/AddonStore.swift */,
+				E28F1DBA5B75CFBEEBDB577E /* TEGNAL/Core/Addons/AddonModels.swift */,
 				E52561A4ECDB99CA3B613EA1 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift */,
 				B77DB6A93FDC53717A941BDF /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift */,
 				DD90F333216B9CA5E03F0306 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift */,
@@ -893,6 +907,7 @@
 				A6FFEC1A61D6ED208A9115A0 /* TEGNALTests/ChallengeTests.swift */,
 				901E41D8B8FF8CA42C7A3020 /* TEGNALTests/StudyTests.swift */,
 				41BA1D28805678EAB564131B /* TEGNALTests/StudyPathTests.swift */,
+				309C4E35C892C99C1FA09F82 /* TEGNALTests/AddonTests.swift */,
 				0CBF3F417C8F3839D6FABB29 /* TEGNALTests/StudyAwardsTests.swift */,
 				F770108644C2D3DD8921F5B1 /* TEGNALTests/StudyGuideTests.swift */,
 				43FEF808560E6F067C584DD1 /* TEGNALTests/GenerationTests.swift */,
@@ -1206,6 +1221,10 @@
 				ACC0A6E09E8E55E7DFDDE533 /* TEGNAL/Presentation/Challenge/ChallengeLibraryView.swift in Sources */,
 				33DB30FEE41026006C8A92E4 /* TEGNAL/Presentation/Challenge/ChallengeEditorView.swift in Sources */,
 				2D1032D6C304CE01713FB5F7 /* TEGNAL/Core/Challenge/ChallengeStore.swift in Sources */,
+				A45E4512410AC0594591068F /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift in Sources */,
+				7A69F1034AD9E5EA10F2FD0C /* TEGNAL/Presentation/Settings/AddonsView.swift in Sources */,
+				46764169D1E156A5E752E52A /* TEGNAL/Core/Addons/AddonStore.swift in Sources */,
+				A84A9C6161892A3101B7B288 /* TEGNAL/Core/Addons/AddonModels.swift in Sources */,
 				59E0835501F6A15D0AA44868 /* TEGNAL/Core/Challenge/ChallengeModels.swift in Sources */,
 				97F275EFC03DF3E4A1834733 /* TEGNAL/Core/Challenge/ChallengeEngine.swift in Sources */,
 				175245BA170E3BF44B71A8A7 /* TEGNAL/Presentation/Study/StudyQuizView.swift in Sources */,
@@ -1381,6 +1400,7 @@
 				FF8710300AB2E727C84EF6F4 /* TEGNALTests/ChallengeTests.swift in Sources */,
 				369B9987C494BA2EBCEA3857 /* TEGNALTests/StudyTests.swift in Sources */,
 				690185032F91C402D64CA0EE /* TEGNALTests/StudyPathTests.swift in Sources */,
+				AE5142B58CB53FB35ED1277F /* TEGNALTests/AddonTests.swift in Sources */,
 				DF60035C8EC1B4C34C014D01 /* TEGNALTests/StudyAwardsTests.swift in Sources */,
 				3C01A198E6221936BDC97A4C /* TEGNALTests/StudyGuideTests.swift in Sources */,
 				C888CE8153DADBECCB9157E7 /* TEGNALTests/GenerationTests.swift in Sources */,

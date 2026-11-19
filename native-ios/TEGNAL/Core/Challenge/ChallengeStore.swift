@@ -13,7 +13,12 @@ struct ChallengeStore {
     }
     func definitions() throws -> [ChallengeDefinition] {
         try database.read { db in
-            try Data.fetchAll(db, sql: "SELECT payload FROM challenges ORDER BY rowid").map { try JSONDecoder().decode(ChallengeDefinition.self, from: $0) }
+            // A challenge an add-on brought shows only while that add-on is installed and on.
+            try Data.fetchAll(db, sql: """
+                SELECT payload FROM challenges c WHERE substr(c.id, 1, 6) != 'addon:' OR EXISTS (
+                    SELECT 1 FROM addons a WHERE a.enabled = 1 AND substr(c.id, 1, length(a.id) + 7) = 'addon:' || a.id || ':')
+                ORDER BY rowid
+                """).map { try JSONDecoder().decode(ChallengeDefinition.self, from: $0) }
         }
     }
     func example() throws -> ChallengeDefinition {

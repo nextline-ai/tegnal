@@ -329,7 +329,7 @@ struct BooruFeedView: View {
     private var hasAccessiblePosts: Bool { loader.posts.contains(where: store.isVisible) }
     private var isActive: Bool { (challenge != nil || env.mode == browsingMode) && scenePhase == .active }
     private func updateBlacklists() {
-        loader.setBlacklists(Dictionary(uniqueKeysWithValues: servers.map { ($0.id, store.blacklist(serverID: $0.id)) }))
+        loader.setBlacklists(Dictionary(uniqueKeysWithValues: servers.map { ($0.id, store.filteringBlacklist(serverID: $0.id)) }))
         loader.setExcludedPostIDs(store.confirmedGoldRestrictedIDs)
     }
     private func updateFooterVisibility() {

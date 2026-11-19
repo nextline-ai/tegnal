@@ -4,8 +4,18 @@ import SwiftUI
 @MainActor @Observable
 final class StudyModeModel {
     static let goalKey = "study.goal"
+    static let trackKey = "study.track"
+    /// The main path. Tracks from add-ons are finished apart from it and never count toward its badges.
     let path = StudyPath.bundled
-    let curriculum = StudyCurriculum.bundled
+    /// The app's curriculum, with the tags of the tracks that are on added after it.
+    private(set) var curriculum = StudyCurriculum.bundled
+    /// Tracks brought by add-ons that are on.
+    private(set) var tracks: [StudyTrack] = []
+    /// The track the path shows, nil for the main path.
+    var trackID: String? { didSet { defaults.set(trackID, forKey: Self.trackKey) } }
+    var track: StudyTrack? { tracks.first { $0.id == trackID } }
+    /// The path being shown: the chosen track's, or the main one.
+    var shownPath: StudyPath { track?.path ?? path }
     private let defaults = ReaderPreferences.booruDefaults
     private(set) var records: [String: StudyLessonRecord] = [:]
     private(set) var progress: [String: StudyProgress] = [:]
@@ -24,9 +34,31 @@ final class StudyModeModel {
     init() {
         let saved = ReaderPreferences.booruDefaults.integer(forKey: Self.goalKey)
         goal = StudyGame.goals.contains(saved) ? saved : StudyGame.defaultGoal
+        trackID = ReaderPreferences.booruDefaults.string(forKey: Self.trackKey)
+    }
+
+    /// Takes in the tracks of the add-ons that are on. A track that was turned off or removed hands the path back to the main one.
+    private func loadTracks() {
+        let next = AddonRuntime.shared.effects.tracks
+        if next.map(\.id) != tracks.map(\.id) || next.map(\.path.lessons.count) != tracks.map(\.path.lessons.count) {
+            tracks = next
+            let units = next.compactMap(\.unit)
+            curriculum = units.isEmpty ? .bundled : StudyCurriculum(version: StudyCurriculum.bundled.version, units: StudyCurriculum.bundled.units + units)
+        }
+        if let trackID, !tracks.contains(where: { $0.id == trackID }) { self.trackID = nil }
+    }
+
+    /// A track finished for the first time, once: the lessons of an add-on track all done, and not yet celebrated.
+    func newlyCompletedTrack(finishing lesson: String) -> StudyTrack? {
+        guard let done = tracks.first(where: { track in
+            track.path.lessons.contains { $0.id == lesson } && track.complete(records) && !defaults.bool(forKey: "study.trackDone." + track.id)
+        }) else { return nil }
+        defaults.set(true, forKey: "study.trackDone." + done.id)
+        return done
     }
 
     func reload(_ store: BooruStore) {
+        loadTracks()
         let study = store.studyStore
         let days = (try? study.days()) ?? []
         records = (try? study.lessons()) ?? [:]
@@ -61,6 +93,8 @@ struct StudyModeRoot: View {
     @State private var showingAwards = false
     /// Badges earned away from a lesson, waiting for their celebration.
     @State private var parade: [StudyAward] = []
+    /// An add-on track just finished, while its certificate is shown.
+    @State private var graduated: StudyTrack?
     private let source: any BooruProviding = TasteSources.booru
 
     /// Whether this visit's opening question or celebration has been shown.
@@ -106,6 +140,7 @@ struct StudyModeRoot: View {
         .sheet(isPresented: $choosingServer) { StudyServerPicker(model: model).presentationDetents([.medium, .large]) }
         .fullScreenCover(item: $speed, onDismiss: { withAnimation { model.reload(store) }; celebrate() }) { StudySpeedView(round: $0) }
         .fullScreenCover(isPresented: $showingAwards) { StudyAwardsGallery(model: model) }
+        .fullScreenCover(item: $graduated) { StudyTrackCertificate(track: $0) { graduated = nil } }
         .fullScreenCover(isPresented: Binding(get: { !parade.isEmpty }, set: { if !$0 { parade = [] } })) {
             StudyAwardParade(awards: parade) { parade = []; model.reload(store) }
         }
@@ -140,6 +175,7 @@ struct StudyModeRoot: View {
         }
         .onChange(of: HomeStage.shared.coversScreen) { _, _ in greet() }
         .onChange(of: store.revision) { model.reload(store) }
+        .onChange(of: AddonRuntime.shared.effects.tracks.map(\.id)) { model.reload(store) }
         // The path behind a finished lesson is already up to date when the lesson closes.
         .onChange(of: session?.phase) { _, phase in
             guard phase == .finished else { return }
@@ -165,6 +201,10 @@ struct StudyModeRoot: View {
         guard let done = finished else { return }
         finished = nil
         mode.tab = .path
+        // The last lesson of an add-on track earns its certificate, once, after the stop has burst.
+        if let track = model.newlyCompletedTrack(finishing: done) {
+            Task { try? await Task.sleep(for: .seconds(1.6)); if session == nil, parade.isEmpty { graduated = track } }
+        }
         Task {
             try? await Task.sleep(for: .milliseconds(250))
             celebrating = done
@@ -176,7 +216,8 @@ struct StudyModeRoot: View {
     }
 
     private func start(_ plan: StudyLessonPlan) {
-        session = StudyLessonSession(plan: plan, store: store, source: source, server: model.server)
+        // Lessons of an add-on track can teach tags of its own, so the curriculum with them is used.
+        session = StudyLessonSession(plan: plan, store: store, source: source, server: model.server, engine: StudyEngine(curriculum: model.curriculum))
     }
 }
 
@@ -257,11 +298,13 @@ struct StudyPathView: View {
     private static let sway: [CGFloat] = [0, 58, 86, 58, 0, -58, -86, -58]
 
     var body: some View {
-        let current = model.path.current(model.records)
+        let current = model.shownPath.current(model.records)
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(model.path.sections) { section in
+                    if !model.tracks.isEmpty { StudyTrackPicker(model: model).padding(.top, 10) }
+                    if let track = model.track { StudyTrackHeader(track: track, records: model.records).padding(.top, 14) }
+                    ForEach(model.shownPath.sections) { section in
                         banner(section).padding(.top, 18).padding(.bottom, 22)
                         if section.lessons.isEmpty {
                             Label(L10n.text("Opens in a coming update"), systemImage: "lock.fill")
