@@ -528,6 +528,8 @@ struct TagSuggestion: Identifiable, Equatable, Sendable {
     let namespace: String
     let name: String
     let count: Int?
+    /// The words a translation add-on shows for the tag.
+    var words: String? = nil
     var id: String { token }
     var token: String { namespace + ":" + name.replacingOccurrences(of: " ", with: "_") }
     static let namespaces: Set<String> = ["female", "male", "tag", "artist", "group", "series", "character", "language", "type"]

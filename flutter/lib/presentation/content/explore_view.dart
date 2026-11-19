@@ -10,6 +10,8 @@ import '../../core/content/manga_urls.dart';
 import '../../core/content/reading_queue.dart';
 import 'reading_queue_views.dart';
 
+import '../../core/addons/addon_models.dart';
+import '../../core/addons/addon_store.dart';
 import '../../core/content/combined_catalog.dart';
 import '../../core/content/gallery_content.dart';
 import '../../core/storage/app_database.dart';
@@ -126,26 +128,43 @@ class _ExploreViewState extends State<ExploreView> {
   void _textChanged() {
     _suggestionTimer?.cancel();
     final generation = ++_suggestionGeneration;
-    final context = _searchFocus.hasFocus ? TagCompletionContext.parse(_search.text) : null;
+    final focused = _searchFocus.hasFocus;
+    // Names from a translation add-on are suggested at once, so a tag can be searched by the words it is shown in.
+    final translated = [
+      if (focused)
+        for (final match in AddonSearchCompletion.parse(_search.text)?.suggestions(AddonMode.comics) ?? const <({String tag, String words})>[])
+          _translatedSuggestion(match.tag, match.words),
+    ];
+    final context = focused ? TagCompletionContext.parse(_search.text) : null;
     setState(() {
-      _suggestions = [];
+      _suggestions = translated;
       _suggesting = false;
     });
-    if (context == null) return;
+    if (context == null || !context.token.runes.every((rune) => rune < 128)) return;
     _suggestionTimer = Timer(const Duration(milliseconds: 300), () async {
       if (!mounted || generation != _suggestionGeneration) return;
-      setState(() => _suggesting = true);
+      if (translated.isEmpty) setState(() => _suggesting = true);
       try {
         final result = await widget.source.suggestions(context.token);
         if (!mounted || generation != _suggestionGeneration) return;
+        final seen = {for (final item in translated) item.token};
         setState(() {
-          _suggestions = result.take(8).toList();
+          _suggestions = [...translated, ...result.where((item) => seen.add(item.token))].take(8).toList();
           _suggesting = false;
         });
       } on Object {
         if (mounted && generation == _suggestionGeneration) setState(() => _suggesting = false);
       }
     });
+  }
+
+  static TagSuggestion _translatedSuggestion(String tag, String words) {
+    final colon = tag.indexOf(':');
+    return TagSuggestion(
+      namespace: colon >= 0 ? tag.substring(0, colon) : 'tag',
+      name: (colon >= 0 ? tag.substring(colon + 1) : tag).replaceAll('_', ' '),
+      words: words,
+    );
   }
 
   /// The main feed remembers its category; a feed opened from a tag or artist starts with all.
@@ -279,7 +298,13 @@ class _ExploreViewState extends State<ExploreView> {
 
   void _submitSearch([String? value]) {
     _searchFocus.unfocus();
-    final text = (value ?? _search.text).trim();
+    // Names typed in a translation add-on's words are searched as their tags, and the field shows the tags searched.
+    final typed = (value ?? _search.text).trim();
+    final text = AddonRuntime.shared.effects.searchQuery(typed, AddonMode.comics);
+    if (text != typed) {
+      final selection = TextSelection.collapsed(offset: text.length);
+      _search.value = TextEditingValue(text: text, selection: selection);
+    }
     if (widget.content.browserPreferences.boolean('search.rememberHistory') ?? true) widget.database.recordSearch(text);
     _reloadSearches();
     final route = ContentRoute.initial(text);
@@ -444,11 +469,18 @@ class _ExploreViewState extends State<ExploreView> {
               itemBuilder: (context, index) => _SuggestionRow(
                 suggestion: _suggestions[index],
                 onTap: () {
-                  final completion = TagCompletionContext.parse(_search.text);
-                  if (completion == null) return;
+                  final suggestion = _suggestions[index];
+                  final String inserted;
+                  if (TagCompletionContext.parse(_search.text) case final completion?) {
+                    inserted = completion.inserting(suggestion);
+                  } else if (AddonSearchCompletion.parse(_search.text) case final completion?) {
+                    inserted = completion.inserting(suggestion.token);
+                  } else {
+                    return;
+                  }
                   _search.value = TextEditingValue(
-                    text: completion.inserting(_suggestions[index]),
-                    selection: TextSelection.collapsed(offset: completion.inserting(_suggestions[index]).length),
+                    text: inserted,
+                    selection: TextSelection.collapsed(offset: inserted.length),
                   );
                   setState(() => _suggestions = []);
                 },
@@ -902,6 +934,7 @@ class _SuggestionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final count = suggestion.count;
+    final words = suggestion.words ?? AddonRuntime.shared.translation(suggestion.token, AddonMode.comics);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -912,14 +945,35 @@ class _SuggestionRow extends StatelessWidget {
           children: [
             Text(suggestion.namespace, style: TegnalType.style(12, color: secondary)),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                suggestion.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+            // A translation add-on's words come first, with the tag itself beside them.
+            if (words != null) ...[
+              Flexible(
+                child: Text(
+                  words,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  suggestion.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(12, color: secondary),
+                ),
+              ),
+              const Spacer(),
+            ] else
+              Expanded(
+                child: Text(
+                  suggestion.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+                ),
+              ),
             if (count != null) ...[const SizedBox(width: 4), Text(_grouped(count), style: TegnalType.style(12, color: secondary))],
           ],
         ),

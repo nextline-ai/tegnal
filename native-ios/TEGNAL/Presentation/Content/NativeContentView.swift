@@ -529,13 +529,19 @@ private struct GalleryFeedView: View {
                     VStack(spacing: 0) {
                         ForEach(suggestions) { item in
                             Button {
-                                guard let context = TagCompletionContext(searchText) else { return }
-                                searchText = context.inserting(item)
+                                if let context = TagCompletionContext(searchText) { searchText = context.inserting(item) }
+                                else if let context = AddonSearchCompletion(searchText) { searchText = context.inserting(item.token) }
                                 suggestions = []
                             } label: {
                                 HStack(spacing: 8) {
                                     Text(item.namespace).font(.caption).foregroundStyle(.secondary)
-                                    Text(item.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
+                                    // A translation add-on's words come first, with the tag itself beside them.
+                                    if let words = item.words ?? AddonRuntime.shared.translation(item.token, mode: .comics) {
+                                        Text(words).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
+                                        Text(item.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    } else {
+                                        Text(item.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
+                                    }
                                     Spacer(minLength: 4)
                                     if let count = item.count { Text(count.formatted()).font(.caption).foregroundStyle(.secondary) }
                                 }.searchSuggestionRow()
@@ -563,13 +569,22 @@ private struct GalleryFeedView: View {
         }
         .task(id: "\(isSearchFocused):\(searchText)") {
             suggestions = []; suggesting = false
-            guard isSearchFocused, let context = TagCompletionContext(searchText) else { return }
+            guard isSearchFocused else { return }
+            // Names from a translation add-on are suggested at once, so a tag can be searched by the words it is shown in.
+            let translated = AddonSearchCompletion(searchText)?.suggestions(mode: .comics).map { match -> TagSuggestion in
+                let parts = match.tag.split(separator: ":", maxSplits: 1).map(String.init)
+                return TagSuggestion(namespace: parts.count == 2 ? parts[0] : "tag", name: (parts.last ?? match.tag).replacingOccurrences(of: "_", with: " "),
+                                     count: nil, words: match.words)
+            } ?? []
+            suggestions = translated
+            guard let context = TagCompletionContext(searchText), context.token.allSatisfy(\.isASCII) else { return }
             do {
                 try await Task.sleep(for: .milliseconds(300))
-                suggesting = true
+                if translated.isEmpty { suggesting = true }
                 let result = try await source.suggestions(for: context.token)
                 try Task.checkCancellation()
-                suggestions = Array(result.prefix(8)); suggesting = false
+                var seen = Set(translated.map(\.token))
+                suggestions = Array((translated + result.filter { seen.insert($0.token).inserted }).prefix(8)); suggesting = false
             } catch { if !Task.isCancelled { suggesting = false } }
         }
         .overlay(alignment: .bottom) {
@@ -681,7 +696,9 @@ private struct GalleryFeedView: View {
         isSearchFocused = false
         suggestions = []
         submitted = true; tasteSession = UUID().uuidString
-        let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Names typed in a translation add-on's words are searched as their tags, and the field shows the tags searched.
+        let text = AddonRuntime.shared.effects.searchQuery(searchText.trimmingCharacters(in: .whitespacesAndNewlines), mode: .comics)
+        if text != searchText.trimmingCharacters(in: .whitespacesAndNewlines) { searchText = text }
         if ReaderPreferences.defaults.object(forKey: "search.rememberHistory") as? Bool ?? true {
             try? env.database.recordSearch(text)
             try? env.database.recordTasteSearch(DiscoveryContext(origin: .search, query: text, defaults: env.defaultTags + " " + env.defaultExcludedTags, session: tasteSession))

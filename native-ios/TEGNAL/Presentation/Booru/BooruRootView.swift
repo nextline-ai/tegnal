@@ -558,10 +558,16 @@ struct BooruFeedView: View {
                         ForEach(suggestions) { tag in
                             Button {
                                 if let completion = BooruCompletion(searchText) { searchText = completion.inserting(tag.name) }
+                                else if let completion = AddonSearchCompletion(searchText) { searchText = completion.inserting(tag.name) }
                             } label: {
                                 HStack(spacing: 8) {
                                     Image(systemName: tag.isArtist ? "person" : "number").foregroundStyle(.secondary)
-                                    Text(tag.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
+                                    if let words = AddonRuntime.shared.translation(tag.name, mode: .images) {
+                                        Text(words).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
+                                        Text(tag.name.replacingOccurrences(of: "_", with: " ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    } else {
+                                        Text(tag.name).font(.subheadline).foregroundStyle(.primary).lineLimit(1)
+                                    }
                                     Spacer(minLength: 4)
                                     if tag.count > 0 { Text(tag.count.formatted()).font(.caption).foregroundStyle(.secondary) }
                                 }.searchSuggestionRow()
@@ -585,7 +591,9 @@ struct BooruFeedView: View {
         searchFocused = false
         suggestions = []
         submitted = true; tasteSession = UUID().uuidString
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Names typed in a translation add-on's words are searched as their tags.
+        let value = AddonRuntime.shared.effects.searchQuery(text.trimmingCharacters(in: .whitespacesAndNewlines), mode: .images)
+        if value != text.trimmingCharacters(in: .whitespacesAndNewlines) { searchText = value }
         if rememberHistory && challenge == nil { store.perform {
             for server in servers { try store.recordSearch(value, serverID: server.id) }
             try store.recordTasteSearch(DiscoveryContext(origin: .search, query: value, session: tasteSession), servers: servers)
@@ -607,7 +615,10 @@ struct BooruFeedView: View {
     }
     private func complete() async {
         suggestions = []; suggestionError = nil; suggesting = false
-        guard searchFocused, let completion = BooruCompletion(searchText) else { return }
+        guard searchFocused else { return }
+        let translated = AddonSearchCompletion(searchText)?.suggestions(mode: .images).map { BooruTag(name: $0.tag, count: 0, category: 0) } ?? []
+        suggestions = translated
+        guard let completion = BooruCompletion(searchText), completion.token.allSatisfy(\.isASCII) else { return }
         suggesting = true
         defer { if !Task.isCancelled { suggesting = false } }
         do {
@@ -621,7 +632,8 @@ struct BooruFeedView: View {
                     try? store.tasteStore.record(.taxonomy, item: .init(source: response.server.canonicalAddress, id: 0, tags: [], metadata: metadata), context: .unknown)
                 }
             }
-            suggestions = result.tags
+            var seen = Set(translated.map(\.name))
+            suggestions = translated + result.tags.filter { seen.insert($0.name).inserted }
             suggestionError = result.error
         } catch { if !Task.isCancelled { suggestionError = error.localizedDescription } }
     }

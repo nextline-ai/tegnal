@@ -346,4 +346,44 @@ final class AddonTests: XCTestCase {
         var missing = listing(data); missing["mode"] = nil
         XCTAssertThrowsError(try JSONDecoder().decode(AddonListing.self, from: JSONSerialization.data(withJSONObject: missing)), "An entry with no mode is left out")
     }
+
+    // MARK: - Comics tag names and searches
+
+    private func comicsTranslations() throws -> AddonEffects {
+        let addon = try Addon.decode(file(["tagTranslations": ["language": "ko", "entries": [
+            "character:teitoku": "제독", "tag:big_breasts": "큰 가슴", "tag:glasses": "안경", "series:kantai_collection": "함대 컬렉션", "nakadashi": "질내 사정"
+        ]]], id: "maker.comics", mode: "comics")).addon
+        return AddonEffects([InstalledAddon(addon: addon, enabled: true, installed: .now, digest: "")])
+    }
+
+    func testFemaleAndMaleTagsUseTheirGeneralTranslation() throws {
+        let effects = try comicsTranslations()
+        XCTAssertEqual(effects.translation("female:big breasts", mode: .comics), "큰 가슴", "female: falls back to the tag: name")
+        XCTAssertEqual(effects.translation("male:glasses", mode: .comics), "안경")
+        XCTAssertEqual(effects.translation("mixed:big_breasts", mode: .comics), "큰 가슴")
+        XCTAssertEqual(effects.translation("big breasts", mode: .comics), "큰 가슴", "A tag with no namespace finds its tag: name")
+        XCTAssertEqual(effects.translation("female:nakadashi", mode: .comics), "질내 사정", "A translation with no namespace still serves")
+        XCTAssertNil(effects.translation("character:glasses", mode: .comics), "Only general namespaces borrow the tag: name")
+        XCTAssertEqual(effects.translation("character:teitoku", mode: .comics), "제독")
+    }
+
+    func testTranslatedNamesAreSuggestedAndSearchedAsTheirTags() throws {
+        let effects = try comicsTranslations()
+        XCTAssertEqual(effects.tags(matching: "제", mode: .comics).map(\.tag), ["character:teitoku"])
+        XCTAssertEqual(effects.tags(matching: "가슴", mode: .comics).map(\.tag), ["tag:big_breasts"], "Korean words match inside a name too")
+        XCTAssertEqual(effects.tags(matching: "함대", mode: .comics).first?.words, "함대 컬렉션")
+        XCTAssertTrue(effects.tags(matching: "제", mode: .images).isEmpty, "Comics names are not suggested in Image Mode")
+
+        XCTAssertEqual(effects.searchQuery("제독 -안경", mode: .comics), "character:teitoku -tag:glasses")
+        XCTAssertEqual(effects.searchQuery("큰 가슴 함대 컬렉션 english", mode: .comics), "tag:big_breasts series:kantai_collection english", "Names of several words are found")
+        XCTAssertEqual(effects.searchQuery("glasses", mode: .comics), "glasses", "English searches stay as typed")
+        XCTAssertEqual(effects.searchQuery("모르는말", mode: .comics), "모르는말")
+        XCTAssertEqual(effects.searchQuery("제독", mode: .images), "제독")
+
+        let completion = try XCTUnwrap(AddonSearchCompletion("language:korean -제"))
+        XCTAssertTrue(completion.excluded)
+        XCTAssertEqual(completion.term, "제")
+        XCTAssertEqual(completion.inserting("character:teitoku"), "language:korean -character:teitoku ")
+        XCTAssertNil(AddonSearchCompletion("제독 "))
+    }
 }

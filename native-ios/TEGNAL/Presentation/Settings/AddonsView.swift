@@ -57,11 +57,10 @@ struct AddonsView: View {
                 Button { picking = true } label: { Label(L10n.text("Open Add-on File"), systemImage: "doc.badge.plus") }
                     .disabled(reading)
                     .accessibilityIdentifier("addons.import")
-            } footer: {
-                Text(L10n.text(mode == .comics
-                               ? "These add-ons work in Comics Mode only. Image Mode keeps its own add-ons in its settings."
-                               : "These add-ons work in Image Mode only. Comics Mode keeps its own add-ons in its settings.")
-                     + " " + L10n.text("Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed."))
+            } header: {
+                SettingsHelpLabel("My Add-ons", help: mode == .comics
+                                  ? "These add-ons work in Comics Mode only. Image Mode keeps its own add-ons in its settings. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed, and turning one off or removing it takes back everything it added."
+                                  : "These add-ons work in Image Mode only. Comics Mode keeps its own add-ons in its settings. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed, and turning one off or removing it takes back everything it added.")
             }
             if let error {
                 Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).accessibilityIdentifier("addons.error") }
@@ -90,51 +89,29 @@ struct AddonsView: View {
         }
     }
 
-    /// The official add-ons of this mode, one section per grade, or why they could not be shown.
+    /// The official add-ons of this mode in one list, recommended ones first, each with its grade beside its name.
     @ViewBuilder private var officialSections: some View {
-        if catalog != nil {
-            let groups = AddonGrade.allCases.map { grade in (grade, listings.filter { $0.addonGrade == grade }) }.filter { !$0.1.isEmpty }
-            if groups.isEmpty {
-                Section {
+        Section {
+            if catalog != nil {
+                let sorted = AddonGrade.allCases.flatMap { grade in listings.filter { $0.addonGrade == grade } }
+                if sorted.isEmpty {
                     ContentUnavailableView(L10n.text("No Official Add-ons Yet"), systemImage: "checkmark.seal",
                                            description: Text(L10n.text("Official add-ons appear here as TEGNAL publishes them.")))
-                } header: { officialHeader(nil) }
-            } else {
-                ForEach(Array(groups.enumerated()), id: \.element.0) { index, group in
-                    Section {
-                        ForEach(group.1) { listing in row(listing) }
-                    } header: { officialHeader(index == 0 ? group.0 : nil, grade: group.0) } footer: {
-                        Text(index == groups.count - 1
-                             ? group.0.detail + "\n\n" + L10n.text("Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed.")
-                             : group.0.detail)
-                    }
-                    .accessibilityIdentifier("addons.grade." + group.0.rawValue)
+                } else {
+                    ForEach(sorted) { listing in row(listing) }
                 }
-            }
-        } else if let loadError {
-            Section {
+            } else if let loadError {
                 VStack(spacing: 10) {
                     Label(L10n.text("Couldn’t Load Official Add-ons"), systemImage: "wifi.exclamationmark").font(.headline)
                     Text(loadError).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Button(L10n.text("Try Again")) { Task { await load() } }.accessibilityIdentifier("market.retry")
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 8)
-            } header: { officialHeader(nil) }
-        } else {
-            Section { HStack { Spacer(); ProgressView(); Spacer() } } header: { officialHeader(nil) }
-        }
-    }
-
-    /// "Official Add-ons", with the first grade's name under it once the list is in.
-    @ViewBuilder private func officialHeader(_ first: AddonGrade?, grade: AddonGrade? = nil) -> some View {
-        if let grade, first == nil {
-            Text(grade.title)
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Label { Text(L10n.text("Official Add-ons")) } icon: { Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue) }
-                    .font(.headline).foregroundStyle(.primary).textCase(nil)
-                if let first { Text(first.title) }
+            } else {
+                HStack { Spacer(); ProgressView(); Spacer() }
             }
+        } header: {
+            SettingsHelpLabel("Official Add-ons", help: "Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed, and you still see everything one adds before it is installed.\n\nRecommended: TEGNAL advises these for almost everyone.\nSuggested: useful for many people.\nOptional: for particular tastes and uses.")
         }
     }
 
@@ -218,8 +195,8 @@ struct AddonInstalledListView: View {
                         NavigationLink { AddonDetailView(id: item.id, changed: reload) } label: { AddonRow(item: item) }
                             .accessibilityIdentifier("addons.row." + item.id)
                     }
-                } footer: {
-                    Text(L10n.text("Turning an add-on off or removing it takes back everything it added. Your own settings are never changed."))
+                } header: {
+                    SettingsHelpLabel("Installed", help: "Turning an add-on off or removing it takes back everything it added. Your own settings are never changed.")
                 }
             }
         }
@@ -492,6 +469,23 @@ struct AddonContentsSections: View {
     }
 }
 
+/// An official add-on's grade, drawn as a small badge beside its name.
+struct AddonGradeBadge: View {
+    let grade: AddonGrade
+    private var color: Color {
+        switch grade { case .recommended: return .green; case .suggested: return .blue; case .optional: return .gray }
+    }
+    var body: some View {
+        Text(grade.title)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.18)))
+            .foregroundStyle(color)
+            .fixedSize()
+            .accessibilityIdentifier("addons.grade." + grade.rawValue)
+    }
+}
+
 private struct AddonListingRow: View {
     let listing: AddonListing
     let state: AddonListingState
@@ -502,13 +496,23 @@ private struct AddonListingRow: View {
             Image(systemName: listing.addonKinds.first?.symbol ?? "puzzlepiece.extension")
                 .font(.title3).foregroundStyle(Color.accentColor).frame(width: 32)
             VStack(alignment: .leading, spacing: 3) {
-                Text(listing.title).font(.headline)
+                // The badge sits beside the name when both fit on a line, and under it otherwise, so the name is never cut short.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(listing.title).font(.headline).fixedSize()
+                        AddonGradeBadge(grade: listing.addonGrade)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(listing.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                        AddonGradeBadge(grade: listing.addonGrade)
+                    }
+                }
                 Text(L10n.text("By %@ · Version %@", listing.author, listing.version)).font(.caption).foregroundStyle(.secondary)
                 if state == .fromFile {
                     Text(L10n.text("Installed from a File")).font(.caption).foregroundStyle(.orange)
                 }
                 if let summary = listing.summary?.addonResolved(), !summary.isEmpty {
-                    Text(summary).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                    Text(summary).font(.callout).foregroundStyle(.secondary).lineLimit(2)
                 }
                 Text((listing.addonKinds.map(\.title) + [ByteCountFormatter.string(fromByteCount: Int64(listing.size), countStyle: .file)]).joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/addons/addon_models.dart';
+import '../../core/addons/addon_store.dart';
 import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_client.dart';
 import '../../core/booru/booru_models.dart';
@@ -312,18 +314,27 @@ class _BooruFeedViewState extends State<BooruFeedView> {
   void _textChanged() {
     _suggestionTimer?.cancel();
     final generation = ++_suggestionGeneration;
-    final completion = _searchFocus.hasFocus ? BooruCompletion.parse(_search.text) : null;
+    final focused = _searchFocus.hasFocus;
+    // Names from a translation add-on are suggested at once, so a tag can be searched by the words it is shown in.
+    final translated = [
+      if (focused)
+        for (final match in AddonSearchCompletion.parse(_search.text)?.suggestions(AddonMode.images) ?? const <({String tag, String words})>[])
+          BooruTag(name: match.tag, count: 0, category: 0),
+    ];
+    final completion = focused ? BooruCompletion.parse(_search.text) : null;
+    final lookup = completion != null && completion.token.runes.every((rune) => rune < 128);
     setState(() {
-      _suggestions = [];
+      _suggestions = translated;
       _suggestionError = null;
-      _suggesting = completion != null;
+      _suggesting = lookup;
     });
-    if (completion == null) return;
+    if (completion == null || !lookup) return;
     _suggestionTimer = Timer(const Duration(milliseconds: 300), () async {
       final result = await BooruTagSuggestionSearch.load(servers: _servers, source: _source, token: completion.token);
       if (!mounted || generation != _suggestionGeneration || !_searchFocus.hasFocus) return;
       setState(() {
-        _suggestions = result.tags;
+        final seen = {for (final tag in translated) tag.name};
+        _suggestions = [...translated, ...result.tags.where((tag) => seen.add(tag.name))];
         _suggestionError = result.error;
         _suggesting = false;
       });
@@ -332,7 +343,13 @@ class _BooruFeedViewState extends State<BooruFeedView> {
 
   void _submit([String? value]) {
     _searchFocus.unfocus();
-    final text = (value ?? _search.text).trim();
+    // Names typed in a translation add-on's words are searched as their tags.
+    final typed = (value ?? _search.text).trim();
+    final text = AddonRuntime.shared.effects.searchQuery(typed, AddonMode.images);
+    if (text != typed) {
+      final selection = TextSelection.collapsed(offset: text.length);
+      _search.value = TextEditingValue(text: text, selection: selection);
+    }
     _session = uuidString();
     if (_booru.remembersHistory && widget.challenge == null) {
       for (final server in _servers) {
@@ -547,9 +564,14 @@ class _BooruFeedViewState extends State<BooruFeedView> {
                   _SuggestionRow(
                     tag: tag,
                     onTap: () {
-                      final completion = BooruCompletion.parse(_search.text);
-                      if (completion == null) return;
-                      final text = completion.inserting(tag.name);
+                      final String text;
+                      if (BooruCompletion.parse(_search.text) case final completion?) {
+                        text = completion.inserting(tag.name);
+                      } else if (AddonSearchCompletion.parse(_search.text) case final completion?) {
+                        text = completion.inserting(tag.name);
+                      } else {
+                        return;
+                      }
                       _search.value = TextEditingValue(
                         text: text,
                         selection: TextSelection.collapsed(offset: text.length),
@@ -828,6 +850,7 @@ class _SuggestionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final words = AddonRuntime.shared.translation(tag.name, AddonMode.images);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -838,14 +861,34 @@ class _SuggestionRow extends StatelessWidget {
           children: [
             Icon(tag.isArtist ? CupertinoIcons.person : CupertinoIcons.number, size: 17, color: secondary),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                tag.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+            if (words != null) ...[
+              Flexible(
+                child: Text(
+                  words,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  tag.name.replaceAll('_', ' '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(12, color: secondary),
+                ),
+              ),
+              const Spacer(),
+            ] else
+              Expanded(
+                child: Text(
+                  tag.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TegnalType.style(15, color: TegnalColors.label.resolveFrom(context)),
+                ),
+              ),
             if (tag.count > 0) ...[
               const SizedBox(width: 4),
               Text(tag.count.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ','), style: TegnalType.style(12, color: secondary)),

@@ -747,10 +747,13 @@ class QueryRoute extends ContentRoute {
 }
 
 class TagSuggestion {
-  const TagSuggestion({required this.namespace, required this.name, this.count});
+  const TagSuggestion({required this.namespace, required this.name, this.count, this.words});
   final String namespace;
   final String name;
   final int? count;
+
+  /// The words a translation add-on shows for the tag.
+  final String? words;
 
   String get id => token;
   String get token => '$namespace:${name.replaceAll(' ', '_')}';
@@ -779,9 +782,10 @@ class TagSuggestion {
   }
 
   @override
-  bool operator ==(Object other) => other is TagSuggestion && other.namespace == namespace && other.name == name && other.count == count;
+  bool operator ==(Object other) =>
+      other is TagSuggestion && other.namespace == namespace && other.name == name && other.count == count && other.words == words;
   @override
-  int get hashCode => Object.hash(namespace, name, count);
+  int get hashCode => Object.hash(namespace, name, count, words);
   @override
   String toString() => 'TagSuggestion($namespace:$name, $count)';
 }

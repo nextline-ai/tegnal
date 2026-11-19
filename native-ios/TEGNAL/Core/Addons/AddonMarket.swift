@@ -76,13 +76,6 @@ enum AddonGrade: String, CaseIterable, Sendable {
         case .optional: return L10n.text("addon.grade.optional")
         }
     }
-    var detail: String {
-        switch self {
-        case .recommended: return L10n.text("TEGNAL advises these for almost everyone.")
-        case .suggested: return L10n.text("Useful for many people.")
-        case .optional: return L10n.text("For particular tastes and uses.")
-        }
-    }
 }
 
 /// How an official add-on in the catalog stands against what is installed.

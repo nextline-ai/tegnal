@@ -79,6 +79,17 @@ class AddonEffects {
         }
       }
     }
+    for (final MapEntry(key: mode, value: entries) in translations.entries) {
+      final byWords = <String, String>{};
+      final list = <({String folded, String tag, String words})>[];
+      for (final MapEntry(key: tag, value: words) in entries.entries.toList()..sort((a, b) => a.key.compareTo(b.key))) {
+        final folded = fold(words);
+        byWords.putIfAbsent(folded, () => tag);
+        list.add((folded: folded, tag: tag, words: words));
+      }
+      tagsByWords[mode] = byWords;
+      searchable[mode] = list;
+    }
   }
 
   final enabledIDs = <String>{};
@@ -88,6 +99,13 @@ class AddonEffects {
 
   /// Tag (lowercase, underscores) to the words shown for it, kept apart for each mode.
   final translations = <AddonMode, Map<String, String>>{};
+
+  /// Translated words (folded: lowercase, single spaces, no width or diacritic differences) back to their tag, for searches typed in them.
+  /// The first tag given a wording keeps it.
+  final tagsByWords = <AddonMode, Map<String, String>>{};
+
+  /// Every translation of a mode as (folded words, tag, words), for suggestions while a search is typed.
+  final searchable = <AddonMode, List<({String folded, String tag, String words})>>{};
   final comicsInclude = <String>[];
   final comicsExclude = <String>[];
   final imageExclude = <String>[];
@@ -151,7 +169,54 @@ class AddonEffects {
 
   int enabledCount(AddonMode mode) => enabledModes.values.where((value) => value == mode).length;
 
-  /// The words shown for a tag in a mode, by its full name (`female:glasses`) or, failing that, its name without the namespace.
+  /// Namespaces of general tags. Comics pages name a general tag by who has it (`female:`, `male:`, `mixed:`, `other:`),
+  /// while a translation may list it once as `tag:` or with no namespace.
+  static const generalNamespaces = {'female', 'male', 'mixed', 'other', 'tag', 'f', 'm', 'x', 'o'};
+
+  static const _plain = {
+    'àáâãäåāăą': 'a',
+    'çćĉċč': 'c',
+    'ďđ': 'd',
+    'èéêëēĕėęě': 'e',
+    'ĝğġģ': 'g',
+    'ìíîïĩīĭįı': 'i',
+    'ñńņňŉ': 'n',
+    'òóôõöøōŏő': 'o',
+    'ŕŗř': 'r',
+    'śŝşšß': 's',
+    'ţťŧ': 't',
+    'ùúûüũūŭůűų': 'u',
+    'ýÿŷ': 'y',
+    'źżž': 'z',
+  };
+
+  /// Lowercase, single spaces, and no width or diacritic differences, so that wordings compare the way people type them.
+  static String fold(String text) {
+    final out = StringBuffer();
+    for (final rune in text.runes) {
+      var code = rune;
+      if (code == 0x3000) {
+        code = 0x20;
+      } else if (code >= 0xFF01 && code <= 0xFF5E) {
+        code -= 0xFEE0;
+      }
+      final char = String.fromCharCode(code).toLowerCase();
+      var folded = char;
+      for (final MapEntry(key: letters, value: plain) in _plain.entries) {
+        if (letters.contains(char)) {
+          folded = plain;
+          break;
+        }
+      }
+      out.write(folded);
+    }
+    return out.toString().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).join(' ');
+  }
+
+  static bool _ascii(String text) => text.runes.every((rune) => rune < 128);
+
+  /// The words shown for a tag in a mode: by its full name (`female:glasses`); a general tag (`female:`, `male:`, …)
+  /// also by its `tag:` name; then by its name without the namespace.
   /// Only that mode's add-ons are read: a comics translation never renames an image tag.
   String? translation(String tag, AddonMode mode) {
     final translations = this.translations[mode];
@@ -159,7 +224,65 @@ class AddonEffects {
     final key = AddonCheck.tagKey(tag);
     if (translations[key] case final words?) return words;
     final colon = key.indexOf(':');
-    return colon >= 0 && colon < key.length - 1 ? translations[key.substring(colon + 1)] : null;
+    if (colon < 0) return translations['tag:$key'];
+    final name = key.substring(colon + 1);
+    if (name.isEmpty) return null;
+    if (generalNamespaces.contains(key.substring(0, colon))) {
+      if (translations['tag:$name'] case final words?) return words;
+    }
+    return translations[name];
+  }
+
+  /// Tags whose translation holds what was typed, those starting with it first. Typed text in plain ASCII letters
+  /// is left to the website's own suggestions unless it matches the start of a translation.
+  List<({String tag, String words})> tags({required String matching, required AddonMode mode, int limit = 8}) {
+    final folded = fold(matching);
+    final list = searchable[mode];
+    if (folded.isEmpty || list == null) return const [];
+    final starts = <({String tag, String words})>[], contains = <({String tag, String words})>[];
+    final ascii = _ascii(folded);
+    for (final item in list) {
+      if (item.folded.startsWith(folded)) {
+        starts.add((tag: item.tag, words: item.words));
+      } else if (!ascii && item.folded.contains(folded)) {
+        contains.add((tag: item.tag, words: item.words));
+      }
+    }
+    List<({String tag, String words})> byLength(List<({String tag, String words})> items) {
+      final indexed = items.indexed.toList()
+        ..sort((a, b) {
+          final byWords = a.$2.words.runes.length.compareTo(b.$2.words.runes.length);
+          return byWords != 0 ? byWords : a.$1.compareTo(b.$1);
+        });
+      return [for (final (_, item) in indexed) item];
+    }
+
+    return [...byLength(starts), ...byLength(contains)].take(limit).toList();
+  }
+
+  /// A search with every translated name in it written as its tag, so that `제독 -안경` searches `character:teitoku -tag:glasses`.
+  /// Only names with letters outside ASCII are turned, so that English searches stay as typed. Names of up to four words are found.
+  String searchQuery(String text, AddonMode mode) {
+    final index = tagsByWords[mode];
+    if (index == null || index.isEmpty || _ascii(text)) return text;
+    final words = text.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).toList();
+    final result = <String>[];
+    var position = 0;
+    while (position < words.length) {
+      var matched = false;
+      for (var length = words.length - position < 4 ? words.length - position : 4; length >= 1; length--) {
+        var phrase = words.sublist(position, position + length).join(' ');
+        final negative = phrase.startsWith('-');
+        if (negative) phrase = phrase.substring(1);
+        if (_ascii(phrase) || index[fold(phrase)] is! String) continue;
+        result.add('${negative ? '-' : ''}${index[fold(phrase)]}');
+        position += length;
+        matched = true;
+        break;
+      }
+      if (!matched) result.add(words[position++]);
+    }
+    return result.join(' ');
   }
 }
 
@@ -285,4 +408,34 @@ class AddonStore {
       db.execute('INSERT INTO challenges (id, payload) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload', [game.id, data]);
     }
   }
+}
+
+/// The word being typed at the end of a search, matched against the translations of the mode's add-ons (`AddonSearchCompletion`).
+class AddonSearchCompletion {
+  AddonSearchCompletion._(this.prefix, this.excluded, this.term);
+
+  final String prefix;
+  final bool excluded;
+  final String term;
+
+  static AddonSearchCompletion? parse(String input) {
+    if (input.isEmpty || RegExp(r'\s$').hasMatch(input)) return null;
+    final tail = input.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).lastOrNull;
+    if (tail == null) return null;
+    final prefix = input.substring(0, input.length - tail.length);
+    final excluded = tail.startsWith('-');
+    final term = excluded ? tail.substring(1) : tail;
+    if (term.isEmpty || term.runes.length > 64) return null;
+    return AddonSearchCompletion._(prefix, excluded, term);
+  }
+
+  String inserting(String tag) => '$prefix${excluded ? '-' : ''}$tag ';
+
+  /// Tags whose translation starts with or holds the word, from the add-ons of a mode.
+  List<({String tag, String words})> suggestions(AddonMode mode, {int limit = 6}) => AddonRuntime.shared.effects.tags(matching: term, mode: mode, limit: limit);
+
+  @override
+  bool operator ==(Object other) => other is AddonSearchCompletion && other.prefix == prefix && other.excluded == excluded && other.term == term;
+  @override
+  int get hashCode => Object.hash(prefix, excluded, term);
 }

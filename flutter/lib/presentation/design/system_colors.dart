@@ -13,6 +13,7 @@ abstract final class SystemColors {
   static const indigo = CupertinoDynamicColor.withBrightness(color: Color(0xFF6155F5), darkColor: Color(0xFF6D7CFF));
   static const purple = CupertinoDynamicColor.withBrightness(color: Color(0xFFCB30E0), darkColor: Color(0xFFDB34F2));
   static const pink = CupertinoDynamicColor.withBrightness(color: Color(0xFFFF2D55), darkColor: Color(0xFFFF375F));
+  static const gray = CupertinoDynamicColor.withBrightness(color: Color(0xFF8E8E93), darkColor: Color(0xFF8E8E93));
   static const brown = CupertinoDynamicColor.withBrightness(color: Color(0xFFAC7F5E), darkColor: Color(0xFFB78A66));
 }
 

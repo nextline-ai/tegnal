@@ -253,9 +253,11 @@ class _AddonsViewState extends State<AddonsView> {
           children: [
             FormSection(
               rowColor: row,
-              footer: Text(
-                '${L10n.text(_mode == AddonMode.comics ? 'These add-ons work in Comics Mode only. Image Mode keeps its own add-ons in its settings.' : 'These add-ons work in Image Mode only. Comics Mode keeps its own add-ons in its settings.')} '
-                '${L10n.text('Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed.')}',
+              header: _HelpHeader(
+                title: 'My Add-ons',
+                help: _mode == AddonMode.comics
+                    ? 'These add-ons work in Comics Mode only. Image Mode keeps its own add-ons in its settings. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed, and turning one off or removing it takes back everything it added.'
+                    : 'These add-ons work in Image Mode only. Comics Mode keeps its own add-ons in its settings. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed, and turning one off or removing it takes back everything it added.',
               ),
               children: [
                 SettingsLinkRow(
@@ -310,156 +312,103 @@ class _AddonsViewState extends State<AddonsView> {
     );
   }
 
-  /// The official add-ons of this mode, one section per grade, or why they could not be shown.
+  /// The official add-ons of this mode in one list, recommended ones first, each with its grade beside its name, or why they could not be shown.
   List<Widget> _officialSections(BuildContext context, Color row) {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final catalog = _catalog;
-    final sections = <Widget>[];
+    final List<Widget> children;
     if (catalog != null) {
       final listings = catalog.addons.where((listing) => listing.mode == _mode).toList();
-      final groups = [
+      final sorted = [
         for (final grade in AddonGrade.values)
-          (
-            grade,
-            [
-              for (final listing in listings)
-                if (listing.addonGrade == grade) listing,
-            ],
-          ),
-      ].where((group) => group.$2.isNotEmpty).toList();
-      if (groups.isEmpty) {
-        sections.addAll([
-          settingsSectionGap,
-          FormSection(
-            rowColor: row,
-            header: _officialHeader(context, null),
-            children: [
-              FormRow(
-                minHeight: 200,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(CupertinoIcons.checkmark_seal, size: 44, color: secondary),
-                      const SizedBox(height: 12),
-                      Text(
-                        L10n.text('No Official Add-ons Yet'),
-                        textAlign: TextAlign.center,
-                        style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        L10n.text('Official add-ons appear here as TEGNAL publishes them.'),
-                        textAlign: TextAlign.center,
-                        style: TegnalType.style(15, color: secondary),
-                      ),
-                    ],
+          for (final listing in listings)
+            if (listing.addonGrade == grade) listing,
+      ];
+      if (sorted.isEmpty) {
+        children = [
+          FormRow(
+            minHeight: 200,
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.checkmark_seal, size: 44, color: secondary),
+                  const SizedBox(height: 12),
+                  Text(
+                    L10n.text('No Official Add-ons Yet'),
+                    textAlign: TextAlign.center,
+                    style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    L10n.text('Official add-ons appear here as TEGNAL publishes them.'),
+                    textAlign: TextAlign.center,
+                    style: TegnalType.style(15, color: secondary),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ]);
-      } else {
-        for (final (index, (grade, items)) in groups.indexed) {
-          sections.addAll([
-            settingsSectionGap,
-            FormSection(
-              rowColor: row,
-              header: _officialHeader(context, index == 0 ? grade : null, grade: grade),
-              footer: Text(
-                index == groups.length - 1
-                    ? '${grade.detail}\n\n${L10n.text('Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed.')}'
-                    : grade.detail,
-              ),
-              children: [for (final listing in items) _listingRow(listing)],
             ),
-          ]);
-        }
+          ),
+        ];
+      } else {
+        children = [for (final listing in sorted) _listingRow(listing)];
       }
     } else if (_loadError != null) {
-      sections.addAll([
-        settingsSectionGap,
-        FormSection(
-          rowColor: row,
-          header: _officialHeader(context, null),
-          children: [
-            FormRow(
-              child: SizedBox(
-                width: double.infinity,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+      children = [
+        FormRow(
+          child: SizedBox(
+            width: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(CupertinoIcons.wifi_exclamationmark, size: 20, color: TegnalColors.label.resolveFrom(context)),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            L10n.text('Couldn’t Load Official Add-ons'),
-                            style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-                          ),
-                        ),
-                      ],
+                    Icon(CupertinoIcons.wifi_exclamationmark, size: 20, color: TegnalColors.label.resolveFrom(context)),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        L10n.text('Couldn’t Load Official Add-ons'),
+                        style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _loadError!,
-                      textAlign: TextAlign.center,
-                      style: TegnalType.style(16, color: secondary),
-                    ),
-                    const SizedBox(height: 10),
-                    CupertinoButton(padding: EdgeInsets.zero, onPressed: _load, child: Text(L10n.text('Try Again'))),
                   ],
                 ),
-              ),
+                const SizedBox(height: 10),
+                Text(
+                  _loadError!,
+                  textAlign: TextAlign.center,
+                  style: TegnalType.style(16, color: secondary),
+                ),
+                const SizedBox(height: 10),
+                CupertinoButton(padding: EdgeInsets.zero, onPressed: _load, child: Text(L10n.text('Try Again'))),
+              ],
             ),
-          ],
+          ),
         ),
-      ]);
+      ];
     } else {
-      sections.addAll([
-        settingsSectionGap,
-        FormSection(
-          rowColor: row,
-          header: _officialHeader(context, null),
-          children: [
-            FormRow(
-              child: SizedBox(
-                width: double.infinity,
-                child: Center(child: CupertinoActivityIndicator(color: TegnalColors.tint.resolveFrom(context))),
-              ),
-            ),
-          ],
+      children = [
+        FormRow(
+          child: SizedBox(
+            width: double.infinity,
+            child: Center(child: CupertinoActivityIndicator(color: TegnalColors.tint.resolveFrom(context))),
+          ),
         ),
-      ]);
+      ];
     }
-    return sections;
-  }
-
-  /// "Official Add-ons", with the first grade's name under it once the list is in. Later sections show their grade alone.
-  Widget _officialHeader(BuildContext context, AddonGrade? first, {AddonGrade? grade}) {
-    if (grade != null && first == null) return Text(grade.title);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(CupertinoIcons.checkmark_seal_fill, size: 17, color: SystemColors.blue.resolveFrom(context)),
-            const SizedBox(width: 6),
-            Text(
-              L10n.text('Official Add-ons'),
-              style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-            ),
-          ],
+    return [
+      settingsSectionGap,
+      FormSection(
+        rowColor: row,
+        header: const _HelpHeader(
+          title: 'Official Add-ons',
+          help: 'Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed, and you still see everything one adds before it is installed.\n\nRecommended: TEGNAL advises these for almost everyone.\nSuggested: useful for many people.\nOptional: for particular tastes and uses.',
         ),
-        if (first != null) ...[const SizedBox(height: 6), Text(first.title)],
-      ],
-    );
+        children: children,
+      ),
+    ];
   }
 
   Widget _listingRow(AddonListing listing) {
@@ -559,7 +508,10 @@ class _AddonInstalledListViewState extends State<AddonInstalledListView> {
         else
           FormSection(
             rowColor: row,
-            footer: Text(L10n.text('Turning an add-on off or removing it takes back everything it added. Your own settings are never changed.')),
+            header: const _HelpHeader(
+              title: 'Installed',
+              help: 'Turning an add-on off or removing it takes back everything it added. Your own settings are never changed.',
+            ),
             children: [
               for (final item in _installed)
                 _AddonRow(
@@ -1193,9 +1145,18 @@ class _AddonListingRow extends StatelessWidget implements FormSeparatorInset {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      listing.title,
-                      style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                    // The badge follows the name on its line, or drops under it; the name is never cut short.
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 3,
+                      children: [
+                        Text(
+                          listing.title,
+                          style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                        ),
+                        AddonGradeBadge(grade: listing.addonGrade),
+                      ],
                     ),
                     const SizedBox(height: 3),
                     Text(L10n.text('By %@ · Version %@', [listing.author, listing.version]), style: TegnalType.style(12, color: secondary)),
@@ -1207,7 +1168,7 @@ class _AddonListingRow extends StatelessWidget implements FormSeparatorInset {
                       const SizedBox(height: 3),
                       Text(
                         summary,
-                        maxLines: 3,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TegnalType.style(16, color: secondary),
                       ),
@@ -1227,6 +1188,46 @@ class _AddonListingRow extends StatelessWidget implements FormSeparatorInset {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A section header with its title and an info button that opens the longer explanation (`SettingsHelpLabel`).
+class _HelpHeader extends StatelessWidget {
+  const _HelpHeader({required this.title, required this.help});
+  final String title;
+  final String help;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Flexible(child: Text(L10n.text(title))),
+      const SizedBox(width: 4),
+      FormHelpButton(title: L10n.text(title), message: L10n.text(help)),
+    ],
+  );
+}
+
+/// An official add-on's grade, drawn as a small badge beside its name (`AddonGradeBadge`).
+class AddonGradeBadge extends StatelessWidget {
+  const AddonGradeBadge({super.key, required this.grade});
+  final AddonGrade grade;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (grade) {
+      AddonGrade.recommended => SystemColors.green,
+      AddonGrade.suggested => SystemColors.blue,
+      AddonGrade.optional => SystemColors.gray,
+    }.resolveFrom(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: ShapeDecoration(shape: const StadiumBorder(), color: color.withValues(alpha: 0.18)),
+      child: Text(
+        grade.title,
+        style: TegnalType.style(11, weight: FontWeight.w600, color: color),
       ),
     );
   }

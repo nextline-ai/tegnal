@@ -598,4 +598,56 @@ void main() {
     expect(content.searchExcludedTags.split(' '), contains('tag:gore'));
     expect(content.defaultExcludedTags.contains('tag:gore'), isFalse);
   });
+
+  // MARK: - Comics tag names and searches
+
+  AddonEffects comicsTranslations() {
+    final addon = Addon.decode(
+      _file(
+        _translations({'character:teitoku': '제독', 'tag:big_breasts': '큰 가슴', 'tag:glasses': '안경', 'series:kantai_collection': '함대 컬렉션', 'nakadashi': '질내 사정'}),
+        id: 'maker.comics',
+        mode: 'comics',
+      ),
+    ).addon;
+    return AddonEffects([_installed(addon)]);
+  }
+
+  test('female and male tags use their general translation', () {
+    final effects = comicsTranslations();
+    expect(effects.translation('female:big breasts', AddonMode.comics), '큰 가슴', reason: 'female: falls back to the tag: name');
+    expect(effects.translation('male:glasses', AddonMode.comics), '안경');
+    expect(effects.translation('mixed:big_breasts', AddonMode.comics), '큰 가슴');
+    expect(effects.translation('big breasts', AddonMode.comics), '큰 가슴', reason: 'A tag with no namespace finds its tag: name');
+    expect(effects.translation('female:nakadashi', AddonMode.comics), '질내 사정', reason: 'A translation with no namespace still serves');
+    expect(effects.translation('character:glasses', AddonMode.comics), isNull, reason: 'Only general namespaces borrow the tag: name');
+    expect(effects.translation('character:teitoku', AddonMode.comics), '제독');
+  });
+
+  test('translated names are suggested and searched as their tags', () {
+    final effects = comicsTranslations();
+    expect(effects.tags(matching: '제', mode: AddonMode.comics).map((item) => item.tag), ['character:teitoku']);
+    expect(effects.tags(matching: '가슴', mode: AddonMode.comics).map((item) => item.tag), ['tag:big_breasts'], reason: 'Korean words match inside a name too');
+    expect(effects.tags(matching: '함대', mode: AddonMode.comics).first.words, '함대 컬렉션');
+    expect(
+      effects.tags(matching: '제', mode: AddonMode.images),
+      isEmpty,
+      reason: 'Comics names are not suggested in Image Mode',
+    );
+
+    expect(effects.searchQuery('제독 -안경', AddonMode.comics), 'character:teitoku -tag:glasses');
+    expect(
+      effects.searchQuery('큰 가슴 함대 컬렉션 english', AddonMode.comics),
+      'tag:big_breasts series:kantai_collection english',
+      reason: 'Names of several words are found',
+    );
+    expect(effects.searchQuery('glasses', AddonMode.comics), 'glasses', reason: 'English searches stay as typed');
+    expect(effects.searchQuery('모르는말', AddonMode.comics), '모르는말');
+    expect(effects.searchQuery('제독', AddonMode.images), '제독');
+
+    final completion = AddonSearchCompletion.parse('language:korean -제')!;
+    expect(completion.excluded, isTrue);
+    expect(completion.term, '제');
+    expect(completion.inserting('character:teitoku'), 'language:korean -character:teitoku ');
+    expect(AddonSearchCompletion.parse('제독 '), isNull);
+  });
 }
