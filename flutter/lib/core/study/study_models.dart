@@ -373,12 +373,18 @@ class StudyProgress {
 
 /// One day's answers, for the streak and the day's total.
 class StudyDay {
-  const StudyDay({required this.day, this.answered = 0, this.correct = 0});
+  const StudyDay({required this.day, this.answered = 0, this.correct = 0, this.xp = 0});
 
   /// The local calendar day as `yyyy-MM-dd`.
   final String day;
   final int answered;
   final int correct;
+
+  /// Experience earned that day in learning mode.
+  final int xp;
+
+  /// A day counts towards a streak when anything was studied on it.
+  bool get isStudied => answered > 0 || xp > 0;
   String get id => day;
 
   /// The day [date] falls on in the device's time zone, or in the zone [utcOffset] from UTC when given.
@@ -387,15 +393,16 @@ class StudyDay {
     return '${local.year.toString().padLeft(4, '0')}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
   }
 
-  factory StudyDay.fromJson(JsonObject json) => StudyDay(day: json.string('day'), answered: json.integer('answered'), correct: json.integer('correct'));
-  JsonObject toJson() => {'day': day, 'answered': answered, 'correct': correct};
+  factory StudyDay.fromJson(JsonObject json) =>
+      StudyDay(day: json.string('day'), answered: json.integer('answered'), correct: json.integer('correct'), xp: json.integerOrNull('xp') ?? 0);
+  JsonObject toJson() => {'day': day, 'answered': answered, 'correct': correct, 'xp': xp};
 
   @override
-  bool operator ==(Object other) => other is StudyDay && other.day == day && other.answered == answered && other.correct == correct;
+  bool operator ==(Object other) => other is StudyDay && other.day == day && other.answered == answered && other.correct == correct && other.xp == xp;
   @override
-  int get hashCode => Object.hash(day, answered, correct);
+  int get hashCode => Object.hash(day, answered, correct, xp);
   @override
-  String toString() => 'StudyDay($day, $correct/$answered)';
+  String toString() => 'StudyDay($day, $correct/$answered, $xp xp)';
 }
 
 enum StudyQuestionKind {

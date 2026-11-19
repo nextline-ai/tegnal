@@ -322,7 +322,7 @@ void main() {
     final json = jsonDecode(utf8.decode(source.exportBackup().encoded())) as Map<String, Object?>;
     final written = (json['study']! as Map)['progress']! as List;
     expect((written.first as Map).keys.toSet(), {'tag', 'step', 'due', 'correct', 'wrong', 'seen'});
-    expect(((json['study']! as Map)['days']! as List).first, {'day': StudyDay.key(early), 'answered': 1, 'correct': 1});
+    expect(((json['study']! as Map)['days']! as List).first, {'day': StudyDay.key(early), 'answered': 1, 'correct': 1, 'xp': 0});
     json.remove('study');
     expect(BooruBackup.decode(utf8.encode(jsonEncode(json))).study, isNull, reason: 'Backups from before tag study still read');
     final invalid = BooruBackup.decode(source.exportBackup().encoded());
@@ -500,11 +500,12 @@ void main() {
 
   // MARK: StudyStore
 
-  test('the study tables come from the booru_v14_study migration', () {
+  test('the study tables come from the study migrations', () {
     final store = BooruStore.inMemory();
-    expect(store.database.column<String>('SELECT identifier FROM grdb_migrations').last, 'booru_v14_study');
+    final migrations = store.database.column<String>('SELECT identifier FROM grdb_migrations');
+    expect(migrations.skipWhile((name) => name != 'booru_v14_study').take(3), ['booru_v14_study', 'booru_v15_study_game', 'booru_v16_study_awards']);
     expect(store.database.columns('study_progress'), ['tag', 'step', 'due', 'correct', 'wrong', 'seen']);
-    expect(store.database.columns('study_days'), ['day', 'answered', 'correct']);
+    expect(store.database.columns('study_days'), ['day', 'answered', 'correct', 'xp']);
     expect(store.database.columns('study_tags'), ['address', 'name', 'payload', 'fetched']);
   });
 
