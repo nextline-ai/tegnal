@@ -48,10 +48,11 @@ class AddonOfficialBadge extends StatelessWidget {
   );
 }
 
-/// The row that leads to the add-ons, last in the Browsing section of both modes' settings (`AddonsSettingsRow`).
+/// The row that leads to a mode's add-ons, last in the Browsing section of that mode's settings (`AddonsSettingsRow`).
 class AddonsSettingsRow extends StatelessWidget implements FormSeparatorInset {
-  const AddonsSettingsRow({super.key, required this.booru});
+  const AddonsSettingsRow({super.key, required this.booru, required this.mode});
   final BooruStore booru;
+  final AddonMode mode;
 
   @override
   double get separatorInset => settingsIconInset;
@@ -60,12 +61,16 @@ class AddonsSettingsRow extends StatelessWidget implements FormSeparatorInset {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: AddonRuntime.shared,
     builder: (context, _) {
-      final count = AddonRuntime.shared.effects.enabledIDs.length;
+      final count = AddonRuntime.shared.effects.enabledCount(mode);
       return SettingsLinkRow(
         title: L10n.text('Add-ons'),
         symbol: (color) => PuzzlePieceSymbol(color: color),
         value: count > 0 ? '$count' : null,
-        onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: booru))),
+        onTap: () => Navigator.of(context).push(
+          CupertinoPageRoute<void>(
+            builder: (_) => AddonsView(booru: booru, mode: mode),
+          ),
+        ),
       );
     },
   );
@@ -73,9 +78,12 @@ class AddonsSettingsRow extends StatelessWidget implements FormSeparatorInset {
 
 /// Terms that add-ons apply beside the person's own, shown read-only where the person's own are edited.
 class AddonAddedTermsSection extends StatelessWidget {
-  const AddonAddedTermsSection({super.key, required this.title, required this.terms, required this.openAddons, this.rowColor});
+  const AddonAddedTermsSection({super.key, required this.title, required this.terms, required this.mode, required this.openAddons, this.rowColor});
   final String title;
   final List<String> terms;
+
+  /// The mode whose add-ons [openAddons] opens.
+  final AddonMode mode;
   final VoidCallback openAddons;
   final Color? rowColor;
 
@@ -116,10 +124,15 @@ class _AddonCandidate {
   final bool official;
 }
 
-/// The add-ons kept, a way to open a file, and what the add-ons are (`AddonsView`).
+/// One mode's add-ons: the installed ones and a file to open at the top, then TEGNAL's official add-ons by grade (`AddonsView`).
+/// Comics and image add-ons never meet: each mode lists, opens and installs only its own.
 class AddonsView extends StatefulWidget {
-  const AddonsView({super.key, required this.booru});
+  const AddonsView({super.key, required this.booru, required this.mode, this.market});
   final BooruStore booru;
+  final AddonMode mode;
+
+  /// Replaced in tests; the live market otherwise.
+  final AddonMarket? market;
 
   @override
   State<AddonsView> createState() => _AddonsViewState();
@@ -127,25 +140,44 @@ class AddonsView extends StatefulWidget {
 
 class _AddonsViewState extends State<AddonsView> {
   List<InstalledAddon> _installed = [];
+  AddonCatalog? _catalog;
   bool _reading = false;
   String? _error;
+  String? _loadError;
+  String? _downloading;
+  AddonMode get _mode => widget.mode;
+  AddonMarket get _market => widget.market ?? AddonMarket.live;
   AddonStore get _store => AddonStore(widget.booru.database);
 
   @override
   void initState() {
     super.initState();
     _reload();
+    _load();
   }
 
   void _reload() {
     List<InstalledAddon> items;
     try {
-      items = _store.installed().reversed.toList();
+      items = _store.installed().where((item) => item.addon.mode == _mode).toList();
     } on Object {
       items = const [];
     }
     if (mounted) setState(() => _installed = items);
   }
+
+  Future<void> _load() async {
+    if (_loadError != null) setState(() => _loadError = null);
+    try {
+      final catalog = await _market.catalog();
+      if (mounted) setState(() => _catalog = catalog);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _catalog == null ? _loadError = _message(error) : _error = _message(error));
+    }
+  }
+
+  InstalledAddon? _item(String id) => _installed.where((item) => item.id == id).firstOrNull;
 
   Future<void> _open() async {
     setState(() => _reading = true);
@@ -155,14 +187,12 @@ class _AddonsViewState extends State<AddonsView> {
       if (file != null) {
         final (:addon, :digest) = await Addon.read(file);
         if (!mounted) return;
+        // An add-on for the other mode is opened from that mode's settings, so that it is never mistaken for this one's.
+        if (addon.mode != _mode) throw AddonError.otherMode(addon.mode);
         _error = null;
-        final candidate = _AddonCandidate(addon: addon, digest: digest, existing: _installed.where((item) => item.id == addon.id).firstOrNull);
+        final candidate = _AddonCandidate(addon: addon, digest: digest, existing: _item(addon.id));
         setState(() => _reading = false);
-        final install = await showAppSheet<bool>(
-          context,
-          builder: (context, controller) => _AddonInstallSheet(candidate: candidate, controller: controller),
-        );
-        if (install == true) _install(candidate);
+        await _offer(candidate);
       }
     } on Object catch (error) {
       if (mounted) setState(() => _error = _message(error));
@@ -174,6 +204,31 @@ class _AddonsViewState extends State<AddonsView> {
       }
       if (mounted) setState(() => _reading = false);
     }
+  }
+
+  Future<void> _get(AddonListing listing) async {
+    setState(() => _downloading = listing.id);
+    _AddonCandidate? candidate;
+    try {
+      final (:addon, :digest) = await _market.download(listing);
+      candidate = _AddonCandidate(addon: addon, digest: digest, existing: _item(addon.id), official: true);
+      _error = null;
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _downloading = null);
+    }
+    if (candidate == null || !mounted) return;
+    await _offer(candidate);
+  }
+
+  /// Shows everything the add-on adds, and installs it when the person agrees.
+  Future<void> _offer(_AddonCandidate candidate) async {
+    final install = await showAppSheet<bool>(
+      context,
+      builder: (context, controller) => _AddonInstallSheet(candidate: candidate, controller: controller),
+    );
+    if (install == true && mounted) _install(candidate);
   }
 
   void _install(_AddonCandidate candidate) {
@@ -190,28 +245,27 @@ class _AddonsViewState extends State<AddonsView> {
   @override
   Widget build(BuildContext context) {
     final row = FormColors.listRow.resolveFrom(context);
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
     return Stack(
       children: [
         SettingsPage(
-          title: L10n.text('Add-ons'),
+          title: L10n.text(_mode == AddonMode.comics ? 'Comics Mode Add-ons' : 'Image Mode Add-ons'),
           children: [
             FormSection(
               rowColor: row,
               footer: Text(
-                L10n.text(
-                  'Official add-ons are made by TEGNAL and downloaded from its server. Others are files made by other people that you download and open yourself. Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed.',
-                ),
+                '${L10n.text(_mode == AddonMode.comics ? 'These add-ons work in Comics Mode only. Image Mode keeps its own add-ons in its settings.' : 'These add-ons work in Image Mode only. Comics Mode keeps its own add-ons in its settings.')} '
+                '${L10n.text('Add-ons hold data only: they cannot run code, connect to the internet, read your library or change your accounts and servers. You see everything one adds before it is installed.')}',
               ),
               children: [
                 SettingsLinkRow(
-                  title: L10n.text('Official Add-ons'),
-                  symbol: (_) => Icon(CupertinoIcons.checkmark_seal, size: 22, color: SystemColors.blue.resolveFrom(context)),
+                  title: L10n.text('Installed Add-ons'),
+                  icon: CupertinoIcons.checkmark_circle,
+                  value: _installed.isEmpty ? null : '${_installed.length}',
                   onTap: () async {
                     await Navigator.of(context).push(
                       CupertinoPageRoute<void>(
-                        builder: (_) => AddonMarketView(booru: widget.booru, changed: _reload),
+                        builder: (_) => AddonInstalledListView(booru: widget.booru, mode: _mode),
                       ),
                     );
                     _reload();
@@ -226,57 +280,6 @@ class _AddonsViewState extends State<AddonsView> {
                 ),
               ],
             ),
-            settingsSectionGap,
-            if (_installed.isEmpty)
-              FormSection(
-                rowColor: row,
-                children: [
-                  FormRow(
-                    minHeight: 200,
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          PuzzlePieceSymbol(size: 44, color: secondary),
-                          const SizedBox(height: 12),
-                          Text(
-                            L10n.text('No Add-ons'),
-                            style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            L10n.text('Open a .tegnaladdon file to add tag translations, search tags, challenges or learning tracks.'),
-                            textAlign: TextAlign.center,
-                            style: TegnalType.style(15, color: secondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else
-              FormSection(
-                rowColor: row,
-                header: Text(L10n.text('Installed')),
-                footer: Text(L10n.text('Turning an add-on off or removing it takes back everything it added. Your own settings are never changed.')),
-                children: [
-                  for (final item in _installed)
-                    _AddonRow(
-                      key: ValueKey(item.id),
-                      item: item,
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (_) => AddonDetailView(booru: widget.booru, id: item.id, changed: _reload),
-                          ),
-                        );
-                        _reload();
-                      },
-                    ),
-                ],
-              ),
             if (_error != null) ...[
               settingsSectionGap,
               FormSection(
@@ -296,11 +299,282 @@ class _AddonsViewState extends State<AddonsView> {
                 ],
               ),
             ],
+            ..._officialSections(context, row),
           ],
         ),
         if (_reading)
           Positioned.fill(
             child: Center(child: CupertinoActivityIndicator(color: tint, radius: 14)),
+          ),
+      ],
+    );
+  }
+
+  /// The official add-ons of this mode, one section per grade, or why they could not be shown.
+  List<Widget> _officialSections(BuildContext context, Color row) {
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final catalog = _catalog;
+    final sections = <Widget>[];
+    if (catalog != null) {
+      final listings = catalog.addons.where((listing) => listing.mode == _mode).toList();
+      final groups = [
+        for (final grade in AddonGrade.values)
+          (
+            grade,
+            [
+              for (final listing in listings)
+                if (listing.addonGrade == grade) listing,
+            ],
+          ),
+      ].where((group) => group.$2.isNotEmpty).toList();
+      if (groups.isEmpty) {
+        sections.addAll([
+          settingsSectionGap,
+          FormSection(
+            rowColor: row,
+            header: _officialHeader(context, null),
+            children: [
+              FormRow(
+                minHeight: 200,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.checkmark_seal, size: 44, color: secondary),
+                      const SizedBox(height: 12),
+                      Text(
+                        L10n.text('No Official Add-ons Yet'),
+                        textAlign: TextAlign.center,
+                        style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        L10n.text('Official add-ons appear here as TEGNAL publishes them.'),
+                        textAlign: TextAlign.center,
+                        style: TegnalType.style(15, color: secondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ]);
+      } else {
+        for (final (index, (grade, items)) in groups.indexed) {
+          sections.addAll([
+            settingsSectionGap,
+            FormSection(
+              rowColor: row,
+              header: _officialHeader(context, index == 0 ? grade : null, grade: grade),
+              footer: Text(
+                index == groups.length - 1
+                    ? '${grade.detail}\n\n${L10n.text('Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed.')}'
+                    : grade.detail,
+              ),
+              children: [for (final listing in items) _listingRow(listing)],
+            ),
+          ]);
+        }
+      }
+    } else if (_loadError != null) {
+      sections.addAll([
+        settingsSectionGap,
+        FormSection(
+          rowColor: row,
+          header: _officialHeader(context, null),
+          children: [
+            FormRow(
+              child: SizedBox(
+                width: double.infinity,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.wifi_exclamationmark, size: 20, color: TegnalColors.label.resolveFrom(context)),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            L10n.text('Couldn’t Load Official Add-ons'),
+                            style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _loadError!,
+                      textAlign: TextAlign.center,
+                      style: TegnalType.style(16, color: secondary),
+                    ),
+                    const SizedBox(height: 10),
+                    CupertinoButton(padding: EdgeInsets.zero, onPressed: _load, child: Text(L10n.text('Try Again'))),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ]);
+    } else {
+      sections.addAll([
+        settingsSectionGap,
+        FormSection(
+          rowColor: row,
+          header: _officialHeader(context, null),
+          children: [
+            FormRow(
+              child: SizedBox(
+                width: double.infinity,
+                child: Center(child: CupertinoActivityIndicator(color: TegnalColors.tint.resolveFrom(context))),
+              ),
+            ),
+          ],
+        ),
+      ]);
+    }
+    return sections;
+  }
+
+  /// "Official Add-ons", with the first grade's name under it once the list is in. Later sections show their grade alone.
+  Widget _officialHeader(BuildContext context, AddonGrade? first, {AddonGrade? grade}) {
+    if (grade != null && first == null) return Text(grade.title);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.checkmark_seal_fill, size: 17, color: SystemColors.blue.resolveFrom(context)),
+            const SizedBox(width: 6),
+            Text(
+              L10n.text('Official Add-ons'),
+              style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+            ),
+          ],
+        ),
+        if (first != null) ...[const SizedBox(height: 6), Text(first.title)],
+      ],
+    );
+  }
+
+  Widget _listingRow(AddonListing listing) {
+    final item = _item(listing.id);
+    final state = AddonListingState.of(listing, item);
+    if (state == AddonListingState.installed && item != null) {
+      return _AddonListingRow(
+        key: ValueKey(listing.id),
+        listing: listing,
+        state: state,
+        downloading: false,
+        onTap: () async {
+          await Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => AddonDetailView(booru: widget.booru, id: item.id, changed: _reload),
+            ),
+          );
+          _reload();
+        },
+      );
+    }
+    return _AddonListingRow(
+      key: ValueKey(listing.id),
+      listing: listing,
+      state: state,
+      downloading: _downloading == listing.id,
+      onTap: state == AddonListingState.unsupported || _downloading != null ? null : () => _get(listing),
+    );
+  }
+}
+
+/// The add-ons of one mode that are installed, newest first (`AddonInstalledListView`).
+class AddonInstalledListView extends StatefulWidget {
+  const AddonInstalledListView({super.key, required this.booru, required this.mode});
+  final BooruStore booru;
+  final AddonMode mode;
+
+  @override
+  State<AddonInstalledListView> createState() => _AddonInstalledListViewState();
+}
+
+class _AddonInstalledListViewState extends State<AddonInstalledListView> {
+  List<InstalledAddon> _installed = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() {
+    List<InstalledAddon> items;
+    try {
+      items = AddonStore(widget.booru.database).installed().where((item) => item.addon.mode == widget.mode).toList().reversed.toList();
+    } on Object {
+      items = const [];
+    }
+    if (mounted) setState(() => _installed = items);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = FormColors.listRow.resolveFrom(context);
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    return SettingsPage(
+      title: L10n.text('Installed Add-ons'),
+      children: [
+        if (_installed.isEmpty)
+          FormSection(
+            rowColor: row,
+            children: [
+              FormRow(
+                minHeight: 200,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PuzzlePieceSymbol(size: 44, color: secondary),
+                      const SizedBox(height: 12),
+                      Text(
+                        L10n.text('No Add-ons'),
+                        style: TegnalType.style(20, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        L10n.text('Get an official add-on or open a .tegnaladdon file.'),
+                        textAlign: TextAlign.center,
+                        style: TegnalType.style(15, color: secondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          FormSection(
+            rowColor: row,
+            footer: Text(L10n.text('Turning an add-on off or removing it takes back everything it added. Your own settings are never changed.')),
+            children: [
+              for (final item in _installed)
+                _AddonRow(
+                  key: ValueKey(item.id),
+                  item: item,
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => AddonDetailView(booru: widget.booru, id: item.id, changed: _reload),
+                      ),
+                    );
+                    _reload();
+                  },
+                ),
+            ],
           ),
       ],
     );
@@ -669,6 +943,7 @@ class _AddonOriginSection extends StatelessWidget {
       footer: Text(L10n.text('If the maker publishes a fingerprint, it should match this one exactly.')),
       children: [
         SettingsValueRow(title: L10n.text('Identifier'), value: addon.id),
+        SettingsValueRow(title: L10n.text('Mode'), value: addon.mode.title),
         SettingsValueRow(title: L10n.text('Source'), value: L10n.text(official ? 'Official Add-ons' : 'Opened File')),
         if (installed != null) SettingsValueRow(title: L10n.text('Installed'), value: _date(installed!)),
         FormRow(
@@ -856,220 +1131,6 @@ List<Widget> _addonContentsSections(Addon addon, BuildContext context, {Color? r
   return [
     for (final section in sections) ...[settingsSectionGap, section],
   ];
-}
-
-// MARK: - Official add-ons
-
-/// The official add-ons, read from TEGNAL's signed catalog (`AddonMarketView`). Each one is downloaded,
-/// matched against the catalog and shown in full before it is installed, like a file the person opens.
-class AddonMarketView extends StatefulWidget {
-  const AddonMarketView({super.key, required this.booru, required this.changed, this.market});
-  final BooruStore booru;
-  final VoidCallback changed;
-
-  /// Replaced in tests; the live market otherwise.
-  final AddonMarket? market;
-
-  @override
-  State<AddonMarketView> createState() => _AddonMarketViewState();
-}
-
-class _AddonMarketViewState extends State<AddonMarketView> {
-  AddonCatalog? _catalog;
-  List<InstalledAddon> _installed = [];
-  String? _loadError;
-  String? _error;
-  String? _downloading;
-  AddonMarket get _market => widget.market ?? AddonMarket.live;
-  AddonStore get _store => AddonStore(widget.booru.database);
-
-  @override
-  void initState() {
-    super.initState();
-    _reloadInstalled();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (_loadError != null) setState(() => _loadError = null);
-    try {
-      final catalog = await _market.catalog();
-      if (mounted) setState(() => _catalog = catalog);
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() => _catalog == null ? _loadError = _message(error) : _error = _message(error));
-    }
-  }
-
-  void _reloadInstalled() {
-    List<InstalledAddon> items;
-    try {
-      items = _store.installed();
-    } on Object {
-      items = const [];
-    }
-    if (mounted) setState(() => _installed = items);
-  }
-
-  InstalledAddon? _item(String id) => _installed.where((item) => item.id == id).firstOrNull;
-
-  Future<void> _get(AddonListing listing) async {
-    setState(() => _downloading = listing.id);
-    _AddonCandidate? candidate;
-    try {
-      final (:addon, :digest) = await _market.download(listing);
-      candidate = _AddonCandidate(addon: addon, digest: digest, existing: _item(addon.id), official: true);
-      _error = null;
-    } on Object catch (error) {
-      if (mounted) setState(() => _error = _message(error));
-    } finally {
-      if (mounted) setState(() => _downloading = null);
-    }
-    if (candidate == null || !mounted) return;
-    final install = await showAppSheet<bool>(
-      context,
-      builder: (context, controller) => _AddonInstallSheet(candidate: candidate!, controller: controller),
-    );
-    if (install != true || !mounted) return;
-    try {
-      _store.install(candidate.addon, digest: candidate.digest, official: true);
-      _error = null;
-      _reloadInstalled();
-      AddonRuntime.applyChanges(widget.booru);
-      widget.changed();
-    } on Object catch (error) {
-      setState(() => _error = _message(error));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final row = FormColors.listRow.resolveFrom(context);
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    final label = TegnalColors.label.resolveFrom(context);
-    final catalog = _catalog;
-    Widget placeholder({required Widget symbol, required String title, required String detail, Widget? action}) => FormSection(
-      rowColor: row,
-      children: [
-        FormRow(
-          minHeight: 200,
-          child: SizedBox(
-            width: double.infinity,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                symbol,
-                const SizedBox(height: 12),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: TegnalType.style(20, weight: FontWeight.w600, color: label),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  detail,
-                  textAlign: TextAlign.center,
-                  style: TegnalType.style(15, color: secondary),
-                ),
-                if (action != null) ...[const SizedBox(height: 14), action],
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-    return Stack(
-      children: [
-        SettingsPage(
-          title: L10n.text('Official Add-ons'),
-          children: [
-            if (catalog != null) ...[
-              if (catalog.addons.isEmpty)
-                placeholder(
-                  symbol: Icon(CupertinoIcons.checkmark_seal, size: 44, color: secondary),
-                  title: L10n.text('No Official Add-ons Yet'),
-                  detail: L10n.text('Official add-ons appear here as TEGNAL publishes them.'),
-                )
-              else
-                FormSection(
-                  rowColor: row,
-                  footer: Text(
-                    L10n.text(
-                      'Official add-ons are made and checked by TEGNAL. The list and every file are signed, so only the copy TEGNAL published is installed. You still see everything an add-on adds before it is installed.',
-                    ),
-                  ),
-                  children: [for (final listing in catalog.addons) _listingRow(listing)],
-                ),
-              if (_error != null) ...[
-                settingsSectionGap,
-                FormSection(
-                  rowColor: row,
-                  children: [
-                    FormRow(
-                      child: Row(
-                        children: [
-                          Icon(CupertinoIcons.exclamationmark_triangle, size: 20, color: SystemColors.red.resolveFrom(context)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(_error!, style: TegnalType.style(17, color: SystemColors.red.resolveFrom(context))),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ] else if (_loadError != null)
-              placeholder(
-                symbol: Icon(CupertinoIcons.wifi_exclamationmark, size: 44, color: secondary),
-                title: L10n.text('Couldn’t Load Official Add-ons'),
-                detail: _loadError!,
-                action: CupertinoButton(onPressed: _load, child: Text(L10n.text('Try Again'))),
-              ),
-          ],
-        ),
-        if (catalog == null && _loadError == null)
-          Positioned.fill(
-            child: Center(child: CupertinoActivityIndicator(color: TegnalColors.tint.resolveFrom(context), radius: 14)),
-          ),
-      ],
-    );
-  }
-
-  Widget _listingRow(AddonListing listing) {
-    final item = _item(listing.id);
-    final state = AddonListingState.of(listing, item);
-    if (state == AddonListingState.installed && item != null) {
-      return _AddonListingRow(
-        key: ValueKey(listing.id),
-        listing: listing,
-        state: state,
-        downloading: false,
-        onTap: () async {
-          await Navigator.of(context).push(
-            CupertinoPageRoute<void>(
-              builder: (_) => AddonDetailView(
-                booru: widget.booru,
-                id: item.id,
-                changed: () {
-                  _reloadInstalled();
-                  widget.changed();
-                },
-              ),
-            ),
-          );
-          _reloadInstalled();
-        },
-      );
-    }
-    return _AddonListingRow(
-      key: ValueKey(listing.id),
-      listing: listing,
-      state: state,
-      downloading: _downloading == listing.id,
-      onTap: state == AddonListingState.unsupported || _downloading != null ? null : () => _get(listing),
-    );
-  }
 }
 
 class _AddonListingRow extends StatelessWidget implements FormSeparatorInset {

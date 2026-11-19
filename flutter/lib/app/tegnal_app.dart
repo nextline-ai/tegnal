@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../core/addons/addon_models.dart';
+import '../core/addons/addon_store.dart';
 import '../core/booru/booru_account.dart';
 import '../core/booru/booru_client.dart';
 import '../core/booru/booru_image_cache.dart';
@@ -185,6 +187,22 @@ class TegnalApp extends StatefulWidget {
 
 class _TegnalAppState extends State<TegnalApp> {
   late final AppState _state = AppState(mode: widget.initialMode, tab: widget.initialTab);
+
+  @override
+  void initState() {
+    super.initState();
+    AddonRuntime.shared.displayedMode = AddonMode.fromApp(_state.mode);
+    _state.addListener(_modeChanged);
+  }
+
+  @override
+  void dispose() {
+    _state.removeListener(_modeChanged);
+    super.dispose();
+  }
+
+  /// Tag names in taste and recap texts come from the add-ons of the mode on screen.
+  void _modeChanged() => AddonRuntime.shared.displayedMode = AddonMode.fromApp(_state.mode);
 
   /// `AppTheme`: each library keeps its own setting, dark unless changed.
   Brightness? _brightness() {
@@ -491,8 +509,12 @@ class _RootState extends State<_Root> {
     ),
     tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
     safeMode: (context) => SafeModeSection(booru: _booru),
-    addons: (context) => AddonsSettingsRow(booru: services.booru),
-    openAddons: (context) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: services.booru))),
+    addons: (context) => AddonsSettingsRow(booru: services.booru, mode: AddonMode.comics),
+    openAddons: (context) => Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => AddonsView(booru: services.booru, mode: AddonMode.comics),
+      ),
+    ),
     recentWorks: services.recentWorks,
     openWork: (context, id) => _contentRoutes.openThumbnail(context, id),
     resetSettings: () => ModeSettingsReset.reset(booru: false, content: services.content, preferences: services.preferences),

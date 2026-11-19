@@ -21,12 +21,25 @@ struct Addon: Codable, Equatable, Sendable {
     var id: String
     /// Digits and dots, such as `1.2.0`.
     var version: String
+    /// The mode it works in. Comics and image add-ons are kept, listed and applied apart.
+    var mode: AddonMode
     var name: StudyText
     var author: String
     var summary: StudyText?
     var contents: AddonContents
 
     var title: String { name.addonResolved() }
+}
+
+/// The mode an add-on belongs to. Comics add-ons bring tag translations and comics search tags; image add-ons
+/// bring tag translations, image blacklist rules, challenges and learning tracks.
+enum AddonMode: String, Codable, CaseIterable, Sendable {
+    case comics, images
+
+    init(_ mode: AppMode) { self = mode == .manga ? .comics : .images }
+    init(_ mode: TasteMode) { self = mode == .comics ? .comics : .images }
+
+    var title: String { L10n.text(self == .comics ? "Comics Mode" : "Image Mode") }
 }
 
 /// What an add-on brings. One file may bring several of these together, such as a track with the translations it uses.
@@ -107,7 +120,7 @@ struct AddonTrack: Codable, Equatable, Sendable {
 // MARK: - Errors
 
 enum AddonError: LocalizedError, Equatable {
-    case tooLarge, notAddon, newerFormat, unknownContent(String), empty, invalid(String)
+    case tooLarge, notAddon, newerFormat, unknownContent(String), empty, invalid(String), otherMode(AddonMode)
     var errorDescription: String? {
         switch self {
         case .tooLarge: return L10n.text("This add-on file is too large.")
@@ -116,6 +129,8 @@ enum AddonError: LocalizedError, Equatable {
         case .unknownContent(let key): return L10n.text("This add-on contains something TEGNAL does not support: %@", key)
         case .empty: return L10n.text("This add-on contains nothing to add.")
         case .invalid(let field): return L10n.text("This add-on was not added because a part of it is not allowed: %@", field)
+        case .otherMode(let mode):
+            return L10n.text(mode == .comics ? "This add-on is for Comics Mode. Open it from Settings → Add-ons in Comics Mode." : "This add-on is for Image Mode. Open it from Settings → Add-ons in Image Mode.")
         }
     }
 }
@@ -140,7 +155,7 @@ extension Addon {
         guard let schema = top["schemaVersion"] as? Int, schema >= 1 else { throw AddonError.notAddon }
         guard schema <= schemaVersion else { throw AddonError.newerFormat }
         // Anything not understood is refused rather than skipped, so that what is shown is all the file does.
-        let known: Set<String> = ["format", "schemaVersion", "id", "version", "name", "author", "summary", "contents"]
+        let known: Set<String> = ["format", "schemaVersion", "id", "version", "mode", "name", "author", "summary", "contents"]
         if let extra = Set(top.keys).subtracting(known).sorted().first { throw AddonError.unknownContent(extra) }
         guard let contents = top["contents"] as? [String: Any] else { throw AddonError.empty }
         if let extra = Set(contents.keys).subtracting(AddonContents.keys).sorted().first { throw AddonError.unknownContent(extra) }
@@ -196,6 +211,15 @@ extension Addon {
         try require(format == Self.format && schemaVersion >= 1 && schemaVersion <= Self.schemaVersion, "format")
         try require(AddonCheck.identifier(id), "id")
         try require(AddonCheck.version(version), "version")
+        // A comics add-on cannot reach image servers, challenges or learning mode, and an image add-on cannot reach comics searches.
+        switch mode {
+        case .comics:
+            try require(contents.challenges == nil, "challenges")
+            try require(contents.learningTrack == nil, "learningTrack")
+            try require(contents.searchTags?.images == nil, "searchTags.images")
+        case .images:
+            try require(contents.searchTags?.comics == nil, "searchTags.comics")
+        }
         try require(AddonCheck.text(name, max: 80), "name")
         try require(AddonCheck.line(author, max: 80), "author")
         if let summary { try require(AddonCheck.text(summary, max: 600, multiline: true), "summary") }

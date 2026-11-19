@@ -3,7 +3,10 @@ import SwiftUI
 /// Shared presentation values keep raw tags intact for queries and evidence.
 enum TastePresentation {
     static let accent = Color.indigo
-    static func name(_ tag: String) -> String { AddonRuntime.shared.translation(tag) ?? tag.replacingOccurrences(of: "_", with: " ") }
+    /// Taste screens always belong to the mode on screen, so its add-ons name the tags.
+    static func name(_ tag: String) -> String {
+        AddonRuntime.shared.translation(tag, mode: AddonRuntime.shared.displayedMode) ?? tag.replacingOccurrences(of: "_", with: " ")
+    }
     static func host(_ source: String) -> String { URL(string: source)?.host ?? source }
     static func category(_ tag: TasteTag) -> String {
         L10n.text(tag.count == 0 ? "Searched tags" : tag.discovery ? "Hidden taste candidate" : tag.confirmed > 0 ? "Confirmed preference" : "Often saved together")

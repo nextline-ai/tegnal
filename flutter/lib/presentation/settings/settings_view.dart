@@ -21,6 +21,7 @@ import '../library/library_routes.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import '../../core/addons/addon_models.dart';
 import '../../core/addons/addon_store.dart';
 import 'addons_view.dart';
 import 'comics_cache_settings_view.dart';
@@ -576,12 +577,14 @@ class _DefaultSearchTagsPageState extends State<DefaultSearchTagsPage> {
                 AddonAddedTermsSection(
                   title: 'Added by Add-ons',
                   terms: AddonRuntime.shared.effects.comicsInclude,
+                  mode: AddonMode.comics,
                   rowColor: row,
                   openAddons: () => open(context),
                 ),
                 AddonAddedTermsSection(
                   title: 'Excluded by Add-ons',
                   terms: AddonRuntime.shared.effects.comicsExclude,
+                  mode: AddonMode.comics,
                   rowColor: row,
                   openAddons: () => open(context),
                 ),

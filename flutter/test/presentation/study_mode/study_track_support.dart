@@ -12,6 +12,7 @@ List<int> trackAddonFile({String id = 'maker.track', int lessons = 2, bool tags 
     'schemaVersion': 1,
     'id': id,
     'version': '1.0.0',
+    'mode': 'images',
     'name': {'en': 'Track Pack'},
     'author': 'Maker',
     'contents': {

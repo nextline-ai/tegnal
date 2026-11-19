@@ -13,12 +13,13 @@ import '../../support/addon_market_fixtures.dart';
 
 typedef Json = Map<String, Object?>;
 
-List<int> _file({Json extra = const {}, String id = 'maker.sample-pack', String version = '1.0.0'}) => utf8.encode(
+List<int> _file({Json extra = const {}, String id = 'maker.sample-pack', String version = '1.0.0', String mode = 'images'}) => utf8.encode(
   jsonEncode({
     'format': 'tegnal-addon',
     'schemaVersion': 1,
     'id': id,
     'version': version,
+    'mode': mode,
     'name': {'en': 'Sample Pack'},
     'author': 'Maker',
     'contents': {
@@ -34,6 +35,8 @@ List<int> _file({Json extra = const {}, String id = 'maker.sample-pack', String 
 Json _listing(List<int> data, {String id = 'maker.sample-pack', String version = '1.0.0'}) => {
   'id': id,
   'version': version,
+  'mode': 'images',
+  'grade': 'recommended',
   'name': {'en': 'Sample Pack'},
   'author': 'TEGNAL',
   'kinds': ['translations'],
@@ -150,5 +153,19 @@ void main() {
     for (final entry in catalog.addons) {
       expect(() => AddonMarket.check(File('${folder.path}/${entry.path}').readAsBytesSync(), entry), returnsNormally, reason: entry.id);
     }
+  });
+
+  test('catalog entries carry their mode and grade', () {
+    final data = _file();
+    final entry = AddonListing.fromJson(_listing(data))!;
+    expect(entry.addonGrade, AddonGrade.recommended);
+    expect(AddonListing.fromJson({..._listing(data), 'grade': 'unheard-of'})!.addonGrade, AddonGrade.optional, reason: 'An unknown grade is shown as optional');
+    expect(AddonListing.fromJson({..._listing(data), 'grade': null})!.addonGrade, AddonGrade.optional);
+    expect(AddonGrade.values, [AddonGrade.recommended, AddonGrade.suggested, AddonGrade.optional], reason: 'The list shows grades in this order');
+    expect(() => AddonMarket.check(data, entry), returnsNormally);
+    final comics = AddonListing.fromJson({..._listing(data), 'mode': 'comics'})!;
+    expect(() => AddonMarket.check(data, comics), throwsA(const AddonMarketError.damaged()), reason: 'A file must be for the mode the list names');
+    expect(AddonListing.fromJson({..._listing(data)..remove('mode')}), isNull, reason: 'An entry with no mode is left out');
+    expect(AddonListing.fromJson({..._listing(data), 'mode': 'both'}), isNull);
   });
 }

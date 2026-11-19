@@ -1,3 +1,5 @@
+import '../../core/addons/addon_models.dart';
+
 import 'dart:async';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -594,7 +596,7 @@ class WorkContextPreview extends StatelessWidget {
     final label = TegnalColors.label.resolveFrom(context);
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final details = [work.language, work.type].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
-    final tags = ArtworkTagGroup.make(tags: (work.tags ?? '').split(', '))
+    final tags = ArtworkTagGroup.make(tags: (work.tags ?? '').split(', '), mode: AddonMode.comics)
         .expand((group) => group.tags)
         .where((tag) => tag.category != ArtworkTagCategory.language && tag.category != ArtworkTagCategory.artist)
         .take(6)

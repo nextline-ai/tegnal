@@ -31,7 +31,7 @@ import '../booru/booru_favorites_view.dart';
 /// Shared presentation values keep raw tags intact for queries and evidence.
 abstract final class TastePresentation {
   static Color accent(BuildContext context) => SystemColors.indigo.resolveFrom(context);
-  static String name(String tag) => AddonRuntime.shared.translation(tag) ?? tag.replaceAll('_', ' ');
+  static String name(String tag) => AddonRuntime.shared.translation(tag, AddonRuntime.shared.displayedMode) ?? tag.replaceAll('_', ' ');
   static String host(String source) => Uri.tryParse(source)?.host.isNotEmpty == true ? Uri.parse(source).host : source;
   static String category(TasteTag tag) => L10n.text(
     tag.count == 0

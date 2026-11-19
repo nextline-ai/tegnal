@@ -23,6 +23,7 @@ import '../library/folder_rule_editor.dart';
 import '../navigation/app_header.dart';
 import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
+import '../../core/addons/addon_models.dart';
 import '../../core/addons/addon_store.dart';
 import '../settings/addons_view.dart';
 import '../settings/downloads_view.dart';
@@ -220,7 +221,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       symbol: (color) => HandTapSymbol(size: 22, color: color),
                       onTap: () => _push((context) => const ThumbnailGestureSettings(booru: true)),
                     ),
-                    AddonsSettingsRow(booru: _booru.store),
+                    AddonsSettingsRow(booru: _booru.store, mode: AddonMode.images),
                   ],
                 ),
                 settingsSectionGap,
@@ -629,8 +630,13 @@ class _BooruBlacklistViewState extends State<BooruBlacklistView> {
           builder: (context, _) => AddonAddedTermsSection(
             title: 'Hidden by Add-ons',
             terms: AddonRuntime.shared.effects.imageExclude,
+            mode: AddonMode.images,
             rowColor: row,
-            openAddons: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => AddonsView(booru: widget.booru.store))),
+            openAddons: () => Navigator.of(context).push(
+              CupertinoPageRoute<void>(
+                builder: (_) => AddonsView(booru: widget.booru.store, mode: AddonMode.images),
+              ),
+            ),
           ),
         ),
       ],
