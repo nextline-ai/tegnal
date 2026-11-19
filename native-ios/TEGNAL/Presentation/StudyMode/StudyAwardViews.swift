@@ -269,7 +269,7 @@ struct StudyAwardsGallery: View {
             }.padding(.horizontal, 16).padding(.vertical, 8).background(StudyTheme.background)
         }
         .tint(StudyTheme.primary)
-        .sheet(item: $opened) { award in
+        .appSheet(item: $opened) { award in
             StudyAwardDetail(award: award, record: model.earned[award.id], facts: model.facts, family: all.filter { $0.family == award.family }, earned: model.earned)
                 .presentationDetents([.medium, .large]).presentationBackground(StudyTheme.background)
         }

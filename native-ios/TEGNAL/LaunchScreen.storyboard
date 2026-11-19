@@ -7,7 +7,7 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--The home scene's blurred first frame, which the scene itself then opens from.-->
+        <!--The home scene's blurred first frame, which the scene itself then opens from. It covers the screen with the word TEGNAL in the middle: the hidden Focus view is 0.776 of the picture's height, so its middle is that word's.-->
         <scene sceneID="EHf-IW-A2E">
             <objects>
                 <viewController id="01J-lp-oVM" sceneMemberID="viewController">
@@ -15,16 +15,33 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" image="HomeBlur.jpg" translatesAutoresizingMaskIntoConstraints="NO" id="hB1-ur-St1">
-                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" image="HomeBlur.jpg" translatesAutoresizingMaskIntoConstraints="NO" id="hB1-ur-St1">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="854.5"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" secondItem="hB1-ur-St1" secondAttribute="height" multiplier="603:1311" id="r01-as-000"/>
+                                </constraints>
                             </imageView>
+                            <view hidden="YES" userInteractionEnabled="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="fC1-us-Hp1" userLabel="Focus">
+                                <rect key="frame" x="0.0" y="0.0" width="1" height="663"/>
+                                <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="1" id="f01-wd-000"/>
+                                </constraints>
+                            </view>
                         </subviews>
                         <color key="backgroundColor" red="0.16470588235294117" green="0.11764705882352941" blue="0.31764705882352939" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstItem="hB1-ur-St1" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="c01-tp-000"/>
-                            <constraint firstItem="hB1-ur-St1" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="c02-ld-000"/>
-                            <constraint firstAttribute="trailing" secondItem="hB1-ur-St1" secondAttribute="trailing" id="c03-tr-000"/>
-                            <constraint firstAttribute="bottom" secondItem="hB1-ur-St1" secondAttribute="bottom" id="c04-bt-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="c01-cx-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="width" relation="greaterThanOrEqual" secondItem="Ze5-6b-2t3" secondAttribute="width" id="c02-wg-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="height" relation="greaterThanOrEqual" secondItem="Ze5-6b-2t3" secondAttribute="height" id="c03-hg-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="width" secondItem="Ze5-6b-2t3" secondAttribute="width" priority="250" id="c04-we-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="height" secondItem="Ze5-6b-2t3" secondAttribute="height" priority="250" id="c05-he-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="top" relation="lessThanOrEqual" secondItem="Ze5-6b-2t3" secondAttribute="top" id="c06-tp-000"/>
+                            <constraint firstItem="hB1-ur-St1" firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="Ze5-6b-2t3" secondAttribute="bottom" id="c07-bt-000"/>
+                            <constraint firstItem="fC1-us-Hp1" firstAttribute="top" secondItem="hB1-ur-St1" secondAttribute="top" id="c08-ft-000"/>
+                            <constraint firstItem="fC1-us-Hp1" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="c09-fl-000"/>
+                            <constraint firstItem="fC1-us-Hp1" firstAttribute="height" secondItem="hB1-ur-St1" secondAttribute="height" multiplier="0.776" id="c10-fh-000"/>
+                            <constraint firstItem="fC1-us-Hp1" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" priority="750" id="c11-fy-000"/>
                         </constraints>
                     </view>
                 </viewController>

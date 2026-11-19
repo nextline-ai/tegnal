@@ -22,30 +22,50 @@ enum AppAudio {
     }
 }
 
+/// How the picture sits on a screen. A phone shows all of it. A tablet or a Mac window is another
+/// shape, so the picture fills it and closes in on the word TEGNAL.
+enum HomeFraming {
+    static let pictureSize = CGSize(width: 1206, height: 2622)
+    /// The middle of the word TEGNAL, as a share of the picture's width and height.
+    static let focus = CGPoint(x: 0.5, y: 0.388)
+
+    /// Where the whole picture lies so that it covers a screen of this size with its focus in the middle,
+    /// or as near the middle as the picture's own edges allow.
+    static func frame(in size: CGSize) -> CGRect {
+        let scale = max(size.width / pictureSize.width, size.height / pictureSize.height)
+        let width = pictureSize.width * scale, height = pictureSize.height * scale
+        return CGRect(x: min(0, max(size.width - width, size.width / 2 - width * focus.x)),
+                      y: min(0, max(size.height - height, size.height / 2 - height * focus.y)), width: width, height: height)
+    }
+}
+
 /// The film's first frame, already blurred: what the app shows while it starts, what the scene opens
-/// from, and what covers the app in the app switcher.
-@MainActor final class HomeStillView: UIImageView {
+/// from, and what covers the app in the app switcher. It is framed exactly as the film is.
+@MainActor final class HomeStillView: UIView {
     /// A plain file in the app, not a catalogue entry: the system's launch screen can only read it that way.
     static let picture = UIImage(named: "HomeBlur.jpg")
+    let imageView = UIImageView(image: HomeStillView.picture)
 
     init() {
-        super.init(image: Self.picture)
+        super.init(frame: .zero)
         backgroundColor = HomePalette.dusk
-        contentMode = .scaleAspectFill
         clipsToBounds = true
         isOpaque = true
+        imageView.contentMode = .scaleToFill
+        addSubview(imageView)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        imageView.frame = HomeFraming.frame(in: bounds.size)
+    }
 }
 
 /// The illustration itself: its opening film once, then its loop for as long as the scene is watched.
 @MainActor final class HomeSceneView: UIView {
-    static let videoSize = CGSize(width: 1206, height: 2622)
-
     private let player = AVQueuePlayer()
     private let picture = UIView()
-    private let backdropLayer = AVPlayerLayer()
-    private let backdropBlur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
     private let videoLayer = AVPlayerLayer()
     private let headShade = CAGradientLayer()
     private let footShade = CAGradientLayer()
@@ -68,13 +88,6 @@ enum AppAudio {
         clipsToBounds = false
         picture.clipsToBounds = true
         addSubview(picture)
-
-        backdropLayer.player = player
-        backdropLayer.videoGravity = .resizeAspectFill
-        backdropLayer.isHidden = true
-        picture.layer.addSublayer(backdropLayer)
-        backdropBlur.isHidden = true
-        picture.addSubview(backdropBlur)
 
         videoLayer.player = player
         videoLayer.videoGravity = .resizeAspectFill
@@ -135,21 +148,9 @@ enum AppAudio {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         picture.bounds = CGRect(origin: .zero, size: bounds.size)
         picture.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let size = bounds.size, video = Self.videoSize
-        let wide = size.width / size.height > 0.9
-        if wide {
-            // A wide window shows the whole picture upright, over a soft copy of itself.
-            let height = size.height, width = height * video.width / video.height
-            videoLayer.frame = CGRect(x: (size.width - width) / 2, y: 0, width: width, height: height)
-            backdropLayer.frame = picture.bounds
-            backdropBlur.frame = picture.bounds
-        } else {
-            // Otherwise it fills the screen from its middle, exactly as the still does.
-            let scale = max(size.width / video.width, size.height / video.height)
-            let width = video.width * scale, height = video.height * scale
-            videoLayer.frame = CGRect(x: (size.width - width) / 2, y: (size.height - height) / 2, width: width, height: height)
-        }
-        backdropLayer.isHidden = !wide; backdropBlur.isHidden = !wide
+        let size = bounds.size
+        // On a phone this is the whole picture; on a wider screen, a close-up around the word TEGNAL.
+        videoLayer.frame = HomeFraming.frame(in: size)
         headShade.frame = CGRect(x: 0, y: 0, width: size.width, height: size.height * 0.16)
         footShade.frame = CGRect(x: 0, y: size.height * 0.9, width: size.width, height: size.height * 0.1)
         veil.frame = bounds
@@ -169,7 +170,7 @@ enum AppAudio {
         opening = true
         let reduced = UIAccessibility.isReduceMotionEnabled
         UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseOut]) { self.still.alpha = 0 } completion: { _ in
-            self.still.removeFromSuperview(); self.still.image = nil
+            self.still.removeFromSuperview(); self.still.imageView.image = nil
         }
         let animator = UIViewPropertyAnimator(duration: reduced ? 0.5 : seconds, controlPoint1: CGPoint(x: 0.3, y: 0), controlPoint2: CGPoint(x: 0.2, y: 1)) {
             self.veil.effect = nil

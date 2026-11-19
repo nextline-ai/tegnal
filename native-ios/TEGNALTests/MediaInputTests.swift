@@ -789,6 +789,22 @@ import WebKit
         XCTAssertTrue(zip(back, back.dropFirst()).allSatisfy { $0 >= $1 })
     }
 
+    func testThePictureFillsAnyScreenAroundTheWordTEGNAL() {
+        // A phone has the picture's own shape and shows all of it.
+        let phone = HomeFraming.frame(in: CGSize(width: 402, height: 874))
+        XCTAssertEqual(phone.minX, 0, accuracy: 0.5); XCTAssertEqual(phone.minY, 0, accuracy: 0.5)
+        XCTAssertEqual(phone.width, 402, accuracy: 0.5); XCTAssertEqual(phone.height, 874, accuracy: 0.5)
+        // A tablet either way up, and a Mac window, are covered edge to edge with the word in the middle.
+        for size in [CGSize(width: 1366, height: 1024), CGSize(width: 1024, height: 1366), CGSize(width: 1512, height: 900)] {
+            let frame = HomeFraming.frame(in: size)
+            XCTAssertLessThanOrEqual(frame.minX, 0); XCTAssertLessThanOrEqual(frame.minY, 0)
+            XCTAssertGreaterThanOrEqual(frame.maxX, size.width - 0.5); XCTAssertGreaterThanOrEqual(frame.maxY, size.height - 0.5)
+            XCTAssertEqual(frame.width / frame.height, HomeFraming.pictureSize.width / HomeFraming.pictureSize.height, accuracy: 0.001)
+            XCTAssertEqual(frame.minX + frame.width * HomeFraming.focus.x, size.width / 2, accuracy: 0.5)
+            XCTAssertEqual(frame.minY + frame.height * HomeFraming.focus.y, size.height / 2, accuracy: 0.5, "The word TEGNAL is level with the middle of a \(Int(size.width))×\(Int(size.height)) screen")
+        }
+    }
+
     func testHomeWorldFindsEveryDrawingAndFilm() {
         let size = CGSize(width: 402, height: 874)
         for request in HomeArt.requests(for: size) {
@@ -815,14 +831,15 @@ import WebKit
         defer { window.isHidden = true }
         let manager = PrivacyCoverManager()
         manager.show(in: [window])
-        let cover = try XCTUnwrap(window.subviews.last as? UIImageView)
+        let cover = try XCTUnwrap(window.subviews.last as? HomeStillView)
         XCTAssertEqual(cover.accessibilityIdentifier, "privacy.cover")
         XCTAssertEqual(cover.frame, window.bounds)
         XCTAssertEqual(cover.alpha, 1)
         XCTAssertTrue(cover.isOpaque)
-        XCTAssertNotNil(cover.image, "The cover is the home scene's blurred first frame")
-        XCTAssertTrue(cover.image === HomeStillView.picture, "The app starts from, and hides behind, one picture")
-        XCTAssertEqual(cover.contentMode, .scaleAspectFill)
+        XCTAssertNotNil(cover.imageView.image, "The cover is the home scene's blurred first frame")
+        XCTAssertTrue(cover.imageView.image === HomeStillView.picture, "The app starts from, and hides behind, one picture")
+        cover.layoutIfNeeded()
+        XCTAssertEqual(cover.imageView.frame, HomeFraming.frame(in: window.bounds.size), "The cover is framed as the film is")
         XCTAssertTrue(cover.layer.animationKeys()?.isEmpty ?? true)
         // Leaving again while the cover fades puts it straight back, and that fade's end must not remove it.
         manager.hide()

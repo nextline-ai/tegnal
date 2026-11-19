@@ -354,7 +354,7 @@ private struct StudyCardStep: View {
             if let action = card.action { button(action).studyRise(shown, delay: 0.25) }
         }
         .onAppear { shown = true }
-        .sheet(item: $opened) { opened in
+        .appSheet(item: $opened) { opened in
             NavigationStack {
                 if opened == .key { GeneratorAccountView() } else {
                     GeneratorView(prompt: card.code ?? "")
