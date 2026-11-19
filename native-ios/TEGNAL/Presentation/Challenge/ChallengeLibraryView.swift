@@ -43,6 +43,9 @@ struct ChallengeLibraryView: View {
                                 .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(game.title).font(.headline).foregroundStyle(Color.primary)
+                                if game.id.hasPrefix(AddonEffects.challengePrefix) {
+                                    Label(L10n.text("From an Add-on"), systemImage: "puzzlepiece.extension").font(.caption2.weight(.semibold)).foregroundStyle(Color.secondary)
+                                }
                                 if !game.detail.isEmpty { Text(game.detail).font(.caption).foregroundStyle(Color.secondary).lineLimit(2) }
                             }
                             Spacer()

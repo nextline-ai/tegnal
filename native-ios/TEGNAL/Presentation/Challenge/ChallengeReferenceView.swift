@@ -80,7 +80,7 @@ struct ChallengeFolderSource: BooruProviding {
                         : available.contains(value.lowercased())
                     return negative ? !match : match
                 }
-                return matches && post.serverID == server.id && ChallengeMediaFilter.matches(post, tags: [], blacklist: store.blacklist(serverID: server.id))
+                return matches && post.serverID == server.id && ChallengeMediaFilter.matches(post, tags: [], blacklist: store.filteringBlacklist(serverID: server.id))
             }
         }
         let ordered = popular ? all.sorted { $0.score == $1.score ? $0.postID > $1.postID : $0.score > $1.score } : all

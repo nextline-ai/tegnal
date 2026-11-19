@@ -751,7 +751,7 @@ struct BooruPostView: View {
                 ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:])) { group in
                     Section {
                         ForEach(group.tags) { tag in
-                            tagRow(tag.query, category: group.category, title: tag.name).tint(group.category.color).foregroundStyle(group.category.color)
+                            tagRow(tag.query, category: group.category, title: tag.name, original: tag.original).tint(group.category.color).foregroundStyle(group.category.color)
                         }
                     } header: { ArtworkTagHeading(category: group.category) }
                 }
@@ -809,9 +809,15 @@ struct BooruPostView: View {
         }
     }
 
-    private func tagRow(_ tag: String, category: ArtworkTagCategory, title: String? = nil) -> some View {
+    private func tagRow(_ tag: String, category: ArtworkTagCategory, title: String? = nil, original: String? = nil) -> some View {
         HStack {
-            NavigationLink { BooruFeedView(server: server, source: source, initialQuery: tag) } label: { Text(title ?? tag.replacingOccurrences(of: "_", with: " ")) }
+            NavigationLink { BooruFeedView(server: server, source: source, initialQuery: tag) } label: {
+                // A translated tag keeps the tag itself beneath it, so that what is searched is never hidden.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title ?? tag.replacingOccurrences(of: "_", with: " "))
+                    if let original { Text(original).font(.caption).foregroundStyle(.secondary) }
+                }
+            }
                 .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) })
                 .accessibilityAction(named: L10n.text("Save Tag")) { saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) }
             Menu {

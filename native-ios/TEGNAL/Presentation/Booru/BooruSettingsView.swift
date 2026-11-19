@@ -336,6 +336,7 @@ struct BooruBlacklistView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("booru.blacklistText")
             } header: { SettingsHelpLabel("Tag Blacklist", help: "Enter one rule per line to hide matching images. You can use a tag, rating:explicit, id:123 or artist:name. Delete a rule to show those images again.") }
             Section(L10n.text("Example")) { Text("spoilers\ngore -scenery\nrating:explicit\nartist_*").font(.footnote).foregroundStyle(.secondary) }
+            AddonAddedTermsSection(title: "Hidden by Add-ons", terms: AddonRuntime.shared.effects.imageExclude)
         }.navigationTitle(server.displayName).navigationBarTitleDisplayMode(.inline)
             .onAppear { text = store.blacklist(serverID: server.id) }
             .toolbar { ToolbarItem(placement: .confirmationAction) {
@@ -392,6 +393,7 @@ struct BooruMoreView: View {
             TasteSettingsSection(mode: .booru)
             BooruSafeModeSettings()
             StudyModeSettings()
+            AddonsSettingsSection()
             Section {
                 NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }
                     .accessibilityIdentifier("booru.libraryManagement")

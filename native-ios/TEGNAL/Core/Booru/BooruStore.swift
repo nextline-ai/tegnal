@@ -162,6 +162,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v14_study") { try StudyStore.migrate($0) }
         migrations.registerMigration("booru_v15_study_game") { try StudyStore.migrateGame($0) }
         migrations.registerMigration("booru_v16_study_awards") { try StudyStore.migrateAwards($0) }
+        migrations.registerMigration("booru_v17_addons") { try AddonStore.migrate($0) }
         try migrations.migrate(database)
         try reload()
     }
@@ -362,7 +363,7 @@ final class BooruStore: @unchecked Sendable {
         if let value = snapshotLock.withLock({ visibleFavoritesRevision == revision ? visibleFavoritesCache[key] : nil }) {
             return hidden.isEmpty ? value : value.filter { !hidden.contains($0.id) }
         }
-        let filters = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, BooruBlacklist(blacklist(serverID: $0.id))) })
+        let filters = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, BooruBlacklist(filteringBlacklist(serverID: $0.id))) })
         let safebooru = Set(servers.filter(\.isSafebooru).map(\.id))
         let shown = folderID == nil ? Set(visibleFolders().map(\.id)) : nil
         let value = favoriteRecords().compactMap { record -> BooruPost? in
@@ -567,6 +568,12 @@ final class BooruStore: @unchecked Sendable {
     func blacklist(serverID: String) -> String {
         _ = revision
         return (try? setting("blacklist." + serverID)) ?? ""
+    }
+    /// The rules that hide images from a server: the learner's own, then those of add-ons that are on.
+    /// Only for filtering; the learner edits `blacklist(serverID:)`, which never holds an add-on's rules.
+    func filteringBlacklist(serverID: String) -> String {
+        let own = blacklist(serverID: serverID), added = AddonRuntime.shared.effects.imageExclude
+        return added.isEmpty ? own : ([own] + added).filter { !$0.isEmpty }.joined(separator: "\n")
     }
     func setBlacklist(_ text: String, serverID: String) throws { try setSetting("blacklist." + serverID, value: text) }
     func setting(_ key: String) throws -> String? {

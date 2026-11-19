@@ -13,7 +13,7 @@ enum StudyLookup {
         var blacklists: [String: BooruBlacklist] = [:]
         return posts.filter { post in
             guard StudyEngine.usable(post), store.isVisible(post), store.isShownInSafeMode(post) else { return false }
-            let blacklist = blacklists[post.serverID] ?? BooruBlacklist(store.blacklist(serverID: post.serverID))
+            let blacklist = blacklists[post.serverID] ?? BooruBlacklist(store.filteringBlacklist(serverID: post.serverID))
             blacklists[post.serverID] = blacklist
             return !blacklist.contains(post)
         }
@@ -41,7 +41,7 @@ enum StudyLookup {
     /// so the choice of browsing servers and Safe Mode's own choice do not apply; hidden and blacklisted pictures still stay out.
     static func examples(_ tag: String, server: BooruServer, store: BooruStore, source: any BooruProviding, page: Int = 0) async -> [BooruPost] {
         let batch = await hurried { try await source.posts(server: server, query: tag, page: page) }
-        let blacklist = BooruBlacklist(store.blacklist(serverID: server.id))
+        let blacklist = BooruBlacklist(store.filteringBlacklist(serverID: server.id))
         return (batch?.posts ?? []).filter { StudyEngine.usable($0) && store.isVisible($0) && !blacklist.contains($0) }
     }
 

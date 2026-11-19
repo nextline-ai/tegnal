@@ -51,6 +51,7 @@ public struct SettingsView: View {
             // Reachable from Comics Mode too, which Safe Mode keeps to Safebooru's pools.
             BooruSafeModeSettings()
             StudyModeSettings()
+            AddonsSettingsSection()
             Section {
                 NavigationLink { MangaLibraryToolsView() } label: {
                     Label(L10n.text("Library Management"), systemImage: "externaldrive")
