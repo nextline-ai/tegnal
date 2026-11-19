@@ -113,6 +113,5 @@ void main() {
     expect(SearchHistoryPreferences.retentionDays(defaults), 0);
     expect(AppTheme.stored(defaults, booru: false), AppTheme.dark);
     expect(AppLanguageSetting.stored(defaults), 'system');
-    expect(ResumeAnimationSetting.stored(defaults), isTrue);
   });
 }

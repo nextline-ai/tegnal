@@ -54,7 +54,7 @@ import 'presentation/settings/site_account_section.dart';
 import 'presentation/study_mode/study_kit.dart';
 
 /// `--dart-define=TEGNAL_FIXTURE=on` (or a comma-separated list of [FixtureOption] names,
-/// plus `setup` to start without a connected website, and `startChoice` to open "Choose How to Start") runs offline with the native UI
+/// plus `setup` to start without a connected website, and `onboarding` to open the first-run onboarding) runs offline with the native UI
 /// tests' synthetic works and an in-memory library, so screens can be compared with the
 /// native app's. `TEGNAL_LANGUAGE` and `TEGNAL_TAB` pick the language and the first tab
 /// for those runs, `TEGNAL_THEME` (`light`, `dark` or `system`) the comics appearance, and
@@ -318,7 +318,7 @@ Future<AppServices> _launchFixture() async {
     syncDirectory: Directory('${Directory.systemTemp.path}/fixture-drive-sync'),
     version: await _version(),
     isTesting: true,
-    showsStartChoice: names.contains('startChoice'),
+    showsOnboarding: names.contains('onboarding'),
   );
   // The native taste, recap and challenge UI tests' libraries.
   if (names.contains('tasteRich') || names.contains('tasteRecap') || names.contains('tasteSoleExclusion')) {

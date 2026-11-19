@@ -1019,6 +1019,11 @@ class _GalleryDetailMetadata extends StatelessWidget {
           ),
           _tagFlow(context, GalleryDetailMetadata.tags(gallery)),
         ),
+        // Who put the work up, where the website says so. Searches for it differ from site to site, so it copies like the number.
+        if (gallery.uploader?.trim() case final uploader? when uploader.isNotEmpty) ...[
+          GalleryCopyValue(key: const Key('content.detail.uploader'), title: 'Uploader', value: uploader),
+          const SizedBox(height: 14),
+        ],
         GalleryWorkNumber(number: gallery.id),
       ],
     );
@@ -1051,19 +1056,29 @@ class _MetadataPlaceholder extends StatelessWidget {
 }
 
 /// `GalleryWorkNumber`: the number in a pill; tap or hold copies it.
-class GalleryWorkNumber extends StatefulWidget {
+class GalleryWorkNumber extends StatelessWidget {
   const GalleryWorkNumber({super.key, required this.number});
   final int number;
 
   @override
-  State<GalleryWorkNumber> createState() => _GalleryWorkNumberState();
+  Widget build(BuildContext context) => GalleryCopyValue(title: 'Number', value: '$number');
 }
 
-class _GalleryWorkNumberState extends State<GalleryWorkNumber> {
+/// A value under its own heading that copies itself when tapped or held, such as the work's number or its uploader.
+class GalleryCopyValue extends StatefulWidget {
+  const GalleryCopyValue({super.key, required this.title, required this.value});
+  final String title;
+  final String value;
+
+  @override
+  State<GalleryCopyValue> createState() => _GalleryCopyValueState();
+}
+
+class _GalleryCopyValueState extends State<GalleryCopyValue> {
   bool _copied = false;
 
   Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: '${widget.number}'));
+    await Clipboard.setData(ClipboardData(text: widget.value));
     HapticFeedback.mediumImpact();
     setState(() => _copied = true);
     await Future<void>.delayed(const Duration(seconds: 2));
@@ -1079,14 +1094,16 @@ class _GalleryWorkNumberState extends State<GalleryWorkNumber> {
         Padding(
           padding: const EdgeInsets.only(left: galleryLabelInset),
           child: Text(
-            L10n.text('Number'),
+            L10n.text(widget.title),
             style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
           ),
         ),
         const SizedBox(height: 4),
         Row(
           children: [
-            ArtworkTagPill(color: color, onTap: _copy, onLongPress: _copy, child: Text('${widget.number}')),
+            Flexible(
+              child: ArtworkTagPill(color: color, onTap: _copy, onLongPress: _copy, child: Text(widget.value, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ),
             if (_copied) ...[
               const SizedBox(width: 8),
               Icon(Symbols.checkmark, size: 12, color: TegnalColors.secondaryLabel.resolveFrom(context)),

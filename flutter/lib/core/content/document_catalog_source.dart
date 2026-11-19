@@ -571,6 +571,7 @@ class DocumentCatalogSource {
           if (pair[0] != 'language' && pair[0] != 'artist') '${_localNamespace(pair[0])}:${pair[1]}',
       ],
       pages: pages,
+      uploader: NativeGallery.uploaderFrom(object['uploader']),
     );
   }
 

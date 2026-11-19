@@ -63,13 +63,73 @@ void main() {
   });
 
   /// The harness with its server already chosen, so the opening question stays away.
-  void prepare({bool choose = true}) {
-    harness = StudyHarness();
+  void prepare({bool choose = true, bool welcomed = true}) {
+    harness = StudyHarness(welcomed: welcomed);
     mode = StudyMode.forTesting()..attach(harness.preferences.booruDefaults, fixture: false);
     if (choose) harness.preferences.booruDefaults.set(StudyServer.key, harness.server.id);
   }
 
   Widget root() => StudyModeRoot(booru: harness.booru, mode: mode, generation: generationStore(directory));
+
+  group('welcome', () {
+    testWidgets('a first visit is welcomed: a hello, a daily goal and how much the learner knows, then the server question', (tester) async {
+      prepare(choose: false, welcomed: false);
+      await pumpMode(tester, root());
+      expect(find.text('Welcome to Learning Mode!'), findsOneWidget);
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      expect(key('study.welcome.goal.20'), findsOneWidget);
+      await tester.tap(key('study.welcome.goal.30'));
+      await tester.pumpAndSettle();
+      expect(harness.preferences.booruDefaults.integer(StudyModeModel.goalKey), 30);
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<StudyMainButton>(key('study.welcome.next')).onPressed, isNull, reason: 'Nothing is chosen yet');
+      await tester.tap(key('study.welcome.new'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome to Learning Mode!'), findsNothing);
+      expect(harness.preferences.booruDefaults.boolean(StudyPlacement.welcomedKey), isTrue);
+      expect(find.text('Where should the pictures come from?'), findsOneWidget, reason: 'The server question waits for the welcome');
+    });
+
+    testWidgets('the placement test ends at the first question not known and starts at the beginning', (tester) async {
+      prepare(welcomed: false);
+      await pumpMode(tester, root());
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('study.welcome.some'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      expect(key('study.choice.0'), findsOneWidget, reason: 'The test asks at once');
+      await tester.tap(key('study.unsure'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('study.next'));
+      await tester.pumpAndSettle();
+      expect(key('study.placement.title'), findsOneWidget);
+      expect(find.text("Let's Start from the Beginning"), findsOneWidget);
+      await tester.tap(key('study.done'));
+      await tester.pumpAndSettle();
+      expect(key('study.welcome'), findsNothing);
+      expect(nodeState(tester, 's0-order'), 'Next');
+      expect(harness.store.studyStore.stats()[StudyPlacement.counter], isNull);
+    });
+
+    testWidgets('a placement passes the earlier lessons by, which stay open, and the path starts there', (tester) async {
+      prepare();
+      final placed = StudyPlacement.skipped(bundledPath, stoppedAt: 2);
+      harness.store.studyStore.raise(StudyPlacement.counter, placed);
+      await pumpMode(tester, root());
+      final lessons = bundledPath.lessons;
+      expect(nodeState(tester, lessons[placed].id), 'Next');
+      expect(nodeState(tester, lessons[0].id), 'Skipped');
+      expect(nodeState(tester, lessons[placed + 1].id), 'Locked');
+    });
+  });
 
   group('dock', () {
     testWidgets('switches tabs, builds each the first time it opens and keeps it', (tester) async {

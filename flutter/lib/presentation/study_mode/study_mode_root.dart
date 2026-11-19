@@ -31,6 +31,7 @@ import 'study_mode_model.dart';
 import 'study_reactions.dart';
 import 'study_speed_view.dart';
 import 'study_track_views.dart';
+import 'study_welcome_view.dart';
 
 // Learning mode's frame: its tabs, its dock and its top bar, laid over the library. Ported from `StudyModeRoot.swift`
 // and the way `AppRootTabView.swift` lays the mode over the library.
@@ -197,6 +198,8 @@ class _StudyModeRootState extends State<StudyModeRoot> {
           if (records[lesson.id] == null) study.earn(15, lesson: lesson.id, stars: 3);
         }
         booru.booruDefaults.set(StudyServer.key, StudyServer.recommended(StudyServer.choices(booru.store)).id);
+        // A seeded learner has been welcomed already; the welcome has tests of its own.
+        model.welcomed();
       }
       if (_seedXP > 0 && StudyGame.of(days: study.days(), goal: model.goal).xp == 0) study.earn(_seedXP);
       if (_seedTags > 0 && study.progress().length < _seedTags) {
@@ -213,14 +216,49 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   }
 
   /// Asks or celebrates once the learner has arrived, not while the home scene is still on the way out.
+  /// A learner new to the mode is welcomed first; the server question waits until the welcome closes.
   void _greet() {
     if (_greeted || !mounted || _stage.coversScreen) return;
     _greeted = true;
-    if (model.needsServer) {
+    if (model.needsWelcome) {
+      unawaited(_welcome());
+    } else if (model.needsServer) {
       _chooseServer();
     } else {
       _celebrate();
     }
+  }
+
+  bool _welcoming = false;
+
+  /// The welcome and placement test, shown on a first visit and after a reset. Afterwards the path glides to where
+  /// the learner begins, then the server question comes if one is due.
+  Future<void> _welcome() async {
+    if (_welcoming) return;
+    _welcoming = true;
+    await _cover<void>(
+      context,
+      (context) => StudyWelcomeView(booru: booru, model: model, finish: () => Navigator.of(context).pop()),
+    );
+    _welcoming = false;
+    model.welcomed();
+    model.reload();
+    if (!mounted) return;
+    mode.tab = StudyTab.path;
+    if (model.needsServer) {
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      if (mounted) unawaited(_chooseServer());
+    } else {
+      _celebrate();
+    }
+  }
+
+  /// After a reset learning mode starts over, welcome and placement test included.
+  void _restarted() {
+    model.forgetWelcome();
+    model.reload();
+    mode.tab = StudyTab.path;
+    unawaited(_welcome());
   }
 
   Future<void> _chooseServer() => showAppSheet<void>(
@@ -334,7 +372,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     StudyTab.practice => StudyPracticeView(model: model, start: _start, startSpeed: _startSpeed),
     StudyTab.dex => StudyDexView(model: model),
     StudyTab.lab => StudyLabView(model: model, start: _start, closed: _celebrate, generation: widget.generation),
-    StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode),
+    StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode, reset: _restarted),
   };
 
   @override
@@ -741,7 +779,7 @@ class _StudyPathViewState extends State<StudyPathView> {
   String? _current;
 
   StudyModeModel get model => widget.model;
-  StudyPathLesson? get _currentLesson => model.shownPath.current(model.records);
+  StudyPathLesson? get _currentLesson => model.shownPath.current(model.records, placed: model.shownPlaced);
 
   GlobalKey _key(String id) => _keys.putIfAbsent(id, GlobalKey.new);
 
@@ -977,7 +1015,9 @@ class _StudyPathViewState extends State<StudyPathView> {
   Widget _node(StudyPathLesson lesson, Color color, {required bool current}) {
     final theme = StudyTheme.of(context);
     final record = model.records[lesson.id];
-    final open = record != null || current;
+    // A lesson the placement test passed by stays open, to be played whenever the learner likes.
+    final skipped = model.shownPath.isSkipped(lesson, model.records, placed: model.shownPlaced);
+    final open = record != null || current || skipped;
     final size = lesson.kind == StudyPathLessonKind.boss ? 92.0 : 76.0;
     final celebrating = widget.celebrating == lesson.id;
     final symbol = open ? (record != null && lesson.kind != StudyPathLessonKind.boss ? 'checkmark' : lesson.symbol) : 'lock.fill';
@@ -1063,6 +1103,8 @@ class _StudyPathViewState extends State<StudyPathView> {
                 ? 'Lesson Done'
                 : current
                 ? 'Next'
+                : skipped
+                ? 'Skipped'
                 : 'Locked',
           ),
           child: button,
@@ -1742,10 +1784,13 @@ class _StudyLabViewState extends State<StudyLabView> {
 
 /// `StudyMeView`: the level, the badges, the daily goal and the mode's settings.
 class StudyMeView extends StatefulWidget {
-  const StudyMeView({super.key, required this.model, required this.chooseServer, this.openAwards, this.mode});
+  const StudyMeView({super.key, required this.model, required this.chooseServer, this.openAwards, this.mode, this.reset});
   final StudyModeModel model;
   final VoidCallback chooseServer;
   final VoidCallback? openAwards;
+
+  /// Called after progress is reset, so learning mode can welcome the learner again.
+  final VoidCallback? reset;
 
   /// The mode whose settings are shown; null is [StudyMode.shared].
   final StudyMode? mode;
@@ -1782,13 +1827,14 @@ class _StudyMeViewState extends State<StudyMeView> {
       // Nothing was reset; the screen reads the store again either way.
     }
     model.reload();
+    widget.reset?.call();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = StudyTheme.of(context);
     final game = model.game;
-    final canReset = !(game.xp == 0 && model.summary.started == 0);
+    final canReset = !(game.xp == 0 && model.summary.started == 0 && model.placed == 0);
     final red = CupertinoColors.systemRed.resolveFrom(context);
     return _Scroll(
       padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 16),
@@ -2009,11 +2055,15 @@ class _StudyMeViewState extends State<StudyMeView> {
         children: [
           Expanded(child: _label(symbol, title)),
           const SizedBox(width: 8),
-          Flexible(
+          // The value keeps to the trailing edge, beside its chevron, as `Spacer` puts it on iOS. Beside an
+          // `Expanded` title a `Flexible` would take half the row and leave the value floating in the middle.
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
             child: Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
               style: StudyTheme.body(15, StudyTheme.semibold).copyWith(color: theme.muted),
             ),
           ),

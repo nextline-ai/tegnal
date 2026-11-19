@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tegnal/core/study/study_path.dart';
 import 'package:tegnal/core/booru/booru_fixture_source.dart';
 import 'package:tegnal/core/booru/booru_image_cache.dart';
 import 'package:tegnal/core/booru/booru_models.dart';
@@ -19,8 +20,11 @@ import 'package:tegnal/presentation/design/tegnal_theme.dart';
 
 /// Image mode's context over an in-memory store and the offline fixture source, as the screens get it in the app.
 class StudyHarness {
-  StudyHarness({bool select = true}) {
+  /// [welcomed] marks learning mode's first-visit welcome as already gone through, so screens open on the path;
+  /// the welcome has tests of its own.
+  StudyHarness({bool select = true, bool welcomed = true}) {
     StudyCurriculum.useBundled(StudyCurriculum.parse(File('assets/study/TagStudy.json').readAsStringSync()));
+    if (welcomed) preferences.booruDefaults.set(StudyPlacement.welcomedKey, true);
     final directory = Directory.systemTemp.createTempSync('study-view-');
     addTearDown(() => directory.deleteSync(recursive: true));
     final database = AppDatabase.inMemory(preferences: preferences);

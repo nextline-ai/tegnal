@@ -45,6 +45,7 @@ class SettingsDependencies {
     required this.version,
     this.extraSections = const [],
     this.openDownloads,
+    this.openOnboarding,
     this.openLibraryManagement,
     this.resetSettings,
     this.siteAccount,
@@ -84,6 +85,9 @@ class SettingsDependencies {
   final String version;
   final List<Widget> extraSections;
   final void Function(BuildContext context)? openDownloads;
+
+  /// "Replay Onboarding" under Help & Privacy.
+  final void Function(BuildContext context)? openOnboarding;
   final void Function(BuildContext context)? openLibraryManagement;
   final VoidCallback? resetSettings;
 
@@ -253,11 +257,6 @@ class _SettingsViewState extends State<SettingsView> {
                       options: [('dark', L10n.text('Dark Mode')), ('light', L10n.text('Light Mode')), ('system', L10n.text('System Default'))],
                       selected: theme,
                       onSelected: _setTheme,
-                    ),
-                    SettingsToggleRow(
-                      title: L10n.text('Play Animation When Returning'),
-                      value: _defaults.boolean('app.resumeAnimation') ?? true,
-                      onChanged: (value) => _set('app.resumeAnimation', value),
                     ),
                     SettingsSegmentedRow<int>(
                       title: L10n.text('Folder Columns'),
@@ -443,6 +442,14 @@ class _SettingsViewState extends State<SettingsView> {
                 section(
                   header: L10n.text('Help & Privacy'),
                   children: [
+                    if (_deps.openOnboarding case final open?)
+                      SettingsLinkRow(
+                        key: const Key('settings.onboarding'),
+                        title: L10n.text('Replay Onboarding'),
+                        icon: CupertinoIcons.sparkles,
+                        chevron: false,
+                        onTap: () => open(context),
+                      ),
                     SettingsLinkRow(
                       title: L10n.text('Privacy Policy'),
                       icon: CupertinoIcons.hand_raised,

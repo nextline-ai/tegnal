@@ -174,7 +174,7 @@ class WorkExtras {
   /// The work's archive page, when the page links one.
   Uri? archiveURL;
 
-  bool get hasContent => rating != null || favorited != null || uploader != null || fileSize != null || comments.isNotEmpty || canComment || canRate;
+  bool get hasContent => rating != null || favorited != null || fileSize != null || comments.isNotEmpty || canComment || canRate;
 }
 
 /// The signed-in account's id and key the page hands its own scripts for rating.

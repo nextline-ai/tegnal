@@ -104,10 +104,10 @@ class MainActivity : FlutterActivity() {
     }
 
     /// While the launch cover is pending, focus and resume changes leave it alone; afterwards
-    /// returning only fades, following "Play Animation When Returning".
+    /// returning only fades.
     private fun revealContent() {
         if (!uiDisplayed || !resumed || !topResumed || !focused || launchSplashPending) return
-        privacyCover.hide(if (privacyCover.resumeAnimation) PrivacyCover.RESUME_FADE else 0L)
+        privacyCover.hide(PrivacyCover.RESUME_FADE)
     }
 
     /// The home scene's first picture is on screen (or the safety timeout ran out): the launch
@@ -174,13 +174,9 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        // Flutter reports the returning-animation setting and when the launch picture is on screen.
+        // Flutter reports when the launch picture is on screen.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "work.nextline.tegnal/privacy").setMethodCallHandler { call, result ->
             when (call.method) {
-                "configure" -> {
-                    call.argument<Boolean>("resumeAnimation")?.let { privacyCover.resumeAnimation = it }
-                    result.success(null)
-                }
                 // "Block Screenshots and Recording": the window is left out of captures and recordings.
                 "secure" -> {
                     if (call.arguments == true) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)

@@ -45,12 +45,6 @@ abstract final class SearchHistoryPreferences {
   static int retentionDays(Preferences preferences) => preferences.integerOrNull(retentionKey) ?? 0;
 }
 
-/// "Play Animation When Returning".
-abstract final class ResumeAnimationSetting {
-  static const key = 'app.resumeAnimation';
-  static bool stored(Preferences preferences) => preferences.boolean(key) ?? true;
-}
-
 /// The occasional Discord invitation in Settings: shown when due, due again three days after
 /// it was seen, and a week after it was dismissed.
 class DiscordInvitation {
@@ -130,7 +124,8 @@ abstract final class ModeSettingsReset {
     ]) {
       reader.remove(key);
     }
-    browser.remove(ResumeAnimationSetting.key);
+    // The former "Play Animation When Returning" switch; returning always fades now.
+    browser.remove('app.resumeAnimation');
     ReaderPreferenceReset.reset(booru: booru, defaults: reader);
   }
 }

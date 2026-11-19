@@ -303,7 +303,6 @@ class _WorkExtrasSectionState extends State<WorkExtrasSection> {
                 _stat(context, name, CupertinoIcons.heart_fill, tint: CupertinoColors.systemPink.resolveFrom(context)),
               if (extras.fileSize case final size?) _stat(context, size, CupertinoIcons.archivebox),
               if (extras.posted case final posted?) _stat(context, _shortDate(posted), CupertinoIcons.calendar),
-              if (extras.uploader case final uploader?) _stat(context, uploader, CupertinoIcons.person),
             ],
           ),
           if (previews.isNotEmpty) ...[

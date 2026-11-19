@@ -16,8 +16,21 @@ class PullDownMenuItem<T> {
 
 /// The iOS 26 pull-down menu a `Menu` with a `Picker` opens: a large glass panel that grows
 /// out of its button, covering it, at least 250 pt wide with 42 pt rows and no dividers.
+///
+/// It opens over the whole app, tab bar included, as iOS menus do, and stays inside the safe area:
+/// a list longer than the screen (many folders, say) scrolls inside the panel, starting at the checked row.
 Future<T?> showPullDownMenu<T>(BuildContext context, {required Rect anchor, required List<PullDownMenuItem<T>> items}) {
-  return Navigator.of(context).push<T>(_PullDownMenuRoute<T>(anchor: anchor, items: items));
+  return Navigator.of(context, rootNavigator: true).push<T>(_PullDownMenuRoute<T>(anchor: anchor, items: items));
+}
+
+/// Where a menu panel of [height] goes so that it starts at [anchorTop] when it can and always fits between the
+/// safe area's edges. Returns the panel's top and the height it gets, which is less than asked when the screen is short.
+({double top, double height}) menuPlacement({required double anchorTop, required double height, required Size screen, required EdgeInsets padding}) {
+  final minTop = padding.top + 8;
+  final maxBottom = screen.height - math.max(padding.bottom, 16) - 8;
+  final fitted = math.max(0.0, math.min(height, maxBottom - minTop));
+  final top = math.max(minTop, math.min(anchorTop, maxBottom - fitted));
+  return (top: top, height: fitted);
 }
 
 /// The global rectangle of the widget that owns `context`.
@@ -62,10 +75,15 @@ class _PullDownMenuRoute<T> extends PopupRoute<T> {
         })
         .fold<double>(0, math.max);
     final width = math.min(screen.width - 32, math.max(_minimumWidth, textWidth + 43 + 40));
-    final height = items.length * _rowHeight + _verticalPadding * 2;
+    final full = items.length * _rowHeight + _verticalPadding * 2;
+    final place = menuPlacement(anchorTop: anchor.top, height: full, screen: screen, padding: MediaQuery.paddingOf(context));
+    final height = place.height;
+    final top = place.top;
     final left = anchor.left.clamp(16.0, math.max(16.0, screen.width - 16 - width)).toDouble();
-    final top = math.min(anchor.top, screen.height - height - 16);
     final origin = Alignment(((anchor.center.dx - left) / width) * 2 - 1, -1);
+    // A list that scrolls opens with the checked row in the middle, as a long iOS picker menu does.
+    final checked = items.indexWhere((item) => item.checked);
+    final scroll = full > height && checked > 0 ? math.min(full - height, math.max(0.0, checked * _rowHeight - (height - _rowHeight) / 2)) : 0.0;
     return Stack(
       children: [
         Positioned(
@@ -82,7 +100,7 @@ class _PullDownMenuRoute<T> extends PopupRoute<T> {
                 child: Transform.scale(scale: 0.6 + 0.4 * grow, alignment: origin, child: child),
               );
             },
-            child: _MenuPanel<T>(items: items, style: style, onSelected: (value) => Navigator.of(context).pop(value)),
+            child: _MenuPanel<T>(items: items, style: style, initialScroll: scroll, onSelected: (value) => Navigator.of(context).pop(value)),
           ),
         ),
       ],
@@ -90,11 +108,25 @@ class _PullDownMenuRoute<T> extends PopupRoute<T> {
   }
 }
 
-class _MenuPanel<T> extends StatelessWidget {
-  const _MenuPanel({required this.items, required this.style, required this.onSelected});
+class _MenuPanel<T> extends StatefulWidget {
+  const _MenuPanel({required this.items, required this.style, required this.initialScroll, required this.onSelected});
   final List<PullDownMenuItem<T>> items;
   final TextStyle style;
+  final double initialScroll;
   final ValueChanged<T> onSelected;
+
+  @override
+  State<_MenuPanel<T>> createState() => _MenuPanelState<T>();
+}
+
+class _MenuPanelState<T> extends State<_MenuPanel<T>> {
+  late final ScrollController _scroll = ScrollController(initialScrollOffset: widget.initialScroll);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,10 +146,11 @@ class _MenuPanel<T> extends StatelessWidget {
               shape: shape.copyWith(side: BorderSide(color: dark ? const Color(0x1FFFFFFF) : const Color(0x14000000), width: 0.5)),
               color: dark ? const Color(0xB0303030) : const Color(0xD9F7F7F7),
             ),
-            child: Padding(
+            child: SingleChildScrollView(
+              controller: _scroll,
               padding: const EdgeInsets.symmetric(vertical: _verticalPadding),
               child: Column(
-                children: [for (final item in items) _MenuRow<T>(item: item, style: style, onSelected: onSelected)],
+                children: [for (final item in widget.items) _MenuRow<T>(item: item, style: widget.style, onSelected: widget.onSelected)],
               ),
             ),
           ),

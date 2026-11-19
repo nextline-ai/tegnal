@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../booru/booru_client.dart';
 import '../booru/booru_models.dart';
 import '../booru/booru_store.dart';
+import '../support/l10n.dart';
 import '../support/preferences.dart';
 import '../support/swift_json.dart';
 import 'study_awards.dart';
@@ -323,11 +324,21 @@ class StudyPath {
 
   List<StudyPathLesson> get lessons => [for (final section in sections) ...section.lessons];
 
-  /// The first lesson not finished yet: the one the learner is on. Null once every lesson is done.
-  StudyPathLesson? current(Map<String, StudyLessonRecord> records) => lessons.where((lesson) => records[lesson.id] == null).firstOrNull;
+  /// The lesson the learner is on: the first one not finished from where the placement test put them, then the
+  /// first one not finished anywhere. Null once every lesson is done. [placed] counts the lessons the test passed by.
+  StudyPathLesson? current(Map<String, StudyLessonRecord> records, {int placed = 0}) {
+    final all = lessons;
+    return all.skip(placed.clamp(0, all.length)).where((lesson) => records[lesson.id] == null).firstOrNull ??
+        all.where((lesson) => records[lesson.id] == null).firstOrNull;
+  }
 
-  /// A lesson opens once every lesson before it is finished.
-  bool isOpen(StudyPathLesson lesson, Map<String, StudyLessonRecord> records) => records[lesson.id] != null || current(records)?.id == lesson.id;
+  /// A lesson opens once every lesson before it is finished, or once the placement test has passed it by.
+  bool isOpen(StudyPathLesson lesson, Map<String, StudyLessonRecord> records, {int placed = 0}) =>
+      records[lesson.id] != null || current(records, placed: placed)?.id == lesson.id || isSkipped(lesson, records, placed: placed);
+
+  /// True for a lesson the placement test passed by that has not been played since.
+  bool isSkipped(StudyPathLesson lesson, Map<String, StudyLessonRecord> records, {required int placed}) =>
+      records[lesson.id] == null && lessons.take(max(0, placed)).any((other) => other.id == lesson.id);
 }
 
 // MARK: - Game state
@@ -602,6 +613,9 @@ sealed class StudyLessonPlan {
 
   /// The tags missed most often, asked again whether or not they are due.
   static const weak = StudyWeakPlan();
+
+  /// The short test, taken at the start, that finds where on the path a learner who already knows some of this begins.
+  static const placement = StudyPlacementPlan();
   const factory StudyLessonPlan.lesson(StudyPathLesson lesson) = StudyLessonOfPlan;
   StudyPathLesson? get lesson => null;
 }
@@ -631,6 +645,14 @@ class StudyWeakPlan extends StudyLessonPlan {
   bool operator ==(Object other) => other is StudyWeakPlan;
   @override
   int get hashCode => 3;
+}
+
+class StudyPlacementPlan extends StudyLessonPlan {
+  const StudyPlacementPlan();
+  @override
+  bool operator ==(Object other) => other is StudyPlacementPlan;
+  @override
+  int get hashCode => 4;
 }
 
 enum StudyLessonPhaseKind { loading, asking, feedback, finished }
@@ -699,6 +721,11 @@ class StudyLessonSession extends ChangeNotifier {
   final _before = StudyStanding();
   var _disposed = false;
 
+  /// The section each placement question checks, by the question's step id.
+  final _checks = <String, int>{};
+  int? _stoppedAt;
+  var _placed = 0;
+
   List<StudyStep> get steps => List.unmodifiable(_steps);
   int get index => _index;
   StudyLessonPhase get phase => _phase;
@@ -717,6 +744,14 @@ class StudyLessonSession extends ChangeNotifier {
 
   /// Where the learner stood before this lesson paid out, so that its end can celebrate what changed.
   StudyStanding get before => _before;
+
+  bool get isPlacement => plan is StudyPlacementPlan;
+
+  /// The section the placement test stopped at: the first one whose question was missed.
+  int? get stoppedAt => _stoppedAt;
+
+  /// How many lessons the placement test passed by.
+  int get placed => _placed;
 
   StudyStep? get step => _index >= 0 && _index < _steps.length ? _steps[_index] : null;
 
@@ -754,6 +789,12 @@ class StudyLessonSession extends ChangeNotifier {
     final today = StudyDay.key(_now(), utcOffset: utcOffset);
     _before.studiedToday = _days().where((day) => day.day == today).firstOrNull?.isStudied ?? false;
     switch (plan) {
+      case StudyPlacementPlan():
+        for (final question in StudyPlacement.questions(StudyPath.bundled, curriculum: engine.curriculum, random: _random)) {
+          final step = StudyStep(StudyStepAsk(question.ask));
+          _checks[step.id] = question.section;
+          _steps.add(step);
+        }
       case StudyReviewPlan():
         final progress = _progress();
         _tags = engine.round(StudyScope.review, progress: progress, count: reviewSize, now: _now(), random: _random);
@@ -943,6 +984,13 @@ class StudyLessonSession extends ChangeNotifier {
       _combo = 0;
       _mistakes += 1;
     }
+    if (isPlacement) {
+      // The test stops at the first section it finds unknown; nothing is asked again and no tag is scheduled.
+      if (!right) _stoppedAt ??= _checks[current.id];
+      _phase = StudyLessonPhase.feedback(right);
+      _changed();
+      return;
+    }
     if (!current.again) {
       if (tag != null) {
         try {
@@ -965,7 +1013,7 @@ class StudyLessonSession extends ChangeNotifier {
 
   void _advance() {
     _index += 1;
-    if (_index >= _steps.length) {
+    if (_index >= _steps.length || (isPlacement && _stoppedAt != null)) {
       _finish();
     } else {
       _phase = StudyLessonPhase.asking;
@@ -976,6 +1024,16 @@ class StudyLessonSession extends ChangeNotifier {
   void _finish() {
     if (_phase == StudyLessonPhase.finished) return;
     _phase = StudyLessonPhase.finished;
+    if (isPlacement) {
+      // The test earns no experience; it only says where the path begins.
+      _placed = StudyPlacement.skipped(StudyPath.bundled, stoppedAt: _stoppedAt);
+      try {
+        if (_placed > 0) store.studyStore.raise(StudyPlacement.counter, _placed);
+      } on Object {
+        // Without the record the learner starts at the beginning.
+      }
+      return;
+    }
     if (!(_asked > 0 || plan.lesson != null)) return;
     _stars = StudyGame.stars(mistakes: _mistakes);
     _earned = StudyGame.earned(mistakes: _mistakes, bestCombo: _bestCombo);
@@ -990,4 +1048,88 @@ class StudyLessonSession extends ChangeNotifier {
       // The result is still shown when it cannot be saved.
     }
   }
+}
+
+// MARK: - Placement
+
+/// One question of the placement test, and the section of the path it checks.
+class StudyPlacementQuestion {
+  const StudyPlacementQuestion({required this.section, required this.ask});
+  final int section;
+  final StudyPathAsk ask;
+}
+
+/// The short test a learner can take when learning mode first opens: one question for each section, in the path's
+/// order, ending at the first one missed. The lessons before that section are passed by: open, but not finished.
+abstract final class StudyPlacement {
+  /// The counter (in `study_stats`) holding how many lessons at the start of the main path the test passed by.
+  /// Counters only go up, travel in sync and backups, and are cleared by a reset.
+  static const counter = 'placed';
+
+  /// Set on this device once the welcome has been gone through; cleared when progress is reset.
+  static const welcomedKey = 'study.welcomed';
+
+  /// One question for each section: one of the section's own questions, or, for a section that only teaches tags,
+  /// which of a lesson's tags a meaning names, with the lesson's other tags as the wrong answers.
+  static List<StudyPlacementQuestion> questions(StudyPath path, {required StudyCurriculum curriculum, String? language, required Random random}) {
+    final lang = language ?? L10n.language;
+    final questions = <StudyPlacementQuestion>[];
+    for (final (index, section) in path.sections.indexed) {
+      final asks = [
+        for (final lesson in section.lessons)
+          for (final step in lesson.steps ?? const <StudyPathStep>[]) ?step.ask,
+      ];
+      if (asks.isNotEmpty) {
+        questions.add(StudyPlacementQuestion(section: index, ask: asks[random.nextInt(asks.length)].shuffled(random)));
+        continue;
+      }
+      final taught = [
+        for (final lesson in section.lessons)
+          if (lesson.kind == StudyPathLessonKind.tags) [for (final name in lesson.tags ?? const <String>[]) ?curriculum.tag(name)],
+      ].where((tags) => tags.length >= 2).toList();
+      if (taught.isEmpty) continue;
+      final tags = taught[random.nextInt(taught.length)];
+      final tag = tags[random.nextInt(tags.length)];
+      final choices = shuffledWith([tag, ...shuffledWith(tags.where((other) => other != tag), random).take(3)], random);
+      // Tags are never translated in a question; what they mean is, as in a match step.
+      final meaning = lang == 'en' ? tag.note.resolved(lang) : tag.title(lang);
+      questions.add(
+        StudyPlacementQuestion(
+          section: index,
+          ask: StudyPathAsk(
+            question: {'en': L10n.text('Which tag fits “%@”?', [meaning])},
+            choices: [
+              for (final choice in choices) {'en': choice.english},
+            ],
+            answer: choices.indexOf(tag),
+            why: {'en': '`${tag.english}` · ${tag.note.resolved(lang)}'},
+            code: true,
+          ),
+        ),
+      );
+    }
+    return questions;
+  }
+
+  /// How many lessons come before the section the test stopped at. With nothing missed the learner begins at the last section.
+  static int skipped(StudyPath path, {required int? stoppedAt}) {
+    if (path.sections.isEmpty) return 0;
+    final target = min(stoppedAt ?? path.sections.length - 1, path.sections.length - 1);
+    return path.sections.take(max(0, target)).fold(0, (total, section) => total + section.lessons.length);
+  }
+
+  /// The section the learner begins at after passing [placed] lessons by.
+  static StudyPathSection? section(StudyPath path, {required int placed}) {
+    if (placed <= 0) return path.sections.firstOrNull;
+    var count = 0;
+    for (final section in path.sections) {
+      if (count >= placed) return section;
+      count += section.lessons.length;
+    }
+    return path.sections.lastOrNull;
+  }
+
+  /// True while learning mode should greet the learner: never welcomed on this device, and nothing played or placed yet.
+  static bool needsWelcome({required Map<String, StudyLessonRecord> records, required int xp, required int placed, required Preferences defaults}) =>
+      !(defaults.boolean(welcomedKey) ?? false) && records.isEmpty && xp == 0 && placed == 0;
 }
