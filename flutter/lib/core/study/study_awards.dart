@@ -322,7 +322,7 @@ abstract final class StudyAwards {
   }
 
   /// Brings the counters and the earned badges up to date. Returns the badges earned but not yet shown, in gallery order.
-  static List<StudyAward> refresh(BooruStore store, {StudyPath? path, required GenerationStore generation, DateTime? now, Duration? utcOffset}) {
+  static List<StudyAward> refresh(BooruStore store, {StudyPath? path, required GenerationStore? generation, DateTime? now, Duration? utcOffset}) {
     final study = store.studyStore;
     T read<T>(T Function() body, T fallback) {
       try {
@@ -334,8 +334,11 @@ abstract final class StudyAwards {
 
     void attempt(void Function() body) => read<void>(body, null);
 
-    attempt(() => study.raise(StudyCounter.pictures, generation.pictures.length));
-    if (generation.hasKey) attempt(() => study.raise(StudyCounter.key, 1));
+    // Without a generator to ask, the counters it feeds stay as they are; every other badge is still worked out.
+    if (generation != null) {
+      attempt(() => study.raise(StudyCounter.pictures, generation.pictures.length));
+      if (generation.hasKey) attempt(() => study.raise(StudyCounter.key, 1));
+    }
     final days = read(study.days, <StudyDay>[]);
     attempt(
       () => study.raise(StudyCounter.streak, StudySummary.of(curriculum: StudyCurriculum.empty, progress: const {}, days: days, now: now, utcOffset: utcOffset).streak),

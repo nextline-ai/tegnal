@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import 'study_reactions.dart';
+import 'study_symbols.dart';
 
 // Learning mode's shared look: bright, rounded and chunky, unlike the stock iOS look of the rest of the app.
 // Ported from `StudyKit.swift` (and `studyLifted` from `StudyAwardViews.swift`).
@@ -822,7 +823,15 @@ class StudyIcon extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) => Icon(StudyGlyph.icon(symbol), size: size, color: color);
+  Widget build(BuildContext context) {
+    if (!studySymbolDrawn(symbol)) return Icon(StudyGlyph.icon(symbol), size: size, color: color);
+    // The colour as `Icon` works it out: the given one, else the icon theme's, faded by the theme's opacity.
+    final theme = IconTheme.of(context);
+    var resolved = color ?? theme.color ?? const Color(0xFF000000);
+    final opacity = theme.opacity ?? 1;
+    if (opacity != 1) resolved = resolved.withValues(alpha: resolved.a * opacity);
+    return ExcludeSemantics(child: studySymbol(symbol, size: size, color: resolved));
+  }
 }
 
 /// `Image(systemName:)` for Flutter: the SF Symbol names that the iOS code and the lesson data use, as the closest

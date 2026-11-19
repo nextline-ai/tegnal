@@ -92,5 +92,19 @@ class StudyModeModel extends ChangeNotifier {
   }
 
   /// Brings the earned badges up to date and returns the ones not yet celebrated, in gallery order.
-  List<StudyAward> refreshAwards() => _read(() => StudyAwards.refresh(booru.store, path: path, generation: generation), const []);
+  List<StudyAward> refreshAwards() {
+    // The generator's store can fail to open (no storage folder yet); badges that do not depend on it must not wait for it.
+    GenerationStore? store;
+    try {
+      store = generation;
+    } on Object catch (error) {
+      debugPrint('StudyModeModel: the generator store is unavailable: $error');
+    }
+    try {
+      return StudyAwards.refresh(booru.store, path: path, generation: store);
+    } on Object catch (error) {
+      debugPrint('StudyModeModel: badges could not be refreshed: $error');
+      return const [];
+    }
+  }
 }
