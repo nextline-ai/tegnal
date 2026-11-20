@@ -397,7 +397,14 @@ final class AddonTests: XCTestCase {
         AddonRuntime.shared.apply(AddonEffects([InstalledAddon(addon: addon, enabled: true, installed: .now, digest: digest)]))
         let tags = ArtworkTagGroup.make(tags: ["female:big breasts", "male:sole male", "character:reimu hakurei", "series:touhou project", "tag:full color"], mode: .comics)
             .flatMap(\.tags)
-        for tag in tags { XCTAssertNotNil(tag.original, tag.query + " is shown in Korean") }
+        for tag in tags {
+            XCTAssertNotNil(tag.original, tag.query + " is shown in Korean")
+            XCTAssertFalse(tag.name.contains(":") && ["female", "male", "mixed", "other", "tag"].contains(tag.name.split(separator: ":").first.map(String.init) ?? ""),
+                           tag.query + " is shown without a namespace, got " + tag.name)
+        }
+        XCTAssertEqual(tags.first { $0.query == "female:big breasts" }?.name, "거유")
+        XCTAssertFalse(addon.contents.tagTranslations!.entries.values.contains { ["female:", "male:", "mixed:", "other:", "tag:"].contains(where: $0.lowercased().hasPrefix) },
+                       "No shown name starts with a namespace")
         XCTAssertEqual(AddonRuntime.shared.effects.tags(matching: "거유", mode: .comics).first?.tag, "female:big_breasts", "A gender tag is suggested with its own namespace")
     }
 }
