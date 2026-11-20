@@ -114,11 +114,7 @@ private struct InactiveCover: UIViewRepresentable {
 struct TEGNALApp: App {
 
     @Environment(\.scenePhase) private var scenePhase
-    #if DEBUG
-    @State private var env = ContentUITestSupport.enabled || ContentUITestSupport.unitTestsEnabled ? ContentUITestSupport.environment() : AppEnvironment.standard()
-    #else
-    @State private var env = AppEnvironment.standard()
-    #endif
+    @State private var env: AppEnvironment
 
     private var isContentUITest: Bool {
         #if DEBUG
@@ -128,7 +124,8 @@ struct TEGNALApp: App {
         #endif
     }
 
-    @State private var stage = HomeStage.shared
+    // Set in init, after the launch step: the home stage reads and writes preferences as it is made.
+    @State private var stage: HomeStage
     /// The home scene opens from a blur, as the splash once slid away; what waited for the splash waits for that.
     private var isSplashScreenVisible: Bool { stage.enabled && !stage.introFinished }
     @State private var isResumeSplashVisible = false
@@ -152,6 +149,14 @@ struct TEGNALApp: App {
     private var splashEnabled: Bool { stage.enabled }
 
     init() {
+        // The data the previous version left is copied before anything opens a database.
+        UpdateBackup.launch()
+        _stage = State(initialValue: HomeStage.shared)
+        #if DEBUG
+        _env = State(initialValue: ContentUITestSupport.enabled || ContentUITestSupport.unitTestsEnabled ? ContentUITestSupport.environment() : AppEnvironment.standard())
+        #else
+        _env = State(initialValue: AppEnvironment.standard())
+        #endif
         // Encrypted DNS is the first thing set, before any request leaves the app.
         EncryptedDNS.applyStored()
         AppAudio.useMediaVolume()
@@ -287,10 +292,21 @@ struct TEGNALApp: App {
             )) { offer in
                 SiteFavoritesSetupSheet(offer: offer, sync: env.booruAccounts)
             }
+            // A staged restore waits for the app to be closed and opened again; nothing is usable until then.
+            // Last among the covers, so it sits above whatever else is showing.
+            .appFullScreenCover(isPresented: Binding(get: { env.backups.pendingRestore != nil }, set: { _ in })) {
+                PendingRestoreCover()
+            }
             // Include the presenting root and its sheets, not just the tab content.
             // Retained UIKit hosts also inject these same instances at their own roots.
             .environment(env)
             .environment(env.booru)
+            // Packs the backup the launch step staged and moves it to iCloud, once the app is up.
+            .task {
+                guard !isContentUITest else { return }
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                await env.backups.afterLaunch()
+            }
         }
     }
 }

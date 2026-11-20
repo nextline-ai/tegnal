@@ -969,6 +969,41 @@ final class NativeContentUITests: XCTestCase {
         app.alerts.buttons["취소"].tap()
     }
 
+    /// The Automatic Backups screen lists the backups, Back Up Now adds one, and Restore asks plainly first.
+    func testAutomaticBackupsListBackUpNowAndTheRestoreQuestion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--automatic-backups-test"]
+        app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        let tools = element(app, "settings.libraryManagement")
+        for _ in 0..<6 where !tools.isHittable { app.swipeUp() }
+        tools.tap()
+        let entry = element(app, "settings.automaticBackups")
+        for _ in 0..<4 where !entry.isHittable { app.swipeUp() }
+        entry.tap()
+        let rows = app.descendants(matching: .any).matching(identifier: "backups.row")
+        let first = rows.firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertEqual(rows.count, 2, "The two backups made for the test are listed")
+        let labels = rows.allElementsBoundByIndex.map(\.label).joined(separator: "\n")
+        XCTAssertTrue(labels.contains("Data from 1.5.1"), "The data version is shown")
+        XCTAssertTrue(labels.contains("Manual backup"))
+        XCTAssertTrue(labels.contains("Always kept"), "The newest update backup is always kept")
+        capture(app, "Automatic backups")
+        element(app, "backups.backUpNow").tap()
+        expectation(for: NSPredicate(format: "count == 3"), evaluatedWith: rows)
+        waitForExpectations(timeout: 15)
+        let menu = element(app, "backups.menu")
+        menu.tap()
+        element(app, "backups.restore").tap()
+        let alert = app.alerts["Restore This Backup?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS 'not merged'")).count > 0, "The question says it replaces, not merges")
+        capture(app, "Automatic backups restore question")
+        alert.buttons["Cancel"].tap()
+        XCTAssertFalse(alert.waitForExistence(timeout: 1), "Cancelling restores nothing")
+    }
+
     /// Duplicates are found by title without brackets, cleaned up in one go with the chosen keeper, and undone.
     func testDuplicateCleanupRemovesExtraCopiesInOneGoAndUndoes() {
         let app = XCUIApplication()

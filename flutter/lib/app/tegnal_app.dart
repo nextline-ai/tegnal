@@ -8,6 +8,9 @@ import '../core/addons/addon_store.dart';
 import '../core/booru/booru_account.dart';
 import '../core/booru/booru_client.dart';
 import '../core/booru/booru_image_cache.dart';
+import '../core/backup/automatic_backups.dart';
+import '../core/backup/backup_vault.dart';
+import '../core/backup/update_backup.dart';
 import '../core/booru/booru_store.dart';
 import '../core/content/content_environment.dart';
 import '../core/content/site_favorites_sync.dart';
@@ -55,6 +58,7 @@ import '../presentation/settings/cover_fill_warning.dart';
 import '../presentation/settings/discord_invitation_banner.dart';
 import '../presentation/settings/downloads_view.dart';
 import '../presentation/settings/drive_sync_section.dart';
+import '../presentation/settings/automatic_backups_view.dart';
 import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
 import '../presentation/study_mode/study_mode_root.dart';
@@ -89,6 +93,7 @@ class AppServices {
     this.version = '',
     this.isTesting = false,
     this.showsOnboarding = false,
+    this.backupSetup,
   }) : images = PageImageStore(source: content.source) {
     // Fixture runs and tests never fill covers from the network, as in the native app.
     coverQueue = isTesting
@@ -120,6 +125,8 @@ class AppServices {
         coverQueue.start();
       },
     );
+    // The launch before this one restored a backup: the same signal the file restore raises.
+    if (preferences.defaults.object(LibraryDriveSync.replacedKey) != null) sync.libraryRestored();
     invitation = DiscordInvitation(preferences.defaults);
     taste = TasteController(library: database, images: booru, content: content, booruSource: booruSource, comicSource: content.source);
   }
@@ -159,6 +166,17 @@ class AppServices {
   late final BookmarkSession bookmarks;
   late final DownloadStore downloads;
   late final LibraryDriveSync sync;
+
+  /// The folders and store the backup engine works in; null for tests and fixture runs, which use a throwaway setup.
+  final BackupSetup? backupSetup;
+
+  /// Automatic backups: the list, Back Up Now, restore, export and import.
+  late final AutomaticBackups backups = AutomaticBackups(
+    setup: backupSetup ?? BackupSetup.isolated(),
+    databases: () => OpenDatabases(memo: database.dbWriter, booru: booru.database),
+    drive: isTesting ? null : DriveBackupVault(backend: sync.backend, isSignedIn: () => sync.account != null),
+    flushPreferences: preferences.flush,
+  );
   late final DiscordInvitation invitation;
 
   /// Taste analysis, recommendations and recaps for both libraries.
@@ -189,6 +207,9 @@ class TegnalApp extends StatefulWidget {
 
 class _TegnalAppState extends State<TegnalApp> {
   late final AppState _state = AppState(mode: widget.initialMode, tab: widget.initialTab);
+
+  /// The app's own navigator, so a pending restore's cover can be pushed above every screen.
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -224,6 +245,7 @@ class _TegnalAppState extends State<TegnalApp> {
         final brightness = _brightness() ?? MediaQuery.platformBrightnessOf(context);
         return CupertinoApp(
           title: 'TEGNAL',
+          navigatorKey: _navigatorKey,
           debugShowCheckedModeBanner: false,
           scrollBehavior: const TegnalScrollBehavior(),
           locale: Locale(L10n.language),
@@ -232,7 +254,9 @@ class _TegnalAppState extends State<TegnalApp> {
           theme: tegnalTheme(brightness),
           builder: (context, child) => ReadingQueueScope(
             queue: widget.services.readingQueue,
-            child: AppLockGate(child: child!),
+            child: AppLockGate(
+              child: PendingRestoreGate(backups: widget.services.backups, navigatorKey: _navigatorKey, child: child!),
+            ),
           ),
           home: _Root(state: _state, services: widget.services, homeFreeze: widget.homeFreeze),
         );
@@ -317,6 +341,8 @@ class _RootState extends State<_Root> {
     if (!services.isTesting && _libraryWarm) unawaited(services.favorites.setActive(true));
     if (!services.isTesting && _libraryWarm) unawaited(services.booruAccounts.setActive(true));
     if (!services.isTesting) services.sync.restore().then((_) => services.sync.setActive(true));
+    // Packs the backup the launch step staged and copies it to Drive, once the app is up.
+    if (!services.isTesting) unawaited(Future<void>.delayed(const Duration(seconds: 5), services.backups.afterLaunch));
   }
 
   late final AppLifecycleListener _lifecycle;
@@ -485,6 +511,7 @@ class _RootState extends State<_Root> {
     images: services.booru,
     content: services.content,
     coverQueue: services.coverQueue,
+    backups: services.backups,
     restored: () {
       services.coverQueue.start();
       services.sync.libraryRestored();

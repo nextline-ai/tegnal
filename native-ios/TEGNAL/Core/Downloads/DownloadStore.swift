@@ -18,7 +18,7 @@ struct WorkDownload: Codable, Identifiable {
     var files: [String] = []
     var bytes: Int64 = 0
     var error: String?
-    /// Where the files are: nil for the app's own storage (every download before 1.5.2), else a
+    /// Where the files are: nil for the app's own storage (every download before 1.6.0), else a
     /// `DownloadLocation` key. `path` is the folder inside it; nil means the download's id.
     var location: String?
     var path: String?
@@ -86,7 +86,9 @@ private struct DownloadSettings: Codable {
     @ObservationIgnored private var active: [WorkDownload.Mode: UUID] = [:]
     @ObservationIgnored private var suspended = false
 
-    static let appDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads")
+    nonisolated static let appDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads")
+    nonisolated static func manifestURL(in directory: URL) -> URL { directory.appendingPathComponent("downloads.json") }
+    nonisolated static func settingsURL(in directory: URL) -> URL { directory.appendingPathComponent("settings.json") }
 
     /// `filesRoot` defaults to Documents for the app's own store, and to a folder beside a test's
     /// directory otherwise, so tests never write into the Files app.
@@ -96,14 +98,14 @@ private struct DownloadSettings: Codable {
         self.filesRoot = filesRoot ?? (directory == Self.appDirectory
             ? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             : directory.deletingLastPathComponent().appendingPathComponent(directory.lastPathComponent + "-files"))
-        let settingsFile = directory.appendingPathComponent("settings.json")
+        let settingsFile = Self.settingsURL(in: directory)
         if let data = try? Data(contentsOf: settingsFile), let saved = try? JSONDecoder().decode(DownloadSettings.self, from: data) { settings = saved }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             var location = directory
             var values = URLResourceValues(); values.isExcludedFromBackup = true
             try location.setResourceValues(values)
-            let manifest = directory.appendingPathComponent("downloads.json")
+            let manifest = Self.manifestURL(in: directory)
             if FileManager.default.fileExists(atPath: manifest.path) {
                 items = try JSONDecoder().decode([WorkDownload].self, from: Data(contentsOf: manifest))
                 for index in items.indices {
@@ -166,7 +168,7 @@ private struct DownloadSettings: Codable {
     }
     @discardableResult private func persist() -> Bool {
         do {
-            try JSONEncoder().encode(items).write(to: directory.appendingPathComponent("downloads.json"), options: .atomic)
+            try JSONEncoder().encode(items).write(to: Self.manifestURL(in: directory), options: .atomic)
             storageError = nil; return true
         } catch { storageError = error.localizedDescription; return false }
     }
@@ -238,7 +240,7 @@ private struct DownloadSettings: Codable {
     }
 
     private func saveSettings() {
-        do { try JSONEncoder().encode(settings).write(to: directory.appendingPathComponent("settings.json"), options: .atomic) }
+        do { try JSONEncoder().encode(settings).write(to: Self.settingsURL(in: directory), options: .atomic) }
         catch { locationError = error.localizedDescription }
     }
 

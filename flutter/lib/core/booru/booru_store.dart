@@ -69,7 +69,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   BooruStore({String? path, required this.preferences, BooruCredentialStore? credentials})
     : database = path == null ? SqlDatabase.inMemory() : SqlDatabase.open(path),
       credentials = credentials ?? MemoryCredentialStore() {
-    _migrator.migrate(database);
+    migrator.migrate(database);
     reload();
   }
 
@@ -187,7 +187,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   List<BooruServer> get selectedServers => servers.where((server) => selectedServerIDs.contains(server.id)).toList();
   BooruServer? get selectedServer => servers.where((server) => server.id == selectedServerID).firstOrNull;
 
-  SqlMigrator get _migrator {
+  static SqlMigrator get migrator {
     final migrations = SqlMigrator();
     migrations.registerMigration('booru_v1', (db) {
       db.execute('''
@@ -1165,7 +1165,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   void fill(FolderRule rule) => fillRule(rule);
 }
 
-/// Whether image folders belong to one server each, or are shared by every server as before 1.5.2.
+/// Whether image folders belong to one server each, or are shared by every server as before 1.6.0.
 enum BooruFolderStyle {
   byServer,
   shared;

@@ -81,11 +81,14 @@ final class GenerationStore {
         #if DEBUG
         if GenerationUITestSupport.enabled { return GenerationUITestSupport.store() }
         #endif
-        let folder = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))?
-            .appendingPathComponent("Generated", isDirectory: true) ?? FileManager.default.temporaryDirectory.appendingPathComponent("Generated", isDirectory: true)
-        return GenerationStore(folder: folder, defaults: ReaderPreferences.booruDefaults, key: GenerationKeychain.read(), saveKey: { GenerationKeychain.save($0) })
+        return GenerationStore(folder: defaultFolder, defaults: ReaderPreferences.booruDefaults, key: GenerationKeychain.read(), saveKey: { GenerationKeychain.save($0) })
     }()
     static let pictureLimit = 200
+    nonisolated static var defaultFolder: URL {
+        (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))?
+            .appendingPathComponent("Generated", isDirectory: true) ?? FileManager.default.temporaryDirectory.appendingPathComponent("Generated", isDirectory: true)
+    }
+    nonisolated static func indexURL(in folder: URL) -> URL { folder.appendingPathComponent("index.json") }
     private static let settingsKey = "generation.settings", recentKey = "generation.recentModels", fieldKey = "generation.modelField"
 
     let folder: URL
@@ -111,7 +114,7 @@ final class GenerationStore {
         }
     }
 
-    private var index: URL { folder.appendingPathComponent("index.json") }
+    private var index: URL { Self.indexURL(in: folder) }
     private static func load<Value: Decodable>(_ type: Value.Type, _ name: String, _ defaults: UserDefaults) -> Value? {
         defaults.data(forKey: name).flatMap { try? JSONDecoder().decode(type, from: $0) }
     }

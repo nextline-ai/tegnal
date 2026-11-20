@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import '../../core/backup/automatic_backups.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/booru/booru_store.dart';
 import '../../core/content/content_environment.dart';
@@ -15,6 +16,7 @@ import '../../domain/models.dart';
 import '../design/grouped_form.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
+import 'automatic_backups_view.dart';
 import 'backup_reminder.dart';
 import 'duplicate_cleanup_view.dart';
 import '../booru/booru_folder_style.dart';
@@ -25,11 +27,14 @@ import '../design/alert_dialog.dart';
 
 /// What library management works on.
 class LibraryManagementContext {
-  const LibraryManagementContext({required this.database, required this.images, required this.content, required this.coverQueue, this.restored});
+  const LibraryManagementContext({required this.database, required this.images, required this.content, required this.coverQueue, required this.backups, this.restored});
   final AppDatabase database;
   final BooruStore images;
   final ContentEnvironment content;
   final CoverQueue coverQueue;
+
+  /// Automatic backups cover the whole app, so both modes open the same screen.
+  final AutomaticBackups backups;
 
   /// After a restore: refill covers and publish the merged library to sync.
   final VoidCallback? restored;
@@ -269,6 +274,21 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
               ),
             ),
             children: [
+              ListenableBuilder(
+                listenable: widget.library.backups,
+                builder: (context, _) {
+                  final count = widget.library.backups.items.length;
+                  return Semantics(
+                    identifier: 'settings.automaticBackups',
+                    child: SettingsLinkRow(
+                      title: L10n.text('Automatic Backups'),
+                      icon: CupertinoIcons.clock,
+                      value: count > 0 ? '$count' : null,
+                      onTap: () => open((_) => AutomaticBackupsView(backups: widget.library.backups)),
+                    ),
+                  );
+                },
+              ),
               FormRow(
                 separatorInset: settingsIconInset,
                 onTap: _export,

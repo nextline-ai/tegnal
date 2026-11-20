@@ -80,6 +80,11 @@ final class BooruStore: @unchecked Sendable {
     init(path: String? = nil, prefetchSavedPreviews: Bool = false) throws {
         self.prefetchSavedPreviews = prefetchSavedPreviews
         database = try path.map { try DatabaseQueue(path: $0) } ?? DatabaseQueue()
+        try Self.migrator.migrate(database)
+        try reload()
+    }
+
+    static var migrator: DatabaseMigrator {
         var migrations = DatabaseMigrator()
         migrations.registerMigration("booru_v1") { db in
             try db.execute(sql: """
@@ -171,8 +176,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v16_study_awards") { try StudyStore.migrateAwards($0) }
         migrations.registerMigration("booru_v17_addons") { try AddonStore.migrate($0) }
         migrations.registerMigration("booru_v18_addon_origin") { try AddonStore.migrateOrigin($0) }
-        try migrations.migrate(database)
-        try reload()
+        return migrations
     }
 
     static func open() throws -> BooruStore {
@@ -601,7 +605,7 @@ final class BooruStore: @unchecked Sendable {
 
 // MARK: Folders by server
 
-/// Whether image folders belong to one server each, or are shared by every server as before 1.5.2.
+/// Whether image folders belong to one server each, or are shared by every server as before 1.6.0.
 enum BooruFolderStyle: String, CaseIterable, Identifiable {
     case byServer, shared
     var id: String { rawValue }

@@ -91,7 +91,8 @@ extension BooruEngineAccount on BooruEngine {
 
 /// `BooruAccounts`: each image server's signed-in account and its favorites sync, kept on this device only.
 class BooruAccounts {
-  BooruAccounts(this._preferences) : favorites = SiteFavoriteFolders(_preferences, statesKey: 'booru.favoriteSync', declinedKey: 'booru.favoriteSyncDeclined');
+  BooruAccounts(this._preferences)
+    : favorites = SiteFavoriteFolders(_preferences, statesKey: SiteFavoriteKeys.booruStates, declinedKey: SiteFavoriteKeys.booruDeclined);
 
   /// The list id the account's own favorites take in a favorites sync; named lists keep their ids.
   static const favoritesList = 0;
@@ -1174,8 +1175,9 @@ class BooruAccountSync extends ChangeNotifier {
     }
     _remember(fetched, server);
     final offer = _offer(server, fetched);
-    // A server with no favorites has nothing to bring in or leave alone.
-    if (offer.favoriteCount == 0) return _start(offer, SiteFavoritesSetupChoice.bringIn);
+    // A server with no favorites has nothing to bring in or leave alone, except after a restore,
+    // when bringing in would send the restored folders to the server without asking.
+    if (offer.favoriteCount == 0 && !accounts.favorites.asksAgain(server.id)) return _start(offer, SiteFavoritesSetupChoice.bringIn);
     if ((setupOffer != null && setupOffer!.serverID != server.id) || favorites.state(server.id) != null) return;
     setupOffer = offer;
     notifyListeners();

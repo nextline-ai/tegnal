@@ -563,6 +563,20 @@ public final class AppEnvironment: @unchecked Sendable {
     @MainActor private func makeSync() -> LibraryCloudSync {
         let value = LibraryCloudSync(defaults: browserPreferences); syncStorage = value; return value
     }
+    /// Automatic backups: the list, Back Up Now, restore, export and import.
+    @MainActor var backups: AutomaticBackups { backupsStorage ?? makeBackups() }
+    @ObservationIgnored private var backupsStorage: AutomaticBackups?
+    @MainActor private func makeBackups() -> AutomaticBackups {
+        let memo = database.dbWriter, images = booru.database
+        #if DEBUG
+        if ContentPreferences.isIsolated {
+            let value = AutomaticBackups(setup: .isolated(), databases: { .init(memo: memo, booru: images) }, cloud: nil)
+            backupsStorage = value; return value
+        }
+        #endif
+        let value = AutomaticBackups(setup: .standard(), databases: { .init(memo: memo, booru: images) }, cloud: CloudBackupVault())
+        backupsStorage = value; return value
+    }
     @MainActor func reloadSyncedPreferences() {
         // Assign only changed values: materializing absent defaults would upload them
         // as fresh edits and overwrite another device's preferences on the next pass.
@@ -955,8 +969,9 @@ public final class AppEnvironment: @unchecked Sendable {
         // Read before anything is offered, so a website that keeps the account out asks nothing.
         guard let favorites = try? await SiteContent.for(site).accountFavoriteLists(),
               let offer = try? siteFavoritesSetupOffer(site: site, favorites: favorites) else { return }
-        // A website with no favorites has nothing to bring in or leave alone.
-        if offer.favoriteCount == 0 { await startSiteFavorites(offer, choice: .bringIn); return }
+        // A website with no favorites has nothing to bring in or leave alone, except after a restore,
+        // when bringing in would send the restored folders to the website without asking.
+        if offer.favoriteCount == 0 && !store.asksAgain(site) { await startSiteFavorites(offer, choice: .bringIn); return }
         guard favoriteSetupOffer == nil || favoriteSetupOffer?.site == site, store.state(for: site) == nil else { return }
         favoriteSetupOffer = offer
     }

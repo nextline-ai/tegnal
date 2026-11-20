@@ -5,7 +5,7 @@ import Security
 /// cache: a forgotten one is found again by searching the number.
 final class GalleryKeys: @unchecked Sendable {
     static let shared = GalleryKeys(file: ContentPreferences.isIsolated ? nil : GalleryKeys.defaultFile)
-    private static var defaultFile: URL {
+    static var defaultFile: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("gallery-keys.plist")
     }
     private let lock = NSLock()
@@ -600,16 +600,53 @@ final class SiteFavoriteFolders: @unchecked Sendable {
         var setUpAt: Date?
     }
 
+    /// Where the states live in a preferences domain.
+    struct Keys: Sendable {
+        var states: String
+        var declined: String
+        /// Set by a restore: the accounts asked how to start again, even one with no favorites.
+        var asksAgain: String { states + "AskAgain" }
+    }
+    static let mangaKeys = Keys(states: "manga.favoriteSync", declined: "manga.favoriteSyncDeclined")
+    static let booruKeys = Keys(states: "booru.favoriteSync", declined: "booru.favoriteSyncDeclined")
+
     private let defaults: UserDefaults
     private let lock = NSLock()
     private let statesKey: String
     private let declinedKey: String
 
     /// Image servers keep their own states under other keys, by server.
-    init(defaults: UserDefaults, statesKey: String = "manga.favoriteSync", declinedKey: String = "manga.favoriteSyncDeclined") {
+    init(defaults: UserDefaults, statesKey: String = SiteFavoriteFolders.mangaKeys.states, declinedKey: String = SiteFavoriteFolders.mangaKeys.declined) {
         self.defaults = defaults
         self.statesKey = statesKey
         self.declinedKey = declinedKey
+    }
+
+    /// After a restore the restored library would otherwise be compared with today's favorites and
+    /// the changes it undid made again, so every sync waits for the first-sync choice once more.
+    /// Accounts declined in the backup or on the device stay declined.
+    static func restoredPreferences(_ restored: [String: Any], current: [String: Any], keys: Keys) -> [String: Any] {
+        var values = restored
+        let declined = Set(restored[keys.declined] as? [String] ?? []).union(current[keys.declined] as? [String] ?? [])
+        // Every account that synced in the backup or until now waits for an answer, until it is given.
+        var asking = Set((restored[keys.states] as? [String: Any])?.keys.map { $0 } ?? [])
+            .union((current[keys.states] as? [String: Any])?.keys.map { $0 } ?? [])
+            .union(restored[keys.asksAgain] as? [String] ?? []).union(current[keys.asksAgain] as? [String] ?? [])
+        asking.subtract(declined)
+        values[keys.states] = nil
+        values[keys.declined] = declined.isEmpty ? nil : declined.sorted()
+        values[keys.asksAgain] = asking.isEmpty ? nil : asking.sorted()
+        return values
+    }
+
+    /// Whether a restore asked for this account to be asked again, so it is not set up on its own.
+    func asksAgain(_ site: String) -> Bool { lock.withLock { asking.contains(site) } }
+    private var asksAgainKey: String { Keys(states: statesKey, declined: declinedKey).asksAgain }
+    private var asking: Set<String> { Set(defaults.stringArray(forKey: asksAgainKey) ?? []) }
+    /// An answer, or the account going, ends the wait a restore started.
+    private func answered(_ site: String) {
+        let rest = asking.subtracting([site])
+        if rest.isEmpty { defaults.removeObject(forKey: asksAgainKey) } else { defaults.set(rest.sorted(), forKey: asksAgainKey) }
     }
 
     /// A website whose favorites are synced, with what was learned about them.
@@ -623,6 +660,7 @@ final class SiteFavoriteFolders: @unchecked Sendable {
             states[site] = try? JSONEncoder().encode(state)
             defaults.set(states, forKey: statesKey)
             defaults.set(declined.subtracting([site]).sorted(), forKey: declinedKey)
+            answered(site)
         }
     }
 
@@ -635,6 +673,7 @@ final class SiteFavoriteFolders: @unchecked Sendable {
             states[site] = nil
             defaults.set(states, forKey: statesKey)
             if decline { defaults.set(declined.union([site]).sorted(), forKey: declinedKey) }
+            answered(site)
         }
     }
 

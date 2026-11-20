@@ -119,7 +119,7 @@ class WorkDownload {
   int bytes;
   String? error;
 
-  /// Where the files are: null for the app's own storage (every download before 1.5.2), else a
+  /// Where the files are: null for the app's own storage (every download before 1.6.0), else a
   /// `DownloadLocation` id. `path` is the folder inside it; null means the download's id.
   String? location;
   String? path;
@@ -299,7 +299,7 @@ class DownloadStore extends ChangeNotifier {
   }) : filesRoot = filesRoot ?? Directory('${directory.path}-files'),
        _configuredHost = configuredHost ?? (() => MangaUrls.configuredHost) {
     try {
-      final saved = File('${directory.path}/settings.json');
+      final saved = settingsFile(directory);
       if (saved.existsSync()) {
         final json = jsonDecode(saved.readAsStringSync()) as Map<String, Object?>;
         _current = json['current'] as String? ?? DownloadLocation.files;
@@ -313,7 +313,7 @@ class DownloadStore extends ChangeNotifier {
       directory.createSync(recursive: true);
       // The native store excludes this folder from device backups; the Android backup
       // rules leave the app's support directory out instead.
-      final manifest = File('${directory.path}/downloads.json');
+      final manifest = manifestFile(directory);
       if (manifest.existsSync()) {
         final values = decodeJsonValue(manifest.readAsBytesSync());
         if (values is! List) throw SwiftJsonError('Expected a list of downloads');
@@ -333,7 +333,10 @@ class DownloadStore extends ChangeNotifier {
   }
 
   /// `Application Support/Downloads`, beside both libraries.
-  static Directory get defaultDirectory => Directory('${AppStorage.container.path}/Downloads');
+  static Directory get defaultDirectory => directoryIn(AppStorage.container);
+  static Directory directoryIn(Directory container) => Directory('${container.path}/Downloads');
+  static File manifestFile(Directory directory) => File('${directory.path}/downloads.json');
+  static File settingsFile(Directory directory) => File('${directory.path}/settings.json');
 
   final Directory directory;
   final Directory filesRoot;
@@ -467,7 +470,7 @@ class DownloadStore extends ChangeNotifier {
 
   bool _persist() {
     try {
-      final manifest = File('${directory.path}/downloads.json');
+      final manifest = manifestFile(directory);
       final temporary = File('${manifest.path}.tmp');
       temporary.writeAsBytesSync(encodeSwiftJson([for (final item in items) item.toJson()]), flush: true);
       temporary.renameSync(manifest.path);
@@ -553,7 +556,7 @@ class DownloadStore extends ChangeNotifier {
 
   void _saveSettings() {
     try {
-      File('${directory.path}/settings.json').writeAsStringSync(
+      settingsFile(directory).writeAsStringSync(
         jsonEncode({
           'current': _current,
           'folders': [for (final folder in _folders) folder.toJson()],

@@ -162,6 +162,17 @@ enum ContentUITestSupport {
             let second = try! env.database.createFolder(name: "두 번째 폴더")
             try! env.database.addWork(galleryId: 930000040, folderID: second.id!)
         }
+        if ProcessInfo.processInfo.arguments.contains("--automatic-backups-test") {
+            // Two backups from before: one made before an update and one by hand, in a vault emptied for the run.
+            let setup = env.backups.setup
+            try? FileManager.default.removeItem(at: setup.root)
+            setup.markerDefaults.removeObject(forKey: UpdateBackup.failureKey)
+            let databases = UpdateBackup.OpenDatabases(memo: env.database.dbWriter, booru: env.booru.database)
+            for (kind, version) in [(BackupKind.minor, "1.5.1"), (.manual, "1.6.0")] {
+                let folder = try! UpdateBackup.takeSnapshot(setup, kind: kind, dataVersion: version, dataBuild: nil, databases: databases)
+                _ = try! UpdateBackup.pack(folder, setup: setup)
+            }
+        }
         if ProcessInfo.processInfo.arguments.contains("--favorites-setup-test") {
             let favorites = AccountFavorites(categories: [FavoriteCategory(id: 0, name: "Favorites 0", count: 80), FavoriteCategory(id: 3, name: "Favorites 3", count: 40)],
                                              members: [:], exclusive: true)

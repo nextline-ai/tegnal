@@ -227,6 +227,37 @@ class LibrarySyncLedger {
     baseline = Map.of(snapshot);
   }
 
+  /// A restore replaced the library: every row it holds is this device's newest edit, and every row
+  /// known before that it lacks is deleted, so other devices follow it instead of filling it back in.
+  /// Stamped no earlier than the restore, so edits made elsewhere after it still win.
+  void captureReplacement(Map<String, LibrarySyncRow> snapshot, {required String device, required double at}) {
+    final latest = changes.values.map((change) => change.timestamp).fold<double>(0, math.max);
+    final timestamp = math.max(at, latest + 0.000001);
+    final known = {
+      ...baseline.keys,
+      for (final MapEntry(:key, :value) in changes.entries)
+        if (!value.deleted) key,
+    };
+    for (final MapEntry(:key, value: row) in snapshot.entries) {
+      changes[key] = LibrarySyncChange(row: row, timestamp: timestamp, device: device, deleted: false);
+    }
+    for (final key in known) {
+      if (snapshot.containsKey(key)) continue;
+      final row = baseline[key] ?? changes[key]?.row;
+      if (row == null) continue;
+      final keyColumns = LibrarySyncRow.keys[row.table] ?? const <String>[];
+      final tombstone = LibrarySyncRow(
+        table: row.table,
+        values: {
+          for (final entry in row.values.entries)
+            if (keyColumns.contains(entry.key)) entry.key: entry.value,
+        },
+      );
+      changes[key] = LibrarySyncChange(row: tombstone, timestamp: timestamp, device: device, deleted: true);
+    }
+    baseline = Map.of(snapshot);
+  }
+
   void merge(Map<String, LibrarySyncChange> remote) {
     for (final MapEntry(:key, value: change) in remote.entries) {
       if (key != change.row.key || LibrarySyncRow.keys[change.row.table] == null) continue;

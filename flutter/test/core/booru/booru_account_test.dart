@@ -209,6 +209,40 @@ void main() {
     expect(places[4], {FavoritePlace.unassigned});
   });
 
+  test('an image server with no favorites is set up on its own, except when a restore asks every account again', () async {
+    for (final asksAgain in [false, true]) {
+      final store = BooruStore.inMemory();
+      store.saveServer(dan);
+      final preferences = MemoryPreferences(
+        asksAgain
+            ? {
+                SiteFavoriteKeys.booru.asksAgain: <String>[dan.id],
+              }
+            : null,
+      );
+      final accounts = BooruAccounts(preferences);
+      accounts.setIdentity(const BooruAccountIdentity(userID: 42, name: 'me'), dan.id);
+      final client = BooruAccountClient(
+        fetcher: FixtureFetcher((request) {
+          final path = request.url.path.replaceFirst('/booru/', '');
+          return FixtureReply.text(200, switch (path) {
+            'favorites.json' => '[]',
+            'favorite_groups.json' => '[]',
+            'profile' => '<html><head><meta name="csrf-token" content="tok"></head></html>',
+            _ => '{}',
+          });
+        }),
+        credentials: MemoryCredentialStore(),
+        session: BooruBrowserSession(),
+        pause: Duration.zero,
+      );
+      final sync = BooruAccountSync(store: store, accounts: accounts, client: client)..sendGap = Duration.zero;
+      await sync.setUp(dan);
+      expect(accounts.favorites.state(dan.id) != null, !asksAgain, reason: 'asksAgain: $asksAgain');
+      expect(sync.setupOffer != null, asksAgain);
+    }
+  });
+
   test('danbooru sync brings in favorites and groups, then sends changes made in the app', () async {
     final directory = await Directory.systemTemp.createTemp('booru-account');
     addTearDown(() => directory.delete(recursive: true));

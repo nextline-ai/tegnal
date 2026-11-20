@@ -155,6 +155,36 @@ ANDROID = {
     "Importing bookmarks from Violet…": {"en": "Importing bookmarks from Violet…", "ko": "Violet 북마크를 가져오는 중…", "ja": "Violetのブックマークを読み込み中…"},
     "Violet data imported!\n%@ folders, %@ works, %@ artists": {"en": "Violet data imported!\n%@ folders, %@ works, %@ artists", "ko": "Violet 데이터를 가져왔습니다!\n폴더 %@개, 작품 %@개, 작가 %@명", "ja": "Violetのデータを読み込みました！\nフォルダ %@件、作品 %@件、作家 %@人"},
     "Titles, tags and covers are filled in from the connected website in the background.": {"en": "Titles, tags and covers are filled in from the connected website in the background.", "ko": "제목, 태그, 커버는 연결된 웹사이트에서 백그라운드로 채워집니다.", "ja": "タイトル、タグ、表紙は接続中のウェブサイトからバックグラウンドで補完されます。"},
+    # Duplicate cleanup's folder priority button, which was only ever in the JSON files.
+    "Change Order": {"en": "Change Order", "ko": "순서 바꾸기", "ja": "順序を変更"},
+    # Automatic Backups: Google Drive in place of iCloud, and Android's file picker wording.
+    "Keep in Google Drive": {"en": "Keep in Google Drive", "ko": "Google 드라이브에 보관", "ja": "Google ドライブに保管"},
+    "New backups are copied to Google Drive, so they can come back if you lose this device. This is separate from Google Drive Sync.": {
+        "en": "New backups are copied to Google Drive, so they can come back if you lose this device. This is separate from Google Drive Sync.",
+        "ko": "새 백업은 Google 드라이브에도 복사되어, 기기를 잃어버려도 되살릴 수 있습니다. Google 드라이브 동기화와는 별개입니다.",
+        "ja": "新しいバックアップはGoogle ドライブにもコピーされるため、デバイスを失くしても元に戻せます。Google ドライブ同期とは別の設定です。",
+    },
+    "Google Drive is not available. Backups stay on this device until it is.": {
+        "en": "Google Drive is not available. Backups stay on this device until it is.",
+        "ko": "Google 드라이브를 사용할 수 없습니다. 사용할 수 있게 될 때까지 백업은 이 기기에만 보관됩니다.",
+        "ja": "Google ドライブを利用できません。利用できるようになるまで、バックアップはこのデバイスにのみ保管されます。",
+    },
+    "This backup is deleted from this device and from Google Drive. This can’t be undone.": {
+        "en": "This backup is deleted from this device and from Google Drive. This can’t be undone.",
+        "ko": "이 백업을 이 기기와 Google 드라이브에서 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+        "ja": "このバックアップをこのデバイスとGoogle ドライブから削除します。この操作は取り消せません。",
+    },
+    "This backup is deleted from this device. This can’t be undone.": {
+        "en": "This backup is deleted from this device. This can’t be undone.",
+        "ko": "이 백업을 이 기기에서 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+        "ja": "このバックアップをこのデバイスから削除します。この操作は取り消せません。",
+    },
+    "In Google Drive, not on this device yet": {
+        "en": "In Google Drive, not on this device yet",
+        "ko": "Google 드라이브에 있고 아직 이 기기에는 없음",
+        "ja": "Google ドライブにあり、このデバイスにはまだありません",
+    },
+    "Downloading from Google Drive…": {"en": "Downloading from Google Drive…", "ko": "Google 드라이브에서 내려받는 중…", "ja": "Google ドライブからダウンロード中…"},
 }
 
 

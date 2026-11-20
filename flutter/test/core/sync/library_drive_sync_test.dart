@@ -7,6 +7,7 @@ import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
+import 'package:tegnal/core/support/swift_json.dart';
 import 'package:tegnal/core/sync/library_drive_sync.dart';
 
 /// A Drive folder shared by fake devices; nothing contacts Google.
@@ -143,6 +144,51 @@ void main() {
     expect(restarted.enabled, isTrue);
     await restarted.synchronize();
     expect(a.database.getWork(200), isNull);
+  });
+
+  test('after a restore the next sync sends the restored library over edits made elsewhere', () async {
+    for (final restored in [false, true]) {
+      final drive = FakeDrive();
+      final a = device(drive, 'a-$restored'), b = device(drive, 'b-$restored');
+      a.database.upsertWork(galleryId: 2, title: 'Two');
+      await a.sync.connect();
+      await b.sync.connect();
+      await b.sync.synchronize();
+      await a.sync.synchronize();
+      await b.sync.synchronize();
+      expect(b.database.getWork(2)?.title, 'Two');
+      // The other device edits the work, and a restore on this one puts it back as it was.
+      b.database.upsertWork(galleryId: 2, title: 'Edited elsewhere', overwriteMetadata: true);
+      await b.sync.synchronize();
+      if (restored) {
+        a.preferences.defaults.set(LibraryDriveSync.replacedKey, unixSeconds());
+        a.sync.libraryRestored();
+      }
+      await a.sync.synchronize();
+      expect(a.database.getWork(2)?.title, restored ? 'Two' : 'Edited elsewhere', reason: 'restored: $restored');
+      expect(a.preferences.defaults.object(LibraryDriveSync.replacedKey), isNull, reason: 'The signal is used once');
+      await b.sync.synchronize();
+      expect(b.database.getWork(2)?.title, restored ? 'Two' : 'Edited elsewhere');
+    }
+  });
+
+  test('a restore signal that waited for days is dropped and the normal capture handles the library', () async {
+    final drive = FakeDrive();
+    final a = device(drive, 'a'), b = device(drive, 'b');
+    a.database.upsertWork(galleryId: 2, title: 'Two');
+    await a.sync.connect();
+    await b.sync.connect();
+    await b.sync.synchronize();
+    await a.sync.synchronize();
+    await b.sync.synchronize();
+    b.database.upsertWork(galleryId: 2, title: 'Edited elsewhere', overwriteMetadata: true);
+    await b.sync.synchronize();
+    // The restore happened while sync was off, three days ago.
+    a.preferences.defaults.set(LibraryDriveSync.replacedKey, unixSeconds() - 3 * 86400);
+    a.sync.libraryRestored();
+    await a.sync.synchronize();
+    expect(a.preferences.defaults.object(LibraryDriveSync.replacedKey), isNull);
+    expect(a.database.getWork(2)?.title, 'Edited elsewhere', reason: 'The old signal did not stamp the library with the restore time');
   });
 
   test('an unchanged peer document is not downloaded again', () async {

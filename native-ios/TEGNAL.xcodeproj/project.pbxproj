@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		42284F17190D7742C1FE346D /* TEGNAL/Core/Backup/BackupContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFDD4A5FBB73184FB9514F5 /* TEGNAL/Core/Backup/BackupContainer.swift */; };
+		13134BED86F616ABA1C6A881 /* TEGNAL/Core/Backup/BackupRetention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979313C297315F1481694E12 /* TEGNAL/Core/Backup/BackupRetention.swift */; };
+		4CED4BA0AABCB05AE3EF33C9 /* TEGNAL/Core/Backup/UpdateBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F761B1741AF37598EB38A0 /* TEGNAL/Core/Backup/UpdateBackup.swift */; };
+		1AB3C4D10AFC42AE37210E19 /* TEGNAL/Core/Backup/BackupVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C39A41ABC355A150BB9BDE8 /* TEGNAL/Core/Backup/BackupVault.swift */; };
+		1B6DB0FCE4B93CF4DAC99D19 /* TEGNAL/Core/Backup/AutomaticBackups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90E102276F5E54C31B4402C6 /* TEGNAL/Core/Backup/AutomaticBackups.swift */; };
+		114165B2494CA818DA48261D /* TEGNALTests/UpdateBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295FA8ED67CD6E8A2037548 /* TEGNALTests/UpdateBackupTests.swift */; };
 		AE5142B58CB53FB35ED1277F /* TEGNALTests/AddonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309C4E35C892C99C1FA09F82 /* TEGNALTests/AddonTests.swift */; };
 		A45E4512410AC0594591068F /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5657F8CF36F5F2B1D1D2C4C /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift */; };
 		7A69F1034AD9E5EA10F2FD0C /* TEGNAL/Presentation/Settings/AddonsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAB503971B929358EDA4343 /* TEGNAL/Presentation/Settings/AddonsView.swift */; };
@@ -126,6 +132,7 @@
 		7B291F7D131C4BA39CDEDFB8 /* MangaBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */; };
 		7C6BF65F09115D54F402C28F /* TEGNALTests/BooruThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */; };
 		80CC48D12C34736B70F79C9D /* SiteAccountSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */; };
+		5A7C0E1B9D3F4A2C8B6E1D40 /* AutomaticBackupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A7C0E1B9D3F4A2C8B6E1D41 /* AutomaticBackupsView.swift */; };
 		627EEFE043DE9EE3CBFEE982 /* DuplicateCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C3AB4EBC2BBDCA622793B4 /* DuplicateCleanup.swift */; };
 		8251D5F60C29EEC6C8F01098 /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */; };
 		83BD9B7BFC83E9A55D5F9109 /* LibrarySyncAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */; };
@@ -288,6 +295,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CAFDD4A5FBB73184FB9514F5 /* TEGNAL/Core/Backup/BackupContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Backup/BackupContainer.swift; sourceTree = SOURCE_ROOT; };
+		979313C297315F1481694E12 /* TEGNAL/Core/Backup/BackupRetention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Backup/BackupRetention.swift; sourceTree = SOURCE_ROOT; };
+		27F761B1741AF37598EB38A0 /* TEGNAL/Core/Backup/UpdateBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Backup/UpdateBackup.swift; sourceTree = SOURCE_ROOT; };
+		2C39A41ABC355A150BB9BDE8 /* TEGNAL/Core/Backup/BackupVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Backup/BackupVault.swift; sourceTree = SOURCE_ROOT; };
+		90E102276F5E54C31B4402C6 /* TEGNAL/Core/Backup/AutomaticBackups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Backup/AutomaticBackups.swift; sourceTree = SOURCE_ROOT; };
+		7295FA8ED67CD6E8A2037548 /* TEGNALTests/UpdateBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/UpdateBackupTests.swift; sourceTree = SOURCE_ROOT; };
 		309C4E35C892C99C1FA09F82 /* TEGNALTests/AddonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNALTests/AddonTests.swift; sourceTree = SOURCE_ROOT; };
 		B5657F8CF36F5F2B1D1D2C4C /* TEGNAL/Presentation/StudyMode/StudyTrackViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/StudyMode/StudyTrackViews.swift; sourceTree = SOURCE_ROOT; };
 		7FAB503971B929358EDA4343 /* TEGNAL/Presentation/Settings/AddonsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Settings/AddonsView.swift; sourceTree = SOURCE_ROOT; };
@@ -411,6 +424,7 @@
 		976351FAE534D42BB200A330 /* SettingsSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSections.swift; sourceTree = "<group>"; };
 		97F12694F41487A0764537DB /* ja */ = {isa = PBXFileReference; lastKnownFileType = text; name = ja; path = ja.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
 		98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteAccountSettings.swift; sourceTree = "<group>"; };
+		5A7C0E1B9D3F4A2C8B6E1D41 /* AutomaticBackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomaticBackupsView.swift; sourceTree = "<group>"; };
 		A2C3AB4EBC2BBDCA622793B4 /* DuplicateCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateCleanup.swift; sourceTree = "<group>"; };
 		98B27C1D9B72147F9520E6B5 /* KeyedCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyedCatalogTests.swift; sourceTree = "<group>"; };
 		9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLibraryTests.swift; sourceTree = "<group>"; };
@@ -697,6 +711,7 @@
 				D0C400CAB19213FD13D0989C /* LanguageSettings.swift */,
 				98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */,
 				A2C3AB4EBC2BBDCA622793B4 /* DuplicateCleanup.swift */,
+				5A7C0E1B9D3F4A2C8B6E1D41 /* AutomaticBackupsView.swift */,
 				3A5EFD7523ECEC99D902F3E8 /* ModeAppearanceSettings.swift */,
 				976351FAE534D42BB200A330 /* SettingsSections.swift */,
 				2627853DC68AF8337C00516D /* SettingsView.swift */,
@@ -771,6 +786,12 @@
 		9CF9B6EE8855F205F3649D61 /* TEGNAL */ = {
 			isa = PBXGroup;
 			children = (
+				CAFDD4A5FBB73184FB9514F5 /* TEGNAL/Core/Backup/BackupContainer.swift */,
+				979313C297315F1481694E12 /* TEGNAL/Core/Backup/BackupRetention.swift */,
+				27F761B1741AF37598EB38A0 /* TEGNAL/Core/Backup/UpdateBackup.swift */,
+				2C39A41ABC355A150BB9BDE8 /* TEGNAL/Core/Backup/BackupVault.swift */,
+				90E102276F5E54C31B4402C6 /* TEGNAL/Core/Backup/AutomaticBackups.swift */,
+				7295FA8ED67CD6E8A2037548 /* TEGNALTests/UpdateBackupTests.swift */,
 				DFEF57ABE07C1BB394AB5FF9 /* TEGNAL/Presentation/Taste/TasteTagDetail.swift */,
 				5A17926A2AEB2E2D77B90651 /* TEGNAL/Presentation/Taste/TasteStatisticsView.swift */,
 				31AE970670259006F0B06867 /* TEGNAL/Presentation/Taste/TasteAnalysisExclusionsView.swift */,
@@ -1221,6 +1242,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				42284F17190D7742C1FE346D /* TEGNAL/Core/Backup/BackupContainer.swift in Sources */,
+				13134BED86F616ABA1C6A881 /* TEGNAL/Core/Backup/BackupRetention.swift in Sources */,
+				4CED4BA0AABCB05AE3EF33C9 /* TEGNAL/Core/Backup/UpdateBackup.swift in Sources */,
+				1AB3C4D10AFC42AE37210E19 /* TEGNAL/Core/Backup/BackupVault.swift in Sources */,
+				1B6DB0FCE4B93CF4DAC99D19 /* TEGNAL/Core/Backup/AutomaticBackups.swift in Sources */,
 				097285DCCB0D05AA18A23DC6 /* TEGNAL/Presentation/Challenge/ChallengeUITestSupport.swift in Sources */,
 				9EBF0AA004D32F5934A376E7 /* TEGNAL/Presentation/Challenge/ChallengeReferenceView.swift in Sources */,
 				C5CED574C70DCC1099E56470 /* TEGNAL/Presentation/Challenge/ChallengePlayView.swift in Sources */,
@@ -1368,6 +1394,7 @@
 				E1D8BE93D1E5C204FC27FE25 /* LiquidGlassModifiers.swift in Sources */,
 				80CC48D12C34736B70F79C9D /* SiteAccountSettings.swift in Sources */,
 				627EEFE043DE9EE3CBFEE982 /* DuplicateCleanup.swift in Sources */,
+				5A7C0E1B9D3F4A2C8B6E1D40 /* AutomaticBackupsView.swift in Sources */,
 				D6A780B15BDF6BD20834BDEF /* ModeAppearanceSettings.swift in Sources */,
 				CC287FB165EB8FB0DB96C9A2 /* Models.swift in Sources */,
 				1FB5162E9127DAAB032A95F0 /* NativeContentView.swift in Sources */,
@@ -1405,6 +1432,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				114165B2494CA818DA48261D /* TEGNALTests/UpdateBackupTests.swift in Sources */,
 				FF8710300AB2E727C84EF6F4 /* TEGNALTests/ChallengeTests.swift in Sources */,
 				369B9987C494BA2EBCEA3857 /* TEGNALTests/StudyTests.swift in Sources */,
 				690185032F91C402D64CA0EE /* TEGNALTests/StudyPathTests.swift in Sources */,
@@ -1525,7 +1553,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5.2;
+				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -1619,7 +1647,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.2;
+				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.share;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -1645,7 +1673,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5.2;
+				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -1732,7 +1760,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.2;
+				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = work.nextline.tegnal.share;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;

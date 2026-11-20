@@ -239,7 +239,7 @@ private struct OfflineMangaReader: View {
 }
 
 /// Where downloads are saved, and moving the ones saved elsewhere, such as in the app's own
-/// storage where versions before 1.5.2 kept them, without downloading them again.
+/// storage where versions before 1.6.0 kept them, without downloading them again.
 struct DownloadSettingsView: View {
     let store: DownloadStore
     @State private var choosing = false

@@ -123,6 +123,13 @@ class SqlMigrator {
     if (rebuildsTables) _rebuildsTables.add(identifier);
   }
 
+  /// Whether [database] records a migration this app does not know, so a newer version made it.
+  bool hasBeenSuperseded(SqlDatabase database) {
+    if (!database.tableExists('grdb_migrations')) return false;
+    final known = {for (final (identifier, _) in _migrations) identifier};
+    return database.column<String>('SELECT identifier FROM grdb_migrations').any((identifier) => !known.contains(identifier));
+  }
+
   /// Applies registered migrations in order, stopping after [upTo] when given.
   void migrate(SqlDatabase database, {String? upTo}) {
     database.execute('CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)');

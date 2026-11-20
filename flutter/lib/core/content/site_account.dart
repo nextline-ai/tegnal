@@ -11,6 +11,9 @@ class GalleryKeys {
   /// The app replaces this with a file-backed instance in its support directory at launch.
   static GalleryKeys shared = GalleryKeys();
 
+  /// Where the app keeps the keys inside its support directory; backups copy this file too.
+  static File defaultFile(Directory support) => File('${support.path}/gallery-keys.json');
+
   final File? file;
   final int limit;
   final _keys = <int, String>{};

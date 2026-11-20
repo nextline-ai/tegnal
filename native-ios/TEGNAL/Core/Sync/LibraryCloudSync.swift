@@ -49,6 +49,9 @@ final class LibraryCloudSync {
     private var device: String
     private var needsUpload = false
     private var accessGeneration = 0
+    /// When a restore at this launch replaced the library. Kept for this session only: a stamp used
+    /// later would make edits made since lose to older ones, and the ordinary capture handles it then.
+    private(set) var pendingReplacement: Double?
     @ObservationIgnored private let snapshotCache = LibrarySyncSnapshotCache()
     @ObservationIgnored private let resolveContainer: @Sendable () async -> URL?
 
@@ -64,6 +67,10 @@ final class LibraryCloudSync {
         let installation = defaults.string(forKey: "icloud.installation") ?? UUID().uuidString
         defaults.set(installation, forKey: "icloud.installation")
         device = Self.digest(Data((installation + (UIDevice.current.identifierForVendor?.uuidString ?? "")).utf8))
+        if let replaced = defaults.object(forKey: UpdateBackup.libraryReplacedKey) as? Double {
+            defaults.removeObject(forKey: UpdateBackup.libraryReplacedKey)
+            if enabled { pendingReplacement = replaced; libraryRestored() }
+        }
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
         query.predicate = NSPredicate(format: "%K LIKE %@", NSMetadataItemFSNameKey, "library-*.json")
         for name in [NSNotification.Name.NSMetadataQueryDidFinishGathering, .NSMetadataQueryDidUpdate] {
@@ -130,7 +137,10 @@ final class LibraryCloudSync {
             cloudDocumentCount = incoming.documentCount
             let before = ledger.changes
             var next = ledger
-            next.capture(try snapshotCache.snapshot(adapter), device: device)
+            // The first sync after a restore sends the restored library as the newest state.
+            let replacedAt = pendingReplacement
+            if let replacedAt { next.captureReplacement(try snapshotCache.snapshot(adapter), device: device, at: replacedAt) }
+            else { next.capture(try snapshotCache.snapshot(adapter), device: device) }
             let captured = next.changes
             for document in incoming.documents { next.merge(document.changes) }
             // Local snapshots are already sanitized. Only incoming edits need
@@ -166,6 +176,7 @@ final class LibraryCloudSync {
                 try Task.checkCancellation()
                 guard generation == accessGeneration, enabled else { return }
             }
+            if replacedAt != nil { pendingReplacement = nil }
             if needsUpload {
                 let document = LibrarySyncDocument(changes: ledger.changes)
                 let data = try await Task.detached(priority: .utility) {
@@ -233,6 +244,7 @@ final class LibraryCloudSync {
         ledger = .init()
         snapshotCache.invalidate()
         needsUpload = false
+        pendingReplacement = nil
         cloudBytes = nil; cloudDocumentCount = 0
     }
 
