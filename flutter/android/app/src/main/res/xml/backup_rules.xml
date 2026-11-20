@@ -5,4 +5,6 @@
     <exclude domain="sharedpref" path="verified_browser_routes.xml" />
     <!-- A restored device must establish its own Drive comparison baseline. -->
     <exclude domain="file" path="drive-sync/" />
+    <!-- Automatic backups keep their own copies; the 25 MB quota is not spent on them. -->
+    <exclude domain="file" path="Backups/" />
 </full-backup-content>

@@ -29,6 +29,7 @@ SCOPES = {
     "image-cache": ["PageImageDecodeQueueTests", "ViewerDownloadLifetimeTests"],
     "booru-backup": ["BooruBackupTests"],
     "backup": ["LibraryBackupTests"],
+    "update-backup": ["UpdateBackupTests"],
     "sync": ["LibrarySyncTests"],
     "taste": ["TasteTests"],
     "taste-feed": ["TasteFeedTests"],

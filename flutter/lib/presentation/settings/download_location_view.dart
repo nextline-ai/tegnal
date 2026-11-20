@@ -14,7 +14,7 @@ import 'settings_rows.dart';
 import '../../core/support/app_platform.dart';
 
 /// `DownloadSettingsView`: where downloads are saved, and moving the ones saved elsewhere, such
-/// as in the app's own storage where versions before 1.5.2 kept them, without downloading them again.
+/// as in the app's own storage where versions before 1.6.0 kept them, without downloading them again.
 class DownloadLocationView extends StatefulWidget {
   const DownloadLocationView({super.key, required this.store, this.files = const DocumentFiles()});
   final DownloadStore store;

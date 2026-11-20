@@ -388,6 +388,29 @@ void main() {
     expect(sync.store.state(host), isNotNull);
   });
 
+  test('a website with no favorites is set up on its own, except when a restore asks every account again', () async {
+    site.members.clear();
+    await sync.setUp(host);
+    expect(sync.store.state(host), isNotNull, reason: 'Nothing to bring in or leave alone');
+    expect(sync.offer, isNull);
+
+    final preferences = resetContent(site: host);
+    expect(SiteAccount.signIn(const [SiteCookie(name: 'ipb_member_id', value: '7'), SiteCookie(name: 'ipb_pass_hash', value: 'x')], host: host), isTrue);
+    final asking = SiteFavoritesSync(
+      database: AppDatabase.inMemory(preferences: AppPreferences.memory()),
+      content: ContentEnvironment(browserPreferences: preferences),
+      storeOverride: SiteFavoriteFolders(
+        MemoryPreferences({
+          SiteFavoriteKeys.manga.asksAgain: <String>[host],
+        }),
+      ),
+      siteContent: (_) => site,
+    );
+    await asking.setUp(host);
+    expect(asking.store.state(host), isNull, reason: 'Bringing in would send the restored folders to the website without asking');
+    expect(asking.offer?.favoriteCount, 0);
+  });
+
   test('the first sync asks how to start and changes nothing until then', () async {
     final unfiled = database.unfiledFolderID();
     database.upsertWork(galleryId: 1, folderId: unfiled);

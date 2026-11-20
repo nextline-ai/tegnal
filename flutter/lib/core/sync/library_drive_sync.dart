@@ -69,9 +69,20 @@ abstract interface class DriveBackend {
   Future<String> upload(String folder, String name, Uint8List data, {String? fileID});
 }
 
+/// What the backup vault needs from the same Drive folder beyond library sync: other file names,
+/// any content type, and removal. [GoogleDriveBackend] has it; the sync fakes do not need it.
+abstract interface class DriveBackupFiles {
+  /// The `.tegnalbackup` files in [folder].
+  Future<List<DriveFile>> backupFiles(String folder);
+
+  /// Writes [data] as [name] in [folder], replacing [fileID] when given. Returns the file's ID.
+  Future<String> uploadBackup(String folder, String name, Uint8List data, {String? fileID});
+  Future<void> deleteFile(String fileID);
+}
+
 /// Google Sign-In (Android's Credential Manager and authorization APIs) plus the Drive
 /// REST API with the non-sensitive `drive.file` scope.
-class GoogleDriveBackend implements DriveBackend {
+class GoogleDriveBackend implements DriveBackend, DriveBackupFiles {
   GoogleDriveBackend({String? serverClientID, http.Client? client})
     : _serverClientID = serverClientID ?? const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID'),
       _client = client ?? http.Client();
@@ -173,7 +184,18 @@ class GoogleDriveBackend implements DriveBackend {
   }
 
   @override
-  Future<List<DriveFile>> documents(String folder) async {
+  Future<List<DriveFile>> documents(String folder) => _list(folder, (name) => name.startsWith('library-') && name.endsWith('.json'));
+
+  @override
+  Future<List<DriveFile>> backupFiles(String folder) => _list(folder, (name) => name.startsWith('tegnal_') && name.endsWith('.tegnalbackup'));
+
+  @override
+  Future<void> deleteFile(String fileID) async {
+    final uri = Uri.parse('$_api/${Uri.encodeComponent(fileID)}');
+    await _send((headers) => _client.delete(uri, headers: headers));
+  }
+
+  Future<List<DriveFile>> _list(String folder, bool Function(String name) wanted) async {
     final result = <DriveFile>[];
     String? page;
     do {
@@ -188,7 +210,7 @@ class GoogleDriveBackend implements DriveBackend {
       final body = jsonObject(jsonDecode((await _send((headers) => _client.get(uri, headers: headers))).body));
       for (final file in body.list('files', jsonObject)) {
         final name = file.string('name');
-        if (!name.startsWith('library-') || !name.endsWith('.json')) continue;
+        if (!wanted(name)) continue;
         result.add(
           DriveFile(
             id: file.string('id'),
@@ -210,22 +232,25 @@ class GoogleDriveBackend implements DriveBackend {
   }
 
   @override
-  Future<String> upload(String folder, String name, Uint8List data, {String? fileID}) async {
+  Future<String> upload(String folder, String name, Uint8List data, {String? fileID}) => _write(folder, name, data, 'application/json', fileID);
+
+  @override
+  Future<String> uploadBackup(String folder, String name, Uint8List data, {String? fileID}) => _write(folder, name, data, 'application/octet-stream', fileID);
+
+  Future<String> _write(String folder, String name, Uint8List data, String mimeType, String? fileID) async {
     if (fileID != null) {
       final uri = Uri.parse('$_upload/${Uri.encodeComponent(fileID)}').replace(queryParameters: {'uploadType': 'media', 'fields': 'id'});
-      final response = await _send((headers) => _client.patch(uri, headers: {...headers, 'Content-Type': 'application/json'}, body: data));
+      final response = await _send((headers) => _client.patch(uri, headers: {...headers, 'Content-Type': mimeType}, body: data));
       return jsonObject(jsonDecode(response.body)).string('id');
     }
     const boundary = 'tegnal-library-sync';
     final metadata = jsonEncode({
       'name': name,
       'parents': [folder],
-      'mimeType': 'application/json',
+      'mimeType': mimeType,
     });
     final body = BytesBuilder()
-      ..add(
-        utf8.encode('--$boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n$metadata\r\n--$boundary\r\nContent-Type: application/json\r\n\r\n'),
-      )
+      ..add(utf8.encode('--$boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n$metadata\r\n--$boundary\r\nContent-Type: $mimeType\r\n\r\n'))
       ..add(data)
       ..add(utf8.encode('\r\n--$boundary--'));
     final uri = Uri.parse(_upload).replace(queryParameters: {'uploadType': 'multipart', 'fields': 'id'});
@@ -277,6 +302,12 @@ class LibraryDriveSync extends ChangeNotifier {
   }
 
   static const enabledKey = 'drive.librarySyncEnabled';
+
+  /// Set by a restore (`UpdateBackup.libraryReplacedKey`); the next sync sends the restored library as the newest state.
+  static const replacedKey = 'backup.libraryReplacedAt';
+
+  /// How long the signal is honored; after it, a normal capture handles the restored library.
+  static const replacedLifetime = Duration(days: 1);
 
   final DriveBackend backend;
   final AppDatabase database;
@@ -468,7 +499,20 @@ class LibraryDriveSync extends ChangeNotifier {
     _cloudBytes = incoming.storedBytes;
     _cloudDocumentCount = incoming.documentCount;
     final before = _ledger.changes;
-    final next = _ledger.copy()..capture(_cache.snapshot(adapter), device: _device);
+    // The first sync after a restore sends the restored library as the newest state.
+    var replacedAt = (defaults.object(replacedKey) as num?)?.toDouble();
+    // A signal that waited for days (sync was off or signed out) would stamp today's rows with the restore's old
+    // time, and edits made since would lose to other devices. Dropped, the normal capture stamps what differs now.
+    if (replacedAt != null && unixSeconds() - replacedAt > replacedLifetime.inSeconds) {
+      defaults.remove(replacedKey);
+      replacedAt = null;
+    }
+    final next = _ledger.copy();
+    if (replacedAt != null) {
+      next.captureReplacement(_cache.snapshot(adapter), device: _device, at: replacedAt);
+    } else {
+      next.capture(_cache.snapshot(adapter), device: _device);
+    }
     final captured = Map.of(next.changes);
     for (final document in incoming.documents) {
       next.merge(document.changes);
@@ -496,6 +540,7 @@ class LibraryDriveSync extends ChangeNotifier {
       await staging.rename(local.path);
       if (!current()) return;
     }
+    if (replacedAt != null) defaults.remove(replacedKey);
     if (_needsUpload) {
       final data = LibrarySyncDocument(changes: _ledger.changes).encode();
       _documentBytes = data.length;

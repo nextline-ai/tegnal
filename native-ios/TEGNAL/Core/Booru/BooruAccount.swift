@@ -62,7 +62,7 @@ final class BooruAccounts: @unchecked Sendable {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
-        favorites = SiteFavoriteFolders(defaults: defaults, statesKey: "booru.favoriteSync", declinedKey: "booru.favoriteSyncDeclined")
+        favorites = SiteFavoriteFolders(defaults: defaults, statesKey: SiteFavoriteFolders.booruKeys.states, declinedKey: SiteFavoriteFolders.booruKeys.declined)
     }
 
     func identity(serverID: String) -> BooruAccountIdentity? { lock.withLock { stored[serverID] } }
@@ -908,8 +908,9 @@ final class BooruAccountSync {
         }
         remember(fetched, server: server)
         let offer = try self.offer(server, read: fetched)
-        // A server with no favorites has nothing to bring in or leave alone.
-        if offer.favoriteCount == 0 { await start(offer, choice: .bringIn); return }
+        // A server with no favorites has nothing to bring in or leave alone, except after a restore,
+        // when bringing in would send the restored folders to the server without asking.
+        if offer.favoriteCount == 0 && !favorites.asksAgain(server.id) { await start(offer, choice: .bringIn); return }
         guard setupOffer == nil || setupOffer?.serverID == server.id, favorites.state(for: server.id) == nil else { return }
         setupOffer = offer
     }

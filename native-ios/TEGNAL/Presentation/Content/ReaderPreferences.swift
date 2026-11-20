@@ -8,11 +8,13 @@ enum ReaderPreferences {
         #endif
         return persistentBooruDefaults
     }
+    /// The image mode's own preferences domain, which backups copy whole.
+    static let booruDomain = "work.nextline.tegnal.booru.preferences"
     #if DEBUG
     private static let testingBooruDefaults = UserDefaults(suiteName: "work.nextline.tegnal.booru-ui-tests")!
     #endif
     private static let persistentBooruDefaults: UserDefaults = {
-        let store = UserDefaults(suiteName: "work.nextline.tegnal.booru.preferences")!
+        let store = UserDefaults(suiteName: booruDomain)!
         if !store.bool(forKey: "booru.preferencesSeparated") {
             // Preserve Booru-only options from the earlier shared store, without importing manga reader options.
             for key in ["booru.original", "booru.showNotes", "booru.rememberHistory", "booru.autoLoad", "booru.fitThumbnails"] {

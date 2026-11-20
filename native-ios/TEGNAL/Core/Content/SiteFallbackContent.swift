@@ -7,11 +7,13 @@ import Foundation
 final class WorkSiteMemory: @unchecked Sendable {
     static let shared: WorkSiteMemory = {
         guard !ContentPreferences.isIsolated else { return WorkSiteMemory(file: nil) }
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         // The list of where works last opened made them stay there after switching websites.
-        try? FileManager.default.removeItem(at: folder.appendingPathComponent("work-sites.plist"))
-        return WorkSiteMemory(file: folder.appendingPathComponent("work-missing-sites.plist"))
+        try? FileManager.default.removeItem(at: defaultFile.deletingLastPathComponent().appendingPathComponent("work-sites.plist"))
+        return WorkSiteMemory(file: defaultFile)
     }()
+    static var defaultFile: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("work-missing-sites.plist")
+    }
     private let lock = NSLock()
     private let file: URL?
     private let limit: Int

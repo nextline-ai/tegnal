@@ -17,6 +17,14 @@ struct LibraryBackupSection: View {
 
     var body: some View {
         Section {
+            // A backup covers the whole app, so both modes open the same screen.
+            NavigationLink { AutomaticBackupsView() } label: {
+                HStack {
+                    Label(L10n.text("Automatic Backups"), systemImage: "clock.arrow.circlepath")
+                    let count = env.backups.items.count
+                    if count > 0 { Spacer(); Text(count.formatted()).foregroundStyle(.secondary) }
+                }
+            }.accessibilityIdentifier("settings.automaticBackups")
             Button { export() } label: {
                 HStack {
                     Label(L10n.text("Export JSON Backup"), systemImage: "square.and.arrow.up")

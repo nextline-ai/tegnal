@@ -5,10 +5,12 @@
         <exclude domain="root" path="app_webview/" />
         <exclude domain="sharedpref" path="verified_browser_routes.xml" />
         <exclude domain="file" path="drive-sync/" />
+        <exclude domain="file" path="Backups/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="root" path="app_webview/" />
         <exclude domain="sharedpref" path="verified_browser_routes.xml" />
         <exclude domain="file" path="drive-sync/" />
+        <exclude domain="file" path="Backups/" />
     </device-transfer>
 </data-extraction-rules>

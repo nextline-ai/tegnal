@@ -155,6 +155,10 @@ class MainActivity : FlutterActivity() {
                 }
                 // Settings shows the installed version name, as the native app shows its bundle version.
                 "version" -> result.success(packageManager.getPackageInfo(packageName, 0).versionName)
+                // The build number (versionCode), which the backup before an update compares as well.
+                "build" -> result.success(buildNumber())
+                // Names this device in backup files, as the native app uses the device's name.
+                "deviceName" -> result.success(listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.joinToString(" "))
                 // Website sign-in reads the identity cookies the page set, then clears the web session,
                 // as the native sign-in uses a private, non-persistent store.
                 "cookies" -> result.success(CookieManager.getInstance().getCookie(call.argument<String>("url")))
@@ -222,6 +226,12 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun buildNumber(): String {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toString() else info.versionCode.toString()
     }
 
     private fun shareImage(path: String?, title: String?, result: MethodChannel.Result) {

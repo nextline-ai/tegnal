@@ -79,6 +79,20 @@ struct LibrarySyncLedger: Codable, Sendable {
         }
         baseline = snapshot
     }
+    /// A restore replaced the library: every row it holds is this device's newest edit, and every row
+    /// known before that it lacks is deleted, so other devices follow it instead of filling it back in.
+    /// Stamped no earlier than the restore, so edits made elsewhere after it still win.
+    mutating func captureReplacement(_ snapshot: [String: LibrarySyncRow], device: String, at restored: Double) {
+        let timestamp = max(restored, (changes.values.map(\.timestamp).max() ?? 0) + 0.000001)
+        let known = Set(baseline.keys).union(changes.filter { !$0.value.deleted }.keys)
+        for (key, row) in snapshot { changes[key] = .init(row: row, timestamp: timestamp, device: device, deleted: false) }
+        for key in known where snapshot[key] == nil {
+            guard let row = baseline[key] ?? changes[key]?.row else { continue }
+            let tombstone = LibrarySyncRow(table: row.table, values: row.values.filter { (LibrarySyncRow.keys[row.table] ?? []).contains($0.key) })
+            changes[key] = .init(row: tombstone, timestamp: timestamp, device: device, deleted: true)
+        }
+        baseline = snapshot
+    }
     mutating func merge(_ remote: [String: LibrarySyncChange]) {
         for (key, change) in remote where key == change.row.key && LibrarySyncRow.keys[change.row.table] != nil {
             if changes[key].map({ change.isNewer(than: $0) }) ?? true { changes[key] = change }

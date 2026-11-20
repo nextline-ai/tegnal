@@ -191,9 +191,12 @@ class GenerationStore extends ChangeNotifier {
 
   static GenerationStore? _shared;
 
+  static Directory folderIn(Directory container) => Directory('${container.path}/Generated');
+  static File indexFile(Directory folder) => File('${folder.path}/index.json');
+
   /// The app's own store, over the app support folder and the Keystore. Created on first use.
   static GenerationStore shared(Preferences defaults) => _shared ??= _fixtureStore() ?? GenerationStore(
-    folder: Directory('${AppStorage.container.path}/Generated'),
+    folder: folderIn(AppStorage.container),
     defaults: defaults,
     keychain: GenerationKeychain(),
   );
@@ -268,7 +271,7 @@ class GenerationStore extends ChangeNotifier {
     }
   }
 
-  File get _index => File('${folder.path}/index.json');
+  File get _index => indexFile(folder);
 
   void _readIndex() {
     try {

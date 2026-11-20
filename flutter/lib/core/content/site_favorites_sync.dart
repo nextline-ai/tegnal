@@ -111,7 +111,7 @@ class SiteFavoriteState {
 /// step with them. Kept as JSON text, since stored preferences hold only plain values.
 class SiteFavoriteFolders {
   /// Image servers keep their own states under other keys, by server.
-  SiteFavoriteFolders(this._preferences, {String statesKey = 'manga.favoriteSync', String declinedKey = 'manga.favoriteSyncDeclined'})
+  SiteFavoriteFolders(this._preferences, {String statesKey = SiteFavoriteKeys.mangaStates, String declinedKey = SiteFavoriteKeys.mangaDeclined})
     // ignore: prefer_initializing_formals
     : _statesKey = statesKey,
       // ignore: prefer_initializing_formals
@@ -145,6 +145,7 @@ class SiteFavoriteFolders {
   void setState(SiteFavoriteState state, String site) {
     _preferences.set(_statesKey, jsonEncode({..._states, site: state.toJson()}));
     _preferences.set(_declinedKey, (_declined..remove(site)).toList()..sort());
+    _answered(site);
   }
 
   List<String> get syncedSites => _states.keys.toList()..sort();
@@ -152,10 +153,84 @@ class SiteFavoriteFolders {
   /// Stops syncing a website. Turned off by hand, it is not set up again on its own.
   void remove(String site, {required bool declined}) {
     _preferences.set(_statesKey, jsonEncode({..._states}..remove(site)));
-    if (declined) _preferences.set(_declinedKey, (_declined..add(site)).toList()..sort());
+    if (declined) {
+      _preferences.set(_declinedKey, (_declined..add(site)).toList()..sort());
+      _answered(site);
+    }
   }
 
   bool isDeclined(String site) => _declined.contains(site);
+
+  String get _askKey => SiteFavoriteKeys(_statesKey, _declinedKey).asksAgain;
+
+  Set<String> get _asking {
+    final stored = _preferences.object(_askKey);
+    return stored is List ? stored.whereType<String>().toSet() : {};
+  }
+
+  /// Whether a restore asked this account to be asked again, so it is not set up on its own even when it has no
+  /// favorites. Lasts until the account's state is set or it is declined.
+  bool asksAgain(String site) => _asking.contains(site);
+
+  void _answered(String site) {
+    final asking = _asking;
+    if (!asking.remove(site)) return;
+    _preferences.set(_askKey, asking.isEmpty ? null : (asking.toList()..sort()));
+  }
+}
+
+/// Where the favorites sync keeps its states in a preferences store. [states] and [declined] are the
+/// full stored key names, so the same shape serves the plain keys and the image mode's prefixed ones.
+class SiteFavoriteKeys {
+  const SiteFavoriteKeys(this.states, this.declined);
+  static const mangaStates = 'manga.favoriteSync', mangaDeclined = 'manga.favoriteSyncDeclined';
+  static const booruStates = 'booru.favoriteSync', booruDeclined = 'booru.favoriteSyncDeclined';
+  static const manga = SiteFavoriteKeys(mangaStates, mangaDeclined);
+  static const booru = SiteFavoriteKeys(booruStates, booruDeclined);
+
+  final String states;
+  final String declined;
+
+  /// Set by a restore: the accounts that existed then, which are asked how to start even with no favorites.
+  String get asksAgain => '${states}AskAgain';
+
+  /// After a restore the restored library would otherwise be compared with today's favorites and the
+  /// changes it undid made again, so every sync waits for the first-sync choice once more. Accounts
+  /// declined in the backup or on the device stay declined.
+  static Map<String, Object> restoredPreferences(Map<String, Object> restored, {required Map<String, Object> current, required SiteFavoriteKeys keys}) {
+    List<String> names(Object? value) => value is List ? value.whereType<String>().toList() : const [];
+    final values = {...restored};
+    final declined = {...names(restored[keys.declined]), ...names(current[keys.declined])};
+    values.remove(keys.states);
+    if (declined.isEmpty) {
+      values.remove(keys.declined);
+    } else {
+      values[keys.declined] = declined.toList()..sort();
+    }
+    // The accounts the restore leaves unanswered: every one that had a state, in the backup or on the device,
+    // or was still waiting from an earlier restore.
+    Iterable<String> accounts(Object? text) {
+      try {
+        final states = text is String ? jsonDecode(text) : null;
+        return states is Map ? states.keys.cast<String>() : const [];
+      } on Object {
+        return const [];
+      }
+    }
+
+    final asking = {
+      ...accounts(restored[keys.states]),
+      ...accounts(current[keys.states]),
+      ...names(restored[keys.asksAgain]),
+      ...names(current[keys.asksAgain]),
+    }..removeAll(declined);
+    if (asking.isEmpty) {
+      values.remove(keys.asksAgain);
+    } else {
+      values[keys.asksAgain] = asking.toList()..sort();
+    }
+    return values;
+  }
 }
 
 /// One request a sync sends: a work added to a category (moved there, where a favorite has one) or
@@ -354,8 +429,9 @@ class SiteFavoritesSync extends ChangeNotifier {
       return;
     }
     final made = setUpOffer(site, favorites);
-    // A website with no favorites has nothing to bring in or leave alone.
-    if (made.favoriteCount == 0) return _start(made, SiteFavoritesSetupChoice.bringIn);
+    // A website with no favorites has nothing to bring in or leave alone, except after a restore,
+    // when bringing in would send the restored folders to the website without asking.
+    if (made.favoriteCount == 0 && !store.asksAgain(site)) return _start(made, SiteFavoritesSetupChoice.bringIn);
     if ((offer != null && offer!.site != site) || store.state(site) != null) return;
     offer = made;
     notifyListeners();

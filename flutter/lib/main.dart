@@ -1,4 +1,5 @@
 import 'core/addons/addon_store.dart';
+import 'core/backup/update_backup.dart';
 
 import 'dart:async';
 import 'dart:io';
@@ -196,12 +197,38 @@ Future<void> _loadTimeZone() async {
   }
 }
 
+/// The installed build number (Android's `versionCode`), which the backup before an update compares too.
+Future<String> _build() async {
+  if (AppPlatform.isDesktop) return const String.fromEnvironment('TEGNAL_BUILD');
+  try {
+    return await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<String>('build') ?? '';
+  } on Object {
+    return '';
+  }
+}
+
+/// Names this device in backup files.
+Future<String> _deviceName() async {
+  try {
+    if (AppPlatform.isDesktop) return Platform.localHostname;
+    return await const MethodChannel('work.nextline.tegnal/screen').invokeMethod<String>('deviceName') ?? 'Android';
+  } on Object {
+    return 'Android';
+  }
+}
+
 Future<AppServices> _launch() async {
+  // The backup before an update copies the data the previous version left, so it runs before anything
+  // reads preferences or opens a database. It never throws.
+  final loadingSupport = getApplicationSupportDirectory();
+  final loadingVersion = PerfTrace.span('launch version', _version);
+  final backup = await PerfTrace.span(
+    'launch backup',
+    () async => UpdateBackup.launch(support: await loadingSupport, version: await loadingVersion, build: await _build(), deviceName: await _deviceName()),
+  );
   // Independent platform calls start together; each is awaited where it is first needed.
   final loadingSecrets = PerfTrace.span('launch keystore', SecureSecretStore.load);
-  final loadingSupport = getApplicationSupportDirectory();
   final loadingCaches = getApplicationCacheDirectory();
-  final loadingVersion = PerfTrace.span('launch version', _version);
   final loadingTimeZone = _loadTimeZone();
   final preparingStorage = PerfTrace.span('launch storage', AppStorage.prepare);
   final preferences = await PerfTrace.span('launch preferences', AppPreferences.load);
@@ -243,11 +270,11 @@ Future<AppServices> _launch() async {
   BooruWebTransport.preferences = preferences.defaults;
   final support = await loadingSupport;
   // Keys of numbered works and where works opened elsewhere outlive the session.
-  GalleryKeys.shared = GalleryKeys(file: File('${support.path}/gallery-keys.json'));
+  GalleryKeys.shared = GalleryKeys(file: GalleryKeys.defaultFile(support));
   // The list of where works last opened made them stay there after switching websites.
   final legacySites = File('${support.path}/work-sites.json');
   if (legacySites.existsSync()) legacySites.deleteSync();
-  WorkSiteMemory.shared = WorkSiteMemory(file: File('${support.path}/work-missing-sites.json'));
+  WorkSiteMemory.shared = WorkSiteMemory(file: WorkSiteMemory.defaultFile(support));
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
   // A track's symbols that learning mode cannot draw give way to its stand-ins, as iOS does for unknown SF Symbols.
@@ -272,6 +299,7 @@ Future<AppServices> _launch() async {
     downloadsFilesRoot: await const DocumentFiles().downloadRoot(),
     syncDirectory: Directory('${support.path}/drive-sync'),
     version: await loadingVersion,
+    backupSetup: backup?.setup,
   );
 }
 

@@ -21,6 +21,9 @@ class WorkSiteMemory {
   /// The app replaces this with a file-backed instance in its support directory at launch.
   static WorkSiteMemory shared = WorkSiteMemory();
 
+  /// Where the app keeps the memory inside its support directory; backups copy this file too.
+  static File defaultFile(Directory support) => File('${support.path}/work-missing-sites.json');
+
   final File? file;
   final int limit;
   final _missing = <int, Set<String>>{};
