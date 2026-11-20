@@ -126,6 +126,7 @@
 		7B291F7D131C4BA39CDEDFB8 /* MangaBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009DB9DFB49444099A1C3A60 /* MangaBackendTests.swift */; };
 		7C6BF65F09115D54F402C28F /* TEGNALTests/BooruThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9519E282D3CE6AC9232B7609 /* TEGNALTests/BooruThumbnailCacheTests.swift */; };
 		80CC48D12C34736B70F79C9D /* SiteAccountSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */; };
+		627EEFE043DE9EE3CBFEE982 /* DuplicateCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C3AB4EBC2BBDCA622793B4 /* DuplicateCleanup.swift */; };
 		8251D5F60C29EEC6C8F01098 /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D4E140C517DE74300D02DE /* TEGNAL/Core/Taste/TasteSyncCoordinator.swift */; };
 		83BD9B7BFC83E9A55D5F9109 /* LibrarySyncAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B05605CED927549A22B822 /* LibrarySyncAdapter.swift */; };
 		85550D22EF9E90252CD5EFE3 /* TEGNAL/Core/Taste/TasteViewing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E39F651D80EB9A30F62B9E99 /* TEGNAL/Core/Taste/TasteViewing.swift */; };
@@ -410,6 +411,7 @@
 		976351FAE534D42BB200A330 /* SettingsSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSections.swift; sourceTree = "<group>"; };
 		97F12694F41487A0764537DB /* ja */ = {isa = PBXFileReference; lastKnownFileType = text; name = ja; path = ja.lproj/PrivacyPolicy.txt; sourceTree = "<group>"; };
 		98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteAccountSettings.swift; sourceTree = "<group>"; };
+		A2C3AB4EBC2BBDCA622793B4 /* DuplicateCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateCleanup.swift; sourceTree = "<group>"; };
 		98B27C1D9B72147F9520E6B5 /* KeyedCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyedCatalogTests.swift; sourceTree = "<group>"; };
 		9AEDCCFA40FADE8988D665C3 /* BooruLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooruLibraryTests.swift; sourceTree = "<group>"; };
 		2B9B6207DB92412482200D49 /* OtherAppImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OtherAppImportTests.swift; sourceTree = "<group>"; };
@@ -694,6 +696,7 @@
 				B491282DB93F2259627DEFFC /* MangaDefaultTagsSettings.swift */,
 				D0C400CAB19213FD13D0989C /* LanguageSettings.swift */,
 				98AB2D294979509C470AC0CF /* SiteAccountSettings.swift */,
+				A2C3AB4EBC2BBDCA622793B4 /* DuplicateCleanup.swift */,
 				3A5EFD7523ECEC99D902F3E8 /* ModeAppearanceSettings.swift */,
 				976351FAE534D42BB200A330 /* SettingsSections.swift */,
 				2627853DC68AF8337C00516D /* SettingsView.swift */,
@@ -1364,6 +1367,7 @@
 				6C79321A05F654A1A75CE0F7 /* LibrarySyncRecord.swift in Sources */,
 				E1D8BE93D1E5C204FC27FE25 /* LiquidGlassModifiers.swift in Sources */,
 				80CC48D12C34736B70F79C9D /* SiteAccountSettings.swift in Sources */,
+				627EEFE043DE9EE3CBFEE982 /* DuplicateCleanup.swift in Sources */,
 				D6A780B15BDF6BD20834BDEF /* ModeAppearanceSettings.swift in Sources */,
 				CC287FB165EB8FB0DB96C9A2 /* Models.swift in Sources */,
 				1FB5162E9127DAAB032A95F0 /* NativeContentView.swift in Sources */,

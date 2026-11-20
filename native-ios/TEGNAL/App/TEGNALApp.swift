@@ -273,9 +273,16 @@ struct TEGNALApp: App {
             )) { offer in
                 SiteFavoritesSetupSheet(offer: offer, env: env)
             }
+            // A library from before server folders chooses how its image folders work, once, in image mode.
+            .appSheet(isPresented: Binding(
+                get: { env.mode == .booru && env.isOnboardingCompleted && !env.sync.needsOffReminder && !stage.coversScreen && env.booru.folderStylePending },
+                set: { _ in }
+            )) {
+                BooruFolderStyleSheet()
+            }
             // The same for a signed-in image server.
             .appSheet(item: Binding(
-                get: { env.isOnboardingCompleted && !env.sync.needsOffReminder && !stage.coversScreen && env.favoriteSetupOffer == nil ? env.booruAccounts.setupOffer : nil },
+                get: { env.isOnboardingCompleted && !env.sync.needsOffReminder && !stage.coversScreen && env.favoriteSetupOffer == nil && !env.booru.folderStylePending ? env.booruAccounts.setupOffer : nil },
                 set: { _ in }
             )) { offer in
                 SiteFavoritesSetupSheet(offer: offer, sync: env.booruAccounts)

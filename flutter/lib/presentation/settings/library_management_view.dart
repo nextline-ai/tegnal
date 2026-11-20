@@ -16,6 +16,8 @@ import '../design/grouped_form.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
 import 'backup_reminder.dart';
+import 'duplicate_cleanup_view.dart';
+import '../booru/booru_folder_style.dart';
 import 'cover_fill_warning.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
@@ -233,19 +235,27 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
     }
     Widget section({String? header, Widget? headerWidget, Widget? footer, required List<Widget> children}) =>
         FormSection(prominentHeader: true, rowColor: row, header: headerWidget ?? (header == null ? null : Text(header)), footer: footer, children: children);
-    void organize(bool duplicates) => Navigator.of(context).push(
-      CupertinoPageRoute<void>(
-        builder: (_) => LibraryOrganizationView(library: widget.library, duplicates: duplicates, booru: widget.booru),
-      ),
-    );
+    void open(WidgetBuilder builder) => Navigator.of(context).push(CupertinoPageRoute<void>(builder: builder));
     return SettingsPage(
       title: L10n.text('Library Management'),
       children: [
+        if (widget.booru) ...[BooruFolderStyleSection(store: widget.library.images), settingsSectionGap],
         section(
           header: L10n.text('Organize Saved Works'),
           children: [
-            SettingsLinkRow(title: L10n.text('Classify into Folders'), icon: CupertinoIcons.folder_badge_person_crop, onTap: () => organize(false)),
-            SettingsLinkRow(title: L10n.text('Review Duplicate Works'), icon: CupertinoIcons.square_on_square, onTap: () => organize(true)),
+            SettingsLinkRow(
+              title: L10n.text('Classify into Folders'),
+              icon: CupertinoIcons.folder_badge_person_crop,
+              onTap: () => open((_) => LibraryOrganizationView(library: widget.library, booru: widget.booru)),
+            ),
+            Semantics(
+              identifier: 'settings.duplicates',
+              child: SettingsLinkRow(
+                title: L10n.text('Clean Up Duplicates'),
+                icon: CupertinoIcons.square_on_square,
+                onTap: () => open((_) => DuplicateCleanupView(database: widget.library.database, images: widget.library.images, booru: widget.booru)),
+              ),
+            ),
           ],
         ),
         settingsSectionGap,
@@ -423,11 +433,10 @@ class _LibraryManagementViewState extends State<LibraryManagementView> {
   }
 }
 
-/// `LibraryOrganizationView`: classify works into folders by a field, or review possible duplicates.
+/// `LibraryOrganizationView`: classify works into folders by a field.
 class LibraryOrganizationView extends StatefulWidget {
-  const LibraryOrganizationView({super.key, required this.library, this.duplicates = false, this.booru = false});
+  const LibraryOrganizationView({super.key, required this.library, this.booru = false});
   final LibraryManagementContext library;
-  final bool duplicates;
   final bool booru;
 
   @override
@@ -453,13 +462,11 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
       images: widget.library.images,
       booru: widget.booru,
       onlyUnsorted: _onlyUnsorted,
-      duplicates: widget.duplicates,
+      duplicates: false,
     );
   });
 
-  List<LibraryClassificationGroup> get _groups => widget.duplicates
-      ? LibraryMaintenance.duplicates(works: _items.works, posts: _items.posts)
-      : LibraryMaintenance.classification(works: _items.works, posts: _items.posts, criterion: _criterion);
+  List<LibraryClassificationGroup> get _groups => LibraryMaintenance.classification(works: _items.works, posts: _items.posts, criterion: _criterion);
 
   Future<void> _classify() async {
     final apply = await showCupertinoModalPopup<bool>(
@@ -482,66 +489,6 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
     _load();
   }
 
-  Future<void> _keep(LibraryClassificationGroup group, Work work) async {
-    final keep = await showCupertinoModalPopup<bool>(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(L10n.text('Keep This Copy?')),
-        message: Text(
-          L10n.text(
-            'Review the number and source before confirming. Comics merge folder memberships and notes into the kept copy. Images keep the selected copy’s folder.',
-          ),
-        ),
-        actions: [
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(L10n.text('Keep This Copy and Remove Others')),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
-      ),
-    );
-    if (keep != true) return;
-    try {
-      LibraryMaintenance.mergeComics(group, keeping: work.galleryId, database: widget.library.database);
-      _message = L10n.text('Duplicate Copies Removed');
-    } on Object catch (error) {
-      _showError('$error');
-    }
-    _load();
-  }
-
-  Future<void> _keepImage(LibraryClassificationGroup group, BooruPost post) async {
-    final keep = await showCupertinoModalPopup<bool>(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(L10n.text('Keep This Copy?')),
-        message: Text(
-          L10n.text(
-            'Review the number and source before confirming. Comics merge folder memberships and notes into the kept copy. Images keep the selected copy’s folder.',
-          ),
-        ),
-        actions: [
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(L10n.text('Keep This Copy and Remove Others')),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
-      ),
-    );
-    if (keep != true) return;
-    try {
-      LibraryMaintenance.mergeImages(group, keeping: post.id, images: widget.library.images);
-      _message = L10n.text('Duplicate Copies Removed');
-    } on Object catch (error) {
-      _showError('$error');
-    }
-    _load();
-  }
-
   void _showError(String message) => showCupertinoDialog<void>(
     context: context,
     builder: (context) => TegnalAlertDialog(
@@ -557,7 +504,7 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
     final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
     final groups = _groups;
-    final title = L10n.text(widget.duplicates ? 'Review Duplicate Works' : 'Classify into Folders');
+    final title = L10n.text('Classify into Folders');
     return SettingsPage(
       title: title,
       children: [
@@ -568,32 +515,28 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
               child: SettingsTitle(
                 title,
                 help: L10n.text(
-                  widget.duplicates
-                      ? 'Identical work numbers and server post IDs are already merged. This lists possible duplicates with matching metadata or original file addresses. Review each copy before removing it.'
-                      : 'Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped.',
+                  'Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped.',
                 ),
               ),
             ),
-            if (!widget.duplicates) ...[
-              SettingsPickerRow<LibraryClassification>(
-                title: L10n.text('Classify By'),
-                options: [for (final value in LibraryClassification.available(booru: widget.booru)) (value, L10n.text(value.title))],
-                selected: _criterion,
-                onSelected: (value) => setState(() => _criterion = value),
-              ),
-              SettingsToggleRow(
-                title: L10n.text('Only Unsorted Works'),
-                value: _onlyUnsorted,
-                onChanged: (value) {
-                  _onlyUnsorted = value;
-                  _load();
-                },
-              ),
-              FormRow(
-                onTap: groups.isEmpty || _busy ? null : _classify,
-                child: Text(L10n.text('Apply Classification'), style: TegnalType.style(17, color: groups.isEmpty || _busy ? secondary : tint)),
-              ),
-            ],
+            SettingsPickerRow<LibraryClassification>(
+              title: L10n.text('Classify By'),
+              options: [for (final value in LibraryClassification.available(booru: widget.booru)) (value, L10n.text(value.title))],
+              selected: _criterion,
+              onSelected: (value) => setState(() => _criterion = value),
+            ),
+            SettingsToggleRow(
+              title: L10n.text('Only Unsorted Works'),
+              value: _onlyUnsorted,
+              onChanged: (value) {
+                _onlyUnsorted = value;
+                _load();
+              },
+            ),
+            FormRow(
+              onTap: groups.isEmpty || _busy ? null : _classify,
+              child: Text(L10n.text('Apply Classification'), style: TegnalType.style(17, color: groups.isEmpty || _busy ? secondary : tint)),
+            ),
             if (_busy) const FormRow(child: CupertinoActivityIndicator()),
             if (_message != null)
               FormRow(
@@ -606,48 +549,9 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
           FormSection(
             prominentHeader: true,
             rowColor: row,
-            header: Text(widget.duplicates ? L10n.text('Possible Duplicates') : L10n.text(_criterion.title)),
+            header: Text(L10n.text(_criterion.title)),
             children: [
-              if (widget.duplicates)
-                for (final post in group.posts)
-                  FormRow(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text('${post.serverID} · ${post.postID}', style: TegnalType.style(17, color: tint)),
-                        ),
-                        GestureDetector(
-                          onTap: () => _keepImage(group, post),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: ShapeDecoration(color: tint.withValues(alpha: 0.15), shape: const StadiumBorder()),
-                            child: Text(L10n.text('Keep This Copy'), style: TegnalType.style(15, color: tint)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              if (widget.duplicates)
-                for (final work in group.works)
-                  FormRow(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text('${work.title ?? ''} · ${work.galleryId}', style: TegnalType.style(17, color: tint)),
-                        ),
-                        GestureDetector(
-                          onTap: () => _keep(group, work),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: ShapeDecoration(color: tint.withValues(alpha: 0.15), shape: const StadiumBorder()),
-                            child: Text(L10n.text('Keep This Copy'), style: TegnalType.style(15, color: tint)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-              else
-                SettingsValueRow(title: group.name.replaceAll('_', ' '), value: '${group.count}'),
+              SettingsValueRow(title: group.name.replaceAll('_', ' '), value: '${group.count}'),
             ],
           ),
         ],
@@ -657,7 +561,7 @@ class _LibraryOrganizationViewState extends State<LibraryOrganizationView> {
             rowColor: row,
             children: [
               FormRow(
-                child: Text(L10n.text(widget.duplicates ? 'No Duplicate Candidates' : 'No Matching Metadata'), style: TegnalType.style(17, color: secondary)),
+                child: Text(L10n.text('No Matching Metadata'), style: TegnalType.style(17, color: secondary)),
               ),
             ],
           ),

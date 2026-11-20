@@ -102,7 +102,7 @@ struct BooruFavoritesView: View {
     /// One server chosen, a new folder is that server's; with several, the menu asks which, or global.
     @ViewBuilder private var createButton: some View {
         let chosen = store.selectedServers
-        if chosen.count > 1 {
+        if chosen.count > 1 && store.folderStyle == .byServer {
             Menu {
                 ForEach(chosen) { server in
                     Button(server.displayName, systemImage: "server.rack") { newFolderServer = server.id; creating = true }
@@ -114,7 +114,7 @@ struct BooruFavoritesView: View {
             } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
                 .accessibilityLabel(L10n.text("Create Folder")).accessibilityIdentifier("booru.createFolder")
         } else {
-            Button { newFolderServer = chosen.first?.id; creating = true } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
+            Button { newFolderServer = store.newFolderServer(chosen.first?.id); creating = true } label: { Image(systemName: "folder.badge.plus").font(.system(size: 17, weight: .medium)) }
                 .accessibilityLabel(L10n.text("Create Folder")).accessibilityIdentifier("booru.createFolder")
         }
     }

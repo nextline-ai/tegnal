@@ -241,8 +241,10 @@ extension BooruStore {
                 ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)
                 """, arguments: [name, value])
         }
-        // Folders of an older backup go where their images are, and every image to a folder of its server.
-        try Self.assignFolderServers(db: db, only: Set(backup.folders.filter(\.isLegacy).map(\.id)))
+        // Folders of an older backup go where their images are when each server keeps its own folders,
+        // and stay shared otherwise; every image goes to a folder that may hold it.
+        let split = try String.fetchOne(db, sql: "SELECT value FROM settings WHERE key = ?", arguments: [BooruFolderStyle.key]) == BooruFolderStyle.byServer.rawValue
+        try Self.assignFolderServers(db: db, only: Set(backup.folders.filter(\.isLegacy).map(\.id)), split: split)
         // The order kept is the one the folders now have, each server's Uncategorized included, so a
         // second restore of the same backup changes nothing.
         let order = try String.fetchAll(db, sql: "SELECT id FROM folders ORDER BY position, name")

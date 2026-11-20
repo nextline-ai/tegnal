@@ -409,13 +409,13 @@ struct LibraryMaintenanceLinks: View {
     var body: some View {
         Section(L10n.text("Organize Saved Works")) {
             NavigationLink { LibraryOrganizationView(booru: booru) } label: { Label(L10n.text("Classify into Folders"), systemImage: "folder.badge.gearshape") }
-            NavigationLink { LibraryOrganizationView(booru: booru, duplicates: true) } label: { Label(L10n.text("Review Duplicate Works"), systemImage: "square.on.square") }
+            NavigationLink { DuplicateCleanupView(booru: booru) } label: { Label(L10n.text("Clean Up Duplicates"), systemImage: "square.on.square") }
+                .accessibilityIdentifier("settings.duplicates")
         }
     }
 }
 struct LibraryOrganizationView: View {
     var booru = false
-    var duplicates = false
     @Environment(AppEnvironment.self) private var env
     @State private var criterion = LibraryClassification.artist
     @State private var works: [Work] = []
@@ -424,84 +424,42 @@ struct LibraryOrganizationView: View {
     @State private var busy = false
     @State private var message: String?
     @State private var error: String?
-    @State private var pendingGroup: LibraryClassificationGroup?
-    @State private var keeper = ""
-    @State private var inspectedComic: IdentifiableString?
-    @State private var inspectedImage: BooruPost?
     @State private var confirming = false
     private var groups: [LibraryClassificationGroup] {
-        duplicates ? LibraryMaintenance.duplicates(works: works, posts: posts) : LibraryMaintenance.classification(works: works, posts: posts, criterion: criterion, serverNames: Dictionary(uniqueKeysWithValues: env.booru.servers.map { ($0.id, $0.canonicalAddress) }))
+        LibraryMaintenance.classification(works: works, posts: posts, criterion: criterion, serverNames: Dictionary(uniqueKeysWithValues: env.booru.servers.map { ($0.id, $0.canonicalAddress) }))
     }
     var body: some View {
         List {
             Section {
-                SettingsHelpLabel(duplicates ? "Review Duplicate Works" : "Classify into Folders", help: duplicates
-                    ? "Identical work numbers and server post IDs are already merged. This lists possible duplicates with matching metadata or original file addresses. Review each copy before removing it."
-                    : "Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped.")
-                if !duplicates {
-                    Picker(L10n.text("Classify By"), selection: $criterion) {
-                        ForEach(LibraryClassification.allCases.filter { booru || ![.rating, .server].contains($0) }) { Text(L10n.text($0.title)).tag($0) }
-                    }
-                    Toggle(L10n.text("Only Unsorted Works"), isOn: $onlyUnsorted)
-                    Button(L10n.text("Apply Classification")) { confirming = true }.disabled(groups.isEmpty || busy)
+                SettingsHelpLabel("Classify into Folders", help: "Creates folders from metadata already saved in your library. Comics keep their existing folder memberships. Images use the first matching value because each image belongs to one folder. Works with missing metadata are skipped.")
+                Picker(L10n.text("Classify By"), selection: $criterion) {
+                    ForEach(LibraryClassification.allCases.filter { booru || ![.rating, .server].contains($0) }) { Text(L10n.text($0.title)).tag($0) }
                 }
+                Toggle(L10n.text("Only Unsorted Works"), isOn: $onlyUnsorted)
+                Button(L10n.text("Apply Classification")) { confirming = true }.disabled(groups.isEmpty || busy)
                 if busy { ProgressView(L10n.text("Processing…")) }
                 if let message { Text(message).foregroundStyle(.secondary) }
             }
             ForEach(groups) { group in
                 Section {
-                    if duplicates {
-                        ForEach(group.works) { work in
-                            HStack {
-                                Button { inspectedComic = .init(id: MangaUrls.galleryUrl(for: work.galleryId)) } label: { Text((work.title ?? "") + " · " + String(work.galleryId)) }
-                                Spacer()
-                                Button(L10n.text("Keep This Copy")) { pendingGroup = group; keeper = String(work.galleryId) }.buttonStyle(.bordered)
-                            }.buttonStyle(.borderless)
-                        }
-                        ForEach(group.posts) { post in
-                            HStack {
-                                Button { inspectedImage = post } label: {
-                                    HStack {
-                                        VStack(alignment: .leading) {
-                                            Text((env.booru.servers.first { $0.id == post.serverID }?.displayName ?? post.serverID) + " · " + String(post.postID))
-                                            Text(env.booru.folders().first { $0.id == env.booru.folderID(for: post) }?.displayName ?? "").font(.caption).foregroundStyle(.secondary)
-                                        }
-                                        if let url = post.previewURL { AsyncImage(url: url) { $0.resizable().scaledToFit() } placeholder: { Color.clear }.frame(width: 56, height: 64) }
-                                    }
-                                }
-                                Spacer()
-                                Button(L10n.text("Keep This Copy")) { pendingGroup = group; keeper = post.id }.buttonStyle(.bordered)
-                            }.buttonStyle(.borderless)
-                        }
-                    } else { LabeledContent(group.name.replacingOccurrences(of: "_", with: " "), value: String(group.count)) }
-                } header: { Text(duplicates ? L10n.text("Possible Duplicates") : L10n.text(criterion.title)) }
+                    LabeledContent(group.name.replacingOccurrences(of: "_", with: " "), value: String(group.count))
+                } header: { Text(L10n.text(criterion.title)) }
             }
-            if groups.isEmpty && !busy { Text(L10n.text(duplicates ? "No Duplicate Candidates" : "No Matching Metadata")).foregroundStyle(.secondary) }
+            if groups.isEmpty && !busy { Text(L10n.text("No Matching Metadata")).foregroundStyle(.secondary) }
         }
-        .navigationTitle(L10n.text(duplicates ? "Review Duplicate Works" : "Classify into Folders")).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(L10n.text("Classify into Folders")).navigationBarTitleDisplayMode(.inline)
         .disabled(busy)
         .task { await load() }
-        .appFullScreenCover(item: $inspectedComic) { ContentEntryView(initialUrl: $0.id) }
-        .appFullScreenCover(item: $inspectedImage) { post in
-            if let server = env.booru.servers.first(where: { $0.id == post.serverID }) {
-                BooruPostView(post: post, posts: [post], server: server, source: BooruClient.shared)
-            }
-        }
         .onChange(of: onlyUnsorted) { _, _ in Task { await load() } }
         .confirmationDialog(L10n.text("Apply Classification?"), isPresented: $confirming, titleVisibility: .visible) {
             Button(L10n.text("Apply")) { Task { await classify() } }
         }
-        .confirmationDialog(L10n.text("Keep This Copy?"), isPresented: Binding(get: { pendingGroup != nil }, set: { if !$0 { pendingGroup = nil } }), titleVisibility: .visible) {
-            Button(L10n.text("Keep This Copy and Remove Others"), role: .destructive) {
-                if let group = pendingGroup { let selection = keeper; pendingGroup = nil; Task { await merge(group, keeping: selection) } }
-            }
-        } message: { Text(L10n.text("Review the number and source before confirming. Comics merge folder memberships and notes into the kept copy. Images keep the selected copy’s folder.")) }
         .alert(L10n.text("Unable to Save"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button(L10n.text("Done"), role: .cancel) {} } message: { Text(error ?? "") }
     }
     private func load() async {
         busy = true; defer { busy = false }
         do {
-            let database = env.database, images = env.booru, imageMode = booru, filter = onlyUnsorted && !duplicates
+            let database = env.database, images = env.booru, imageMode = booru, filter = onlyUnsorted
             let value = try await Task.detached(priority: .userInitiated) { () -> ([Work], [BooruPost]) in
                 if imageMode {
                     let posts = images.favorites(serverIDs: images.servers.map(\.id)).filter {
@@ -532,18 +490,6 @@ struct LibraryOrganizationView: View {
                 }
             }.value
             message = L10n.text("Classification Complete")
-        } catch { self.error = error.localizedDescription }
-        busy = false; await load()
-    }
-    private func merge(_ group: LibraryClassificationGroup, keeping key: String) async {
-        busy = true
-        do {
-            let images = env.booru, database = env.database, imageMode = booru
-            try await Task.detached(priority: .userInitiated) {
-                if imageMode { try images.removeFavorites(group.posts.filter { $0.id != key }) }
-                else if let id = Int64(key) { try LibraryMaintenance.mergeComics(group, keeping: id, database: database) }
-            }.value
-            message = L10n.text("Duplicate Copies Removed")
         } catch { self.error = error.localizedDescription }
         busy = false; await load()
     }

@@ -969,6 +969,47 @@ final class NativeContentUITests: XCTestCase {
         app.alerts.buttons["취소"].tap()
     }
 
+    /// Duplicates are found by title without brackets, cleaned up in one go with the chosen keeper, and undone.
+    func testDuplicateCleanupRemovesExtraCopiesInOneGoAndUndoes() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--duplicate-cleanup-test"]
+        app.launch()
+        app.tabBars.buttons["설정"].tap()
+        let tools = element(app, "settings.libraryManagement")
+        for _ in 0..<6 where !tools.isHittable { app.swipeUp() }
+        tools.tap()
+        element(app, "settings.duplicates").tap()
+        let summary = element(app, "duplicates.summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.label, "여러 폴더에 저장된 작품 1개 · 뺄 폴더 1개", "The same work number is found first")
+        capture(app, "Duplicate cleanup by work number")
+        element(app, "duplicates.match").tap()
+        app.buttons["제목과 작가가 같을 때"].tap()
+        expectation(for: NSPredicate(format: "label == %@", "중복 묶음 2개 · 지울 사본 2개"), evaluatedWith: summary)
+        waitForExpectations(timeout: 10)
+        capture(app, "Duplicate cleanup options")
+        let first = element(app, "duplicates.copy.930000010")
+        for _ in 0..<6 where !(first.exists && first.isHittable) { app.swipeUp() }
+        XCTAssertEqual(first.value as? String, "남김", "Saved first stays by default")
+        XCTAssertEqual(element(app, "duplicates.copy.930000030").value as? String, "제거")
+        // Keep the later copy of the other work instead.
+        let later = element(app, "duplicates.copy.930000050")
+        for _ in 0..<4 where !(later.exists && later.isHittable) { app.swipeUp() }
+        capture(app, "Duplicate cleanup groups")
+        later.tap()
+        XCTAssertEqual(later.value as? String, "남김")
+        element(app, "duplicates.apply").tap()
+        element(app, "duplicates.confirm").tap()
+        let undo = element(app, "duplicates.undo")
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        for _ in 0..<6 where !(summary.exists && summary.isHittable) { app.swipeDown() }
+        XCTAssertEqual(summary.label, "중복 묶음 0개 · 지울 사본 0개")
+        capture(app, "Duplicate cleanup done")
+        undo.tap()
+        expectation(for: NSPredicate(format: "label == %@", "중복 묶음 2개 · 지울 사본 2개"), evaluatedWith: summary)
+        waitForExpectations(timeout: 10)
+    }
+
     /// The first time a website's favorites can be synced, nothing changes until the person chooses how.
     func testFavoritesSyncAsksHowToStartFirst() {
         let app = XCUIApplication()

@@ -272,11 +272,14 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
       db.execute("DELETE FROM folders WHERE id = 'unsorted' AND color = 4284922736 AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')");
     });
     migrations.registerMigration('booru_v12_vivid_folder_colors', AppDatabase.adoptVividFolderColors);
-    // Each server gets folders of its own; a folder with images of several servers becomes one
-    // folder of the same name and color in each, and a folder holding nothing stays global.
+    // Each server gets an Uncategorized of its own. Folders made before stay shared by every server
+    // until the person chooses (`adoptFolderStyle`); a library with none starts with server folders.
     migrations.registerMigration('booru_v13_server_folders', (db) {
       db.execute('ALTER TABLE folders ADD COLUMN server_id TEXT');
-      assignFolderServers(db);
+      assignFolderServers(db, split: false);
+      final shared =
+          db.value<int>("SELECT COUNT(*) FROM folders WHERE server_id IS NULL AND id != 'unsorted' AND id NOT GLOB ?", ['${BooruFolder.uncategorizedPrefix}*']) ?? 0;
+      if (shared == 0) db.execute('INSERT OR REPLACE INTO settings VALUES (?, ?)', [BooruFolderStyle.key, BooruFolderStyle.byServer.name]);
     });
     migrations.registerMigration('booru_v14_study', StudyStore.migrate);
     migrations.registerMigration('booru_v15_study_game', StudyStore.migrateGame);
@@ -316,6 +319,60 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
         if (saved.contains(server.id) && (!safe || server.isSafebooru)) server.id,
     ];
     selectedServerID = selectedServerIDs.firstOrNull ?? '';
+    final style = setting(BooruFolderStyle.key);
+    chosenFolderStyle = BooruFolderStyle.values.where((value) => value.name == style).firstOrNull;
+  }
+
+  /// The folder style the person chose; null while a library from before server folders waits to be asked.
+  BooruFolderStyle? chosenFolderStyle;
+
+  /// The style in use: the one chosen, or shared folders while a library from before waits for a choice.
+  BooruFolderStyle get folderStyle => chosenFolderStyle ?? BooruFolderStyle.shared;
+
+  /// A library from before server folders whose folders wait for the person to choose a style.
+  bool get folderStylePending => chosenFolderStyle == null;
+
+  /// The server a new folder made while browsing [serverID] belongs to: none when folders are shared.
+  String? newFolderServer(String? serverID) => folderStyle == BooruFolderStyle.shared ? null : serverID;
+
+  /// What giving each server its own folders would change: shared folders holding images, and those
+  /// holding images of several servers, which would become one folder per server.
+  ({int folders, int mixed}) folderStyleImpact() => database.read((db) {
+    final rows = db.rows(
+      "SELECT d.id, COUNT(DISTINCT f.server_id) AS servers FROM folders d JOIN favorites f ON f.folder_id = d.id WHERE d.server_id IS NULL AND d.id != 'unsorted' AND d.id NOT GLOB ? GROUP BY d.id",
+      ['${BooruFolder.uncategorizedPrefix}*'],
+    );
+    return (folders: rows.length, mixed: rows.where((row) => (row['servers'] as int) > 1).length);
+  });
+
+  /// Switches folder style. By server: each shared folder goes to the server of its images, one
+  /// folder of the same name for each when it holds several. Shared: every folder holds any server's
+  /// images again, and a server's copy of a folder joins the folder it came from. Each server's
+  /// Uncategorized and [kept] folders (a server's favorites lists) stay with their server.
+  void adoptFolderStyle(BooruFolderStyle style, {Set<String> kept = const {}}) {
+    database.write((db) {
+      switch (style) {
+        case BooruFolderStyle.byServer:
+          assignFolderServers(db);
+        case BooruFolderStyle.shared:
+          shareFolders(db, kept: kept);
+      }
+      db.execute('INSERT OR REPLACE INTO settings VALUES (?, ?)', [BooruFolderStyle.key, style.name]);
+    });
+    refresh();
+  }
+
+  static void shareFolders(SqlDatabase db, {Set<String> kept = const {}}) {
+    for (final id in db.column<String>('SELECT id FROM folders WHERE instr(id, ?) > 0', [copyMarker])) {
+      final base = baseFolderID(id);
+      if (kept.contains(id) || kept.contains(base) || db.value<String>('SELECT id FROM folders WHERE id = ?', [base]) == null) continue;
+      db.execute('UPDATE favorites SET folder_id = ? WHERE folder_id = ?', [base, id]);
+      db.execute('DELETE FROM folders WHERE id = ?', [id]);
+      db.execute('DELETE FROM settings WHERE key = ?', ['${FolderRule.keyPrefix}$id']);
+    }
+    for (final id in db.column<String>('SELECT id FROM folders WHERE server_id IS NOT NULL AND id NOT GLOB ?', ['${BooruFolder.uncategorizedPrefix}*'])) {
+      if (!kept.contains(id)) db.execute('UPDATE folders SET server_id = NULL WHERE id = ?', [id]);
+    }
   }
 
   void refresh() {
@@ -831,7 +888,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   /// its Uncategorized, a folder belongs to the server of its images (one folder of the same name
   /// in each when it holds several servers'), and a folder holding nothing stays global.
   /// [only] limits it to folders just restored from an older backup.
-  static void assignFolderServers(SqlDatabase db, {Set<String>? only}) {
+  static void assignFolderServers(SqlDatabase db, {Set<String>? only, bool split = true}) {
     final servers = decodedServers(db);
     final byAddress = <String, String>{};
     final addresses = <String, String>{};
@@ -846,6 +903,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
         db.execute('UPDATE folders SET server_id = ? WHERE id = ?', [owner, id]);
         continue;
       }
+      if (!split) continue;
       // The server whose address comes first keeps the folder, so every device picks the same one.
       final owners = db.column<String>('SELECT DISTINCT server_id FROM favorites WHERE folder_id = ?', [id]).where(addresses.containsKey).toList()
         ..sort((a, b) => addresses[a]!.compareTo(addresses[b]!));
@@ -1105,4 +1163,13 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
   void deleteRule(String forFolder) => deleteFolderRule(forFolder);
   @override
   void fill(FolderRule rule) => fillRule(rule);
+}
+
+/// Whether image folders belong to one server each, or are shared by every server as before 1.5.2.
+enum BooruFolderStyle {
+  byServer,
+  shared;
+
+  static const key = 'folder_style';
+  String get title => this == byServer ? "Each Server's Own Folders" : 'Folders Shared by All Servers';
 }

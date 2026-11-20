@@ -512,13 +512,15 @@ extension BooruStoreBackup on BooruStore {
         [entry.key, entry.value],
       );
     }
-    // Folders of an older backup go where their images are, and every image to a folder of its server.
+    // Folders of an older backup go where their images are when each server keeps its own folders,
+    // and stay shared otherwise; every image goes to a folder that may hold it.
     BooruStore.assignFolderServers(
       db,
       only: {
         for (final folder in backup.folders)
           if (folder.isLegacy) folder.id,
       },
+      split: db.value<String>('SELECT value FROM settings WHERE key = ?', [BooruFolderStyle.key]) == BooruFolderStyle.byServer.name,
     );
     // The order kept is the one the folders now have, each server's Uncategorized included, so a
     // second restore of the same backup changes nothing.
