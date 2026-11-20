@@ -474,7 +474,7 @@ struct BooruServerFolders: SmartFolderLibrary {
     func smartRules() throws -> [FolderRule] { try store.smartRules().filter { shown($0.folder) } }
     func matchingCount(_ rule: FolderRule) throws -> Int { try store.matchingCount(rule) }
     func matchingCountElsewhere(_ rule: FolderRule) throws -> Int { try store.matchingCountElsewhere(rule) }
-    func createRuleFolder(named name: String) throws -> String { try store.saveFolder(name: name, serverID: serverID) }
+    func createRuleFolder(named name: String) throws -> String { try store.saveFolder(name: name, serverID: store.newFolderServer(serverID)) }
     func saveRule(_ rule: FolderRule) throws { try store.saveRule(rule) }
     func deleteRule(forFolder id: String) throws { try store.deleteRule(forFolder: id) }
     func fill(_ rule: FolderRule) throws { try store.fill(rule) }

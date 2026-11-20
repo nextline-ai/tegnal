@@ -900,6 +900,10 @@
           "value_parsed_from_unsorted_json_string" : true
         },
         {
+          "key" : "folder_style",
+          "value" : "byServer"
+        },
+        {
           "key" : "selected_servers",
           "value" : "[\"server-alpha\",\"server-gamma\"]"
         }
@@ -1531,7 +1535,10 @@
 
       ],
       "settings" : [
-
+        {
+          "key" : "folder_style",
+          "value" : "byServer"
+        }
       ]
     }
   },

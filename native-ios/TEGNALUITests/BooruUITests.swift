@@ -53,6 +53,21 @@ final class BooruUITests: XCTestCase {
         }
         return app
     }
+    /// A library from before server folders is asked once how its folders work, and nothing changes before.
+    func testAnOlderLibraryChoosesItsFolderStyleOnce() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--booru-ui-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--booru-folder-style-test"]
+        app.launch()
+        let shared = element(app, "booru.folderStyle.shared")
+        XCTAssertTrue(shared.waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "booru.folderStyle.byServer").exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "1 folders hold images from several servers")).firstMatch.exists)
+        capture(app, "Image folder style choice")
+        shared.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: shared)
+        waitForExpectations(timeout: 10)
+    }
+
     /// Opens a server's own settings (its account, blacklist, check and cookies) from the More tab:
     /// the first server listed, or the one with [id].
     private func openServerSettings(_ app: XCUIApplication, id: String? = nil) {

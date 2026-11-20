@@ -173,6 +173,7 @@ class _SiteFavoritesSetupGateState extends State<SiteFavoritesSetupGate> {
     super.initState();
     widget.sync.addListener(_check);
     widget.images.addListener(_check);
+    widget.images.store.addListener(_check);
     HomeStage.shared.addListener(_check);
     WidgetsBinding.instance.addPostFrameCallback((_) => _check());
   }
@@ -181,6 +182,7 @@ class _SiteFavoritesSetupGateState extends State<SiteFavoritesSetupGate> {
   void dispose() {
     widget.sync.removeListener(_check);
     widget.images.removeListener(_check);
+    widget.images.store.removeListener(_check);
     HomeStage.shared.removeListener(_check);
     super.dispose();
   }
@@ -192,7 +194,8 @@ class _SiteFavoritesSetupGateState extends State<SiteFavoritesSetupGate> {
       final choice = await SiteFavoritesSetupSheet.show(context, offer);
       _asking = false;
       await widget.sync.answer(choice);
-    } else if (widget.images.setupOffer case final offer?) {
+    } else if (widget.images.setupOffer case final offer? when !widget.images.store.folderStylePending) {
+      // An older image library first chooses how its folders work.
       _asking = true;
       final choice = await SiteFavoritesSetupSheet.showImages(context, offer);
       _asking = false;

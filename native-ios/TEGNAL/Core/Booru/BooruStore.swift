@@ -19,6 +19,8 @@ final class BooruStore: @unchecked Sendable {
     @ObservationIgnored private var snapshotGeneration = 0
     @ObservationIgnored private var goldRestrictedIDs: Set<String> = []
     private(set) var servers: [BooruServer] = []
+    /// The folder style the person chose; nil while a library from before server folders waits to be asked.
+    private(set) var chosenFolderStyle: BooruFolderStyle?
     private(set) var selectedServerID = ""
     private(set) var selectedServerIDs: [String] = []
     var selectedServers: [BooruServer] { servers.filter { selectedServerIDs.contains($0.id) } }
@@ -155,9 +157,14 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v12_vivid_folder_colors") { try AppDatabase.adoptVividFolderColors($0) }
         // Each server gets folders of its own; a folder with images of several servers becomes one
         // folder of the same name and color in each, and a folder holding nothing stays global.
+        // Each server gets an Uncategorized of its own. Folders made before stay shared by every server
+        // until the person chooses (`adoptFolderStyle`); a library with none starts with server folders.
         migrations.registerMigration("booru_v13_server_folders") { db in
             try db.execute(sql: "ALTER TABLE folders ADD COLUMN server_id TEXT")
-            try Self.assignFolderServers(db: db)
+            try Self.assignFolderServers(db: db, split: false)
+            let shared = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folders WHERE server_id IS NULL AND id != 'unsorted' AND id NOT GLOB ?",
+                                          arguments: [BooruFolder.uncategorizedPrefix + "*"]) ?? 0
+            if shared == 0 { try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: [BooruFolderStyle.key, BooruFolderStyle.byServer.rawValue]) }
         }
         migrations.registerMigration("booru_v14_study") { try StudyStore.migrate($0) }
         migrations.registerMigration("booru_v15_study_game") { try StudyStore.migrateGame($0) }
@@ -186,6 +193,8 @@ final class BooruStore: @unchecked Sendable {
         // Another device or a restored backup may have chosen other servers; Safe Mode keeps to Safebooru.
         selectedServerIDs = servers.map(\.id).filter { saved.contains($0) && (!safeMode || isSafebooru(serverID: $0)) }
         selectedServerID = selectedServerIDs.first ?? ""
+        let style = try setting(BooruFolderStyle.key).flatMap(BooruFolderStyle.init(rawValue:))
+        if style != chosenFolderStyle { chosenFolderStyle = style }
     }
 
     func refresh() throws { try reload(); revision += 1 }
@@ -592,7 +601,65 @@ final class BooruStore: @unchecked Sendable {
 
 // MARK: Folders by server
 
+/// Whether image folders belong to one server each, or are shared by every server as before 1.5.2.
+enum BooruFolderStyle: String, CaseIterable, Identifiable {
+    case byServer, shared
+    var id: String { rawValue }
+    static let key = "folder_style"
+    var title: String { self == .byServer ? "Each Server's Own Folders" : "Folders Shared by All Servers" }
+}
+
 extension BooruStore {
+    /// The style in use: the one chosen, or shared folders while a library from before waits for a choice.
+    var folderStyle: BooruFolderStyle { chosenFolderStyle ?? .shared }
+    /// A library from before server folders whose folders wait for the person to choose a style.
+    var folderStylePending: Bool { chosenFolderStyle == nil }
+
+    /// The server a new folder made while browsing `serverID` belongs to: none when folders are shared.
+    func newFolderServer(_ serverID: String?) -> String? { folderStyle == .shared ? nil : serverID }
+
+    /// What giving each server its own folders would change: shared folders holding images, and those
+    /// holding images of several servers, which would become one folder per server.
+    func folderStyleImpact() -> (folders: Int, mixed: Int) {
+        (try? database.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT d.id, COUNT(DISTINCT f.server_id) AS servers FROM folders d JOIN favorites f ON f.folder_id = d.id
+                WHERE d.server_id IS NULL AND d.id != 'unsorted' AND d.id NOT GLOB ? GROUP BY d.id
+                """, arguments: [BooruFolder.uncategorizedPrefix + "*"])
+            return (rows.count, rows.filter { ($0["servers"] as Int) > 1 }.count)
+        }) ?? (0, 0)
+    }
+
+    /// Switches folder style. By server: each shared folder goes to the server of its images, one
+    /// folder of the same name for each when it holds several. Shared: every folder holds any server's
+    /// images again, and a server's copy of a folder joins the folder it came from. Each server's
+    /// Uncategorized and `kept` folders (a server's favorites lists) stay with their server.
+    func adoptFolderStyle(_ style: BooruFolderStyle, kept: Set<String> = []) throws {
+        try database.write { db in
+            switch style {
+            case .byServer: try Self.assignFolderServers(db: db)
+            case .shared: try Self.shareFolders(db: db, kept: kept)
+            }
+            try db.execute(sql: "INSERT OR REPLACE INTO settings VALUES (?, ?)", arguments: [BooruFolderStyle.key, style.rawValue])
+        }
+        try refresh()
+    }
+
+    static func shareFolders(db: Database, kept: Set<String>) throws {
+        for row in try Row.fetchAll(db, sql: "SELECT id FROM folders WHERE instr(id, ?) > 0", arguments: [copyMarker]) {
+            let id: String = row["id"], base = baseFolderID(id)
+            guard !kept.contains(id), !kept.contains(base),
+                  try String.fetchOne(db, sql: "SELECT id FROM folders WHERE id = ?", arguments: [base]) != nil else { continue }
+            try db.execute(sql: "UPDATE favorites SET folder_id = ? WHERE folder_id = ?", arguments: [base, id])
+            try db.execute(sql: "DELETE FROM folders WHERE id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [FolderRule.keyPrefix + id])
+        }
+        for id in try String.fetchAll(db, sql: "SELECT id FROM folders WHERE server_id IS NOT NULL AND id NOT GLOB ?", arguments: [BooruFolder.uncategorizedPrefix + "*"])
+        where !kept.contains(id) {
+            try db.execute(sql: "UPDATE folders SET server_id = NULL WHERE id = ?", arguments: [id])
+        }
+    }
+
     /// A copy of a folder for another server is named `<folder>@<server address>`, the same on every
     /// device, so devices that split a folder at once agree on the copies.
     static let copyMarker = "@https://"
@@ -693,7 +760,7 @@ extension BooruStore {
     /// its Uncategorized, a folder belongs to the server of its images (one folder of the same name
     /// in each when it holds several servers'), and a folder holding nothing stays global.
     /// `only` limits it to folders just restored from an older backup.
-    static func assignFolderServers(db: Database, only ids: Set<String>? = nil) throws {
+    static func assignFolderServers(db: Database, only ids: Set<String>? = nil, split: Bool = true) throws {
         let servers = try decodedServers(db)
         let byAddress = Dictionary(servers.map { ($0.canonicalAddress, $0.id) }, uniquingKeysWith: { first, _ in first })
         let addresses = Dictionary(servers.map { ($0.id, $0.canonicalAddress) }, uniquingKeysWith: { first, _ in first })
@@ -702,6 +769,7 @@ extension BooruStore {
                 try db.execute(sql: "UPDATE folders SET server_id = ? WHERE id = ?", arguments: [owner, id])
                 continue
             }
+            guard split else { continue }
             // The server whose address comes first keeps the folder, so every device picks the same one.
             let owners = try String.fetchAll(db, sql: "SELECT DISTINCT server_id FROM favorites WHERE folder_id = ?", arguments: [id])
                 .filter { addresses[$0] != nil }.sorted { addresses[$0]! < addresses[$1]! }

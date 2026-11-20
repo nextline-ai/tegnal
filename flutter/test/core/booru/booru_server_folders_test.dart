@@ -32,6 +32,7 @@ void main() {
       db.execute('DELETE FROM folders');
       db.execute('ALTER TABLE folders DROP COLUMN server_id');
       db.execute("DELETE FROM grdb_migrations WHERE identifier = 'booru_v13_server_folders'");
+      db.execute('DELETE FROM settings WHERE key = ?', [BooruFolderStyle.key]);
       final folders = [
         ('unsorted', '', FolderPalette.unsorted),
         (uncategorized(danbooru), 'danbooru.donmai.us', FolderPalette.colors[1]),
@@ -66,7 +67,7 @@ void main() {
     return path;
   }
 
-  test('the update gives each server its folders and splits a folder of several servers', () {
+  test('the update keeps folders shared until each server is chosen to have its own', () {
     final path = legacyLibrary();
     final store = BooruStore(path: path, preferences: AppPreferences.memory());
     final copy = 'mixed@${gelbooru.canonicalAddress}';
@@ -76,7 +77,22 @@ void main() {
     expect(store.folderIDFor(post(3, danbooru)), uncategorized(danbooru), reason: "the server's own folder is its Uncategorized");
     expect(store.folder(uncategorized(danbooru))?.plainName, L10n.text('Uncategorized'));
     expect(store.folder(uncategorized(danbooru))?.color, FolderPalette.colors[1], reason: 'keeping its color');
-    expect(store.folderIDFor(post(4, danbooru)), 'mixed', reason: 'the server whose address comes first keeps the folder');
+    // Nothing else changes until the person chooses.
+    expect(store.folderStylePending, isTrue);
+    expect(store.folderStyle, BooruFolderStyle.shared);
+    expect(store.folder('mixed')?.serverID, isNull, reason: 'a folder of several servers stays shared');
+    expect(store.folderIDFor(post(4, danbooru)), 'mixed');
+    expect(store.folderIDFor(post(5, gelbooru)), 'mixed');
+    expect(store.folder('only-g')?.serverID, isNull);
+    expect(store.folder(copy), isNull);
+    expect(store.rule('mixed')?.sources?.toSet(), {uncategorized(danbooru), uncategorized(gelbooru)});
+    expect(store.folderStyleImpact(), (folders: 2, mixed: 1));
+    expect(store.newFolderServer(danbooru.id), isNull, reason: 'a new folder is shared too');
+
+    // Each server's own folders: the folder goes to the server whose address comes first.
+    store.adoptFolderStyle(BooruFolderStyle.byServer);
+    expect(store.folderStylePending, isFalse);
+    expect(store.folderIDFor(post(4, danbooru)), 'mixed');
     expect(store.folderIDFor(post(5, gelbooru)), copy);
     expect(store.folder('mixed')?.serverID, danbooru.id);
     expect(store.folder(copy)?.serverID, gelbooru.id);
@@ -86,13 +102,34 @@ void main() {
     expect(store.folder('empty')?.serverID, isNull, reason: 'a folder holding nothing stays global, shown as before');
     expect(store.rule('mixed')?.sources, [uncategorized(danbooru)]);
     expect(store.rule(copy)?.sources, [uncategorized(gelbooru)]);
+    expect(store.newFolderServer(danbooru.id), danbooru.id);
+
+    // Back to shared folders: the copy joins the folder it came from.
+    store.adoptFolderStyle(BooruFolderStyle.shared);
+    expect(store.folder(copy), isNull);
+    expect(store.folderIDFor(post(5, gelbooru)), 'mixed');
+    expect(store.folder('mixed')?.serverID, isNull);
+    expect(store.folder('only-g')?.serverID, isNull);
+    expect(store.folder(uncategorized(danbooru))?.serverID, danbooru.id, reason: 'each server keeps its Uncategorized');
     final ids = store.folders().map((folder) => folder.id).toList();
     store.database.close();
-    expect(
-      BooruStore(path: path, preferences: AppPreferences.memory()).folders().map((folder) => folder.id),
-      ids,
-      reason: 'reopening changes nothing more',
-    );
+    final reopened = BooruStore(path: path, preferences: AppPreferences.memory());
+    expect(reopened.folderStyle, BooruFolderStyle.shared);
+    expect(reopened.folderStylePending, isFalse);
+    expect(reopened.folders().map((folder) => folder.id), ids, reason: 'reopening changes nothing more');
+  });
+
+  test("a new library starts with each server's own folders, and favorites lists stay with their server", () {
+    final store = BooruStore.inMemory();
+    store.saveServer(danbooru);
+    store.saveServer(gelbooru);
+    expect(store.folderStylePending, isFalse, reason: "a library with nothing to change isn't asked");
+    expect(store.folderStyle, BooruFolderStyle.byServer);
+    final list = store.saveFolder(name: 'Group', serverID: danbooru.id);
+    final mine = store.saveFolder(name: 'Mine', serverID: danbooru.id);
+    store.adoptFolderStyle(BooruFolderStyle.shared, kept: {list});
+    expect(store.folder(list)?.serverID, danbooru.id, reason: "a folder kept with the server's favorites stays its own");
+    expect(store.folder(mine)?.serverID, isNull);
   });
 
   test("saved shows the chosen servers' folders and the global ones", () {

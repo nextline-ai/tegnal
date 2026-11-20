@@ -399,6 +399,7 @@ final class BooruServerFolderTests: XCTestCase {
             try db.execute(sql: "DELETE FROM folders")
             try db.execute(sql: "ALTER TABLE folders DROP COLUMN server_id")
             try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'booru_v13_server_folders'")
+            try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [BooruFolderStyle.key])
             let folders: [(String, String, Int64)] = [("unsorted", "", FolderPalette.unsorted), ("site:" + danbooru.canonicalAddress, "danbooru.donmai.us", FolderPalette.colors[1]),
                                                       ("mixed", "Mixed", FolderPalette.colors[2]), ("empty", "Empty", FolderPalette.colors[3]), ("only-g", "Only Gelbooru", FolderPalette.colors[4])]
             for (position, folder) in folders.enumerated() {
@@ -416,7 +417,7 @@ final class BooruServerFolderTests: XCTestCase {
         return path
     }
 
-    func testUpdateGivesEachServerItsFoldersAndSplitsAFolderOfSeveralServers() throws {
+    func testUpdateKeepsFoldersSharedUntilEachServerIsChosenToHaveItsOwn() throws {
         let path = try legacyLibrary()
         defer { try? FileManager.default.removeItem(atPath: path) }
         let store = try BooruStore(path: path)
@@ -428,7 +429,25 @@ final class BooruServerFolderTests: XCTestCase {
         XCTAssertEqual(store.folderID(for: post(3, danbooru)), danbooruUncategorized, "the server's own folder is its Uncategorized")
         XCTAssertEqual(store.folder(danbooruUncategorized)?.plainName, L10n.text("Uncategorized"))
         XCTAssertEqual(store.folder(danbooruUncategorized)?.color, FolderPalette.colors[1], "keeping its color")
-        XCTAssertEqual(store.folderID(for: post(4, danbooru)), "mixed", "the server whose address comes first keeps the folder")
+        // Nothing else changes until the person chooses.
+        XCTAssertTrue(store.folderStylePending)
+        XCTAssertEqual(store.folderStyle, .shared)
+        XCTAssertNil(store.folder("mixed")?.serverID, "a folder of several servers stays shared")
+        XCTAssertEqual(store.folderID(for: post(4, danbooru)), "mixed")
+        XCTAssertEqual(store.folderID(for: post(5, gelbooru)), "mixed")
+        XCTAssertNil(store.folder("only-g")?.serverID)
+        XCTAssertNil(store.folder(copy))
+        XCTAssertEqual(Set(try XCTUnwrap(store.rule(forFolder: "mixed")?.sources)), [danbooruUncategorized, gelbooruUncategorized],
+                       "the smart folder reads every server's Uncategorized where it read the shared one")
+        XCTAssertEqual(store.folderStyleImpact().folders, 2)
+        XCTAssertEqual(store.folderStyleImpact().mixed, 1)
+        XCTAssertNil(store.newFolderServer(danbooru.id), "a new folder is shared too")
+        XCTAssertTrue(try BooruStore(path: path).folderStylePending, "reopening still waits for the choice")
+
+        // Each server's own folders: the folder goes to the server whose address comes first.
+        try store.adoptFolderStyle(.byServer)
+        XCTAssertFalse(store.folderStylePending)
+        XCTAssertEqual(store.folderID(for: post(4, danbooru)), "mixed")
         XCTAssertEqual(store.folderID(for: post(5, gelbooru)), copy)
         XCTAssertEqual(store.folder("mixed")?.serverID, danbooru.id)
         XCTAssertEqual(store.folder(copy)?.serverID, gelbooru.id)
@@ -436,12 +455,33 @@ final class BooruServerFolderTests: XCTestCase {
         XCTAssertEqual(store.folder(copy)?.color, FolderPalette.colors[2], "the same name and color in each server")
         XCTAssertEqual(store.folder("only-g")?.serverID, gelbooru.id)
         XCTAssertNil(store.folder("empty")?.serverID, "a folder holding nothing stays global, shown as before")
-        // The smart folder works in each server, reading that server's Uncategorized.
         XCTAssertEqual(try store.rule(forFolder: "mixed")?.sources, [danbooruUncategorized])
         XCTAssertEqual(try store.rule(forFolder: copy)?.sources, [gelbooruUncategorized])
-        // Reopening changes nothing more.
+        XCTAssertEqual(store.newFolderServer(danbooru.id), danbooru.id)
+
+        // Back to shared folders: the copy joins the folder it came from.
+        try store.adoptFolderStyle(.shared)
+        XCTAssertNil(store.folder(copy))
+        XCTAssertEqual(store.folderID(for: post(5, gelbooru)), "mixed")
+        XCTAssertNil(store.folder("mixed")?.serverID)
+        XCTAssertNil(store.folder("only-g")?.serverID)
+        XCTAssertEqual(store.folder(danbooruUncategorized)?.serverID, danbooru.id, "each server keeps its Uncategorized")
         let reopened = try BooruStore(path: path)
+        XCTAssertEqual(reopened.folderStyle, .shared)
+        XCTAssertFalse(reopened.folderStylePending)
         XCTAssertEqual(reopened.folders().map(\.id), store.folders().map(\.id))
+    }
+
+    func testANewLibraryStartsWithEachServersOwnFoldersAndFavoritesListsStayWithTheirServer() throws {
+        let store = try BooruStore()
+        for server in [danbooru, gelbooru] { try store.saveServer(server) }
+        XCTAssertFalse(store.folderStylePending, "a library with nothing to change isn't asked")
+        XCTAssertEqual(store.folderStyle, .byServer)
+        let list = try store.saveFolder(name: "Group", serverID: danbooru.id)
+        let mine = try store.saveFolder(name: "Mine", serverID: danbooru.id)
+        try store.adoptFolderStyle(.shared, kept: [list])
+        XCTAssertEqual(store.folder(list)?.serverID, danbooru.id, "a folder kept with the server's favorites stays its own")
+        XCTAssertNil(store.folder(mine)?.serverID)
     }
 
     func testSavedShowsTheChosenServersFoldersAndTheGlobalOnes() throws {

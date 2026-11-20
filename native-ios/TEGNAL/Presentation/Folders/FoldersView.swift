@@ -345,7 +345,7 @@ struct NewFolderPromptModifier: ViewModifier {
     }
 
     private func create(_ name: String) throws -> String {
-        if booru { return try env.booru.saveFolder(name: name, serverID: booruServerID) }
+        if booru { return try env.booru.saveFolder(name: name, serverID: env.booru.newFolderServer(booruServerID)) }
         guard let id = try env.database.createFolder(name: name).id else { throw BooruError.storage }
         return try env.database.identity(ofFolder: id)
     }

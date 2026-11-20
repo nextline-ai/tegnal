@@ -563,7 +563,7 @@ class BooruServerFolders implements SmartFolderLibrary {
   int matchingCountElsewhere(FolderRule rule) => store.matchingCountElsewhere(rule);
 
   @override
-  String createRuleFolder(String named) => store.saveFolder(name: named, serverID: serverID);
+  String createRuleFolder(String named) => store.saveFolder(name: named, serverID: store.newFolderServer(serverID));
 
   @override
   void saveRule(FolderRule rule) => store.saveRule(rule);

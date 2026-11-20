@@ -346,4 +346,159 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertThrowsError(try LibraryBackupImport.decode(JSONEncoder().encode(value)))
         XCTAssertThrowsError(try LibraryBackupImport.decode(Data("{}".utf8)))
     }
+
+    // MARK: Duplicate cleanup
+
+    func testCoreTitlesDropBracketedPartsButKeepABracketOnlyTitle() {
+        XCTAssertEqual(DuplicateFinder.coreTitle("[Circle (Artist)] Summer Days! (Some Show) [Korean] [Team]"), "summer days")
+        XCTAssertEqual(DuplicateFinder.coreTitle("【サークル】 夏の日 ［中国翻訳］"), "夏の日")
+        XCTAssertEqual(DuplicateFinder.coreTitle("Summer  Days"), DuplicateFinder.coreTitle("summer days [v2]"))
+        XCTAssertEqual(DuplicateFinder.coreTitle("[Only Brackets]"), "only brackets", "A title that is all brackets keeps them")
+    }
+
+    private func duplicateLibrary() throws -> (AppDatabase, mine: Folder, other: Folder) {
+        let database = try AppDatabase.inMemory()
+        let mine = try database.createFolder(name: "Mine"), other = try database.createFolder(name: "Other")
+        _ = try database.upsertWork(galleryId: 10, folderId: other.id, title: "[Circle] Summer Days [Korean]", artists: "Author", language: "korean",
+                                    bookmarkedAt: "2026-01-01T00:00:00Z", pageCount: 20)
+        _ = try database.upsertWork(galleryId: 30, folderId: mine.id, title: "[Circle] Summer Days [Korean] [Team B]", artists: "Author", language: "korean",
+                                    bookmarkedAt: "2026-03-01T00:00:00Z", pageCount: 24)
+        _ = try database.upsertWork(galleryId: 20, title: "[Circle] Summer Days", artists: "Author", language: "japanese",
+                                    bookmarkedAt: "2026-02-01T00:00:00Z", pageCount: 22)
+        _ = try database.upsertWork(galleryId: 40, title: "Winter", artists: "Someone", language: "korean")
+        try database.setNote(galleryId: 10, note: "Read twice")
+        return (database, mine, other)
+    }
+
+    private func groups(_ database: AppDatabase, _ options: DuplicateCleanupOptions, order: [Folder] = []) throws -> [DuplicateGroup] {
+        let folders = try database.listFolders()
+        let keys = Dictionary(uniqueKeysWithValues: folders.compactMap { folder in folder.id.map { ($0, String($0)) } })
+        let rank = DuplicateFinder.rank(order: order.compactMap { $0.id.map(String.init) }, standard: folders.compactMap { $0.id.map(String.init) })
+        return DuplicateFinder.comics(try database.listWorks(), folderKeys: keys, folderRank: rank, options: options)
+    }
+
+    func testDuplicatesMatchTitlesWithoutBracketsAndTranslationsOnlyWhenAsked() throws {
+        let (database, _, _) = try duplicateLibrary()
+        var options = DuplicateCleanupOptions()
+        options.match = .sameTitle
+        options.useFolderOrder = false
+        XCTAssertEqual(try groups(database, options).map { Set($0.copies.map(\.id)) }, [["10", "30"]], "Another translator's copy is the same work")
+        options.acrossLanguages = true
+        XCTAssertEqual(try groups(database, options).map { Set($0.copies.map(\.id)) }, [["10", "20", "30"]])
+        options.match = .exact
+        XCTAssertTrue(try groups(database, options).isEmpty, "Exact matching needs the same full title")
+    }
+
+    func testTheKeptCopyFollowsFolderOrderLanguageThenTheRule() throws {
+        let (database, mine, other) = try duplicateLibrary()
+        var options = DuplicateCleanupOptions()
+        options.match = .sameTitle
+        options.acrossLanguages = true
+        options.useFolderOrder = false
+        options.keep = .oldestSaved
+        XCTAssertEqual(try groups(database, options)[0].keeperID, "10")
+        options.keep = .newestSaved
+        XCTAssertEqual(try groups(database, options)[0].keeperID, "30")
+        options.keep = .mostPages
+        XCTAssertEqual(try groups(database, options)[0].keeperID, "30")
+        options.keep = .newestNumber
+        XCTAssertEqual(try groups(database, options)[0].keeperID, "30")
+        options.preferredLanguage = "japanese"
+        XCTAssertEqual(try groups(database, options)[0].keeperID, "20", "The preferred language comes before the rule")
+        options.useFolderOrder = true
+        XCTAssertEqual(try groups(database, options, order: [other, mine])[0].keeperID, "10", "A copy in a higher folder comes first of all")
+        XCTAssertEqual(try groups(database, options, order: [mine, other])[0].keeperID, "30")
+    }
+
+    @MainActor func testCleanupCombinesFoldersAndNotesAndUndoPutsEverythingBack() throws {
+        let (database, mine, other) = try duplicateLibrary()
+        var options = DuplicateCleanupOptions()
+        options.match = .sameTitle
+        options.useFolderOrder = true
+        let found = try groups(database, options, order: [mine, other])
+        XCTAssertEqual(found[0].keeperID, "30")
+        let undo = try DuplicateCleaner.applyComics(found, combine: true, removeFromWebsite: true, websiteFolders: [], database: database)
+        XCTAssertEqual(undo.removedCount, 1)
+        XCTAssertNil(try database.getWork(galleryId: 10))
+        let kept = try XCTUnwrap(database.getWork(galleryId: 30))
+        XCTAssertEqual(Set(kept.folders.map(\.name)), ["Mine", "Other"], "The kept copy takes the removed copy's folders")
+        XCTAssertEqual(kept.note, "Read twice")
+
+        try DuplicateCleaner.undo(undo, database: database, images: try BooruStore(), accounts: BooruAccountSync(store: try BooruStore()))
+        let back = try XCTUnwrap(database.getWork(galleryId: 10))
+        XCTAssertEqual(back.folders.map(\.name), ["Other"])
+        XCTAssertEqual(back.note, "Read twice")
+        XCTAssertEqual(back.bookmarkedAt, "2026-01-01T00:00:00Z", "It returns as it was saved")
+        let restored = try XCTUnwrap(database.getWork(galleryId: 30))
+        XCTAssertEqual(restored.folders.map(\.name), ["Mine"])
+        XCTAssertNil(restored.note)
+    }
+
+    @MainActor func testTheSameWorkNumberInSeveralFoldersStaysInOneAndFixedFoldersAreLeftAlone() throws {
+        let database = try AppDatabase.inMemory()
+        let a = try database.createFolder(name: "A"), b = try database.createFolder(name: "B"), site = try database.createFolder(name: "Favorites 0")
+        _ = try database.upsertWork(galleryId: 1, folderId: a.id, title: "One")
+        try database.addWork(galleryId: 1, folderID: b.id!)
+        try database.addWork(galleryId: 1, folderID: site.id!)
+        _ = try database.upsertWork(galleryId: 2, folderId: a.id, title: "Two")
+        try database.dbWriter.write { db in
+            try db.execute(sql: "UPDATE folder_works SET added_at = '2026-01-01T00:00:00Z' WHERE folder_id = ?", arguments: [a.id])
+            try db.execute(sql: "UPDATE folder_works SET added_at = '2026-02-01T00:00:00Z' WHERE folder_id = ?", arguments: [b.id])
+        }
+        let folders = try database.listFolders()
+        let keys = Dictionary(uniqueKeysWithValues: folders.compactMap { folder in folder.id.map { ($0, String($0)) } })
+        let names = Dictionary(uniqueKeysWithValues: folders.compactMap { folder in folder.id.map { (String($0), folder.name) } })
+        let times = try DuplicateCleaner.folderTimes(database)
+        func found(_ options: DuplicateCleanupOptions, order: [String]) -> [DuplicateGroup] {
+            let rank = DuplicateFinder.rank(order: order, standard: folders.compactMap { $0.id.map(String.init) })
+            return DuplicateFinder.placements(try! database.listWorks(), addedAt: times, folderKeys: keys, folderNames: names, folderRank: rank,
+                                              fixed: [String(site.id!)], options: options)
+        }
+        var options = DuplicateCleanupOptions()
+        XCTAssertEqual(options.match, .sameNumber, "The work number is the default")
+        let byFolder = found(options, order: [String(b.id!)])
+        XCTAssertEqual(byFolder.count, 1, "A work in one folder is not a duplicate")
+        XCTAssertEqual(Set(byFolder[0].copies.map(\.title)), ["A", "B"], "A folder kept with website favorites is not touched")
+        XCTAssertEqual(byFolder[0].keeper?.title, "B")
+        options.useFolderOrder = false
+        XCTAssertEqual(found(options, order: [])[0].keeper?.title, "A", "Without folder order, the folder it went into first stays")
+
+        let undo = try DuplicateCleaner.applyComics(byFolder, combine: true, removeFromWebsite: false, websiteFolders: [], database: database)
+        XCTAssertEqual(undo.tidiedCount, 1)
+        XCTAssertEqual(undo.removedCount, 0, "No work leaves the library")
+        XCTAssertEqual(Set(try XCTUnwrap(database.getWork(galleryId: 1)).folders.map(\.name)), ["B", "Favorites 0"])
+        try DuplicateCleaner.undo(undo, database: database, images: try BooruStore(), accounts: BooruAccountSync(store: try BooruStore()))
+        XCTAssertEqual(Set(try XCTUnwrap(database.getWork(galleryId: 1)).folders.map(\.name)), ["A", "B", "Favorites 0"])
+    }
+
+    func testCleanupOptionsReadOlderSavesAndKeepTheirChoices() throws {
+        let suite = "duplicate-options-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data(#"{"keep":"newestSaved"}"#.utf8), forKey: "library.duplicateCleanup")
+        let read = DuplicateCleanupOptions.load(images: false, defaults: defaults)
+        XCTAssertEqual(read.keep, .newestSaved)
+        XCTAssertEqual(read.match, .sameNumber, "Options a save didn't have take their defaults")
+        var changed = read
+        changed.folderOrder = ["3", "1"]
+        changed.save(images: false, defaults: defaults)
+        XCTAssertEqual(DuplicateCleanupOptions.load(images: false, defaults: defaults), changed)
+        XCTAssertEqual(DuplicateCleanupOptions.load(images: true, defaults: defaults), DuplicateCleanupOptions(), "Each mode keeps its own")
+    }
+
+    func testImagesWithTheSameFileKeepTheCopyTheRulesPrefer() {
+        var p = BooruFixtureSource.post(1, server: BooruServer.presets[0]), q = BooruFixtureSource.post(2, server: BooruServer.presets[1])
+        p.fileURL = URL(string: "https://a.example/0123456789abcdef0123456789abcdef.jpg")
+        q.fileURL = URL(string: "https://b.example/0123456789abcdef0123456789abcdef.png")
+        p.width = 100; p.height = 100; q.width = 200; q.height = 200
+        let records = [BooruStore.FavoriteRecord(post: p, folderID: "unsorted", savedAt: Date(timeIntervalSince1970: 100)),
+                       BooruStore.FavoriteRecord(post: q, folderID: "art", savedAt: Date(timeIntervalSince1970: 200))]
+        var options = DuplicateCleanupOptions()
+        options.useFolderOrder = false
+        XCTAssertEqual(DuplicateFinder.images(records, serverNames: [:], folderRank: [:], options: options).first?.keeperID, p.id)
+        options.keep = .largestImage
+        XCTAssertEqual(DuplicateFinder.images(records, serverNames: [:], folderRank: [:], options: options).first?.keeperID, q.id)
+        options.keep = .oldestSaved
+        options.useFolderOrder = true
+        XCTAssertEqual(DuplicateFinder.images(records, serverNames: [:], folderRank: ["art": 0, "unsorted": 1], options: options).first?.keeperID, q.id)
+    }
 }

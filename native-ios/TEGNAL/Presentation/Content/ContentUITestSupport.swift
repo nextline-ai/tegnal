@@ -134,6 +134,34 @@ enum ContentUITestSupport {
                     title: "함께 저장 \(index + 1)", bookmarkedAt: String(format: "2026-08-15T08:00:%02dZ", 5 - index))
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--booru-folder-style-test") {
+            // A library from before server folders: one folder holding two servers' images, no style chosen.
+            let servers = env.booru.servers
+            if servers.count >= 2 {
+                let folder = try! env.booru.saveFolder(name: "Shared")
+                try! env.booru.saveFavorite(BooruFixtureSource.post(1, server: servers[0]), folderID: folder)
+                try! env.booru.saveFavorite(BooruFixtureSource.post(2, server: servers[1]), folderID: folder)
+            }
+            try! env.booru.removeSetting(BooruFolderStyle.key)
+            try! env.booru.refresh()
+        }
+        if ProcessInfo.processInfo.arguments.contains("--duplicate-cleanup-test") {
+            let mine = try! env.database.createFolder(name: "내 폴더")
+            let copies: [(Int64, Int64?, String, String, String, Int)] = [
+                (930000010, mine.id, "[서클] 여름의 끝 [Korean]", "korean", "2026-01-05T09:00:00Z", 20),
+                (930000030, nil, "[서클] 여름의 끝 [Korean] [팀 B]", "korean", "2026-03-05T09:00:00Z", 24),
+                (930000020, nil, "[서클] 여름의 끝", "japanese", "2026-02-05T09:00:00Z", 22),
+                (930000040, mine.id, "[모임] 겨울 이야기 (단편집)", "korean", "2026-01-10T09:00:00Z", 30),
+                (930000050, nil, "[모임] 겨울 이야기 [Korean]", "korean", "2026-04-10T09:00:00Z", 30),
+            ]
+            for (id, folder, title, language, saved, pages) in copies {
+                _ = try! env.database.upsertWork(galleryId: id, folderId: folder, title: title, artists: title.contains("서클") ? "작가" : "다른 작가",
+                                                 language: language, type: "manga", bookmarkedAt: saved, pageCount: pages)
+            }
+            // The same work saved in a second folder.
+            let second = try! env.database.createFolder(name: "두 번째 폴더")
+            try! env.database.addWork(galleryId: 930000040, folderID: second.id!)
+        }
         if ProcessInfo.processInfo.arguments.contains("--favorites-setup-test") {
             let favorites = AccountFavorites(categories: [FavoriteCategory(id: 0, name: "Favorites 0", count: 80), FavoriteCategory(id: 3, name: "Favorites 3", count: 40)],
                                              members: [:], exclusive: true)

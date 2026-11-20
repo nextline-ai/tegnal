@@ -101,10 +101,11 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
   }
 
   /// One server chosen, a new folder is that server's; with several, the menu asks which, or global.
+  /// With folders shared by all servers, a new folder is shared too.
   void _createMenu(BuildContext buttonContext) {
     final chosen = _booru.store.selectedServers;
-    if (chosen.length < 2) {
-      _createFolder(chosen.firstOrNull?.id);
+    if (chosen.length < 2 || _booru.store.folderStyle == BooruFolderStyle.shared) {
+      _createFolder(_booru.store.newFolderServer(chosen.firstOrNull?.id));
       return;
     }
     showActionMenu(
