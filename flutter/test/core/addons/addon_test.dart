@@ -671,7 +671,14 @@ void main() {
     ).expand((group) => group.tags);
     for (final tag in tags) {
       expect(tag.original, isNotNull, reason: '${tag.query} is shown in Korean');
+      expect(RegExp(r'^(female|male|mixed|other|tag):').hasMatch(tag.name), isFalse, reason: '${tag.query} is shown without a namespace, got ${tag.name}');
     }
+    expect(tags.firstWhere((tag) => tag.query == 'female:big breasts').name, '거유');
+    expect(
+      addon.contents.tagTranslations!.entries.values.where((words) => RegExp(r'^(female|male|mixed|other|tag):', caseSensitive: false).hasMatch(words)),
+      isEmpty,
+      reason: 'No shown name starts with a namespace',
+    );
     expect(AddonRuntime.shared.effects.tags(matching: '거유', mode: AddonMode.comics).first.tag, 'female:big_breasts');
   });
 }
