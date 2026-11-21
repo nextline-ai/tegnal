@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
 
 import '../booru/booru_store.dart';
@@ -59,8 +60,9 @@ abstract interface class DriveBackend {
   /// False when this build carries no OAuth client ID.
   bool get isConfigured;
 
-  /// Restores a previously connected account without showing any UI.
-  Future<DriveAccount?> restore();
+  /// Restores a previously connected account without showing any UI. [known] is the account
+  /// the app remembered when it connected; without it the backend finds the account itself.
+  Future<DriveAccount?> restore({DriveAccount? known});
 
   /// Lets a person choose an account and grant Drive file access.
   Future<DriveAccount> connect();
@@ -103,7 +105,7 @@ class GoogleDriveBackend implements DriveBackend, DriveBackupFiles {
   final String _serverClientID;
   final http.Client _client;
   Future<void>? _initialized;
-  GoogleSignInAccount? _account;
+  DriveAccount? _account;
   String? _folder;
 
   @override
@@ -113,16 +115,33 @@ class GoogleDriveBackend implements DriveBackend, DriveBackupFiles {
 
   DriveAccount _identity(GoogleSignInAccount account) => DriveAccount(id: account.id, email: account.email);
 
+  /// A Drive token for [account] through Android's authorization API alone, never Credential
+  /// Manager, so it shows no sign-in sheet. Null when access was not granted (or was removed).
+  Future<String?> _token(DriveAccount account) async {
+    final data = await GoogleSignInPlatform.instance.clientAuthorizationTokensForScopes(
+      ClientAuthorizationTokensForScopesParameters(
+        request: AuthorizationRequestDetails(scopes: scopes, userId: account.id, email: account.email, promptIfUnauthorized: false),
+      ),
+    );
+    return data?.accessToken;
+  }
+
   @override
-  Future<DriveAccount?> restore() async {
+  Future<DriveAccount?> restore({DriveAccount? known}) async {
     if (!isConfigured) return null;
     await _initialize();
+    if (known != null) {
+      // The account connected before: its Drive access is checked quietly, with no sign-in.
+      if (await _token(known) == null) return null;
+      _account = known;
+      return known;
+    }
+    // Connected before the app remembered the account: one lightweight sign-in finds it.
     final account = await GoogleSignIn.instance.attemptLightweightAuthentication();
     if (account == null) return null;
     // Restoring never asks for permission; an account without Drive access is not connected.
     if (await account.authorizationClient.authorizationForScopes(scopes) == null) return null;
-    _account = account;
-    return _identity(account);
+    return _account = _identity(account);
   }
 
   @override
@@ -136,9 +155,8 @@ class GoogleDriveBackend implements DriveBackend, DriveBackupFiles {
       // The account was chosen; a failure granting Drive access is never a silent cancel.
       throw DriveConsentError('${error.code.name}${error.description == null ? '' : ' (${error.description})'}');
     }
-    _account = account;
     _folder = null;
-    return _identity(account);
+    return _account = _identity(account);
   }
 
   @override
@@ -155,21 +173,23 @@ class GoogleDriveBackend implements DriveBackend, DriveBackupFiles {
     }
   }
 
-  Future<Map<String, String>> _headers() async {
+  Future<String> _bearer() async {
     final account = _account;
     if (account == null) throw const DriveAuthorizationError();
-    final headers = await account.authorizationClient.authorizationHeaders(scopes);
-    if (headers == null) throw const DriveAuthorizationError();
-    return headers;
+    final token = await _token(account);
+    if (token == null) throw const DriveAuthorizationError();
+    return token;
   }
 
   Future<http.Response> _send(Future<http.Response> Function(Map<String, String> headers) request) async {
-    var response = await request(await _headers());
+    Map<String, String> headers(String token) => {'Authorization': 'Bearer $token'};
+    var token = await _bearer();
+    var response = await request(headers(token));
     if (response.statusCode == 401) {
       // A cached token can be stale; drop it once and ask again without prompting.
-      final token = (await _headers())['Authorization']?.replaceFirst('Bearer ', '');
-      if (token != null) await _account?.authorizationClient.clearAuthorizationToken(accessToken: token);
-      response = await request(await _headers());
+      await GoogleSignInPlatform.instance.clearAuthorizationToken(ClearAuthorizationTokenParams(accessToken: token));
+      token = await _bearer();
+      response = await request(headers(token));
     }
     if (response.statusCode == 401 || response.statusCode == 403) throw const DriveAuthorizationError();
     if (response.statusCode >= 300) throw DriveRequestError(response.statusCode);
@@ -320,6 +340,23 @@ class LibraryDriveSync extends ChangeNotifier {
   /// the app never contacts Google Sign-In, so a fresh install shows no account prompt.
   static const connectedKey = 'drive.accountConnected';
 
+  /// The connected account's ID and email, so a launch restores it without a sign-in sheet.
+  static const accountKey = 'drive.account';
+
+  DriveAccount? get _remembered {
+    final Object? value;
+    try {
+      value = jsonDecode(defaults.string(accountKey) ?? '');
+    } on FormatException {
+      return null;
+    }
+    if (value is! Map || value['id'] is! String || value['email'] is! String) return null;
+    return DriveAccount(id: value['id'] as String, email: value['email'] as String);
+  }
+
+  void _remember(DriveAccount? account) =>
+      account == null ? defaults.remove(accountKey) : defaults.set(accountKey, jsonEncode({'id': account.id, 'email': account.email}));
+
   /// Set by a restore (`UpdateBackup.libraryReplacedKey`); the next sync sends the restored library as the newest state.
   static const replacedKey = 'backup.libraryReplacedAt';
 
@@ -395,7 +432,8 @@ class LibraryDriveSync extends ChangeNotifier {
   Future<void> restore() async {
     if (!isConfigured || !_connected) return;
     try {
-      _account = await backend.restore();
+      _account = await backend.restore(known: _remembered);
+      if (_account != null) _remember(_account);
     } on Object {
       _account = null;
     }
@@ -410,6 +448,7 @@ class LibraryDriveSync extends ChangeNotifier {
     try {
       _account = await backend.connect();
       defaults.set(connectedKey, true);
+      _remember(_account);
     } on DriveConsentError catch (error) {
       debugPrint('Google Drive access: ${error.reason}');
       return L10n.text('Unable to connect Google Account: %@', [error.reason]);
@@ -432,6 +471,7 @@ class LibraryDriveSync extends ChangeNotifier {
     enabled = false;
     _account = null;
     defaults.remove(connectedKey);
+    _remember(null);
     notifyListeners();
     try {
       await backend.disconnect();
@@ -493,7 +533,10 @@ class LibraryDriveSync extends ChangeNotifier {
   }
 
   Future<void> _synchronize() async {
-    if (_account == null && _connected) _account = await backend.restore();
+    if (_account == null && _connected) {
+      _account = await backend.restore(known: _remembered);
+      if (_account != null) _remember(_account);
+    }
     final account = _account;
     if (account == null) {
       _invalidateAccess();
