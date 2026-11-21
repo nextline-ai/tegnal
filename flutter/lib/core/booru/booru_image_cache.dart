@@ -302,7 +302,11 @@ class BooruMediaDownloader implements BooruMediaDownloading {
     try {
       return await _downloadMedia(url, server, post, folder, progress);
     } catch (error) {
-      if (post.isVideo || !BooruWebTransport.hasSession(server)) rethrow;
+      if (post.isVideo) {
+        if (!BooruWebTransport.isAvailable) rethrow;
+        return _downloadVideoInBrowser(url, server, post, folder, progress);
+      }
+      if (!BooruWebTransport.hasSession(server)) rethrow;
       final data = await BooruWebTransport.imageData(url.toString(), server);
       final ext = BooruMediaType.imageExtension(data);
       if (ext == null) throw ContentError.unsupportedFormat;
@@ -310,6 +314,24 @@ class BooruMediaDownloader implements BooruMediaDownloading {
       await File('${folder.path}/$name').writeAsBytes(data, flush: true);
       return name;
     }
+  }
+
+  /// A server that refuses the app's own connection still serves the validated page; the page
+  /// streams the video into the file piece by piece.
+  Future<String> _downloadVideoInBrowser(Uri url, BooruServer server, BooruPost post, Directory folder, void Function(double fraction)? progress) async {
+    await folder.create(recursive: true);
+    final temporary = File('${folder.path}/.${post.postID}.download');
+    try {
+      final type = await BooruWebTransport.download(url.toString(), server, temporary, progress: progress);
+      if (type.isNotEmpty && !type.toLowerCase().startsWith('video/')) throw const BooruError(BooruErrorKind.invalidResponse);
+    } catch (_) {
+      await temporary.delete().catchError((_) => temporary);
+      rethrow;
+    }
+    final destination = File('${folder.path}/${post.postID}.${post.fileExtension.toLowerCase()}');
+    if (await destination.exists()) await destination.delete();
+    await temporary.rename(destination.path);
+    return destination.uri.pathSegments.last;
   }
 
   Future<String> _downloadMedia(Uri url, BooruServer server, BooruPost post, Directory folder, void Function(double fraction)? progress) async {

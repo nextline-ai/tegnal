@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection' show Queue;
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -503,6 +504,72 @@ abstract final class BooruWebTransport {
       }),
     );
   }
+
+  static var _nextStream = 0;
+
+  /// Streams [url] into [file] through the server's validated page, a piece at a time, so a
+  /// video of any size never sits in memory whole. A stream the page lost (it navigated, or the
+  /// connection dropped) resumes from the bytes already written. Returns the content type.
+  static Future<String> download(String url, BooruServer server, File file, {void Function(double fraction)? progress}) async {
+    final target = Uri.tryParse(url);
+    if (target == null || target.scheme != 'https' || target.userInfo.isNotEmpty) throw const BooruError(BooruErrorKind.invalidServer);
+    final key = 'tegnal-${_nextStream++}';
+    final sink = file.openWrite();
+    var received = 0, total = -1, resumes = 0;
+    var type = '';
+    var open = false;
+    Future<Map<Object?, Object?>> run(String script, Map<String, Object?> arguments) {
+      final browser = _browser(server);
+      return browser.shared(image: true, () async {
+        await browser.page.ready();
+        final value = jsonDecode(await browser.page.evaluate(script, arguments));
+        if (value is! Map) throw const BooruError(BooruErrorKind.invalidResponse);
+        return value;
+      });
+    }
+
+    try {
+      while (true) {
+        if (!open) {
+          final head = await run(BooruBrowserScripts.streamOpen, {'address': url, 'key': key, 'offset': received});
+          final status = (head['status'] as num?)?.toInt() ?? 0;
+          if (status < 200 || status >= 300 || (received > 0 && status != 206)) throw const BooruError(BooruErrorKind.invalidResponse);
+          if (received == 0) {
+            type = head['type'] as String? ?? '';
+            total = (head['length'] as num?)?.toInt() ?? -1;
+          }
+          open = true;
+        }
+        final Map<Object?, Object?> piece;
+        try {
+          piece = await run(BooruBrowserScripts.streamRead, {'key': key, 'limit': 2 << 20});
+        } on Object {
+          // Reopen from what is written; a server that ignores ranges cannot resume.
+          if (++resumes > 3) rethrow;
+          open = false;
+          continue;
+        }
+        if (piece['missing'] == true) {
+          if (++resumes > 3) throw const NetworkError(NetworkErrorCode.networkConnectionLost);
+          open = false;
+          continue;
+        }
+        if (piece['data'] case final String data) {
+          final bytes = base64Decode(data);
+          sink.add(bytes);
+          received += bytes.length;
+          if (total > 0) progress?.call(math.min(1, received / total));
+        }
+        if (piece['done'] == true) break;
+      }
+      await sink.close();
+      return type;
+    } catch (_) {
+      await sink.close();
+      unawaited(run(BooruBrowserScripts.streamClose, {'key': key}).then((_) {}, onError: (_) {}));
+      rethrow;
+    }
+  }
 }
 
 /// The scripts the hidden page runs, and how their JSON results read.
@@ -561,6 +628,50 @@ try {
         file.onerror = reject; file.readAsDataURL(blob);
     });
 } finally { clearTimeout(timer); }
+''';
+
+  /// Opens a streamed read of a media address under [key], from byte [offset].
+  static const streamOpen = '''
+const target = new URL(address);
+const streams = window.__tegnalStreams = window.__tegnalStreams || {};
+const old = streams[key];
+delete streams[key];
+if (old) { try { await old.cancel(); } catch (_) {} }
+const headers = offset > 0 ? {Range: 'bytes=' + offset + '-'} : {};
+const response = await fetch(target.href, {credentials: target.origin === location.origin ? 'include' : 'omit',
+    redirect: 'error', headers});
+if (!response.ok) return {status: response.status};
+streams[key] = response.body.getReader();
+return {status: response.status, length: Number(response.headers.get('content-length')) || -1,
+    type: response.headers.get('content-type') || ''};
+''';
+
+  /// Up to [limit] bytes of the stream [key], base64 encoded, and whether it has ended.
+  static const streamRead = '''
+const streams = window.__tegnalStreams || {};
+const reader = streams[key];
+if (!reader) return {missing: true};
+const parts = [];
+let size = 0, done = false;
+while (size < limit) {
+    const chunk = await reader.read();
+    if (chunk.done) { done = true; delete streams[key]; break; }
+    parts.push(chunk.value); size += chunk.value.byteLength;
+}
+if (!parts.length) return {done};
+const url = await new Promise((resolve, reject) => {
+    const file = new FileReader(); file.onload = () => resolve(file.result);
+    file.onerror = reject; file.readAsDataURL(new Blob(parts));
+});
+return {data: url.slice(url.indexOf(',') + 1), done};
+''';
+
+  static const streamClose = '''
+const streams = window.__tegnalStreams || {};
+const reader = streams[key];
+delete streams[key];
+if (reader) { try { await reader.cancel(); } catch (_) {} }
+return {};
 ''';
 
   static const outerHTML = "return document.readyState === 'loading' ? null : document.documentElement.outerHTML;";
