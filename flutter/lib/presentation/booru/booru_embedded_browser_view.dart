@@ -257,7 +257,8 @@ class _BooruWebsiteViewState extends State<_BooruWebsiteView> {
         // Without the cookie bridge the shared web view store still holds them.
       }
     }
-    BooruBrowserSession.shared.clearChallenge(server);
+    BooruBrowserSession.shared.clearChallenge(server);    // A hidden page that loaded before the check passed starts again with the new cookies.
+    BooruWebTransport.reset(server);
   }
 
   @override
