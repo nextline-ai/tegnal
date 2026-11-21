@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/gestures.dart' show VelocityTracker;
-import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/booru/booru_client.dart';
@@ -19,6 +17,7 @@ import '../content/image_translation.dart';
 import '../content/reader_models.dart';
 import '../content/reader_translation.dart' show ZoomedText;
 import 'booru_common.dart';
+import 'booru_web_video.dart';
 
 /// What the media reports to the viewer, as the native document's messages do.
 sealed class BooruMediaGesture {
@@ -124,8 +123,8 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   Uint8List? _image;
   Size? _imageSize;
   VideoPlayerController? _video;
-  File? _videoFile;
   bool _videoViaBrowser = false;
+  bool _webVideo = false;
   bool _videoControls = true;
   Timer? _controlsTimer;
   int _retries = 0;
@@ -187,7 +186,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
     _video?.dispose();
     _video = null;
     _videoViaBrowser = false;
-    _deleteVideoFile();
+    _webVideo = false;
     _image = null;
     _imageSize = null;
     _retries = 0;
@@ -257,27 +256,21 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   }
 
   Future<void> _loadVideo() async {
-    final url = widget.url;
     // A server behind a browser check refuses the player's own requests, as it does direct image
-    // requests; then the hidden browser page fetches the video into a temporary file.
-    final viaBrowser = BooruWebTransport.isAvailable && (_videoViaBrowser || BooruWebTransport.prefersBrowser(widget.server));
-    final VideoPlayerController controller;
-    if (viaBrowser) {
-      try {
-        final file = await _browserVideo(url);
-        if (!mounted || widget.url != url) return;
-        controller = VideoPlayerController.file(file, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
-      } on Object {
-        if (mounted && widget.url == url) _retry();
-        return;
-      }
-    } else {
-      controller = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        httpHeaders: BooruBrowserSession.shared.requestHeaders(widget.server, url: url),
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-      );
+    // requests; then the browser's own player streams the video with the validated connection.
+    if (BooruWebTransport.isAvailable && (_videoViaBrowser || BooruWebTransport.prefersBrowser(widget.server))) {
+      final post = widget.post;
+      setState(() {
+        _webVideo = true;
+        _imageSize = post.width > 0 && post.height > 0 ? Size(post.width.toDouble(), post.height.toDouble()) : const Size(16, 9);
+      });
+      return;
     }
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(widget.url),
+      httpHeaders: BooruBrowserSession.shared.requestHeaders(widget.server, url: widget.url),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    );
     _video = controller;
     controller.addListener(_videoChanged);
     try {
@@ -290,28 +283,10 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
       _scheduleControlsHide();
     } on Object {
       if (mounted && _video == controller) {
-        if (!viaBrowser) _videoViaBrowser = true;
+        _videoViaBrowser = true;
         _retryVideo();
       }
     }
-  }
-
-  Future<File> _browserVideo(String url) async {
-    final data = await BooruWebTransport.imageData(url, widget.server);
-    final segment = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
-    final ext = segment.contains('.') ? segment.split('.').last.toLowerCase() : widget.post.fileExtension.toLowerCase();
-    final folder = Directory('${(await getTemporaryDirectory()).path}/booru-video');
-    await folder.create(recursive: true);
-    _deleteVideoFile();
-    final file = _videoFile = File('${folder.path}/${widget.post.postID}-${DateTime.now().microsecondsSinceEpoch}.$ext');
-    await file.writeAsBytes(data, flush: true);
-    return file;
-  }
-
-  void _deleteVideoFile() {
-    final file = _videoFile;
-    _videoFile = null;
-    if (file != null) unawaited(file.delete().then((_) {}, onError: (_) {}));
   }
 
   void _retryVideo() {
@@ -326,7 +301,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
     final value = _video?.value;
     if (value == null || !value.isInitialized) return;
     if (value.hasError) {
-      if (_videoFile == null) _videoViaBrowser = true;
+      _videoViaBrowser = true;
       return _retryVideo();
     }
     final ended = !value.isLooping && value.duration > Duration.zero && value.position >= value.duration;
@@ -570,6 +545,22 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   Widget? _media(Size size) {
     if (widget.booru.fixture) return CustomPaint(painter: _FixtureArtPainter(widget.post.postID));
     if (_video case final video? when video.value.isInitialized) return VideoPlayer(video);
+    if (_webVideo) {
+      final audio = BooruVideoAudioPreferences(widget.booru.booruDefaults);
+      return BooruWebVideo(
+        key: ValueKey(widget.url),
+        url: widget.url,
+        server: widget.server,
+        post: widget.post,
+        active: widget.active,
+        muted: audio.muted,
+        onStatus: _report,
+        onSize: (size) {
+          if (mounted && size != _imageSize) setState(() => _imageSize = size);
+        },
+        onMuted: (muted) => audio.update(muted: muted),
+      );
+    }
     final image = _image;
     if (image == null) return null;
     return Image.memory(image, fit: BoxFit.contain, gaplessPlayback: true, filterQuality: FilterQuality.medium);
