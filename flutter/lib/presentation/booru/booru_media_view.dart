@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/gestures.dart' show VelocityTracker;
+import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/booru/booru_client.dart';
@@ -122,6 +124,8 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   Uint8List? _image;
   Size? _imageSize;
   VideoPlayerController? _video;
+  File? _videoFile;
+  bool _videoViaBrowser = false;
   bool _videoControls = true;
   Timer? _controlsTimer;
   int _retries = 0;
@@ -182,6 +186,8 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
     _video?.removeListener(_videoChanged);
     _video?.dispose();
     _video = null;
+    _videoViaBrowser = false;
+    _deleteVideoFile();
     _image = null;
     _imageSize = null;
     _retries = 0;
@@ -251,11 +257,27 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   }
 
   Future<void> _loadVideo() async {
-    final controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.url),
-      httpHeaders: BooruBrowserSession.shared.requestHeaders(widget.server, url: widget.url),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
+    final url = widget.url;
+    // A server behind a browser check refuses the player's own requests, as it does direct image
+    // requests; then the hidden browser page fetches the video into a temporary file.
+    final viaBrowser = BooruWebTransport.isAvailable && (_videoViaBrowser || BooruWebTransport.prefersBrowser(widget.server));
+    final VideoPlayerController controller;
+    if (viaBrowser) {
+      try {
+        final file = await _browserVideo(url);
+        if (!mounted || widget.url != url) return;
+        controller = VideoPlayerController.file(file, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
+      } on Object {
+        if (mounted && widget.url == url) _retry();
+        return;
+      }
+    } else {
+      controller = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        httpHeaders: BooruBrowserSession.shared.requestHeaders(widget.server, url: url),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+    }
     _video = controller;
     controller.addListener(_videoChanged);
     try {
@@ -267,8 +289,29 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
       setState(() => _imageSize = controller.value.size);
       _scheduleControlsHide();
     } on Object {
-      if (mounted && _video == controller) _retryVideo();
+      if (mounted && _video == controller) {
+        if (!viaBrowser) _videoViaBrowser = true;
+        _retryVideo();
+      }
     }
+  }
+
+  Future<File> _browserVideo(String url) async {
+    final data = await BooruWebTransport.imageData(url, widget.server);
+    final segment = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
+    final ext = segment.contains('.') ? segment.split('.').last.toLowerCase() : widget.post.fileExtension.toLowerCase();
+    final folder = Directory('${(await getTemporaryDirectory()).path}/booru-video');
+    await folder.create(recursive: true);
+    _deleteVideoFile();
+    final file = _videoFile = File('${folder.path}/${widget.post.postID}-${DateTime.now().microsecondsSinceEpoch}.$ext');
+    await file.writeAsBytes(data, flush: true);
+    return file;
+  }
+
+  void _deleteVideoFile() {
+    final file = _videoFile;
+    _videoFile = null;
+    if (file != null) unawaited(file.delete().then((_) {}, onError: (_) {}));
   }
 
   void _retryVideo() {
@@ -282,7 +325,10 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
   void _videoChanged() {
     final value = _video?.value;
     if (value == null || !value.isInitialized) return;
-    if (value.hasError) return _retryVideo();
+    if (value.hasError) {
+      if (_videoFile == null) _videoViaBrowser = true;
+      return _retryVideo();
+    }
     final ended = !value.isLooping && value.duration > Duration.zero && value.position >= value.duration;
     final status = ended ? 'ended' : (value.isPlaying ? 'playing' : 'ready');
     if (status != _lastVideoStatus) {
