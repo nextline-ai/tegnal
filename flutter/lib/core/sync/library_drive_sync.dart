@@ -303,6 +303,10 @@ class LibraryDriveSync extends ChangeNotifier {
 
   static const enabledKey = 'drive.librarySyncEnabled';
 
+  /// Set once a person connects a Google account and cleared when they disconnect. Without it
+  /// the app never contacts Google Sign-In, so a fresh install shows no account prompt.
+  static const connectedKey = 'drive.accountConnected';
+
   /// Set by a restore (`UpdateBackup.libraryReplacedKey`); the next sync sends the restored library as the newest state.
   static const replacedKey = 'backup.libraryReplacedAt';
 
@@ -371,9 +375,12 @@ class LibraryDriveSync extends ChangeNotifier {
     _needsUpload = true;
   }
 
+  // Installs from before the flag kept sync on only after connecting.
+  bool get _connected => (defaults.boolean(connectedKey) ?? false) || _enabled;
+
   /// Finds a previously connected account without asking anything.
   Future<void> restore() async {
-    if (!isConfigured) return;
+    if (!isConfigured || !_connected) return;
     try {
       _account = await backend.restore();
     } on Object {
@@ -389,6 +396,7 @@ class LibraryDriveSync extends ChangeNotifier {
     if (!isConfigured) return L10n.text('Google Drive backup is coming soon. For now, back up manually to a local file in Library Management.');
     try {
       _account = await backend.connect();
+      defaults.set(connectedKey, true);
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) return null;
       return L10n.text('Unable to connect Google Account: %@', [error.code.name]);
@@ -405,6 +413,7 @@ class LibraryDriveSync extends ChangeNotifier {
   Future<void> disconnect() async {
     enabled = false;
     _account = null;
+    defaults.remove(connectedKey);
     notifyListeners();
     try {
       await backend.disconnect();
@@ -466,7 +475,7 @@ class LibraryDriveSync extends ChangeNotifier {
   }
 
   Future<void> _synchronize() async {
-    _account ??= await backend.restore();
+    if (_account == null && _connected) _account = await backend.restore();
     final account = _account;
     if (account == null) {
       _invalidateAccess();

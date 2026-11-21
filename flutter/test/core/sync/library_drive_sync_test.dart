@@ -25,12 +25,13 @@ class FakeBackend implements DriveBackend {
   bool signedIn = false;
   bool revoked = false;
   bool authorized = true;
+  int restores = 0;
 
   @override
   bool get isConfigured => configured;
 
   @override
-  Future<DriveAccount?> restore() async => signedIn ? DriveAccount(id: accountID, email: 'person@example.com') : null;
+  Future<DriveAccount?> restore() async => ++restores > 0 && signedIn ? DriveAccount(id: accountID, email: 'person@example.com') : null;
 
   @override
   Future<DriveAccount> connect() async {
@@ -241,5 +242,34 @@ void main() {
     await a.sync.synchronize();
     expect(drive.files.length, files);
     expect(a.sync.status, L10n.text('Sync Off'));
+  });
+
+  test('launch never asks Google Sign-In before a person connects, and restores after they do', () async {
+    final drive = FakeDrive();
+    final a = device(drive, 'a');
+    // A device-wide Google account is there, but this app was never connected.
+    a.backend.signedIn = true;
+    await a.sync.restore();
+    expect(a.backend.restores, 0);
+    expect(a.sync.account, isNull);
+
+    await a.sync.connect();
+    final relaunched = LibraryDriveSync(
+      backend: a.backend,
+      database: a.database,
+      booru: BooruStore.inMemory(preferences: a.preferences),
+      defaults: a.preferences.defaults,
+      booruDefaults: a.preferences.booruDefaults,
+      directory: Directory('${root.path}/a'),
+    );
+    // Sync turned off still keeps the account for Drive backups.
+    relaunched.enabled = false;
+    await relaunched.restore();
+    expect(a.backend.restores, 1);
+    expect(relaunched.account, isNotNull);
+
+    await relaunched.disconnect();
+    await relaunched.restore();
+    expect(a.backend.restores, 1);
   });
 }
