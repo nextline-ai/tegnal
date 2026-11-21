@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/booru/booru_browser.dart';
 import '../../core/booru/booru_models.dart';
+import '../../core/content/content_errors.dart';
 import '../../core/support/perf_trace.dart';
 import '../browser/hidden_web_page.dart';
 
@@ -13,13 +14,15 @@ class WebViewBooruPage implements BooruBrowserPage {
     final watch = Stopwatch()..start();
     // Requests need only a document of the server's origin. Its plain-text robots file loads
     // without the site's scripts, images and ads; a server without one serves its home page.
-    final start = Uri.parse(server.baseURL).resolve('/robots.txt');
+    final start = _start = Uri.parse(server.baseURL).resolve('/robots.txt');
     _page = HiddenWebPage(start, scriptFailure: () => const BooruError(BooruErrorKind.invalidResponse));
     _page.ready().then((_) => PerfTrace.log('booru page load', watch.elapsed, detail: start.path), onError: (_) {});
   }
 
   final BooruServer server;
   late final HiddenWebPage _page;
+  late final Uri _start;
+  Future<void>? _reload;
 
   @override
   Uri? get url => _page.url;
@@ -29,7 +32,24 @@ class WebViewBooruPage implements BooruBrowserPage {
   bool get isolatesScripts => false;
 
   @override
-  Future<void> ready() => _page.ready();
+  Future<void> ready() async {
+    try {
+      await _page.ready();
+    } on NetworkError {
+      // A failed load would fail every later request, even after the person passes the
+      // server's check in Validate Client; the next request loads the page again instead.
+      if (_page.isStopped) rethrow;
+      final reload = _reload ??= () async {
+        _page.load(_page.url ?? _start);
+        try {
+          await _page.ready();
+        } finally {
+          _reload = null;
+        }
+      }();
+      await reload;
+    }
+  }
 
   @override
   Future<int> navigate(Uri url) async {

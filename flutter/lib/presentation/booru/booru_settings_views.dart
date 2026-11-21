@@ -769,6 +769,9 @@ class _BooruValidationViewState extends State<BooruValidationView> {
       BooruBrowserSession.shared.importCookieHeader(header, address.toString(), server);
     }
     BooruBrowserSession.shared.clearChallenge(server);
+    // The hidden page may have loaded before the check passed; the next request starts a fresh
+    // one with the website's new cookies, as iOS adopts the validated page.
+    BooruWebTransport.reset(server);
     widget.booru.store.clearGoldRestrictions(serverID: server.id);
     booruClientValidated.value = (server.id, DateTime.now().microsecondsSinceEpoch);
   }
