@@ -1,28 +1,25 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../../core/content/content_environment.dart';
-import '../../core/support/l10n.dart';
 import '../../core/sync/library_drive_sync.dart';
-import '../design/alert_dialog.dart';
 import '../home/home_stage.dart';
+import 'drive_invitation.dart';
 
-/// Android only: once, someone who set up the app before Google Drive existed (or skipped it) is
-/// asked to connect it, as iOS needs no such step for iCloud. New installs see onboarding's Drive
+/// Android only: once, someone who set up the app before Google Drive existed (or skipped it) sees
+/// the full-page invitation to connect it, as iOS needs no such step for iCloud. New installs see onboarding's Drive
 /// page instead, which counts as the suggestion.
 class DriveSuggestionGate extends StatefulWidget {
-  const DriveSuggestionGate({super.key, required this.sync, required this.content, required this.child, this.isTesting = false});
+  const DriveSuggestionGate({super.key, required this.sync, required this.content, required this.child, this.footprint, this.isTesting = false});
   final LibraryDriveSync? sync;
+
+  /// What the library holds now, shown on the invitation.
+  final DriveFootprint Function()? footprint;
   final ContentEnvironment content;
   final Widget child;
   final bool isTesting;
 
   /// True once the suggestion was shown in this launch, so other launch prompts wait for the next one.
   static bool askedThisLaunch = false;
-
-  /// The suggestion's own text, shared with onboarding's page.
-  static String get message => L10n.text(
-    'Sign in with Google to keep your libraries, folders and settings in sync across your Android devices, and to keep a copy of each automatic backup in Google Drive. TEGNAL only sees the files it creates in its own TEGNAL folder.',
-  );
 
   @override
   State<DriveSuggestionGate> createState() => _DriveSuggestionGateState();
@@ -65,29 +62,14 @@ class _DriveSuggestionGateState extends State<DriveSuggestionGate> {
     sync.markSuggested();
     DriveSuggestionGate.askedThisLaunch = true;
     _asking = true;
-    final connect = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => TegnalAlertDialog(
-        title: Text(L10n.text('Keep Your Library in Google Drive')),
-        content: Text(DriveSuggestionGate.message),
-        actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Not Now'))),
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Connect'))),
-        ],
-      ),
-    );
+    DriveFootprint? footprint;
+    try {
+      footprint = widget.footprint?.call();
+    } on Object {
+      footprint = null;
+    }
+    await DriveInvitationPage.show(context, sync: sync, footprint: footprint);
     _asking = false;
-    if (connect != true || !mounted) return;
-    final error = await sync.connect();
-    if (error == null || !mounted) return;
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => TegnalAlertDialog(
-        title: Text(L10n.text('Google Drive')),
-        content: Text(error),
-        actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
-      ),
-    );
   }
 
   @override

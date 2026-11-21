@@ -119,16 +119,19 @@ void main() {
     await tester.tap(key('onboarding.continue'));
     await tester.pumpAndSettle();
     expect(key('onboarding.drive'), findsOneWidget);
-    expect(find.text('Set Up Later'), findsOneWidget, reason: 'Without an account the way on says it can wait');
+    expect(key('drive.invitation.storage'), findsOneWidget);
+    expect(key('drive.invitation.footprint'), findsNothing, reason: 'A first run has no library to count yet');
+    expect(find.text('Connect Google Drive'), findsOneWidget, reason: 'Connecting is the main button');
+    expect(key('drive.invitation.skip'), findsOneWidget, reason: 'Going on without it is a quiet line');
     expect(drive.shouldSuggest, isFalse, reason: 'Seeing the page is the suggestion; no prompt follows later');
 
     await tester.runAsync(() async {
-      await tester.tap(key('onboarding.connectDrive'));
+      await tester.tap(key('drive.invitation.primary'));
       await Future<void>.delayed(const Duration(milliseconds: 200));
     });
     await tester.pumpAndSettle();
-    expect(key('onboarding.driveConnected'), findsOneWidget);
-    expect(find.text('person@example.com'), findsOneWidget);
+    expect(key('drive.invitation.connected'), findsOneWidget);
+    expect(find.text('Connected as person@example.com'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
     expect(drive.enabled, isTrue);
 

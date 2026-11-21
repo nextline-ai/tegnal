@@ -30,6 +30,7 @@ import '../presentation/design/grouped_form.dart';
 import '../presentation/design/symbols.dart';
 import '../presentation/design/system_colors.dart';
 import '../presentation/imports/import_views.dart';
+import '../presentation/settings/drive_invitation.dart';
 import '../presentation/settings/drive_suggestion.dart';
 import '../presentation/settings/settings_rows.dart';
 import '../presentation/taste/taste_context.dart';
@@ -562,6 +563,7 @@ class _RootState extends State<_Root> {
     return DriveSuggestionGate(
       sync: AppPlatform.hasDriveSync ? services.sync : null,
       content: services.content,
+      footprint: () => DriveFootprint.of(database: services.database, images: services.booru),
       isTesting: services.isTesting,
       child: BackupReminderGate(
         database: services.database,
