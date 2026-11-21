@@ -26,12 +26,13 @@ class FakeBackend implements DriveBackend {
   bool revoked = false;
   bool authorized = true;
   int restores = 0;
+  DriveAccount? lastKnown;
 
   @override
   bool get isConfigured => configured;
 
   @override
-  Future<DriveAccount?> restore() async => ++restores > 0 && signedIn ? DriveAccount(id: accountID, email: 'person@example.com') : null;
+  Future<DriveAccount?> restore({DriveAccount? known}) async => (lastKnown = known) == known && ++restores > 0 && signedIn ? DriveAccount(id: accountID, email: 'person@example.com') : null;
 
   @override
   Future<DriveAccount> connect() async {
@@ -267,8 +268,12 @@ void main() {
     await relaunched.restore();
     expect(a.backend.restores, 1);
     expect(relaunched.account, isNotNull);
+    // The launch names the remembered account, so the backend needs no sign-in to find it.
+    expect(a.backend.lastKnown?.id, 'account-1');
+    expect(a.backend.lastKnown?.email, 'person@example.com');
 
     await relaunched.disconnect();
+    expect(a.preferences.defaults.string(LibraryDriveSync.accountKey), isNull);
     await relaunched.restore();
     expect(a.backend.restores, 1);
   });

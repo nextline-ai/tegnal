@@ -29,7 +29,7 @@ class _Drive implements DriveBackend, DriveBackupFiles {
   @override
   bool get isConfigured => configured;
   @override
-  Future<DriveAccount?> restore() async => signedIn ? const DriveAccount(id: 'a', email: 'a@example.com') : null;
+  Future<DriveAccount?> restore({DriveAccount? known}) async => signedIn ? const DriveAccount(id: 'a', email: 'a@example.com') : null;
   @override
   Future<DriveAccount> connect() async => const DriveAccount(id: 'a', email: 'a@example.com');
   @override

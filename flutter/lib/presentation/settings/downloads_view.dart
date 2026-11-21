@@ -21,6 +21,7 @@ import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
 import '../works/works_models.dart';
 import 'download_location_view.dart';
+import 'download_preview.dart';
 import 'settings_page.dart';
 
 /// What opening a download offline needs.
@@ -393,8 +394,13 @@ class _DownloadFilesPageState extends State<DownloadFilesPage> {
   @override
   void initState() {
     super.initState();
-    // A comic opens straight in the reader, as the native screen does on appear.
-    if (widget.item.gallery != null) WidgetsBinding.instance.addPostFrameCallback((_) => _read());
+    // A comic opens straight in the reader, and an image or video in its preview, as the native
+    // screen does on appear.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.item.gallery != null) return _read();
+      final first = widget.downloads.store.urls(widget.item).firstOrNull;
+      if (first != null && mounted) DownloadPreviewPage.open(context, first);
+    });
   }
 
   void _read() {
@@ -475,6 +481,7 @@ class _DownloadFilesPageState extends State<DownloadFilesPage> {
               ),
             for (final File file in widget.downloads.store.urls(item))
               FormRow(
+                onTap: () => DownloadPreviewPage.open(context, file),
                 child: Text(file.uri.pathSegments.last, style: TegnalType.style(17, color: tint)),
               ),
           ],

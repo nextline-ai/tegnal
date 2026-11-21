@@ -43,7 +43,8 @@ class _DriveSyncSectionState extends State<DriveSyncSection> {
     final error = await _sync.connect();
     if (!mounted) return;
     setState(() => _connecting = false);
-    if (error != null) _alert(L10n.text('Unable to connect Google Account: %@', [error]));
+    // The message already says what failed.
+    if (error != null) _alert(error);
   }
 
   Future<void> _toggle(bool value) async {
