@@ -1,14 +1,19 @@
+import 'dart:io';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content/content_environment.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/support/preferences.dart';
+import 'package:tegnal/core/sync/library_drive_sync.dart';
 import 'package:tegnal/presentation/design/tegnal_theme.dart';
 import 'package:tegnal/presentation/imports/import_views.dart';
 import 'package:tegnal/presentation/navigation/app_header.dart';
 import 'package:tegnal/presentation/navigation/app_state.dart';
 import 'package:tegnal/presentation/onboarding/onboarding_view.dart';
 
+import '../../core/sync/library_drive_sync_test.dart' show FakeBackend, FakeDrive;
 import '../study/study_test_support.dart';
 
 Finder key(String name) => find.byKey(Key(name));
@@ -16,7 +21,7 @@ Finder key(String name) => find.byKey(Key(name));
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<(ContentEnvironment, AppState)> open(WidgetTester tester, {bool completed = false, bool verified = false}) async {
+  Future<(ContentEnvironment, AppState)> open(WidgetTester tester, {bool completed = false, bool verified = false, LibraryDriveSync? drive}) async {
     tester.view.physicalSize = const Size(1206, 2622);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -29,14 +34,17 @@ void main() {
     final fresh = ContentEnvironment(browserPreferences: preferences);
     (verified ? content : fresh).isOnboardingCompleted = completed;
     final state = AppState();
-    final imports = ImportContext(booru: harness.booru, database: AppDatabase.inMemory(preferences: AppPreferences.memory()));
+    final imports = ImportContext(
+      booru: harness.booru,
+      database: AppDatabase.inMemory(preferences: AppPreferences.memory()),
+    );
     await tester.pumpWidget(
       CupertinoApp(
         theme: tegnalTheme(Brightness.light),
         home: Builder(
           builder: (context) => CupertinoButton(
             key: const Key('open'),
-            onPressed: () => OnboardingView.show(context, content: verified ? content : fresh, imports: imports, state: state),
+            onPressed: () => OnboardingView.show(context, content: verified ? content : fresh, imports: imports, state: state, drive: drive),
             child: const Text('Open'),
           ),
         ),
@@ -92,5 +100,40 @@ void main() {
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     expect(find.text('Connect a Website'), findsNothing);
+  });
+
+  testWidgets('with Google Drive set up, a page after the website signs in, and it counts as the suggestion', (tester) async {
+    final root = Directory.systemTemp.createTempSync('onboarding-drive-');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final preferences = AppPreferences.memory();
+    final drive = LibraryDriveSync(
+      backend: FakeBackend(FakeDrive()),
+      database: AppDatabase.inMemory(preferences: preferences),
+      booru: BooruStore.inMemory(preferences: preferences),
+      defaults: preferences.defaults,
+      booruDefaults: preferences.booruDefaults,
+      directory: root,
+    );
+    expect(drive.shouldSuggest, isTrue);
+    await open(tester, drive: drive);
+    await tester.tap(key('onboarding.continue'));
+    await tester.pumpAndSettle();
+    expect(key('onboarding.drive'), findsOneWidget);
+    expect(find.text('Set Up Later'), findsOneWidget, reason: 'Without an account the way on says it can wait');
+    expect(drive.shouldSuggest, isFalse, reason: 'Seeing the page is the suggestion; no prompt follows later');
+
+    await tester.runAsync(() async {
+      await tester.tap(key('onboarding.connectDrive'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(key('onboarding.driveConnected'), findsOneWidget);
+    expect(find.text('person@example.com'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
+    expect(drive.enabled, isTrue);
+
+    await tester.tap(key('onboarding.continue'));
+    await tester.pumpAndSettle();
+    expect(key('onboarding.import'), findsOneWidget);
   });
 }
