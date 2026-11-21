@@ -525,7 +525,7 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
               if (_video case final video? when video.value.isInitialized && _videoControls)
                 Positioned.fromRect(
                   rect: rect,
-                  child: _VideoControls(
+                  child: BooruVideoControls(
                     controller: video,
                     onMute: (muted) {
                       BooruVideoAudioPreferences(widget.booru.booruDefaults).update(muted: muted);
@@ -597,8 +597,9 @@ class _BooruMediaViewState extends State<BooruMediaView> with SingleTickerProvid
 }
 
 /// Play, seek and mute over a video, hidden after a few seconds of playback.
-class _VideoControls extends StatelessWidget {
-  const _VideoControls({required this.controller, required this.onMute, required this.onInteraction});
+/// Play, position and sound over a video, shared by the viewer and the downloads preview.
+class BooruVideoControls extends StatelessWidget {
+  const BooruVideoControls({super.key, required this.controller, required this.onMute, required this.onInteraction});
   final VideoPlayerController controller;
   final ValueChanged<bool> onMute;
   final VoidCallback onInteraction;

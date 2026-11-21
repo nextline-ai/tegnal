@@ -38,6 +38,14 @@ class DriveAuthorizationError implements Exception {
   const DriveAuthorizationError();
 }
 
+/// The account was chosen but Drive file access was not granted. Carries the SDK's code.
+class DriveConsentError implements Exception {
+  const DriveConsentError(this.reason);
+  final String reason;
+  @override
+  String toString() => 'DriveConsentError($reason)';
+}
+
 /// A Drive request failed. Carries only the HTTP status, never a body or header.
 class DriveRequestError implements Exception {
   const DriveRequestError(this.status);
@@ -122,7 +130,12 @@ class GoogleDriveBackend implements DriveBackend, DriveBackupFiles {
     if (!isConfigured) throw const DriveAuthorizationError();
     await _initialize();
     final account = await GoogleSignIn.instance.authenticate(scopeHint: scopes);
-    await account.authorizationClient.authorizeScopes(scopes);
+    try {
+      await account.authorizationClient.authorizeScopes(scopes);
+    } on GoogleSignInException catch (error) {
+      // The account was chosen; a failure granting Drive access is never a silent cancel.
+      throw DriveConsentError('${error.code.name}${error.description == null ? '' : ' (${error.description})'}');
+    }
     _account = account;
     _folder = null;
     return _identity(account);
@@ -397,10 +410,15 @@ class LibraryDriveSync extends ChangeNotifier {
     try {
       _account = await backend.connect();
       defaults.set(connectedKey, true);
+    } on DriveConsentError catch (error) {
+      debugPrint('Google Drive access: ${error.reason}');
+      return L10n.text('Unable to connect Google Account: %@', [error.reason]);
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) return null;
+      debugPrint('Google sign-in: ${error.code.name} ${error.description ?? ''}');
       return L10n.text('Unable to connect Google Account: %@', [error.code.name]);
-    } on Object {
+    } on Object catch (error) {
+      debugPrint('Google Drive connect: $error');
       return L10n.text('Unable to connect Google Account: %@', [L10n.text('Unable to sync now. Your data is saved on this device.')]);
     }
     _invalidateAccess();
