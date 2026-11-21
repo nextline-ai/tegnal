@@ -13,7 +13,7 @@ import '../design/tegnal_theme.dart';
 import '../imports/import_views.dart';
 import '../navigation/app_header.dart' show AppModeSwitch;
 import '../navigation/app_state.dart';
-import '../settings/drive_suggestion.dart';
+import '../settings/drive_invitation.dart';
 import '../settings/settings_view.dart' show PrivacyPolicyPage;
 import '../settings/website_setup.dart';
 
@@ -133,16 +133,16 @@ class _OnboardingViewState extends State<OnboardingView> {
           builder: (context, _) {
             final later = switch (_page) {
               _OnboardingPage.website => !_hasConnection,
-              _OnboardingPage.drive => widget.drive?.account == null,
               _ => false,
             };
+            final invites = _page == _OnboardingPage.drive && widget.drive?.account == null;
             final title = _step == _last ? 'Get Started' : (later ? 'Set Up Later' : 'Continue');
             return Stack(
               children: [
                 Positioned.fill(
                   child: SingleChildScrollView(
                     key: ValueKey('onboarding.step.$_step'),
-                    padding: EdgeInsets.fromLTRB(24, media.padding.top + 60, 24, 24 + 94 + (_step == 0 ? 34 : 0) + media.padding.bottom),
+                    padding: EdgeInsets.fromLTRB(24, media.padding.top + 60, 24, 24 + 94 + (_step == 0 || invites ? 34 : 0) + media.padding.bottom),
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 560),
@@ -205,43 +205,52 @@ class _OnboardingViewState extends State<OnboardingView> {
                     padding: EdgeInsets.fromLTRB(24, 12, 24, 12 + media.padding.bottom),
                     // `.bar` under the button.
                     color: FormColors.row.resolveFrom(context).withValues(alpha: 0.94),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Semantics(
-                          button: true,
-                          label: L10n.text(title),
-                          excludeSemantics: true,
-                          child: GestureDetector(
-                            key: const Key('onboarding.continue'),
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _next,
-                            child: Container(
-                              // A large prominent button with 10 pt of extra vertical padding.
-                              height: 69,
-                              alignment: Alignment.center,
-                              decoration: ShapeDecoration(color: later ? secondaryFill : tint, shape: const StadiumBorder()),
-                              child: Text(
-                                L10n.text(title),
-                                style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
+                    child: invites
+                        // Connecting is the page's main button; going on without it is a quiet line under it.
+                        ? DriveInvitationBar(
+                            primary: L10n.text('Connect Google Drive'),
+                            onPrimary: _connectDrive,
+                            busy: _connecting,
+                            skip: L10n.text('Set Up Later'),
+                            onSkip: _next,
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Semantics(
+                                button: true,
+                                label: L10n.text(title),
+                                excludeSemantics: true,
+                                child: GestureDetector(
+                                  key: const Key('onboarding.continue'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _next,
+                                  child: Container(
+                                    // A large prominent button with 10 pt of extra vertical padding.
+                                    height: 69,
+                                    alignment: Alignment.center,
+                                    decoration: ShapeDecoration(color: later ? secondaryFill : tint, shape: const StadiumBorder()),
+                                    child: Text(
+                                      L10n.text(title),
+                                      style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (_step == 0) ...[
+                                const SizedBox(height: 10),
+                                GestureDetector(
+                                  key: const Key('onboarding.privacy'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const PrivacyPolicyPage())),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    child: Text(L10n.text('Privacy Policy'), style: TegnalType.style(13, color: tint)),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                        ),
-                        if (_step == 0) ...[
-                          const SizedBox(height: 10),
-                          GestureDetector(
-                            key: const Key('onboarding.privacy'),
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const PrivacyPolicyPage())),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Text(L10n.text('Privacy Policy'), style: TegnalType.style(13, color: tint)),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
                   ),
                 ),
               ],
@@ -368,83 +377,10 @@ class _OnboardingViewState extends State<OnboardingView> {
     );
   }
 
-  Widget _drive(BuildContext context) {
-    final label = TegnalColors.label.resolveFrom(context);
-    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
-    final tint = TegnalColors.tint.resolveFrom(context);
-    final account = widget.drive?.account;
-    return Column(
-      key: const Key('onboarding.drive'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(CupertinoIcons.cloud, size: 42, color: tint),
-        const SizedBox(height: 20),
-        _title(context, 'Google Drive', size: 28),
-        const SizedBox(height: 20),
-        Text(DriveSuggestionGate.message, style: TegnalType.style(17, color: secondary)),
-        const SizedBox(height: 20),
-        _card(
-          context,
-          padding: 18,
-          child: account != null
-              ? Row(
-                  key: const Key('onboarding.driveConnected'),
-                  children: [
-                    Icon(CupertinoIcons.checkmark_circle_fill, size: 17, color: tint),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(account.email, style: TegnalType.style(15, color: label)),
-                    ),
-                  ],
-                )
-              : Semantics(
-                  button: true,
-                  label: L10n.text('Connect Google Account'),
-                  excludeSemantics: true,
-                  child: GestureDetector(
-                    key: const Key('onboarding.connectDrive'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _connectDrive,
-                    child: Container(
-                      height: 46,
-                      alignment: Alignment.center,
-                      decoration: ShapeDecoration(color: tint, shape: const StadiumBorder()),
-                      child: _connecting
-                          ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(CupertinoIcons.person_crop_circle_badge_plus, size: 19, color: Color(0xFFFFFFFF)),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    L10n.text('Connect Google Account'),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TegnalType.style(17, color: const Color(0xFFFFFFFF)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                ),
-        ),
-        if (account == null) ...[
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(CupertinoIcons.gear, size: 15, color: secondary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(L10n.text('You can also connect it later in Settings.'), style: TegnalType.style(13, color: secondary)),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
+  Widget _drive(BuildContext context) => KeyedSubtree(
+    key: const Key('onboarding.drive'),
+    child: DriveInvitationContent(connectedEmail: widget.drive?.account?.email),
+  );
 
   Widget _imports(BuildContext context) {
     final label = TegnalColors.label.resolveFrom(context);
