@@ -8,6 +8,7 @@ import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import '../design/alert_dialog.dart';
 import '../home/home_stage.dart';
+import 'drive_suggestion.dart';
 import 'settings_rows.dart';
 
 /// `BackupReminder`: every seven days the app is opened, a library with something in it
@@ -98,6 +99,8 @@ class _BackupReminderGateState extends State<BackupReminderGate> {
   Future<void> _check() async {
     if (!mounted || _asking || HomeStage.shared.coversScreen) return;
     if (widget.isTesting && !BackupReminder.forced) return;
+    // One launch asks one thing: the Google Drive suggestion went first.
+    if (DriveSuggestionGate.askedThisLaunch) return;
     final hasLibrary = widget.database.worksCount() > 0 || widget.images.favoriteIDs.isNotEmpty;
     if (!hasLibrary) return;
     if (!BackupReminder.forced && !BackupReminder.isDue()) return;

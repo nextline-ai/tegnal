@@ -30,6 +30,7 @@ import '../presentation/design/grouped_form.dart';
 import '../presentation/design/symbols.dart';
 import '../presentation/design/system_colors.dart';
 import '../presentation/imports/import_views.dart';
+import '../presentation/settings/drive_suggestion.dart';
 import '../presentation/settings/settings_rows.dart';
 import '../presentation/taste/taste_context.dart';
 import '../presentation/taste/taste_dashboard.dart';
@@ -398,11 +399,12 @@ class _RootState extends State<_Root> {
 
   void _showOnboarding() {
     if (!mounted || (!services.isTesting && services.content.isOnboardingCompleted)) return;
-    OnboardingView.show(context, content: services.content, imports: _imports, state: state);
+    OnboardingView.show(context, content: services.content, imports: _imports, state: state, drive: AppPlatform.hasDriveSync ? services.sync : null);
   }
 
   /// "Replay Onboarding" in either mode's Settings.
-  void _replayOnboarding(BuildContext context) => OnboardingView.show(context, content: services.content, imports: _imports, state: state);
+  void _replayOnboarding(BuildContext context) =>
+      OnboardingView.show(context, content: services.content, imports: _imports, state: state, drive: AppPlatform.hasDriveSync ? services.sync : null);
 
   @override
   void dispose() {
@@ -557,17 +559,22 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     // The home scene lies over the library and learning mode until one of them is chosen.
-    return BackupReminderGate(
-      database: services.database,
-      images: services.booru,
+    return DriveSuggestionGate(
+      sync: AppPlatform.hasDriveSync ? services.sync : null,
+      content: services.content,
       isTesting: services.isTesting,
-      child: SiteFavoritesSetupGate(
-        sync: services.favorites,
-        images: services.booruAccounts,
-        child: BooruFolderStyleGate(
-          store: services.booru,
-          state: state,
-          child: HomeRoot(stage: _stage, freeze: widget.homeFreeze, library: _libraryPlace, study: (context) => _studyPlace()),
+      child: BackupReminderGate(
+        database: services.database,
+        images: services.booru,
+        isTesting: services.isTesting,
+        child: SiteFavoritesSetupGate(
+          sync: services.favorites,
+          images: services.booruAccounts,
+          child: BooruFolderStyleGate(
+            store: services.booru,
+            state: state,
+            child: HomeRoot(stage: _stage, freeze: widget.homeFreeze, library: _libraryPlace, study: (context) => _studyPlace()),
+          ),
         ),
       ),
     );

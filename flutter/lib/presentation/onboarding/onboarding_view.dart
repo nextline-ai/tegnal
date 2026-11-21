@@ -3,33 +3,47 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import '../../core/booru/booru_store.dart';
 import '../../core/content/content_environment.dart';
 import '../../core/support/l10n.dart';
+import '../../core/sync/library_drive_sync.dart';
 import '../booru/booru_settings_views.dart' show showBooruValidation;
 import '../content/gallery_detail_view.dart' show GlassIconButton;
+import '../design/alert_dialog.dart';
 import '../design/grouped_form.dart';
 import '../design/symbols.dart';
 import '../design/tegnal_theme.dart';
 import '../imports/import_views.dart';
 import '../navigation/app_header.dart' show AppModeSwitch;
 import '../navigation/app_state.dart';
+import '../settings/drive_suggestion.dart';
 import '../settings/settings_view.dart' show PrivacyPolicyPage;
 import '../settings/website_setup.dart';
 
 /// `OnboardingView`: the first run's three steps, as on iOS: connect a website, import data from
 /// another viewer, and the switch between comics and images. Reopened from Settings, it ends with Done.
 class OnboardingView extends StatefulWidget {
-  const OnboardingView({super.key, required this.content, required this.imports, required this.state});
+  const OnboardingView({super.key, required this.content, required this.imports, required this.state, this.drive});
   final ContentEnvironment content;
   final ImportContext imports;
   final AppState state;
 
+  /// Android's Google Drive sync. iOS syncs through iCloud with no sign-in, so it has no such page;
+  /// here a page after the website lets a person sign in before their library grows.
+  final LibraryDriveSync? drive;
+
   /// Shows onboarding over the whole app. Pages it opens (an import, the privacy policy) go on inside it.
-  static Future<void> show(BuildContext context, {required ContentEnvironment content, required ImportContext imports, required AppState state}) =>
-      Navigator.of(context, rootNavigator: true).push(
-        CupertinoPageRoute<void>(
-          fullscreenDialog: true,
-          builder: (_) => _OnboardingNavigator(child: OnboardingView(content: content, imports: imports, state: state)),
-        ),
-      );
+  static Future<void> show(
+    BuildContext context, {
+    required ContentEnvironment content,
+    required ImportContext imports,
+    required AppState state,
+    LibraryDriveSync? drive,
+  }) => Navigator.of(context, rootNavigator: true).push(
+    CupertinoPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => _OnboardingNavigator(
+        child: OnboardingView(content: content, imports: imports, state: state, drive: drive),
+      ),
+    ),
+  );
 
   @override
   State<OnboardingView> createState() => _OnboardingViewState();
@@ -57,9 +71,21 @@ class _OnboardingNavigatorState extends State<_OnboardingNavigator> {
   );
 }
 
+enum _OnboardingPage { website, drive, imports, tutorial }
+
 class _OnboardingViewState extends State<OnboardingView> {
-  static const _last = 2;
   int _step = 0;
+  bool _connecting = false;
+
+  /// The Drive page shows only where Drive sync is set up in this build.
+  late final List<_OnboardingPage> _pages = [
+    _OnboardingPage.website,
+    if (widget.drive?.isConfigured ?? false) _OnboardingPage.drive,
+    _OnboardingPage.imports,
+    _OnboardingPage.tutorial,
+  ];
+  int get _last => _pages.length - 1;
+  _OnboardingPage get _page => _pages[_step];
 
   /// The tutorial's switch only shows the two modes; it does not change the app's mode.
   final _preview = AppState(mode: AppMode.booru);
@@ -81,6 +107,8 @@ class _OnboardingViewState extends State<OnboardingView> {
   void _next() {
     if (_step < _last) {
       setState(() => _step += 1);
+      // Seeing the page is the suggestion; the one-time prompt for earlier installs never follows it.
+      if (_page == _OnboardingPage.drive) widget.drive?.markSuggested();
       return;
     }
     widget.content.isOnboardingCompleted = true;
@@ -101,9 +129,13 @@ class _OnboardingViewState extends State<OnboardingView> {
       child: CupertinoPageScaffold(
         backgroundColor: FormColors.background.resolveFrom(context),
         child: ListenableBuilder(
-          listenable: Listenable.merge([widget.content, _store]),
+          listenable: Listenable.merge([widget.content, _store, ?widget.drive]),
           builder: (context, _) {
-            final later = _step == 0 && !_hasConnection;
+            final later = switch (_page) {
+              _OnboardingPage.website => !_hasConnection,
+              _OnboardingPage.drive => widget.drive?.account == null,
+              _ => false,
+            };
             final title = _step == _last ? 'Get Started' : (later ? 'Set Up Later' : 'Continue');
             return Stack(
               children: [
@@ -136,10 +168,11 @@ class _OnboardingViewState extends State<OnboardingView> {
                               ),
                             ),
                             const SizedBox(height: 24),
-                            switch (_step) {
-                              0 => _setup(context),
-                              1 => _imports(context),
-                              _ => _tutorial(context),
+                            switch (_page) {
+                              _OnboardingPage.website => _setup(context),
+                              _OnboardingPage.drive => _drive(context),
+                              _OnboardingPage.imports => _imports(context),
+                              _OnboardingPage.tutorial => _tutorial(context),
                             },
                           ],
                         ),
@@ -188,7 +221,10 @@ class _OnboardingViewState extends State<OnboardingView> {
                               height: 69,
                               alignment: Alignment.center,
                               decoration: ShapeDecoration(color: later ? secondaryFill : tint, shape: const StadiumBorder()),
-                              child: Text(L10n.text(title), style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF))),
+                              child: Text(
+                                L10n.text(title),
+                                style: TegnalType.style(17, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
+                              ),
                             ),
                           ),
                         ),
@@ -216,8 +252,10 @@ class _OnboardingViewState extends State<OnboardingView> {
     );
   }
 
-  Widget _title(BuildContext context, String text, {double size = 34}) =>
-      Text(L10n.text(text), style: TegnalType.style(size, weight: FontWeight.w700, color: TegnalColors.label.resolveFrom(context)));
+  Widget _title(BuildContext context, String text, {double size = 34}) => Text(
+    L10n.text(text),
+    style: TegnalType.style(size, weight: FontWeight.w700, color: TegnalColors.label.resolveFrom(context)),
+  );
 
   Widget _card(BuildContext context, {required Widget child, double padding = 20, double radius = 20}) => Container(
     width: double.infinity,
@@ -238,7 +276,9 @@ class _OnboardingViewState extends State<OnboardingView> {
       children: [
         Icon(CupertinoIcons.checkmark_circle_fill, size: 17, color: tint),
         const SizedBox(width: 8),
-        Expanded(child: Text(name, style: TegnalType.style(15, color: label))),
+        Expanded(
+          child: Text(name, style: TegnalType.style(15, color: label)),
+        ),
         ?trailing,
       ],
     );
@@ -310,6 +350,102 @@ class _OnboardingViewState extends State<OnboardingView> {
     );
   }
 
+  Future<void> _connectDrive() async {
+    final drive = widget.drive;
+    if (drive == null || _connecting) return;
+    setState(() => _connecting = true);
+    final error = await drive.connect();
+    if (!mounted) return;
+    setState(() => _connecting = false);
+    if (error == null) return;
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => TegnalAlertDialog(
+        title: Text(L10n.text('Google Drive')),
+        content: Text(error),
+        actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('OK')))],
+      ),
+    );
+  }
+
+  Widget _drive(BuildContext context) {
+    final label = TegnalColors.label.resolveFrom(context);
+    final secondary = TegnalColors.secondaryLabel.resolveFrom(context);
+    final tint = TegnalColors.tint.resolveFrom(context);
+    final account = widget.drive?.account;
+    return Column(
+      key: const Key('onboarding.drive'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(CupertinoIcons.cloud, size: 42, color: tint),
+        const SizedBox(height: 20),
+        _title(context, 'Google Drive', size: 28),
+        const SizedBox(height: 20),
+        Text(DriveSuggestionGate.message, style: TegnalType.style(17, color: secondary)),
+        const SizedBox(height: 20),
+        _card(
+          context,
+          padding: 18,
+          child: account != null
+              ? Row(
+                  key: const Key('onboarding.driveConnected'),
+                  children: [
+                    Icon(CupertinoIcons.checkmark_circle_fill, size: 17, color: tint),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(account.email, style: TegnalType.style(15, color: label)),
+                    ),
+                  ],
+                )
+              : Semantics(
+                  button: true,
+                  label: L10n.text('Connect Google Account'),
+                  excludeSemantics: true,
+                  child: GestureDetector(
+                    key: const Key('onboarding.connectDrive'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _connectDrive,
+                    child: Container(
+                      height: 46,
+                      alignment: Alignment.center,
+                      decoration: ShapeDecoration(color: tint, shape: const StadiumBorder()),
+                      child: _connecting
+                          ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(CupertinoIcons.person_crop_circle_badge_plus, size: 19, color: Color(0xFFFFFFFF)),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    L10n.text('Connect Google Account'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TegnalType.style(17, color: const Color(0xFFFFFFFF)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+        ),
+        if (account == null) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Icon(CupertinoIcons.gear, size: 15, color: secondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(L10n.text('You can also connect it later in Settings.'), style: TegnalType.style(13, color: secondary)),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _imports(BuildContext context) {
     final label = TegnalColors.label.resolveFrom(context);
     final tint = TegnalColors.tint.resolveFrom(context);
@@ -322,7 +458,12 @@ class _OnboardingViewState extends State<OnboardingView> {
             children: [
               Icon(icon, size: 22, color: label),
               const SizedBox(width: 8),
-              Expanded(child: Text(L10n.text(title), style: TegnalType.style(17, weight: FontWeight.w600, color: label))),
+              Expanded(
+                child: Text(
+                  L10n.text(title),
+                  style: TegnalType.style(17, weight: FontWeight.w600, color: label),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -345,7 +486,14 @@ class _OnboardingViewState extends State<OnboardingView> {
                   children: [
                     DocumentBadgePlus(color: tint),
                     const SizedBox(width: 6),
-                    Flexible(child: Text(L10n.text('Import'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TegnalType.style(17, color: tint))),
+                    Flexible(
+                      child: Text(
+                        L10n.text('Import'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TegnalType.style(17, color: tint),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -375,12 +523,8 @@ class _OnboardingViewState extends State<OnboardingView> {
           icon: Symbols.bookFill,
           title: 'Other Comics Viewer',
           kinds: '.db · .json · .tachibk · .html · .txt',
-          page: (_) => OtherAppImportView(
-            database: imports.database,
-            startCoverQueue: imports.startCoverQueue,
-            libraryChanged: imports.libraryChanged,
-            inSheet: true,
-          ),
+          page: (_) =>
+              OtherAppImportView(database: imports.database, startCoverQueue: imports.startCoverQueue, libraryChanged: imports.libraryChanged, inSheet: true),
         ),
       ],
     );
@@ -410,7 +554,10 @@ class _OnboardingViewState extends State<OnboardingView> {
                 children: [
                   Row(
                     children: [
-                      Text(L10n.text('Saved'), style: TegnalType.style(17, weight: FontWeight.w600, color: label)),
+                      Text(
+                        L10n.text('Saved'),
+                        style: TegnalType.style(17, weight: FontWeight.w600, color: label),
+                      ),
                       const Spacer(),
                       AppModeSwitch(state: _preview),
                       const Spacer(),
@@ -437,7 +584,9 @@ class _OnboardingViewState extends State<OnboardingView> {
           children: [
             Icon(CupertinoIcons.square_stack_3d_up, size: 15, color: secondary),
             const SizedBox(width: 6),
-            Expanded(child: Text(L10n.text('Each mode keeps its own library and settings.'), style: TegnalType.style(13, color: secondary))),
+            Expanded(
+              child: Text(L10n.text('Each mode keeps its own library and settings.'), style: TegnalType.style(13, color: secondary)),
+            ),
           ],
         ),
       ],

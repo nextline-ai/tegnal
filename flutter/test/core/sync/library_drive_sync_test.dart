@@ -277,4 +277,20 @@ void main() {
     await relaunched.restore();
     expect(a.backend.restores, 1);
   });
+
+  test('Google Drive is suggested once, only to someone who never connected it', () async {
+    final drive = FakeDrive();
+    final a = device(drive, 'a');
+    expect(a.sync.shouldSuggest, isTrue);
+    a.sync.markSuggested();
+    expect(a.sync.shouldSuggest, isFalse);
+
+    final b = device(drive, 'b');
+    await b.sync.connect();
+    expect(b.sync.hasConnected, isTrue);
+    expect(b.sync.shouldSuggest, isFalse, reason: 'Someone already connected is never asked');
+
+    final unconfigured = device(drive, 'c', configured: false);
+    expect(unconfigured.sync.shouldSuggest, isFalse);
+  });
 }

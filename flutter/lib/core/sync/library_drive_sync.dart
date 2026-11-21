@@ -428,6 +428,18 @@ class LibraryDriveSync extends ChangeNotifier {
   // Installs from before the flag kept sync on only after connecting.
   bool get _connected => (defaults.boolean(connectedKey) ?? false) || _enabled;
 
+  /// Whether a person ever connected Google Drive here (and has not disconnected since).
+  bool get hasConnected => _connected;
+
+  /// Set once the app suggested Google Drive (onboarding's page or the one-time prompt), so
+  /// it is never suggested again; Settings stays the way in.
+  static const suggestedKey = 'drive.suggested';
+  bool get wasSuggested => defaults.boolean(suggestedKey) ?? false;
+  void markSuggested() => defaults.set(suggestedKey, true);
+
+  /// Whether to suggest Google Drive to someone who has not connected it.
+  bool get shouldSuggest => isConfigured && !_connected && !wasSuggested;
+
   /// Finds a previously connected account without asking anything.
   Future<void> restore() async {
     if (!isConfigured || !_connected) return;
