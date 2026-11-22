@@ -233,7 +233,7 @@ void main() {
     expect(BackupRetention.expired(items), isEmpty);
   });
 
-  test('retention deletes oldest unprotected first', () {
+  test('retention deletes unprotected backups until the rest fit, the oldest of all last', () {
     final items = [
       item('s0', BackupKind.safety, day: 0, mb: 30),
       item('p1', BackupKind.patch, day: 1, mb: 30),
@@ -244,12 +244,12 @@ void main() {
       item('min6', BackupKind.minor, day: 6, mb: 30),
     ];
     // 210 MB: p1 is one of the two newest patches, s3 and m4 the newest safety and manual backups; the older ones go.
-    expect(BackupRetention.expired(items), ['s0', 'm2']);
+    expect(BackupRetention.expired(items), ['m2', 's0']);
     final more = [...items, item('p7', BackupKind.patch, day: 7, mb: 1)];
     expect(BackupRetention.expired(more), [
-      's0',
       'p1',
       'm2',
+      's0',
     ], reason: 'A third patch is no longer protected, and deleting stops when nothing unprotected is left');
   });
 
@@ -265,8 +265,8 @@ void main() {
       item('other-min', BackupKind.minor, day: 1, mb: 60, device: 'other'),
     ];
     expect(BackupRetention.expired(items), [
-      'm-old',
       'min0',
+      'm-old',
     ], reason: 'Only the older minor and the older manual one may go; each device keeps its own protected backups');
     expect(BackupRetention.protected(items), {'p1', 'p2', 'min3', 'm4', 'other-p', 'other-min'});
   });
@@ -298,7 +298,42 @@ void main() {
   test('retention counts a backup in two vaults once', () {
     final items = [item('a', BackupKind.manual, day: 1, mb: 60), item('a', BackupKind.manual, day: 1, mb: 60), item('b', BackupKind.manual, day: 2, mb: 30)];
     expect(BackupRetention.expired(items), isEmpty, reason: '90 MB, not 150 MB');
-    expect(BackupRetention.expired([...items, item('c', BackupKind.manual, day: 3, mb: 20)]), ['a']);
+    expect(BackupRetention.expired([...items, item('c', BackupKind.manual, day: 3, mb: 20)]), ['b'], reason: 'The oldest of all goes last');
+  });
+
+  test('over the limit the spacing widens instead of the oldest going', () {
+    final now = DateTime.fromMillisecondsSinceEpoch(400 * 86400 * 1000, isUtc: true);
+    // Every three days for a year, 1 MB each.
+    final items = [for (var day = 40; day <= 400; day += 3) item('a$day', BackupKind.periodic, day: day, mb: 1)];
+    final expired = BackupRetention.expired(items, limit: 60 * 1024 * 1024, now: now).toSet();
+    final kept = [
+      for (final value in items)
+        if (!expired.contains(value.name)) value.date.millisecondsSinceEpoch ~/ (86400 * 1000),
+    ];
+    expect(kept.length, 60);
+    expect(kept.first, 40, reason: 'The oldest backup stays');
+    expect(kept.last, 400, reason: 'The newest automatic backup is always kept');
+    final gaps = [for (var i = 1; i < kept.length; i++) kept[i] - kept[i - 1]];
+    expect(gaps.skip(gaps.length - 5).reduce((a, b) => a > b ? a : b), lessThan(gaps.take(5).reduce((a, b) => a < b ? a : b)),
+        reason: 'Recent backups stay closer together than old ones');
+  });
+
+  test('automatic backups thin as they age', () {
+    final now = DateTime.fromMillisecondsSinceEpoch(1000 * 86400 * 1000, isUtc: true);
+    // Every three days for two years.
+    final items = [for (var day = 270; day <= 1000; day += 3) item('a$day', BackupKind.periodic, day: day, mb: 1)];
+    final thinned = BackupRetention.thinned(items, now: now).toSet();
+    final remaining = items.where((value) => !thinned.contains(value.name)).toList();
+    final kept = [for (final value in remaining) 1000 - value.date.millisecondsSinceEpoch ~/ (86400 * 1000)];
+    expect(kept.where((age) => age < 14).length, 5, reason: 'Two weeks of backups are all kept');
+    expect(kept.where((age) => age >= 14 && age < 84).length, inInclusiveRange(5, 6), reason: 'Then about one in two weeks');
+    expect(kept.where((age) => age >= 84 && age < 364).length, inInclusiveRange(5, 7), reason: 'Then about one in eight weeks');
+    expect(kept.where((age) => age >= 364).length, lessThanOrEqualTo(3), reason: 'Then about one in 24 weeks');
+    expect(kept.reduce((a, b) => a > b ? a : b), 730, reason: 'The oldest backup stays');
+    // A day later only backups crossing into an older tier may go: windows are fixed in time.
+    expect(BackupRetention.thinned(remaining, now: now.add(const Duration(days: 1))).length, lessThanOrEqualTo(3));
+    final other = [item('u', BackupKind.patch, day: 300, mb: 1), item('v', BackupKind.patch, day: 301, mb: 1), item('m', BackupKind.manual, day: 302, mb: 1)];
+    expect(BackupRetention.thinned([...items, ...other], now: now).every((name) => name.startsWith('a')), isTrue, reason: 'Only automatic backups are thinned');
   });
 
   test('retention never deletes the backup just made', () {

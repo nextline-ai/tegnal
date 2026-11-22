@@ -50,6 +50,13 @@ final class AutomaticBackups {
             if keepInICloud { Task { try? await serial { await self.moveToCloud(); await self.reload() } } }
         }
     }
+    /// Backs up every few days while the app is used (the default), as well as before updates.
+    var backsUpPeriodically: Bool {
+        didSet {
+            setup.markerDefaults.set(backsUpPeriodically, forKey: UpdateBackup.periodicKey)
+            if backsUpPeriodically { Task { await backUpIfDue() } }
+        }
+    }
     /// The last backup that failed on its own (before an update, or a restore that rolled back).
     private(set) var lastFailure: BackupFailure?
     /// How the last restore went, from the launch that applied it, until dismissed. A restore that rolled
@@ -67,6 +74,9 @@ final class AutomaticBackups {
     @ObservationIgnored private var queue: Task<Void, Never>?
     @ObservationIgnored private var details: [String: BackupManifest] = [:]
     @ObservationIgnored private var reloadScheduled = false
+    /// Set once the launch pass has packed what the launch step staged: an automatic backup
+    /// before that would sit beside the update backup of the same moment.
+    @ObservationIgnored private var launched = false
     private var running = 0
 
     init(setup: BackupSetup, databases: @escaping () -> UpdateBackup.OpenDatabases, cloud: (any BackupVault)?) {
@@ -75,6 +85,7 @@ final class AutomaticBackups {
         self.local = LocalBackupVault(folder: setup.vault)
         self.cloud = cloud
         keepInICloud = setup.markerDefaults.object(forKey: UpdateBackup.keepInICloudKey) as? Bool ?? true
+        backsUpPeriodically = setup.markerDefaults.object(forKey: UpdateBackup.periodicKey) as? Bool ?? true
         lastFailure = UpdateBackup.lastFailure(setup)
         lastRestore = UpdateBackup.lastRestore(setup)
         pendingRestore = UpdateBackup.pendingRestore(setup)
@@ -106,8 +117,21 @@ final class AutomaticBackups {
                 return names
             }.value
             self.lastFailure = UpdateBackup.lastFailure(setup)
+            self.launched = true
+            let periodic = await self.periodicBackupIfDue()
             await self.moveToCloud()
-            await self.applyRetention(keeping: Set(packed))
+            await self.applyRetention(keeping: Set(packed + [periodic].compactMap { $0 }))
+            await self.reload()
+        }
+    }
+
+    /// Makes the automatic backup when the last one from this device is `periodicInterval` old,
+    /// as when the app comes back after days in the background.
+    func backUpIfDue() async {
+        try? await serial {
+            guard let name = await self.periodicBackupIfDue() else { return }
+            await self.moveToCloud()
+            await self.applyRetention(keeping: [name])
             await self.reload()
         }
     }
@@ -260,9 +284,38 @@ final class AutomaticBackups {
         return try await task.value
     }
 
-    private func backUp(_ kind: BackupKind) async throws -> String {
+    /// The automatic backup, when it is on and due: the newest backup this device made, of any
+    /// kind, is at least `periodicInterval` old, and the libraries changed since then. Runs inside `serial`.
+    private func periodicBackupIfDue() async -> String? {
+        guard launched, backsUpPeriodically, UpdateBackup.pendingRestore(setup) == nil else { return nil }
+        let now = setup.now()
+        let newest = await files().compactMap { BackupName(fileName: $0.name) }.filter { $0.deviceID == setup.device.id }.map(\.createdAt).max()
+        if let newest {
+            guard now.timeIntervalSince(newest) >= BackupRetention.periodicInterval else { return nil }
+            // Nothing new to keep: the newest backup already holds the libraries as they are.
+            guard let changed = Self.librariesChanged(in: setup.dataFolder), changed > newest else { return nil }
+        } else {
+            // A device with no backup yet is backed up once it holds a library.
+            guard Self.librariesChanged(in: setup.dataFolder) != nil else { return nil }
+        }
+        do { return try await backUp(.periodic, priority: .utility) }
+        catch {
+            UpdateBackup.recordFailure(setup, message: error.localizedDescription)
+            lastFailure = UpdateBackup.lastFailure(setup)
+            return nil
+        }
+    }
+
+    /// When either library was last written, from its database files; nil when there is none.
+    nonisolated static func librariesChanged(in folder: URL) -> Date? {
+        BackupEntry.databases.flatMap { name in ["", "-wal"].map { folder.appendingPathComponent(name + $0) } }
+            .compactMap { (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate }
+            .max()
+    }
+
+    private func backUp(_ kind: BackupKind, priority: TaskPriority = .userInitiated) async throws -> String {
         let setup = self.setup, databases = databases()
-        return try await Task.detached(priority: .userInitiated) {
+        return try await Task.detached(priority: priority) {
             let folder = try UpdateBackup.takeSnapshot(setup, kind: kind, dataVersion: setup.appVersion, dataBuild: setup.appBuild, databases: databases)
             let packed = try UpdateBackup.pack(folder, setup: setup)
             return packed.manifest.fileName
@@ -290,12 +343,16 @@ final class AutomaticBackups {
         return localFiles + cloudFiles
     }
 
+    /// Thins the automatic backups as they age, then removes backups while all together are over the limit.
     private func applyRetention(keeping: Set<String>) async {
         let files = await files()
-        let candidates = files.compactMap { file in
+        let now = setup.now()
+        var candidates = files.compactMap { file in
             BackupName(fileName: file.name).map { BackupRetention.Item(name: file.name, size: file.size, device: $0.deviceID, kind: $0.kind, date: $0.createdAt) }
         }
-        for name in BackupRetention.expired(candidates, keeping: keeping) {
+        let thinned = BackupRetention.thinned(candidates, now: now, keeping: keeping)
+        candidates.removeAll { thinned.contains($0.name) }
+        for name in thinned + BackupRetention.expired(candidates, keeping: keeping, now: now) {
             for file in files where file.name == name {
                 let vault: (any BackupVault)? = file.place == .local ? local : cloud
                 try? await vault?.delete(name)

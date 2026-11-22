@@ -26,7 +26,16 @@ enum AutomaticBackupText {
             return item.appBuild.map { L10n.text("Before the update to %@ (%@)", version, $0) } ?? L10n.text("Before the update to %@", version)
         case .manual: return L10n.text("Manual backup")
         case .safety: return L10n.text("Before a restore")
+        case .periodic: return L10n.text("Automatic backup")
         }
+    }
+
+    /// How long ago, in the app's own language ("3 days ago").
+    static func age(_ date: Date, now: Date = Date()) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: L10n.language)
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: max(now, date))
     }
 
     static func dataVersion(_ version: String?) -> String {
@@ -143,6 +152,10 @@ struct AutomaticBackupsView: View {
             // Without iCloud the switch stays as it was set but cannot change.
             .disabled(!backups.iCloudAvailable)
             .accessibilityIdentifier("backups.keepInICloud")
+            Toggle(isOn: Bindable(backups).backsUpPeriodically) {
+                Label(L10n.text("Back Up Every 3 Days"), systemImage: "clock.arrow.circlepath")
+            }
+            .accessibilityIdentifier("backups.periodic")
             LabeledContent(L10n.text("Space Used"), value: L10n.text("%@ of %@", AutomaticBackupText.size(backups.totalSize), AutomaticBackupText.size(backups.limit)))
                 .accessibilityIdentifier("backups.size")
             Button {
@@ -174,7 +187,7 @@ struct AutomaticBackupsView: View {
     private func listSection(_ backups: AutomaticBackups, blocked: Bool) -> some View {
         Section {
             if backups.items.isEmpty {
-                Text(L10n.text("No backups yet. One is made automatically before each update.")).foregroundStyle(.secondary)
+                Text(L10n.text("No backups yet. One is made automatically every 3 days and before each update.")).foregroundStyle(.secondary)
                     .accessibilityIdentifier("backups.empty")
             }
             ForEach(backups.items) { item in
@@ -188,7 +201,9 @@ struct AutomaticBackupsView: View {
             Text(L10n.text("Backups"))
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.text("Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.", AutomaticBackupText.size(backups.limit)))
+                Text(L10n.text("Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first."))
+                Text(L10n.text("Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year."))
+                Text(L10n.text("Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept.", AutomaticBackupText.size(backups.limit)))
                 Text(L10n.text("A backup holds your libraries, folders and settings. It does not hold passwords, sign-ins, downloaded files or covers."))
             }
         }
@@ -228,7 +243,7 @@ private struct AutomaticBackupRow: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(AutomaticBackupText.date(item.createdAt)).font(.headline)
-                Text(AutomaticBackupText.title(item)).font(.subheadline)
+                Text(AutomaticBackupText.title(item) + " · " + AutomaticBackupText.age(item.createdAt)).font(.subheadline)
                 Text(AutomaticBackupText.dataVersion(item.dataVersion) + " · " + AutomaticBackupText.size(item.size))
                     .font(.footnote).foregroundStyle(.secondary)
                 if !item.isThisDevice {

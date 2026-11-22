@@ -240,6 +240,7 @@ abstract final class UpdateBackup {
 
   /// The Google Drive twin of iOS "Keep in iCloud".
   static const keepInDriveKey = 'backup.keepInDrive';
+  static const periodicKey = 'backup.periodicEnabled';
 
   /// Set by a restore; the library sync sends the restored library as the newest state.
   static const libraryReplacedKey = 'backup.libraryReplacedAt';

@@ -27,7 +27,7 @@ class StoreView extends Preferences {
 
 /// One engine setup over temporary folders and its own store, and the preferences views of it.
 class BackupFixture {
-  BackupFixture(void Function(void Function() body) addTearDown, {String version = '1.6.0', String build = '47'})
+  BackupFixture(void Function(void Function() body) addTearDown, {String version = '1.6.0', String build = '47', DateTime Function()? now})
     : root = temporaryDirectory(addTearDown),
       store = MemoryBackupStore() {
     Directory('${root.path}/Data').createSync();
@@ -45,6 +45,7 @@ class BackupFixture {
       appVersion: version,
       appBuild: build,
       device: const BackupDevice(id: 'a1b2c3d4', name: 'Test phone'),
+      now: now,
     );
     defaults = StoreView(store);
     images = StoreView(store, BackupPreferences.imagePrefix);

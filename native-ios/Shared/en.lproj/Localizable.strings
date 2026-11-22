@@ -2517,9 +2517,7 @@
 "Import from File" = "Import from File";
 "New backups are copied to iCloud Drive, so they can come back if you lose this device. This is separate from iCloud Sync." = "New backups are copied to iCloud Drive, so they can come back if you lose this device. This is separate from iCloud Sync.";
 "iCloud Drive is not available. Backups stay on this device until it is." = "iCloud Drive is not available. Backups stay on this device until it is.";
-"No backups yet. One is made automatically before each update." = "No backups yet. One is made automatically before each update.";
 "Backups" = "Backups";
-"Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached." = "Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.";
 "A backup holds your libraries, folders and settings. It does not hold passwords, sign-ins, downloaded files or covers." = "A backup holds your libraries, folders and settings. It does not hold passwords, sign-ins, downloaded files or covers.";
 "Everything in TEGNAL is replaced by the backup of %@. It is not merged with what you have now." = "Everything in TEGNAL is replaced by the backup of %@. It is not merged with what you have now.";
 "Your current data is backed up first, so you can go back." = "Your current data is backed up first, so you can go back.";
@@ -2548,3 +2546,9 @@
 "The backup's library could not be opened. Your data was not changed." = "The backup's library could not be opened. Your data was not changed.";
 "The current data could not be backed up first, so nothing was restored." = "The current data could not be backed up first, so nothing was restored.";
 "The backup before the update could not be made: %@" = "The backup before the update could not be made: %@";
+"Automatic backup" = "Automatic backup";
+"Back Up Every 3 Days" = "Back Up Every 3 Days";
+"No backups yet. One is made automatically every 3 days and before each update." = "No backups yet. One is made automatically every 3 days and before each update.";
+"Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first." = "Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first.";
+"Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year." = "Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year.";
+"Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept." = "Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept.";

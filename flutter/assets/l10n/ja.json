@@ -277,7 +277,6 @@
  "Backup Saved": "バックアップ保存済み",
  "Backup restored: %@ works, %@ folders": "バックアップを復元しました：作品%@件、フォルダ%@件",
  "Backups": "バックアップ",
- "Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.": "バックアップは合計で最大%@まで保管します。アップデート前に作られた新しい2件、大きなアップデート前に作られた最新の1件、復元前に作られた最新の1件、手動で作った最新の1件は常に保管し、上限を超えると古いものから削除します。",
  "Badge": "バッジ",
  "Balanced": "バランス",
  "Bands must increase and cover the target score. Points use the score before completion.": "区間は昇順で、目標スコアまで含めてください。得点は完了前のスコアで計算します。",
@@ -1188,7 +1187,6 @@
  "No Works in Several Folders": "複数のフォルダに保存された作品はありません",
  "No Works in This Category": "このカテゴリの作品はありません",
  "No Works in This Language": "この言語の作品はありません",
- "No backups yet. One is made automatically before each update.": "まだバックアップはありません。アップデートの前に自動で作成されます。",
  "No longer in your library": "ライブラリから削除された作品",
  "No matching images. Change the source, retry, or skip without points.": "一致する画像がありません。取得元を変えるか再試行、または得点なしでスキップしてください。",
  "No new recommendations yet. Save more works or try refreshing.": "新しいおすすめはまだありません。作品を保存するか、再読み込みしてください。",
@@ -2373,5 +2371,11 @@
  "user.db imported!\n%@ folders, %@ works": "user.dbの読み込みが完了しました！\nフォルダ%@件、作品%@件",
  "user.db imported: %@ folders, %@ works, %@ artists": "user.dbを読み込みました：フォルダ%@件、作品%@件、作家%@件",
  "⚡️ Fill Only My Library (Recommended)": "⚡️ ライブラリの作品のみ補完（推奨）",
- "📦 Save Entire Catalog (Background Import)": "📦 カタログ全体を保存（バックグラウンド）"
+ "📦 Save Entire Catalog (Background Import)": "📦 カタログ全体を保存（バックグラウンド）",
+ "Automatic backup": "自動バックアップ",
+ "Back Up Every 3 Days": "3日ごとにバックアップ",
+ "No backups yet. One is made automatically every 3 days and before each update.": "まだバックアップはありません。3日ごとと、アップデートの前に自動で作成されます。",
+ "Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first.": "バックアップを復元すると、TEGNALはその時点の状態に戻ります。復元の前に現在のデータをバックアップします。",
+ "Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year.": "自動バックアップは2週間はすべて保管します。その後は古くなるほど間隔を空けて残します：2週間に1件、3か月を過ぎると8週間に1件、1年を過ぎると6か月に1件。",
+ "Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept.": "バックアップは合計で最大%@まで保管します。上限を超えると、近い時点の別のバックアップと間隔の狭いものから削除するため、古いバックアップは消えるのではなく間隔が広がります。種類ごとの最新のバックアップ、アップデート前に作られた新しい2件、復元前に作られた最新の1件は常に保管します。"
 }

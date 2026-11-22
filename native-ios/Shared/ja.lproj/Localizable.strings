@@ -2517,9 +2517,7 @@
 "Import from File" = "ファイルから読み込む";
 "New backups are copied to iCloud Drive, so they can come back if you lose this device. This is separate from iCloud Sync." = "新しいバックアップはiCloud Driveにもコピーされるため、デバイスを失くしても元に戻せます。iCloud同期とは別の設定です。";
 "iCloud Drive is not available. Backups stay on this device until it is." = "iCloud Driveを利用できません。利用できるようになるまで、バックアップはこのデバイスにのみ保管されます。";
-"No backups yet. One is made automatically before each update." = "まだバックアップはありません。アップデートの前に自動で作成されます。";
 "Backups" = "バックアップ";
-"Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached." = "バックアップは合計で最大%@まで保管します。アップデート前に作られた新しい2件、大きなアップデート前に作られた最新の1件、復元前に作られた最新の1件、手動で作った最新の1件は常に保管し、上限を超えると古いものから削除します。";
 "A backup holds your libraries, folders and settings. It does not hold passwords, sign-ins, downloaded files or covers." = "バックアップには、ライブラリ、フォルダ、設定が含まれます。パスワード、ログイン情報、ダウンロードしたファイル、表紙は含まれません。";
 "Everything in TEGNAL is replaced by the backup of %@. It is not merged with what you have now." = "%@のバックアップで、TEGNALの内容がすべて置き換わります。今のデータとは統合されません。";
 "Your current data is backed up first, so you can go back." = "現在のデータを先にバックアップするので、元に戻せます。";
@@ -2548,3 +2546,9 @@
 "The backup's library could not be opened. Your data was not changed." = "バックアップのライブラリを開けませんでした。データは変更されていません。";
 "The current data could not be backed up first, so nothing was restored." = "現在のデータを先にバックアップできなかったため、復元しませんでした。";
 "The backup before the update could not be made: %@" = "アップデート前のバックアップを作成できませんでした：%@";
+"Automatic backup" = "自動バックアップ";
+"Back Up Every 3 Days" = "3日ごとにバックアップ";
+"No backups yet. One is made automatically every 3 days and before each update." = "まだバックアップはありません。3日ごとと、アップデートの前に自動で作成されます。";
+"Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first." = "バックアップを復元すると、TEGNALはその時点の状態に戻ります。復元の前に現在のデータをバックアップします。";
+"Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year." = "自動バックアップは2週間はすべて保管します。その後は古くなるほど間隔を空けて残します：2週間に1件、3か月を過ぎると8週間に1件、1年を過ぎると6か月に1件。";
+"Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept." = "バックアップは合計で最大%@まで保管します。上限を超えると、近い時点の別のバックアップと間隔の狭いものから削除するため、古いバックアップは消えるのではなく間隔が広がります。種類ごとの最新のバックアップ、アップデート前に作られた新しい2件、復元前に作られた最新の1件は常に保管します。";

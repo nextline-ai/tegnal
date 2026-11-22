@@ -118,6 +118,7 @@ enum UpdateBackup {
     static let failureKey = "backup.lastFailure"
     static let restoreReportKey = "backup.lastRestore"
     static let keepInICloudKey = "backup.keepInICloud"
+    static let periodicKey = "backup.periodicEnabled"
     /// Set by a restore; the library sync sends the restored library as the newest state.
     static let libraryReplacedKey = "backup.libraryReplacedAt"
     private static let pendingMarker = "pending.json"

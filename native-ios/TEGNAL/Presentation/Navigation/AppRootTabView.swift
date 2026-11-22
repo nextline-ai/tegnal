@@ -437,7 +437,7 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
                     .fixedSize(horizontal: false, vertical: true)
             }
             tabContent
-                .modifier(ReadingQueueAccessory(enabled: mode == .manga && !hidesComics, read: readQueued, showList: { showingReadingQueue = true }))
+                .modifier(ReadingQueueAccessory(enabled: mode == .manga && !hidesComics, showsBar: selection != .settings, read: readQueued, showList: { showingReadingQueue = true }))
         }
         .appSheet(isPresented: $showingReadingQueue) {
             ReadingQueueView(read: { id in showingReadingQueue = false; readQueued(id) })
@@ -461,7 +461,7 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
                     Tab(L10n.text("Saved"), systemImage: "folder.fill", value: .folders) { saved.modifier(queueInset) }
                     Tab(L10n.text("Explore"), systemImage: "globe", value: .works) { explore.modifier(queueInset) }
                     Tab(collectionsTitle, systemImage: collectionsIcon, value: .artists) { collections.modifier(queueInset) }
-                    Tab(settingsTitle, systemImage: settingsIcon, value: .settings) { settings.modifier(queueInset) }
+                    Tab(settingsTitle, systemImage: settingsIcon, value: .settings) { settings }
                     Tab(L10n.text("Smart"), systemImage: "apple.intelligence", value: .insights, role: insightsRole) { insights.modifier(queueInset) }
                 }
             } else {
@@ -469,7 +469,7 @@ struct AppTabLayout<Saved: View, Explore: View, Collections: View, Settings: Vie
                     saved.modifier(queueInset).tabItem { Label(L10n.text("Saved"), systemImage: "folder.fill") }.tag(AppTab.folders)
                     explore.modifier(queueInset).tabItem { Label(L10n.text("Explore"), systemImage: "globe") }.tag(AppTab.works)
                     collections.modifier(queueInset).tabItem { Label(collectionsTitle, systemImage: collectionsIcon) }.tag(AppTab.artists)
-                    settings.modifier(queueInset).tabItem { Label(settingsTitle, systemImage: settingsIcon) }.tag(AppTab.settings)
+                    settings.tabItem { Label(settingsTitle, systemImage: settingsIcon) }.tag(AppTab.settings)
                     insights.modifier(queueInset).tabItem { Label(L10n.text("Smart"), systemImage: "apple.intelligence") }.tag(AppTab.insights)
                 }
             }
@@ -621,13 +621,15 @@ struct ReadingQueueAccessory: ViewModifier {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.horizontalSizeClass) private var sizeClass
     let enabled: Bool
+    /// Settings has no works to queue, and the bar would cover its lower rows, so it steps aside there.
+    var showsBar = true
     let read: (Int64) -> Void
     let showList: () -> Void
     /// Half again the height of the system's accessory bar.
     static let height: CGFloat = 72
     /// About as wide as on the largest iPhone, so on an iPad it reads as a player, not a banner.
     static let maximumWidth: CGFloat = 560
-    private var visible: Bool { enabled && !env.readingQueue.items.isEmpty && env.readingQueue.carried == nil }
+    private var visible: Bool { enabled && showsBar && !env.readingQueue.items.isEmpty && env.readingQueue.carried == nil }
     /// A wide iPad window puts the tabs along the top or in a sidebar, leaving the bottom free.
     static func tabsAtBottom(_ sizeClass: UserInterfaceSizeClass?) -> Bool { !(UIDevice.current.userInterfaceIdiom == .pad && sizeClass == .regular) }
     private var tabsAtBottom: Bool { Self.tabsAtBottom(sizeClass) }

@@ -989,6 +989,8 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(labels.contains("Data from 1.5.1"), "The data version is shown")
         XCTAssertTrue(labels.contains("Manual backup"))
         XCTAssertTrue(labels.contains("Always kept"), "The newest update backup is always kept")
+        XCTAssertTrue(labels.contains(" ago"), "Each backup says how long ago it was made")
+        XCTAssertTrue(element(app, "backups.periodic").exists, "The backup every 3 days can be turned off")
         capture(app, "Automatic backups")
         element(app, "backups.backUpNow").tap()
         expectation(for: NSPredicate(format: "count == 3"), evaluatedWith: rows)
