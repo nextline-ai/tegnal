@@ -63,6 +63,9 @@ struct BooruBackup: Codable, Sendable {
     }
     /// Optional so backups from before tag study still read.
     var study: Study?
+    /// The AI lab's records (`lab_records`); `at` is seconds since 1970. Optional so older backups still read.
+    struct Lab: Codable, Sendable { var key: String; var value: Int; var text: String?; var at: Double }
+    var lab: [Lab]?
 
     static func read(_ url: URL) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
@@ -102,7 +105,9 @@ struct BooruBackup: Codable, Sendable {
               Set((study?.lessons ?? []).map(\.lesson)).count == (study?.lessons ?? []).count,
               (study?.awards ?? []).allSatisfy({ !$0.id.isEmpty && $0.id.count <= 200 && $0.earned.isFinite }),
               Set((study?.awards ?? []).map(\.id)).count == (study?.awards ?? []).count,
-              (study?.stats ?? [:]).allSatisfy({ !$0.key.isEmpty && $0.key.count <= 200 && $0.value >= 0 })
+              (study?.stats ?? [:]).allSatisfy({ !$0.key.isEmpty && $0.key.count <= 200 && $0.value >= 0 }),
+              (lab ?? []).allSatisfy({ !$0.key.isEmpty && $0.key.count <= 200 && $0.value >= 0 && ($0.text?.count ?? 0) <= 2000 && $0.at.isFinite }),
+              Set((lab ?? []).map(\.key)).count == (lab ?? []).count
         else { throw BooruError.invalidResponse }
         for server in servers { _ = try BooruServer.validatedURL(server.baseURL.absoluteString) }
         for post in favorites.map(\.post) + (recentImages ?? []).map(\.post) {
@@ -147,9 +152,11 @@ extension BooruStore {
             let awards = try Row.fetchAll(db, sql: "SELECT id, earned FROM study_awards ORDER BY id").map { BooruBackup.Award(id: $0["id"], earned: $0["earned"]) }
             var stats: [String: Int] = [:]
             for row in try Row.fetchAll(db, sql: "SELECT name, value FROM study_stats") { stats[row["name"]] = row["value"] }
+            let lab = try Row.fetchAll(db, sql: "SELECT key, value, text, at FROM lab_records ORDER BY key").map { BooruBackup.Lab(key: $0["key"], value: $0["value"], text: $0["text"], at: $0["at"]) }
             return BooruBackup(servers: servers, folders: folders, favorites: favorites, history: history, savedTags: tags, blacklist: blacklist, selectedServerIDs: selectedServerIDs, folderRules: try Self.fetchFolderRules(db).filter { rule in folders.contains { $0.id == rule.folder } },
                                study: learned.isEmpty && days.isEmpty && lessons.isEmpty && awards.isEmpty && stats.isEmpty ? nil
-                                : .init(progress: learned, days: days, lessons: lessons, awards: awards, stats: stats))
+                                : .init(progress: learned, days: days, lessons: lessons, awards: awards, stats: stats),
+                               lab: lab.isEmpty ? nil : lab)
         }
     }
 
@@ -240,6 +247,13 @@ extension BooruStore {
                 INSERT INTO study_stats (name, value) VALUES (?, ?)
                 ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)
                 """, arguments: [name, value])
+        }
+        // Lab records merge as in sync: the larger count and the earlier time.
+        for value in backup.lab ?? [] {
+            try db.execute(sql: """
+                INSERT INTO lab_records (key, value, text, at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = MAX(value, excluded.value), at = MIN(at, excluded.at), text = COALESCE(excluded.text, text)
+                """, arguments: [value.key, value.value, value.text, value.at])
         }
         // Folders of an older backup go where their images are when each server keeps its own folders,
         // and stay shared otherwise; every image goes to a folder that may hold it.

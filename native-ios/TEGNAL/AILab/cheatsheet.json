@@ -1,0 +1,33 @@
+{
+  "format": "tegnal-lab-cheatsheet",
+  "id": "2026-11-23",
+  "date": "2026-11-23",
+  "reward": 20,
+  "change": "첫 판입니다.",
+  "sections": [
+    {
+      "id": "models",
+      "title": "지금 이 작업엔 뭐 쓰지?",
+      "opens": "ep01",
+      "rows": [
+        { "task": "문서 · 기획", "example": "보고서, 제안서, 긴 글 다듬기", "pick": "[초안] Claude", "why": "긴 글의 구조와 문체가 안정적" },
+        { "task": "코딩", "example": "앱·스크립트 만들기", "pick": "[초안] Claude", "why": "큰 코드도 한 번에 이해" },
+        { "task": "검색 · 조사", "example": "최신 정보, 출처 확인", "pick": "[초안] ChatGPT", "why": "검색과 출처 표시가 기본" },
+        { "task": "일상 대화", "example": "고민 상담, 빠른 질문", "pick": "[초안] ChatGPT", "why": "빠르고 무료 한도가 넉넉" },
+        { "task": "이미지", "example": "썸네일, 프로필, 상세컷", "pick": "[초안] Gemini", "why": "사진 편집과 글자 넣기에 강함" }
+      ]
+    },
+    {
+      "id": "harness",
+      "title": "하네스 — 손발 달아주는 도구",
+      "opens": "ep04",
+      "rows": [
+        { "task": "영상", "example": "짧은 클립, 광고 시안", "pick": "[초안] Higgsfield", "why": "여러 영상 모델을 한곳에서" },
+        { "task": "파일 · 문서 작업", "example": "엑셀, 슬라이드, PDF 만들기", "pick": "[초안] Claude 앱", "why": "파일을 만들어 바로 내려받기" },
+        { "task": "웹 대신 돌아다니기", "example": "가격 비교, 예약 알아보기", "pick": "[초안] ChatGPT 에이전트", "why": "사이트를 직접 열어 확인" },
+        { "task": "코딩 작업", "example": "내 컴퓨터의 프로젝트 고치기", "pick": "[초안] Claude Code", "why": "파일을 직접 읽고 고침" }
+      ]
+    }
+  ],
+  "footer": "순위는 수시로 바뀝니다. 고르는 기준은 바뀌지 않습니다 — 카드 001."
+}

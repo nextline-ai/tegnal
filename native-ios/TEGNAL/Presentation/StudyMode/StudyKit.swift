@@ -10,6 +10,17 @@ final class StudyMode {
     var active: Bool
     /// The tab learning mode opens on the next time it is entered.
     var tab = StudyTab.path
+    /// Learning mode opens on the AI lab. The tag course, bought in the lab's shop, is shown in its place while this is true.
+    var tagsOpen: Bool
+    /// The lab tab shown.
+    var labTab = LabTab.deck
+    /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on the course.
+    private var wantsTags = false
+    /// Learning mode has been reached through the home scene: the lab, unless a 2D AI entry asked for the course.
+    func arrive() {
+        tagsOpen = wantsTags && LabStore.shared.ownsTagCourse
+        wantsTags = false
+    }
     /// Open straight into learning mode when the app starts.
     var startsActive: Bool { didSet { defaults.set(startsActive, forKey: Self.startKey); if startsActive, startsInLibrary { startsInLibrary = false } } }
     /// Go straight on from the opening scene into the library when the app starts. Only one of the two can be on.
@@ -20,11 +31,39 @@ final class StudyMode {
         let starts = defaults.bool(forKey: Self.startKey)
         startsActive = starts
         startsInLibrary = !starts && defaults.bool(forKey: Self.libraryStartKey)
-        active = starts || ProcessInfo.processInfo.arguments.contains("--study-mode")
+        let arguments = ProcessInfo.processInfo.arguments
+        active = starts || arguments.contains("--study-mode") || arguments.contains("--lab-mode")
+        // `--study-mode` opens the tag course itself, for its own tests; `--lab-mode` opens the lab.
+        tagsOpen = arguments.contains("--study-mode")
+    }
+    /// Opens learning mode on the AI lab.
+    func enterLab(_ tab: LabTab = .deck) {
+        tagsOpen = false
+        wantsTags = false
+        labTab = tab
+        if active { return }
+        if HomeStage.shared.cross(to: .study) { return }
+        withAnimation(.snappy(duration: 0.35)) { active = true }
+    }
+    /// Shows the tag course in place of the lab, once it is bought; before that, the shop where it is sold.
+    func openTags(_ tab: StudyTab = .path) {
+        guard LabStore.shared.ownsTagCourse else { labTab = .twoD; tagsOpen = false; return }
+        self.tab = tab
+        withAnimation(.snappy(duration: 0.35)) { tagsOpen = true }
+    }
+    /// Back from the tag course to the lab.
+    func closeTags() {
+        withAnimation(.snappy(duration: 0.35)) { tagsOpen = false }
+        StudySound.rest()
     }
     /// Opens learning mode. From the library, the way there leads back up through the home scene and on into the sky.
     func enter(_ tab: StudyTab = .path) {
         self.tab = tab
+        // The library's tag-study entries lead to the course when it is owned, and to the lab's shop when not.
+        LabStore.shared.reload()
+        tagsOpen = LabStore.shared.ownsTagCourse
+        wantsTags = tagsOpen
+        if !tagsOpen { labTab = .twoD }
         if HomeStage.shared.cross(to: .study) { return }
         withAnimation(.snappy(duration: 0.35)) { active = true }
     }
@@ -35,11 +74,14 @@ final class StudyMode {
     }
 }
 
+/// The course's dock. The collection lives on the Me tab; `aiLab` is not a page but the way back to the AI lab.
 enum StudyTab: String, CaseIterable, Identifiable {
-    case path, practice, dex, lab, me
+    case path, practice, lab, aiLab, me
     var id: String { rawValue }
-    var title: String { L10n.text(["path": "Map", "practice": "Practice", "dex": "Collection", "lab": "Studio", "me": "Me"][rawValue] ?? "") }
-    var symbol: String { ["path": "map.fill", "practice": "dumbbell.fill", "dex": "square.grid.2x2.fill", "lab": "wand.and.stars", "me": "person.crop.circle.fill"][rawValue] ?? "circle" }
+    var title: String { L10n.text(["path": "Map", "practice": "Practice", "lab": "Studio", "aiLab": "lab.title.short", "me": "Me"][rawValue] ?? "") }
+    var symbol: String { ["path": "map.fill", "practice": "dumbbell.fill", "lab": "wand.and.stars", "aiLab": "flask.fill", "me": "person.crop.circle.fill"][rawValue] ?? "circle" }
+    /// The tabs that show a page.
+    static var pages: [StudyTab] { allCases.filter { $0 != .aiLab } }
 }
 
 extension Color {

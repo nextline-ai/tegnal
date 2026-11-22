@@ -57,11 +57,14 @@ final class StudyModeModel {
     }
 
     /// A track finished for the first time, once: the lessons of an add-on track all done, and not yet celebrated.
-    func newlyCompletedTrack(finishing lesson: String) -> StudyTrack? {
+    /// Kept as a counter in `study_stats`, so a certificate shown on one device is not shown again on another.
+    func newlyCompletedTrack(finishing lesson: String, store: BooruStore) -> StudyTrack? {
+        let stats = (try? store.studyStore.stats()) ?? [:]
         guard let done = tracks.first(where: { track in
-            track.path.lessons.contains { $0.id == lesson } && track.complete(records) && !defaults.bool(forKey: "study.trackDone." + track.id)
+            track.path.lessons.contains { $0.id == lesson } && track.complete(records)
+                && stats["trackDone." + track.id] == nil && !defaults.bool(forKey: "study.trackDone." + track.id)
         }) else { return nil }
-        defaults.set(true, forKey: "study.trackDone." + done.id)
+        try? store.studyStore.raise("trackDone." + done.id, to: 1)
         return done
     }
 
@@ -138,9 +141,9 @@ struct StudyModeRoot: View {
         switch tab {
         case .path: StudyPathView(model: model, celebrating: celebrating, start: start)
         case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
-        case .dex: StudyDexView(model: model, source: source)
+        case .aiLab: EmptyView()
         case .lab: StudyLabView(model: model, start: start, closed: celebrate)
-        case .me: StudyMeView(model: model, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true }, reset: {
+        case .me: StudyMeView(model: model, source: source, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true }, reset: {
             // A reset starts learning mode over, welcome and placement test included.
             ReaderPreferences.booruDefaults.removeObject(forKey: StudyPlacement.welcomedKey)
             model.reload(store)
@@ -152,7 +155,7 @@ struct StudyModeRoot: View {
 
     var body: some View {
         ZStack {
-            ForEach(StudyTab.allCases) { tab in
+            ForEach(StudyTab.pages) { tab in
                 if opened.contains(tab) || tab == mode.tab {
                     let shown = tab == mode.tab
                     page(tab).opacity(shown ? 1 : 0).allowsHitTesting(shown).accessibilityHidden(!shown).zIndex(shown ? 1 : 0)
@@ -239,7 +242,7 @@ struct StudyModeRoot: View {
         finished = nil
         mode.tab = .path
         // The last lesson of an add-on track earns its certificate, once, after the stop has burst.
-        if let track = model.newlyCompletedTrack(finishing: done) {
+        if let track = model.newlyCompletedTrack(finishing: done, store: store) {
             Task { try? await Task.sleep(for: .seconds(1.6)); if session == nil, parade.isEmpty { graduated = track } }
         }
         Task {
@@ -269,6 +272,8 @@ struct StudyDock: View {
                 let chosen = tab == selection
                 Button {
                     StudySound.tap.play()
+                    // The lab tab leads out of the course, back to the AI lab.
+                    if tab == .aiLab { StudyMode.shared.closeTags(); return }
                     if !chosen { chosenCount[tab, default: 0] += 1 }
                     withAnimation(.spring(duration: 0.32, bounce: 0.22)) { selection = tab }
                 } label: {
@@ -663,10 +668,67 @@ struct StudyLabView: View {
     }
 }
 
+/// The collection on the Me tab: how many tags have been met, the latest few, and the whole collection a tap away.
+struct StudyDexCard: View {
+    let model: StudyModeModel
+    let source: any BooruProviding
+    @State private var showingAll = false
+    @State private var opened: StudyTag?
+    var body: some View {
+        let met = model.curriculum.tags.filter { model.progress[$0.name].map { !$0.isNew } == true }
+        StudyCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(L10n.text("Collection")).font(StudyTheme.body(17, .heavy)).foregroundStyle(StudyTheme.ink)
+                    Spacer()
+                    Text("\(met.count)/\(model.summary.total)").font(StudyTheme.body(14, .heavy)).foregroundStyle(StudyTheme.muted).monospacedDigit()
+                }
+                StudyBar(value: model.summary.total == 0 ? 0 : Double(met.count) / Double(model.summary.total), color: StudyTheme.primary)
+                if met.isEmpty {
+                    Text(L10n.text("Tags you learn on the map are kept here.")).font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(met.prefix(12)) { tag in
+                                Button { opened = tag } label: {
+                                    Text(tag.english).font(StudyTheme.body(14, .heavy)).lineLimit(1).padding(.horizontal, 12).padding(.vertical, 8)
+                                }
+                                .buttonStyle(StudyPressStyle(radius: 12, depth: 3, outlined: true))
+                                .accessibilityIdentifier("study.dex.\(tag.name)")
+                            }
+                        }
+                        .padding(.bottom, 4)
+                    }
+                    Button { showingAll = true } label: {
+                        Text(L10n.text("lab.2d.allTags")).font(StudyTheme.body(15, .heavy)).frame(maxWidth: .infinity).padding(.vertical, 10)
+                    }
+                    .buttonStyle(StudyPressStyle(radius: 14, depth: 4, outlined: true))
+                    .accessibilityIdentifier("study.dex.all")
+                }
+            }
+        }
+        .appSheet(isPresented: $showingAll) {
+            NavigationStack {
+                StudyDexView(model: model, source: source)
+                    .background(StudyTheme.background.ignoresSafeArea())
+                    .navigationTitle(L10n.text("Collection")).navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { showingAll = false } } }
+            }
+        }
+        .appSheet(item: $opened) { tag in
+            NavigationStack {
+                StudyTagView(name: tag.name, source: source)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { opened = nil } } }
+            }
+        }
+    }
+}
+
 // MARK: - Me
 
 struct StudyMeView: View {
     @Bindable var model: StudyModeModel
+    var source: any BooruProviding = TasteSources.booru
     let chooseServer: () -> Void
     var openAwards: () -> Void = {}
     /// Called after progress is reset, so learning mode can welcome the learner again.
@@ -695,6 +757,8 @@ struct StudyMeView: View {
                     tile("checkmark.seal.fill", StudyTheme.good, String(model.summary.learned), L10n.text("Learned"))
                     tile("bolt.fill", StudyTheme.gold, String(model.game.xp), "XP")
                 }
+                // The collection, once a tab of its own, sits here above the daily goal.
+                StudyDexCard(model: model, source: source)
                 StudyCard {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(L10n.text("Today's goal")).font(StudyTheme.body(17, .heavy)).foregroundStyle(StudyTheme.ink)
@@ -804,7 +868,7 @@ struct StudyModeSettings: View {
             Toggle(isOn: $mode.startsActive) {
                 SettingsHelpLabel("Open in Learning Mode", help: "Turning this on opens the app straight into learning mode, where tags for prompting image AI are learned step by step. The library stays one tap away.")
             }.accessibilityIdentifier("settings.startInStudyMode")
-            Button(L10n.text("Enter Learning Mode")) { mode.enter() }.accessibilityIdentifier("settings.enterStudyMode")
+            Button(L10n.text("Enter Learning Mode")) { mode.enterLab() }.accessibilityIdentifier("settings.enterStudyMode")
         } header: { Text(L10n.text("Learning Mode")) }
         Section {
             Toggle(isOn: $mode.startsInLibrary) {
