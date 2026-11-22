@@ -101,14 +101,14 @@ class LibrarySyncRow {
 
   bool get isFactoryDefault {
     return switch (table) {
-      // Either palette's first color counts, so devices on both versions agree.
+      // Every palette's first color counts, so devices on all versions agree.
       'booru.folders' =>
         values['id']?.string == 'unsorted' &&
-            const [FolderPalette.unsorted, FolderPalette.earlierUnsorted].contains(values['color']?.integer) &&
+            const [FolderPalette.unsorted, ...FolderPalette.earlierUnsorted].contains(values['color']?.integer) &&
             values['position']?.integer == 0,
       'manga.folders' =>
         values['sync_id']?.string == 'unsorted' &&
-            const [FolderPalette.unfiled, FolderPalette.earlierUnfiled].contains(values['color']?.integer) &&
+            const [FolderPalette.unfiled, ...FolderPalette.earlierUnfiled].contains(values['color']?.integer) &&
             values['sort_order']?.integer == 1,
       _ => false,
     };
@@ -209,8 +209,10 @@ class LibrarySyncLedger {
     final timestamp = math.max(now ?? unixSeconds(), latest + 0.000001);
     for (final MapEntry(:key, value: row) in snapshot.entries) {
       if (baseline[key] == row) continue;
-      final factory = baseline[key] == null && changes[key] == null && row.isFactoryDefault;
-      changes[key] = LibrarySyncChange(row: row, timestamp: factory ? 0 : timestamp, device: device, deleted: false);
+      // A default folder no one has changed stays untouched when a new palette recolors it, so it
+      // never wins over a color picked on another device that has not synced here yet.
+      final untouched = row.isFactoryDefault && (baseline[key]?.isFactoryDefault ?? true) && (changes[key]?.timestamp ?? 0) == 0;
+      changes[key] = LibrarySyncChange(row: row, timestamp: untouched ? 0 : timestamp, device: device, deleted: false);
     }
     for (final MapEntry(:key, value: row) in baseline.entries) {
       if (snapshot.containsKey(key)) continue;

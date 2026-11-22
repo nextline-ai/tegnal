@@ -597,70 +597,84 @@ final class FolderPaletteTests: XCTestCase {
         0xFF10B981, 0xFFF59E0B, 0xFFEF4444, 0xFF64748B
     ]
 
-    func testEveryEarlierColorBecomesItsOwnCurrentColorAndCurrentColorsStay() {
-        let mapped = earlierPalette.map(FolderPalette.vivid)
-        XCTAssertEqual(Set(mapped).count, earlierPalette.count, "folders that differed must still differ")
-        XCTAssertTrue(mapped.allSatisfy(FolderPalette.colors.contains))
-        XCTAssertEqual(FolderPalette.vivid(0xFF2563EB), FolderPalette.colors[0])
-        XCTAssertEqual(FolderPalette.vivid(FolderPalette.earlierUnfiled), FolderPalette.unfiled)
-        XCTAssertEqual(FolderPalette.vivid(FolderPalette.earlierUnsorted), FolderPalette.unsorted)
-        for color in FolderPalette.colors + (0..<40).map(FolderPalette.generated) {
-            XCTAssertEqual(FolderPalette.vivid(color), color)
+    /// The vivid palette 1.6 gave folders.
+    private let vividPalette: [Int64] = [
+        0xFF1F6BFF, 0xFFFF3B30, 0xFF00C853, 0xFFFF9500, 0xFF8E4BFF, 0xFFFF2D87, 0xFF00C2E8, 0xFFFFCC00, 0xFF4A3DFF,
+        0xFF00BFA0, 0xFFFF6A3D, 0xFF7CD200, 0xFFD63CFF, 0xFF2FA8FF, 0xFFFFB000, 0xFF00A86B, 0xFFB026FF, 0xFFFF4F7B,
+        0xFF0047D6, 0xFF2EE0B0, 0xFFE3122C, 0xFF3DB500, 0xFFFF4FD8, 0xFF0090C8, 0xFFFF7A00, 0xFF6A1BE0, 0xFFE0006E,
+        0xFF00897B, 0xFFC8A000, 0xFF2D3DB8, 0xFF0A84FF, 0xFF7B83FF, 0xFF00D0D0, 0xFFB5651D, 0xFF9C27B0, 0xFF5C6B80,
+    ]
+
+    func testThePaletteIsApplesThirteenSystemColors() {
+        XCTAssertEqual(FolderPalette.colors, [0xFFFF383C, 0xFFFF8D28, 0xFFFFCC00, 0xFF34C759, 0xFF00C8B3, 0xFF00C3D0, 0xFF00C0E8,
+                                              0xFF0088FF, 0xFF6155F5, 0xFFCB30E0, 0xFFFF2D55, 0xFFAC7F5E, 0xFF8E8E93])
+        XCTAssertEqual(Set(FolderPalette.assignmentOrder), Set(FolderPalette.colors))
+        XCTAssertEqual(FolderPalette.assignmentOrder.count, FolderPalette.colors.count)
+    }
+
+    func testEveryEarlierColorBecomesASystemColorAndSystemColorsStay() {
+        for color in earlierPalette + vividPalette + FolderPalette.earlierUnfiled + FolderPalette.earlierUnsorted {
+            XCTAssertTrue(FolderPalette.colors.contains(FolderPalette.vivid(color)), String(color, radix: 16))
         }
-        XCTAssertEqual(Set(FolderPalette.colors).count, FolderPalette.colors.count)
+        XCTAssertEqual(Set(vividPalette), Set(FolderPalette.previous.keys), "every 1.6 color has a fixed replacement")
+        XCTAssertEqual(FolderPalette.vivid(0xFF1F6BFF), FolderPalette.blue)
+        XCTAssertEqual(FolderPalette.vivid(0xFFB5651D), FolderPalette.brown)
+        XCTAssertEqual(FolderPalette.vivid(0xFF5C6B80), FolderPalette.gray)
+        XCTAssertEqual(FolderPalette.vivid(0xFF2563EB), FolderPalette.blue, "a 1.5 color goes through its 1.6 color")
+        for color in FolderPalette.earlierUnfiled { XCTAssertEqual(FolderPalette.vivid(color), FolderPalette.unfiled) }
+        for color in FolderPalette.earlierUnsorted { XCTAssertEqual(FolderPalette.vivid(color), FolderPalette.unsorted) }
+        for color in FolderPalette.colors { XCTAssertEqual(FolderPalette.vivid(color), color) }
     }
 
-    func testOtherColorsKeepTheirHueAndGraysBecomeSlate() {
-        XCTAssertEqual(FolderPalette.vivid(0xFF9E9E9E), 0xFF5C6B80)
-        XCTAssertEqual(FolderPalette.vivid(0xFF000000), 0xFF5C6B80)
-        XCTAssertEqual(FolderPalette.vivid(0xFFFF0000), 0xFFFF3B30)
-        XCTAssertEqual(FolderPalette.vivid(0xFFFFFF00), 0xFFFFCC00)
-        XCTAssertEqual(FolderPalette.vivid(0x00FF0000), 0xFFFF3B30, "a color without alpha counts as opaque")
+    func testOtherColorsKeepTheirHueAndGraysBecomeGray() {
+        XCTAssertEqual(FolderPalette.vivid(0xFF9E9E9E), FolderPalette.gray)
+        XCTAssertEqual(FolderPalette.vivid(0xFF000000), FolderPalette.gray)
+        XCTAssertEqual(FolderPalette.vivid(0xFFFFFFFF), FolderPalette.gray)
+        XCTAssertEqual(FolderPalette.vivid(0xFFFF0000), FolderPalette.red)
+        XCTAssertEqual(FolderPalette.vivid(0xFFFFFF00), FolderPalette.yellow)
+        XCTAssertEqual(FolderPalette.vivid(0xFF00FF00), FolderPalette.green)
+        XCTAssertEqual(FolderPalette.vivid(0xFFFFC0CB), FolderPalette.pink)
+        XCTAssertEqual(FolderPalette.vivid(0xFF8B4513), FolderPalette.brown)
+        XCTAssertEqual(FolderPalette.vivid(0x00FF0000), FolderPalette.red, "a color without alpha counts as opaque")
     }
 
-    func testChoicesAreTheFirstTenUnusedColorsAndGoPastThePalette() {
-        let used: Set<Int64> = [FolderPalette.colors[0], FolderPalette.colors[2]]
-        let choices = FolderPalette.unused(used, count: 10)
-        XCTAssertEqual(choices.count, 10)
-        XCTAssertEqual(choices.first, FolderPalette.colors[1])
-        XCTAssertTrue(used.isDisjoint(with: choices))
-        let everything = FolderPalette.unused(Set(FolderPalette.colors), count: 10)
-        XCTAssertEqual(everything, (0..<10).map(FolderPalette.generated))
-        XCTAssertEqual(FolderPalette.next(used: used), FolderPalette.colors[1])
+    func testNewFoldersTakeTheLeastUsedColorInOrder() {
+        XCTAssertEqual(FolderPalette.next(existing: []), FolderPalette.blue)
+        XCTAssertEqual(FolderPalette.next(existing: [FolderPalette.blue]), FolderPalette.red)
+        XCTAssertEqual(FolderPalette.next(existing: [FolderPalette.blue], excluding: [FolderPalette.red]), FolderPalette.green)
+        // Once every color is taken, the order starts again with the ones used least.
+        XCTAssertEqual(FolderPalette.next(existing: FolderPalette.colors), FolderPalette.blue)
+        XCTAssertEqual(FolderPalette.next(existing: FolderPalette.colors + [FolderPalette.blue]), FolderPalette.red)
+        XCTAssertEqual(FolderPalette.next(existing: [0xFF1F6BFF]), FolderPalette.red, "an earlier color counts as its system color")
+        XCTAssertEqual(FolderPalette.next(existing: [], excluding: Set(FolderPalette.colors)), FolderPalette.blue)
     }
 
-    func testMigrationRecolorsFoldersKeepingThemApart() throws {
+    func testMigrationGivesEachColorItsOneReplacement() throws {
         let queue = try DatabaseQueue()
         try queue.write { db in
             try db.execute(sql: "CREATE TABLE folders (id TEXT PRIMARY KEY, color INTEGER NOT NULL)")
-            // Two custom colors close to the same palette color take different ones.
-            for (id, color) in [("a", 0xFF2563EB), ("b", 0xFF1E70F0), ("c", 0xFF1F6BFF), ("d", 0xFF9E9E9E), ("e", 0xFF2563EB)] as [(String, Int64)] {
+            for (id, color) in [("a", 0xFF2563EB), ("b", 0xFF1F6BFF), ("c", FolderPalette.red), ("d", 0xFF9E9E9E), ("e", 0xFF0A84FF), ("f", 0xFFB5651D)] as [(String, Int64)] {
                 try db.execute(sql: "INSERT INTO folders VALUES (?, ?)", arguments: [id, color])
             }
-            try AppDatabase.adoptVividFolderColors(db)
+            try AppDatabase.adoptFolderPalette(db)
         }
         let colors = try queue.read { db in
             Dictionary(uniqueKeysWithValues: try Row.fetchAll(db, sql: "SELECT id, color FROM folders").map { ($0["id"] as String, $0["color"] as Int64) })
         }
-        XCTAssertEqual(colors["a"], FolderPalette.colors[0])
-        XCTAssertEqual(colors["e"], FolderPalette.colors[0], "the same color stays the same")
-        XCTAssertEqual(colors["c"], FolderPalette.colors[0], "a current color is kept")
-        XCTAssertNotEqual(colors["b"], FolderPalette.colors[0])
-        XCTAssertTrue(FolderPalette.colors.contains(colors["b"] ?? 0))
-        XCTAssertEqual(colors["d"], 0xFF5C6B80)
+        XCTAssertEqual(colors, ["a": FolderPalette.blue, "b": FolderPalette.blue, "c": FolderPalette.red, "d": FolderPalette.gray, "e": FolderPalette.blue, "f": FolderPalette.brown])
     }
 
     func testNewLibrariesStartWithTheNewDefaultsAndBackupsBringOldColorsUpToDate() throws {
         let comics = try AppDatabase.inMemory()
         XCTAssertEqual(try comics.ensureDefaultFolder().color, FolderPalette.unfiled)
-        XCTAssertEqual(try comics.createFolder(name: "First").color, FolderPalette.colors[0])
+        XCTAssertEqual(try comics.createFolder(name: "First").color, FolderPalette.red, "Unfiled already has blue")
         let images = try BooruStore()
         try images.saveServer(BooruServer.presets[0])
-        XCTAssertEqual(images.folders().first?.color, FolderPalette.colors[0], "a server's Uncategorized takes the first color")
+        XCTAssertEqual(images.folders().first?.color, FolderPalette.blue, "a server's Uncategorized takes the first color")
 
         let backup = BooruBackup(servers: [], folders: [.init(id: "old", name: "Old", color: 0xFF0D9488)], favorites: [],
                                  history: [], savedTags: [], blacklist: [:], selectedServerIDs: [])
         try images.restoreBackup(backup)
-        XCTAssertEqual(images.folders().first { $0.id == "old" }?.color, 0xFF00897B)
+        XCTAssertEqual(images.folders().first { $0.id == "old" }?.color, FolderPalette.mint)
     }
 }

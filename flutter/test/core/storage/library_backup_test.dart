@@ -40,7 +40,7 @@ void main() {
     expect(work.note, 'Keep this note');
     expect(work.thumbPage, 3);
     expect(work.folders.map((folder) => folder.name), ['Reading']);
-    expect(work.folders.first.color, 0xFF8E4BFF);
+    expect(work.folders.first.color, 0xFFCB30E0);
     expect(work.folders.first.sourceGroupId, 42);
     expect(destination.getWork(9999), isNotNull);
     expect(destination.listFolders().where((folder) => folder.name == 'Reading').length, 1);
@@ -48,7 +48,7 @@ void main() {
     expect(destination.savedSearches(), ['favorite query']);
     expect(destination.dbWriter.value<String>("SELECT note FROM artists WHERE name = 'Artist'"), 'Artist note');
     expect(images.favoriteIDs.length, 1);
-    expect(images.folders().firstWhere((folder) => folder.name == 'References').color, 0xFF00C2E8);
+    expect(images.folders().firstWhere((folder) => folder.name == 'References').color, 0xFF00C0E8);
     expect(images.blacklist(images.servers[0].id), 'gore');
     expect(ChallengeStore(images).definitions().map(gameJson), [gameJson(game)]);
   });

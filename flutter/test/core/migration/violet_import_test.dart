@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/migration/manga_viewer_import.dart';
 import 'package:tegnal/core/migration/violet_import.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/storage/folder_palette.dart';
 import 'package:tegnal/core/support/sql_database.dart';
 
 /// A backup with the tables and value shapes Violet exports on Android.
@@ -82,8 +83,8 @@ void main() {
     final rain = folders.firstWhere((folder) => folder.name == 'Rain');
     final later = folders.firstWhere((folder) => folder.name == 'Later');
     expect(rain.description, 'Wet days');
-    // An earlier palette color becomes its vivid counterpart.
-    expect(rain.color, 0xFF2FA8FF);
+    // An earlier palette color becomes its system color.
+    expect(rain.color, FolderPalette.blue);
     expect(later.description, isNull, reason: "Violet's placeholder description is not kept");
     expect(later.color, isNot(4294940672), reason: "Violet's new-group color takes the next folder color");
 

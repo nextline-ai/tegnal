@@ -17,61 +17,92 @@ const _earlierPalette = [
   0xFF10B981, 0xFFF59E0B, 0xFFEF4444, 0xFF64748B,
 ];
 
+/// The vivid palette 1.6 gave folders.
+const _vividPalette = [
+  0xFF1F6BFF, 0xFFFF3B30, 0xFF00C853, 0xFFFF9500, 0xFF8E4BFF, 0xFFFF2D87, 0xFF00C2E8, 0xFFFFCC00, 0xFF4A3DFF, //
+  0xFF00BFA0, 0xFFFF6A3D, 0xFF7CD200, 0xFFD63CFF, 0xFF2FA8FF, 0xFFFFB000, 0xFF00A86B, 0xFFB026FF, 0xFFFF4F7B, //
+  0xFF0047D6, 0xFF2EE0B0, 0xFFE3122C, 0xFF3DB500, 0xFFFF4FD8, 0xFF0090C8, 0xFFFF7A00, 0xFF6A1BE0, 0xFFE0006E, //
+  0xFF00897B, 0xFFC8A000, 0xFF2D3DB8, 0xFF0A84FF, 0xFF7B83FF, 0xFF00D0D0, 0xFFB5651D, 0xFF9C27B0, 0xFF5C6B80,
+];
+
 void main() {
-  test('every earlier color becomes its own current color and current colors stay', () {
-    final mapped = _earlierPalette.map(FolderPalette.vivid).toList();
-    expect(mapped.toSet(), hasLength(_earlierPalette.length), reason: 'folders that differed must still differ');
-    expect(mapped.every(FolderPalette.colors.contains), isTrue);
-    expect(FolderPalette.vivid(0xFF2563EB), FolderPalette.colors.first);
-    expect(FolderPalette.vivid(FolderPalette.earlierUnfiled), FolderPalette.unfiled);
-    expect(FolderPalette.vivid(FolderPalette.earlierUnsorted), FolderPalette.unsorted);
-    for (final color in [...FolderPalette.colors, for (var index = 0; index < 40; index++) FolderPalette.generated(index)]) {
+  test("the palette is Apple's thirteen system colors", () {
+    expect(FolderPalette.colors, [
+      0xFFFF383C, 0xFFFF8D28, 0xFFFFCC00, 0xFF34C759, 0xFF00C8B3, 0xFF00C3D0, 0xFF00C0E8, //
+      0xFF0088FF, 0xFF6155F5, 0xFFCB30E0, 0xFFFF2D55, 0xFFAC7F5E, 0xFF8E8E93,
+    ]);
+    expect(FolderPalette.assignmentOrder.toSet(), FolderPalette.colors.toSet());
+    expect(FolderPalette.assignmentOrder, hasLength(FolderPalette.colors.length));
+  });
+
+  test('every earlier color becomes a system color and system colors stay', () {
+    for (final color in [..._earlierPalette, ..._vividPalette, ...FolderPalette.earlierUnfiled, ...FolderPalette.earlierUnsorted]) {
+      expect(FolderPalette.colors, contains(FolderPalette.vivid(color)), reason: color.toRadixString(16));
+    }
+    expect(FolderPalette.previous.keys.toSet(), _vividPalette.toSet(), reason: 'every 1.6 color has a fixed replacement');
+    expect(FolderPalette.vivid(0xFF1F6BFF), FolderPalette.blue);
+    expect(FolderPalette.vivid(0xFFB5651D), FolderPalette.brown);
+    expect(FolderPalette.vivid(0xFF5C6B80), FolderPalette.gray);
+    expect(FolderPalette.vivid(0xFF2563EB), FolderPalette.blue, reason: 'a 1.5 color goes through its 1.6 color');
+    for (final color in FolderPalette.earlierUnfiled) {
+      expect(FolderPalette.vivid(color), FolderPalette.unfiled);
+    }
+    for (final color in FolderPalette.earlierUnsorted) {
+      expect(FolderPalette.vivid(color), FolderPalette.unsorted);
+    }
+    for (final color in FolderPalette.colors) {
       expect(FolderPalette.vivid(color), color);
     }
-    expect(FolderPalette.colors.toSet(), hasLength(FolderPalette.colors.length));
   });
 
-  test('other colors keep their hue and grays become slate, as on iOS', () {
-    expect(FolderPalette.vivid(0xFF9E9E9E), 0xFF5C6B80);
-    expect(FolderPalette.vivid(0xFF000000), 0xFF5C6B80);
-    expect(FolderPalette.vivid(0xFFFF0000), 0xFFFF3B30);
-    expect(FolderPalette.vivid(0xFFFFFF00), 0xFFFFCC00);
-    expect(FolderPalette.vivid(0x00FF0000), 0xFFFF3B30, reason: 'a color without alpha counts as opaque');
+  test('other colors keep their hue and grays become gray, as on iOS', () {
+    expect(FolderPalette.vivid(0xFF9E9E9E), FolderPalette.gray);
+    expect(FolderPalette.vivid(0xFF000000), FolderPalette.gray);
+    expect(FolderPalette.vivid(0xFFFFFFFF), FolderPalette.gray);
+    expect(FolderPalette.vivid(0xFFFF0000), FolderPalette.red);
+    expect(FolderPalette.vivid(0xFFFFFF00), FolderPalette.yellow);
+    expect(FolderPalette.vivid(0xFF00FF00), FolderPalette.green);
+    expect(FolderPalette.vivid(0xFFFFC0CB), FolderPalette.pink);
+    expect(FolderPalette.vivid(0xFF8B4513), FolderPalette.brown);
+    expect(FolderPalette.vivid(0x00FF0000), FolderPalette.red, reason: 'a color without alpha counts as opaque');
   });
 
-  test('choices are the first ten unused colors and go past the palette', () {
-    final used = {FolderPalette.colors[0], FolderPalette.colors[2]};
-    final choices = FolderPalette.unused(used, 10);
-    expect(choices, hasLength(10));
-    expect(choices.first, FolderPalette.colors[1]);
-    expect(choices.toSet().intersection(used), isEmpty);
-    expect(FolderPalette.unused(FolderPalette.colors.toSet(), 10), [for (var index = 0; index < 10; index++) FolderPalette.generated(index)]);
-    expect(FolderPalette.next(used), FolderPalette.colors[1]);
+  test('new folders take the least used color in order', () {
+    expect(FolderPalette.next(const []), FolderPalette.blue);
+    expect(FolderPalette.next(const [FolderPalette.blue]), FolderPalette.red);
+    expect(FolderPalette.next(const [FolderPalette.blue], excluding: {FolderPalette.red}), FolderPalette.green);
+    // Once every color is taken, the order starts again with the ones used least.
+    expect(FolderPalette.next(FolderPalette.colors), FolderPalette.blue);
+    expect(FolderPalette.next([...FolderPalette.colors, FolderPalette.blue]), FolderPalette.red);
+    expect(FolderPalette.next(const [0xFF1F6BFF]), FolderPalette.red, reason: 'an earlier color counts as its system color');
+    expect(FolderPalette.next(const [], excluding: FolderPalette.colors.toSet()), FolderPalette.blue);
   });
 
-  test('the migration recolors folders, keeping them apart', () {
+  test('the migration gives each color its one replacement', () {
     final db = SqlDatabase.inMemory();
     db.execute('CREATE TABLE folders (id TEXT PRIMARY KEY, color INTEGER NOT NULL)');
-    for (final (id, color) in [('a', 0xFF2563EB), ('b', 0xFF1E70F0), ('c', 0xFF1F6BFF), ('d', 0xFF9E9E9E), ('e', 0xFF2563EB)]) {
+    for (final (id, color) in [('a', 0xFF2563EB), ('b', 0xFF1F6BFF), ('c', FolderPalette.red), ('d', 0xFF9E9E9E), ('e', 0xFF0A84FF), ('f', 0xFFB5651D)]) {
       db.execute('INSERT INTO folders VALUES (?, ?)', [id, color]);
     }
-    AppDatabase.adoptVividFolderColors(db);
+    AppDatabase.adoptFolderPalette(db);
     final colors = {for (final row in db.rows('SELECT id, color FROM folders')) row['id'] as String: row['color'] as int};
-    expect(colors['a'], FolderPalette.colors.first);
-    expect(colors['e'], FolderPalette.colors.first, reason: 'the same color stays the same');
-    expect(colors['c'], FolderPalette.colors.first, reason: 'a current color is kept');
-    expect(colors['b'], isNot(FolderPalette.colors.first));
-    expect(FolderPalette.colors, contains(colors['b']));
-    expect(colors['d'], 0xFF5C6B80);
+    expect(colors, {
+      'a': FolderPalette.blue,
+      'b': FolderPalette.blue,
+      'c': FolderPalette.red,
+      'd': FolderPalette.gray,
+      'e': FolderPalette.blue,
+      'f': FolderPalette.brown,
+    });
   });
 
   test('new libraries start with the new defaults and backups bring old colors up to date', () {
     final comics = AppDatabase.inMemory();
     expect(comics.ensureDefaultFolder().color, FolderPalette.unfiled);
-    expect(comics.createFolder(name: 'First').color, FolderPalette.colors.first);
+    expect(comics.createFolder(name: 'First').color, FolderPalette.red, reason: 'Unfiled already has blue');
     final images = BooruStore.inMemory();
     images.saveServer(presetServer());
-    expect(images.folders().first.color, FolderPalette.colors.first, reason: "a server's Uncategorized takes the first color");
+    expect(images.folders().first.color, FolderPalette.blue, reason: "a server's Uncategorized takes the first color");
     images.restoreBackup(
       BooruBackup(
         servers: const [],
@@ -83,6 +114,6 @@ void main() {
         selectedServerIDs: const [],
       ),
     );
-    expect(images.folders().firstWhere((folder) => folder.id == 'old').color, 0xFF00897B);
+    expect(images.folders().firstWhere((folder) => folder.id == 'old').color, FolderPalette.mint);
   });
 }

@@ -158,7 +158,7 @@ final class LibraryBackupTests: XCTestCase {
 
     private func populated() throws -> (AppDatabase, BooruStore, ChallengeDefinition) {
         let comics = try AppDatabase.inMemory(), images = try BooruStore()
-        let folder = try comics.createFolder(name: "Reading", color: 0xFF8E4BFF, sourceGroupId: 42)
+        let folder = try comics.createFolder(name: "Reading", color: 0xFFCB30E0, sourceGroupId: 42)
         _ = try comics.upsertWork(galleryId: 1234, folderId: folder.id, title: "Comic", artists: "Artist", tags: "tag:test")
         try comics.setNote(galleryId: 1234, note: "Keep this note")
         try comics.setThumbPage(galleryId: 1234, page: 3)
@@ -171,7 +171,7 @@ final class LibraryBackupTests: XCTestCase {
         let server = BooruServer.presets[0]
         try images.saveServer(server)
         let imageFolder = try images.saveFolder(name: "References")
-        try images.setFolderColor(imageFolder, color: 0xFF00C2E8)
+        try images.setFolderColor(imageFolder, color: 0xFF00C0E8)
         try images.saveFavorite(BooruFixtureSource.post(72, server: server), folderID: imageFolder)
         try images.recordSearch("scenery", serverID: server.id)
         try images.toggleTag("scenery", serverID: server.id, kind: "tag")
@@ -199,7 +199,7 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(work.note, "Keep this note")
         XCTAssertEqual(work.thumbPage, 3)
         XCTAssertEqual(work.folders.map(\.name), ["Reading"])
-        XCTAssertEqual(work.folders.first?.color, 0xFF8E4BFF)
+        XCTAssertEqual(work.folders.first?.color, 0xFFCB30E0)
         XCTAssertEqual(work.folders.first?.sourceGroupId, 42)
         XCTAssertNotNil(try destination.getWork(galleryId: 9999))
         XCTAssertEqual(try destination.listFolders().filter { $0.name == "Reading" }.count, 1)
@@ -207,7 +207,7 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(try destination.savedSearches(), ["favorite query"])
         XCTAssertEqual(try destination.dbWriter.read { try String.fetchOne($0, sql: "SELECT note FROM artists WHERE name = 'Artist'") }, "Artist note")
         XCTAssertEqual(images.favoriteIDs.count, 1)
-        XCTAssertEqual(images.folders().first { $0.name == "References" }?.color, 0xFF00C2E8)
+        XCTAssertEqual(images.folders().first { $0.name == "References" }?.color, 0xFF00C0E8)
         XCTAssertEqual(images.blacklist(serverID: images.servers[0].id), "gore")
         XCTAssertEqual(try ChallengeStore(images).definitions(), [game])
     }
@@ -300,7 +300,7 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(try peer.manga.getWork(galleryId: 1234)?.note, "Keep this note")
         XCTAssertEqual(peer.booru.favoriteIDs.count, 1)
         XCTAssertEqual(try ChallengeStore(peer.booru).definitions().count, 1)
-        XCTAssertEqual(try peer.manga.listFolders().first { $0.name == "Reading" }?.color, 0xFF8E4BFF)
+        XCTAssertEqual(try peer.manga.listFolders().first { $0.name == "Reading" }?.color, 0xFFCB30E0)
     }
 
     func testRecentWorksAndImagesTravelInTheBackupAndOlderBackupsStillRead() throws {

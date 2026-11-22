@@ -115,7 +115,9 @@ class AppDatabase implements SmartFolderLibrary {
       if (!db.columns('works').contains('page_count')) db.execute('ALTER TABLE works ADD COLUMN page_count INTEGER');
     });
     // Folder colors from the earlier, quieter palette or the old color picker become the closest vivid color.
-    migrator.registerMigration('v16_vivid_folder_colors', adoptVividFolderColors);
+    migrator.registerMigration('v16_vivid_folder_colors', adoptFolderPalette);
+    // Then the vivid colors become Apple's system colors.
+    migrator.registerMigration('v17_system_folder_colors', adoptFolderPalette);
     return migrator;
   }
 
@@ -206,13 +208,15 @@ class AppDatabase implements SmartFolderLibrary {
   int nextUniqueFolderColorIn(SqlDatabase db, {Set<int> excluding = const {}}) =>
       nextFolderColor(existingColors: db.column<int>('SELECT color FROM folders'), excluding: excluding);
 
-  /// Shared by both libraries: the first palette color no folder uses, then generated hues.
-  static int nextFolderColor({required List<int> existingColors, Set<int> excluding = const {}}) => FolderPalette.next({...existingColors, ...excluding});
+  /// Shared by both libraries: the palette color the fewest folders use, earliest in the order first.
+  static int nextFolderColor({required List<int> existingColors, Set<int> excluding = const {}}) => FolderPalette.next(existingColors, excluding: excluding);
 
-  /// Moves every folder onto the current palette, keeping folders apart where the palette allows.
-  static void adoptVividFolderColors(SqlDatabase db) {
+  /// Moves every folder onto the current palette. Each color has one fixed replacement, so devices
+  /// that move the same library on their own reach the same colors and sync sees no disagreement.
+  static void adoptFolderPalette(SqlDatabase db) {
     final colors = db.column<int>('SELECT DISTINCT color FROM folders');
-    for (final MapEntry(key: old, value: color) in FolderPalette.replacing(colors).entries) {
+    for (final old in colors) {
+      final color = FolderPalette.vivid(old);
       if (old != color) db.execute('UPDATE folders SET color = ? WHERE color = ?', [color, old]);
     }
   }
@@ -221,7 +225,7 @@ class AppDatabase implements SmartFolderLibrary {
     try {
       return dbWriter.read((db) => nextUniqueFolderColorIn(db, excluding: excluding));
     } on Object {
-      return FolderPalette.colors.first;
+      return FolderPalette.assignmentOrder.first;
     }
   }
 

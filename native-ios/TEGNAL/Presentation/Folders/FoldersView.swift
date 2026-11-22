@@ -163,7 +163,7 @@ public struct FoldersView: View {
         }
         .appSheet(isPresented: $reordering, onDismiss: loadFolders) { FolderOrderView(booru: false) }
         .appSheet(item: $editingColorFolder) { folder in
-            FolderColorSheet(title: folder.displayName, color: folder.color, others: folders.filter { $0.id != folder.id }.map(\.color)) { color in
+            FolderColorSheet(title: folder.displayName, color: folder.color) { color in
                 if let id = folder.id { saveColor(folderId: id, color: color) }
             } preview: { color in
                 FolderBentoCardView(folder: folder.recolored(color), previews: folder.id.flatMap { previews[$0] } ?? [])
@@ -221,28 +221,20 @@ public struct FoldersView: View {
     }
 }
 
-/// Ten colors no other folder in the library uses, in the palette's order. A pick recolors the
-/// folder at once, and a color nobody uses yet takes its place, so each pick brings a new one.
+/// Every folder color, Apple's system colors, with the folder's own marked. A pick recolors the
+/// folder at once.
 struct FolderColorSheet<Preview: View>: View {
     let title: String
-    let others: Set<Int64>
     let apply: (Int64) -> Void
     let preview: (Int64) -> Preview
     @State private var current: Int64
-    @State private var choices: [Int64]
-    /// Colors this sheet has shown or the folder had, never offered again while it is open.
-    @State private var shown: Set<Int64>
     @Environment(\.dismiss) private var dismiss
 
-    init(title: String, color: Int64, others: [Int64], apply: @escaping (Int64) -> Void, @ViewBuilder preview: @escaping (Int64) -> Preview) {
+    init(title: String, color: Int64, apply: @escaping (Int64) -> Void, @ViewBuilder preview: @escaping (Int64) -> Preview) {
         self.title = title
-        self.others = Set(others)
         self.apply = apply
         self.preview = preview
-        let choices = FolderPalette.unused(Set(others).union([color]), count: 10)
         _current = State(initialValue: color)
-        _choices = State(initialValue: choices)
-        _shown = State(initialValue: Set(choices).union([color]))
     }
 
     var body: some View {
@@ -254,27 +246,25 @@ struct FolderColorSheet<Preview: View>: View {
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 16) {
-                        ForEach(Array(choices.enumerated()), id: \.element) { index, color in
+                        ForEach(Array(FolderPalette.colors.enumerated()), id: \.element) { index, color in
                             Button { pick(color) } label: {
                                 Circle()
                                     .fill(Color(argb: color))
                                     .overlay(Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
-                                    .frame(width: 50, height: 50)
+                                    .padding(5)
+                                    // The folder's color is ringed, as the system's own color pickers do.
+                                    .overlay { if color == current { Circle().strokeBorder(Color.secondary, lineWidth: 3) } }
+                                    .frame(width: 56, height: 56)
                                     .frame(maxWidth: .infinity)
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .transition(.scale(scale: 0.3).combined(with: .opacity))
                             .accessibilityLabel(L10n.text("Color %@", String(index + 1)))
+                            .accessibilityAddTraits(color == current ? .isSelected : [])
                             .accessibilityIdentifier("folder.color.\(index)")
                         }
                     }
                     .padding(.horizontal, 20)
-                    Text(L10n.text("These are colors no other folder uses. Each color you pick is replaced by a new one."))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 16)
@@ -294,18 +284,9 @@ struct FolderColorSheet<Preview: View>: View {
     }
 
     private func pick(_ color: Int64) {
-        guard let index = choices.firstIndex(of: color) else { return }
+        guard color != current else { return }
         apply(color)
-        let replacement = FolderPalette.unused(others.union(shown), count: 1).first
-        withAnimation(.snappy) {
-            current = color
-            if let replacement {
-                choices[index] = replacement
-                shown.insert(replacement)
-            } else {
-                choices.remove(at: index)
-            }
-        }
+        withAnimation(.snappy) { current = color }
     }
 }
 

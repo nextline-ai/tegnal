@@ -72,18 +72,17 @@ final class GalleryIDParserTests: XCTestCase {
         XCTAssertEqual(ids, [888888], "Should prioritize the gallery URL and ignore the year 2024")
     }
 
-    func testUniqueFolderColors() throws {
+    func testNewFoldersSpreadOverEveryColor() throws {
         let db = try AppDatabase.inMemory()
-        var createdColors = Set<Int64>()
-
-        for i in 1...20 {
+        _ = try db.ensureDefaultFolder()
+        // Unfiled and 25 more folders: every one of the 13 colors twice.
+        for i in 1...25 {
             let folder = try db.createFolder(name: "Folder \(i)")
             XCTAssertNotNil(folder.id, "Folder ID must not be nil upon creation")
-            XCTAssertFalse(createdColors.contains(folder.color), "Color for folder \(i) should be unique and not repeated")
-            createdColors.insert(folder.color)
         }
-
-        XCTAssertEqual(createdColors.count, 20, "All 20 folders must have unique colors")
+        let counts = Dictionary(try db.listFolders().map { ($0.color, 1) }, uniquingKeysWith: +)
+        XCTAssertEqual(Set(counts.keys), Set(FolderPalette.colors))
+        XCTAssertEqual(Set(counts.values), [2], "no color is used again before every color is used")
     }
 
     func testCancelledMangaViewerImportStopsBeforeOpeningTheSource() async throws {
@@ -129,7 +128,7 @@ final class GalleryIDParserTests: XCTestCase {
 
     func testBackgroundBackupExportPreservesLibraryFieldsAndSeparateOutputs() async throws {
         let database = try AppDatabase.inMemory()
-        let folder = try database.createFolder(name: "Backup folder", color: 0xFF8E4BFF)
+        let folder = try database.createFolder(name: "Backup folder", color: 0xFFCB30E0)
         _ = try database.upsertWork(galleryId: 1234, folderId: folder.id, title: "Backup title", artists: "Artist", tags: "tag:test")
         try database.setNote(galleryId: 1234, note: "My note")
         try database.setThumbPage(galleryId: 1234, page: 3)
