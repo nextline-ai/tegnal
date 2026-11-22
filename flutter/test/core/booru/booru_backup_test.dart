@@ -79,9 +79,9 @@ void main() {
     final server = presetServer();
     source.saveServer(server);
     final a = source.saveFolder(name: 'Landscapes'), b = source.saveFolder(name: 'Rooms');
-    source.setFolderColor(a, 0xFF4A3DFF);
+    source.setFolderColor(a, 0xFF6155F5);
     final uncategorized = 'site:${server.canonicalAddress}';
-    source.setFolderColor(uncategorized, 0xFF00BFA0);
+    source.setFolderColor(uncategorized, 0xFF00C8B3);
     source.reorderFolders([b, uncategorized, a]);
     final post = fixturePost(5194309, server);
     source.saveFavorite(post, folderID: a);
@@ -98,8 +98,8 @@ void main() {
     destination.restoreBackup(backup);
     expect(destination.servers.map((server) => server.id), [local.id]);
     expect(destination.folders().map((folder) => folder.id), [b, uncategorized, a, extra]);
-    expect(destination.folders().firstWhere((folder) => folder.id == a).color, 0xFF4A3DFF);
-    expect(destination.folders().firstWhere((folder) => folder.id == uncategorized).color, 0xFF00BFA0);
+    expect(destination.folders().firstWhere((folder) => folder.id == a).color, 0xFF6155F5);
+    expect(destination.folders().firstWhere((folder) => folder.id == uncategorized).color, 0xFF00C8B3);
     expect(destination.folder(uncategorized)?.serverID, local.id, reason: "the server's Uncategorized stays its own");
     expect(destination.folder(a)?.serverID, isNull, reason: 'a global folder stays global');
     final mapped = post.onServer(local.id);

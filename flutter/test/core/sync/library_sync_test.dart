@@ -7,6 +7,7 @@ import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/content/reading_queue.dart';
 import 'package:tegnal/core/content/recent_works.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/storage/folder_palette.dart';
 import 'package:tegnal/core/storage/folder_rules.dart';
 import 'package:tegnal/core/study/study_store.dart';
 import 'package:tegnal/core/support/preferences.dart';
@@ -211,17 +212,69 @@ void main() {
     expect(b.mangaDefaults.object('app.language'), isNull);
   });
 
-  test('a folder color from a device on the earlier palette arrives vivid', () {
+  test('a folder color from a device on an earlier palette arrives as a system color', () {
     final a = adapter(), b = adapter();
     final folder = a.manga.createFolder(name: 'Older').id!;
+    final vivid = a.manga.createFolder(name: 'Vivid').id!;
     final image = a.booru.saveFolder(name: 'Older images');
-    // A device still on 1.5.1 keeps the earlier palette's colors.
+    // A device still on 1.5.1 keeps the earlier palette's colors, one on 1.6 the vivid ones.
     a.manga.setFolderColor(folder, 0xFF0D9488);
+    a.manga.setFolderColor(vivid, 0xFFFF6A3D);
     a.booru.setFolderColor(image, 0xFFE11D48);
-    exchange(a, b, LibrarySyncLedger(), LibrarySyncLedger());
+    final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
+    exchange(a, b, la, lb);
     b.booru.refresh();
-    expect(b.manga.listFolders().firstWhere((folder) => folder.name == 'Older').color, 0xFF00897B);
-    expect(b.booru.folders().firstWhere((folder) => folder.id == image).color, 0xFFE3122C);
+    expect(b.manga.listFolders().firstWhere((folder) => folder.name == 'Older').color, FolderPalette.mint);
+    expect(b.manga.listFolders().firstWhere((folder) => folder.name == 'Vivid').color, FolderPalette.orange);
+    expect(b.booru.folders().firstWhere((folder) => folder.id == image).color, FolderPalette.red);
+    // The receiving device keeps its system colors without sending them back as its own edits.
+    final before = Map.of(lb.changes);
+    lb.capture(b.snapshot(), device: 'B');
+    expect(changesEquality.equals(lb.changes, before), isTrue);
+  });
+
+  test('a new palette leaves an untouched default folder behind a color picked elsewhere', () {
+    final a = adapter(), b = adapter();
+    int? unfiledColor(LibrarySyncAdapter side) => side.manga.dbWriter.read((db) => db.value<int>("SELECT color FROM folders WHERE sync_id = 'unsorted'"));
+    // Both devices start on 1.6, Unfiled in that palette's default color.
+    for (final side in [a, b]) {
+      side.manga.dbWriter.write((db) => db.execute("UPDATE folders SET color = ? WHERE sync_id = 'unsorted'", [FolderPalette.earlierUnfiled.first]));
+    }
+    final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
+    la.capture(a.snapshot(), device: 'A');
+    lb.capture(b.snapshot(), device: 'B');
+    // A picks a color. B, which has not heard of it yet, updates and moves to the new palette.
+    final unfiled = a.manga.dbWriter.read((db) => db.value<int>("SELECT id FROM folders WHERE sync_id = 'unsorted'"))!;
+    a.manga.setFolderColor(unfiled, FolderPalette.purple);
+    b.manga.dbWriter.write(AppDatabase.adoptFolderPalette);
+    expect(unfiledColor(b), FolderPalette.unfiled);
+    exchange(a, b, la, lb);
+    expect(unfiledColor(a), FolderPalette.purple);
+    expect(unfiledColor(b), FolderPalette.purple);
+  });
+
+  test('devices moving to the new palette on their own agree', () {
+    final a = adapter(), b = adapter();
+    final reading = a.manga.createFolder(name: 'Reading').id!;
+    a.manga.setFolderColor(reading, 0xFF2D3DB8);
+    final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
+    exchange(a, b, la, lb);
+    // Both update while apart; each moves its own copy of the library.
+    for (final side in [a, b]) {
+      side.manga.dbWriter.write((db) {
+        db.execute("UPDATE folders SET color = 0xFF2D3DB8 WHERE name = 'Reading'");
+        AppDatabase.adoptFolderPalette(db);
+      });
+    }
+    exchange(a, b, la, lb);
+    exchange(a, b, la, lb);
+    for (final side in [a, b]) {
+      expect(side.manga.listFolders().firstWhere((folder) => folder.name == 'Reading').color, FolderPalette.indigo);
+    }
+    final beforeA = Map.of(la.changes), beforeB = Map.of(lb.changes);
+    exchange(a, b, la, lb);
+    expect(changesEquality.equals(la.changes, beforeA), isTrue, reason: 'nothing more to send once both agree');
+    expect(changesEquality.equals(lb.changes, beforeB), isTrue);
   });
 
   test('comics folder rename, color and order converge across devices', () {
@@ -230,11 +283,11 @@ void main() {
     final la = LibrarySyncLedger(), lb = LibrarySyncLedger();
     exchange(a, b, la, lb);
     a.manga.renameFolder(first, 'Renamed');
-    a.manga.setFolderColor(first, 0xFF8E4BFF);
+    a.manga.setFolderColor(first, 0xFFCB30E0);
     a.manga.reorderFolders([second, first]);
     exchange(a, b, la, lb);
     expect(b.manga.listFolders().map((folder) => folder.name).take(2), ['Second', 'Renamed']);
-    expect(b.manga.listFolders().firstWhere((folder) => folder.name == 'Renamed').color, 0xFF8E4BFF);
+    expect(b.manga.listFolders().firstWhere((folder) => folder.name == 'Renamed').color, 0xFFCB30E0);
     final before = Map.of(lb.changes);
     lb.capture(b.snapshot(), device: 'B');
     expect(changesEquality.equals(lb.changes, before), isTrue);
@@ -441,7 +494,7 @@ void main() {
     final a = adapter(), b = adapter();
     final server = presetServer();
     a.booru.saveServer(server);
-    final folder = a.booru.saveFolder(name: 'Favorites', color: 0xFF4A3DFF, serverID: server.id);
+    final folder = a.booru.saveFolder(name: 'Favorites', color: 0xFF6155F5, serverID: server.id);
     a.booru.reorderFolders([folder, 'site:${server.canonicalAddress}']);
     final post = fixturePost(101, server);
     a.booru.saveFavorite(post, folderID: folder);
@@ -458,9 +511,9 @@ void main() {
   test('a fresh device does not overwrite an existing default folder color', () {
     final a = adapter(), b = adapter();
     final folder = a.manga.listFolders().first.id!;
-    a.manga.setFolderColor(folder, 0xFF8E4BFF);
+    a.manga.setFolderColor(folder, 0xFFCB30E0);
     exchange(a, b, LibrarySyncLedger(), LibrarySyncLedger());
-    expect(b.manga.listFolders().first.color, 0xFF8E4BFF);
+    expect(b.manga.listFolders().first.color, 0xFFCB30E0);
   });
 
   test('a delete tombstone keeps only the key and documents round-trip', () {

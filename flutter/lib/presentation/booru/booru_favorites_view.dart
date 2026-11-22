@@ -171,11 +171,6 @@ class _BooruFavoritesViewState extends State<BooruFavoritesView> {
             builder: (context, controller) => FolderColorSheet(
               title: folder.displayName,
               color: folder.color,
-              // Colors differ among the folders shown beside it: its server's and the global ones.
-              others: [
-                for (final other in _booru.store.folders())
-                  if (other.id != folder.id && (folder.serverID == null || other.serverID == null || other.serverID == folder.serverID)) other.color,
-              ],
               onSelected: (color) => _booru.store.setFolderColor(folder.id, color),
               preview: (color) => BooruFolderCard(
                 booru: _booru,

@@ -168,7 +168,9 @@ public final class AppDatabase: Sendable {
         }
         // Folder colors from the earlier, quieter palette or the old color picker become the
         // closest vivid color.
-        migrator.registerMigration("v16_vivid_folder_colors") { try Self.adoptVividFolderColors($0) }
+        migrator.registerMigration("v16_vivid_folder_colors") { try Self.adoptFolderPalette($0) }
+        // Then the vivid colors become Apple's system colors.
+        migrator.registerMigration("v17_system_folder_colors") { try Self.adoptFolderPalette($0) }
         return migrator
     }
 
@@ -262,21 +264,22 @@ public final class AppDatabase: Sendable {
         return Self.nextFolderColor(existingColors: existingColors, excluding: excluding)
     }
 
-    /// Shared by both libraries: the first palette color no folder uses, then generated hues.
+    /// Shared by both libraries: the palette color the fewest folders use, earliest in the order first.
     public static func nextFolderColor(existingColors: [Int64], excluding: Set<Int64> = []) -> Int64 {
-        FolderPalette.next(used: Set(existingColors).union(excluding))
+        FolderPalette.next(existing: existingColors, excluding: excluding)
     }
 
     public func nextUniqueFolderColor(excluding: Set<Int64> = []) -> Int64 {
         (try? dbWriter.read { db in nextUniqueFolderColor(in: db, excluding: excluding) })
-            ?? FolderPalette.colors[0]
+            ?? FolderPalette.assignmentOrder[0]
     }
 
-    /// Moves every folder onto the current palette, keeping folders apart where the palette allows.
-    static func adoptVividFolderColors(_ db: Database, table: String = "folders") throws {
+    /// Moves every folder onto the current palette. Each color has one fixed replacement, so devices
+    /// that move the same library on their own reach the same colors and sync sees no disagreement.
+    static func adoptFolderPalette(_ db: Database, table: String = "folders") throws {
         let colors = try Int64.fetchAll(db, sql: "SELECT DISTINCT color FROM \(table)")
-        for (old, new) in FolderPalette.replacing(colors) where old != new {
-            try db.execute(sql: "UPDATE \(table) SET color = ? WHERE color = ?", arguments: [new, old])
+        for old in colors where FolderPalette.vivid(old) != old {
+            try db.execute(sql: "UPDATE \(table) SET color = ? WHERE color = ?", arguments: [FolderPalette.vivid(old), old])
         }
     }
 
@@ -1128,60 +1131,51 @@ extension AppDatabase {
 }
 
 // Kept in this file so every copy of the project builds it without a new file reference.
-/// Folder colors for both libraries: a fixed set of vivid colors in the order new folders take
-/// them, then generated hues once a library uses every one. The color sheet offers the first ten
-/// a library doesn't use yet.
+/// Folder colors for both libraries: Apple's iOS system colors as the Human Interface Guidelines give
+/// them for the light appearance. The color sheet shows every one; a new folder takes the one the
+/// fewest folders use, in `assignmentOrder`.
 enum FolderPalette {
-    static let colors: [Int64] = [
-        0xFF1F6BFF, // Blue
-        0xFFFF3B30, // Red
-        0xFF00C853, // Green
-        0xFFFF9500, // Orange
-        0xFF8E4BFF, // Violet
-        0xFFFF2D87, // Pink
-        0xFF00C2E8, // Cyan
-        0xFFFFCC00, // Yellow
-        0xFF4A3DFF, // Indigo
-        0xFF00BFA0, // Teal
-        0xFFFF6A3D, // Coral
-        0xFF7CD200, // Lime
-        0xFFD63CFF, // Magenta
-        0xFF2FA8FF, // Sky
-        0xFFFFB000, // Amber
-        0xFF00A86B, // Emerald
-        0xFFB026FF, // Purple
-        0xFFFF4F7B, // Rose
-        0xFF0047D6, // Cobalt
-        0xFF2EE0B0, // Mint
-        0xFFE3122C, // Crimson
-        0xFF3DB500, // Leaf
-        0xFFFF4FD8, // Orchid
-        0xFF0090C8, // Ocean
-        0xFFFF7A00, // Tangerine
-        0xFF6A1BE0, // Grape
-        0xFFE0006E, // Raspberry
-        0xFF00897B, // Pine
-        0xFFC8A000, // Gold
-        0xFF2D3DB8, // Navy
-        0xFF0A84FF, // Azure
-        0xFF7B83FF, // Periwinkle
-        0xFF00D0D0, // Turquoise
-        0xFFB5651D, // Copper
-        0xFF9C27B0, // Plum
-        0xFF5C6B80, // Slate
-    ]
-    /// The comics library's Unfiled and the image library's Uncategorized folder when first made.
-    static let unfiled: Int64 = 0xFF2FA8FF
-    static let unsorted: Int64 = 0xFF00C853
-    /// What the two default folders were made with before; sync still treats these as untouched.
-    static let earlierUnfiled: Int64 = 0xFF2196F3
-    static let earlierUnsorted: Int64 = 0xFF66BB70
-    private static let slate: Int64 = 0xFF5C6B80
-    private static let generatedCount = 512
+    static let red: Int64 = 0xFFFF383C
+    static let orange: Int64 = 0xFFFF8D28
+    static let yellow: Int64 = 0xFFFFCC00
+    static let green: Int64 = 0xFF34C759
+    static let mint: Int64 = 0xFF00C8B3
+    static let teal: Int64 = 0xFF00C3D0
+    static let cyan: Int64 = 0xFF00C0E8
+    static let blue: Int64 = 0xFF0088FF
+    static let indigo: Int64 = 0xFF6155F5
+    static let purple: Int64 = 0xFFCB30E0
+    static let pink: Int64 = 0xFFFF2D55
+    static let brown: Int64 = 0xFFAC7F5E
+    static let gray: Int64 = 0xFF8E8E93
 
-    /// Every color earlier versions handed out on their own, each with its own replacement, so
-    /// folders that differed still differ.
-    static let replacements: [Int64: Int64] = [
+    /// In the order the color sheet shows them.
+    static let colors: [Int64] = [red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown, gray]
+    /// The order new folders take them: hues far apart first, so the first folders differ most.
+    static let assignmentOrder: [Int64] = [blue, red, green, orange, purple, yellow, teal, pink, indigo, mint, cyan, brown, gray]
+
+    /// The comics library's Unfiled and the image library's Uncategorized folder when first made.
+    static let unfiled: Int64 = blue
+    static let unsorted: Int64 = green
+    /// What the two default folders were made with before, newest first; sync still treats these as untouched.
+    static let earlierUnfiled: [Int64] = [0xFF2FA8FF, 0xFF2196F3]
+    static let earlierUnsorted: [Int64] = [0xFF00C853, 0xFF66BB70]
+
+    /// The vivid palette 1.6 used, each color with the system color that replaces it. Fixed rather
+    /// than worked out, so every device and both apps move a folder to the same color.
+    static let previous: [Int64: Int64] = [
+        0xFF1F6BFF: blue, 0xFFFF3B30: red, 0xFF00C853: green, 0xFFFF9500: orange,
+        0xFF8E4BFF: purple, 0xFFFF2D87: pink, 0xFF00C2E8: cyan, 0xFFFFCC00: yellow,
+        0xFF4A3DFF: indigo, 0xFF00BFA0: mint, 0xFFFF6A3D: orange, 0xFF7CD200: green,
+        0xFFD63CFF: purple, 0xFF2FA8FF: blue, 0xFFFFB000: yellow, 0xFF00A86B: green,
+        0xFFB026FF: purple, 0xFFFF4F7B: pink, 0xFF0047D6: blue, 0xFF2EE0B0: mint,
+        0xFFE3122C: red, 0xFF3DB500: green, 0xFFFF4FD8: purple, 0xFF0090C8: cyan,
+        0xFFFF7A00: orange, 0xFF6A1BE0: indigo, 0xFFE0006E: pink, 0xFF00897B: mint,
+        0xFFC8A000: yellow, 0xFF2D3DB8: indigo, 0xFF0A84FF: blue, 0xFF7B83FF: indigo,
+        0xFF00D0D0: teal, 0xFFB5651D: brown, 0xFF9C27B0: purple, 0xFF5C6B80: gray,
+    ]
+    /// Every color versions before 1.6 handed out on their own, with the 1.6 color that replaced it.
+    static let earlier: [Int64: Int64] = [
         0xFF2196F3: 0xFF2FA8FF,
         0xFF66BB70: 0xFF00C853,
         0xFF2563EB: 0xFF1F6BFF,
@@ -1214,83 +1208,35 @@ enum FolderPalette {
         0xFF64748B: 0xFF5C6B80,
     ]
 
-    static func color(at index: Int) -> Int64 {
-        index < colors.count ? colors[index] : generated(index - colors.count)
+    static func isCurrent(_ color: Int64) -> Bool { colors.contains(color) }
+
+    /// The color for a new folder: the first in `assignmentOrder` the fewest of `existing` use,
+    /// leaving out `excluding` while any other is left.
+    static func next(existing: [Int64], excluding: Set<Int64> = []) -> Int64 {
+        let counts = Dictionary(existing.map { (vivid($0), 1) }, uniquingKeysWith: +)
+        let free = assignmentOrder.filter { !excluding.contains($0) }
+        return (free.isEmpty ? assignmentOrder : free).min { counts[$0, default: 0] < counts[$1, default: 0] } ?? blue
     }
 
-    /// Golden-angle hues after the palette, bright enough to sit with it.
-    static func generated(_ index: Int) -> Int64 {
-        AppDatabase.colorFromHSV(h: (Double(index) * 0.618033988749895).truncatingRemainder(dividingBy: 1.0), s: 0.8, v: 0.95)
-    }
-    private static let generatedColors = Set((0..<generatedCount).map(generated))
-
-    static func isCurrent(_ color: Int64) -> Bool { colors.contains(color) || generatedColors.contains(color) }
-
-    /// The first `count` colors none of `used` takes, in the order new folders get them.
-    static func unused(_ used: Set<Int64>, count: Int) -> [Int64] {
-        var result: [Int64] = []
-        var index = 0
-        while result.count < count, index < colors.count + generatedCount {
-            let color = color(at: index)
-            if !used.contains(color) { result.append(color) }
-            index += 1
-        }
-        return result
-    }
-
-    static func next(used: Set<Int64>) -> Int64 { unused(used, count: 1).first ?? colors[0] }
-
-    /// A color from an earlier version, a backup, another device or another app, as the closest
-    /// current color. Current colors stay as they are.
+    /// A color from an earlier version, a backup, another device or another app, as the system
+    /// color for it. System colors stay as they are. The same color always gives the same answer.
     static func vivid(_ color: Int64) -> Int64 {
         let opaque = 0xFF000000 | (color & 0xFFFFFF)
         if isCurrent(opaque) { return opaque }
-        return replacements[opaque] ?? nearest(opaque)
+        return previous[earlier[opaque] ?? opaque] ?? nearest(opaque)
     }
 
-    /// New colors for a library's folder colors: earlier palette colors by the table, others by
-    /// the nearest color no other folder has taken.
-    static func replacing(_ colors: [Int64]) -> [Int64: Int64] {
-        var result: [Int64: Int64] = [:]
-        var taken = Set<Int64>()
-        for color in colors {
-            let opaque = 0xFF000000 | (color & 0xFFFFFF)
-            if isCurrent(opaque) { result[color] = opaque } else if let new = replacements[opaque] { result[color] = new }
-            if let new = result[color] { taken.insert(new) }
-        }
-        for color in colors where result[color] == nil {
-            let new = nearest(0xFF000000 | (color & 0xFFFFFF), avoiding: taken)
-            result[color] = new
-            taken.insert(new)
-        }
-        return result
+    /// Grays go to gray and dark or muted warm colors to brown. Every other color takes the system
+    /// color nearest its hue in OKLCH.
+    static func nearest(_ color: Int64) -> Int64 {
+        let (lightness, chroma, hue) = oklch(color)
+        if chroma < 0.04 { return gray }
+        if (30...100).contains(hue), lightness < 0.55 || (chroma < 0.11 && lightness < 0.75) { return brown }
+        func distance(_ other: Double) -> Double { let d = abs(hue - other); return min(d, 360 - d) }
+        return colors.filter { $0 != gray && $0 != brown }.min { distance(oklch($0).2) < distance(oklch($1).2) } ?? blue
     }
 
-    /// Grays go to slate. Other colors keep their hue, made vivid, and take the closest palette
-    /// color in OKLab, skipping `avoiding` while any other is left.
-    static func nearest(_ color: Int64, avoiding: Set<Int64> = []) -> Int64 {
-        let (lightness, a, b) = oklab(color)
-        let chroma = (a * a + b * b).squareRoot()
-        let free = colors.filter { !avoiding.contains($0) }
-        let pool = free.isEmpty ? colors : free
-        if chroma < 0.05, pool.contains(slate) || free.isEmpty { return slate }
-        let target: (Double, Double, Double)
-        if chroma < 0.05 {
-            target = (lightness, a, b)
-        } else {
-            let boosted = max(chroma, 0.17) / chroma
-            target = (min(max(lightness, 0.5), 0.82), a * boosted, b * boosted)
-        }
-        var best = pool[0], bestDistance = Double.infinity
-        for candidate in pool where candidate != slate || chroma < 0.05 {
-            let (l, ca, cb) = oklab(candidate)
-            let distance = (l - target.0) * (l - target.0) + (ca - target.1) * (ca - target.1) + (cb - target.2) * (cb - target.2)
-            if distance < bestDistance { best = candidate; bestDistance = distance }
-        }
-        return best
-    }
-
-    private static func oklab(_ argb: Int64) -> (Double, Double, Double) {
+    private static func oklch(_ argb: Int64) -> (Double, Double, Double) {
         func linear(_ channel: Int64) -> Double {
             let value = Double(channel & 0xFF) / 255
             return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
@@ -1299,8 +1245,9 @@ enum FolderPalette {
         let l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
         let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
         let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-        return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
-                1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
-                0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+        let a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+        let bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+        let hue = atan2(bb, a) * 180 / .pi
+        return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, (a * a + bb * bb).squareRoot(), hue < 0 ? hue + 360 : hue)
     }
 }

@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/content/gallery_id_parser.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/storage/folder_palette.dart';
 import 'package:tegnal/core/storage/library_backup.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/support/swift_json.dart';
@@ -73,16 +74,20 @@ void main() {
     ], reason: 'Should prioritize the gallery URL and ignore the year 2024');
   });
 
-  test('unique folder colors', () {
+  test('new folders spread over every color', () {
     final db = AppDatabase.inMemory();
-    final createdColors = <int>{};
-    for (var index = 1; index <= 20; index++) {
+    db.ensureDefaultFolder();
+    // Unfiled and 25 more folders: every one of the 13 colors twice.
+    for (var index = 1; index <= 25; index++) {
       final folder = db.createFolder(name: 'Folder $index');
       expect(folder.id, isNotNull, reason: 'Folder ID must not be nil upon creation');
-      expect(createdColors.contains(folder.color), isFalse, reason: 'Color for folder $index should be unique and not repeated');
-      createdColors.add(folder.color);
     }
-    expect(createdColors.length, 20, reason: 'All 20 folders must have unique colors');
+    final counts = <int, int>{};
+    for (final folder in db.listFolders()) {
+      counts[folder.color] = (counts[folder.color] ?? 0) + 1;
+    }
+    expect(counts.keys.toSet(), FolderPalette.colors.toSet());
+    expect(counts.values.toSet(), {2}, reason: 'no color is used again before every color is used');
   });
 
   test('background backup export preserves library fields and separate outputs', () {

@@ -271,7 +271,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     migrations.registerMigration('booru_v11_optional_unsorted', (db) {
       db.execute("DELETE FROM folders WHERE id = 'unsorted' AND color = 4284922736 AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')");
     });
-    migrations.registerMigration('booru_v12_vivid_folder_colors', AppDatabase.adoptVividFolderColors);
+    migrations.registerMigration('booru_v12_vivid_folder_colors', AppDatabase.adoptFolderPalette);
     // Each server gets an Uncategorized of its own. Folders made before stay shared by every server
     // until the person chooses (`adoptFolderStyle`); a library with none starts with server folders.
     migrations.registerMigration('booru_v13_server_folders', (db) {
@@ -286,6 +286,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     migrations.registerMigration('booru_v16_study_awards', StudyStore.migrateAwards);
     migrations.registerMigration('booru_v17_addons', AddonStore.migrate);
     migrations.registerMigration('booru_v18_addon_origin', AddonStore.migrateOrigin);
+    migrations.registerMigration('booru_v19_system_folder_colors', AppDatabase.adoptFolderPalette);
     return migrations;
   }
 
@@ -780,7 +781,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     return owner == null || owner == serverID;
   }
 
-  /// A color none of the folders shown beside it uses yet: the server's own and the global ones.
+  /// The color the fewest folders shown beside it use: the server's own and the global ones.
   static int nextFolderColor(String? serverID, SqlDatabase db) => AppDatabase.nextFolderColor(
     existingColors: serverID == null
         ? db.column<int>('SELECT color FROM folders')

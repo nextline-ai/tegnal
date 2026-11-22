@@ -51,7 +51,7 @@ String gameJson(ChallengeDefinition game) => encodeJsonString(game.toJson());
 /// `LibraryBackupTests.populated()`.
 (AppDatabase, BooruStore, ChallengeDefinition) populated() {
   final comics = AppDatabase.inMemory(), images = BooruStore.inMemory();
-  final folder = comics.createFolder(name: 'Reading', color: 0xFF8E4BFF, sourceGroupId: 42);
+  final folder = comics.createFolder(name: 'Reading', color: 0xFFCB30E0, sourceGroupId: 42);
   comics.upsertWork(galleryId: 1234, folderId: folder.id, title: 'Comic', artists: 'Artist', tags: 'tag:test');
   comics.setNote(1234, 'Keep this note');
   comics.setThumbPage(1234, 3);
@@ -65,7 +65,7 @@ String gameJson(ChallengeDefinition game) => encodeJsonString(game.toJson());
   final server = presetServer();
   images.saveServer(server);
   final imageFolder = images.saveFolder(name: 'References');
-  images.setFolderColor(imageFolder, 0xFF00C2E8);
+  images.setFolderColor(imageFolder, 0xFF00C0E8);
   images.saveFavorite(fixturePost(72, server), folderID: imageFolder);
   images.recordSearch('scenery', serverID: server.id);
   images.toggleTag('scenery', serverID: server.id, kind: 'tag');

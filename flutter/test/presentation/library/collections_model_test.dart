@@ -1,11 +1,8 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/domain/models.dart';
 import 'package:tegnal/presentation/library/collections_view.dart';
-import 'package:tegnal/core/storage/folder_palette.dart';
-import 'package:tegnal/presentation/library/folder_color_sheet.dart';
 
 void main() {
   late AppDatabase database;
@@ -55,19 +52,5 @@ void main() {
     model.remove('tag:example', SavedCollectionKind.search);
     expect(model.names(SavedCollectionKind.search), isEmpty);
     expect(model.names(SavedCollectionKind.history), ['tag:example']);
-  });
-
-  test('the color sheet offers ten colors no other folder uses, a new one in place of each pick', () {
-    final picked = <int>[];
-    final sheet = FolderColorSheet(
-      title: 'Folder',
-      color: FolderPalette.colors[1],
-      others: [FolderPalette.colors[0]],
-      onSelected: picked.add,
-      preview: (color) => const SizedBox(),
-    );
-    expect(sheet.others, [FolderPalette.colors[0]]);
-    final choices = FolderPalette.unused({FolderPalette.colors[0], FolderPalette.colors[1]}, 10);
-    expect(choices, FolderPalette.colors.sublist(2, 12));
   });
 }

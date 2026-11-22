@@ -28,7 +28,7 @@ Future<BuildContext> _phone(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('the color sheet fits a medium sheet and puts a new color where one was picked', (tester) async {
+  testWidgets('the color sheet shows all thirteen system colors with the folder\'s own marked', (tester) async {
     final context = await _phone(tester);
     final picked = <int>[];
     showAppSheet<void>(
@@ -36,8 +36,7 @@ void main() {
       medium: true,
       builder: (context, controller) => FolderColorSheet(
         title: 'Reading',
-        color: FolderPalette.colors[0],
-        others: [FolderPalette.unfiled],
+        color: FolderPalette.red,
         onSelected: picked.add,
         preview: (color) => ColoredBox(key: ValueKey('preview-$color'), color: Color(color), child: const SizedBox(height: 120)),
       ),
@@ -45,18 +44,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Reading color'), findsOneWidget);
-    final swatches = find.bySemanticsLabel(RegExp(r'^Color \d+$'));
-    expect(swatches, findsNWidgets(10));
+    expect(find.bySemanticsLabel(RegExp(r'^Color \d+$')), findsNWidgets(13));
+    for (final color in FolderPalette.colors) {
+      expect(find.byKey(ValueKey(color)), findsOneWidget);
+    }
+    expect(tester.getSemantics(find.bySemanticsLabel('Color 1')), isSemantics(isSelected: true));
 
-    // The palette after the folder's own color and Unfiled's.
-    final red = FolderPalette.colors[1];
+    // The folder's own color does nothing; another recolors it and takes the mark.
     await tester.tap(find.bySemanticsLabel('Color 1'));
     await tester.pumpAndSettle();
-    expect(picked, [red]);
-    expect(find.byKey(ValueKey('preview-$red')), findsOneWidget);
-    expect(find.byKey(ValueKey(red)), findsNothing, reason: 'the picked color leaves the choices');
-    final shown = FolderPalette.unused({FolderPalette.colors[0], FolderPalette.unfiled}, 11);
-    expect(find.byKey(ValueKey(shown.last)), findsOneWidget, reason: 'the next unused color takes its place');
+    expect(picked, isEmpty);
+    await tester.tap(find.bySemanticsLabel('Color 2'));
+    await tester.pumpAndSettle();
+    expect(picked, [FolderPalette.orange]);
+    expect(find.byKey(ValueKey('preview-${FolderPalette.orange}')), findsOneWidget);
+    expect(tester.getSemantics(find.bySemanticsLabel('Color 2')), isSemantics(isSelected: true));
+    expect(tester.getSemantics(find.bySemanticsLabel('Color 1')), isSemantics(isSelected: false));
+    expect(find.bySemanticsLabel(RegExp(r'^Color \d+$')), findsNWidgets(13), reason: 'every color stays');
   });
 
   testWidgets('the download location page lists the device folder and offers a move', (tester) async {

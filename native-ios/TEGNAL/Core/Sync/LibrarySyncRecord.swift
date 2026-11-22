@@ -36,9 +36,9 @@ struct LibrarySyncRow: Codable, Equatable, Sendable {
         return table + ":" + ((try? encoder.encode(keys.map { values[$0] ?? .null })) ?? Data()).base64EncodedString()
     }
     var isFactoryDefault: Bool {
-        // Either palette's first color counts, so devices on both versions agree.
-        if table == "booru.folders" { return values["id"]?.string == "unsorted" && [FolderPalette.unsorted, FolderPalette.earlierUnsorted].contains(values["color"]?.integer) && values["position"]?.integer == 0 }
-        if table == "manga.folders" { return values["sync_id"]?.string == "unsorted" && [FolderPalette.unfiled, FolderPalette.earlierUnfiled].contains(values["color"]?.integer) && values["sort_order"]?.integer == 1 }
+        // Every palette's first color counts, so devices on all versions agree.
+        if table == "booru.folders" { return values["id"]?.string == "unsorted" && ([FolderPalette.unsorted] + FolderPalette.earlierUnsorted).contains(values["color"]?.integer) && values["position"]?.integer == 0 }
+        if table == "manga.folders" { return values["sync_id"]?.string == "unsorted" && ([FolderPalette.unfiled] + FolderPalette.earlierUnfiled).contains(values["color"]?.integer) && values["sort_order"]?.integer == 1 }
         return false
     }
     static let keys: [String: [String]] = [
@@ -71,7 +71,10 @@ struct LibrarySyncLedger: Codable, Sendable {
     mutating func capture(_ snapshot: [String: LibrarySyncRow], device: String, now: Double = Date().timeIntervalSince1970) {
         let timestamp = max(now, (changes.values.map(\.timestamp).max() ?? 0) + 0.000001)
         for (key, row) in snapshot where baseline[key] != row {
-            changes[key] = .init(row: row, timestamp: baseline[key] == nil && changes[key] == nil && row.isFactoryDefault ? 0 : timestamp, device: device, deleted: false)
+            // A default folder no one has changed stays untouched when a new palette recolors it, so
+            // it never wins over a color picked on another device that has not synced here yet.
+            let untouched = row.isFactoryDefault && baseline[key]?.isFactoryDefault != false && (changes[key]?.timestamp ?? 0) == 0
+            changes[key] = .init(row: row, timestamp: untouched ? 0 : timestamp, device: device, deleted: false)
         }
         for (key, row) in baseline where snapshot[key] == nil {
             let tombstone = LibrarySyncRow(table: row.table, values: row.values.filter { (LibrarySyncRow.keys[row.table] ?? []).contains($0.key) })

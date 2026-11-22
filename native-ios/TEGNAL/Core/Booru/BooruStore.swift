@@ -159,7 +159,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v11_optional_unsorted") { db in
             try db.execute(sql: "DELETE FROM folders WHERE id = 'unsorted' AND color = 4284922736 AND NOT EXISTS(SELECT 1 FROM favorites WHERE folder_id = 'unsorted')")
         }
-        migrations.registerMigration("booru_v12_vivid_folder_colors") { try AppDatabase.adoptVividFolderColors($0) }
+        migrations.registerMigration("booru_v12_vivid_folder_colors") { try AppDatabase.adoptFolderPalette($0) }
         // Each server gets folders of its own; a folder with images of several servers becomes one
         // folder of the same name and color in each, and a folder holding nothing stays global.
         // Each server gets an Uncategorized of its own. Folders made before stay shared by every server
@@ -176,6 +176,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v16_study_awards") { try StudyStore.migrateAwards($0) }
         migrations.registerMigration("booru_v17_addons") { try AddonStore.migrate($0) }
         migrations.registerMigration("booru_v18_addon_origin") { try AddonStore.migrateOrigin($0) }
+        migrations.registerMigration("booru_v19_system_folder_colors") { try AppDatabase.adoptFolderPalette($0) }
         return migrations
     }
 
@@ -695,7 +696,7 @@ extension BooruStore {
         return owner == nil || owner == serverID
     }
 
-    /// A color none of the folders shown beside it uses yet: the server's own and the global ones.
+    /// The color the fewest folders shown beside it use: the server's own and the global ones.
     static func nextFolderColor(serverID: String?, db: Database) throws -> Int64 {
         let colors = try serverID.map { try Int64.fetchAll(db, sql: "SELECT color FROM folders WHERE server_id = ? OR server_id IS NULL", arguments: [$0]) }
             ?? Int64.fetchAll(db, sql: "SELECT color FROM folders")

@@ -82,10 +82,6 @@ class LibraryRoutes {
       builder: (context, controller) => FolderColorSheet(
         title: folder.displayName,
         color: folder.color,
-        others: [
-          for (final other in database.listFolders())
-            if (other.id != folder.id) other.color,
-        ],
         preview: preview,
         onSelected: (color) {
           final id = folder.id;

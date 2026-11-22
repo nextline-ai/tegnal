@@ -79,9 +79,7 @@ struct BooruFavoritesView: View {
         .appSheet(item: $editing) { item in
             if let folder = item.folder {
                 let posts = store.visibleFavorites(folderID: folder.id)
-                // Colors differ among the folders shown beside it: its server's and the global ones.
-                let others = store.folders().filter { $0.id != folder.id && (folder.serverID == nil || $0.serverID == nil || $0.serverID == folder.serverID) }
-                FolderColorSheet(title: folder.displayName, color: folder.color, others: others.map(\.color)) { color in
+                FolderColorSheet(title: folder.displayName, color: folder.color) { color in
                     store.perform { try store.setFolderColor(folder.id, color: color) }
                 } preview: { color in
                     BooruFolderCard(title: folder.plainName, isSmart: folder.isSmart, color: color, posts: posts, count: posts.count,
