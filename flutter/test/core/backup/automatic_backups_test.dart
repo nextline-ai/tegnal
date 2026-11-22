@@ -181,6 +181,43 @@ void main() {
     fixture.closeLibrary(library);
   });
 
+  test('an automatic backup is made every three days while the library changes', () async {
+    var clock = DateTime.now();
+    final fixture = BackupFixture(addTearDown, now: () => clock);
+    final library = fixture.openLibrary();
+    library.$1.upsertWork(galleryId: 1, title: 'One');
+    final model = modelFor(fixture, library);
+    expect(model.backsUpPeriodically, isTrue, reason: 'It starts on');
+    await model.backUpIfDue();
+    await model.refresh();
+    expect(model.items, isEmpty, reason: 'Nothing is made before the launch pass');
+
+    await model.afterLaunch();
+    expect(model.items.map((item) => item.kind), [BackupKind.periodic], reason: 'A device with a library and no backup yet is backed up');
+    expect(model.items.single.isProtected, isTrue);
+
+    clock = clock.add(const Duration(days: 2));
+    library.$1.upsertWork(galleryId: 2, title: 'Two');
+    await model.backUpIfDue();
+    expect(model.items, hasLength(1), reason: 'Not yet three days');
+
+    clock = clock.add(const Duration(hours: 36));
+    await model.backUpIfDue();
+    expect(model.items.map((item) => item.kind), [BackupKind.periodic, BackupKind.periodic], reason: 'Three days later the changed library is backed up');
+
+    clock = clock.add(const Duration(days: 4));
+    await model.backUpIfDue();
+    expect(model.items, hasLength(2), reason: 'A library unchanged since the last backup needs no new one');
+
+    await model.setBacksUpPeriodically(false);
+    expect(fixture.store.values[UpdateBackup.periodicKey], isFalse);
+    library.$1.upsertWork(galleryId: 3, title: 'Three');
+    clock = clock.add(const Duration(days: 4));
+    await model.backUpIfDue();
+    expect(model.items, hasLength(2), reason: 'Off means off');
+    fixture.closeLibrary(library);
+  });
+
   test('the model reports a restore that was applied at launch', () async {
     final fixture = BackupFixture(addTearDown);
     final library = fixture.openLibrary();

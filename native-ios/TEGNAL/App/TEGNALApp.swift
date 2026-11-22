@@ -307,6 +307,11 @@ struct TEGNALApp: App {
                 do { try await Task.sleep(for: .seconds(5)) } catch { return }
                 await env.backups.afterLaunch()
             }
+            // The automatic backup every few days, also when the app comes back after days in the background.
+            .task(id: scenePhase) {
+                guard !isContentUITest, scenePhase == .active else { return }
+                await env.backups.backUpIfDue()
+            }
         }
     }
 }

@@ -67,6 +67,32 @@ abstract final class AutomaticBackupText {
         return L10n.text('Manual backup');
       case BackupKind.safety:
         return L10n.text('Before a restore');
+      case BackupKind.periodic:
+        return L10n.text('Automatic backup');
+    }
+  }
+
+  /// How long ago, in the app's own language ("3 days ago"), in the largest whole unit as iOS words it.
+  static String age(DateTime date, {DateTime? now}) {
+    final elapsed = (now ?? DateTime.now()).difference(date);
+    final seconds = elapsed.isNegative ? 0 : elapsed.inSeconds;
+    final (count, unit) = switch (seconds) {
+      >= 365 * 86400 => (seconds ~/ (365 * 86400), 5),
+      >= 30 * 86400 => (seconds ~/ (30 * 86400), 4),
+      >= 7 * 86400 => (seconds ~/ (7 * 86400), 3),
+      >= 86400 => (seconds ~/ 86400, 2),
+      >= 3600 => (seconds ~/ 3600, 1),
+      >= 60 => (seconds ~/ 60, 0),
+      _ => (seconds, -1),
+    };
+    switch (L10n.language) {
+      case 'ko':
+        return '$count${const ['초', '분', '시간', '일', '주', '개월', '년'][unit + 1]} 전';
+      case 'ja':
+        return '$count${const ['秒', '分', '時間', '日', '週間', 'か月', '年'][unit + 1]}前';
+      default:
+        final name = const ['second', 'minute', 'hour', 'day', 'week', 'month', 'year'][unit + 1];
+        return '$count $name${count == 1 ? '' : 's'} ago';
     }
   }
 
@@ -268,6 +294,15 @@ class _AutomaticBackupsViewState extends State<AutomaticBackupsView> {
             ),
           ),
         Semantics(
+          identifier: 'backups.periodic',
+          child: SettingsToggleRow(
+            title: L10n.text('Back Up Every 3 Days'),
+            icon: CupertinoIcons.clock,
+            value: _backups.backsUpPeriodically,
+            onChanged: (value) => unawaited(_backups.setBacksUpPeriodically(value)),
+          ),
+        ),
+        Semantics(
           identifier: 'backups.size',
           child: SettingsValueRow(
             title: L10n.text('Space Used'),
@@ -329,7 +364,19 @@ class _AutomaticBackupsViewState extends State<AutomaticBackupsView> {
         children: [
           Text(
             L10n.text(
-              'Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.',
+              'Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            L10n.text(
+              'Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            L10n.text(
+              'Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept.',
               [AutomaticBackupText.size(AutomaticBackups.limit)],
             ),
           ),
@@ -342,7 +389,7 @@ class _AutomaticBackupsViewState extends State<AutomaticBackupsView> {
           FormRow(
             child: Semantics(
               identifier: 'backups.empty',
-              child: Text(L10n.text('No backups yet. One is made automatically before each update.'), style: TegnalType.style(17, color: secondary)),
+              child: Text(L10n.text('No backups yet. One is made automatically every 3 days and before each update.'), style: TegnalType.style(17, color: secondary)),
             ),
           ),
         for (final item in items) _BackupRow(key: ValueKey(item.id), item: item, blocked: blocked, actions: _actions(item)),
@@ -441,7 +488,7 @@ class _BackupRow extends StatelessWidget {
                           style: TegnalType.style(17, weight: FontWeight.w600, color: label),
                         ),
                         const SizedBox(height: 3),
-                        Text(AutomaticBackupText.title(item), style: TegnalType.style(15, color: label)),
+                        Text('${AutomaticBackupText.title(item)} · ${AutomaticBackupText.age(item.createdAt)}', style: TegnalType.style(15, color: label)),
                         const SizedBox(height: 3),
                         Text(
                           '${AutomaticBackupText.dataVersion(item.dataVersion)} · ${AutomaticBackupText.size(item.size)}',

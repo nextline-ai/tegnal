@@ -277,7 +277,6 @@
  "Backup Saved": "Backup Saved",
  "Backup restored: %@ works, %@ folders": "Backup restored: %@ works, %@ folders",
  "Backups": "Backups",
- "Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.": "Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.",
  "Badge": "Badge",
  "Balanced": "Balanced",
  "Bands must increase and cover the target score. Points use the score before completion.": "Bands must increase and cover the target score. Points use the score before completion.",
@@ -1188,7 +1187,6 @@
  "No Works in Several Folders": "No Works in Several Folders",
  "No Works in This Category": "No Works in This Category",
  "No Works in This Language": "No Works in This Language",
- "No backups yet. One is made automatically before each update.": "No backups yet. One is made automatically before each update.",
  "No longer in your library": "No longer in your library",
  "No matching images. Change the source, retry, or skip without points.": "No matching images. Change the source, retry, or skip without points.",
  "No new recommendations yet. Save more works or try refreshing.": "No new recommendations yet. Save more works or try refreshing.",
@@ -2373,5 +2371,11 @@
  "user.db imported!\n%@ folders, %@ works": "user.db imported!\n%@ folders, %@ works",
  "user.db imported: %@ folders, %@ works, %@ artists": "user.db imported: %@ folders, %@ works, %@ artists",
  "⚡️ Fill Only My Library (Recommended)": "⚡️ Fill Only My Library (Recommended)",
- "📦 Save Entire Catalog (Background Import)": "📦 Save Entire Catalog (Background Import)"
+ "📦 Save Entire Catalog (Background Import)": "📦 Save Entire Catalog (Background Import)",
+ "Automatic backup": "Automatic backup",
+ "Back Up Every 3 Days": "Back Up Every 3 Days",
+ "No backups yet. One is made automatically every 3 days and before each update.": "No backups yet. One is made automatically every 3 days and before each update.",
+ "Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first.": "Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first.",
+ "Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year.": "Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year.",
+ "Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept.": "Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept."
 }

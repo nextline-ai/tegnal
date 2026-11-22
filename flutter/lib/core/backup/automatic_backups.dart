@@ -87,6 +87,11 @@ class AutomaticBackups extends ChangeNotifier {
   List<BackupItem> _items = [];
   bool _driveAvailable = false;
   bool _keepInDrive = true;
+  bool _backsUpPeriodically = true;
+
+  /// Set once the launch pass has packed what the launch step staged: an automatic backup
+  /// before that would sit beside the update backup of the same moment.
+  bool _launched = false;
   BackupFailure? _lastFailure;
   BackupRestoreReport? _lastRestore;
   PendingBackupRestore? _pendingRestore;
@@ -105,6 +110,9 @@ class AutomaticBackups extends ChangeNotifier {
 
   /// Copies new backups to Google Drive when on (the default). Independent of library sync.
   bool get keepInDrive => _keepInDrive;
+
+  /// Backs up every few days while the app is used (the default), as well as before updates.
+  bool get backsUpPeriodically => _backsUpPeriodically;
 
   /// The last backup before an update that could not be made. A restore that rolled back is [lastRestore], not this.
   BackupFailure? get lastFailure => _lastFailure;
@@ -135,6 +143,26 @@ class AutomaticBackups extends ChangeNotifier {
     }
   }
 
+  /// Turns the automatic backup every few days on or off.
+  Future<void> setBacksUpPeriodically(bool value) async {
+    _backsUpPeriodically = value;
+    notifyListeners();
+    await setup.preferences.set(UpdateBackup.periodicKey, value);
+    if (value) await backUpIfDue();
+  }
+
+  /// Makes the automatic backup when the last one from this device is [BackupRetention.periodicInterval]
+  /// old, as when the app comes back after days in the background.
+  Future<void> backUpIfDue() => _quietly(
+    () => _serial(() async {
+      final name = await _periodicBackupIfDue();
+      if (name == null) return;
+      await _copyToDrive();
+      await _applyRetention(keeping: {name});
+      await _reload();
+    }),
+  );
+
   /// Packs what the launch step staged, copies backups to Drive and applies retention. Runs once the app is up.
   Future<void> afterLaunch() => _quietly(
     () => _serial(() async {
@@ -156,8 +184,11 @@ class AutomaticBackups extends ChangeNotifier {
           if (entity is Directory && entity.uri.pathSegments.where((part) => part.isNotEmpty).last.startsWith('incoming-')) entity.deleteSync(recursive: true);
         }
       }
+      _lastFailure = await UpdateBackup.lastFailure(setup);
+      _launched = true;
+      final periodic = await _periodicBackupIfDue();
       await _copyToDrive();
-      await _applyRetention(keeping: packed);
+      await _applyRetention(keeping: {...packed, ?periodic});
       await _reload();
     }),
   );
@@ -322,6 +353,46 @@ class AutomaticBackups extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final saved = await setup.preferences.get(UpdateBackup.keepInDriveKey);
     _keepInDrive = saved is bool ? saved : true;
+    final periodic = await setup.preferences.get(UpdateBackup.periodicKey);
+    _backsUpPeriodically = periodic is bool ? periodic : true;
+  }
+
+  /// The automatic backup, when it is on and due: the newest backup this device made, of any
+  /// kind, is at least [BackupRetention.periodicInterval] old, and the libraries changed since then. Runs inside [_serial].
+  Future<String?> _periodicBackupIfDue() async {
+    if (!_launched || !_backsUpPeriodically || UpdateBackup.pendingRestore(setup) != null) return null;
+    final now = setup.now();
+    DateTime? newest;
+    for (final file in await _files()) {
+      final name = BackupName.tryParse(file.name);
+      if (name == null || name.deviceID != setup.device.id) continue;
+      if (newest == null || name.createdAt.isAfter(newest)) newest = name.createdAt;
+    }
+    final changed = librariesChanged(setup.dataFolder);
+    // A device with no backup yet is backed up once it holds a library; after that, only libraries that changed.
+    if (changed == null) return null;
+    if (newest != null && (now.difference(newest) < BackupRetention.periodicInterval || !changed.isAfter(newest))) return null;
+    try {
+      return await _backUp(BackupKind.periodic);
+    } on Object catch (error) {
+      await UpdateBackup.recordFailure(setup, error is BackupError ? error.message : '$error');
+      _lastFailure = await UpdateBackup.lastFailure(setup);
+      return null;
+    }
+  }
+
+  /// When either library was last written, from its database files; null when there is none.
+  static DateTime? librariesChanged(Directory folder) {
+    DateTime? latest;
+    for (final name in BackupEntry.databases) {
+      for (final suffix in ['', '-wal']) {
+        final file = File('${folder.path}/$name$suffix');
+        if (!file.existsSync()) continue;
+        final modified = file.lastModifiedSync();
+        if (latest == null || modified.isAfter(latest)) latest = modified;
+      }
+    }
+    return latest;
   }
 
   Future<String> _backUp(BackupKind kind) async {
@@ -378,9 +449,14 @@ class AutomaticBackups extends ChangeNotifier {
         BackupRetentionItem(name: file.name, size: file.size, device: name.deviceID, kind: name.kind, date: name.createdAt),
   ];
 
+  /// Thins the automatic backups as they age, then removes backups while all together are over the limit.
   Future<void> _applyRetention({required Set<String> keeping}) async {
     final files = await _files();
-    for (final name in BackupRetention.expired(_candidates(files), keeping: keeping)) {
+    final now = setup.now();
+    final candidates = _candidates(files);
+    final thinned = BackupRetention.thinned(candidates, now: now, keeping: keeping);
+    final rest = candidates.where((item) => !thinned.contains(item.name)).toList();
+    for (final name in [...thinned, ...BackupRetention.expired(rest, keeping: keeping, now: now)]) {
       for (final file in files.where((file) => file.name == name)) {
         try {
           await _vault(file.place)?.delete(name);

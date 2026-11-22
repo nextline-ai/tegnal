@@ -13,6 +13,8 @@ enum BackupKind: String, Codable, CaseIterable, Sendable {
     case manual
     /// Made just before a restore.
     case safety
+    /// Made every few days while the app is used, then thinned as it ages.
+    case periodic
 }
 
 enum BackupError: LocalizedError, Equatable {

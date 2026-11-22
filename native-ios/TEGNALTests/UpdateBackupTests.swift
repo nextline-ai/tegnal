@@ -146,13 +146,44 @@ final class UpdateBackupTests: XCTestCase {
         XCTAssertEqual(BackupRetention.expired(items), [])
     }
 
-    func testRetentionDeletesOldestUnprotectedFirst() {
+    func testRetentionDeletesUnprotectedBackupsUntilTheRestFit() {
         let items = [item("p1", .patch, day: 1, mb: 30), item("m2", .manual, day: 2, mb: 30), item("s3", .safety, day: 3, mb: 30),
                      item("m4", .manual, day: 4, mb: 30), item("p5", .patch, day: 5, mb: 30), item("min6", .minor, day: 6, mb: 30)]
         // 180 MB: only m2 is unprotected (the newest safety and manual backups are kept too), so it goes and the rest stays over.
         XCTAssertEqual(BackupRetention.expired(items), ["m2"])
         let more = items + [item("p7", .patch, day: 7, mb: 1)]
-        XCTAssertEqual(BackupRetention.expired(more), ["p1", "m2"], "A third patch is no longer protected; oldest first")
+        XCTAssertEqual(BackupRetention.expired(more), ["m2", "p1"], "A third patch is no longer protected; the oldest of all goes last")
+    }
+
+    func testOverTheLimitTheSpacingWidensInsteadOfTheOldestGoing() {
+        let now = Date(timeIntervalSince1970: 400 * 86_400)
+        // Every three days for a year, 1 MB each, with the newest protected.
+        let items = stride(from: 40, through: 400, by: 3).map { item("a\($0)", .periodic, day: $0, mb: 1) }
+        let expired = Set(BackupRetention.expired(items, limit: 60 * 1024 * 1024, now: now))
+        let kept = items.filter { !expired.contains($0.name) }.map { Int($0.date.timeIntervalSince1970 / 86_400) }
+        XCTAssertEqual(kept.count, 60)
+        XCTAssertEqual(kept.first, 40, "The oldest backup stays")
+        XCTAssertEqual(kept.last, 400, "The newest automatic backup is always kept")
+        let gaps = zip(kept.dropFirst(), kept).map { $0 - $1 }
+        XCTAssertLessThan(gaps.suffix(5).max()!, gaps.prefix(5).min()!, "Recent backups stay closer together than old ones")
+    }
+
+    func testAutomaticBackupsThinAsTheyAge() {
+        let now = Date(timeIntervalSince1970: 1000 * 86_400)
+        // Every three days for two years.
+        let items = stride(from: 270, through: 1000, by: 3).map { item("a\($0)", .periodic, day: $0, mb: 1) }
+        let thinned = Set(BackupRetention.thinned(items, now: now))
+        let kept = items.filter { !thinned.contains($0.name) }.map { 1000 - Int($0.date.timeIntervalSince1970 / 86_400) }
+        XCTAssertEqual(kept.filter { $0 < 14 }.count, 5, "Two weeks of backups are all kept")
+        XCTAssertTrue((5...6).contains(kept.filter { $0 >= 14 && $0 < 84 }.count), "Then about one in two weeks")
+        XCTAssertTrue((5...7).contains(kept.filter { $0 >= 84 && $0 < 364 }.count), "Then about one in eight weeks")
+        XCTAssertLessThanOrEqual(kept.filter { $0 >= 364 }.count, 3, "Then about one in 24 weeks")
+        XCTAssertEqual(kept.max(), 730, "The oldest backup stays")
+        // A day later only backups crossing into an older tier may go: windows are fixed in time.
+        let tomorrow = Set(BackupRetention.thinned(items.filter { !thinned.contains($0.name) }, now: now.addingTimeInterval(86_400)))
+        XCTAssertLessThanOrEqual(tomorrow.count, 3, "What is kept doesn't shift from day to day")
+        let other = [item("u", .patch, day: 300, mb: 1), item("v", .patch, day: 301, mb: 1), item("m", .manual, day: 302, mb: 1)]
+        XCTAssertTrue(BackupRetention.thinned(items + other, now: now).allSatisfy { $0.hasPrefix("a") }, "Only automatic backups are thinned")
     }
 
     func testRetentionKeepsProtectedBackupsEvenWhenTheyAloneExceedTheLimit() {
@@ -168,7 +199,7 @@ final class UpdateBackupTests: XCTestCase {
         let items = [item("a", .manual, day: 1, mb: 60), item("a", .manual, day: 1, mb: 60), item("b", .manual, day: 2, mb: 30)]
         XCTAssertEqual(BackupRetention.expired(items), [], "90 MB, not 150 MB")
         let over = items + [item("c", .manual, day: 3, mb: 20)]
-        XCTAssertEqual(BackupRetention.expired(over), ["a"])
+        XCTAssertEqual(BackupRetention.expired(over), ["b"], "The oldest of all goes last")
     }
 
     func testRetentionNeverDeletesTheBackupJustMade() {
@@ -629,7 +660,7 @@ final class UpdateBackupTests: XCTestCase {
         let items = [item("p1", .patch, day: 1, mb: 40), item("p2", .patch, day: 2, mb: 40), item("min3", .minor, day: 3, mb: 40),
                      item("s0", .safety, day: 0, mb: 10), item("s4", .safety, day: 4, mb: 10),
                      item("m1", .manual, day: 1, mb: 10), item("m5", .manual, day: 5, mb: 10)]
-        XCTAssertEqual(BackupRetention.expired(items, keeping: ["s4"]), ["s0", "m1"])
+        XCTAssertEqual(BackupRetention.expired(items, keeping: ["s4"]), ["m1", "s0"])
         let later = items.filter { !["s0", "m1"].contains($0.name) }
         XCTAssertEqual(BackupRetention.expired(later), [], "A pass that did not make them still keeps them")
     }
@@ -715,7 +746,49 @@ final class UpdateBackupTests: XCTestCase {
         try close(memo, booru)
     }
 
+    @MainActor func testAnAutomaticBackupIsMadeEveryThreeDaysWhileTheLibraryChanges() async throws {
+        let clock = TestClock(Date())
+        var setup = makeSetup()
+        setup.now = { clock.date }
+        let (memo, booru) = try openLibrary(setup)
+        _ = try memo.upsertWork(galleryId: 1, title: "One")
+        let model = AutomaticBackups(setup: setup, databases: { .init(memo: memo.dbWriter, booru: booru.database) }, cloud: nil)
+        XCTAssertTrue(model.backsUpPeriodically, "It starts on")
+        await model.backUpIfDue()
+        await model.refresh()
+        XCTAssertTrue(model.items.isEmpty, "Nothing is made before the launch pass")
+
+        await model.afterLaunch()
+        XCTAssertEqual(model.items.map(\.kind), [.periodic], "A device with a library and no backup yet is backed up")
+        XCTAssertTrue(model.items[0].isProtected)
+
+        clock.date += 2 * 86_400
+        _ = try memo.upsertWork(galleryId: 2, title: "Two")
+        await model.backUpIfDue()
+        XCTAssertEqual(model.items.count, 1, "Not yet three days")
+
+        clock.date += 1.5 * 86_400
+        await model.backUpIfDue()
+        XCTAssertEqual(model.items.map(\.kind), [.periodic, .periodic], "Three days later the changed library is backed up")
+
+        clock.date += 4 * 86_400
+        await model.backUpIfDue()
+        XCTAssertEqual(model.items.count, 2, "A library unchanged since the last backup needs no new one")
+
+        model.backsUpPeriodically = false
+        _ = try memo.upsertWork(galleryId: 3, title: "Three")
+        clock.date += 4 * 86_400
+        await model.backUpIfDue()
+        XCTAssertEqual(model.items.count, 2, "Off means off")
+        try close(memo, booru)
+    }
+
     // MARK: Helpers
+
+    private final class TestClock: @unchecked Sendable {
+        var date: Date
+        init(_ date: Date) { self.date = date }
+    }
 
     private struct TestFault: Error {}
 

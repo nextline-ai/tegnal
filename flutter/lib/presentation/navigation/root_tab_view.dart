@@ -47,16 +47,20 @@ class RootTabView extends StatelessWidget {
         final queue = this.queue;
         final next = queue?.items.firstOrNull;
         // The bar steps aside while a work is carried to the larger panel in its place.
-        final showsBar = next != null && queue?.carried == null;
+        // Settings has no works to queue, and the bar would cover its lower rows, so it steps aside there.
+        final showsBar = next != null && queue?.carried == null && state.tab != AppTab.settings;
         final inset = queue == null || queue.isEmpty ? 0.0 : readingQueueBarHeight + 8;
         return Stack(
           children: [
             Positioned.fill(
               // Lists end above the bar and notices rise above it. The room follows the list, not
               // a carried work, so the screen never shifts under the finger.
-              child: ReadingQueueInset(
-                height: inset,
-                child: IndexedStack(index: tabs.indexOf(state.tab), children: [for (final tab in tabs) pages[tab] ?? const SizedBox.shrink()]),
+              child: IndexedStack(
+                index: tabs.indexOf(state.tab),
+                children: [
+                  for (final tab in tabs)
+                    ReadingQueueInset(height: tab == AppTab.settings ? 0 : inset, child: pages[tab] ?? const SizedBox.shrink()),
+                ],
               ),
             ),
             if (queue != null)

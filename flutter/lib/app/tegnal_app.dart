@@ -335,6 +335,8 @@ class _RootState extends State<_Root> {
         // Website favorites reach the network only for someone on the way to the library.
         if (!services.isTesting) unawaited(services.favorites.setActive(active && _stage.libraryWarm));
         if (!services.isTesting) unawaited(services.booruAccounts.setActive(active && _stage.libraryWarm));
+        // The automatic backup every few days, also when the app comes back after days in the background.
+        if (!services.isTesting && active) unawaited(services.backups.backUpIfDue());
       },
     );
     _libraryWarm = _stage.libraryWarm;

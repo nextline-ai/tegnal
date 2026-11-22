@@ -277,7 +277,6 @@
  "Backup Saved": "백업 저장됨",
  "Backup restored: %@ works, %@ folders": "백업 복원 완료: 작품 %@개, 폴더 %@개",
  "Backups": "백업",
- "Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached.": "백업은 모두 합쳐 최대 %@까지 보관합니다. 업데이트 전에 만든 최근 백업 2개, 큰 업데이트 전에 만든 가장 최근 백업, 복원 전에 만든 가장 최근 백업, 직접 만든 가장 최근 백업은 항상 보관하며, 한도를 넘으면 오래된 백업부터 삭제합니다.",
  "Badge": "배지",
  "Balanced": "균형 있게",
  "Bands must increase and cover the target score. Points use the score before completion.": "구간은 오름차순이며 목표 점수까지 포함해야 합니다. 완료 직전 점수로 획득 점수를 계산합니다.",
@@ -1188,7 +1187,6 @@
  "No Works in Several Folders": "여러 폴더에 저장된 작품이 없어요",
  "No Works in This Category": "이 카테고리에 작품이 없습니다",
  "No Works in This Language": "이 언어로 된 작품이 없습니다",
- "No backups yet. One is made automatically before each update.": "아직 백업이 없습니다. 업데이트 전에 자동으로 만들어집니다.",
  "No longer in your library": "보관함에서 삭제된 작품",
  "No matching images. Change the source, retry, or skip without points.": "일치하는 이미지가 없습니다. 출처를 바꾸거나 다시 시도하거나 점수 없이 건너뛰세요.",
  "No new recommendations yet. Save more works or try refreshing.": "아직 새로운 추천이 없습니다. 작품을 더 저장하거나 새로고침해 보세요.",
@@ -2373,5 +2371,11 @@
  "user.db imported!\n%@ folders, %@ works": "user.db 가져오기 완료!\n폴더 %@개, 작품 %@개",
  "user.db imported: %@ folders, %@ works, %@ artists": "user.db 가져오기 완료: 폴더 %@개, 작품 %@개, 작가 %@개",
  "⚡️ Fill Only My Library (Recommended)": "⚡️ 내 보관함 작품만 채우기 (권장 - 1초 소요)",
- "📦 Save Entire Catalog (Background Import)": "📦 전체 카탈로그 저장 (수십만 건, 백그라운드)"
+ "📦 Save Entire Catalog (Background Import)": "📦 전체 카탈로그 저장 (수십만 건, 백그라운드)",
+ "Automatic backup": "자동 백업",
+ "Back Up Every 3 Days": "3일마다 백업",
+ "No backups yet. One is made automatically every 3 days and before each update.": "아직 백업이 없습니다. 3일마다, 그리고 업데이트 전에 자동으로 만들어집니다.",
+ "Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first.": "백업을 복원하면 TEGNAL이 그 시점의 상태로 돌아갑니다. 복원 전에 지금 데이터를 먼저 백업합니다.",
+ "Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year.": "자동 백업은 2주 동안 모두 보관합니다. 그 뒤로는 오래될수록 간격을 넓혀 남깁니다: 2주에 하나, 3개월이 지나면 8주에 하나, 1년이 지나면 6개월에 하나.",
+ "Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept.": "백업은 모두 합쳐 최대 %@까지 보관합니다. 한도를 넘으면 비슷한 시점의 다른 백업과 가까운 것부터 지워서, 오래된 백업이 사라지는 대신 간격이 넓어집니다. 종류별 가장 최근 백업, 업데이트 전에 만든 최근 백업 2개, 복원 전에 만든 가장 최근 백업은 항상 보관합니다."
 }

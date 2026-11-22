@@ -2517,9 +2517,7 @@
 "Import from File" = "파일에서 가져오기";
 "New backups are copied to iCloud Drive, so they can come back if you lose this device. This is separate from iCloud Sync." = "새 백업은 iCloud Drive에도 복사되어, 기기를 잃어버려도 되살릴 수 있습니다. iCloud 동기화와는 별개입니다.";
 "iCloud Drive is not available. Backups stay on this device until it is." = "iCloud Drive를 사용할 수 없습니다. 사용할 수 있게 될 때까지 백업은 이 기기에만 보관됩니다.";
-"No backups yet. One is made automatically before each update." = "아직 백업이 없습니다. 업데이트 전에 자동으로 만들어집니다.";
 "Backups" = "백업";
-"Backups are kept up to %@ in total. The two newest backups made before updates, the newest one made before a major update, the newest one made before a restore and the newest one made by hand are always kept; older ones are removed first when the limit is reached." = "백업은 모두 합쳐 최대 %@까지 보관합니다. 업데이트 전에 만든 최근 백업 2개, 큰 업데이트 전에 만든 가장 최근 백업, 복원 전에 만든 가장 최근 백업, 직접 만든 가장 최근 백업은 항상 보관하며, 한도를 넘으면 오래된 백업부터 삭제합니다.";
 "A backup holds your libraries, folders and settings. It does not hold passwords, sign-ins, downloaded files or covers." = "백업에는 보관함, 폴더, 설정이 들어 있습니다. 비밀번호, 로그인 정보, 내려받은 파일, 표지는 들어 있지 않습니다.";
 "Everything in TEGNAL is replaced by the backup of %@. It is not merged with what you have now." = "%@의 백업으로 TEGNAL의 모든 내용이 교체됩니다. 지금 데이터와 합쳐지지 않습니다.";
 "Your current data is backed up first, so you can go back." = "현재 데이터를 먼저 백업하므로 다시 되돌릴 수 있습니다.";
@@ -2548,3 +2546,9 @@
 "The backup's library could not be opened. Your data was not changed." = "백업의 보관함을 열 수 없었습니다. 데이터는 바뀌지 않았습니다.";
 "The current data could not be backed up first, so nothing was restored." = "현재 데이터를 먼저 백업하지 못해 복원하지 않았습니다.";
 "The backup before the update could not be made: %@" = "업데이트 전 백업을 만들지 못했습니다: %@";
+"Automatic backup" = "자동 백업";
+"Back Up Every 3 Days" = "3일마다 백업";
+"No backups yet. One is made automatically every 3 days and before each update." = "아직 백업이 없습니다. 3일마다, 그리고 업데이트 전에 자동으로 만들어집니다.";
+"Restore any backup to bring TEGNAL back to how it was at that time. Your data as it is now is backed up first." = "백업을 복원하면 TEGNAL이 그 시점의 상태로 돌아갑니다. 복원 전에 지금 데이터를 먼저 백업합니다.";
+"Automatic backups are all kept for two weeks. After that they are spaced further apart as they age: one every two weeks, then one every eight weeks after three months, then one every six months after a year." = "자동 백업은 2주 동안 모두 보관합니다. 그 뒤로는 오래될수록 간격을 넓혀 남깁니다: 2주에 하나, 3개월이 지나면 8주에 하나, 1년이 지나면 6개월에 하나.";
+"Backups are kept up to %@ in total. When the limit is reached, backups close to others of about the same time are removed first, so older backups grow further apart instead of disappearing. The newest backup of each kind, the two newest made before updates and the newest made before a restore are always kept." = "백업은 모두 합쳐 최대 %@까지 보관합니다. 한도를 넘으면 비슷한 시점의 다른 백업과 가까운 것부터 지워서, 오래된 백업이 사라지는 대신 간격이 넓어집니다. 종류별 가장 최근 백업, 업데이트 전에 만든 최근 백업 2개, 복원 전에 만든 가장 최근 백업은 항상 보관합니다.";

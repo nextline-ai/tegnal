@@ -58,7 +58,7 @@ void main() {
 
     final item = model.items.single;
     expect(find.text('Automatic Backups'), findsOneWidget);
-    expect(find.text('Before the update to 1.6.0'), findsOneWidget);
+    expect(find.textContaining('Before the update to 1.6.0 · '), findsOneWidget, reason: 'With how long ago it was made');
     expect(find.text('Data from 1.5.1 · ${AutomaticBackupText.size(item.size)}'), findsOneWidget);
     expect(find.text('Always kept'), findsOneWidget);
     expect(find.text('${AutomaticBackupText.size(item.size)} of 100 MB'), findsOneWidget);
@@ -86,11 +86,11 @@ void main() {
     final model = seeded.model;
     await tester.pumpWidget(CupertinoApp(home: AutomaticBackupsView(backups: model, hasDrive: false)));
     await _until(tester, () => !model.isWorking);
-    expect(find.text('Manual backup'), findsNothing);
+    expect(find.textContaining('Manual backup'), findsNothing);
 
     await tester.tap(find.text('Back Up Now'));
     await _until(tester, () => model.items.length == 2 && !model.isWorking);
-    expect(find.text('Manual backup'), findsOneWidget);
+    expect(find.text('Manual backup · 0 seconds ago'), findsOneWidget);
     expect(find.text('Always kept'), findsNWidgets(2), reason: 'The newest backup of each kind is kept');
   });
 
@@ -140,7 +140,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete Anyway'));
     await _until(tester, () => model.items.isEmpty && !model.isWorking);
-    expect(find.text('No backups yet. One is made automatically before each update.'), findsOneWidget);
+    expect(find.text('No backups yet. One is made automatically every 3 days and before each update.'), findsOneWidget);
   });
 
   testWidgets('a failed update backup is shown with its date and version and can be dismissed', (tester) async {

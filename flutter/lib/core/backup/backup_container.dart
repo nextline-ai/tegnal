@@ -22,6 +22,9 @@ enum BackupKind {
 
   /// Made just before a restore.
   safety,
+
+  /// Made every few days while the app is used, then thinned as it ages.
+  periodic,
 }
 
 enum BackupErrorCode {
