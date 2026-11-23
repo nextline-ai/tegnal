@@ -298,9 +298,10 @@ extension AppDatabase {
         try dbWriter.read { try Int64.fetchAll($0, sql: "SELECT fw.folder_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE w.gallery_id = ? ORDER BY fw.added_at", arguments: [galleryId]) }
     }
 
-    /// Holds and quick saves land here; a folder deleted since falls back to Unfiled.
-    func defaultSaveFolder() throws -> Folder {
-        let folders = try listFolders()
+    /// Holds and quick saves land here; a folder deleted since falls back to Unfiled. `listed` reuses
+    /// a folder list already read, which is slow to read again in a library with many folders.
+    func defaultSaveFolder(listed: [Folder]? = nil) throws -> Folder {
+        let folders = try listed ?? listFolders()
         let chosen = try dbWriter.read { db in
             try LibrarySavePreferences.defaultFolderIdentity(db).flatMap { try Int64.fetchOne(db, sql: "SELECT id FROM folders WHERE sync_id = ?", arguments: [$0]) }
         }

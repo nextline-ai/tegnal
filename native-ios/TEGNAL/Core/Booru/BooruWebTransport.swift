@@ -71,7 +71,7 @@ enum BooruWebTransport {
         // An account's change (a form or a vote) is answered with a redirect to the page it
         // changed; that answer is enough, and the redirect is never followed elsewhere.
         let method = request.httpMethod ?? "GET"
-        let value = try await browser.webView.callAsyncJavaScript("""
+        let value = try await browser.webView.pageCall("""
             const target = new URL(address);
             if (target.origin !== location.origin || target.protocol !== 'https:') throw new Error('Origin mismatch');
             const controller = new AbortController();
@@ -104,8 +104,7 @@ enum BooruWebTransport {
                              "payload": request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? NSNull(),
                              "headers": request.allHTTPHeaderFields?.filter {
                                  ["accept", "authorization", "content-type", "x-csrf-token"].contains($0.key.lowercased())
-                             } ?? [:]],
-            in: nil, contentWorld: .defaultClient)
+                             } ?? [:]])
         try Task.checkCancellation()
         if let result = value as? [String: Any], let failure = result["networkError"] as? String {
             throw URLError(failure == "timeout" ? .timedOut : .networkConnectionLost)
@@ -135,7 +134,7 @@ enum BooruWebTransport {
     }
     private static func fetchImage(url: URL, browser: Browser) async throws -> Data {
         try await browser.ready()
-        let result = try await browser.webView.callAsyncJavaScript("""
+        let result = try await browser.webView.pageCall("""
             const target = new URL(address);
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 25000);
@@ -158,7 +157,7 @@ enum BooruWebTransport {
                     file.onerror = reject; file.readAsDataURL(blob);
                 });
             } finally { clearTimeout(timer); }
-            """, arguments: ["address": url.absoluteString], in: nil, contentWorld: .defaultClient)
+            """, arguments: ["address": url.absoluteString])
         try Task.checkCancellation()
         guard let text = result as? String, let comma = text.firstIndex(of: ","),
               let data = Data(base64Encoded: String(text[text.index(after: comma)...])) else { throw BooruError.invalidResponse }
@@ -209,7 +208,7 @@ enum BooruWebTransport {
                 if let failure { throw failure }
                 if committed, let url = webView.url {
                     guard BooruWebTransport.sameOrigin(url, server.baseURL) else { throw BooruError.validationRequired }
-                    let ready = try? await webView.evaluateJavaScript("document.readyState !== 'loading'", in: nil, contentWorld: .defaultClient)
+                    let ready = try? await webView.pageEvaluate("document.readyState !== 'loading'")
                     if ready as? Bool == true { return }
                 }
                 try await Task.sleep(for: .milliseconds(100))
@@ -226,9 +225,9 @@ enum BooruWebTransport {
                 let encoded = String(decoding: try JSONEncoder().encode(url.absoluteString), as: UTF8.self)
                 // A navigation destroys the JS context. Do not await an async JS
                 // function across that destruction (WebKit reports a script error).
-                webView.evaluateJavaScript("location.assign(" + encoded + ");", in: nil, in: .defaultClient) { [weak self] result in
+                webView.pageEvaluate("location.assign(" + encoded + ");") { [weak self] error in
                     guard let self else { return }
-                    if case .failure = result, !self.committed { self.webView.load(request) }
+                    if error != nil, !self.committed { self.webView.load(request) }
                 }
             } else { webView.load(request) }
             var lastChallenge: (Data, HTTPURLResponse)?
@@ -237,7 +236,7 @@ enum BooruWebTransport {
                 if let failure { throw failure }
                 if committed, let response = documentResponse,
                    let current = webView.url, BooruWebTransport.sameOrigin(current, server.baseURL) {
-                    let value = try? await webView.evaluateJavaScript("document.readyState === 'loading' ? null : document.documentElement.outerHTML", in: nil, contentWorld: .defaultClient)
+                    let value = try? await webView.pageEvaluate("document.readyState === 'loading' ? null : document.documentElement.outerHTML")
                     if let html = value as? String {
                         guard html.utf8.count < 12_000_000 else { throw BooruError.invalidResponse }
                         let data = Data(html.utf8)

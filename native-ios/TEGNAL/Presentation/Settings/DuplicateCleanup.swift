@@ -482,9 +482,6 @@ struct DuplicateCleanupView: View {
         .task { options = DuplicateCleanupOptions.load(images: booru); await load() }
         .onChange(of: options) { _, value in value.save(images: booru); regroup() }
         .appFullScreenCover(item: $inspectedComic) { ContentEntryView(initialUrl: $0.id) }
-        .confirmationDialog(confirmTitle, isPresented: $confirming, titleVisibility: .visible) {
-            Button(L10n.text("Clean Up"), role: .destructive) { Task { await apply() } }.accessibilityIdentifier("duplicates.confirm")
-        } message: { Text(confirmMessage) }
         .alert(L10n.text("Unable to Save"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button(L10n.text("Done"), role: .cancel) {}
         } message: { Text(error ?? "") }
@@ -609,6 +606,10 @@ struct DuplicateCleanupView: View {
             .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(removalCount == 0 || busy)
             .accessibilityIdentifier("duplicates.apply")
+            // On the button, so on iPad the question points at it instead of hiding under the top bar.
+            .confirmationDialog(confirmTitle, isPresented: $confirming, titleVisibility: .visible) {
+                Button(L10n.text("Clean Up"), role: .destructive) { Task { await apply() } }.accessibilityIdentifier("duplicates.confirm")
+            } message: { Text(confirmMessage) }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(.bar)

@@ -380,9 +380,10 @@ extension AppDatabaseFolderRules on AppDatabase {
         db.column<int>('SELECT fw.folder_id FROM folder_works fw JOIN works w ON w.id = fw.work_id WHERE w.gallery_id = ? ORDER BY fw.added_at', [galleryId]),
   );
 
-  /// Holds and quick saves land here; a folder deleted since falls back to Unfiled.
-  Folder defaultSaveFolder() {
-    final folders = listFolders();
+  /// Holds and quick saves land here; a folder deleted since falls back to Unfiled. [listed] reuses a
+  /// folder list already read, which is slow to read again in a library with many folders.
+  Folder defaultSaveFolder({List<Folder>? listed}) {
+    final folders = listed ?? listFolders();
     final chosen = dbWriter.read((db) {
       final identity = LibrarySavePreferences.defaultFolderIdentity(db, preferences.defaults);
       return identity == null ? null : db.value<int>('SELECT id FROM folders WHERE sync_id = ?', [identity]);

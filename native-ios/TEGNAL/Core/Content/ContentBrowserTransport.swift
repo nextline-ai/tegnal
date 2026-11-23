@@ -30,7 +30,7 @@ enum ContentBrowserTransport {
         let browser = Browser(origin: origin)
         defer { browser.view.stopLoading() }
         try await browser.ready()
-        let value = try await browser.view.evaluateJavaScript("document.documentElement.outerHTML", in: nil, contentWorld: .defaultClient)
+        let value = try await browser.view.pageEvaluate("document.documentElement.outerHTML")
         try Task.checkCancellation()
         guard let text = value as? String, text.utf8.count <= 1_000_000 else { throw ContentError.invalidResponse }
         return text
@@ -64,7 +64,7 @@ enum ContentBrowserTransport {
         try Task.checkCancellation()
         let requestID = UUID().uuidString
         let value = try await withTaskCancellationHandler {
-            try await browser.view.callAsyncJavaScript("""
+            try await browser.view.pageCall("""
                 const target = new URL(address);
                 const controller = new AbortController();
                 globalThis.contentRequests ??= new Map();
@@ -105,12 +105,11 @@ enum ContentBrowserTransport {
                 """, arguments: ["address": url.absoluteString, "requestID": requestID, "limit": limit,
                                   "timeout": Int(timeout * 1000),
                                   "range": range.map { "bytes=\($0.lowerBound)-\($0.upperBound - 1)" } ?? "",
-                                  "body": body.map { String(decoding: $0, as: UTF8.self) } ?? NSNull(), "contentType": contentType ?? ""],
-                in: nil, contentWorld: .defaultClient)
+                                  "body": body.map { String(decoding: $0, as: UTF8.self) } ?? NSNull(), "contentType": contentType ?? ""])
         } onCancel: {
             Task { @MainActor in
-                _ = try? await browser.view.callAsyncJavaScript("globalThis.contentRequests?.get(requestID)?.abort();",
-                    arguments: ["requestID": requestID], in: nil, contentWorld: .defaultClient)
+                _ = try? await browser.view.pageCall("globalThis.contentRequests?.get(requestID)?.abort();",
+                    arguments: ["requestID": requestID])
             }
         }
         try Task.checkCancellation()
@@ -156,7 +155,7 @@ enum ContentBrowserTransport {
                 try Task.checkCancellation()
                 if let failure { throw failure }
                 if committed, view.url?.host == origin.host, pendingCookies <= 0 || attempt >= 30,
-                   (try? await view.evaluateJavaScript("document.readyState !== 'loading'", in: nil, contentWorld: .defaultClient)) as? Bool == true { return }
+                   (try? await view.pageEvaluate("document.readyState !== 'loading'")) as? Bool == true { return }
                 try await Task.sleep(for: .milliseconds(100))
             }
             throw URLError(.timedOut)
@@ -171,6 +170,33 @@ enum ContentBrowserTransport {
                 decisionHandler(url.scheme == "https" || url.absoluteString == "about:blank" ? .allow : .cancel)
             } else {
                 decisionHandler(url.scheme == "https" && url.host == origin.host && url.port == origin.port ? .allow : .cancel)
+            }
+        }
+    }
+}
+
+/// Runs scripts in the page's own client world. WebKit's Swift-only forms of these calls live in
+/// libswiftWebKit, which iOS 17 and 18 don't have, so linking them stopped the app at launch there;
+/// these reach the same methods through Objective-C.
+@MainActor extension WKWebView {
+    func pageEvaluate(_ script: String) async throws -> Any? {
+        try await withCheckedThrowingContinuation { continuation in
+            __evaluateJavaScript(script, inFrame: nil, in: .defaultClient) { value, error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: value) }
+            }
+        }
+    }
+
+    /// Starts a script and leaves it, as when it navigates the page away.
+    func pageEvaluate(_ script: String, completion: @escaping @MainActor (Error?) -> Void) {
+        __evaluateJavaScript(script, inFrame: nil, in: .defaultClient) { _, error in completion(error) }
+    }
+
+    /// Runs an async function body with the given arguments and waits for what it returns.
+    func pageCall(_ body: String, arguments: [String: Any] = [:]) async throws -> Any? {
+        try await withCheckedThrowingContinuation { continuation in
+            __callAsyncJavaScript(body, arguments: arguments, inFrame: nil, in: .defaultClient) { value, error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: value) }
             }
         }
     }

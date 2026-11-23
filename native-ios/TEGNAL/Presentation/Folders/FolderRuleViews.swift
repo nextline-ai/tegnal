@@ -378,8 +378,14 @@ struct SavedWorksSettingsSection: View {
     @Environment(AppEnvironment.self) private var env
     @SwiftUI.AppStorage(LibrarySavePreferences.defaultFolderKey, store: ReaderPreferences.defaults) private var defaultFolder = ""
     @State private var folders: [Folder] = []
+    /// Read once with the folders: reading it while drawing listed every folder on each frame,
+    /// which froze Settings in a library with many folders.
+    @State private var selected: Int64 = 0
     private var selection: Binding<Int64> {
-        Binding(get: { (try? env.database.defaultSaveFolder().id) ?? 0 }, set: { defaultFolder = (try? env.database.identity(ofFolder: $0)) ?? "" })
+        Binding(get: { selected }, set: { id in
+            selected = id
+            defaultFolder = (try? env.database.identity(ofFolder: id)) ?? ""
+        })
     }
     var body: some View {
         Section(L10n.text("Saved Works")) {
@@ -389,7 +395,10 @@ struct SavedWorksSettingsSection: View {
             NavigationLink { FolderRulesView() } label: { Text(L10n.text("Smart Folders")) }
                 .accessibilityIdentifier("settings.folderRules")
         }
-        .task { folders = (try? env.database.listFolders()) ?? [] }
+        .task(id: defaultFolder) {
+            folders = (try? env.database.listFolders()) ?? []
+            selected = (try? env.database.defaultSaveFolder(listed: folders).id) ?? 0
+        }
     }
 }
 
