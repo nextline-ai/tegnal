@@ -331,9 +331,9 @@ void main() {
   });
 
   group('collection', () {
-    testWidgets('lists the tags met, each opening its page in a sheet', (tester) async {
+    testWidgets('on Me, lists the tags met, each opening its page in a sheet', (tester) async {
       prepare();
-      mode.tab = StudyTab.dex;
+      mode.tab = StudyTab.me;
       final tag = StudyCurriculum.bundled.tags.first;
       await pumpMode(tester, root());
       expect(find.text('Tags you learn on the map are kept here.'), findsOneWidget);
@@ -342,6 +342,8 @@ void main() {
       harness.state.appearanceChanged();
       await tester.pumpAndSettle();
       expect(key('study.dex.${tag.name}'), findsOneWidget);
+      await tester.ensureVisible(key('study.dex.${tag.name}'));
+      await tester.pumpAndSettle();
       await tester.tap(key('study.dex.${tag.name}'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));

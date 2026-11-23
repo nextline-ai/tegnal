@@ -134,6 +134,7 @@ class LibrarySyncRow {
     'booru.study_lessons': ['lesson'],
     'booru.study_awards': ['id'],
     'booru.study_stats': ['name'],
+    'booru.lab_records': ['key'],
     'preferences.manga': ['key'],
     'preferences.booru': ['key'],
     'recent.works': ['id'],

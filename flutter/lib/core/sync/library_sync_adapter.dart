@@ -107,7 +107,17 @@ class LibrarySyncAdapter {
     LibrarySavePreferences.rulesEnabledKey,
     RecentWorks.limitKey,
   ];
-  static const booruPreferences = ['search.retentionDays', 'reader.translationLanguage', 'booru.rememberHistory', 'booru.showNotes', RecentImages.limitKey];
+  static const booruPreferences = [
+    'search.retentionDays',
+    'reader.translationLanguage',
+    'booru.rememberHistory',
+    'booru.showNotes',
+    RecentImages.limitKey,
+    // 2D AI 배우기: the daily goal, sound and whether the welcome has been seen go with the learner.
+    'study.goal',
+    'study.sound',
+    'study.welcomed',
+  ];
 
   static const columns = <String, List<String>>{
     'manga.library_order': ['key', 'value'],
@@ -147,6 +157,8 @@ class LibrarySyncAdapter {
     'booru.study_lessons': ['lesson', 'stars', 'runs', 'finished'],
     'booru.study_awards': ['id', 'earned', 'seen'],
     'booru.study_stats': ['name', 'value'],
+    // The AI lab's cards, 망작, purchases and state (see lab_records.dart).
+    'booru.lab_records': ['key', 'value', 'text', 'at'],
   };
 
   /// Columns a peer that does not know the value yet sends empty: they fill in, never clear.
@@ -392,6 +404,7 @@ class LibrarySyncAdapter {
         'study_lessons',
         'study_awards',
         'study_stats',
+        'lab_records',
       ]) {
         for (final change in values) {
           if (change.row.table != 'booru.$table') continue;
@@ -423,6 +436,17 @@ class LibrarySyncAdapter {
           if (table == 'study_stats' && !change.deleted) {
             final name = row.values['name']?.string;
             if (name == null || name.isEmpty || name.characters.length > 200 || (row.values['value']?.integer ?? -1) < 0) continue;
+          }
+          if (table == 'lab_records' && !change.deleted) {
+            final key = row.values['key']?.string;
+            if (key == null ||
+                key.isEmpty ||
+                key.characters.length > 200 ||
+                (row.values['value']?.integer ?? -1) < 0 ||
+                (row.values['text']?.string?.characters.length ?? 0) > 2000 ||
+                row.values['at'] == null) {
+              continue;
+            }
           }
           // The shared Uncategorized from before folder ownership never comes back; its images go to their servers' own.
           if (table == 'folders' && row.values['id']?.string == 'unsorted') continue;
@@ -600,6 +624,13 @@ class LibrarySyncAdapter {
               // A badge keeps the earlier time and, once seen anywhere, stays seen.
               : row.table == 'booru.study_awards'
               ? (field == 'earned' ? 'earned = MIN(earned, excluded.earned)' : 'seen = MAX(seen, excluded.seen)')
+              // A lab record keeps the larger count and the earlier time: what was earned on either device stays earned.
+              : row.table == 'booru.lab_records'
+              ? (field == 'value'
+                    ? 'value = MAX(value, excluded.value)'
+                    : field == 'at'
+                    ? 'at = MIN(at, excluded.at)'
+                    : 'text = COALESCE(excluded.text, text)')
               : keepsKnownValue.contains(field)
               ? '$field = COALESCE(excluded.$field, $field)'
               : '$field = excluded.$field',

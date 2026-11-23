@@ -61,7 +61,7 @@ class _StudyEntrySectionState extends State<StudyEntrySection> {
 
   String get _detail {
     final summary = _board.summary;
-    if (summary.started == 0) return L10n.text('Learn the tags image AI is prompted with, from real pictures.');
+    if (summary.started == 0) return L10n.text('lab.2d.tagline');
     if (summary.due > 0) return L10n.text('%@ to review · %@ of %@ learned', ['${summary.due}', '${summary.learned}', '${summary.total}']);
     return L10n.text('%@ of %@ learned', ['${summary.learned}', '${summary.total}']);
   }

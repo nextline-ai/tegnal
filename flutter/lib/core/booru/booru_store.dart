@@ -8,6 +8,7 @@ import '../challenge/challenge_store.dart';
 import '../content/site_account.dart';
 import '../storage/app_database.dart';
 import '../storage/folder_rules.dart';
+import '../lab/lab_records.dart';
 import '../study/study_store.dart';
 import '../support/preferences.dart';
 import '../support/sql_database.dart';
@@ -287,6 +288,7 @@ class BooruStore extends ChangeNotifier implements SmartFolderLibrary {
     migrations.registerMigration('booru_v17_addons', AddonStore.migrate);
     migrations.registerMigration('booru_v18_addon_origin', AddonStore.migrateOrigin);
     migrations.registerMigration('booru_v19_system_folder_colors', AppDatabase.adoptFolderPalette);
+    migrations.registerMigration('booru_v20_lab_records', LabDatabaseRecords.migrate);
     return migrations;
   }
 

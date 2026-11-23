@@ -1,0 +1,45 @@
+{
+  "title": "1분 AI 습관 진단",
+  "intro": "네 문제만 답하면, 덱의 첫 장이 당신 카드가 됩니다.",
+  "questions": [
+    {
+      "text": "AI 앱 질문창 아래 모델·'생각' 버튼, 마지막으로 바꿔 본 게 언제예요?",
+      "options": [
+        { "text": "그런 버튼이 있어요?", "type": "default" },
+        { "text": "가끔 바꿔요" },
+        { "text": "질문마다 골라요" }
+      ]
+    },
+    {
+      "text": "요즘 나온 폰 가격을 AI한테 물을 때?",
+      "options": [
+        { "text": "그냥 물어봐요", "type": "search" },
+        { "text": "'검색해서'를 붙여요" }
+      ]
+    },
+    {
+      "text": "제대로 된 답이 필요할 때, 첫 줄은?",
+      "options": [
+        { "text": "\"너는 10년차 전문가야\"", "type": "role" },
+        { "text": "인터넷에서 찾은 만능 프롬프트 붙여 넣기", "type": "copy" },
+        { "text": "내 상황을 그냥 적어요" }
+      ]
+    },
+    {
+      "text": "AI가 \"그건 못 해요\"라고 하면?",
+      "options": [
+        { "text": "역시 아직 멀었구나", "type": "doubt" },
+        { "text": "그걸 하는 다른 도구를 찾아봐요" }
+      ]
+    }
+  ],
+  "types": [
+    { "id": "role", "name": "역할극 신봉자", "line": "\"너는 10년차 전문가야\"로 시작한다.", "episodes": ["ep09", "ep05"] },
+    { "id": "copy", "name": "30줄 프롬프트 복붙러", "line": "길고 화려할수록 좋은 줄 안다.", "episodes": ["ep05", "ep07"] },
+    { "id": "search", "name": "검색 패스 신뢰파", "line": "AI가 다 알고 있을 거라 믿는다.", "episodes": ["ep02", "ep11"] },
+    { "id": "default", "name": "기본값 순정파", "line": "스위치는 공장 출고 그대로.", "episodes": ["ep01"] },
+    { "id": "doubt", "name": "\"설마 그게 돼?\" 회의파", "line": "시켜 보기 전에 포기한다.", "episodes": ["ep03", "ep04"] },
+    { "id": "almost", "name": "반쯤 고수", "line": "기본기는 있다. 남은 건 습관.", "episodes": ["ep08", "ep13"] }
+  ],
+  "fallback": "almost"
+}

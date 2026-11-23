@@ -478,10 +478,10 @@ void main() {
       expect(mode.active, isFalse);
       expect(home.studying, isFalse);
 
-      mode.enter(StudyTab.dex);
+      mode.enter(StudyTab.practice);
       expect(home.studying, isTrue);
       expect(mode.active, isTrue);
-      expect(mode.tab, StudyTab.dex);
+      expect(mode.tab, StudyTab.practice);
       expect(heard, greaterThan(0));
 
       heard = 0;
@@ -597,7 +597,9 @@ void main() {
     });
 
     test('tabs have titles and symbols', () {
-      expect([for (final tab in StudyTab.values) tab.title], ['Map', 'Practice', 'Collection', 'Studio', 'Me']);
+      // The collection moved onto Me; the fourth tab leads back to the AI lab.
+      expect([for (final tab in StudyTab.values) tab.title], ['Map', 'Practice', 'Studio', 'lab.title.short', 'Me']);
+      expect(StudyTab.pages, isNot(contains(StudyTab.aiLab)));
     });
   });
 }

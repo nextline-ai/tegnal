@@ -30,7 +30,7 @@ void main() {
       await harness.pump(tester, BooruSavedServersView(booru: harness.booru, tags: (context, server, {onBack}) => const SizedBox()));
       expect(key('study.entry'), findsOneWidget);
       expect(find.text('Tag Study'), findsOneWidget);
-      expect(find.text('Learn the tags image AI is prompted with, from real pictures.'), findsOneWidget);
+      expect(find.text('lab.2d.tagline'), findsOneWidget);
       expect(StudyMode.shared.active, isFalse);
       await tester.tap(key('study.entry'));
       await tester.pump();
@@ -42,7 +42,7 @@ void main() {
       final harness = StudyHarness(select: false);
       final total = StudyCurriculum.bundled.count;
       await harness.pump(tester, BooruSavedServersView(booru: harness.booru, tags: (context, server, {onBack}) => const SizedBox()));
-      expect(find.text('Learn the tags image AI is prompted with, from real pictures.'), findsOneWidget);
+      expect(find.text('lab.2d.tagline'), findsOneWidget);
 
       harness.store.studyStore.answer('1girl', right: true, now: DateTime.now().subtract(const Duration(days: 3)));
       harness.state.appearanceChanged();

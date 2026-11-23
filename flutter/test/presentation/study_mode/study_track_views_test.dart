@@ -307,7 +307,7 @@ void main() {
       expect(find.byType(StudyAwardParade), findsNothing);
       expect(find.byType(StudyTrackCertificate), findsOneWidget);
       expect(tester.widget<Text>(key('study.track.certificate')).data, 'Lighthouse Track');
-      expect(harness.preferences.booruDefaults.boolean('study.trackDone.maker.track'), isTrue);
+      expect(harness.store.studyStore.stats()['trackDone.maker.track'], 1, reason: 'Kept in study_stats, so it syncs');
 
       await tester.tap(key('study.done'));
       await tester.pumpAndSettle();
