@@ -146,6 +146,8 @@ enum ContentUITestSupport {
             try! env.booru.refresh()
         }
         if ProcessInfo.processInfo.arguments.contains("--duplicate-cleanup-test") {
+            // Options a previous run chose are kept in the app's own preferences; start from the defaults.
+            for key in ["library.duplicateCleanup", "booru.duplicateCleanup"] { UserDefaults.standard.removeObject(forKey: key) }
             let mine = try! env.database.createFolder(name: "내 폴더")
             let copies: [(Int64, Int64?, String, String, String, Int)] = [
                 (930000010, mine.id, "[서클] 여름의 끝 [Korean]", "korean", "2026-01-05T09:00:00Z", 20),

@@ -497,9 +497,15 @@ private struct SiteFavoritesSyncRows: View {
         if let name = categories.first(where: { $0.id == category })?.name { return name }
         return state?.exclusive == false ? "fav:\(category)" : L10n.text("Category %@", String(category + 1))
     }
-    private func folderName(_ identity: String) -> String? {
-        guard let id = try? env.database.folderID(identity: identity) else { return nil }
-        return (try? env.database.listFolders())?.first { $0.id == id }?.displayName
+    /// Each linked folder's name by its identity, with the folder list read once rather than once a category.
+    private func folderNames(_ state: SiteFavoriteFolders.State) -> [String: String] {
+        let folders = (try? env.database.listFolders()) ?? []
+        let names = Dictionary(folders.compactMap { folder in folder.id.map { ($0, folder.displayName) } }, uniquingKeysWith: { first, _ in first })
+        var result: [String: String] = [:]
+        for identity in state.folders.values {
+            if let id = try? env.database.folderID(identity: identity), let name = names[id] { result[identity] = name }
+        }
+        return result
     }
 
     var body: some View {
@@ -518,8 +524,9 @@ private struct SiteFavoritesSyncRows: View {
             categories = (try? await SiteContent.for(site).favoriteCategories()) ?? []
         }
         if let state {
+            let names = folderNames(state)
             ForEach(state.folders.keys.sorted(), id: \.self) { category in
-                if let identity = state.folders[category], let folder = folderName(identity) {
+                if let identity = state.folders[category], let folder = names[identity] {
                     LabeledContent(name(category), value: folder)
                 }
             }

@@ -144,7 +144,7 @@ class _SettingsViewState extends State<SettingsView> {
       children: children,
     );
     final folders = _deps.database.listFolders();
-    final defaultFolder = _deps.database.defaultSaveFolder().id;
+    final defaultFolder = _deps.database.defaultSaveFolder(listed: folders).id;
     final remember = _defaults.boolean('search.rememberHistory') ?? true;
     final theme = _defaults.string('app_theme') ?? 'dark';
     const automatic = 0;
