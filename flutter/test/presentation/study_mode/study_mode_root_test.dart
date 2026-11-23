@@ -144,6 +144,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(mode.tab, StudyTab.practice);
       expect(key('study.review'), findsOneWidget);
+      // The AI lab's shop sits at the foot of Practice.
+      expect(find.descendant(of: key('study.shop'), matching: key('lab.shop.balance')), findsOneWidget);
       // The map is kept, out of reach.
       expect(key('study.section.s0'), findsOneWidget);
 

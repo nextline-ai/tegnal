@@ -276,9 +276,8 @@ struct StudyModeRoot: View {
 /// The bar above every tab: the streak, the experience, today's goal and the way back to the library.
 struct StudyHUD: View {
     let model: StudyModeModel
-    @State private var shopping = false
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             // Learning mode is left for the home scene it was reached from. Where that scene is not in use, the library is next door.
             let home = HomeStage.shared.enabled
             Button { if home { HomeStage.shared.goHome?() } else { StudyMode.shared.leave() } } label: {
@@ -290,30 +289,15 @@ struct StudyHUD: View {
                 .accessibilityLabel(L10n.text("Day streak") + " " + String(model.summary.streak)).accessibilityIdentifier("study.hud.streak")
             StudyStat(symbol: "bolt.fill", color: StudyTheme.gold, value: String(model.game.xp))
                 .accessibilityLabel("XP " + String(model.game.xp)).accessibilityIdentifier("study.hud.xp")
-            // The lab's 연구비, which this course earns too; tapping it opens the lab's shop.
-            Button { StudySound.tap.play(); shopping = true } label: {
-                StudyStat(symbol: "bag.fill", color: StudyTheme.primary, value: String(LabStore.shared.balance))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.text("lab.tab.shop") + ", " + LabStore.shared.shop.currency.text + " " + String(LabStore.shared.balance))
-            .accessibilityIdentifier("study.hud.shop")
-            Spacer(minLength: 6)
+            Spacer(minLength: 8)
             HStack(spacing: 8) {
-                StudyBar(value: model.game.goalProgress, color: model.game.goalMet ? StudyTheme.good : StudyTheme.gold, height: 12).frame(width: 52)
+                StudyBar(value: model.game.goalProgress, color: model.game.goalMet ? StudyTheme.good : StudyTheme.gold, height: 12).frame(width: 74)
                 Text("\(min(model.game.today, model.game.goal))/\(model.game.goal)").font(StudyTheme.body(14, .heavy)).foregroundStyle(StudyTheme.muted).monospacedDigit()
             }
             .accessibilityElement().accessibilityLabel(L10n.text("Today's goal") + " \(model.game.today)/\(model.game.goal)").accessibilityIdentifier("study.hud.goal")
         }
         .padding(.horizontal, 18).padding(.vertical, 10)
         .background(StudyTheme.background)
-        .appSheet(isPresented: $shopping) {
-            NavigationStack {
-                LabShopView().toolbar(.visible, for: .navigationBar).toolbar {
-                    ToolbarItem(placement: .topBarTrailing) { Button { shopping = false } label: { Image(systemName: "xmark") }.accessibilityLabel(L10n.text("Close")) }
-                }
-            }
-            .labLines()
-        }
     }
 }
 
@@ -504,8 +488,17 @@ struct StudyPracticeView: View {
                      enabled: model.weak > 0, id: "study.weak") { start(.weak) }
                 game("timer", StudyTheme.flame, "Speed Round", met >= StudySpeedRound.needed ? L10n.text("As many as you can in a minute.") : L10n.text("Opens once you have learned 4 tags."),
                      enabled: met >= StudySpeedRound.needed, id: "study.speed", action: startSpeed)
+                // The AI lab's shop, at the foot of the page: the same 연구비, which this course earns too.
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(L10n.text("lab.tab.shop")).font(StudyTheme.title(21)).foregroundStyle(StudyTheme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    LabShopContent().labLines()
+                }
+                .padding(.top, 18)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("study.shop")
             }
-            .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 560).frame(maxWidth: .infinity)
+            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 24).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
     }
 

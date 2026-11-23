@@ -224,6 +224,10 @@ final class StudyUITests: XCTestCase {
         element(app, "study.dock.practice").tap()
         XCTAssertTrue(element(app, "study.weak").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "study.weak").isEnabled, "Tags answered wrong can be asked again")
+        // The AI lab's shop sits at the foot of the page.
+        app.swipeUp(); app.swipeUp()
+        XCTAssertTrue(element(app, "lab.shop.balance").waitForExistence(timeout: 5), "The shop is at the foot of Practice")
+        app.swipeDown(); app.swipeDown()
         element(app, "study.speed").tap()
         XCTAssertTrue(element(app, "study.speed.go").waitForExistence(timeout: 5)); element(app, "study.speed.go").tap()
         for _ in 0..<4 {

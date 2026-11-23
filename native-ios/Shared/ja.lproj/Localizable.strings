@@ -2555,12 +2555,12 @@
 
 /* AI Lab */
 "lab.title" = "AIラボ";
-"lab.tab.deck" = "デッキ";
+"lab.tab.deck" = "カード";
 "lab.tab.sheet" = "チートシート";
 "lab.tab.fails" = "迷作";
 "lab.tab.shop" = "ショップ";
 "lab.new" = "NEW";
-"lab.deck.title" = "マイデッキ";
+"lab.deck.title" = "マイカード";
 "lab.deck.fold" = "たたむ";
 "lab.deck.unfold" = "前のカード%@枚";
 "lab.deck.diagnose" = "1分診断で最初の一枚を作る";
@@ -2648,7 +2648,6 @@
 "lab.courses.lab.rate" = "いまの%1$@ %2$@";
 "lab.courses.tags.kicker" = "追加コース";
 "lab.courses.here" = "いまここ";
-"lab.courses.open" = "%@を開く";
 "lab.2d.lessons" = "マップのレッスン%@個";
 "lab.2d.tags" = "実際の絵で学ぶタグ%@個";
 "lab.2d.studio" = "自分のキーで描けるスタジオ";

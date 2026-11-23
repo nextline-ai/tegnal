@@ -76,7 +76,7 @@ final class StudyMode {
 }
 
 /// The course's tabs. The collection lives on the Me tab; `courses` lists the lab's courses and leads back to the AI lab.
-/// The lab's shop opens from the 연구비 counter in the bar above the tabs (a sixth tab would fold into More).
+/// The lab's shop sits at the foot of the Practice tab (a sixth tab would fold into More).
 enum StudyTab: String, CaseIterable, Identifiable {
     case path, practice, lab, courses, me
     var id: String { rawValue }

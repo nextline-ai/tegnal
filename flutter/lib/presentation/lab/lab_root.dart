@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/booru/booru_store.dart';
@@ -352,6 +353,16 @@ class _LabDeckViewState extends State<LabDeckView> {
   /// The folded pile at the back of the stack, fanned out by a tap.
   bool fanned = false;
 
+  /// The card just engraved, shown in its colours where the blank card lay, before it goes into the stack.
+  String? arriving;
+
+  /// The front card's height when it began to shrink, measured through [_frontKey].
+  double? _frontHeight;
+  final GlobalKey _frontKey = GlobalKey();
+
+  /// Whether a card laid in front now rises from below, as the next blank card does after one goes into the stack.
+  bool _rising = false;
+
   static const earnedHeight = 200.0;
   static const lockedPeek = 44.0;
   static const lockedHeight = 120.0;
@@ -408,16 +419,89 @@ class _LabDeckViewState extends State<LabDeckView> {
     if (next.length != shown.length || !next.containsAll(shown)) setState(() => shown = next);
   }
 
-  /// The cover has gone: the new card slides into the stack, the ring climbs and the next blank card is laid down.
+  /// The cover has gone. The blank card in front comes up in its engraved colours, settling to a card's size; then the
+  /// next blank card rises over it from below, tucking it into the stack as the cards behind lean one step further back,
+  /// and the ring climbs.
   void _uncovered() {
     if (widget.covered.value) return;
-    Future<void>.delayed(const Duration(milliseconds: 350), () {
+    Future<void>.delayed(const Duration(milliseconds: 350), () async {
       if (!mounted) return;
-      final next = store.progress.cards.keys.toSet();
-      final added = next.difference(shown);
-      setState(() => shown = next);
-      if (added.isNotEmpty) LabHaptic.snap();
+      final all = store.progress.cards.keys.toSet();
+      final added = all.difference(shown);
+      final first = store.course.episodes.where((episode) => !shown.contains(episode.id)).firstOrNull;
+      if (added.length != 1 || first?.id != added.first) {
+        setState(() => shown = all);
+        if (added.isNotEmpty) LabHaptic.snap();
+        return;
+      }
+      LabHaptic.tick();
+      setState(() {
+        _frontHeight = _frontKey.currentContext?.size?.height ?? 290;
+        arriving = added.first;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
+      setState(() {
+        shown = all;
+        arriving = null;
+        _rising = true;
+      });
+      LabHaptic.snap();
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (mounted) setState(() => _rising = false);
     });
+  }
+
+  /// The card in front: the next blank card or, just after it was engraved, the same card in its colours.
+  Widget _front(BuildContext context, LabEpisode? next) {
+    if (next == null) return _Rising(key: const ValueKey('lab.deck.finished'), rise: _rising, child: _finished(context));
+    return _Rising(
+      key: ValueKey(next.id),
+      rise: _rising,
+      child: arriving == next.id ? _arriving(context, next) : KeyedSubtree(key: _frontKey, child: _nextCard(context, next)),
+    );
+  }
+
+  /// The card just engraved, where the blank card lay: its colours fade in over the paper while it shrinks to the size of
+  /// the cards in the stack it is about to join.
+  Widget _arriving(BuildContext context, LabEpisode episode) {
+    final from = _frontHeight ?? 290;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 550),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, _) => SizedBox(
+        height: from + (earnedHeight - from) * t,
+        // While it shrinks, the paper below the new edge is cut off; above and beside, its shadow still falls.
+        child: ClipRect(
+          clipper: const _OpenAbove(),
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: Opacity(opacity: 1 - t, child: _nextCard(context, episode)),
+              ),
+              Positioned.fill(
+                child: Opacity(
+                  opacity: t,
+                  child: LabCardFace(
+                    serial: episode.serial,
+                    title: episode.title.text,
+                    line: episode.card.line.text,
+                    color: store.course.color(episode),
+                    state: LabCardState.earned,
+                    label: episode.label,
+                    top: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _fan(bool open) {
@@ -445,11 +529,12 @@ class _LabDeckViewState extends State<LabDeckView> {
             LabHeader(
               kicker: TextSpan(
                 children: [
-                  TextSpan(text: '${course.title} · ${L10n.text('lab.season', ['$season'])} · '),
+                  TextSpan(text: '${L10n.text('lab.season', ['$season'])} · '),
                   TextSpan(text: '${shown.length}/${course.episodes.length}', style: LabFont.number(13)),
                 ],
               ),
               title: L10n.text('lab.deck.title'),
+              below: true,
               trailing: Semantics(
                 key: const Key('lab.rate'),
                 label: course.info.gauge.text,
@@ -460,13 +545,12 @@ class _LabDeckViewState extends State<LabDeckView> {
             const SizedBox(height: 22),
             if (stacked > 2)
               Align(
-                alignment: Alignment.centerRight,
                 child: GestureDetector(
                   key: const Key('lab.deck.fan'),
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _fan(!fanned),
                   child: Padding(
-                    padding: const EdgeInsets.only(bottom: 10, top: 4, left: 12),
+                    padding: const EdgeInsets.only(bottom: 10, top: 4, left: 12, right: 12),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -506,61 +590,62 @@ class _LabDeckViewState extends State<LabDeckView> {
                   top: true,
                 ),
               ),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 450),
-              transitionBuilder: (child, animation) => ScaleTransition(
-                scale: Tween(begin: 0.96, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
-                child: FadeTransition(opacity: animation, child: child),
-              ),
-              child: next == null ? _finished(context) : KeyedSubtree(key: ValueKey(next.id), child: _nextCard(context, next)),
-            ),
-            if (waiting.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
-                child: Column(
-                  children: [
-                    for (final (offset, episode) in waiting.indexed)
-                      SizedBox(
-                        height: offset == waiting.length - 1 ? lockedHeight : lockedPeek,
-                        child: OverflowBox(
-                          alignment: Alignment.topCenter,
-                          minHeight: lockedHeight,
-                          maxHeight: lockedHeight,
-                          child: LabCardBackground(
-                            key: Key('lab.deck.locked.${episode.id}'),
-                            state: LabCardState.locked,
-                            radius: 18,
-                            step: offset,
-                            shadow: offset == 0 ? null : const [BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, -6))],
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(18, 13, 18, 0),
-                              child: Align(
-                                alignment: Alignment.topLeft,
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${episode.digits} · ${episode.title.text}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
-                                      ),
+            // Laid out from the bottom up, so the card in front is painted over the locked cards: the next blank card
+            // rises over them.
+            Column(
+              verticalDirection: VerticalDirection.up,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (waiting.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+                    child: Column(
+                      children: [
+                        for (final (offset, episode) in waiting.indexed)
+                          SizedBox(
+                            height: offset == waiting.length - 1 ? lockedHeight : lockedPeek,
+                            child: OverflowBox(
+                              alignment: Alignment.topCenter,
+                              minHeight: lockedHeight,
+                              maxHeight: lockedHeight,
+                              child: LabCardBackground(
+                                key: Key('lab.deck.locked.${episode.id}'),
+                                state: LabCardState.locked,
+                                radius: 18,
+                                step: offset,
+                                shadow: offset == 0 ? null : const [BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, -6))],
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(18, 13, 18, 0),
+                                  child: Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '${episode.digits} · ${episode.title.text}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          L10n.text('lab.card.locked'),
+                                          style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      L10n.text('lab.card.locked'),
-                                      style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+                      ],
+                    ),
+                  ),
+                _front(context, next),
+              ],
+            ),
           ],
         ),
       );
@@ -1003,6 +1088,8 @@ class LabCoursesView extends StatelessWidget {
               _card(
                 context,
                 key: const Key('lab.courses.lab'),
+                // A course owned and not on screen opens with a tap on its card.
+                open: here == LabCoursePlace.lab ? null : (const Key('lab.courses.open.lab'), _mode.closeTags),
                 kicker: L10n.text('lab.courses.lab.kicker'),
                 title: course.title,
                 current: here == LabCoursePlace.lab,
@@ -1051,11 +1138,11 @@ class LabCoursesView extends StatelessWidget {
                   ),
                 ),
               ),
-              if (here != LabCoursePlace.lab) ...[const SizedBox(height: 12), _open(course.title, const Key('lab.courses.open.lab'), _mode.closeTags)],
               const SizedBox(height: 20),
               _card(
                 context,
                 key: const Key('lab.courses.tags'),
+                open: here == LabCoursePlace.tags || !store.ownsTagCourse ? null : (const Key('lab.courses.open.tags'), () => _mode.openTags()),
                 kicker: L10n.text('lab.courses.tags.kicker'),
                 title: L10n.text('Tag Study'),
                 current: here == LabCoursePlace.tags,
@@ -1073,12 +1160,7 @@ class LabCoursesView extends StatelessWidget {
                   child: ExcludeSemantics(child: StudyMascot(pose: StudyMascotPose.wave, size: 132)),
                 ),
               ),
-              if (store.ownsTagCourse) ...[
-                if (here != LabCoursePlace.tags) ...[
-                  const SizedBox(height: 12),
-                  _open(L10n.text('Tag Study'), const Key('lab.courses.open.tags'), _mode.openTags),
-                ],
-              ] else if (item != null && price != null) ...[
+              if (!store.ownsTagCourse && item != null && price != null) ...[
                 const SizedBox(height: 12),
                 LabButton(
                   key: const Key('lab.2d.buy'),
@@ -1110,9 +1192,6 @@ class LabCoursesView extends StatelessWidget {
     );
   }
 
-  Widget _open(String course, Key key, VoidCallback action) =>
-      LabButton(key: key, style: LabButtonStyle.primary, expand: true, onPressed: action, child: Text(L10n.text('lab.courses.open', [course])));
-
   Widget _card(
     BuildContext context, {
     required Key key,
@@ -1123,9 +1202,10 @@ class LabCoursesView extends StatelessWidget {
     required Color glow,
     required List<(String, String)> features,
     required Widget art,
+    (Key, VoidCallback)? open,
   }) {
     const white = Color(0xFFFFFFFF);
-    return DecoratedBox(
+    final card = DecoratedBox(
       key: key,
       decoration: ShapeDecoration(
         gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: colors),
@@ -1196,5 +1276,59 @@ class LabCoursesView extends StatelessWidget {
         ),
       ),
     );
+    if (open == null) return card;
+    return LabPress(
+      key: open.$1,
+      onTap: () {
+        LabHaptic.tick();
+        open.$2();
+      },
+      child: card,
+    );
   }
+}
+
+/// Cuts off only what lies below the box, so a shadow above and beside it still shows.
+class _OpenAbove extends CustomClipper<Rect> {
+  const _OpenAbove();
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-60, -60, size.width + 60, size.height);
+  @override
+  bool shouldReclip(_OpenAbove oldClipper) => false;
+}
+
+/// A card laid in front of the deck: rising from below when [rise] is set as it first appears, otherwise simply there.
+class _Rising extends StatefulWidget {
+  const _Rising({super.key, required this.rise, required this.child});
+  final bool rise;
+  final Widget child;
+
+  @override
+  State<_Rising> createState() => _RisingState();
+}
+
+class _RisingState extends State<_Rising> with SingleTickerProviderStateMixin {
+  late final AnimationController _lift = AnimationController.unbounded(vsync: this, value: widget.rise ? 0 : 1);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.rise) {
+      // `.spring(duration: 0.65, bounce: 0.08)` on iOS.
+      unawaited(_lift.animateWith(SpringSimulation(SpringDescription.withDampingRatio(mass: 1, stiffness: 93, ratio: 0.92), 0, 1, 0)));
+    }
+  }
+
+  @override
+  void dispose() {
+    _lift.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _lift,
+    builder: (context, child) => Transform.translate(offset: Offset(0, 300 * (1 - _lift.value)), child: child),
+    child: widget.child,
+  );
 }

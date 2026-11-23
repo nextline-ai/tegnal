@@ -238,6 +238,37 @@ void main() {
   });
 
 
+  testWidgets('the gallery opens a 망작 the way it came up when it was won, quoting the trap', (tester) async {
+    seed('ep02');
+    final fail = LabStore.shared.course.fails.first;
+    LabStore.shared.hang(fail);
+    await pump(tester, LabRoot(booru: booru, mode: mode));
+    await tester.tap(key('lab.tab.fails'));
+    await tester.pumpAndSettle();
+    await tester.tap(key('lab.fail.${fail.id}'));
+    await tester.pumpAndSettle();
+    expect(key('lab.fail.reveal'), findsOneWidget);
+    expect(find.text(L10n.text('lab.fail.got')), findsNothing, reason: 'Opened again, not won again');
+    expect(find.text('“${fail.choice.text}”'), findsOneWidget);
+    await shot(tester, '14-flop-gallery');
+    await tester.tap(key('lab.fail.reveal.done'));
+    await tester.pumpAndSettle();
+    expect(key('lab.fail.reveal'), findsNothing);
+  });
+
+  testWidgets('a course card opens its course when tapped, and the course on screen has nothing to open', (tester) async {
+    seed('ep05');
+    LabStore.shared.buy(LabStore.shared.shop.item(LabStore.tagCourse)!);
+    await pump(tester, LabRoot(booru: booru, mode: mode));
+    await tester.tap(key('lab.tab.courses'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(key('lab.courses.open.lab'), findsNothing);
+    expect(find.text(L10n.text('lab.courses.open', [L10n.text('Tag Study')])), findsNothing, reason: 'No open button under the card');
+    await tester.tap(key('lab.courses.open.tags'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(mode.tagsOpen, isTrue);
+  });
+
   testWidgets('an episode shows no number at its top right', (tester) async {
     await pump(tester, LabEpisodeView(episode: LabStore.shared.course.episodes.first));
     expect(find.text(LabStore.shared.course.episodes.first.serial), findsNothing);

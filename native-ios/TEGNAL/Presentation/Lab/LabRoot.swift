@@ -25,9 +25,14 @@ struct LabRoot: View {
     @State private var store = LabStore.shared
     @State private var playing: LabEpisode?
     @State private var diagnosing = false
+    /// A 망작 opened from the gallery, shown over everything, dock included.
+    @State private var revealing: LabFail?
 
     var body: some View {
         tabs
+            .overlay {
+                if let revealing { LabFailReveal(fail: revealing, won: false) { self.revealing = nil }.id(revealing.id) }
+            }
             .labLines()
             .appFullScreenCover(item: $playing) { LabEpisodeView(episode: $0) }
             .appFullScreenCover(isPresented: $diagnosing) { LabDiagnosisView() }
@@ -45,7 +50,7 @@ struct LabRoot: View {
 
     @ViewBuilder private var tabs: some View {
         let deck = NavigationStack { LabDeckView(play: { playing = $0 }, diagnose: { diagnosing = true }, covered: playing != nil) }
-        let fails = NavigationStack { LabFailsView(play: { playing = $0 }) }
+        let fails = NavigationStack { LabFailsView(play: { playing = $0 }, open: { revealing = $0 }) }
         let courses = NavigationStack { LabCoursesView(here: .lab) }
         let shop = NavigationStack { LabShopView() }
         let sheet = NavigationStack { LabSheetView() }
@@ -102,6 +107,11 @@ struct LabDeckView: View {
     @State private var shown: Set<String> = []
     /// The folded pile at the back of the stack, fanned out by a tap.
     @State private var fanned = false
+    /// The card just engraved, shown in its colours where the blank card lay, before it goes into the stack.
+    @State private var arriving: String?
+    /// The front card's height as laid out, and whether it is held there, so it can shrink smoothly to a card's size.
+    @State private var frontHeight: CGFloat = 290
+    @State private var pinned = false
     @Namespace private var space
 
     private static let earnedHeight: CGFloat = 200
@@ -146,7 +156,7 @@ struct LabDeckView: View {
         let rate = course.base + earned.reduce(0) { $0 + $1.impact }
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                LabHeader(kicker: kicker(next ?? earned.last), title: L10n.text("lab.deck.title")) {
+                LabHeader(kicker: kicker(next ?? earned.last), title: L10n.text("lab.deck.title"), below: true) {
                     LabRing(value: rate)
                         .accessibilityElement().accessibilityLabel(course.info.gauge.text).accessibilityValue("\(rate)%")
                         .accessibilityIdentifier("lab.rate")
@@ -161,7 +171,7 @@ struct LabDeckView: View {
                                 .contentTransition(.symbolEffect(.replace))
                         }
                         .buttonStyle(.plain)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .frame(maxWidth: .infinity)
                         .padding(.bottom, 10)
                         .accessibilityIdentifier("lab.deck.fan")
                     }
@@ -176,12 +186,21 @@ struct LabDeckView: View {
                             }
                             .buttonStyle(LabPressStyle())
                             .matchedTransitionSourceIfAvailable(id: episode.id, in: space)
-                            .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
+                            // Taken over from the coloured card in front, at its size: no jump as it becomes the nearest strip.
+                            .transition(.asymmetric(insertion: .scale(scale: 1 / Self.scale(1), anchor: .top), removal: .opacity))
                             .accessibilityIdentifier("lab.deck.earned.\(episode.id)")
                         }
-                        if let next { nextCard(next).id(next.id).transition(.asymmetric(insertion: .scale(scale: 0.96).combined(with: .opacity), removal: .opacity)) }
-                        else { finished }
+                        if let next {
+                            frontCard(next)
+                                .id(next.id)
+                                // The next blank card rises from below, over the locked ones, and covers the one just engraved,
+                                // tucking it into the stack.
+                                .transition(.asymmetric(insertion: .offset(y: 300), removal: .identity))
+                        } else {
+                            finished.transition(.asymmetric(insertion: .offset(y: 300), removal: .identity))
+                        }
                     }
+                    .zIndex(1)
                     if !waiting.isEmpty {
                         VStack(spacing: Self.lockedPeek - Self.lockedHeight) {
                             ForEach(Array(waiting.enumerated()), id: \.element.id) { offset, episode in
@@ -217,21 +236,38 @@ struct LabDeckView: View {
         .onAppear { if !covered { shown = Set(store.progress.cards.keys) } }
         .onChange(of: covered) { _, covered in
             guard !covered else { return }
-            // The cover has gone: the new card slides into the stack, the ring climbs and the next blank card is laid down.
+            // The cover has gone. The blank card in front comes up in its engraved colours, settling to a card's size; then the
+            // next blank card rises over it from below, tucking it into the stack as the cards behind lean one step further back,
+            // and the ring climbs.
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
-                let added = Set(store.progress.cards.keys).subtracting(shown)
-                withAnimation(.spring(duration: 0.75, bounce: 0.22)) { shown = Set(store.progress.cards.keys) }
-                if !added.isEmpty { LabHaptic.snap() }
+                let all = Set(store.progress.cards.keys)
+                let added = all.subtracting(shown)
+                guard added.count == 1, let id = added.first, store.course.episodes.first(where: { !shown.contains($0.id) })?.id == id else {
+                    withAnimation(.spring(duration: 0.75, bounce: 0.1)) { shown = all }
+                    return
+                }
+                // The front card is held at the height it has now, so its shrink to a card's size can be animated.
+                pinned = true
+                try? await Task.sleep(for: .milliseconds(30))
+                LabHaptic.tick()
+                withAnimation(.spring(duration: 0.55, bounce: 0.06)) { arriving = id }
+                try? await Task.sleep(for: .milliseconds(700))
+                withAnimation(.spring(duration: 0.65, bounce: 0.08)) {
+                    shown = all
+                    arriving = nil
+                    pinned = false
+                }
+                LabHaptic.snap()
             }
         }
         .onChange(of: store.progress.cards.count) { if !covered { withAnimation(.spring(duration: 0.6)) { shown = Set(store.progress.cards.keys) } } }
     }
 
-    /// "AI 실험실 · 시즌 1 · 3/15".
+    /// "시즌 1 · 3/15", under the title.
     private func kicker(_ episode: LabEpisode?) -> Text {
         let season = episode.flatMap { store.course.season(of: $0) }?.number ?? 1
-        return Text(store.course.title + " · " + L10n.text("lab.season", String(season)) + " · ")
+        return Text(L10n.text("lab.season", String(season)) + " · ")
             + Text("\(shown.count)/\(store.course.episodes.count)").font(LabFont.number(13))
     }
 
@@ -271,6 +307,25 @@ struct LabDeckView: View {
             }
             .buttonStyle(LabPressStyle()).accessibilityIdentifier("lab.deck.diagnose")
         }
+    }
+
+    /// The card in front: the next blank card or, just after it was engraved, the same card in its colours, which fades in
+    /// over the paper while the card shrinks to the size of the cards in the stack it is about to join.
+    private func frontCard(_ episode: LabEpisode) -> some View {
+        let coloured = arriving == episode.id
+        return ZStack(alignment: .top) {
+            nextCard(episode).opacity(coloured ? 0 : 1)
+            LabCardFace(serial: episode.serial, title: episode.title.text, line: episode.card.line.text, color: store.course.color(episode),
+                        state: .earned, label: episode.label, top: true)
+                .frame(maxHeight: .infinity)
+                .opacity(coloured ? 1 : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(!coloured)
+        }
+        .frame(height: coloured ? Self.earnedHeight : pinned ? frontHeight : nil, alignment: .top)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if !pinned { frontHeight = $0 } }
+        // While it shrinks, the paper below the new edge is cut off; above and beside, its shadow still falls.
+        .mask { Rectangle().padding(.top, -60).padding(.horizontal, -60) }
     }
 
     private func nextCard(_ episode: LabEpisode) -> some View {
@@ -441,15 +496,11 @@ struct LabCoursesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 LabHeader(kicker: Text(L10n.text("lab.courses.subtitle")), title: L10n.text("lab.tab.courses"))
+                // A course owned and not on screen opens with a tap on its card.
+                opening(here == .lab ? nil : { StudyMode.shared.closeTags() }, id: "lab.courses.open.lab") { labCard }
                 VStack(alignment: .leading, spacing: 12) {
-                    labCard
-                    if here != .lab { open(store.course.title, id: "lab.courses.open.lab") { StudyMode.shared.closeTags() } }
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    tagsCard
-                    if store.ownsTagCourse {
-                        if here != .tags { open(L10n.text("Tag Study"), id: "lab.courses.open.tags") { StudyMode.shared.openTags() } }
-                    } else if let item, let price = item.price {
+                    opening(here == .tags || !store.ownsTagCourse ? nil : { StudyMode.shared.openTags() }, id: "lab.courses.open.tags") { tagsCard }
+                    if !store.ownsTagCourse, let item, let price = item.price {
                         purchase(item, price)
                     }
                 }
@@ -533,10 +584,16 @@ struct LabCoursesView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func open(_ course: String, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Text(L10n.text("lab.courses.open", course)).frame(maxWidth: .infinity) }
-            .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18))
-            .accessibilityIdentifier(id)
+    /// A card that opens its course when tapped, or just the card when there is nothing to open.
+    @ViewBuilder private func opening<Card: View>(_ action: (() -> Void)?, id: String, @ViewBuilder card: () -> Card) -> some View {
+        if let action {
+            Button { LabHaptic.tick(); action() } label: { card() }
+                .buttonStyle(LabPressStyle())
+                .accessibilityIdentifier(id)
+                .accessibilityHint(L10n.text("lab.shop.open"))
+        } else {
+            card()
+        }
     }
 
     private func purchase(_ item: LabShopItem, _ price: Int) -> some View {

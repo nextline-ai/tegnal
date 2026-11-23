@@ -2555,12 +2555,12 @@
 
 /* AI Lab */
 "lab.title" = "AI 실험실";
-"lab.tab.deck" = "덱";
+"lab.tab.deck" = "카드";
 "lab.tab.sheet" = "치트시트";
 "lab.tab.fails" = "망작";
 "lab.tab.shop" = "상점";
 "lab.new" = "NEW";
-"lab.deck.title" = "나의 덱";
+"lab.deck.title" = "나의 카드";
 "lab.deck.fold" = "접기";
 "lab.deck.unfold" = "이전 카드 %@장";
 "lab.deck.diagnose" = "1분 진단으로 첫 장 만들기";
@@ -2648,7 +2648,6 @@
 "lab.courses.lab.rate" = "지금 %1$@ %2$@";
 "lab.courses.tags.kicker" = "추가 코스";
 "lab.courses.here" = "지금 여기";
-"lab.courses.open" = "%@ 열기";
 "lab.2d.lessons" = "지도 위의 레슨 %@개";
 "lab.2d.tags" = "실제 그림으로 배우는 태그 %@개";
 "lab.2d.studio" = "내 키로 그려 보는 스튜디오";
