@@ -14,6 +14,7 @@ import '../../core/study/study_path.dart';
 import '../../core/study/study_speed.dart';
 import '../../core/study/study_store.dart';
 import '../../core/support/l10n.dart';
+import '../../core/lab/lab_store.dart';
 import '../booru/booru_common.dart';
 import '../design/app_sheet.dart';
 import '../design/ios_controls.dart';
@@ -24,6 +25,8 @@ import '../home/home_stage.dart';
 import '../study/study_guide_view.dart';
 import '../study/study_tag_view.dart';
 import '../study/study_widgets.dart';
+import '../lab/lab_pages.dart';
+import '../lab/lab_root.dart';
 import 'study_award_views.dart';
 import 'study_kit.dart';
 import 'study_lesson_view.dart';
@@ -367,7 +370,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   Widget _page(StudyTab tab) => switch (tab) {
     StudyTab.path => StudyPathView(model: model, celebrating: _celebrating, start: _start),
     StudyTab.practice => StudyPracticeView(model: model, start: _start, startSpeed: _startSpeed),
-    StudyTab.aiLab => const SizedBox.shrink(),
+    StudyTab.courses => LabCoursesView(here: LabCoursePlace.tags, mode: mode, bottom: 24),
     StudyTab.lab => StudyLabView(model: model, start: _start, closed: _celebrate, generation: widget.generation),
     StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode, reset: _restarted),
   };
@@ -401,7 +404,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
                         children: [
                           // The tab on screen is laid last, over the ones kept underneath.
                           for (final tab in [
-                            for (final tab in StudyTab.pages)
+                            for (final tab in StudyTab.values)
                               if (_opened.contains(tab) && tab != mode.tab) tab,
                             mode.tab,
                           ])
@@ -421,14 +424,18 @@ class _StudyModeRootState extends State<StudyModeRoot> {
                       onSize: (size) {
                         if (_dockHeight != size.height) setState(() => _dockHeight = size.height);
                       },
-                      // As on iOS, the content stops at the dock: its margins and the strip below it are the
-                      // background, so nothing scrolling shows through under the dock.
-                      child: ColoredBox(
-                        color: theme.background,
-                        child: Padding(
-                          padding: EdgeInsets.only(bottom: media.padding.bottom),
-                          // The 실험실 tab leads out of the course, back to the AI lab.
-                          child: StudyDock(selection: mode.tab, onSelected: (tab) => tab == StudyTab.aiLab ? mode.closeTags() : mode.tab = tab),
+                      // The floating glass tab bar, as the lab's and the library's, in the course's own purple.
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: math.max(21, media.padding.bottom - 13)),
+                        child: LabGlassDock<StudyTab>(
+                          items: [for (final tab in StudyTab.values) (tab, tab.title, tab.icon)],
+                          current: mode.tab,
+                          keyPrefix: 'study.dock',
+                          tint: theme.primary,
+                          select: (tab) {
+                            StudySound.tap.play();
+                            mode.tab = tab;
+                          },
                         ),
                       ),
                     ),
@@ -491,163 +498,6 @@ class _RenderSizeReporter extends RenderProxyBox {
 
 // MARK: - Dock
 
-/// `StudyDock`: learning mode's own tab bar. The highlight slides to the chosen tab, whose symbol bounces.
-class StudyDock extends StatefulWidget {
-  const StudyDock({super.key, required this.selection, required this.onSelected});
-
-  /// The tab on screen.
-  final StudyTab selection;
-
-  /// Called with the tab tapped.
-  final ValueChanged<StudyTab> onSelected;
-
-  @override
-  State<StudyDock> createState() => _StudyDockState();
-}
-
-class _StudyDockState extends State<StudyDock> {
-  /// How many times each tab has been chosen. Its symbol bounces when it is chosen, not when it is left.
-  final Map<StudyTab, int> _chosenCount = {};
-  static final _slide = StudySpring(0.32, 0.22);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = StudyTheme.of(context);
-    final reduce = MediaQuery.disableAnimationsOf(context);
-    final tabs = StudyTab.values;
-    final index = tabs.indexOf(widget.selection);
-    return Padding(
-      padding: const EdgeInsets.only(left: 14, right: 14, top: 6, bottom: 4),
-      child: Center(
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: ShapeDecoration(
-              color: theme.surface,
-              shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(24)),
-            ),
-            foregroundDecoration: ShapeDecoration(
-              shape: RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.circular(24),
-                side: BorderSide(color: theme.line, width: 2),
-              ),
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                const spacing = 2.0;
-                final width = (constraints.maxWidth - spacing * (tabs.length - 1)) / tabs.length;
-                return Stack(
-                  children: [
-                    AnimatedPositioned(
-                      key: const Key('study.dock.highlight'),
-                      left: index * (width + spacing),
-                      top: 0,
-                      bottom: 0,
-                      width: width,
-                      duration: reduce ? Duration.zero : _slide.settle,
-                      curve: _slide,
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: theme.primary.withValues(alpha: 0.14),
-                          shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        for (final (position, tab) in tabs.indexed) ...[if (position > 0) const SizedBox(width: spacing), Expanded(child: _item(tab, theme))],
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _item(StudyTab tab, StudyTheme theme) {
-    final chosen = tab == widget.selection;
-    final color = chosen ? theme.primary : theme.muted;
-    return Semantics(
-      key: Key('study.dock.${tab.name}'),
-      button: true,
-      selected: chosen,
-      label: tab.title,
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          StudySound.tap.play();
-          if (!chosen) setState(() => _chosenCount[tab] = (_chosenCount[tab] ?? 0) + 1);
-          widget.onSelected(tab);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _Bounce(
-                count: _chosenCount[tab] ?? 0,
-                child: StudyIcon(tab.symbol, size: 21, color: color),
-              ),
-              const SizedBox(height: 3),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(tab.title, maxLines: 1, style: StudyTheme.body(11, StudyTheme.bold).copyWith(color: color)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// `.symbolEffect(.bounce, value:)`: the symbol squeezes and springs back each time [count] changes.
-class _Bounce extends StatefulWidget {
-  const _Bounce({required this.count, required this.child});
-  final int count;
-  final Widget child;
-
-  @override
-  State<_Bounce> createState() => _BounceState();
-}
-
-class _BounceState extends State<_Bounce> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-  static final _scale = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.82).chain(CurveTween(curve: Curves.easeOut)), weight: 25),
-    TweenSequenceItem(tween: Tween(begin: 0.82, end: 1.14).chain(CurveTween(curve: Curves.easeOut)), weight: 35),
-    TweenSequenceItem(tween: Tween(begin: 1.14, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)), weight: 40),
-  ]);
-
-  @override
-  void didUpdateWidget(_Bounce old) {
-    super.didUpdateWidget(old);
-    if (old.count != widget.count && !MediaQuery.disableAnimationsOf(context)) _controller.forward(from: 0);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    child: widget.child,
-    builder: (context, child) => Transform.scale(scale: _controller.isAnimating ? _scale.evaluate(_controller) : 1, child: child),
-  );
-}
-
-// MARK: - HUD
-
 /// `StudyHUD`: the bar above every tab: the streak, the experience, today's goal and the way back to the library.
 class StudyHUD extends StatelessWidget {
   const StudyHUD({super.key, required this.model, this.mode});
@@ -695,15 +545,41 @@ class StudyHUD extends StatelessWidget {
               excludeSemantics: true,
               child: StudyStat(symbol: 'flame.fill', color: streak > 0 ? theme.flame : theme.muted, value: '$streak'),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Semantics(
               key: const Key('study.hud.xp'),
               label: 'XP ${game.xp}',
               excludeSemantics: true,
               child: StudyStat(symbol: 'bolt.fill', color: theme.gold, value: '${game.xp}'),
             ),
+            const SizedBox(width: 14),
+            // The lab's 연구비, which this course earns too; tapping it opens the lab's shop.
+            ListenableBuilder(
+              listenable: LabStore.shared,
+              builder: (context, _) {
+                final lab = LabStore.shared;
+                return Semantics(
+                  key: const Key('study.hud.shop'),
+                  button: true,
+                  label: '${L10n.text('lab.tab.shop')}, ${lab.shop.currency.text} ${lab.balance}',
+                  excludeSemantics: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      StudySound.tap.play();
+                      showAppSheet<void>(
+                        context,
+                        grabber: true,
+                        builder: (sheetContext, controller) => LabShopView(openTags: StudyMode.shared.openTags, controller: controller),
+                      );
+                    },
+                    child: StudyStat(symbol: 'bag.fill', color: theme.primary, value: '${lab.balance}'),
+                  ),
+                );
+              },
+            ),
             const Spacer(),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Semantics(
               key: const Key('study.hud.goal'),
               label: '${L10n.text("Today's goal")} ${game.today}/${game.goal}',
@@ -712,7 +588,7 @@ class StudyHUD extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 74,
+                    width: 52,
                     child: StudyBar(value: game.goalProgress, color: game.goalMet ? theme.good : theme.gold, height: 12),
                   ),
                   const SizedBox(width: 8),

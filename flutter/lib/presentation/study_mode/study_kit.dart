@@ -83,7 +83,7 @@ class StudyMode extends ChangeNotifier {
   /// Shows the 2D AI course in place of the lab, once it is bought; before that, the lab tab where it is sold.
   void openTags([StudyTab tab = StudyTab.path]) {
     if (!LabStore.shared.ownsTagCourse) {
-      _labTab = LabTab.twoD;
+      _labTab = LabTab.courses;
       _tagsOpen = false;
       notifyListeners();
       return;
@@ -93,8 +93,9 @@ class StudyMode extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Back from the 2D AI course to the lab.
+  /// Back from the 2D AI course to the lab, on its deck.
   void closeTags() {
+    _labTab = LabTab.deck;
     _tagsOpen = false;
     notifyListeners();
     StudySound.rest();
@@ -198,7 +199,7 @@ class StudyMode extends ChangeNotifier {
     LabStore.shared.reload();
     _tagsOpen = LabStore.shared.ownsTagCourse;
     _wantsTags = _tagsOpen;
-    if (!_tagsOpen) _labTab = LabTab.twoD;
+    if (!_tagsOpen) _labTab = LabTab.courses;
     final stage = _stage;
     if (stage != null) {
       notifyListeners();
@@ -222,19 +223,14 @@ class StudyMode extends ChangeNotifier {
   }
 }
 
-/// The 2D AI course's dock. The collection lives on the Me tab; `aiLab` is not a page but the way back to the AI lab.
+/// The 2D AI course's tabs. The collection lives on the Me tab; `courses` lists the lab's courses and leads back to the
+/// AI lab. The lab's shop opens from the 연구비 counter in the bar above the tabs (a sixth tab would not fit the bar).
 enum StudyTab {
   path('Map', 'map.fill'),
   practice('Practice', 'dumbbell.fill'),
   lab('Studio', 'wand.and.stars'),
-  aiLab('lab.title.short', 'flask.fill'),
+  courses('lab.tab.courses', 'square.stack.3d.up.fill'),
   me('Me', 'person.crop.circle.fill');
-
-  /// The tabs that show a page.
-  static List<StudyTab> get pages => [
-    for (final tab in values)
-      if (tab != aiLab) tab,
-  ];
 
   const StudyTab(this._title, this.symbol);
   final String _title;
@@ -991,6 +987,11 @@ abstract final class StudyGlyph {
   static IconData icon(String symbol) => switch (symbol) {
     'arrow.left.arrow.right' => CupertinoIcons.arrow_left_right,
     'flask.fill' => CupertinoIcons.lab_flask_solid,
+    'square.stack.3d.up.fill' => CupertinoIcons.square_stack_3d_up_fill,
+    'bag.fill' => CupertinoIcons.bag_fill,
+    'gauge.with.dots.needle.67percent' => CupertinoIcons.gauge,
+    'doc.text.fill' => CupertinoIcons.doc_text_fill,
+    'rectangle.stack.fill' => CupertinoIcons.rectangle_stack_fill,
     // The AI lab's shop items and tools.
     'bag' => CupertinoIcons.bag,
     'books.vertical' => CupertinoIcons.book,

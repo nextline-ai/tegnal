@@ -134,14 +134,11 @@ struct StudyModeRoot: View {
         } else { celebrate() }
     }
 
-    /// The tabs opened so far. A tab is built the first time it is opened and kept from then on.
-    @State private var opened: Set<StudyTab> = []
-
     @ViewBuilder private func page(_ tab: StudyTab) -> some View {
         switch tab {
         case .path: StudyPathView(model: model, celebrating: celebrating, start: start)
         case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
-        case .aiLab: EmptyView()
+        case .courses: LabCoursesView(here: .tags)
         case .lab: StudyLabView(model: model, start: start, closed: celebrate)
         case .me: StudyMeView(model: model, source: source, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true }, reset: {
             // A reset starts learning mode over, welcome and placement test included.
@@ -153,21 +150,36 @@ struct StudyModeRoot: View {
         }
     }
 
-    var body: some View {
-        ZStack {
-            ForEach(StudyTab.pages) { tab in
-                if opened.contains(tab) || tab == mode.tab {
-                    let shown = tab == mode.tab
-                    page(tab).opacity(shown ? 1 : 0).allowsHitTesting(shown).accessibilityHidden(!shown).zIndex(shown ? 1 : 0)
+    /// One tab's page under the bar of streak, experience and today's goal, on the course's own background.
+    private func screen(_ tab: StudyTab) -> some View {
+        page(tab)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(StudyTheme.background.ignoresSafeArea())
+            .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
+    }
+
+    /// The stock tab bar.
+    @ViewBuilder private var tabs: some View {
+        if #available(iOS 18.0, *) {
+            TabView(selection: $mode.tab) {
+                ForEach(StudyTab.allCases) { tab in
+                    Tab(tab.title, systemImage: tab.symbol, value: tab) { screen(tab) }
+                        .accessibilityIdentifier("study.dock.\(tab.rawValue)")
+                }
+            }
+        } else {
+            TabView(selection: $mode.tab) {
+                ForEach(StudyTab.allCases) { tab in
+                    screen(tab).tabItem { Label(tab.title, systemImage: tab.symbol) }.tag(tab)
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: mode.tab)
-        .onChange(of: mode.tab, initial: true) { opened.insert(mode.tab) }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(StudyTheme.background.ignoresSafeArea())
-        .safeAreaInset(edge: .top, spacing: 0) { StudyHUD(model: model) }
-        .safeAreaInset(edge: .bottom, spacing: 0) { StudyDock(selection: $mode.tab) }
+    }
+
+    var body: some View {
+        tabs
+        .onChange(of: mode.tab) { StudySound.tap.play() }
+        // The stock tab bar, in the course's own purple.
         .tint(StudyTheme.primary)
         // What learning mode opens over itself is handed the app's models outright. On the Mac a cover or sheet
         // left to inherit them comes up without the image library, which ends the app.
@@ -261,51 +273,12 @@ struct StudyModeRoot: View {
     }
 }
 
-struct StudyDock: View {
-    @Binding var selection: StudyTab
-    @Namespace private var space
-    /// How many times each tab has been chosen. Its symbol bounces when it is chosen, not when it is left.
-    @State private var chosenCount: [StudyTab: Int] = [:]
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(StudyTab.allCases) { tab in
-                let chosen = tab == selection
-                Button {
-                    StudySound.tap.play()
-                    // The lab tab leads out of the course, back to the AI lab.
-                    if tab == .aiLab { StudyMode.shared.closeTags(); return }
-                    if !chosen { chosenCount[tab, default: 0] += 1 }
-                    withAnimation(.spring(duration: 0.32, bounce: 0.22)) { selection = tab }
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: tab.symbol).font(.system(size: 21, weight: .bold))
-                            .symbolEffect(.bounce, value: chosenCount[tab, default: 0])
-                        Text(tab.title).font(StudyTheme.body(11, .bold)).lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    .foregroundStyle(chosen ? StudyTheme.primary : StudyTheme.muted)
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-                    .background {
-                        if chosen { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(StudyTheme.primary.opacity(0.14)).matchedGeometryEffect(id: "chosen", in: space) }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("study.dock.\(tab.rawValue)").accessibilityAddTraits(chosen ? .isSelected : [])
-            }
-        }
-        .padding(6)
-        .background(StudyTheme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 2) }
-        .frame(maxWidth: 520).padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 4)
-        .frame(maxWidth: .infinity)
-    }
-}
-
 /// The bar above every tab: the streak, the experience, today's goal and the way back to the library.
 struct StudyHUD: View {
     let model: StudyModeModel
+    @State private var shopping = false
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             // Learning mode is left for the home scene it was reached from. Where that scene is not in use, the library is next door.
             let home = HomeStage.shared.enabled
             Button { if home { HomeStage.shared.goHome?() } else { StudyMode.shared.leave() } } label: {
@@ -317,15 +290,30 @@ struct StudyHUD: View {
                 .accessibilityLabel(L10n.text("Day streak") + " " + String(model.summary.streak)).accessibilityIdentifier("study.hud.streak")
             StudyStat(symbol: "bolt.fill", color: StudyTheme.gold, value: String(model.game.xp))
                 .accessibilityLabel("XP " + String(model.game.xp)).accessibilityIdentifier("study.hud.xp")
-            Spacer(minLength: 8)
+            // The lab's 연구비, which this course earns too; tapping it opens the lab's shop.
+            Button { StudySound.tap.play(); shopping = true } label: {
+                StudyStat(symbol: "bag.fill", color: StudyTheme.primary, value: String(LabStore.shared.balance))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.text("lab.tab.shop") + ", " + LabStore.shared.shop.currency.text + " " + String(LabStore.shared.balance))
+            .accessibilityIdentifier("study.hud.shop")
+            Spacer(minLength: 6)
             HStack(spacing: 8) {
-                StudyBar(value: model.game.goalProgress, color: model.game.goalMet ? StudyTheme.good : StudyTheme.gold, height: 12).frame(width: 74)
+                StudyBar(value: model.game.goalProgress, color: model.game.goalMet ? StudyTheme.good : StudyTheme.gold, height: 12).frame(width: 52)
                 Text("\(min(model.game.today, model.game.goal))/\(model.game.goal)").font(StudyTheme.body(14, .heavy)).foregroundStyle(StudyTheme.muted).monospacedDigit()
             }
             .accessibilityElement().accessibilityLabel(L10n.text("Today's goal") + " \(model.game.today)/\(model.game.goal)").accessibilityIdentifier("study.hud.goal")
         }
         .padding(.horizontal, 18).padding(.vertical, 10)
         .background(StudyTheme.background)
+        .appSheet(isPresented: $shopping) {
+            NavigationStack {
+                LabShopView().toolbar(.visible, for: .navigationBar).toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { Button { shopping = false } label: { Image(systemName: "xmark") }.accessibilityLabel(L10n.text("Close")) }
+                }
+            }
+            .labLines()
+        }
     }
 }
 

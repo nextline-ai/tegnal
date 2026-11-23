@@ -15,6 +15,8 @@ struct LabEpisodeView: View {
     @State private var toolRun = 0
     @State private var started = Date()
     @State private var engraving: LabEngraving?
+    /// A 망작 just won, shown over the chat until the learner has looked at it.
+    @State private var won: LabFail?
 
     var body: some View {
         NavigationStack {
@@ -42,6 +44,9 @@ struct LabEpisodeView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .overlay {
+            if let won { LabFailReveal(fail: won) { self.won = nil }.transition(.identity) }
         }
         .labLines()
     }
@@ -141,7 +146,11 @@ struct LabEpisodeView: View {
         } else if let fail = episode.fails.first(where: { $0.choice == choice.text }) {
             // No shaking and no penalty: a quiet tag, and the 망작 goes up in the gallery.
             LabHaptic.press()
-            if store.hang(fail) { hungNow.append(fail.id) }
+            if store.hang(fail) {
+                hungNow.append(fail.id)
+                // Won for the first time: the answer is read in the chat first, then the 망작 comes up as a card won.
+                Task { try? await Task.sleep(for: .milliseconds(650)); won = fail }
+            }
         }
         withAnimation(.spring(duration: 0.45, bounce: 0.15)) { picked = index }
     }

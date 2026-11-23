@@ -47,12 +47,13 @@ final class StudyMode {
     }
     /// Shows the tag course in place of the lab, once it is bought; before that, the shop where it is sold.
     func openTags(_ tab: StudyTab = .path) {
-        guard LabStore.shared.ownsTagCourse else { labTab = .twoD; tagsOpen = false; return }
+        guard LabStore.shared.ownsTagCourse else { labTab = .courses; tagsOpen = false; return }
         self.tab = tab
         withAnimation(.snappy(duration: 0.35)) { tagsOpen = true }
     }
-    /// Back from the tag course to the lab.
+    /// Back from the tag course to the lab, on its deck.
     func closeTags() {
+        labTab = .deck
         withAnimation(.snappy(duration: 0.35)) { tagsOpen = false }
         StudySound.rest()
     }
@@ -63,7 +64,7 @@ final class StudyMode {
         LabStore.shared.reload()
         tagsOpen = LabStore.shared.ownsTagCourse
         wantsTags = tagsOpen
-        if !tagsOpen { labTab = .twoD }
+        if !tagsOpen { labTab = .courses }
         if HomeStage.shared.cross(to: .study) { return }
         withAnimation(.snappy(duration: 0.35)) { active = true }
     }
@@ -74,14 +75,13 @@ final class StudyMode {
     }
 }
 
-/// The course's dock. The collection lives on the Me tab; `aiLab` is not a page but the way back to the AI lab.
+/// The course's tabs. The collection lives on the Me tab; `courses` lists the lab's courses and leads back to the AI lab.
+/// The lab's shop opens from the 연구비 counter in the bar above the tabs (a sixth tab would fold into More).
 enum StudyTab: String, CaseIterable, Identifiable {
-    case path, practice, lab, aiLab, me
+    case path, practice, lab, courses, me
     var id: String { rawValue }
-    var title: String { L10n.text(["path": "Map", "practice": "Practice", "lab": "Studio", "aiLab": "lab.title.short", "me": "Me"][rawValue] ?? "") }
-    var symbol: String { ["path": "map.fill", "practice": "dumbbell.fill", "lab": "wand.and.stars", "aiLab": "flask.fill", "me": "person.crop.circle.fill"][rawValue] ?? "circle" }
-    /// The tabs that show a page.
-    static var pages: [StudyTab] { allCases.filter { $0 != .aiLab } }
+    var title: String { L10n.text(["path": "Map", "practice": "Practice", "lab": "Studio", "courses": "lab.tab.courses", "me": "Me"][rawValue] ?? "") }
+    var symbol: String { ["path": "map.fill", "practice": "dumbbell.fill", "lab": "wand.and.stars", "courses": LabTab.coursesSymbol, "me": "person.crop.circle.fill"][rawValue] ?? "circle" }
 }
 
 extension Color {

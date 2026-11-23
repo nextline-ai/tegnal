@@ -240,21 +240,7 @@ struct LabFailsView: View {
         .appSheet(item: $shown) { fail in LabFailSheet(fail: fail, play: play).presentationDetents([.medium, .large]) }
     }
 
-    private func frame(_ fail: LabFail) -> some View {
-        let episode = store.course.episode(fail.episode)
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(fail.reply.text).font(LabFont.line(13)).foregroundStyle(LabPalette.paperInk).lineLimit(5)
-                .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
-                .padding(12)
-                .background(LabPalette.paper)
-                .padding(7)
-                .background(Color(labHex: "2A2724"), in: RoundedRectangle(cornerRadius: 3))
-                .labCardShadow(.black.opacity(0.35), radius: 8, y: 4)
-            Text(fail.name.text).font(.system(size: 14, weight: .bold)).lineLimit(1)
-            Text(String(format: "No. %02d", store.number(fail)) + " · " + L10n.text("lab.card.number", episode?.digits ?? ""))
-                .font(LabFont.number(11, .medium)).foregroundStyle(.secondary)
-        }
-    }
+    private func frame(_ fail: LabFail) -> some View { LabFailFrame(fail: fail) }
 
     private func empty(_ fail: LabFail) -> some View {
         let episode = store.course.episode(fail.episode)
@@ -272,6 +258,123 @@ struct LabFailsView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("lab.fail.empty.\(fail.id)")
+    }
+}
+
+/// A 망작 as the gallery hangs it: what came out, on paper in a dark frame, with its name and number under it.
+struct LabFailFrame: View {
+    let fail: LabFail
+    /// How many lines of the answer the paper holds; nil shows all of it.
+    var lines: Int? = 5
+    /// Whether the name and number are written under the frame.
+    var captioned = true
+    private var store: LabStore { .shared }
+    var body: some View {
+        let episode = store.course.episode(fail.episode)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(fail.reply.text).font(LabFont.line(13)).foregroundStyle(LabPalette.paperInk).lineLimit(lines)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
+                .padding(12)
+                .background(LabPalette.paper)
+                .padding(7)
+                .background(Color(labHex: "2A2724"), in: RoundedRectangle(cornerRadius: 3))
+                .labCardShadow(.black.opacity(0.35), radius: 8, y: 4)
+            if captioned {
+                Text(fail.name.text).font(.system(size: 14, weight: .bold)).lineLimit(1)
+                Text(String(format: "No. %02d", store.number(fail)) + " · " + L10n.text("lab.card.number", episode?.digits ?? ""))
+                    .font(LabFont.number(11, .medium)).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// The moment a 망작 is won, the first time its trap is pressed: the chat dims, a ring of light opens, the framed 망작 drops in
+/// from above, swings on its pin and settles a little crooked, and only then its name, number and the 연구비 it paid come in.
+struct LabFailReveal: View {
+    let fail: LabFail
+    let done: () -> Void
+    private var store: LabStore { .shared }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dimmed = false
+    @State private var hung = false
+    @State private var settled = false
+
+    var body: some View {
+        let episode = store.course.episode(fail.episode)
+        ZStack {
+            // The chat goes dark and out of focus behind the card.
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(.black.opacity(0.72))
+            }
+            .ignoresSafeArea()
+            .opacity(dimmed ? 1 : 0)
+            .contentShape(Rectangle()).onTapGesture {}
+                .accessibilityHidden(true)
+            VStack(spacing: 22) {
+                VStack(spacing: 8) {
+                    LabTag(text: String(format: "No. %02d", store.number(fail)), color: LabPalette.fail, mono: true)
+                    Text(L10n.text("lab.fail.got")).font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .opacity(settled ? 1 : 0).offset(y: settled ? 0 : -10)
+
+                LabFailFrame(fail: fail, lines: 7, captioned: false)
+                    .overlay(alignment: .top) {
+                        Circle().fill(Color(labHex: "8A867D")).frame(width: 10, height: 10)
+                            .overlay { Circle().strokeBorder(.black.opacity(0.25), lineWidth: 0.5) }
+                            .shadow(color: .black.opacity(0.4), radius: 1, y: 1)
+                            .offset(y: -4)
+                    }
+                    .frame(width: 260)
+                    .background {
+                        // A ring of light behind the frame, opening as it lands.
+                        Circle().fill(RadialGradient(colors: [LabPalette.paper.opacity(0.3), LabPalette.fail.opacity(0.18), .clear], center: .center, startRadius: 20, endRadius: 220))
+                            .frame(width: 440, height: 440)
+                            .scaleEffect(settled ? 1 : 0.3).opacity(settled ? 1 : 0)
+                            .allowsHitTesting(false)
+                    }
+                    .rotationEffect(.degrees(hung ? -2.5 : -22), anchor: .top)
+                    .offset(y: hung ? 0 : -320)
+                    .accessibilityElement(children: .combine)
+
+                VStack(spacing: 6) {
+                    Text(fail.name.text).font(LabFont.voice(24)).foregroundStyle(.white).multilineTextAlignment(.center)
+                    Text(L10n.text("lab.card.number", episode?.digits ?? "") + " · " + L10n.text("lab.fail.gotNote", store.shop.currency.text, String(store.course.info.rewards.fail)))
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                }
+                .opacity(settled ? 1 : 0).offset(y: settled ? 0 : 12)
+
+                Button(action: close) { Text(L10n.text("OK")).frame(maxWidth: .infinity) }
+                    .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18))
+                    .frame(width: 260)
+                    .opacity(settled ? 1 : 0)
+                    .accessibilityIdentifier("lab.fail.reveal.done")
+            }
+            .padding(.horizontal, 24)
+        }
+        .environment(\.colorScheme, .dark)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityIdentifier("lab.fail.reveal")
+        .task { await play() }
+    }
+
+    private func play() async {
+        if reduceMotion { dimmed = true; hung = true; settled = true; return }
+        withAnimation(.easeOut(duration: 0.25)) { dimmed = true }
+        try? await Task.sleep(for: .milliseconds(120))
+        // Dropped in, it swings past and back on its pin before it comes to rest.
+        withAnimation(.spring(duration: 0.9, bounce: 0.5)) { hung = true }
+        try? await Task.sleep(for: .milliseconds(380))
+        LabHaptic.snap()
+        withAnimation(.spring(duration: 0.6, bounce: 0.2)) { settled = true }
+    }
+
+    private func close() {
+        withAnimation(.easeIn(duration: 0.2)) { settled = false; dimmed = false; hung = false }
+        Task { try? await Task.sleep(for: .milliseconds(200)); done() }
     }
 }
 
@@ -380,7 +483,7 @@ struct LabShopView: View {
     }
 
     @ViewBuilder private func priceTag(_ item: LabShopItem, state: LabStore.BuyResult, owned: Bool) -> some View {
-        if owned, item.id == LabStore.tagCourse {
+        if owned, item.id == LabStore.tagCourse, !StudyMode.shared.tagsOpen {
             Button(L10n.text("lab.shop.open")) { StudyMode.shared.openTags() }
                 .buttonStyle(.bordered).buttonBorderShape(.capsule).accessibilityIdentifier("lab.shop.open.\(item.id)")
         } else if owned {

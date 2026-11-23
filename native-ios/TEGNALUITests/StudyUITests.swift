@@ -324,7 +324,13 @@ final class StudyUITests: XCTestCase {
     private var sawOdd = false
     override func setUpWithError() throws { continueAfterFailure = false }
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
-        app.descendants(matching: .any).matching(identifier: id).firstMatch
+        // The course's tabs are the stock tab bar's buttons, which do not always carry the identifier given to their tab
+        // (in Korean they come with only their label): they are found by place, in the bar that shows the map's symbol.
+        let tabs = ["path", "practice", "lab", "courses", "me"]
+        if id.hasPrefix("study.dock."), let index = tabs.firstIndex(of: String(id.dropFirst("study.dock.".count))) {
+            return app.tabBars.containing(.image, identifier: "map.fill").firstMatch.buttons.element(boundBy: index)
+        }
+        return app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
     /// Starts the app with the image fixture: in learning mode, or in the library when `mode` is false.
     /// `seed` names the lesson the path starts at, with a server already chosen.
