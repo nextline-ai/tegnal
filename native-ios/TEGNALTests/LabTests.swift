@@ -18,9 +18,10 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(course.seasons.map(\.number), [1, 2, 3, 4])
         XCTAssertEqual(course.episodes.map(\.id), (1...15).map { String(format: "ep%02d", $0) })
         XCTAssertEqual(course.episodes.map(\.number), Array(1...15), "An episode's number matches its place in the deck")
-        for season in course.seasons {
-            XCTAssertNotNil(season.color.range(of: "^[0-9A-Fa-f]{6}$", options: .regularExpression), "season \(season.number) colour")
-        }
+        let colors = course.info.cardColors ?? []
+        XCTAssertEqual(colors, ["1F4D3A", "2B2F77", "6B1F2A", "6E4A12", "0F4C5C"], "The system sheet's card colours, without 먹")
+        // Cards take the colours in turn by number: card 6 comes round to the first again.
+        XCTAssertEqual(course.episodes.prefix(6).map(course.color), ["1F4D3A", "2B2F77", "6B1F2A", "6E4A12", "0F4C5C", "1F4D3A"])
     }
 
     func testEveryEpisodeHasOneRightChoiceTrapsWithTheirFailsAndThreeUses() {

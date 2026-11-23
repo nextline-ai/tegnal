@@ -10,12 +10,12 @@
     "edition": 20,
     "courseLesson": 10
   },
+  "cardColors": ["1F4D3A", "2B2F77", "6B1F2A", "6E4A12", "0F4C5C"],
   "seasons": [
     {
       "number": 1,
       "title": "1분 만에 AI 지능 2배 올리는 치트키",
       "summary": "프롬프트 고민 없이, 버튼과 말 한 마디로.",
-      "color": "1F4D3A",
       "order": "fixed",
       "episodes": ["ep01", "ep02", "ep03", "ep04"]
     },
@@ -23,7 +23,6 @@
       "number": 2,
       "title": "프롬프트의 90%, 컨텍스트 엔지니어링",
       "summary": "무엇을 넣고, 무엇을 빼는가.",
-      "color": "2B2F77",
       "order": "fixed",
       "opensAfter": 1,
       "episodes": ["ep05", "ep06", "ep07", "ep08"]
@@ -32,7 +31,6 @@
       "number": 3,
       "title": "가짜 전문가 거르고, AI 다중인격 참교육하기",
       "summary": "사기꾼 팁, 아부, 억지 중립, 거짓말.",
-      "color": "6B1F2A",
       "order": "fixed",
       "opensAfter": 2,
       "episodes": ["ep09", "ep10", "ep11"]
@@ -41,7 +39,6 @@
       "number": 4,
       "title": "고수처럼 굴리기",
       "summary": "티키타카와 습관 자동화.",
-      "color": "6E4A12",
       "order": "fixed",
       "opensAfter": 3,
       "episodes": ["ep12", "ep13", "ep14", "ep15"]

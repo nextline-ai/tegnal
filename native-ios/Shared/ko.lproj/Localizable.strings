@@ -2561,6 +2561,8 @@
 "lab.tab.shop" = "상점";
 "lab.new" = "새 판";
 "lab.deck.title" = "나의 덱";
+"lab.deck.fold" = "접기";
+"lab.deck.unfold" = "이전 카드 %@장";
 "lab.deck.diagnose" = "1분 진단으로 첫 장 만들기";
 "lab.deck.complete" = "모든 카드가 새겨졌습니다.";
 "lab.deck.completeNote" = "판도가 바뀌면 치트시트가 바뀝니다. 새 판이 오면 알려 드립니다.";
@@ -2613,7 +2615,9 @@
 "lab.sheet.stamp" = "%@ 기준 큐레이션";
 "lab.sheet.locked" = "카드 %@가 엽니다";
 "lab.sheet.none" = "치트시트가 아직 없습니다";
-"lab.sheet.paid" = "새 판 열람 연구비 +%@ (%@)";
+"lab.sheet.basis" = "큐레이션 기준";
+"lab.sheet.draft" = "초안";
+"lab.sheet.paid" = "새 판 열람 +%@ %@";
 "lab.shop.limited" = "한정 판매";
 "lab.shop.owned" = "보유 중";
 "lab.shop.ownedShort" = "보유";

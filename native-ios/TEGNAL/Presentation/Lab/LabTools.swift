@@ -27,7 +27,7 @@ private struct LabAnswer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let meta, !meta.isEmpty { Text(meta).font(LabFont.number(11)).tracking(1).foregroundStyle(.secondary) }
-            Text(text).font(.system(size: 15)).lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading)
+            Text(text).font(.system(size: 15)).labSpacing(3).frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
             if let note, !note.isEmpty {
@@ -232,7 +232,7 @@ struct LabComposeTool: View {
                 if lines.isEmpty {
                     LabDashedRule(color: LabPalette.paperRule).padding(.vertical, 8)
                 } else {
-                    Text(lines.joined(separator: "\n")).font(.system(size: 15, weight: .medium)).lineSpacing(4).foregroundStyle(LabPalette.paperInk)
+                    Text(lines.joined(separator: "\n")).font(.system(size: 15, weight: .medium)).labSpacing(4).foregroundStyle(LabPalette.paperInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if !lines.isEmpty {

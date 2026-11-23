@@ -89,6 +89,8 @@ struct LabCourseInfo: Decodable, Sendable {
     var base: Int
     var rewards: LabRewards
     var seasons: [LabSeason]
+    /// The colours engraved cards take, six hexadecimal digits each, used in turn down the deck: card 1 the first, card 6 the first again.
+    var cardColors: [String]?
 
     static let empty = LabCourseInfo(id: "", title: "", gauge: "", base: 0, rewards: LabRewards(fail: 0, edition: 0, courseLesson: 0), seasons: [])
 }
@@ -107,8 +109,6 @@ struct LabSeason: Decodable, Hashable, Sendable, Identifiable {
     var number: Int
     var title: LabText
     var summary: LabText?
-    /// The colour its engraved cards take, six hexadecimal digits.
-    var color: String
     /// `fixed`: one card after another. `free`: any open card in any order.
     var order: String
     /// The season that must be finished before this one opens.

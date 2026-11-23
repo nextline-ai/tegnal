@@ -16,7 +16,7 @@ struct LabSheetView: View {
                     ContentUnavailableView(L10n.text("lab.sheet.none"), systemImage: "doc.text")
                 }
                 if paid > 0 {
-                    Text(L10n.text("lab.sheet.paid", String(paid), store.shop.currency.text)).font(LabFont.number(13)).foregroundStyle(LabPalette.gauge)
+                    Text(L10n.text("lab.sheet.paid", String(paid), store.shop.currency.text)).font(.system(size: 13, weight: .semibold)).foregroundStyle(LabPalette.gauge)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                         .accessibilityIdentifier("lab.sheet.paid")
                 }
@@ -36,59 +36,174 @@ struct LabSheetView: View {
         if amount > 0 { withAnimation(.spring(duration: 0.5)) { paid = amount } }
     }
 
-    private func paper(_ edition: LabEdition) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.text("lab.sheet.stamp", edition.stamp))
-                    .font(LabFont.number(12)).foregroundStyle(LabPalette.paperInk)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(LabPalette.paperInk, lineWidth: 1.5) }
-                    .rotationEffect(.degrees(-2))
-                    .accessibilityIdentifier("lab.sheet.stamp")
-                if let change = edition.change { Text(change.text).font(.system(size: 13)).foregroundStyle(LabPalette.paperMuted) }
+    private func paper(_ edition: LabEdition) -> some View { LabSheetPaper(edition: edition) }
+}
+
+/// The sheet itself, printed on paper: a masthead with the date stamp and what changed, a numbered section for each family of jobs,
+/// and the footer under a double rule. Each row reads in one glance: the job, an example, the pick on a tag, and why.
+/// A section no card has opened yet is shown blacked out, with the card that opens it.
+struct LabSheetPaper: View {
+    let edition: LabEdition
+    private var store: LabStore { .shared }
+    private let ink = LabPalette.paperInk
+    private let muted = LabPalette.paperMuted
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            masthead
+            ForEach(Array(edition.sections.enumerated()), id: \.element.id) { index, section in
+                sectionView(index + 1, section).padding(.top, 30)
             }
-            ForEach(edition.sections) { section in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(section.title.text).font(LabFont.voice(20)).foregroundStyle(LabPalette.paperInk)
-                    if store.opened(section) {
-                        VStack(spacing: 0) {
-                            ForEach(section.rows.indices, id: \.self) { index in
-                                let row = section.rows[index]
-                                HStack(alignment: .top, spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(row.task.text).font(.system(size: 15, weight: .semibold))
-                                        if let example = row.example { Text(example.text).font(.system(size: 12)).foregroundStyle(LabPalette.paperMuted) }
-                                    }
-                                    Spacer(minLength: 8)
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(row.pick).font(.system(size: 15, weight: .bold)).multilineTextAlignment(.trailing)
-                                        if let why = row.why { Text(why.text).font(.system(size: 12)).foregroundStyle(LabPalette.paperMuted).multilineTextAlignment(.trailing) }
-                                    }
-                                }
-                                .foregroundStyle(LabPalette.paperInk)
-                                .padding(.vertical, 11)
-                                .accessibilityElement(children: .combine)
-                                if index < section.rows.count - 1 { Rectangle().fill(LabPalette.paperRule.opacity(0.35)).frame(height: 0.5) }
-                            }
-                        }
-                        .accessibilityIdentifier("lab.sheet.section.\(section.id)")
-                    } else {
-                        HStack(spacing: 8) {
-                            Image(systemName: "lock.fill")
-                            Text(L10n.text("lab.sheet.locked", (section.opens.flatMap(store.course.episode)?.digits ?? "")))
-                        }
-                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(LabPalette.paperMuted)
-                        .frame(maxWidth: .infinity, minHeight: 64)
-                        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(LabPalette.paperRule.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 4])) }
-                        .accessibilityIdentifier("lab.sheet.locked.\(section.id)")
+            if let footer = edition.footer {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(spacing: 2) {
+                        Rectangle().fill(ink).frame(height: 0.5)
+                        Rectangle().fill(ink).frame(height: 2)
                     }
+                    Text(footer.text).font(LabFont.line(14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.top, 30)
             }
-            if let footer = edition.footer { Text(footer.text).font(.system(size: 12)).foregroundStyle(LabPalette.paperMuted) }
         }
-        .padding(22)
+        .padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 26)
         .background { LabCardBackground(state: .blank, radius: 22) }
         .environment(\.colorScheme, .light)
+    }
+
+    private var masthead: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI LAB · CHEAT SHEET").font(LabFont.number(10)).tracking(1.8).foregroundStyle(muted)
+                    if let change = edition.change {
+                        Text(change.text).font(LabFont.line(16)).foregroundStyle(ink).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+                stamp
+            }
+            Rectangle().fill(ink).frame(height: 2)
+        }
+    }
+
+    /// A rubber stamp in red ink: the day this sheet was curated.
+    private var stamp: some View {
+        let red = Color(labHex: "B3392B")
+        return VStack(spacing: 2) {
+            Text(L10n.text("lab.sheet.basis")).font(.system(size: 10, weight: .heavy)).tracking(1.2)
+            Text(edition.stamp).font(LabFont.number(14))
+        }
+        .foregroundStyle(red)
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(red, lineWidth: 1.6) }
+        .padding(3)
+        .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(red, lineWidth: 0.8) }
+        .opacity(0.88)
+        .rotationEffect(.degrees(-5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("lab.sheet.stamp", edition.stamp))
+        .accessibilityIdentifier("lab.sheet.stamp")
+    }
+
+    private func sectionView(_ number: Int, _ section: LabSheetSection) -> some View {
+        let opened = store.opened(section)
+        let card = section.opens.flatMap(store.course.episode)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(String(format: "%02d", number)).font(LabFont.number(14)).foregroundStyle(muted)
+                Text(section.title.text).font(LabFont.voice(21)).foregroundStyle(ink).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            if let card, opened {
+                Label(L10n.text("lab.card.number", card.digits) + " · " + card.label, systemImage: "key.fill")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(muted)
+                    .padding(.top, 6)
+            }
+            Rectangle().fill(ink).frame(height: 1).padding(.top, 12)
+            if opened {
+                VStack(spacing: 0) {
+                    ForEach(section.rows.indices, id: \.self) { index in
+                        row(section.rows[index])
+                        if index < section.rows.count - 1 { Rectangle().fill(LabPalette.paperRule.opacity(0.4)).frame(height: 0.5) }
+                    }
+                }
+                .accessibilityIdentifier("lab.sheet.section.\(section.id)")
+            } else {
+                blackedOut(section, card: card)
+            }
+        }
+    }
+
+    private func row(_ row: LabSheetRow) -> some View {
+        let job = VStack(alignment: .leading, spacing: 2) {
+            Text(row.task.text).font(.system(size: 17, weight: .bold)).foregroundStyle(ink)
+            if let example = row.example { Text(example.text).font(.system(size: 13)).foregroundStyle(muted) }
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            // The pick sits beside the job when there is room, under it when there is not.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) { job.fixedSize(); Spacer(minLength: 0); pick(row) }
+                VStack(alignment: .leading, spacing: 8) { job; pick(row) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let why = row.why {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "arrow.turn.down.right").font(.system(size: 11, weight: .bold)).foregroundStyle(muted)
+                    Text(why.text).font(.system(size: 14)).foregroundStyle(ink.opacity(0.78)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The pick on a tag: solid ink once settled; a pencilled outline, marked as a draft, while it is not.
+    private func pick(_ row: LabSheetRow) -> some View {
+        let draft = row.draft == true
+        return HStack(spacing: 6) {
+            if draft {
+                Text(L10n.text("lab.sheet.draft")).font(.system(size: 10, weight: .heavy)).foregroundStyle(muted)
+            }
+            Text(row.pick).font(.system(size: 15, weight: .bold)).lineLimit(1)
+        }
+        .foregroundStyle(draft ? ink : LabPalette.paper)
+        .padding(.horizontal, 13).frame(height: 32)
+        .background {
+            if draft { Capsule().strokeBorder(ink.opacity(0.55), style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])) }
+            else { Capsule().fill(ink) }
+        }
+        .fixedSize()
+    }
+
+    /// A section not opened yet: its rows blacked out, and the card that opens it.
+    private func blackedOut(_ section: LabSheetSection, card: LabEpisode?) -> some View {
+        let widths: [(CGFloat, CGFloat)] = [(104, 150), (78, 118), (124, 168), (92, 134)]
+        return VStack(spacing: 0) {
+            ForEach(section.rows.indices, id: \.self) { index in
+                let width = widths[index % widths.count]
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Capsule().fill(ink.opacity(0.75)).frame(width: width.0, height: 13)
+                        Capsule().fill(ink.opacity(0.3)).frame(width: width.1, height: 9)
+                    }
+                    Spacer(minLength: 0)
+                    Capsule().fill(ink.opacity(0.75)).frame(width: 76, height: 28)
+                }
+                .padding(.vertical, 16)
+                if index < section.rows.count - 1 { Rectangle().fill(LabPalette.paperRule.opacity(0.4)).frame(height: 0.5) }
+            }
+        }
+        .opacity(0.35)
+        .overlay {
+            Label(L10n.text("lab.sheet.locked", card?.digits ?? ""), systemImage: "lock.fill")
+                .font(.system(size: 14, weight: .bold)).foregroundStyle(ink)
+                .padding(.horizontal, 16).frame(height: 38)
+                .background(LabPalette.paper, in: Capsule())
+                .overlay { Capsule().strokeBorder(ink.opacity(0.25), lineWidth: 1) }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("lab.sheet.locked", card?.digits ?? ""))
+        .accessibilityIdentifier("lab.sheet.locked.\(section.id)")
     }
 }
 
@@ -128,13 +243,13 @@ struct LabFailsView: View {
     private func frame(_ fail: LabFail) -> some View {
         let episode = store.course.episode(fail.episode)
         return VStack(alignment: .leading, spacing: 8) {
-            Text(fail.reply.text).font(LabFont.line(13)).lineSpacing(2).foregroundStyle(LabPalette.paperInk).lineLimit(5)
+            Text(fail.reply.text).font(LabFont.line(13)).foregroundStyle(LabPalette.paperInk).lineLimit(5)
                 .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
                 .padding(12)
                 .background(LabPalette.paper)
                 .padding(7)
                 .background(Color(labHex: "2A2724"), in: RoundedRectangle(cornerRadius: 3))
-                .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+                .labCardShadow(.black.opacity(0.35), radius: 8, y: 4)
             Text(fail.name.text).font(.system(size: 14, weight: .bold)).lineLimit(1)
             Text(String(format: "No. %02d", store.number(fail)) + " · " + L10n.text("lab.card.number", episode?.digits ?? ""))
                 .font(LabFont.number(11, .medium)).foregroundStyle(.secondary)
@@ -181,6 +296,7 @@ struct LabFailSheet: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel(L10n.text("Close")) }
             }
         }
+        .labLines()
     }
 }
 
@@ -314,6 +430,7 @@ struct LabDiagnosisView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+        .labLines()
     }
 
     private func question(_ diagnosis: LabDiagnosis, _ index: Int) -> some View {
@@ -325,7 +442,7 @@ struct LabDiagnosisView: View {
                     if let intro = diagnosis.intro { Text(intro.text).font(.system(size: 14)).foregroundStyle(.secondary) }
                 }
             }
-            Text(question.text.text).font(LabFont.voice(26)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            Text(question.text.text).font(LabFont.voice(26)).fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("lab.diagnosis.question")
             Spacer()
             VStack(spacing: 8) {
@@ -356,7 +473,7 @@ struct LabDiagnosisView: View {
         ScrollView {
             VStack(spacing: 20) {
                 Text(L10n.text("lab.diagnosis.done")).font(.system(size: 22, weight: .bold)).accessibilityIdentifier("lab.diagnosis.done")
-                LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.teal, state: .earned,
+                LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.ink, state: .earned,
                             footer: type.line.text, large: true)
                     .frame(width: 280, height: 352)
                 LabTypeEpisodes(type: type)
@@ -402,7 +519,7 @@ struct LabTypeSheet: View {
             ScrollView {
                 if let type = store.type {
                     VStack(spacing: 18) {
-                        LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.teal, state: .earned,
+                        LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.ink, state: .earned,
                                     footer: type.line.text, date: store.progress.diagnosed?.labStamp, large: true)
                             .frame(width: 280, height: 352)
                         LabTypeEpisodes(type: type)
@@ -416,5 +533,6 @@ struct LabTypeSheet: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel(L10n.text("Close")) }
             }
         }
+        .labLines()
     }
 }

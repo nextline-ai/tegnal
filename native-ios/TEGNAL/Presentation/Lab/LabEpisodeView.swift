@@ -33,18 +33,17 @@ struct LabEpisodeView: View {
                             .accessibilityLabel(L10n.text("Close")).accessibilityIdentifier("lab.episode.close")
                     }
                     ToolbarItem(placement: .principal) { progress }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        if phase == .tool {
+                    if phase == .tool {
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button { toolRun += 1; passed = false } label: { Image(systemName: "arrow.counterclockwise") }
                                 .accessibilityLabel(L10n.text("lab.tool.again")).accessibilityIdentifier("lab.tool.again")
-                        } else {
-                            Text(episode.serial).font(LabFont.number(12)).foregroundStyle(.secondary).fixedSize()
                         }
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+        .labLines()
     }
 
     /// Four short bars: disaster, choice, tool, engraving.
@@ -88,7 +87,7 @@ struct LabEpisodeView: View {
     private var opening: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(episode.disaster.verdict.text).font(LabFont.voice(29)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                Text(episode.disaster.verdict.text).font(LabFont.voice(29)).fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader).accessibilityIdentifier("lab.disaster")
                 Text(episode.disaster.question.text).font(.system(size: 15)).foregroundStyle(.secondary)
             }
@@ -115,7 +114,7 @@ struct LabEpisodeView: View {
                     LabTag(text: L10n.text("lab.fail.hung", String(format: "%02d", store.number(fail))), color: LabPalette.fail)
                         .accessibilityIdentifier("lab.fail.tag")
                 }
-                Text(choice.verdict.text).font(LabFont.voice(25)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                Text(choice.verdict.text).font(LabFont.voice(25)).fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("lab.verdict")
                 if let why = choice.why { Text(why.text).font(.system(size: 15)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             }
@@ -207,8 +206,9 @@ struct LabEngraveView: View {
         let season = store.course.season(of: episode)
         GeometryReader { proxy in
             let height = min(352, max(250, proxy.size.height * 0.5))
-            List {
-                Section {
+            // A plain scroll view rather than a list: a list row clips the card while it turns, and the rows below it would sit in front.
+            ScrollView {
+                VStack(spacing: 22) {
                     VStack(spacing: 6) {
                         Text(String(format: "%d:%02d · ", Int(seconds) / 60, Int(seconds) % 60) + L10n.text("lab.engrave.done"))
                             .font(LabFont.number(12)).tracking(1.2).foregroundStyle(.secondary)
@@ -226,45 +226,19 @@ struct LabEngraveView: View {
                             .overlay { LabSheen(progress: sheen).clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous)) }
                     }
                     .frame(width: height * 280 / 352, height: height)
-                    .shadow(color: angle > 90 ? Color(labHex: store.course.color(episode)).opacity(0.5) : .black.opacity(0.25), radius: 28, y: 16)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .labCardShadow(angle > 90 ? Color(labHex: store.course.color(episode)).opacity(0.5) : .black.opacity(0.25), radius: 28, y: 16)
+                    .zIndex(1)
                     .accessibilityElement().accessibilityLabel(line)
                     .accessibilityIdentifier("lab.engrave.card")
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
 
-                if let engraving, settled {
-                    Section {
-                        HStack {
-                            Text(store.course.info.gauge.text)
-                            Spacer()
-                            Text("\(engraving.before)% → ").font(LabFont.number(17)).foregroundStyle(.secondary)
-                            Text("\(shownRate ?? engraving.before)%").font(LabFont.number(17)).foregroundStyle(LabPalette.gauge)
-                                .contentTransition(.numericText(value: Double(shownRate ?? engraving.before)))
-                        }
-                        .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.rate")
-                        HStack {
-                            Text(store.shop.currency.text)
-                            Spacer()
-                            Text("+\(engraving.total)").font(LabFont.number(15))
-                            Text(L10n.text("lab.engrave.income", String(engraving.cardReward), String(engraving.failReward))).font(.system(size: 13)).foregroundStyle(.secondary)
-                        }
-                        .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.income")
-                        HStack {
-                            Text(L10n.text("lab.engrave.fails"))
-                            Spacer()
-                            Text(L10n.text("lab.count.pieces", String(engraving.failsHung))).font(LabFont.number(15)).foregroundStyle(LabPalette.fail)
-                            Text(engraving.failsLeft == 0 ? L10n.text("lab.engrave.allFails") : L10n.text("lab.engrave.failsLeft", String(engraving.failsLeft)))
-                                .font(.system(size: 13)).foregroundStyle(.secondary)
-                        }
-                        .accessibilityElement(children: .combine)
+                    if let engraving, settled {
+                        rows(engraving).transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .scrollClipDisabled()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 8) {
@@ -279,6 +253,42 @@ struct LabEngraveView: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .task { await play(line) }
+    }
+
+    /// The rate, the 연구비 and the 망작, grouped as a stock inset list draws them.
+    private func rows(_ engraving: LabEngraving) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(store.course.info.gauge.text)
+                Spacer()
+                Text("\(engraving.before)% → ").font(LabFont.number(17)).foregroundStyle(.secondary)
+                Text("\(shownRate ?? engraving.before)%").font(LabFont.number(17)).foregroundStyle(LabPalette.gauge)
+                    .contentTransition(.numericText(value: Double(shownRate ?? engraving.before)))
+            }
+            .rowPadding()
+            .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.rate")
+            Divider()
+            HStack {
+                Text(store.shop.currency.text)
+                Spacer()
+                Text("+\(engraving.total)").font(LabFont.number(15))
+                Text(L10n.text("lab.engrave.income", String(engraving.cardReward), String(engraving.failReward))).font(.system(size: 13)).foregroundStyle(.secondary)
+            }
+            .rowPadding()
+            .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.income")
+            Divider()
+            HStack {
+                Text(L10n.text("lab.engrave.fails"))
+                Spacer()
+                Text(L10n.text("lab.count.pieces", String(engraving.failsHung))).font(LabFont.number(15)).foregroundStyle(LabPalette.fail)
+                Text(engraving.failsLeft == 0 ? L10n.text("lab.engrave.allFails") : L10n.text("lab.engrave.failsLeft", String(engraving.failsLeft)))
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
+            }
+            .rowPadding()
+            .accessibilityElement(children: .combine)
+        }
+        .padding(.leading, 16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private func play(_ line: String) async {
@@ -306,6 +316,10 @@ struct LabEngraveView: View {
         withAnimation(.spring(duration: 1.2)) { shownRate = engraving?.after }
         if engraving?.first == true { LabHaptic.pass() }
     }
+}
+
+private extension View {
+    func rowPadding() -> some View { padding(.trailing, 16).frame(minHeight: 50) }
 }
 
 /// Shares a picture of an engraved card.

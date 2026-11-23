@@ -14,6 +14,7 @@ struct LabRoot: View {
 
     var body: some View {
         tabs
+            .labLines()
             .appFullScreenCover(item: $playing) { LabEpisodeView(episode: $0) }
             .appFullScreenCover(isPresented: $diagnosing) { LabDiagnosisView() }
             .onAppear {
@@ -44,7 +45,7 @@ struct LabRoot: View {
         if #available(iOS 18.0, *) {
             TabView(selection: $mode.labTab) {
                 Tab(L10n.text("lab.tab.deck"), systemImage: "rectangle.stack.fill", value: LabTab.deck) { deck }
-                Tab(L10n.text("lab.tab.fails"), systemImage: "photo.artframe", value: LabTab.fails) { fails }
+                Tab(L10n.text("lab.tab.fails"), systemImage: "photo.fill", value: LabTab.fails) { fails }
                 Tab(L10n.text("lab.tab.2d"), systemImage: "paintbrush.pointed.fill", value: LabTab.twoD) { twoD }
                 Tab(L10n.text("lab.tab.shop"), systemImage: "bag.fill", value: LabTab.shop) { shop }
                 // Like Smart in viewing mode: the cheat sheet stands apart at the right end of the dock.
@@ -54,7 +55,7 @@ struct LabRoot: View {
         } else {
             TabView(selection: $mode.labTab) {
                 deck.tabItem { Label(L10n.text("lab.tab.deck"), systemImage: "rectangle.stack.fill") }.tag(LabTab.deck)
-                fails.tabItem { Label(L10n.text("lab.tab.fails"), systemImage: "photo.artframe") }.tag(LabTab.fails)
+                fails.tabItem { Label(L10n.text("lab.tab.fails"), systemImage: "photo.fill") }.tag(LabTab.fails)
                 twoD.tabItem { Label(L10n.text("lab.tab.2d"), systemImage: "paintbrush.pointed.fill") }.tag(LabTab.twoD)
                 shop.tabItem { Label(L10n.text("lab.tab.shop"), systemImage: "bag.fill") }.tag(LabTab.shop)
                 sheet.tabItem { Label(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill") }.tag(LabTab.sheet).badge(newEdition)
@@ -101,12 +102,37 @@ struct LabDeckView: View {
     @State private var showingType = false
     /// The engraved cards the deck shows. It catches up with the store after an episode closes, so the new card can be seen arriving.
     @State private var shown: Set<String> = []
+    /// The folded pile at the back of the stack, fanned out by a tap.
+    @State private var fanned = false
     @Namespace private var space
 
-    private static let peek: CGFloat = 62
     private static let earnedHeight: CGFloat = 200
     private static let lockedPeek: CGFloat = 44
     private static let lockedHeight: CGFloat = 120
+
+    /// How far back a card in the stack sits: 1 just behind the blank card, more further up. Cards further back are a little
+    /// smaller and show less of themselves, so the stack reads as leaning away.
+    /// Shrinks quickly near the front and ever more slowly further back, towards 80%, so even a full deck keeps leaning away.
+    private static func scale(_ depth: Int) -> CGFloat { 0.8 + 0.2 * pow(0.86, CGFloat(depth)) }
+    /// The strip left showing shrinks with the card, but always holds its number, name and line whole: never a line cut through.
+    private static func peek(_ depth: Int) -> CGFloat { (stripContent * scale(depth)).rounded() + 8 }
+    /// From the card's top edge to the foot of its line: padding, the number row, the gap, one line of the serif at 130%.
+    private static let stripContent: CGFloat = 14 + 14 + 6 + 21
+    /// The cards nearest the front show their strip; older ones fold into a pile that shows only coloured edges, so the deck
+    /// stops growing. At most `edges` edges show; the rest sit hidden behind them.
+    private static let openCount = 3
+    private static let edges = 5
+    private static let edge: CGFloat = 10
+
+    private func folded(_ depth: Int) -> Bool { !fanned && depth > Self.openCount }
+    private func hidden(_ depth: Int) -> Bool { !fanned && depth > Self.openCount + Self.edges }
+    private func shownHeight(_ depth: Int) -> CGFloat { hidden(depth) ? 0 : folded(depth) ? Self.edge : Self.peek(depth) }
+    /// Folded cards darken the further back they sit, as if the light did not reach them.
+    private func dim(_ depth: Int) -> Double { folded(depth) ? min(0.6, 0.22 + 0.08 * Double(depth - Self.openCount - 1)) : 0 }
+    private func fan(_ open: Bool) {
+        LabHaptic.tick()
+        withAnimation(.spring(duration: 0.55, bounce: 0.18)) { fanned = open }
+    }
 
     var body: some View {
         let course = store.course
@@ -121,15 +147,28 @@ struct LabDeckView: View {
                         .accessibilityElement().accessibilityLabel(course.info.gauge.text).accessibilityValue("\(rate)%")
                         .accessibilityIdentifier("lab.rate")
                 }
+                let stacked = earned.count + (store.type != nil || store.diagnosis != nil ? 1 : 0)
                 VStack(spacing: 0) {
-                    VStack(spacing: Self.peek - Self.earnedHeight) {
-                        typeCard
-                        ForEach(earned) { episode in
+                    if stacked > Self.openCount {
+                        Button { fan(!fanned) } label: {
+                            Label(fanned ? L10n.text("lab.deck.fold") : L10n.text("lab.deck.unfold", String(stacked - Self.openCount)),
+                                  systemImage: fanned ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.bottom, 10)
+                        .accessibilityIdentifier("lab.deck.fan")
+                    }
+                    VStack(spacing: 0) {
+                        typeCard(depth: earned.count + 1)
+                        ForEach(Array(earned.enumerated()), id: \.element.id) { index, episode in
                             NavigationLink(value: episode.id) {
-                                LabCardFace(serial: episode.serial, title: episode.title.text, line: episode.card.line.text, color: course.color(episode),
-                                            state: .earned, label: episode.label, top: true)
-                                    .frame(height: Self.earnedHeight)
-                                    .shadow(color: .black.opacity(0.35), radius: 10, y: -8)
+                                band(depth: earned.count - index) {
+                                    LabCardFace(serial: episode.serial, title: episode.title.text, line: episode.card.line.text, color: course.color(episode),
+                                                state: .earned, label: episode.label, top: true)
+                                }
                             }
                             .buttonStyle(LabPressStyle())
                             .matchedTransitionSourceIfAvailable(id: episode.id, in: space)
@@ -151,7 +190,7 @@ struct LabDeckView: View {
                                 .padding(.horizontal, 18).padding(.top, 13)
                                 .frame(maxWidth: .infinity, minHeight: Self.lockedHeight, maxHeight: Self.lockedHeight, alignment: .topLeading)
                                 .background { LabCardBackground(state: .locked, radius: 18, step: offset) }
-                                .shadow(color: .black.opacity(offset == 0 ? 0 : 0.4), radius: 8, y: -6)
+                                .labCardShadow(.black.opacity(offset == 0 ? 0 : 0.4), radius: 8, y: -6)
                                 .accessibilityElement(children: .combine)
                                 .accessibilityIdentifier("lab.deck.locked.\(episode.id)")
                             }
@@ -192,19 +231,36 @@ struct LabDeckView: View {
             + Text("\(shown.count)/\(store.course.episodes.count)").font(LabFont.number(13))
     }
 
-    /// Card No. 000: the learner's type, or the paper card that invites the check.
-    @ViewBuilder private var typeCard: some View {
+    /// A card further up the stack: smaller the further back it sits, and only its top showing above the card in front.
+    private func band<Card: View>(depth: Int, @ViewBuilder _ card: () -> Card) -> some View {
+        card()
+            .frame(height: Self.earnedHeight)
+            .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.black.opacity(dim(depth))).allowsHitTesting(false) }
+            .labCardShadow(.black.opacity(0.32), radius: 10, y: -6)
+            .scaleEffect(Self.scale(depth), anchor: .top)
+            .frame(height: shownHeight(depth), alignment: .top)
+            .opacity(hidden(depth) ? 0 : 1)
+            // A folded edge fans the pile out rather than opening its card.
+            .overlay {
+                if folded(depth) { Color.clear.contentShape(Rectangle()).onTapGesture { fan(true) } }
+            }
+    }
+
+    /// Card No. 000: the learner's type, or the paper card that invites the check. It sits at the back of the stack.
+    @ViewBuilder private func typeCard(depth: Int) -> some View {
         if let type = store.type {
             Button { showingType = true } label: {
-                LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.teal, state: .earned,
-                            label: L10n.text("lab.type.label"), top: true)
-                    .frame(height: Self.earnedHeight)
+                band(depth: depth) {
+                    LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.ink, state: .earned,
+                                label: L10n.text("lab.type.label"), top: true)
+                }
             }
             .buttonStyle(LabPressStyle()).accessibilityIdentifier("lab.deck.type")
         } else if store.diagnosis != nil {
             Button(action: diagnose) {
-                LabCardFace(serial: "No. 000 · " + L10n.text("lab.card.blank"), title: L10n.text("lab.deck.diagnose"), state: .blank, top: true)
-                    .frame(height: Self.earnedHeight)
+                band(depth: depth) {
+                    LabCardFace(serial: "No. 000 · " + L10n.text("lab.card.blank"), title: L10n.text("lab.deck.diagnose"), state: .blank, top: true)
+                }
             }
             .buttonStyle(LabPressStyle()).accessibilityIdentifier("lab.deck.diagnose")
         }
@@ -220,11 +276,11 @@ struct LabDeckView: View {
             .font(.system(size: 11, weight: .bold)).tracking(1.5).foregroundStyle(LabPalette.paperMuted)
             Spacer(minLength: 18)
             VStack(alignment: .leading, spacing: 10) {
-                Text(episode.title.text).font(LabFont.voice(28)).lineSpacing(4).tracking(-0.6).foregroundStyle(LabPalette.paperInk)
+                Text(episode.title.text).font(LabFont.voice(28)).tracking(-0.6).foregroundStyle(LabPalette.paperInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("lab.deck.next.title")
                 if let teaser = episode.teaser {
-                    Text(teaser.text).font(.system(size: 14)).lineSpacing(2).foregroundStyle(LabPalette.paperMuted).fixedSize(horizontal: false, vertical: true)
+                    Text(teaser.text).font(.system(size: 14)).labSpacing(2).foregroundStyle(LabPalette.paperMuted).fixedSize(horizontal: false, vertical: true)
                 }
                 LabDashedRule(color: LabPalette.paperRule)
             }
@@ -244,7 +300,7 @@ struct LabDeckView: View {
         .padding(.horizontal, 20).padding(.vertical, 18)
         .frame(minHeight: 290)
         .background { LabCardBackground(state: .blank, radius: 20) }
-        .shadow(color: .black.opacity(0.45), radius: 12, y: -10)
+        .labCardShadow(.black.opacity(0.45), radius: 12, y: -10)
         .environment(\.colorScheme, .light)
     }
 
@@ -255,7 +311,7 @@ struct LabDeckView: View {
         }
         .padding(20).frame(maxWidth: .infinity, minHeight: 200, alignment: .bottomLeading)
         .background { LabCardBackground(state: .blank, radius: 20) }
-        .shadow(color: .black.opacity(0.45), radius: 12, y: -10)
+        .labCardShadow(.black.opacity(0.45), radius: 12, y: -10)
     }
 }
 
@@ -303,7 +359,7 @@ struct LabCardDetailView: View {
                             footer: [episode.label, season.map { L10n.text("lab.season", String($0.number)) }].compactMap { $0 }.joined(separator: " · "),
                             date: store.progress.cards[episode.id]?.labStamp, large: true)
                     .frame(width: 280, height: 352).frame(maxWidth: .infinity)
-                    .shadow(color: Color(labHex: store.course.color(episode)).opacity(0.45), radius: 24, y: 14)
+                    .labCardShadow(Color(labHex: store.course.color(episode)).opacity(0.45), radius: 24, y: 14)
             }
             .listRowBackground(Color.clear).listRowSeparator(.hidden)
 
@@ -394,7 +450,7 @@ struct LabTwoDView: View {
                 }
                 .background(StudyTheme.primary.gradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .shadow(color: StudyTheme.primary.opacity(0.35), radius: 20, y: 10)
+                .labCardShadow(StudyTheme.primary.opacity(0.35), radius: 20, y: 10)
                 if let item, let price = item.price {
                     let state = store.canBuy(item)
                     VStack(spacing: 8) {

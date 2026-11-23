@@ -16,8 +16,7 @@ enum LabPalette {
     static let pass = Color(labLight: "1E8A50", dark: "5BE49B")
     /// A 망작.
     static let fail = Color(labLight: "D0432A", dark: "FF6B4A")
-    /// Card No. 000 and the colours of the system sheet: teal and ink.
-    static let teal = "0F4C5C"
+    /// 먹, the system sheet's sixth card colour. Engraved cards take the course's other five in turn; this one is kept for card No. 000.
     static let ink = "3A3A3C"
     /// The main button: near-white in dark appearance, ink in light.
     static let primary = Color(labLight: "1D1D1F", dark: "F5F5F7")
@@ -77,6 +76,21 @@ enum LabFont {
     }
 
     static func number(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font { .system(size: size, weight: weight, design: .monospaced) }
+}
+
+extension View {
+    /// Every line in the lab sits 130% of its font size below the one before (iOS 26 and later). Set once on each of the lab's screens.
+    @ViewBuilder func labLines() -> some View {
+        if #available(iOS 26, *) { lineHeight(.multiple(factor: 1.3)) } else { self }
+    }
+    /// A little extra room between lines before iOS 26, where the fixed line height is not available.
+    @ViewBuilder func labSpacing(_ value: CGFloat) -> some View {
+        if #available(iOS 26, *) { self } else { lineSpacing(value) }
+    }
+    /// A card's shadow, cast by its outline only: the text and buttons on it cast none.
+    func labCardShadow(_ color: Color = .black.opacity(0.4), radius: CGFloat = 12, y: CGFloat = -8) -> some View {
+        compositingGroup().shadow(color: color, radius: radius, y: y)
+    }
 }
 
 // MARK: - Headers
@@ -142,12 +156,11 @@ struct LabCardFace: View {
             if state == .earned, let line {
                 if large { Rectangle().fill(tint).frame(width: 28, height: 2).padding(.bottom, 2) }
                 LabEngravedText(text: line, revealed: engraved, font: large ? LabFont.voice(28) : LabFont.line(16), color: ink)
-                    .lineSpacing(large ? 6 : 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text(title).font(state == .locked && top ? .system(size: 13, weight: .semibold) : LabFont.voice(large ? 26 : 14))
-                    .lineSpacing(large ? 3 : 0).foregroundStyle(ink)
+                    .foregroundStyle(ink)
                     .lineLimit(state == .locked && top ? 1 : large ? 4 : 3).minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if state == .blank { LabDashedRule(color: LabPalette.paperRule) }
@@ -263,10 +276,12 @@ struct LabSheen: View {
     var progress: Double
     var body: some View {
         GeometryReader { proxy in
+            let width = proxy.size.width, height = proxy.size.height
+            // Taller than the card, so the slanted band still covers it from top to bottom; it starts and ends wholly off the card.
             LinearGradient(colors: [.white.opacity(0), .white.opacity(0.28), .white.opacity(0)], startPoint: .leading, endPoint: .trailing)
-                .frame(width: proxy.size.width * 0.45)
+                .frame(width: width * 0.5, height: height * 1.8)
                 .rotationEffect(.degrees(18))
-                .offset(x: -proxy.size.width * 0.6 + proxy.size.width * 1.8 * progress)
+                .position(x: -width * 0.7 + width * 2.4 * progress, y: height / 2)
                 .blendMode(.plusLighter)
         }
         .allowsHitTesting(false)
@@ -370,7 +385,7 @@ struct LabBubble: View {
     var body: some View {
         HStack {
             if mine { Spacer(minLength: 48) }
-            Text(text).font(.system(size: 15)).lineSpacing(2)
+            Text(text).font(.system(size: 15))
                 .foregroundStyle(mine ? Color(uiColor: .systemBackground) : .primary)
                 .padding(.horizontal, 15).padding(.vertical, 11)
                 .background(mine ? AnyShapeStyle(Color.primary) : AnyShapeStyle(tint ?? LabPalette.surface()),
@@ -475,8 +490,12 @@ struct LabCopyButton: View {
 }
 
 extension LabCourse {
-    /// The colour of an episode's engraved card: its season's, six hexadecimal digits.
-    func color(_ episode: LabEpisode) -> String { season(of: episode)?.color ?? LabPalette.ink }
+    /// The colour of an episode's engraved card, six hexadecimal digits: the course's card colours in turn, by the card's number.
+    func color(_ episode: LabEpisode) -> String {
+        let colors = info.cardColors ?? []
+        guard !colors.isEmpty else { return LabPalette.ink }
+        return colors[(max(1, episode.number) - 1) % colors.count]
+    }
 }
 
 extension LabEpisode {

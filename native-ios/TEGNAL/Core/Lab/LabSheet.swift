@@ -62,6 +62,8 @@ struct LabSheetRow: Codable, Equatable, Sendable {
     /// The product or tool to use now. Real names live only here, never in the course.
     var pick: String
     var why: LabSheetText?
+    /// A pick not settled yet: the sheet marks it as a draft.
+    var draft: Bool?
 }
 
 /// Downloads newer editions from TEGNAL's add-on server and keeps the last one.

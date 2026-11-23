@@ -2561,6 +2561,8 @@
 "lab.tab.shop" = "Shop";
 "lab.new" = "New";
 "lab.deck.title" = "My Deck";
+"lab.deck.fold" = "Fold";
+"lab.deck.unfold" = "%@ earlier cards";
 "lab.deck.diagnose" = "One-minute check: make your first card";
 "lab.deck.complete" = "Every card is engraved.";
 "lab.deck.completeNote" = "The cheat sheet changes whenever the field does. Come back for new editions.";
@@ -2613,6 +2615,8 @@
 "lab.sheet.stamp" = "Curated %@";
 "lab.sheet.locked" = "Card %@ opens this";
 "lab.sheet.none" = "No cheat sheet yet";
+"lab.sheet.basis" = "Curated";
+"lab.sheet.draft" = "Draft";
 "lab.sheet.paid" = "+%@ %@ for reading this edition";
 "lab.shop.limited" = "Limited";
 "lab.shop.owned" = "Owned";

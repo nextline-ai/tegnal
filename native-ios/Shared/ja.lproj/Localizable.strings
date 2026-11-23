@@ -2561,6 +2561,8 @@
 "lab.tab.shop" = "ショップ";
 "lab.new" = "新版";
 "lab.deck.title" = "マイデッキ";
+"lab.deck.fold" = "たたむ";
+"lab.deck.unfold" = "前のカード%@枚";
 "lab.deck.diagnose" = "1分診断で最初の一枚を作る";
 "lab.deck.complete" = "すべてのカードが刻まれました。";
 "lab.deck.completeNote" = "勢力図が変わればチートシートも変わります。新版が出たらお知らせします。";
@@ -2613,7 +2615,9 @@
 "lab.sheet.stamp" = "%@時点のキュレーション";
 "lab.sheet.locked" = "カード%@で開きます";
 "lab.sheet.none" = "チートシートはまだありません";
-"lab.sheet.paid" = "新版の閲覧で+%@（%@）";
+"lab.sheet.basis" = "選定日";
+"lab.sheet.draft" = "案";
+"lab.sheet.paid" = "新版の閲覧で+%@ %@";
 "lab.shop.limited" = "数量限定";
 "lab.shop.owned" = "所持中";
 "lab.shop.ownedShort" = "所持";
