@@ -20,6 +20,7 @@ import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/presentation/design/tegnal_theme.dart';
 import 'package:tegnal/presentation/lab/lab_episode_view.dart';
+import 'package:tegnal/presentation/lab/lab_kit.dart';
 import 'package:tegnal/presentation/lab/lab_root.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
 
@@ -114,6 +115,11 @@ void main() {
     expect(key('lab.fail.tag'), findsOneWidget);
     expect(LabStore.shared.progress.fails, hasLength(1));
     await shot(tester, '03-trap');
+    // The 망작 comes up as a card won, once the reply has been read.
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    await tester.tap(key('lab.fail.reveal.done'));
+    await tester.pumpAndSettle();
     await tester.tap(key('lab.choice.back'));
     await tester.pumpAndSettle();
 
@@ -152,7 +158,7 @@ void main() {
     await pump(tester, LabRoot(booru: booru, mode: mode));
     await shot(tester, '08-deck-folded');
     expect(key('lab.deck.fan'), findsOneWidget);
-    expect(find.text(L10n.text('lab.deck.unfold', ['10'])), findsOneWidget, reason: 'Card No. 000 and twelve cards, three of them open');
+    expect(find.text(L10n.text('lab.deck.unfold', ['13'])), findsOneWidget, reason: 'Card No. 000 and twelve cards');
     await tester.tap(key('lab.deck.fan'));
     await tester.pumpAndSettle();
     await shot(tester, '09-deck-fanned');
@@ -171,25 +177,66 @@ void main() {
     expect(LabStore.shared.editionWaiting, isFalse);
   });
 
-  testWidgets('the shop sells the 2D course once season 1 has paid for it, and the 2D tab then opens the course', (tester) async {
+  testWidgets('the courses tab sells the 2D course once season 1 has paid for it, and then opens it', (tester) async {
     seed('ep05');
     await pump(tester, LabRoot(booru: booru, mode: mode));
     await tester.tap(key('lab.tab.shop'));
     await tester.pumpAndSettle();
     await shot(tester, '11-shop');
-    await tester.tap(key('lab.tab.twoD'));
+    await tester.tap(key('lab.tab.courses'));
     // The course's guide keeps moving on this page, so the screen never settles; time is pumped instead.
     await tester.pump(const Duration(seconds: 1));
-    expect(mode.labTab, LabTab.twoD);
-    expect(find.byType(LabTwoDView), findsOneWidget);
-    await shot(tester, '12-2d');
+    expect(mode.labTab, LabTab.courses);
+    expect(find.byType(LabCoursesView), findsOneWidget);
+    // The lab is marked as the course on screen; the 2D course shows its price.
+    expect(find.descendant(of: key('lab.courses.lab'), matching: key('lab.courses.here')), findsOneWidget);
+    expect(find.descendant(of: key('lab.courses.tags'), matching: key('lab.courses.here')), findsNothing);
+    await shot(tester, '12-courses');
     await tester.tap(key('lab.2d.buy'));
     await tester.pump(const Duration(seconds: 1));
     await tester.tap(find.text(L10n.text('lab.shop.buy', ['600'])).last);
     await tester.pump(const Duration(seconds: 1));
     expect(LabStore.shared.ownsTagCourse, isTrue);
     expect(mode.tagsOpen, isTrue, reason: 'Buying opens the course');
+    // Back in the lab, the courses tab now offers to open the course rather than sell it.
+    mode.closeTags();
+    expect(mode.labTab, LabTab.deck, reason: 'Coming back from the course lands on the deck');
+    mode.labTab = LabTab.courses;
+    await tester.pump(const Duration(seconds: 1));
+    expect(key('lab.2d.buy'), findsNothing);
+    await tester.tap(key('lab.courses.open.tags'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(mode.tagsOpen, isTrue);
   });
+
+  testWidgets('a trap won for the first time brings its 망작 up as a card, over the chat that keeps the reply', (tester) async {
+    final episode = LabStore.shared.course.episodes.first;
+    await pump(tester, LabEpisodeView(episode: episode));
+    final trap = episode.choices.indexWhere((choice) => !choice.isRight);
+    final fail = episode.fails.firstWhere((fail) => fail.choice == episode.choices[trap].text);
+    await tester.tap(key('lab.choice.$trap'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    expect(key('lab.fail.reveal'), findsOneWidget);
+    expect(find.text(L10n.text('lab.fail.got')), findsOneWidget);
+    expect(find.text(fail.name.text), findsOneWidget);
+    expect(find.text(labWords(fail.reply.text)), findsNWidgets(2), reason: 'The reply stays in the chat and is framed on the card');
+    await shot(tester, '13-flop');
+    await tester.tap(key('lab.fail.reveal.done'));
+    await tester.pumpAndSettle();
+    expect(key('lab.fail.reveal'), findsNothing);
+    expect(key('lab.fail.tag'), findsOneWidget);
+    // Pressed again, it is already in the gallery: no card comes up.
+    await tester.tap(key('lab.choice.back'));
+    await tester.pumpAndSettle();
+    await tester.tap(key('lab.choice.$trap'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    expect(key('lab.fail.reveal'), findsNothing);
+  });
+
 
   testWidgets('an episode shows no number at its top right', (tester) async {
     await pump(tester, LabEpisodeView(episode: LabStore.shared.course.episodes.first));

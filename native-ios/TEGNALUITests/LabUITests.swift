@@ -20,6 +20,11 @@ final class LabUITests: XCTestCase {
         XCTAssertTrue(element(app, "lab.disaster").waitForExistence(timeout: 5))
         element(app, "lab.choice.0").tap()
         XCTAssertTrue(element(app, "lab.fail.tag").waitForExistence(timeout: 5), "Pressing a trap hangs its 망작")
+        let won = element(app, "lab.fail.reveal.done")
+        XCTAssertTrue(won.waitForExistence(timeout: 5), "A 망작 won for the first time comes up as a card")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: won)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        won.tap()
         element(app, "lab.choice.back").tap()
 
         // The right choice leads to the tool.

@@ -17,6 +17,7 @@ import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import '../study_mode/study_kit.dart';
 import 'lab_kit.dart';
+import 'lab_pages.dart';
 import 'lab_tools.dart';
 
 // One episode, played full screen: the disaster and the choice, the tool, then the card's engraving.
@@ -61,6 +62,9 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
   final Stopwatch _clock = Stopwatch()..start();
   LabEngraving? engraving;
 
+  /// A 망작 just won, shown over the chat until the learner has looked at it.
+  LabFail? won;
+
   LabEpisode get episode => widget.episode;
   LabStore get store => widget.store ?? LabStore.shared;
 
@@ -73,7 +77,13 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
       if (fail != null) {
         // No shaking and no penalty: a quiet tag, and the 망작 goes up in the gallery.
         LabHaptic.press();
-        if (store.hang(fail)) hungNow.add(fail.id);
+        if (store.hang(fail)) {
+          hungNow.add(fail.id);
+          // Won for the first time: the answer is read in the chat first, then the 망작 comes up as a card won.
+          Future<void>.delayed(const Duration(milliseconds: 650), () {
+            if (mounted) setState(() => won = fail);
+          });
+        }
       }
     }
     setState(() => picked = index);
@@ -82,6 +92,19 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
   @override
   Widget build(BuildContext context) {
     final background = TegnalColors.background.resolveFrom(context);
+    final won = this.won;
+    return Stack(
+      children: [
+        Positioned.fill(child: _stage(context, background)),
+        if (won != null)
+          Positioned.fill(
+            child: LabFailReveal(key: ValueKey(won.id), fail: won, done: () => setState(() => this.won = null)),
+          ),
+      ],
+    );
+  }
+
+  Widget _stage(BuildContext context, Color background) {
     return ColoredBox(
       color: background,
       child: SafeArea(

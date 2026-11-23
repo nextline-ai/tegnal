@@ -1,7 +1,21 @@
 import SwiftUI
 
-/// The lab's tabs. `twoD` leads into the 2D AI course; `sheet` stands apart at the right end of the dock.
-enum LabTab: String, Hashable { case deck, fails, twoD, shop, sheet }
+/// The lab's tabs. `courses` lists the courses, the 2D AI course among them; `sheet` stands apart at the right end of the dock.
+enum LabTab: String, Hashable {
+    case deck, fails, courses, shop, sheet
+    static let coursesSymbol = "square.stack.3d.up.fill"
+
+    /// The role that gives a tab the separate glass circle at the trailing end of the bar: iOS 26's search role, iOS 27's
+    /// prominent one. Nil before iOS 26, where no such place exists.
+    @available(iOS 18.0, *)
+    static var trailingRole: TabRole? {
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) { return .prominent }
+        #endif
+        if #available(iOS 26.0, *) { return .search }
+        return nil
+    }
+}
 
 /// AI 실험실: what learning mode shows. The stock tab bar and navigation stacks; the cards, paper and gauges are the lab's own.
 /// The way back to the home scene is the swipe up from the bottom, as everywhere in learning mode.
@@ -24,12 +38,6 @@ struct LabRoot: View {
             }
             .onChange(of: booru.revision) { countCourses() }
             .onChange(of: HomeStage.shared.coversScreen) { _, _ in greet() }
-            // The 2D tab of someone who owns the course opens the course itself; the lab tab they were on stays chosen.
-            .onChange(of: mode.labTab) { old, new in
-                guard new == .twoD, store.ownsTagCourse else { return }
-                mode.labTab = old == .twoD ? .deck : old
-                mode.openTags()
-            }
             .task {
                 if let edition = await LabSheetSource.fetch() { store.show(edition) }
             }
@@ -38,7 +46,7 @@ struct LabRoot: View {
     @ViewBuilder private var tabs: some View {
         let deck = NavigationStack { LabDeckView(play: { playing = $0 }, diagnose: { diagnosing = true }, covered: playing != nil) }
         let fails = NavigationStack { LabFailsView(play: { playing = $0 }) }
-        let twoD = NavigationStack { LabTwoDView() }
+        let courses = NavigationStack { LabCoursesView(here: .lab) }
         let shop = NavigationStack { LabShopView() }
         let sheet = NavigationStack { LabSheetView() }
         let newEdition: Text? = store.editionWaiting ? Text(L10n.text("lab.new")) : nil
@@ -46,31 +54,21 @@ struct LabRoot: View {
             TabView(selection: $mode.labTab) {
                 Tab(L10n.text("lab.tab.deck"), systemImage: "rectangle.stack.fill", value: LabTab.deck) { deck }
                 Tab(L10n.text("lab.tab.fails"), systemImage: "photo.fill", value: LabTab.fails) { fails }
-                Tab(L10n.text("lab.tab.2d"), systemImage: "paintbrush.pointed.fill", value: LabTab.twoD) { twoD }
+                Tab(L10n.text("lab.tab.courses"), systemImage: LabTab.coursesSymbol, value: LabTab.courses) { courses }
                 Tab(L10n.text("lab.tab.shop"), systemImage: "bag.fill", value: LabTab.shop) { shop }
                 // Like Smart in viewing mode: the cheat sheet stands apart at the right end of the dock.
-                Tab(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill", value: LabTab.sheet, role: sheetRole) { sheet }
+                Tab(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill", value: LabTab.sheet, role: LabTab.trailingRole) { sheet }
                     .badge(newEdition)
             }
         } else {
             TabView(selection: $mode.labTab) {
                 deck.tabItem { Label(L10n.text("lab.tab.deck"), systemImage: "rectangle.stack.fill") }.tag(LabTab.deck)
                 fails.tabItem { Label(L10n.text("lab.tab.fails"), systemImage: "photo.fill") }.tag(LabTab.fails)
-                twoD.tabItem { Label(L10n.text("lab.tab.2d"), systemImage: "paintbrush.pointed.fill") }.tag(LabTab.twoD)
+                courses.tabItem { Label(L10n.text("lab.tab.courses"), systemImage: LabTab.coursesSymbol) }.tag(LabTab.courses)
                 shop.tabItem { Label(L10n.text("lab.tab.shop"), systemImage: "bag.fill") }.tag(LabTab.shop)
                 sheet.tabItem { Label(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill") }.tag(LabTab.sheet).badge(newEdition)
             }
         }
-    }
-
-    @available(iOS 18.0, *)
-    private var sheetRole: TabRole? {
-        #if compiler(>=6.4)
-        if #available(iOS 27.0, *) { return .prominent }
-        #endif
-        // iOS 26 gives the search role the separate trailing glass circle.
-        if #available(iOS 26.0, *) { return .search }
-        return nil
     }
 
     /// Lessons of the 2D course finished so far, which pay once the course is bought. A learner who studied tags before the lab keeps it.
@@ -110,25 +108,31 @@ struct LabDeckView: View {
     private static let lockedPeek: CGFloat = 44
     private static let lockedHeight: CGFloat = 120
 
-    /// How far back a card in the stack sits: 1 just behind the blank card, more further up. Cards further back are a little
-    /// smaller and show less of themselves, so the stack reads as leaning away.
-    /// Shrinks quickly near the front and ever more slowly further back, towards 80%, so even a full deck keeps leaning away.
-    private static func scale(_ depth: Int) -> CGFloat { 0.8 + 0.2 * pow(0.86, CGFloat(depth)) }
-    /// The strip left showing shrinks with the card, but always holds its number, name and line whole: never a line cut through.
-    private static func peek(_ depth: Int) -> CGFloat { (stripContent * scale(depth)).rounded() + 8 }
+    /// How far back a card in the stack sits: 1 just behind the blank card, more further up. One rule runs from the front of
+    /// the stack to the back, with no step anywhere: each card is a little smaller, shows a little less of itself, and is a
+    /// little fainter than the one in front, as things further off are. Lines further back may be cut through; the deck
+    /// reads as leaning away into the distance and never grows past about four strips' height, however many cards it holds.
+    /// Shrinks quickly near the front and ever more slowly further back, towards 74%.
+    private static func scale(_ depth: Int) -> CGFloat { 0.74 + 0.26 * pow(0.8, CGFloat(depth)) }
     /// From the card's top edge to the foot of its line: padding, the number row, the gap, one line of the serif at 130%.
     private static let stripContent: CGFloat = 14 + 14 + 6 + 21
-    /// The cards nearest the front show their strip; older ones fold into a pile that shows only coloured edges, so the deck
-    /// stops growing. At most `edges` edges show; the rest sit hidden behind them.
-    private static let openCount = 3
-    private static let edges = 5
-    private static let edge: CGFloat = 10
-
-    private func folded(_ depth: Int) -> Bool { !fanned && depth > Self.openCount }
-    private func hidden(_ depth: Int) -> Bool { !fanned && depth > Self.openCount + Self.edges }
-    private func shownHeight(_ depth: Int) -> CGFloat { hidden(depth) ? 0 : folded(depth) ? Self.edge : Self.peek(depth) }
-    /// Folded cards darken the further back they sit, as if the light did not reach them.
-    private func dim(_ depth: Int) -> Double { folded(depth) ? min(0.6, 0.22 + 0.08 * Double(depth - Self.openCount - 1)) : 0 }
+    /// The card just behind the blank one shows its whole strip; each card behind shows 74% of what the one in front shows.
+    private static let front: CGFloat = 64
+    private static let recede: CGFloat = 0.74
+    /// Fanned out, every card shows its whole strip.
+    private func peek(_ depth: Int) -> CGFloat {
+        fanned ? (Self.stripContent * Self.scale(depth)).rounded() + 8 : Self.front * pow(Self.recede, CGFloat(depth - 1))
+    }
+    /// So far back that it would show less than a hairline: left out until the deck is fanned.
+    private func hidden(_ depth: Int) -> Bool { peek(depth) < 1.5 }
+    /// Too little of it shows to read or aim at: a tap fans the deck out rather than opening the card.
+    private func compact(_ depth: Int) -> Bool { !fanned && peek(depth) < 40 }
+    private func shownHeight(_ depth: Int) -> CGFloat { hidden(depth) ? 0 : peek(depth) }
+    /// How far a card has faded into the page: none just behind the blank card, a little more for each step back.
+    /// Fanned out, the cards stay readable, so they fade less.
+    private func fade(_ depth: Int) -> Double { min(fanned ? 0.4 : 0.8, 1 - pow(0.84, Double(depth - 1))) }
+    /// And it softens a little for each step back, past the first two.
+    private func blur(_ depth: Int) -> CGFloat { fanned ? 0 : min(2.5, max(0, 0.45 * CGFloat(depth - 2))) }
     private func fan(_ open: Bool) {
         LabHaptic.tick()
         withAnimation(.spring(duration: 0.55, bounce: 0.18)) { fanned = open }
@@ -149,9 +153,9 @@ struct LabDeckView: View {
                 }
                 let stacked = earned.count + (store.type != nil || store.diagnosis != nil ? 1 : 0)
                 VStack(spacing: 0) {
-                    if stacked > Self.openCount {
+                    if stacked > 2 {
                         Button { fan(!fanned) } label: {
-                            Label(fanned ? L10n.text("lab.deck.fold") : L10n.text("lab.deck.unfold", String(stacked - Self.openCount)),
+                            Label(fanned ? L10n.text("lab.deck.fold") : L10n.text("lab.deck.unfold", String(stacked)),
                                   systemImage: fanned ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
                                 .contentTransition(.symbolEffect(.replace))
@@ -231,19 +235,22 @@ struct LabDeckView: View {
             + Text("\(shown.count)/\(store.course.episodes.count)").font(LabFont.number(13))
     }
 
-    /// A card further up the stack: smaller the further back it sits, and only its top showing above the card in front.
+    /// A card further up the stack: smaller and fainter the further back it sits, and only its top showing above the card in front.
     private func band<Card: View>(depth: Int, @ViewBuilder _ card: () -> Card) -> some View {
         card()
             .frame(height: Self.earnedHeight)
-            .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.black.opacity(dim(depth))).allowsHitTesting(false) }
-            .labCardShadow(.black.opacity(0.32), radius: 10, y: -6)
+            // The page's own background laid over the card: it fades into the distance in light and dark appearance alike.
+            .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color(uiColor: .systemBackground).opacity(fade(depth))).allowsHitTesting(false) }
+            .labCardShadow(.black.opacity(0.32 * (1 - fade(depth) * 0.6)), radius: 10, y: -6)
+            .blur(radius: blur(depth))
             .scaleEffect(Self.scale(depth), anchor: .top)
             .frame(height: shownHeight(depth), alignment: .top)
             .opacity(hidden(depth) ? 0 : 1)
-            // A folded edge fans the pile out rather than opening its card.
+            // A strip too thin to read fans the deck out rather than opening its card.
             .overlay {
-                if folded(depth) { Color.clear.contentShape(Rectangle()).onTapGesture { fan(true) } }
+                if compact(depth) { Color.clear.contentShape(Rectangle()).onTapGesture { fan(true) } }
             }
+            .accessibilityHidden(hidden(depth))
     }
 
     /// Card No. 000: the learner's type, or the paper card that invites the check. It sits at the back of the stack.
@@ -418,10 +425,14 @@ struct LabRow: View {
     }
 }
 
-// MARK: - 2D AI 배우기
+// MARK: - Courses
 
-/// The 2D tab: the 2D AI course. Someone who owns it goes straight in (see `LabRoot`); anyone else sees what it is and what it costs.
-struct LabTwoDView: View {
+/// The 코스 tab, in the lab and in the 2D AI course alike: every course as a card, the way the 2D course was shown before it was
+/// bought. The course on screen now is marked on its card; another one owned opens with a button under it; one not bought yet
+/// shows its price and the balance.
+struct LabCoursesView: View {
+    enum Place { case lab, tags }
+    let here: Place
     @State private var store = LabStore.shared
     @State private var confirming = false
 
@@ -429,45 +440,25 @@ struct LabTwoDView: View {
         let item = store.shop.item(LabStore.tagCourse)
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                LabHeader(kicker: Text(L10n.text("lab.2d.tagline")), title: L10n.text("Tag Study"))
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L10n.text("lab.2d.kicker")).font(.system(size: 11, weight: .bold)).tracking(1.6).foregroundStyle(.white.opacity(0.75))
-                        Text(L10n.text("Tag Study")).font(LabFont.voice(30)).foregroundStyle(.white)
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        feature("map.fill", L10n.text("lab.2d.lessons", String(StudyPath.bundled.lessons.count)))
-                        feature("tag.fill", L10n.text("lab.2d.tags", String(StudyCurriculum.bundled.tags.count)))
-                        feature("wand.and.stars", L10n.text("lab.2d.studio"))
-                    }
-                    .padding(.trailing, 96)
+                LabHeader(kicker: Text(L10n.text("lab.courses.subtitle")), title: L10n.text("lab.tab.courses"))
+                VStack(alignment: .leading, spacing: 12) {
+                    labCard
+                    if here != .lab { open(store.course.title, id: "lab.courses.open.lab") { StudyMode.shared.closeTags() } }
                 }
-                .padding(22)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // The course's guide leans in from the corner, behind nothing.
-                .background(alignment: .bottomTrailing) {
-                    StudyMascot(pose: .wave, size: 132).offset(x: 8, y: 6).accessibilityHidden(true)
-                }
-                .background(StudyTheme.primary.gradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .labCardShadow(StudyTheme.primary.opacity(0.35), radius: 20, y: 10)
-                if let item, let price = item.price {
-                    let state = store.canBuy(item)
-                    VStack(spacing: 8) {
-                        Button { confirming = true } label: {
-                            Text(L10n.text("lab.shop.buy", String(price))).frame(maxWidth: .infinity)
-                        }
-                        .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18)).disabled(state != .bought)
-                        .accessibilityIdentifier("lab.2d.buy")
-                        Text(state == .bought ? L10n.text("lab.2d.balance", String(store.balance)) : L10n.text("lab.2d.short", String(store.balance), String(price - store.balance)))
-                            .font(.system(size: 13)).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 12) {
+                    tagsCard
+                    if store.ownsTagCourse {
+                        if here != .tags { open(L10n.text("Tag Study"), id: "lab.courses.open.tags") { StudyMode.shared.openTags() } }
+                    } else if let item, let price = item.price {
+                        purchase(item, price)
                     }
-                    Text(L10n.text("lab.2d.how")).font(.system(size: 13)).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 20).padding(.bottom, 32)
         }
+        .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
+        .labLines()
         .alert(L10n.text("lab.shop.confirm", L10n.text("Tag Study")), isPresented: $confirming) {
             Button(L10n.text("lab.shop.buy", String(item?.price ?? 0))) {
                 if let item, store.buy(item) == .bought { LabHaptic.pass(); StudyMode.shared.openTags() }
@@ -478,7 +469,88 @@ struct LabTwoDView: View {
         }
     }
 
-    private func feature(_ symbol: String, _ text: String) -> some View {
-        Label(text, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+    /// The AI lab: ink, with a small fan of its card colours in the corner.
+    private var labCard: some View {
+        let colors = store.course.info.cardColors ?? [LabPalette.ink]
+        return card(kicker: L10n.text("lab.courses.lab.kicker"), title: store.course.title, current: here == .lab, fill: Color(labHex: "2C2C2E").gradient, glow: .black.opacity(0.3),
+                    features: [("rectangle.stack.fill", L10n.text("lab.courses.lab.cards", String(store.course.episodes.count), String(store.course.seasons.count))),
+                               ("doc.text.fill", L10n.text("lab.courses.lab.sheet")),
+                               ("gauge.with.dots.needle.67percent", L10n.text("lab.courses.lab.rate", store.course.info.gauge.text, "\(store.rate)%"))]) {
+            ZStack {
+                ForEach(Array(colors.prefix(3).enumerated()), id: \.offset) { index, hex in
+                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(labHex: hex))
+                        .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.75) }
+                        .frame(width: 58, height: 78)
+                        .rotationEffect(.degrees(Double(index - 1) * 11), anchor: .bottom)
+                        .offset(x: CGFloat(index - 1) * 14)
+                        .labCardShadow(.black.opacity(0.35), radius: 6, y: 3)
+                }
+            }
+            .offset(x: -30, y: 16)
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// 2D AI 배우기: the course's purple, with its guide leaning in from the corner.
+    private var tagsCard: some View {
+        card(kicker: L10n.text("lab.courses.tags.kicker"), title: L10n.text("Tag Study"), current: here == .tags, fill: StudyTheme.primary.gradient, glow: StudyTheme.primary.opacity(0.35),
+             features: [("map.fill", L10n.text("lab.2d.lessons", String(StudyPath.bundled.lessons.count))),
+                        ("tag.fill", L10n.text("lab.2d.tags", String(StudyCurriculum.bundled.tags.count))),
+                        ("wand.and.stars", L10n.text("lab.2d.studio"))]) {
+            StudyMascot(pose: .wave, size: 132).offset(x: 8, y: 6).accessibilityHidden(true)
+        }
+    }
+
+    private func card<Fill: ShapeStyle, Art: View>(kicker: String, title: String, current: Bool, fill: Fill, glow: Color,
+                                                   features: [(String, String)], @ViewBuilder art: () -> Art) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(kicker).font(.system(size: 11, weight: .bold)).tracking(1.6).foregroundStyle(.white.opacity(0.75))
+                    Spacer(minLength: 8)
+                    if current {
+                        Label(L10n.text("lab.courses.here"), systemImage: "checkmark")
+                            .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 10).frame(height: 26).background(.white.opacity(0.2), in: Capsule())
+                            .accessibilityIdentifier("lab.courses.here")
+                    }
+                }
+                Text(title).font(LabFont.voice(30)).foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(features, id: \.1) { symbol, text in
+                    Label(text, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                }
+            }
+            .padding(.trailing, 96)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .bottomTrailing) { art() }
+        .background(fill, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .labCardShadow(glow, radius: 20, y: 10)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func open(_ course: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Text(L10n.text("lab.courses.open", course)).frame(maxWidth: .infinity) }
+            .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18))
+            .accessibilityIdentifier(id)
+    }
+
+    private func purchase(_ item: LabShopItem, _ price: Int) -> some View {
+        let state = store.canBuy(item)
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 8) {
+                Button { confirming = true } label: { Text(L10n.text("lab.shop.buy", String(price))).frame(maxWidth: .infinity) }
+                    .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18)).disabled(state != .bought)
+                    .accessibilityIdentifier("lab.2d.buy")
+                Text(state == .bought ? L10n.text("lab.2d.balance", String(store.balance)) : L10n.text("lab.2d.short", String(store.balance), String(price - store.balance)))
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            Text(L10n.text("lab.2d.how")).font(.system(size: 13)).foregroundStyle(.secondary)
+        }
     }
 }

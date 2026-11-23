@@ -1,5 +1,10 @@
+import 'dart:math' as math;
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/physics.dart';
 
 import '../../core/lab/lab_course.dart';
 import '../../core/lab/lab_sheet.dart';
@@ -560,45 +565,7 @@ class LabFailsView extends StatelessWidget {
     builder: (sheetContext, controller) => LabFailSheet(fail: fail, controller: controller),
   );
 
-  Widget _frame(BuildContext context, LabFail fail) {
-    final episode = store.course.episode(fail.episode);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2724),
-            borderRadius: BorderRadius.circular(3),
-            boxShadow: const [BoxShadow(color: Color(0x59000000), blurRadius: 16, offset: Offset(0, 4))],
-          ),
-          child: Container(
-            height: 124,
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            color: LabPalette.paper,
-            child: Text(
-              labWords(fail.reply.text),
-              maxLines: 5,
-              overflow: TextOverflow.ellipsis,
-              style: LabFont.line(13, color: LabPalette.paperInk),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          fail.name.text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: LabFont.text(14, weight: FontWeight.w700, color: labLabel(context)),
-        ),
-        Text(
-          'No. ${store.number(fail).toString().padLeft(2, '0')} · ${L10n.text('lab.card.number', [episode?.digits ?? ''])}',
-          style: LabFont.number(11, weight: FontWeight.w500, color: labSecondary(context)),
-        ),
-      ],
-    );
-  }
+  Widget _frame(BuildContext context, LabFail fail) => LabFailFrame(fail: fail);
 
   Widget _empty(BuildContext context, LabFail fail) {
     final episode = store.course.episode(fail.episode);
@@ -728,14 +695,18 @@ class LabFailSheet extends StatelessWidget {
 
 /// The shop: what 연구비 buys, as square cards.
 class LabShopView extends StatelessWidget {
-  const LabShopView({super.key, required this.openTags});
+  const LabShopView({super.key, required this.openTags, this.controller});
   final VoidCallback openTags;
+
+  /// The scroll controller of the sheet the shop is shown in, from the 2D AI course's 연구비 counter.
+  final ScrollController? controller;
   LabStore get store => LabStore.shared;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: store,
     builder: (context, _) => CustomScrollView(
+      controller: controller,
       slivers: [
         SliverSafeArea(
           bottom: false,
@@ -905,7 +876,8 @@ class LabShopView extends StatelessWidget {
   }
 
   Widget _priceTag(BuildContext context, LabShopItem item, LabBuyResult state, bool owned) {
-    if (owned && item.id == LabStore.tagCourse) {
+    // Inside the 2D AI course, its own item has nothing to open.
+    if (owned && item.id == LabStore.tagCourse && !StudyMode.shared.tagsOpen) {
       return LabButton(
         key: Key('lab.shop.open.${item.id}'),
         onPressed: openTags,
@@ -1261,6 +1233,283 @@ class LabTypeSheet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A 망작 as the gallery hangs it: what came out, on paper in a dark frame, with its name and number under it.
+class LabFailFrame extends StatelessWidget {
+  const LabFailFrame({super.key, required this.fail, this.lines = 5, this.captioned = true});
+  final LabFail fail;
+
+  /// Whether the name and number are written under the frame.
+  final bool captioned;
+
+  /// How many lines of the answer the paper holds; null shows all of it.
+  final int? lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = LabStore.shared;
+    final episode = store.course.episode(fail.episode);
+    final lines = this.lines;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2A2724),
+            borderRadius: BorderRadius.circular(3),
+            boxShadow: const [BoxShadow(color: Color(0x59000000), blurRadius: 16, offset: Offset(0, 4))],
+          ),
+          child: Container(
+            height: captioned && lines != null ? 124 : null,
+            constraints: const BoxConstraints(minHeight: 100),
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            color: LabPalette.paper,
+            child: Text(
+              labWords(fail.reply.text),
+              maxLines: lines,
+              overflow: lines == null ? null : TextOverflow.ellipsis,
+              style: LabFont.line(13, color: LabPalette.paperInk),
+            ),
+          ),
+        ),
+        if (captioned) ...[
+          const SizedBox(height: 8),
+          Text(
+            fail.name.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: LabFont.text(14, weight: FontWeight.w700, color: labLabel(context)),
+          ),
+          Text(
+            'No. ${store.number(fail).toString().padLeft(2, '0')} · ${L10n.text('lab.card.number', [episode?.digits ?? ''])}',
+            style: LabFont.number(11, weight: FontWeight.w500, color: labSecondary(context)),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The moment a 망작 is won, the first time its trap is pressed: the chat dims and blurs, a ring of light opens, the framed
+/// 망작 drops in from above, swings on its pin and settles a little crooked, and only then its name, number and the 연구비 it
+/// paid come in. Ported from `LabFailReveal` in `LabPages.swift`.
+class LabFailReveal extends StatefulWidget {
+  const LabFailReveal({super.key, required this.fail, required this.done});
+  final LabFail fail;
+  final VoidCallback done;
+
+  @override
+  State<LabFailReveal> createState() => _LabFailRevealState();
+}
+
+class _LabFailRevealState extends State<LabFailReveal> with TickerProviderStateMixin {
+  late final AnimationController _dim = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+  late final AnimationController _hang = AnimationController.unbounded(vsync: this);
+  late final AnimationController _settle = AnimationController.unbounded(vsync: this);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _play());
+  }
+
+  Future<void> _play() async {
+    if (!mounted) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _dim.value = 1;
+      _hang.value = 1;
+      _settle.value = 1;
+      return;
+    }
+    unawaited(_dim.forward());
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+    // Dropped in, it swings past and back on its pin before it comes to rest (`.spring(duration: 0.9, bounce: 0.5)`).
+    unawaited(_hang.animateWith(SpringSimulation(SpringDescription.withDampingRatio(mass: 1, stiffness: 49, ratio: 0.5), 0, 1, 0)));
+    await Future<void>.delayed(const Duration(milliseconds: 380));
+    if (!mounted) return;
+    LabHaptic.snap();
+    unawaited(_settle.animateWith(SpringSimulation(SpringDescription.withDampingRatio(mass: 1, stiffness: 110, ratio: 0.8), 0, 1, 0)));
+  }
+
+  Future<void> _close() async {
+    await Future.wait([
+      _dim.reverse(),
+      _settle.animateTo(0, duration: const Duration(milliseconds: 200)),
+      _hang.animateTo(0, duration: const Duration(milliseconds: 200)),
+    ]);
+    widget.done();
+  }
+
+  @override
+  void dispose() {
+    _dim.dispose();
+    _hang.dispose();
+    _settle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = LabStore.shared;
+    final fail = widget.fail;
+    final episode = store.course.episode(fail.episode);
+    const white = Color(0xFFFFFFFF);
+    final failColor = LabPalette.fail.resolveFrom(context);
+    return Semantics(
+      key: const Key('lab.fail.reveal'),
+      scopesRoute: true,
+      explicitChildNodes: true,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_dim, _hang, _settle]),
+        builder: (context, _) {
+          final dim = _dim.value;
+          final hang = _hang.value;
+          final settle = _settle.value;
+          final shown = settle.clamp(0.0, 1.0);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // The chat goes dark and out of focus behind the card.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 12 * dim, sigmaY: 12 * dim),
+                    child: ColoredBox(color: Color.fromRGBO(0, 0, 0, 0.72 * dim)),
+                  ),
+                ),
+              ),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Opacity(
+                        opacity: shown,
+                        child: Transform.translate(
+                          offset: Offset(0, -10 * (1 - settle)),
+                          child: Column(
+                            children: [
+                              LabTag(text: 'No. ${store.number(fail).toString().padLeft(2, '0')}', color: failColor, mono: true),
+                              const SizedBox(height: 8),
+                              Semantics(
+                                header: true,
+                                child: Text(
+                                  L10n.text('lab.fail.got'),
+                                  style: LabFont.text(24, weight: FontWeight.w700, color: white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Transform.translate(
+                        offset: Offset(0, -320 * (1 - hang)),
+                        child: Transform.rotate(
+                          angle: (-22 + 19.5 * hang) * math.pi / 180,
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: 260,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              alignment: Alignment.topCenter,
+                              children: [
+                                // A ring of light behind the frame, opening as it lands.
+                                Positioned(
+                                  top: -150,
+                                  child: IgnorePointer(
+                                    child: Opacity(
+                                      opacity: shown,
+                                      child: Transform.scale(
+                                        scale: 0.3 + 0.7 * settle,
+                                        child: Container(
+                                          width: 440,
+                                          height: 440,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: RadialGradient(
+                                              colors: [LabPalette.paper.withValues(alpha: 0.3), failColor.withValues(alpha: 0.18), const Color(0x00000000)],
+                                              stops: const [0.05, 0.45, 1],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                LabFailFrame(fail: fail, lines: 7, captioned: false),
+                                // The pin it hangs from.
+                                Positioned(
+                                  top: -4,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF8A867D),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [BoxShadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1))],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Opacity(
+                        opacity: shown,
+                        child: Transform.translate(
+                          offset: Offset(0, 12 * (1 - settle)),
+                          child: Column(
+                            children: [
+                              Text(
+                                fail.name.text,
+                                textAlign: TextAlign.center,
+                                style: LabFont.voice(24, color: white),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '${L10n.text('lab.card.number', [episode?.digits ?? ''])} · '
+                                '${L10n.text('lab.fail.gotNote', [store.shop.currency.text, '${store.course.info.rewards.fail}'])}',
+                                textAlign: TextAlign.center,
+                                style: LabFont.text(13, weight: FontWeight.w600, color: white.withValues(alpha: 0.7)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Opacity(
+                        opacity: shown,
+                        child: SizedBox(
+                          width: 260,
+                          child: LabButton(
+                            key: const Key('lab.fail.reveal.done'),
+                            style: LabButtonStyle.primary,
+                            expand: true,
+                            onPressed: shown > 0.5 ? _close : null,
+                            child: Text(L10n.text('OK')),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

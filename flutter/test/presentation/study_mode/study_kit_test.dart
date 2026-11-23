@@ -597,9 +597,8 @@ void main() {
     });
 
     test('tabs have titles and symbols', () {
-      // The collection moved onto Me; the fourth tab leads back to the AI lab.
-      expect([for (final tab in StudyTab.values) tab.title], ['Map', 'Practice', 'Studio', 'lab.title.short', 'Me']);
-      expect(StudyTab.pages, isNot(contains(StudyTab.aiLab)));
+      // The collection moved onto Me; the fourth tab lists the courses, the lab among them.
+      expect([for (final tab in StudyTab.values) tab.title], ['Map', 'Practice', 'Studio', 'lab.tab.courses', 'Me']);
     });
   });
 }

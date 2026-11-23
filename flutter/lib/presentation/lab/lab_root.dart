@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
@@ -28,8 +29,11 @@ import 'lab_pages.dart';
 
 // AI 실험실: what learning mode opens on. Ported from `LabRoot.swift`.
 
-/// The lab's tabs. `twoD` leads into the 2D AI course; `sheet` stands apart at the right end of the dock.
-enum LabTab { deck, fails, twoD, shop, sheet }
+/// The lab's tabs. `courses` lists the courses, the 2D AI course among them; `sheet` stands apart at the right end of the dock.
+enum LabTab { deck, fails, courses, shop, sheet }
+
+/// The icon of the 코스 tab, in the lab and in the 2D AI course alike.
+const IconData labCoursesIcon = CupertinoIcons.square_stack_3d_up_fill;
 
 /// The lab: a deck, the 망작 gallery, the 2D course, the shop, and the cheat sheet apart at the right end of the dock.
 /// The way back to the home scene is the swipe up from the bottom, as everywhere in learning mode.
@@ -105,14 +109,7 @@ class _LabRootState extends State<LabRoot> {
     });
   }
 
-  void _select(LabTab tab) {
-    // The 2D tab of someone who owns the course opens the course itself; the lab tab they were on stays chosen.
-    if (tab == LabTab.twoD && store.ownsTagCourse) {
-      mode.openTags();
-      return;
-    }
-    mode.labTab = tab;
-  }
+  void _select(LabTab tab) => mode.labTab = tab;
 
   Future<void> _play(LabEpisode episode) async {
     _covered.value = true;
@@ -124,7 +121,7 @@ class _LabRootState extends State<LabRoot> {
   Widget _page(LabTab tab) => switch (tab) {
     LabTab.deck => LabDeckView(play: _play, covered: _covered),
     LabTab.fails => const LabFailsView(),
-    LabTab.twoD => LabTwoDView(openTags: mode.openTags),
+    LabTab.courses => LabCoursesView(here: LabCoursePlace.lab, mode: mode),
     LabTab.shop => LabShopView(openTags: mode.openTags),
     LabTab.sheet => LabSheetView(shown: _sheetShown),
   };
@@ -173,21 +170,86 @@ class LabDock extends StatelessWidget {
   final LabTab current;
   final ValueChanged<LabTab> select;
 
-  static const _height = 62.0;
-
   @override
   Widget build(BuildContext context) {
     final tint = TegnalColors.tint.resolveFrom(context);
     final label = labLabel(context);
-    final selection = TegnalColors.glassSelection.resolveFrom(context);
-    final items = [
-      (LabTab.deck, L10n.text('lab.tab.deck'), CupertinoIcons.rectangle_stack_fill),
-      (LabTab.fails, L10n.text('lab.tab.fails'), CupertinoIcons.photo_fill),
-      (LabTab.twoD, L10n.text('lab.tab.2d'), CupertinoIcons.paintbrush_fill),
-      (LabTab.shop, L10n.text('lab.tab.shop'), CupertinoIcons.bag_fill),
-    ];
-    final active = items.indexWhere((item) => item.$1 == current);
     final waiting = LabStore.shared.editionWaiting;
+    return LabGlassDock<LabTab>(
+      current: current,
+      select: select,
+      keyPrefix: 'lab.tab',
+      tint: tint,
+      items: [
+        (LabTab.deck, L10n.text('lab.tab.deck'), CupertinoIcons.rectangle_stack_fill),
+        (LabTab.fails, L10n.text('lab.tab.fails'), CupertinoIcons.photo_fill),
+        (LabTab.courses, L10n.text('lab.tab.courses'), labCoursesIcon),
+        (LabTab.shop, L10n.text('lab.tab.shop'), CupertinoIcons.bag_fill),
+      ],
+      // Like Smart in viewing mode: the cheat sheet stands apart at the right end of the dock.
+      trailing: Semantics(
+        button: true,
+        selected: current == LabTab.sheet,
+        label: L10n.text('lab.tab.sheet'),
+        child: GestureDetector(
+          key: const Key('lab.tab.sheet'),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            select(LabTab.sheet);
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Glass.circle(
+                child: SizedBox.square(
+                  dimension: LabGlassDock.height,
+                  child: Icon(CupertinoIcons.doc_text_fill, size: 25, color: current == LabTab.sheet ? tint : label),
+                ),
+              ),
+              if (waiting)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: const ShapeDecoration(color: Color(0xFFFF3B30), shape: StadiumBorder()),
+                    child: Text(
+                      L10n.text('lab.new'),
+                      style: TegnalType.style(12, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The floating glass tab bar of learning mode, as the library's: the tabs in a glass capsule with the chosen one lifted
+/// in its tint, and optionally something standing apart in its own circle at the right end. iOS draws the stock tab bar.
+class LabGlassDock<T extends Enum> extends StatelessWidget {
+  const LabGlassDock({super.key, required this.items, required this.current, required this.select, required this.keyPrefix, required this.tint, this.trailing});
+
+  /// Each tab: its value, its name and its icon.
+  final List<(T, String, IconData)> items;
+  final T current;
+  final ValueChanged<T> select;
+
+  /// Each tab is keyed `<keyPrefix>.<name>`.
+  final String keyPrefix;
+  final Color tint;
+  final Widget? trailing;
+
+  static const height = 62.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = labLabel(context);
+    final selection = TegnalColors.glassSelection.resolveFrom(context);
+    final active = items.indexWhere((item) => item.$1 == current);
+    final trailing = this.trailing;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 21),
       child: BackdropGroup(
@@ -196,7 +258,7 @@ class LabDock extends StatelessWidget {
             Expanded(
               child: Glass.capsule(
                 child: SizedBox(
-                  height: _height,
+                  height: height,
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: LayoutBuilder(
@@ -221,12 +283,12 @@ class LabDock extends StatelessWidget {
                                 for (final (index, item) in items.indexed)
                                   Expanded(
                                     child: Semantics(
+                                      key: Key('$keyPrefix.${item.$1.name}'),
                                       button: true,
                                       selected: index == active,
                                       label: item.$2,
                                       excludeSemantics: true,
                                       child: GestureDetector(
-                                        key: Key('lab.tab.${item.$1.name}'),
                                         behavior: HitTestBehavior.opaque,
                                         onTap: () {
                                           HapticFeedback.selectionClick();
@@ -257,44 +319,7 @@ class LabDock extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            // Like Smart in viewing mode: the cheat sheet stands apart at the right end of the dock.
-            Semantics(
-              button: true,
-              selected: current == LabTab.sheet,
-              label: L10n.text('lab.tab.sheet'),
-              child: GestureDetector(
-                key: const Key('lab.tab.sheet'),
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  select(LabTab.sheet);
-                },
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Glass.circle(
-                      child: SizedBox.square(
-                        dimension: _height,
-                        child: Icon(CupertinoIcons.doc_text_fill, size: 25, color: current == LabTab.sheet ? tint : label),
-                      ),
-                    ),
-                    if (waiting)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: const ShapeDecoration(color: Color(0xFFFF3B30), shape: StadiumBorder()),
-                          child: Text(
-                            L10n.text('lab.new'),
-                            style: TegnalType.style(12, weight: FontWeight.w600, color: const Color(0xFFFFFFFF)),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+            if (trailing != null) ...[const SizedBox(width: 8), trailing],
           ],
         ),
       ),
@@ -304,9 +329,8 @@ class LabDock extends StatelessWidget {
 
 // MARK: - The deck
 
-/// The deck: home and collection at once, as a wallet of cards. The nearest engraved cards show their number, name and
-/// line, each a little smaller and showing less further back; older ones fold into a pile of coloured edges that a tap
-/// fans out. The next blank card lies in front; locked ones wait below with only their titles.
+/// The deck: home and collection at once, as a wallet of cards. Engraved cards lean away behind the next one, each a
+/// little smaller, closer and fainter further back; a tap on the thin strips at the back fans them all out. The next blank card lies in front; locked ones wait below with only their titles.
 class LabDeckView extends StatefulWidget {
   const LabDeckView({super.key, required this.play, required this.covered});
   final Future<void> Function(LabEpisode) play;
@@ -331,25 +355,37 @@ class _LabDeckViewState extends State<LabDeckView> {
   static const earnedHeight = 200.0;
   static const lockedPeek = 44.0;
   static const lockedHeight = 120.0;
-  static const openCount = 3;
-  static const edges = 5;
-  static const edge = 10.0;
 
   /// From the card's top edge to the foot of its line: padding, the number row, the gap, one line of the serif at 130%.
   static const stripContent = 14.0 + 14 + 6 + 21;
 
-  /// Shrinks quickly near the front and ever more slowly further back, towards 80%, so even a full deck keeps leaning away.
-  static double scale(int depth) => 0.8 + 0.2 * math.pow(0.86, depth);
+  /// How far back a card sits: 1 just behind the blank card, more further up. One rule runs from the front of the stack to
+  /// the back, with no step anywhere: each card is a little smaller, shows a little less of itself and is a little fainter
+  /// than the one in front, as things further off are. Lines further back may be cut through; the deck reads as leaning
+  /// away into the distance and never grows past about four strips' height, however many cards it holds.
+  /// Shrinks quickly near the front and ever more slowly further back, towards 74%.
+  static double scale(int depth) => 0.74 + 0.26 * math.pow(0.8, depth);
 
-  /// The strip left showing shrinks with the card, but always holds its number, name and line whole.
-  static double peek(int depth) => (stripContent * scale(depth)).roundToDouble() + 8;
+  /// The card just behind the blank one shows its whole strip; each card behind shows 74% of what the one in front shows.
+  static const front = 64.0;
+  static const recede = 0.74;
 
-  bool folded(int depth) => !fanned && depth > openCount;
-  bool hidden(int depth) => !fanned && depth > openCount + edges;
-  double shownHeight(int depth) => hidden(depth) ? 0 : (folded(depth) ? edge : peek(depth));
+  /// Fanned out, every card shows its whole strip.
+  double peek(int depth) => fanned ? (stripContent * scale(depth)).roundToDouble() + 8 : front * math.pow(recede, depth - 1);
 
-  /// Folded cards darken the further back they sit, as if the light did not reach them.
-  double dim(int depth) => folded(depth) ? math.min(0.6, 0.22 + 0.08 * (depth - openCount - 1)) : 0;
+  /// So far back that it would show less than a hairline: left out until the deck is fanned.
+  bool hidden(int depth) => peek(depth) < 1.5;
+
+  /// Too little of it shows to read or aim at: a tap fans the deck out rather than opening the card.
+  bool compact(int depth) => !fanned && peek(depth) < 40;
+  double shownHeight(int depth) => hidden(depth) ? 0 : peek(depth);
+
+  /// How far a card has faded into the page: none just behind the blank card, a little more for each step back.
+  /// Fanned out, the cards stay readable, so they fade less.
+  double fade(int depth) => math.min(fanned ? 0.4 : 0.8, 1 - math.pow(0.84, depth - 1).toDouble());
+
+  /// And it softens a little for each step back, past the first two.
+  double blur(int depth) => fanned ? 0 : math.min(2.5, math.max(0, 0.45 * (depth - 2)));
 
   @override
   void initState() {
@@ -422,7 +458,7 @@ class _LabDeckViewState extends State<LabDeckView> {
               ),
             ),
             const SizedBox(height: 22),
-            if (stacked > openCount)
+            if (stacked > 2)
               Align(
                 alignment: Alignment.centerRight,
                 child: GestureDetector(
@@ -441,7 +477,7 @@ class _LabDeckViewState extends State<LabDeckView> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          fanned ? L10n.text('lab.deck.fold') : L10n.text('lab.deck.unfold', ['${stacked - openCount}']),
+                          fanned ? L10n.text('lab.deck.fold') : L10n.text('lab.deck.unfold', ['$stacked']),
                           style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
                         ),
                       ],
@@ -532,9 +568,9 @@ class _LabDeckViewState extends State<LabDeckView> {
   );
 
   /// A card further up the stack: smaller the further back it sits, and only its top showing above the card in front.
-  /// A folded edge fans the pile out rather than opening its card.
+  /// A strip too thin to read fans the deck out rather than opening its card.
   Widget _band({Key? key, required int depth, required VoidCallback onTap, required String semantics, required Widget card}) {
-    final folded = this.folded(depth);
+    final compact = this.compact(depth);
     return AnimatedContainer(
       key: key,
       duration: const Duration(milliseconds: 550),
@@ -554,28 +590,39 @@ class _LabDeckViewState extends State<LabDeckView> {
             curve: Curves.easeOutBack,
             child: LabPress(
               key: Key(semantics),
-              onTap: folded ? () => _fan(true) : onTap,
+              onTap: compact ? () => _fan(true) : onTap,
               child: DecoratedBox(
                 decoration: ShapeDecoration(
                   shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(20)),
-                  shadows: const [BoxShadow(color: Color(0x52000000), blurRadius: 20, offset: Offset(0, -6))],
+                  shadows: [BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.32 * (1 - fade(depth) * 0.6)), blurRadius: 20, offset: const Offset(0, -6))],
                 ),
-                child: Stack(
-                  children: [
-                    SizedBox(height: earnedHeight, width: double.infinity, child: card),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: AnimatedOpacity(
-                          opacity: dim(depth),
-                          duration: const Duration(milliseconds: 300),
-                          child: ClipRSuperellipse(
-                            borderRadius: BorderRadius.circular(20),
-                            child: const ColoredBox(color: Color(0xFF000000)),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(end: blur(depth)),
+                  duration: const Duration(milliseconds: 300),
+                  builder: (context, sigma, child) => sigma < 0.05
+                      ? child!
+                      : ImageFiltered(
+                          imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                          child: child,
+                        ),
+                  child: Stack(
+                    children: [
+                      SizedBox(height: earnedHeight, width: double.infinity, child: card),
+                      // The page's own background laid over the card: it fades into the distance in light and dark alike.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: AnimatedOpacity(
+                            opacity: fade(depth),
+                            duration: const Duration(milliseconds: 300),
+                            child: ClipRSuperellipse(
+                              borderRadius: BorderRadius.circular(20),
+                              child: ColoredBox(color: TegnalColors.background.resolveFrom(context)),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -913,11 +960,23 @@ class LabCardDetailView extends StatelessWidget {
 
 // MARK: - 2D AI 배우기
 
-/// The 2D tab: the 2D AI course. Someone who owns it goes straight in (see [LabRoot]); anyone else sees what it is and
-/// what it costs.
-class LabTwoDView extends StatelessWidget {
-  const LabTwoDView({super.key, required this.openTags});
-  final VoidCallback openTags;
+/// Where the 코스 tab is shown: in the lab, or in the 2D AI course.
+enum LabCoursePlace { lab, tags }
+
+/// The 코스 tab, in the lab and in the 2D AI course alike: every course as a card, the way the 2D course was shown before it
+/// was bought. The course on screen now is marked on its card; another one owned opens with a button under it; one not
+/// bought yet shows its price and the balance.
+class LabCoursesView extends StatelessWidget {
+  const LabCoursesView({super.key, required this.here, this.mode, this.bottom = labDockClearance});
+  final LabCoursePlace here;
+
+  /// The mode to switch; null is [StudyMode.shared].
+  final StudyMode? mode;
+
+  /// Room left under the page for the dock.
+  final double bottom;
+
+  StudyMode get _mode => mode ?? StudyMode.shared;
 
   @override
   Widget build(BuildContext context) {
@@ -928,80 +987,106 @@ class LabTwoDView extends StatelessWidget {
         final item = store.shop.item(LabStore.tagCourse);
         final price = item?.price;
         final state = item == null ? LabBuyResult.unavailable : store.canBuy(item);
-        const white = Color(0xFFFFFFFF);
         final primary = StudyTheme.of(context).primary;
-        Widget feature(String symbol, String text) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: [
-              StudyIcon(symbol, size: 17, color: white),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  text,
-                  style: LabFont.text(15, weight: FontWeight.w600, color: white),
-                ),
-              ),
-            ],
-          ),
-        );
+        final course = store.course;
+        final colors = course.info.cardColors ?? const [LabPalette.ink];
         return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top, 20, labDockClearance),
+          padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top, 20, math.max(bottom, MediaQuery.paddingOf(context).bottom + 24)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               LabHeader(
-                kicker: TextSpan(text: L10n.text('lab.2d.tagline')),
-                title: L10n.text('Tag Study'),
+                kicker: TextSpan(text: L10n.text('lab.courses.subtitle')),
+                title: L10n.text('lab.tab.courses'),
               ),
               const SizedBox(height: 20),
-              DecoratedBox(
-                decoration: ShapeDecoration(
-                  gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [primary, studyEdge(primary)]),
-                  shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(24)),
-                  shadows: [BoxShadow(color: primary.withValues(alpha: 0.35), blurRadius: 40, offset: const Offset(0, 10))],
-                ),
-                child: ClipRSuperellipse(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Stack(
-                    children: [
-                      // The course's guide leans in from the corner, behind nothing.
-                      Positioned(
-                        right: -8,
-                        bottom: -6,
-                        child: ExcludeSemantics(child: StudyMascot(pose: StudyMascotPose.wave, size: 132)),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(22, 22, 118, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              L10n.text('lab.2d.kicker'),
-                              style: LabFont.text(11, weight: FontWeight.w700, color: white.withValues(alpha: 0.75), tracking: 1.6),
+              _card(
+                context,
+                key: const Key('lab.courses.lab'),
+                kicker: L10n.text('lab.courses.lab.kicker'),
+                title: course.title,
+                current: here == LabCoursePlace.lab,
+                colors: const [Color(0xFF3A3A3C), Color(0xFF1C1C1E)],
+                glow: const Color(0x4D000000),
+                features: [
+                  ('rectangle.stack.fill', L10n.text('lab.courses.lab.cards', ['${course.episodes.length}', '${course.seasons.length}'])),
+                  ('doc.text.fill', L10n.text('lab.courses.lab.sheet')),
+                  ('gauge.with.dots.needle.67percent', L10n.text('lab.courses.lab.rate', [course.info.gauge.text, '${store.rate}%'])),
+                ],
+                // A small fan of the lab's card colours in the corner.
+                art: Positioned(
+                  right: 30,
+                  bottom: -16,
+                  child: ExcludeSemantics(
+                    child: SizedBox(
+                      width: 120,
+                      height: 96,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          for (final (index, hex) in colors.take(3).indexed)
+                            Transform.translate(
+                              offset: Offset((index - 1) * 14.0, 0),
+                              child: Transform.rotate(
+                                angle: (index - 1) * 11 * math.pi / 180,
+                                alignment: Alignment.bottomCenter,
+                                child: Container(
+                                  width: 58,
+                                  height: 78,
+                                  decoration: ShapeDecoration(
+                                    color: LabPalette.hex(hex),
+                                    shape: RoundedSuperellipseBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                      side: const BorderSide(color: Color(0x2EFFFFFF), width: 0.75),
+                                    ),
+                                    shadows: const [BoxShadow(color: Color(0x59000000), blurRadius: 12, offset: Offset(0, 3))],
+                                  ),
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(L10n.text('Tag Study'), style: LabFont.voice(30, color: white)),
-                            const SizedBox(height: 18),
-                            feature('map.fill', L10n.text('lab.2d.lessons', ['${StudyPath.bundled.lessons.length}'])),
-                            feature('tag.fill', L10n.text('lab.2d.tags', ['${StudyCurriculum.bundled.tags.length}'])),
-                            feature('wand.and.stars', L10n.text('lab.2d.studio')),
-                          ],
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-              if (item != null && price != null) ...[
-                const SizedBox(height: 20),
+              if (here != LabCoursePlace.lab) ...[const SizedBox(height: 12), _open(course.title, const Key('lab.courses.open.lab'), _mode.closeTags)],
+              const SizedBox(height: 20),
+              _card(
+                context,
+                key: const Key('lab.courses.tags'),
+                kicker: L10n.text('lab.courses.tags.kicker'),
+                title: L10n.text('Tag Study'),
+                current: here == LabCoursePlace.tags,
+                colors: [primary, studyEdge(primary)],
+                glow: primary.withValues(alpha: 0.35),
+                features: [
+                  ('map.fill', L10n.text('lab.2d.lessons', ['${StudyPath.bundled.lessons.length}'])),
+                  ('tag.fill', L10n.text('lab.2d.tags', ['${StudyCurriculum.bundled.tags.length}'])),
+                  ('wand.and.stars', L10n.text('lab.2d.studio')),
+                ],
+                // The course's guide leans in from the corner, behind nothing.
+                art: Positioned(
+                  right: -8,
+                  bottom: -6,
+                  child: ExcludeSemantics(child: StudyMascot(pose: StudyMascotPose.wave, size: 132)),
+                ),
+              ),
+              if (store.ownsTagCourse) ...[
+                if (here != LabCoursePlace.tags) ...[
+                  const SizedBox(height: 12),
+                  _open(L10n.text('Tag Study'), const Key('lab.courses.open.tags'), _mode.openTags),
+                ],
+              ] else if (item != null && price != null) ...[
+                const SizedBox(height: 12),
                 LabButton(
                   key: const Key('lab.2d.buy'),
                   style: LabButtonStyle.primary,
                   expand: true,
                   onPressed: state.isBought
                       ? () async {
-                          if (await confirmLabPurchase(context, item)) openTags();
+                          if (await confirmLabPurchase(context, item)) _mode.openTags();
                         }
                       : null,
                   child: Text(L10n.text('lab.shop.buy', ['$price'])),
@@ -1015,13 +1100,101 @@ class LabTwoDView extends StatelessWidget {
                     style: LabFont.text(13, color: labSecondary(context)),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 Text(L10n.text('lab.2d.how'), style: LabFont.text(13, color: labSecondary(context))),
               ],
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _open(String course, Key key, VoidCallback action) =>
+      LabButton(key: key, style: LabButtonStyle.primary, expand: true, onPressed: action, child: Text(L10n.text('lab.courses.open', [course])));
+
+  Widget _card(
+    BuildContext context, {
+    required Key key,
+    required String kicker,
+    required String title,
+    required bool current,
+    required List<Color> colors,
+    required Color glow,
+    required List<(String, String)> features,
+    required Widget art,
+  }) {
+    const white = Color(0xFFFFFFFF);
+    return DecoratedBox(
+      key: key,
+      decoration: ShapeDecoration(
+        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: colors),
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(24)),
+        shadows: [BoxShadow(color: glow, blurRadius: 40, offset: const Offset(0, 10))],
+      ),
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          children: [
+            art,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          kicker,
+                          style: LabFont.text(11, weight: FontWeight.w700, color: white.withValues(alpha: 0.75), tracking: 1.6),
+                        ),
+                      ),
+                      if (current)
+                        Container(
+                          key: const Key('lab.courses.here'),
+                          height: 26,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: const ShapeDecoration(color: Color(0x33FFFFFF), shape: StadiumBorder()),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(CupertinoIcons.checkmark_alt, size: 13, color: white),
+                              const SizedBox(width: 4),
+                              Text(
+                                L10n.text('lab.courses.here'),
+                                style: LabFont.text(12, weight: FontWeight.w700, color: white),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(title, style: LabFont.voice(30, color: white)),
+                  const SizedBox(height: 18),
+                  for (final (symbol, text) in features)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10, right: 96),
+                      child: Row(
+                        children: [
+                          StudyIcon(symbol, size: 17, color: white),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              text,
+                              style: LabFont.text(15, weight: FontWeight.w600, color: white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
