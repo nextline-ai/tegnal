@@ -66,25 +66,21 @@ struct LabSheetRow: Codable, Equatable, Sendable, Identifiable {
     var draft: Bool?
 
     // What a tap on the row opens (all optional; an app that predates them simply does not show them).
-    /// A system symbol for the job, drawn beside it.
+    /// A system symbol for the job, drawn beside it. The lab editor offers the set both apps draw (`LabSheetRow.symbols`).
     var symbol: String?
-    /// The longer story: when the pick is right, and when it is not.
+    /// The symbol's colour, six hexadecimal digits. Missing: the lab's gauge colour.
+    var color: String?
+    /// The tag at the tile's top right, such as "추천" or "무료". Missing: "초안" for a draft pick, else nothing.
+    var label: LabSheetText?
+    /// The tag's colour, six hexadecimal digits. Missing: a quiet dashed outline.
+    var labelColor: String?
+    /// What a tap on the row shows under the pick, written as Markdown: paragraphs, `###` headings, `-` and `1.` lists,
+    /// `>` quotes, fenced code (shown with a copy button) and **bold**, *italic*, `code` inline (`LabMarkdown`).
     var detail: LabSheetText?
-    /// How to get the most out of the pick, a few short lines.
-    var tips: [LabSheetText]?
-    /// A prompt to copy and try.
-    var prompt: LabSheetText?
-    /// Other picks for the same job, with when to choose them.
-    var alternatives: [LabSheetAlternative]?
 
     var id: String { task.values.sorted { $0.key < $1.key }.map(\.value).joined(separator: "|") + "/" + pick }
     /// Whether a tap has anything more to show than the row itself.
-    var hasDetail: Bool { detail != nil || !(tips ?? []).isEmpty || prompt != nil || !(alternatives ?? []).isEmpty }
-}
-
-struct LabSheetAlternative: Codable, Equatable, Sendable {
-    var pick: String
-    var why: LabSheetText?
+    var hasDetail: Bool { detail != nil }
 }
 
 /// Downloads newer editions from TEGNAL's add-on server and keeps the last one.

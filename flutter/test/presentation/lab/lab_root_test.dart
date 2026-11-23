@@ -23,6 +23,7 @@ import 'package:tegnal/core/lab/lab_course_file.dart';
 import 'package:tegnal/presentation/design/tegnal_theme.dart';
 import 'package:tegnal/presentation/lab/lab_episode_view.dart';
 import 'package:tegnal/presentation/lab/lab_kit.dart';
+import 'package:tegnal/presentation/lab/lab_pages.dart';
 import 'package:tegnal/presentation/lab/lab_root.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
 
@@ -179,11 +180,12 @@ void main() {
     expect(key('lab.sheet.locked.harness'), findsOneWidget);
     expect(key('lab.sheet.paid'), findsOneWidget);
     expect(LabStore.shared.editionWaiting, isFalse);
-    // A row opens its details: the pick, why, how to use it and other picks.
+    // A row opens its details: the pick and why, then its own writing rendered from Markdown.
     await tester.tap(key('lab.sheet.row.models.0'));
     await tester.pumpAndSettle();
     expect(key('lab.sheet.detail'), findsOneWidget);
-    expect(find.text(L10n.text('lab.sheet.alternatives')), findsOneWidget);
+    expect(find.byType(LabMarkdown), findsOneWidget, reason: 'The details are the row\'s own Markdown');
+    expect(key('lab.sheet.copy'), findsOneWidget, reason: 'A fenced prompt comes with a copy button');
     await shot(tester, '10b-sheet-detail');
   });
 

@@ -19,11 +19,6 @@ struct LabSheetView: View {
                     LabHeader(kicker: Text(L10n.text("lab.sheet.subtitle")), title: L10n.text("lab.tab.sheet")) {
                         if let edition = store.edition { LabSheetStamp(edition: edition) }
                     }
-                    if let change = store.edition?.change {
-                        Label { Text(change.text) } icon: { Image(systemName: "sparkles") }
-                            .font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
-                            .accessibilityIdentifier("lab.sheet.change")
-                    }
                     if paid > 0 {
                         LabTag(text: L10n.text("lab.sheet.paid", String(paid), store.shop.currency.text), color: LabPalette.gauge)
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -96,10 +91,11 @@ struct LabSheetBoard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(section.title.text).font(.system(size: 20, weight: .bold)).fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                if let card {
-                    Label(L10n.text(open ? "lab.sheet.openedBy" : "lab.sheet.locked", card.digits), systemImage: open ? "key.fill" : "lock.fill")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(open ? AnyShapeStyle(.secondary) : AnyShapeStyle(LabPalette.fail))
-                        .accessibilityIdentifier(open ? "" : "lab.sheet.locked.\(section.id)")
+                // Only while locked: which card opens it. Once open, nothing more needs saying.
+                if let card, !open {
+                    Label(L10n.text("lab.sheet.locked", card.digits), systemImage: "lock.fill")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(LabPalette.fail)
+                        .accessibilityIdentifier("lab.sheet.locked.\(section.id)")
                 }
             }
             Grid(horizontalSpacing: 10, verticalSpacing: 10) {
@@ -128,10 +124,10 @@ struct LabSheetBoard: View {
     private func tile(_ row: LabSheetRow, open: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: LabSheetRowDetail.symbol(row)).font(.system(size: 12, weight: .bold)).foregroundStyle(LabPalette.gauge)
+                Image(systemName: LabSheetRowDetail.symbol(row)).font(.system(size: 12, weight: .bold)).foregroundStyle(LabSheetRowDetail.tint(row))
                 Text(row.task.text).font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
-                if open, row.draft == true { LabSheetDraftMark() }
+                if open { LabSheetLabel(row: row) }
             }
             Group {
                 if open {
@@ -157,12 +153,27 @@ struct LabSheetBoard: View {
     }
 }
 
-/// "초안": a pick not settled yet.
-struct LabSheetDraftMark: View {
+/// The tag at a tile's top right: the row's own `label` in its `labelColor` (a tinted capsule), or a quiet dashed outline
+/// without a colour; "초안" for a draft pick that names no label of its own.
+struct LabSheetLabel: View {
+    let row: LabSheetRow
+    var large = false
     var body: some View {
-        Text(L10n.text("lab.sheet.draft")).font(.system(size: 10, weight: .heavy)).foregroundStyle(.secondary)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 2])) }
+        if let text = row.label?.text ?? (row.draft == true ? L10n.text("lab.sheet.draft") : nil), !text.isEmpty {
+            let size: CGFloat = large ? 12 : 10
+            if let hex = row.labelColor, hex.count == 6 {
+                let color = Color(labHex: hex)
+                Text(text).font(.system(size: size, weight: .heavy)).foregroundStyle(color)
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(color.opacity(0.16), in: Capsule())
+                    .accessibilityIdentifier("lab.sheet.label")
+            } else {
+                Text(text).font(.system(size: size, weight: .heavy)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 2])) }
+                    .accessibilityIdentifier("lab.sheet.label")
+            }
+        }
     }
 }
 
@@ -171,7 +182,12 @@ struct LabSheetDraftMark: View {
 struct LabSheetRowDetail: View {
     let row: LabSheetRow
     @Environment(\.dismiss) private var dismiss
-    @State private var copied = false
+
+    /// The row's own colour for its symbol, or the lab's gauge colour.
+    static func tint(_ row: LabSheetRow) -> Color {
+        guard let hex = row.color, hex.count == 6, hex.allSatisfy(\.isHexDigit) else { return LabPalette.gauge }
+        return Color(labHex: hex)
+    }
 
     static func symbol(_ row: LabSheetRow) -> String {
         guard let name = row.symbol, UIImage(systemName: name) != nil else { return "sparkles" }
@@ -180,15 +196,15 @@ struct LabSheetRowDetail: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
                     // The answer first: the job as its label, the pick as large as the page's title, then why.
                     VStack(alignment: .leading, spacing: 10) {
-                        Label { Text(row.task.text) } icon: { Image(systemName: Self.symbol(row)).foregroundStyle(LabPalette.gauge) }
+                        Label { Text(row.task.text) } icon: { Image(systemName: Self.symbol(row)).foregroundStyle(Self.tint(row)) }
                             .font(.system(size: 15, weight: .semibold)).foregroundStyle(.secondary)
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(row.pick).font(.system(size: 32, weight: .heavy)).fixedSize(horizontal: false, vertical: true)
-                            if row.draft == true { LabSheetDraftMark() }
+                            LabSheetLabel(row: row, large: true)
                         }
                         if let why = row.why { Text(why.text).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true) }
                         if let example = row.example {
@@ -198,40 +214,16 @@ struct LabSheetRowDetail: View {
                             Label(L10n.text("lab.sheet.draftNote"), systemImage: "pencil.and.scribble").font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 6)
+                    .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("lab.sheet.detail")
-                }
-                if let detail = row.detail {
-                    Section(L10n.text("lab.sheet.detailTitle")) { Text(detail.text).fixedSize(horizontal: false, vertical: true) }
-                }
-                if let tips = row.tips, !tips.isEmpty {
-                    Section(L10n.text("lab.sheet.tips")) {
-                        ForEach(Array(tips.enumerated()), id: \.offset) { index, tip in
-                            Label { Text(tip.text) } icon: { Text("\(index + 1)").font(LabFont.number(13)).foregroundStyle(LabPalette.gauge) }
-                        }
+                    // The rest is the sheet's own writing, as Markdown.
+                    if let detail = row.detail {
+                        Divider()
+                        LabMarkdown(text: detail.text)
                     }
                 }
-                if let prompt = row.prompt {
-                    Section(L10n.text("lab.sheet.prompt")) {
-                        Text(prompt.text).font(.system(size: 15, design: .monospaced)).textSelection(.enabled)
-                        Button {
-                            UIPasteboard.general.string = prompt.text
-                            LabHaptic.pass()
-                            withAnimation { copied = true }
-                        } label: { Label(L10n.text(copied ? "lab.sheet.copied" : "lab.sheet.copy"), systemImage: copied ? "checkmark" : "doc.on.doc") }
-                            .accessibilityIdentifier("lab.sheet.copy")
-                    }
-                }
-                if let alternatives = row.alternatives, !alternatives.isEmpty {
-                    Section(L10n.text("lab.sheet.alternatives")) {
-                        ForEach(Array(alternatives.enumerated()), id: \.offset) { _, alternative in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(alternative.pick).font(.system(size: 16, weight: .semibold))
-                                if let why = alternative.why { Text(why.text).font(.system(size: 14)).foregroundStyle(.secondary) }
-                            }
-                        }
-                    }
-                }
+                .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 32)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -242,6 +234,111 @@ struct LabSheetRowDetail: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+/// A small Markdown renderer for writing that comes with the app's own data, such as a cheat-sheet row's details: paragraphs,
+/// `#`–`###` headings, `-`/`*` and `1.` lists, `>` quotes, `---` rules and fenced code shown with a copy button; inline
+/// **bold**, *italic* and `code`. Links show as their text and open nothing. Android draws the same blocks (`LabMarkdown`).
+struct LabMarkdown: View {
+    let text: String
+
+    enum Block: Hashable {
+        case heading(Int, String), paragraph(String), bullet(String), numbered(String, String), quote(String), code(String), rule
+    }
+
+    /// The blocks of a Markdown text, in order.
+    static func blocks(_ text: String) -> [Block] {
+        var blocks: [Block] = [], paragraph: [String] = [], code: [String]?
+        func flush() { if !paragraph.isEmpty { blocks.append(.paragraph(paragraph.joined(separator: " "))); paragraph = [] } }
+        for raw in text.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") {
+                if let open = code { blocks.append(.code(open.joined(separator: "\n"))); code = nil } else { flush(); code = [] }
+                continue
+            }
+            if code != nil { code?.append(raw); continue }
+            if line.isEmpty { flush(); continue }
+            if let hashes = line.firstIndex(where: { $0 != "#" }), line.hasPrefix("#"), line[hashes] == " " {
+                flush(); blocks.append(.heading(min(3, line.distance(from: line.startIndex, to: hashes)), String(line[hashes...]).trimmingCharacters(in: .whitespaces)))
+            } else if line == "---" || line == "***" {
+                flush(); blocks.append(.rule)
+            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                flush(); blocks.append(.bullet(String(line.dropFirst(2))))
+            } else if let dot = line.firstIndex(of: "."), line[..<dot].allSatisfy(\.isNumber), !line[..<dot].isEmpty, line[line.index(after: dot)...].hasPrefix(" ") {
+                flush(); blocks.append(.numbered(String(line[..<dot]), String(line[line.index(dot, offsetBy: 2)...])))
+            } else if line.hasPrefix(">") {
+                flush(); blocks.append(.quote(String(line.dropFirst()).trimmingCharacters(in: .whitespaces)))
+            } else {
+                paragraph.append(line)
+            }
+        }
+        if let open = code { blocks.append(.code(open.joined(separator: "\n"))) }
+        flush()
+        return blocks
+    }
+
+    /// Inline Markdown as styled text, with links kept as plain words.
+    static func inline(_ text: String) -> AttributedString {
+        var value = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        for run in value.runs where run.link != nil { value[run.range].link = nil }
+        return value
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(Self.blocks(text).enumerated()), id: \.offset) { _, block in view(block) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func view(_ block: Block) -> some View {
+        switch block {
+        case .heading(let level, let text):
+            Text(Self.inline(text)).font(.system(size: [22, 19, 17][level - 1], weight: .bold)).padding(.top, 6)
+                .accessibilityAddTraits(.isHeader)
+        case .paragraph(let text):
+            Text(Self.inline(text)).font(.system(size: 16)).fixedSize(horizontal: false, vertical: true)
+        case .bullet(let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("•").font(.system(size: 16, weight: .bold)).foregroundStyle(.secondary)
+                Text(Self.inline(text)).font(.system(size: 16)).fixedSize(horizontal: false, vertical: true)
+            }
+        case .numbered(let number, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(number + ".").font(LabFont.number(14)).foregroundStyle(LabPalette.gauge).frame(minWidth: 18, alignment: .leading)
+                Text(Self.inline(text)).font(.system(size: 16)).fixedSize(horizontal: false, vertical: true)
+            }
+        case .quote(let text):
+            Text(Self.inline(text)).font(.system(size: 16)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) { Capsule().fill(Color.secondary.opacity(0.4)).frame(width: 3) }
+        case .code(let code):
+            LabCodeBlock(code: code)
+        case .rule:
+            Divider()
+        }
+    }
+}
+
+/// Fenced code in Markdown: set in a fixed-width face on a tinted plate, with a button that copies it.
+struct LabCodeBlock: View {
+    let code: String
+    @State private var copied = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(code).font(.system(size: 15)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Button {
+                UIPasteboard.general.string = code
+                LabHaptic.pass()
+                withAnimation { copied = true }
+            } label: { Label(L10n.text(copied ? "lab.sheet.copied" : "lab.sheet.copy"), systemImage: copied ? "checkmark" : "doc.on.doc") }
+                .font(.system(size: 14, weight: .semibold))
+                .accessibilityIdentifier("lab.sheet.copy")
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

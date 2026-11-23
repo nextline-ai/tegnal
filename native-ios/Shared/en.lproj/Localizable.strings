@@ -2613,16 +2613,11 @@
 "lab.sheet.paid" = "+%@ %@ for reading this edition";
 "lab.sheet.example" = "For example: %@";
 "lab.sheet.edition" = "This edition";
-"lab.sheet.openedBy" = "Opened by card %@";
 "lab.sheet.more" = "Show details";
 "lab.sheet.pick" = "For now";
 "lab.sheet.draftNote" = "A draft, not settled yet.";
-"lab.sheet.detailTitle" = "When it fits";
-"lab.sheet.tips" = "Try it like this";
-"lab.sheet.prompt" = "A prompt to try";
 "lab.sheet.copy" = "Copy Prompt";
 "lab.sheet.copied" = "Copied";
-"lab.sheet.alternatives" = "Other picks";
 "lab.shop.limited" = "Limited";
 "lab.shop.owned" = "Owned";
 "lab.shop.ownedShort" = "Owned";
