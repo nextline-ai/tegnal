@@ -261,6 +261,7 @@ struct LabStampsTool: View {
     let tool: LabTool
     @Binding var passed: Bool
     @State private var stamped: [Int] = []
+    @Environment(\.labMistake) private var mistake
 
     private var items: [LabStampItem] { tool.items ?? [] }
     private var labels: [String] { (tool.stamps ?? []).map(\.text) }
@@ -293,14 +294,15 @@ struct LabStampsTool: View {
                 }
             }
             ForEach(Array(zip(items, stamped).enumerated()).reversed(), id: \.offset) { offset, pair in
-                LabStampedRow(item: pair.0, pick: pair.1, label: labels.indices.contains(pair.1) ? labels[pair.1] : "")
+                // The stamp shows the right answer: green when it was picked, red when another was.
+                LabStampedRow(item: pair.0, pick: pair.1, label: labels.indices.contains(pair.0.answer) ? labels[pair.0.answer] : "")
             }
         }
         .animation(.spring(duration: 0.4, bounce: 0.2), value: stamped)
     }
 
     private func stamp(_ index: Int) {
-        LabHaptic.press()
+        if items[stamped.count].answer == index { LabHaptic.press() } else { mistake() }
         stamped.append(index)
         if stamped.count == items.count { LabHaptic.pass(); withAnimation { passed = true } }
     }
@@ -338,6 +340,7 @@ struct LabMarksTool: View {
     @State private var marked: Set<Int> = []
     @State private var shaking: Int?
     @State private var complaint: String?
+    @Environment(\.labMistake) private var mistake
     @State private var started: Date?
     @State private var took: TimeInterval?
 
@@ -437,7 +440,7 @@ struct LabMarksTool: View {
         let piece = pieces[index]
         if style != "cut", !piece.isTarget {
             // Only made-up or private pieces can be marked; anything else says why and stays.
-            LabHaptic.miss()
+            mistake()
             complaint = tool.wrong?.text
             withAnimation(.spring(duration: 0.12, bounce: 0.8)) { shaking = index }
             Task { try? await Task.sleep(for: .milliseconds(180)); withAnimation { shaking = nil }; try? await Task.sleep(for: .seconds(1.4)); complaint = nil }

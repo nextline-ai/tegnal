@@ -7,15 +7,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/booru/booru_backup.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/lab/lab_course.dart';
+import 'package:tegnal/core/lab/lab_course_file.dart';
 import 'package:tegnal/core/lab/lab_records.dart';
 import 'package:tegnal/core/lab/lab_sheet.dart';
 import 'package:tegnal/core/lab/lab_store.dart';
+import 'package:tegnal/core/lab/learning_courses.dart';
 import 'package:tegnal/core/storage/app_database.dart';
+import 'package:tegnal/core/study/study_models.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/sync/library_sync_adapter.dart';
 import 'package:tegnal/core/sync/library_sync_record.dart';
 
 import '../../support/addon_market_fixtures.dart';
+import 'lab_course_file_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +27,8 @@ void main() {
 
   setUpAll(() async {
     course = await LabCourse.loadBundled();
+    // A tags lesson may teach the app's own tags, so course files are checked against the curriculum.
+    StudyCurriculum.useBundled(StudyCurriculum.parse(File('assets/study/TagStudy.json').readAsStringSync()));
     await LabShop.loadBundled();
     await LabDiagnosis.loadBundled();
     await LabEdition.loadBundled();
@@ -72,6 +78,10 @@ void main() {
     final impacts = [for (final episode in course.episodes) episode.impact];
     expect(impacts, [...impacts]..sort((a, b) => b.compareTo(a)));
     expect(course.top, 100);
+  });
+
+  test('the bundled course keeps the course rules', () {
+    expect(course.problems(), isEmpty);
   });
 
   test('every tool can be passed with what its file gives it', () {
@@ -304,5 +314,182 @@ void main() {
     expect(backup.lab?.map((record) => record.key), ['card:ep03']);
     final target = BooruStore.inMemory()..restoreBackup(backup);
     expect(LabProgress.fromRecords(LabDatabaseRecords(target.database).all()).cards['ep03'], 50);
+  });
+
+  // MARK: Course files and the 코스 tab
+
+  test('a course file decodes as an imported deck course', () {
+    final imported = LabCourseFile.decode(labCourseFile()).deck!;
+    expect(imported.imported, isTrue);
+    expect(imported.id, 'maker.prompt-basics');
+    expect([for (final episode in imported.episodes) episode.id], ['a1', 'a2']);
+    expect(imported.top, 40);
+    expect(imported.info.rewards.fail, 0, reason: 'Rewards may be left out');
+  });
+
+  test('course files are refused rather than cleaned', () {
+    void refused(List<int> data, [LabCourseFileError? error]) =>
+        expect(() => LabCourseFile.decode(data), throwsA(error == null ? isA<LabCourseFileError>() : equals(error)));
+    refused(utf8.encode('[]'), const LabCourseFileError.notCourse());
+    refused(labCourseFile(edit: (top) => top['format'] = 'tegnal-addon'), const LabCourseFileError.notCourse());
+    refused(labCourseFile(edit: (top) => top['version'] = 2), const LabCourseFileError.newer());
+    refused(labCourseFile(edit: (top) => top['engine'] = 'flashcards'), const LabCourseFileError.newer());
+    refused(
+      labCourseFile(edit: (top) => ((top['episodes']! as List)[0] as Map)['tool'] = {'kind': 'hologram', 'title': '새 도구'}),
+      const LabCourseFileError.newer(),
+    );
+    refused(List.filled(LabCourseFile.maximumBytes + 1, 32), const LabCourseFileError.tooLarge());
+    refused(labCourseFile(id: LearningCourse.labID), const LabCourseFileError.invalid('id'));
+    refused(labCourseFile(id: 'Bad ID'), const LabCourseFileError.invalid('id'));
+    refused(labCourseFile(edit: (top) => top['title'] = '숨은\u202E글자'));
+    refused(
+      labCourseFile(
+        edit: (top) => top['seasons'] = [
+          {'number': 1, 'title': '시즌', 'order': 'fixed', 'episodes': ['a1']},
+        ],
+      ),
+      const LabCourseFileError.invalid('episodes'),
+    );
+    refused(
+      labCourseFile(
+        edit: (top) {
+          final episodes = top['episodes']! as List;
+          (episodes[0] as Map)['choices'] = [
+            {'text': '함정뿐', 'verdict': '판정'},
+            {'text': '또 함정', 'verdict': '판정'},
+          ];
+        },
+      ),
+    );
+    refused(
+      labCourseFile(
+        edit: (top) {
+          final episodes = top['episodes']! as List;
+          (episodes[1] as Map)['tool'] = {
+            'kind': 'stamps',
+            'title': '도장',
+            'stamps': ['하나'],
+            'items': [
+              {'text': '문장', 'answer': 3},
+            ],
+          };
+        },
+      ),
+      const LabCourseFileError.invalid('episodes.a2.tool.stamps'),
+    );
+  });
+
+  /// An imported course keeps its records under its own id and pays nothing; the AI lab's money is untouched by it.
+  test('an imported course keeps its own records and pays nothing', () {
+    final lab = store();
+    final imported = LabCourseFile.decode(labCourseFile()).deck!;
+    lab.showCourse(imported);
+    expect(lab.next?.id, 'a1');
+    expect(lab.rate, 20);
+    final engraving = lab.engrave(imported.episodes.first, failsHung: 1);
+    expect(lab.hang(imported.fails.first), isTrue);
+    expect(engraving.cardReward, 0);
+    expect(engraving.failReward, 0);
+    expect(lab.failReward, 0);
+    expect(lab.rate, 30);
+    expect(lab.balance, 0, reason: 'Nothing in an imported course pays');
+    expect(lab.progress.cards.containsKey('maker.prompt-basics/a1'), isTrue);
+    expect(lab.progress.fails.containsKey('maker.prompt-basics/a1-trap'), isTrue);
+    expect(lab.offersDiagnosis, isFalse, reason: 'Card No. 000 is the AI lab\'s');
+
+    lab.showCourse(course);
+    expect(lab.next?.id, 'ep01', reason: 'The AI lab\'s deck is as it was');
+    expect(lab.rate, course.base);
+    expect(lab.offersDiagnosis, isTrue);
+  });
+
+  test('the catalog keeps imported courses and removes them', () {
+    final folder = Directory.systemTemp.createTempSync('courses-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final catalog = LearningCourses(folder: folder);
+    expect([for (final course in catalog.all) course.id], [LearningCourse.labID, LearningCourse.tagsID]);
+    final data = labCourseFile();
+    catalog
+      ..add(data)
+      ..add(data);
+    expect([for (final course in catalog.all) course.id], [LearningCourse.labID, LearningCourse.tagsID, 'maker.prompt-basics'], reason: 'The same course again replaces it');
+    expect(catalog.course('maker.prompt-basics')?.engine, LearningEngine.deck);
+    expect([for (final course in LearningCourses(folder: folder).imported) course.id], ['maker.prompt-basics'], reason: 'Kept for the next launch');
+    catalog.remove('maker.prompt-basics');
+    expect(LearningCourses(folder: folder).imported, isEmpty);
+    expect(() => catalog.add(labCourseFile(id: LearningCourse.labID)), throwsA(isA<LabCourseFileError>()), reason: "A bundled course's id is never taken");
+  });
+
+  test('the sample courses in the docs folder pass', () {
+    final folder = Directory('../docs/edu/courses');
+    final files = folder.existsSync() ? folder.listSync().whereType<File>().where((file) => file.path.endsWith('.${LabCourseFile.fileExtension}')).toList() : <File>[];
+    if (files.isEmpty) return markTestSkipped('The samples are local only');
+    for (final file in files) {
+      expect(() => LabCourseFile.decode(file.readAsBytesSync()), returnsNormally, reason: file.path);
+    }
+  });
+
+  test('a course on the tags engine brings a path and tags of its own', () {
+    final course = LabCourseFile.decode(tagsCourseFile());
+    expect(course.engine, LearningEngine.tags);
+    final lessons = course.lessons!;
+    expect([for (final lesson in lessons.path.lessons) lesson.id], ['course:maker.backgrounds:intro', 'course:maker.backgrounds:tags']);
+    expect(lessons.title['en'], '배경과 장소', reason: 'Korean-only text is shown in English too');
+    expect(lessons.unit?.tags.single.name, 'lighthouse');
+    expect(
+      () => LabCourseFile.decode(
+        tagsCourseFile(
+          edit: (top) => (((top['sections']! as List)[0] as Map)['lessons'] as List)[0] = {
+            'id': 'intro',
+            'kind': 'concept',
+            'symbol': 'book',
+            'title': {'ko': '소개'},
+            'steps': [
+              {'card': {'title': {'ko': '가자'}, 'body': {'ko': '생성기'}, 'action': 'generator'}},
+            ],
+          },
+        ),
+      ),
+      throwsA(isA<LabCourseFileError>()),
+      reason: 'Cards in course files only tell: they open nothing',
+    );
+    expect(
+      () => LabCourseFile.decode(
+        tagsCourseFile(
+          edit: (top) => ((((top['sections']! as List)[0] as Map)['lessons'] as List)[0] as Map)['steps'] = [
+            {'match': {'pairs': []}},
+          ],
+        ),
+      ),
+      throwsA(const LabCourseFileError.newer()),
+      reason: 'A step this app does not know asks for an update',
+    );
+  });
+
+  test('a course for a newer app waits in the catalog', () {
+    final folder = Directory.systemTemp.createTempSync('courses-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final catalog = LearningCourses(folder: folder);
+    expect(
+      () => catalog.add(labCourseFile(edit: (top) => top..['engine'] = 'flashcards'..['title'] = '미래 코스')),
+      throwsA(const LabCourseFileError.newer()),
+    );
+    expect(catalog.waiting, [const WaitingCourse(id: 'maker.prompt-basics', title: '미래 코스')]);
+    expect(catalog.course('maker.prompt-basics'), isNull);
+    expect([for (final course in LearningCourses(folder: folder).waiting) course.id], ['maker.prompt-basics'], reason: 'Kept for after the update');
+    catalog.add(labCourseFile());
+    expect(catalog.waiting, isEmpty);
+    expect(catalog.course('maker.prompt-basics'), isNotNull);
+  });
+
+  test('the card that finishes a season says so', () {
+    final lab = store();
+    final season = course.seasons.first;
+    for (final id in season.episodes.take(season.episodes.length - 1)) {
+      expect(lab.engrave(course.episode(id)!, failsHung: 0).season, isNull);
+    }
+    final last = course.episode(season.episodes.last)!;
+    expect(lab.engrave(last, failsHung: 0).season, season.number);
+    expect(lab.engrave(last, failsHung: 0).season, isNull, reason: 'Playing it again finishes nothing new');
   });
 }

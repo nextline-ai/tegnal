@@ -5,12 +5,15 @@ import 'dart:ui' as ui;
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/lab/lab_course.dart';
 import '../../core/lab/lab_sheet.dart';
 import '../../core/lab/lab_store.dart';
+import '../../core/lab/learning_courses.dart';
 import '../../core/support/l10n.dart';
 import '../design/alert_dialog.dart';
+import '../design/app_sheet.dart';
 import '../design/glass.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
@@ -81,10 +84,28 @@ class _LabSheetViewState extends State<LabSheetView> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, labDockClearance),
               sliver: SliverList.list(
                 children: [
+                  // The page and the day it was curated, as a small red stamp beside the title, then what changed.
                   LabHeader(
                     kicker: TextSpan(text: L10n.text('lab.sheet.subtitle')),
                     title: L10n.text('lab.tab.sheet'),
+                    trailing: edition == null ? null : LabSheetStamp(edition: edition),
                   ),
+                  if (edition?.change case final change?) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      key: const Key('lab.sheet.change'),
+                      children: [
+                        Icon(CupertinoIcons.sparkles, size: 15, color: labSecondary(context)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            change.text,
+                            style: LabFont.text(14, weight: FontWeight.w500, color: labSecondary(context)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   // What reading a new edition paid, where it is seen at once.
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),
@@ -103,9 +124,9 @@ class _LabSheetViewState extends State<LabSheetView> {
                           )
                         : const SizedBox(width: double.infinity),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 24),
                   if (edition != null)
-                    LabSheetPaper(edition: edition)
+                    LabSheetBoard(edition: edition)
                   else
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 80),
@@ -125,375 +146,444 @@ class _LabSheetViewState extends State<LabSheetView> {
   );
 }
 
-/// The sheet itself, printed on paper: a masthead with the date stamp and what changed, a numbered section for each
-/// family of jobs, and the footer under a double rule. A section no card has opened yet is shown blacked out.
-class LabSheetPaper extends StatelessWidget {
-  const LabSheetPaper({super.key, required this.edition});
+/// The day the sheet was curated, as a small red rubber stamp beside the title (`LabSheetStamp`).
+class LabSheetStamp extends StatelessWidget {
+  const LabSheetStamp({super.key, required this.edition});
   final LabEdition edition;
 
-  static const ink = LabPalette.paperInk;
-  static const muted = LabPalette.paperMuted;
-  LabStore get store => LabStore.shared;
-
   @override
-  Widget build(BuildContext context) => LabCardBackground(
-    state: LabCardState.blank,
-    radius: 22,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(22, 20, 22, 26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _masthead(),
-          for (final (index, section) in edition.sections.indexed)
-            Padding(padding: const EdgeInsets.only(top: 30), child: _section(context, index + 1, section)),
-          if (edition.footer case final footer?)
-            Padding(
-              padding: const EdgeInsets.only(top: 30),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(height: 0.5, color: ink),
-                  const SizedBox(height: 2),
-                  Container(height: 2, color: ink),
-                  const SizedBox(height: 12),
-                  Text(labWords(footer.text), style: LabFont.line(14, color: muted)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _masthead() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('AI LAB · CHEAT SHEET', style: LabFont.number(10, color: muted, tracking: 1.8)),
-                if (edition.change case final change?) ...[const SizedBox(height: 6), Text(change.text, style: LabFont.line(16, color: ink))],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          _stamp(),
-        ],
-      ),
-      const SizedBox(height: 16),
-      Container(height: 2, color: ink),
-    ],
-  );
-
-  /// A rubber stamp in red ink: the day this sheet was curated.
-  Widget _stamp() {
-    const red = Color(0xFFB3392B);
+  Widget build(BuildContext context) {
+    const red = Color(0xFFD0432A);
     return Semantics(
       key: const Key('lab.sheet.stamp'),
       label: L10n.text('lab.sheet.stamp', [edition.stamp]),
       child: ExcludeSemantics(
-        child: Opacity(
-          opacity: 0.88,
-          child: Transform.rotate(
-            angle: -5 * 3.14159 / 180,
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                border: Border.all(color: red, width: 0.8),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  border: Border.all(color: red, width: 1.6),
-                  borderRadius: BorderRadius.circular(5),
+        child: Transform.rotate(
+          angle: -4 * math.pi / 180,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              border: Border.all(color: red, width: 1.4),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  L10n.text('lab.sheet.basis'),
+                  style: LabFont.text(9, weight: FontWeight.w900, color: red, tracking: 1),
                 ),
-                child: Column(
-                  children: [
-                    Text(
-                      L10n.text('lab.sheet.basis'),
-                      style: LabFont.text(10, weight: FontWeight.w800, color: red, tracking: 1.2),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(edition.stamp, style: LabFont.number(14, color: red)),
-                  ],
-                ),
-              ),
+                const SizedBox(height: 1),
+                Text(edition.stamp, style: LabFont.number(13, color: red)),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _section(BuildContext context, int number, LabSheetSection section) {
-    final opened = store.sectionOpened(section);
-    final card = section.opens == null ? null : store.course.episode(section.opens!);
+/// The sheet's questions, each a grid of tiles two across (`LabSheetBoard`). On a tile the answer, the pick, is the largest
+/// thing; the job is its label and the reason one quiet line. A question no card has opened yet shows its jobs with the picks
+/// held back, and which card opens them.
+class LabSheetBoard extends StatelessWidget {
+  const LabSheetBoard({super.key, required this.edition});
+  final LabEdition edition;
+  LabStore get store => LabStore.shared;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = labSecondary(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(number.toString().padLeft(2, '0'), style: LabFont.number(14, color: muted)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Semantics(
-                header: true,
-                child: Text(labWords(section.title.text), style: LabFont.voice(21, color: ink)),
+        for (final (index, section) in edition.sections.indexed) ...[if (index > 0) const SizedBox(height: 28), _section(context, section)],
+        if (edition.footer case final footer?) ...[
+          const SizedBox(height: 28),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(CupertinoIcons.info_circle, size: 15, color: secondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(footer.text, style: LabFont.text(13, color: secondary)),
               ),
-            ),
-          ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _section(BuildContext context, LabSheetSection section) {
+    final open = store.sectionOpened(section);
+    final card = section.opens == null ? null : store.main.episode(section.opens!);
+    final rows = section.rows;
+    return Column(
+      key: Key(open ? 'lab.sheet.section.${section.id}' : 'lab.sheet.locked.${section.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(
+            section.title.text,
+            style: LabFont.text(20, weight: FontWeight.w700, color: labLabel(context)),
+          ),
         ),
-        if (card != null && opened) ...[
-          const SizedBox(height: 6),
+        if (card != null) ...[
+          const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(CupertinoIcons.lock_open_fill, size: 12, color: muted),
-              const SizedBox(width: 6),
+              Icon(
+                open ? CupertinoIcons.lock_open_fill : CupertinoIcons.lock_fill,
+                size: 12,
+                color: open ? labSecondary(context) : LabPalette.fail.resolveFrom(context),
+              ),
+              const SizedBox(width: 5),
               Text(
-                '${L10n.text('lab.card.number', [card.digits])} · ${card.label}',
-                style: LabFont.text(12, weight: FontWeight.w600, color: muted),
+                L10n.text(open ? 'lab.sheet.openedBy' : 'lab.sheet.locked', [card.digits]),
+                style: LabFont.text(12, weight: FontWeight.w600, color: open ? labSecondary(context) : LabPalette.fail.resolveFrom(context)),
               ),
             ],
           ),
         ],
         const SizedBox(height: 12),
-        Container(height: 1, color: ink),
-        if (opened)
-          Column(
-            key: Key('lab.sheet.section.${section.id}'),
-            children: [
-              for (final (index, row) in section.rows.indexed) ...[
-                if (index > 0) Container(height: 0.5, color: LabPalette.paperRule.withValues(alpha: 0.4)),
-                _row(row),
+        for (var start = 0; start < rows.length; start += 2) ...[
+          if (start > 0) const SizedBox(height: 10),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var index = start; index < start + 2; index++) ...[
+                  if (index > start) const SizedBox(width: 10),
+                  Expanded(child: index < rows.length ? _tile(context, section, index, rows[index], open) : const SizedBox()),
+                ],
               ],
-            ],
-          )
-        else
-          _blackedOut(section, card),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _row(LabSheetRow row) {
-    final job = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          studyWords(row.task.text),
-          style: LabFont.text(17, weight: FontWeight.w700, color: ink),
-        ),
-        if (row.example case final example?) ...[const SizedBox(height: 2), Text(studyWords(example.text), style: LabFont.text(13, color: muted))],
-      ],
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+  /// One job: its symbol and name as the label, the pick large, the reason in a line or two.
+  Widget _tile(BuildContext context, LabSheetSection section, int index, LabSheetRow row, bool open) {
+    final gauge = LabPalette.gauge.resolveFrom(context);
+    final secondary = labSecondary(context);
+    final tile = Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ShapeDecoration(
+        color: FormColors.listRow.resolveFrom(context),
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(18)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // The pick sits beside the job when there is room, under it when there is not.
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final tag = _pick(row);
-              final tagWidth = _tagWidth(row);
-              if (tagWidth + 12 + 120 <= constraints.maxWidth) {
-                return Row(
-                  children: [
-                    Expanded(child: job),
-                    const SizedBox(width: 12),
-                    tag,
-                  ],
-                );
-              }
-              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [job, const SizedBox(height: 8), tag]);
-            },
+          Row(
+            children: [
+              Icon(labSheetSymbol(row.symbol), size: 13, color: gauge),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  row.task.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LabFont.text(13, weight: FontWeight.w600, color: secondary),
+                ),
+              ),
+              if (!open)
+                Icon(CupertinoIcons.lock_fill, size: 11, color: TegnalColors.tertiaryLabel.resolveFrom(context))
+              else if (row.draft == true)
+                const Flexible(child: LabSheetDraftMark()),
+            ],
           ),
-          if (row.why case final why?) ...[
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 3),
-                  child: Icon(CupertinoIcons.arrow_turn_down_right, size: 12, color: muted),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(studyWords(why.text), style: LabFont.text(14, color: ink.withValues(alpha: 0.78))),
-                ),
-              ],
+          const SizedBox(height: 8),
+          if (open) ...[
+            Text(
+              row.pick,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: LabFont.text(21, weight: FontWeight.w700, color: labLabel(context)),
+            ),
+            if (row.why case final why?) ...[
+              const SizedBox(height: 8),
+              Text(
+                why.text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: LabFont.text(13, color: secondary),
+              ),
+            ],
+          ] else ...[
+            // Held back until its card is engraved.
+            Container(
+              width: 84,
+              height: 18,
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              decoration: ShapeDecoration(color: secondary.withValues(alpha: 0.22), shape: const StadiumBorder()),
+            ),
+            Container(
+              width: 120,
+              height: 10,
+              decoration: ShapeDecoration(color: secondary.withValues(alpha: 0.14), shape: const StadiumBorder()),
             ),
           ],
         ],
       ),
     );
-  }
-
-  double _tagWidth(LabSheetRow row) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: row.pick,
-        style: LabFont.text(15, weight: FontWeight.w700),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final draft = row.draft == true
-        ? (TextPainter(
-                text: TextSpan(
-                  text: L10n.text('lab.sheet.draft'),
-                  style: LabFont.text(10, weight: FontWeight.w800),
-                ),
-                textDirection: TextDirection.ltr,
-              )..layout()).width +
-              6
-        : 0;
-    return painter.width + draft + 26;
-  }
-
-  /// The pick on a tag: solid ink once settled; a pencilled outline, marked as a draft, while it is not.
-  Widget _pick(LabSheetRow row) {
-    final draft = row.draft == true;
-    final content = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (draft) ...[
-          Text(
-            L10n.text('lab.sheet.draft'),
-            style: LabFont.text(10, weight: FontWeight.w800, color: muted),
-          ),
-          const SizedBox(width: 6),
-        ],
-        Text(
-          row.pick,
-          maxLines: 1,
-          style: LabFont.text(15, weight: FontWeight.w700, color: draft ? ink : LabPalette.paper),
-        ),
-      ],
-    );
-    return SizedBox(
-      height: 32,
-      child: draft
-          ? CustomPaint(
-              painter: _DashedCapsule(ink.withValues(alpha: 0.55)),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 13),
-                child: Center(widthFactor: 1, child: content),
-              ),
-            )
-          : DecoratedBox(
-              decoration: const ShapeDecoration(color: ink, shape: StadiumBorder()),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 13),
-                child: Center(widthFactor: 1, child: content),
-              ),
-            ),
-    );
-  }
-
-  /// A section not opened yet: its rows blacked out, and the card that opens it.
-  Widget _blackedOut(LabSheetSection section, LabEpisode? card) {
-    const widths = [(104.0, 150.0), (78.0, 118.0), (124.0, 168.0), (92.0, 134.0)];
-    final text = L10n.text('lab.sheet.locked', [card?.digits ?? '']);
+    if (!open) return ExcludeSemantics(child: tile);
     return Semantics(
-      key: Key('lab.sheet.locked.${section.id}'),
-      label: text,
-      child: ExcludeSemantics(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Opacity(
-              opacity: 0.35,
-              child: Column(
+      button: true,
+      hint: L10n.text('lab.sheet.more'),
+      child: LabPress(
+        key: Key('lab.sheet.row.${section.id}.$index'),
+        onTap: () {
+          LabHaptic.tick();
+          showAppSheet<void>(
+            context,
+            grabber: true,
+            builder: (context, controller) => LabSheetRowDetail(row: row, controller: controller),
+          );
+        },
+        child: tile,
+      ),
+    );
+  }
+}
+
+/// "초안": a pick not settled yet.
+class LabSheetDraftMark extends StatelessWidget {
+  const LabSheetDraftMark({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = labSecondary(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: ShapeDecoration(
+        shape: StadiumBorder(side: BorderSide(color: secondary.withValues(alpha: 0.5))),
+      ),
+      child: Text(
+        L10n.text('lab.sheet.draft'),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: LabFont.text(10, weight: FontWeight.w900, color: secondary),
+      ),
+    );
+  }
+}
+
+/// A cheat-sheet row's symbol, by the SF Symbol name the sheet gives (as iOS draws it), or sparkles.
+IconData labSheetSymbol(String? name) => switch (name) {
+  'doc.text' => CupertinoIcons.doc_text,
+  'chevron.left.forwardslash.chevron.right' => CupertinoIcons.chevron_left_slash_chevron_right,
+  'magnifyingglass' => CupertinoIcons.search,
+  'bubble.left.and.bubble.right' => CupertinoIcons.chat_bubble_2,
+  'photo' => CupertinoIcons.photo,
+  'film' => CupertinoIcons.film,
+  'doc.richtext' => CupertinoIcons.doc_richtext,
+  'safari' => CupertinoIcons.compass,
+  'terminal' => CupertinoIcons.chevron_right_square,
+  _ => CupertinoIcons.sparkles,
+};
+
+/// What a tap on a cheat-sheet row opens: the pick and why, the longer story, how to use it, a prompt to copy and the
+/// other picks for the same job.
+class LabSheetRowDetail extends StatefulWidget {
+  const LabSheetRowDetail({super.key, required this.row, required this.controller});
+  final LabSheetRow row;
+  final ScrollController controller;
+
+  @override
+  State<LabSheetRowDetail> createState() => _LabSheetRowDetailState();
+}
+
+class _LabSheetRowDetailState extends State<LabSheetRowDetail> {
+  bool copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = widget.row;
+    final label = labLabel(context), secondary = labSecondary(context);
+    final gauge = LabPalette.gauge.resolveFrom(context);
+    // A grouped page of its own, like a stock sheet: the sheet paints its own background.
+    return ColoredBox(
+      color: FormColors.background.resolveFrom(context),
+      child: Stack(
+        children: [
+          ListView(
+            key: const Key('lab.sheet.detail'),
+            controller: widget.controller,
+            padding: const EdgeInsets.fromLTRB(0, 64, 0, 32),
+            children: [
+              FormSection(
                 children: [
-                  for (final (index, _) in section.rows.indexed) ...[
-                    if (index > 0) Container(height: 0.5, color: LabPalette.paperRule.withValues(alpha: 0.4)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Row(
+                  FormRow(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      // The answer first: the job as its label, the pick as large as the page's title, then why.
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [_bar(widths[index % 4].$1, 13, 0.75), const SizedBox(height: 7), _bar(widths[index % 4].$2, 9, 0.3)],
+                          Row(
+                            children: [
+                              Icon(labSheetSymbol(row.symbol), size: 16, color: gauge),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  row.task.text,
+                                  style: LabFont.text(15, weight: FontWeight.w600, color: secondary),
+                                ),
+                              ),
+                            ],
                           ),
-                          const Spacer(),
-                          _bar(76, 28, 0.75),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              Text(
+                                row.pick,
+                                style: LabFont.text(32, weight: FontWeight.w800, color: label),
+                              ),
+                              if (row.draft == true) const LabSheetDraftMark(),
+                            ],
+                          ),
+                          if (row.why case final why?) ...[const SizedBox(height: 10), Text(why.text, style: LabFont.text(17, color: label))],
+                          if (row.example case final example?) ...[
+                            const SizedBox(height: 10),
+                            Text(L10n.text('lab.sheet.example', [example.text]), style: LabFont.text(14, color: secondary)),
+                          ],
+                          if (row.draft == true) ...[
+                            const SizedBox(height: 10),
+                            Text(L10n.text('lab.sheet.draftNote'), style: LabFont.text(12, color: secondary)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (row.detail case final detail?)
+                FormSection(
+                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.detailTitle'))),
+                  children: [
+                    FormRow(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Text(detail.text, style: LabFont.text(16, color: label)),
+                      ),
+                    ),
+                  ],
+                ),
+              if (row.tips case final tips? when tips.isNotEmpty)
+                FormSection(
+                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.tips'))),
+                  children: [
+                    for (final (index, tip) in tips.indexed)
+                      FormRow(
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              child: Text('${index + 1}', style: LabFont.number(13, color: gauge)),
+                            ),
+                            Expanded(
+                              child: Text(tip.text, style: LabFont.text(16, color: label)),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              if (row.prompt case final prompt?)
+                FormSection(
+                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.prompt'))),
+                  children: [
+                    FormRow(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Text(
+                          prompt.text,
+                          style: LabFont.number(15, weight: FontWeight.w400, color: label),
+                        ),
+                      ),
+                    ),
+                    FormRow(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: prompt.text));
+                        LabHaptic.pass();
+                        setState(() => copied = true);
+                      },
+                      child: Row(
+                        key: const Key('lab.sheet.copy'),
+                        children: [
+                          Icon(copied ? CupertinoIcons.checkmark_alt : CupertinoIcons.doc_on_doc, size: 18, color: TegnalColors.tint.resolveFrom(context)),
+                          const SizedBox(width: 10),
+                          Text(
+                            L10n.text(copied ? 'lab.sheet.copied' : 'lab.sheet.copy'),
+                            style: LabFont.text(17, color: TegnalColors.tint.resolveFrom(context)),
+                          ),
                         ],
                       ),
                     ),
                   ],
-                ],
+                ),
+              if (row.alternatives case final alternatives? when alternatives.isNotEmpty)
+                FormSection(
+                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.alternatives'))),
+                  children: [
+                    for (final alternative in alternatives)
+                      FormRow(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                alternative.pick,
+                                style: LabFont.text(16, weight: FontWeight.w600, color: label),
+                              ),
+                              if (alternative.why case final why?) Text(why.text, style: LabFont.text(14, color: secondary)),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+          Positioned(
+            right: 16,
+            top: 14,
+            child: Semantics(
+              button: true,
+              label: L10n.text('Close'),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Glass.circle(
+                  elevated: true,
+                  child: SizedBox.square(dimension: 44, child: Icon(CupertinoIcons.xmark, size: 18, color: label)),
+                ),
               ),
             ),
-            Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: ShapeDecoration(
-                color: LabPalette.paper,
-                shape: StadiumBorder(side: BorderSide(color: ink.withValues(alpha: 0.25))),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(CupertinoIcons.lock_fill, size: 14, color: ink),
-                  const SizedBox(width: 6),
-                  Text(
-                    text,
-                    style: LabFont.text(14, weight: FontWeight.w700, color: ink),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-
-  Widget _bar(double width, double height, double alpha) => Container(
-    width: width,
-    height: height,
-    decoration: ShapeDecoration(
-      color: ink.withValues(alpha: alpha),
-      shape: const StadiumBorder(),
-    ),
-  );
-}
-
-class _DashedCapsule extends CustomPainter {
-  _DashedCapsule(this.color);
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = (Offset.zero & size).deflate(0.6);
-    final path = Path()..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(rect.height / 2)));
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    for (final metric in path.computeMetrics()) {
-      for (var distance = 0.0; distance < metric.length; distance += 7) {
-        canvas.drawPath(metric.extractPath(distance, distance + 4), paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedCapsule old) => old.color != color;
 }
 
 // MARK: - The gallery of 망작
 
 /// Every trap's 망작, framed once it has been pressed. Traps not yet pressed are empty frames that call the learner back.
 class LabFailsView extends StatelessWidget {
-  const LabFailsView({super.key});
+  const LabFailsView({super.key, this.play});
+
+  /// Opens an episode, for a 망작 not won yet whose episode is open.
+  final void Function(LabEpisode episode)? play;
   LabStore get store => LabStore.shared;
 
   @override
@@ -544,7 +634,7 @@ class LabFailsView extends StatelessWidget {
                       final fail = fails[index];
                       return store.hung(fail)
                           ? LabPress(key: Key('lab.fail.${fail.id}'), onTap: () => _open(context, fail), child: _frame(context, fail))
-                          : _empty(context, fail);
+                          : _go(context, fail);
                     },
                   ),
                 ],
@@ -572,6 +662,25 @@ class LabFailsView extends StatelessWidget {
   }
 
   Widget _frame(BuildContext context, LabFail fail) => LabFailFrame(fail: fail);
+
+  /// A 망작 not won yet. When its episode is open, a tap goes straight there to win it.
+  Widget _go(BuildContext context, LabFail fail) {
+    final episode = store.course.episode(fail.episode);
+    final play = this.play;
+    if (episode == null || play == null || store.state(episode) == LabCardStatus.locked) return _empty(context, fail);
+    return Semantics(
+      button: true,
+      hint: L10n.text('lab.fails.go'),
+      child: LabPress(
+        key: Key('lab.fail.go.${fail.id}'),
+        onTap: () {
+          LabHaptic.tick();
+          play(episode);
+        },
+        child: _empty(context, fail),
+      ),
+    );
+  }
 
   Widget _empty(BuildContext context, LabFail fail) {
     final episode = store.course.episode(fail.episode);
@@ -601,10 +710,24 @@ class LabFailsView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            L10n.text(locked ? 'lab.card.locked' : 'lab.fails.waiting'),
-            style: LabFont.text(14, weight: FontWeight.w700, color: secondary),
-          ),
+          if (locked)
+            Text(
+              L10n.text('lab.card.locked'),
+              style: LabFont.text(14, weight: FontWeight.w700, color: secondary),
+            )
+          else
+            Row(
+              children: [
+                Icon(CupertinoIcons.arrow_right_circle_fill, size: 16, color: LabPalette.fail.resolveFrom(context)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    L10n.text('lab.fails.go'),
+                    style: LabFont.text(14, weight: FontWeight.w700, color: LabPalette.fail.resolveFrom(context)),
+                  ),
+                ),
+              ],
+            ),
           Text(
             '${L10n.text('lab.card.number', [episode?.digits ?? ''])}${episode == null ? '' : ' · ${episode.label}'}',
             maxLines: 1,
@@ -642,8 +765,13 @@ class _DashedFrame extends CustomPainter {
 
 /// The shop: what 연구비 buys, as square cards.
 class LabShopView extends StatelessWidget {
-  const LabShopView({super.key, required this.openTags, this.embedded = false});
-  final VoidCallback openTags;
+  const LabShopView({super.key, required this.open, this.mode, this.embedded = false});
+
+  /// Opens a course bought here, by its id (`StudyMode.open`).
+  final void Function(String course) open;
+
+  /// The mode that says which course is on screen; null is [StudyMode.shared].
+  final StudyMode? mode;
 
   /// Only what the shop holds, the balance and each section's cards, without a page or scrolling of its own: the foot of
   /// the 2D AI course's Practice tab.
@@ -849,11 +977,12 @@ class LabShopView extends StatelessWidget {
   }
 
   Widget _priceTag(BuildContext context, LabShopItem item, LabBuyResult state, bool owned) {
-    // Inside the 2D AI course, its own item has nothing to open.
-    if (owned && item.id == LabStore.tagCourse && !StudyMode.shared.tagsOpen) {
+    // A course bought here opens from its item, unless it is the one on screen.
+    final course = LearningCourses.shared.all.where((course) => course.item == item.id).firstOrNull;
+    if (owned && course != null && (mode ?? StudyMode.shared).courseID != course.id) {
       return LabButton(
         key: Key('lab.shop.open.${item.id}'),
-        onPressed: openTags,
+        onPressed: () => open(course.id),
         radius: null,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         child: Text(
@@ -1121,7 +1250,7 @@ class LabTypeEpisodes extends StatelessWidget {
             L10n.text('lab.diagnosis.recommended'),
             style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
           ),
-          for (final episode in type.episodes.map(store.course.episode).nonNulls) ...[
+          for (final episode in type.episodes.map(store.main.episode).nonNulls) ...[
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -1465,7 +1594,7 @@ class _LabFailRevealState extends State<LabFailReveal> with TickerProviderStateM
                               Text(
                                 widget.won
                                     ? '${L10n.text('lab.card.number', [episode?.digits ?? ''])} · '
-                                          '${L10n.text('lab.fail.gotNote', [store.shop.currency.text, '${store.course.info.rewards.fail}'])}'
+                                          '${store.failReward > 0 ? L10n.text('lab.fail.gotNote', [store.shop.currency.text, '${store.failReward}']) : L10n.text('lab.fail.hungNote')}'
                                     : '${L10n.text('lab.card.number', [episode?.digits ?? ''])}${episode == null ? '' : ' · ${episode.title.text}'}',
                                 textAlign: TextAlign.center,
                                 style: LabFont.text(13, weight: FontWeight.w600, color: white.withValues(alpha: 0.7)),

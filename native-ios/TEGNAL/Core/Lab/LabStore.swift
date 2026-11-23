@@ -4,9 +4,9 @@ import Observation
 
 /// Everything a learner has done in the lab. Stored as rows of `lab_records` (see `LabRecords.swift`).
 struct LabProgress: Codable, Equatable, Sendable {
-    /// Engraved cards, by episode id, with when each was engraved.
+    /// Engraved cards, by episode id (`<course>/<episode>` for an imported course, see `LabStore.key`), with when each was engraved.
     var cards: [String: Date] = [:]
-    /// 망작 hung in the gallery, by fail id.
+    /// 망작 hung in the gallery, by fail id (namespaced like cards).
     var fails: [String: Date] = [:]
     /// Cheat-sheet editions read, by edition id, with what each paid.
     var editions: [String: Int] = [:]
@@ -41,10 +41,13 @@ struct LabEngraving: Equatable, Sendable {
     var failsHung: Int
     var failsLeft: Int
     var first: Bool
+    /// The number of the season this card finished, the first time it was finished.
+    var season: Int? = nil
     var total: Int { cardReward + failReward }
 }
 
-/// The lab's progress and its money: one shared store, saved after every change.
+/// Learning mode's records and money: every deck course's cards and 망작, the shop's purchases, the cheat sheet and the diagnosis.
+/// One shared store, saved after every change. `course` is the deck on screen; the AI lab (`main`) alone pays 연구비.
 @MainActor @Observable
 final class LabStore {
     static let shared = LabStore()
@@ -52,7 +55,10 @@ final class LabStore {
     /// Times are kept to the whole second, so they read back from the database exactly as written.
     nonisolated static var now: Date { Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded()) }
 
-    let course: LabCourse
+    /// The bundled AI lab: what pays, and what the cheat sheet and diagnosis belong to.
+    let main: LabCourse
+    /// The deck course on screen: the AI lab, or one the learner imported.
+    private(set) var course: LabCourse
     let shop: LabShop
     let diagnosis: LabDiagnosis?
     private(set) var progress: LabProgress
@@ -64,6 +70,7 @@ final class LabStore {
     private var records: LabRecordStore
 
     init(course: LabCourse = .bundled, shop: LabShop = .bundled, diagnosis: LabDiagnosis? = .bundled, records: LabRecordStore = LabMemoryRecords(), edition: LabEdition? = LabEdition.newest()) {
+        self.main = course
         self.course = course
         self.shop = shop
         self.diagnosis = diagnosis
@@ -91,11 +98,22 @@ final class LabStore {
         do { try records.replace(with: progress.records) } catch { assertionFailure("Lab records could not be saved: \(error)") }
     }
 
+    /// Shows another deck course. Its cards, 망작 and rate are read from now on; the money stays the AI lab's.
+    func show(course: LabCourse) {
+        guard course.id != self.course.id || course.episodes.count != self.course.episodes.count else { return }
+        self.course = course
+    }
+
+    /// Where a card or 망작 of the course on screen is recorded. The AI lab keeps its plain ids, as it always has; an imported
+    /// course's are put under its id, so two courses never meet.
+    func key(_ id: String) -> String { Self.key(id, in: course) }
+    nonisolated static func key(_ id: String, in course: LabCourse) -> String { course.imported ? course.id + "/" + id : id }
+
     // MARK: Cards
 
     enum CardState: Equatable { case earned, open, locked }
 
-    func earned(_ episode: LabEpisode) -> Bool { progress.cards[episode.id] != nil }
+    func earned(_ episode: LabEpisode) -> Bool { progress.cards[key(episode.id)] != nil }
 
     /// A season opens once the season it waits for is finished.
     func opened(_ season: LabSeason) -> Bool {
@@ -103,46 +121,57 @@ final class LabStore {
         return complete(previous)
     }
 
-    func complete(_ season: LabSeason) -> Bool { season.episodes.allSatisfy { progress.cards[$0] != nil } }
+    func complete(_ season: LabSeason) -> Bool { season.episodes.allSatisfy { progress.cards[key($0)] != nil } }
 
     func state(_ episode: LabEpisode) -> CardState {
         if earned(episode) { return .earned }
         guard let season = course.season(of: episode), opened(season) else { return .locked }
         if season.free { return .open }
         // In a fixed season only the first card not yet engraved is open.
-        let first = season.episodes.first { progress.cards[$0] == nil }
+        let first = season.episodes.first { progress.cards[key($0)] == nil }
         return first == episode.id ? .open : .locked
     }
 
     /// The card the deck offers next: the first open one in deck order.
     var next: LabEpisode? { course.episodes.first { state($0) == .open } }
     var earnedCards: [LabEpisode] { course.episodes.filter(earned) }
+    /// The ids of the course's engraved episodes, as the deck tracks them.
+    var earnedIDs: Set<String> { Set(earnedCards.map(\.id)) }
+    /// When a card of the course on screen was engraved.
+    func engraved(_ episode: LabEpisode) -> Date? { progress.cards[key(episode.id)] }
+    /// Card No. 000 and the welcome check belong to the AI lab.
+    var offersDiagnosis: Bool { !course.imported && diagnosis != nil }
     /// The episodes still open to pick, more than one once the free seasons are reached.
     var openCards: [LabEpisode] { course.episodes.filter { state($0) == .open } }
 
-    /// AI 성능 인출률: the base plus every engraved card's share. It never goes down.
+    /// The course's rate (the AI lab's AI 성능 인출률): the base plus every engraved card's share. It never goes down.
     var rate: Int { course.base + earnedCards.reduce(0) { $0 + $1.impact } }
 
     /// Engraves an episode's card. Playing an engraved card again changes nothing but its fails.
     @discardableResult
     func engrave(_ episode: LabEpisode, failsHung: Int) -> LabEngraving {
         let before = rate
-        let first = progress.cards[episode.id] == nil
-        if first { progress.cards[episode.id] = LabStore.now; save() }
-        let left = episode.fails.filter { progress.fails[$0.id] == nil }.count
-        return LabEngraving(before: before, after: rate, cardReward: first ? episode.reward : 0, failReward: failsHung * course.info.rewards.fail,
-                            failsHung: failsHung, failsLeft: left, first: first)
+        let first = progress.cards[key(episode.id)] == nil
+        if first { progress.cards[key(episode.id)] = LabStore.now; save() }
+        let left = episode.fails.filter { progress.fails[key($0.id)] == nil }.count
+        let pays = !course.imported
+        let finished = course.season(of: episode).flatMap { first && complete($0) ? $0.number : nil }
+        return LabEngraving(before: before, after: rate, cardReward: first && pays ? episode.reward : 0, failReward: pays ? failsHung * course.info.rewards.fail : 0,
+                            failsHung: failsHung, failsLeft: left, first: first, season: finished)
     }
 
     // MARK: 망작
 
-    func hung(_ fail: LabFail) -> Bool { progress.fails[fail.id] != nil }
+    func hung(_ fail: LabFail) -> Bool { progress.fails[key(fail.id)] != nil }
+
+    /// What hanging one 망작 pays in the course on screen: nothing in an imported course.
+    var failReward: Int { course.imported ? 0 : course.info.rewards.fail }
 
     /// Hangs a 망작 in the gallery. True the first time, when it also pays.
     @discardableResult
     func hang(_ fail: LabFail) -> Bool {
-        guard progress.fails[fail.id] == nil else { return false }
-        progress.fails[fail.id] = LabStore.now
+        guard progress.fails[key(fail.id)] == nil else { return false }
+        progress.fails[key(fail.id)] = LabStore.now
         save()
         return true
     }
@@ -152,7 +181,7 @@ final class LabStore {
 
     // MARK: Cheat sheet
 
-    /// Whether a section of the sheet is open: the card it waits for has been engraved.
+    /// Whether a section of the sheet is open: the AI lab card it waits for has been engraved.
     func opened(_ section: LabSheetSection) -> Bool {
         guard let card = section.opens else { return true }
         return progress.cards[card] != nil
@@ -171,7 +200,7 @@ final class LabStore {
         progress.seenEdition = edition.id
         var paid = 0
         if progress.editions[edition.id] == nil {
-            paid = edition.reward ?? course.info.rewards.edition
+            paid = edition.reward ?? main.info.rewards.edition
             progress.editions[edition.id] = paid
         }
         save()
@@ -185,13 +214,14 @@ final class LabStore {
 
     // MARK: 연구비
 
+    /// Only the AI lab pays: its cards, its 망작, cheat-sheet editions and lessons of bought courses. Imported courses pay nothing.
     var income: Int {
-        let cards = earnedCards.reduce(0) { $0 + $1.reward }
-        let fails = progress.fails.count * course.info.rewards.fail
+        let cards = main.episodes.filter { progress.cards[$0.id] != nil }.reduce(0) { $0 + $1.reward }
+        let fails = main.fails.filter { progress.fails[$0.id] != nil }.count * main.info.rewards.fail
         let editions = progress.editions.values.reduce(0, +)
         let courses = progress.purchases.reduce(0) { total, entry in
             guard let baseline = entry.value.baseline, let done = courseLessons[entry.key] else { return total }
-            return total + max(0, done - baseline) * course.info.rewards.courseLesson
+            return total + max(0, done - baseline) * main.info.rewards.courseLesson
         }
         return cards + fails + editions + courses
     }
@@ -254,7 +284,7 @@ final class LabStore {
         save()
     }
 
-    /// Starts the lab over: cards, gallery, money and purchases. A course given to an earlier learner is given again on the next visit.
+    /// Starts learning mode's records over: every course's cards, the gallery, money and purchases. A course given to an earlier learner is given again on the next visit.
     func reset() {
         progress = LabProgress()
         save()
@@ -268,12 +298,12 @@ final class LabStore {
         func value(_ name: String) -> String? { arguments.first { $0.hasPrefix(name + "=") }.map { String($0.dropFirst(name.count + 1)) } }
         if arguments.contains("--lab-reset") { progress = LabProgress() }
         if let target = value("--lab-seed") {
-            for episode in course.episodes.prefix(while: { $0.id != target }) where progress.cards[episode.id] == nil {
+            for episode in main.episodes.prefix(while: { $0.id != target }) where progress.cards[episode.id] == nil {
                 progress.cards[episode.id] = LabStore.now
             }
         }
         if let count = value("--lab-fails").flatMap(Int.init) {
-            for fail in course.fails.prefix(count) where progress.fails[fail.id] == nil { progress.fails[fail.id] = LabStore.now }
+            for fail in main.fails.prefix(count) where progress.fails[fail.id] == nil { progress.fails[fail.id] = LabStore.now }
         }
         if arguments.contains("--lab-greeted") || arguments.contains(where: { $0.hasPrefix("--lab-seed=") }) { progress.greeted = true; progress.grandfathered = true }
         if let extra = value("--lab-income").flatMap(Int.init) { progress.editions["test-income"] = extra }

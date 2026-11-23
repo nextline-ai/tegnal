@@ -36,10 +36,16 @@ private struct LabLines: Decodable {
 
 // MARK: - The course
 
-/// A lab course: its seasons and, from its own files, the episodes in them. `AILab/course.json` beside `AILab/episodes/<id>.json`.
+/// A deck course: its seasons and the episodes in them. The AI lab is the bundled one (`AILab/course.json` beside
+/// `AILab/episodes/<id>.json`); others are imported from one-file course files (`LabCourseFile`) and play on the same deck.
 struct LabCourse: Sendable {
     let info: LabCourseInfo
     let episodes: [LabEpisode]
+    /// Imported by the learner from a course file. Such a course pays no 연구비, has no cheat sheet or diagnosis of its own,
+    /// and keeps its records under its own id (`LabStore.key`).
+    var imported = false
+
+    var id: String { info.id }
 
     var seasons: [LabSeason] { info.seasons }
     var title: String { info.title.text }
@@ -92,7 +98,24 @@ struct LabCourseInfo: Decodable, Sendable {
     /// The colours engraved cards take, six hexadecimal digits each, used in turn down the deck: card 1 the first, card 6 the first again.
     var cardColors: [String]?
 
-    static let empty = LabCourseInfo(id: "", title: "", gauge: "", base: 0, rewards: LabRewards(fail: 0, edition: 0, courseLesson: 0), seasons: [])
+    static let empty = LabCourseInfo(id: "", title: "", gauge: "", base: 0, rewards: .none, seasons: [])
+
+    init(id: String, title: LabText, gauge: LabText, base: Int, rewards: LabRewards, seasons: [LabSeason], cardColors: [String]? = nil) {
+        (self.id, self.title, self.gauge, self.base, self.rewards, self.seasons, self.cardColors) = (id, title, gauge, base, rewards, seasons, cardColors)
+    }
+
+    /// `rewards` may be left out, as in an imported course, which pays nothing anyway.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(LabText.self, forKey: .title)
+        gauge = try container.decode(LabText.self, forKey: .gauge)
+        base = try container.decode(Int.self, forKey: .base)
+        rewards = try container.decodeIfPresent(LabRewards.self, forKey: .rewards) ?? .none
+        seasons = try container.decode([LabSeason].self, forKey: .seasons)
+        cardColors = try container.decodeIfPresent([String].self, forKey: .cardColors)
+    }
+    private enum Keys: String, CodingKey { case id, title, gauge, base, rewards, seasons, cardColors }
 }
 
 /// What the lab pays, apart from each card's own amount.
@@ -103,6 +126,8 @@ struct LabRewards: Decodable, Sendable {
     var edition: Int
     /// Each lesson of a bought course finished after buying it.
     var courseLesson: Int
+
+    static let none = LabRewards(fail: 0, edition: 0, courseLesson: 0)
 }
 
 struct LabSeason: Decodable, Hashable, Sendable, Identifiable {
@@ -197,7 +222,7 @@ struct LabCardText: Decodable, Hashable, Sendable {
 
 /// The hands-on part of an episode. One shape for every kind; each kind reads the fields it needs.
 struct LabTool: Decodable, Hashable, Sendable {
-    enum Kind: String, Decodable, Sendable { case switches, chips, stamps, marks, equip, rot }
+    enum Kind: String, Decodable, Sendable, CaseIterable { case switches, chips, stamps, marks, equip, rot }
 
     var kind: Kind
     var title: LabText

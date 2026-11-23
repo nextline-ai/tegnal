@@ -40,7 +40,7 @@ Future<void> showLabEpisode(BuildContext context, LabEpisode episode) => Navigat
   ),
 );
 
-enum _Phase { choice, tool, engrave }
+enum _Phase { choice, tool, engrave, season }
 
 class LabEpisodeView extends StatefulWidget {
   const LabEpisodeView({super.key, required this.episode, this.store});
@@ -65,18 +65,45 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
   /// A 망작 just won, shown over the chat until the learner has looked at it.
   LabFail? won;
 
+  /// Choices pressed in this visit. They can be pressed again, but are drawn dimmed.
+  final Set<int> tried = {};
+
+  /// Counts wrong answers; each one washes the screen red for a moment.
+  int mistakes = 0;
+
+  void _mistake() {
+    LabHaptic.miss();
+    setState(() => mistakes += 1);
+  }
+
+  /// A choice pressed before: in this visit, a trap whose 망작 already hangs, or the right one of a card already engraved.
+  bool _seen(int index) {
+    if (tried.contains(index)) return true;
+    final choice = episode.choices[index];
+    if (choice.isRight) return store.earned(episode);
+    final fail = episode.fails.where((fail) => fail.choice == choice.text).firstOrNull;
+    return fail != null && store.hung(fail);
+  }
+
+  /// After the card is put in the deck: the season's own page when this card finished it, else back to the deck.
+  void _closeEngraving() {
+    if (engraving?.season == null) return Navigator.of(context).pop();
+    setState(() => phase = _Phase.season);
+  }
+
   LabEpisode get episode => widget.episode;
   LabStore get store => widget.store ?? LabStore.shared;
 
   void _pick(int index) {
     final choice = episode.choices[index];
+    tried.add(index);
     if (choice.isRight) {
       LabHaptic.pass();
     } else {
       final fail = episode.fails.where((fail) => fail.choice == choice.text).firstOrNull;
       if (fail != null) {
-        // No shaking and no penalty: a quiet tag, and the 망작 goes up in the gallery.
-        LabHaptic.press();
+        // No penalty: a red wash, a quiet tag, and the 망작 goes up in the gallery.
+        _mistake();
         if (store.hang(fail)) {
           hungNow.add(fail.id);
           // Won for the first time: the answer is read in the chat first, then the 망작 comes up as a card won.
@@ -95,7 +122,10 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
     final won = this.won;
     return Stack(
       children: [
-        Positioned.fill(child: _stage(context, background)),
+        Positioned.fill(
+          child: LabMistake(signal: _mistake, child: _stage(context, background)),
+        ),
+        Positioned.fill(child: LabMistakeWash(count: mistakes)),
         if (won != null)
           Positioned.fill(
             child: LabFailReveal(key: ValueKey(won.id), fail: won, done: () => setState(() => this.won = null)),
@@ -111,7 +141,7 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
         bottom: false,
         child: Column(
           children: [
-            if (phase != _Phase.engrave) _bar(context),
+            if (phase == _Phase.choice || phase == _Phase.tool) _bar(context),
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 450),
@@ -130,6 +160,12 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
                     episode: episode,
                     engraving: engraving,
                     seconds: _clock.elapsed.inSeconds,
+                    store: store,
+                    done: _closeEngraving,
+                  ),
+                  _Phase.season => LabSeasonCompleteView(
+                    key: const ValueKey(_Phase.season),
+                    season: store.course.seasons.firstWhere((season) => season.number == engraving!.season),
                     store: store,
                     done: () => Navigator.of(context).pop(),
                   ),
@@ -264,16 +300,30 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
       Text(labWords(episode.disaster.question.text), style: LabFont.text(15, color: labSecondary(context))),
       const SizedBox(height: 16),
       for (final (index, choice) in episode.choices.indexed) ...[
-        LabButton(
-          key: Key('lab.choice.$index'),
-          onPressed: () => _pick(index),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: SizedBox(
-            width: double.infinity,
-            child: Text(
-              studyWords(choice.text.text),
-              textAlign: TextAlign.left,
-              style: LabFont.text(16, weight: FontWeight.w600, color: labLabel(context)),
+        // Already pressed: it can be pressed again, but reads as done.
+        Semantics(
+          value: _seen(index) ? L10n.text('lab.choice.seen') : null,
+          child: Opacity(
+            opacity: _seen(index) ? 0.42 : 1,
+            child: LabButton(
+              key: Key('lab.choice.$index'),
+              onPressed: () => _pick(index),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      studyWords(choice.text.text),
+                      textAlign: TextAlign.left,
+                      style: LabFont.text(16, weight: FontWeight.w600, color: labLabel(context)),
+                    ),
+                  ),
+                  if (_seen(index)) ...[
+                    const SizedBox(width: 10),
+                    Icon(CupertinoIcons.checkmark_alt, key: Key('lab.choice.seen.$index'), size: 16, color: labLabel(context)),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -580,7 +630,7 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
                                         color: color,
                                         state: LabCardState.earned,
                                         footer: store.course.footer(episode),
-                                        date: labStamp(store.progress.cards[episode.id] ?? LabStore.now),
+                                        date: labStamp(store.engraved(episode) ?? LabStore.now),
                                         engraved: _reveal.value * (count + 1),
                                         large: true,
                                       ),
@@ -707,12 +757,15 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
               builder: (context, value, _) => Text('${value.round()}%', style: LabFont.number(17, color: LabPalette.gauge.resolveFrom(context))),
             ),
           ]),
-          divider,
-          row(const Key('lab.engrave.income'), widget.store.shop.currency.text, [
-            Text('+${engraving.total}', style: LabFont.number(15, color: label)),
-            const SizedBox(width: 4),
-            Text(L10n.text('lab.engrave.income', ['${engraving.cardReward}', '${engraving.failReward}']), style: LabFont.text(13, color: secondary)),
-          ]),
+          // An imported course pays no 연구비, so it has no row for it.
+          if (!widget.store.course.imported) ...[
+            divider,
+            row(const Key('lab.engrave.income'), widget.store.shop.currency.text, [
+              Text('+${engraving.total}', style: LabFont.number(15, color: label)),
+              const SizedBox(width: 4),
+              Text(L10n.text('lab.engrave.income', ['${engraving.cardReward}', '${engraving.failReward}']), style: LabFont.text(13, color: secondary)),
+            ]),
+          ],
           divider,
           row(null, L10n.text('lab.engrave.fails'), [
             Text(L10n.text('lab.count.pieces', ['${engraving.failsHung}']), style: LabFont.number(15, color: LabPalette.fail.resolveFrom(context))),
@@ -747,5 +800,184 @@ Future<void> labShare(GlobalKey key, String title) async {
     await AppAway.run(() => _screen.invokeMethod<void>('shareImage', {'path': file.path, 'title': title}));
   } on Object catch (error) {
     debugPrint('Lab share: $error');
+  }
+}
+
+// MARK: - A season finished
+
+/// Shown once, right after the card that finishes a season is put in the deck: the season's cards fan out in their colours,
+/// with what the season added up to and the season that opens next (`LabSeasonCompleteView`).
+class LabSeasonCompleteView extends StatefulWidget {
+  const LabSeasonCompleteView({super.key, required this.season, required this.store, required this.done});
+  final LabSeason season;
+  final LabStore store;
+  final VoidCallback done;
+
+  @override
+  State<LabSeasonCompleteView> createState() => _LabSeasonCompleteViewState();
+}
+
+class _LabSeasonCompleteViewState extends State<LabSeasonCompleteView> with TickerProviderStateMixin {
+  late final AnimationController _fan = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+  late final AnimationController _settle = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+
+  @override
+  void initState() {
+    super.initState();
+    LabHaptic.pass();
+    _fan.forward();
+    Future<void>.delayed(const Duration(milliseconds: 450), () {
+      if (mounted) _settle.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _fan.dispose();
+    _settle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store, season = widget.season, course = store.course;
+    final cards = [for (final id in season.episodes) ?course.episode(id)];
+    final fails = [for (final card in cards) ...card.fails];
+    final next =
+        course.seasons.where((value) => value.opensAfter == season.number).firstOrNull ??
+        course.seasons.where((value) => value.number > season.number).firstOrNull;
+    final secondary = labSecondary(context);
+    final middle = (cards.length - 1) / 2;
+    Widget stat(String title, String value) => Expanded(
+      child: Column(
+        children: [
+          Text(value, style: LabFont.number(19, color: labLabel(context))),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: LabFont.text(12, color: secondary),
+          ),
+        ],
+      ),
+    );
+    return ColoredBox(
+      color: TegnalColors.background.resolveFrom(context),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.paddingOf(context).bottom + 10),
+        child: Column(
+          children: [
+            const Spacer(),
+            SizedBox(
+              height: 190,
+              child: AnimatedBuilder(
+                animation: _fan,
+                builder: (context, _) {
+                  final t = Curves.easeOutBack.transform(_fan.value);
+                  return Opacity(
+                    opacity: _fan.value.clamp(0, 1),
+                    child: Transform.scale(
+                      scale: 0.7 + 0.3 * t,
+                      child: Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          for (final (index, card) in cards.indexed)
+                            Transform.translate(
+                              offset: Offset((index - middle) * 34 * t, (index - middle).abs() * 6 * t),
+                              child: Transform.rotate(
+                                angle: (index - middle) * 9 * t * 3.1415926 / 180,
+                                alignment: Alignment.bottomCenter,
+                                child: Container(
+                                  width: 96,
+                                  height: 136,
+                                  padding: const EdgeInsets.all(10),
+                                  alignment: Alignment.topLeft,
+                                  decoration: ShapeDecoration(
+                                    color: LabPalette.hex(course.color(card)),
+                                    shape: RoundedSuperellipseBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      side: const BorderSide(color: Color(0x2EFFFFFF), width: 0.75),
+                                    ),
+                                    shadows: const [BoxShadow(color: Color(0x4D000000), blurRadius: 20, offset: Offset(0, 6))],
+                                  ),
+                                  child: Text(card.digits, style: LabFont.number(12, color: const Color(0xD9FFFFFF))),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            FadeTransition(
+              opacity: _settle,
+              child: Column(
+                children: [
+                  const SizedBox(height: 28),
+                  Text(
+                    L10n.text('lab.season.done', ['${season.number}']),
+                    key: const Key('lab.season.done'),
+                    style: LabFont.text(13, weight: FontWeight.w700, color: LabPalette.pass.resolveFrom(context), tracking: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    season.title.text,
+                    textAlign: TextAlign.center,
+                    style: LabFont.voice(28, color: labLabel(context)),
+                  ),
+                  if (season.summary case final summary?) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      summary.text,
+                      textAlign: TextAlign.center,
+                      style: LabFont.text(15, color: secondary),
+                    ),
+                  ],
+                  const SizedBox(height: 26),
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: ShapeDecoration(
+                      color: FormColors.listRow.resolveFrom(context),
+                      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: Row(
+                      children: [
+                        stat(L10n.text('lab.season.cards'), '${cards.length}'),
+                        stat(course.info.gauge.text, '${store.rate}%'),
+                        stat(L10n.text('lab.season.fails'), '${fails.where(store.hung).length}/${fails.length}'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            FadeTransition(
+              opacity: _settle,
+              child: Column(
+                children: [
+                  Text(
+                    next == null ? L10n.text('lab.season.all') : L10n.text('lab.season.next', ['${next.number}', next.title.text]),
+                    textAlign: TextAlign.center,
+                    style: LabFont.text(14, weight: FontWeight.w600, color: secondary),
+                  ),
+                  const SizedBox(height: 10),
+                  LabButton(
+                    key: const Key('lab.season.continue'),
+                    style: LabButtonStyle.primary,
+                    expand: true,
+                    onPressed: widget.done,
+                    child: Text(L10n.text('lab.season.continue')),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

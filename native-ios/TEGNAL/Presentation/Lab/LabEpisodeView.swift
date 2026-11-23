@@ -6,7 +6,7 @@ struct LabEpisodeView: View {
     @Environment(\.dismiss) private var dismiss
     private var store: LabStore { LabStore.shared }
 
-    enum Phase: Int { case choice, tool, engrave }
+    enum Phase: Int { case choice, tool, engrave, season }
     @State private var phase = Phase.choice
     /// The choice picked, shown with its verdict until the learner goes back to the choices.
     @State private var picked: Int?
@@ -17,6 +17,10 @@ struct LabEpisodeView: View {
     @State private var engraving: LabEngraving?
     /// A 망작 just won, shown over the chat until the learner has looked at it.
     @State private var won: LabFail?
+    /// Choices pressed in this visit. They can be pressed again, but are drawn dimmed.
+    @State private var tried: Set<Int> = []
+    /// Counts wrong answers; each one washes the screen red for a moment.
+    @State private var mistakes = 0
 
     var body: some View {
         NavigationStack {
@@ -24,12 +28,16 @@ struct LabEpisodeView: View {
                 switch phase {
                 case .choice: choiceStage.transition(.opacity)
                 case .tool: toolStage.transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
-                case .engrave: LabEngraveView(episode: episode, engraving: engraving, seconds: Date().timeIntervalSince(started), hung: hungNow) { dismiss() }
+                case .engrave: LabEngraveView(episode: episode, engraving: engraving, seconds: Date().timeIntervalSince(started), hung: hungNow) { closeEngraving() }
                     .transition(.opacity)
+                case .season:
+                    if let number = engraving?.season, let season = store.course.seasons.first(where: { $0.number == number }) {
+                        LabSeasonCompleteView(season: season) { dismiss() }.transition(.opacity)
+                    }
                 }
             }
             .toolbar {
-                if phase != .engrave {
+                if phase == .choice || phase == .tool {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { dismiss() } label: { Image(systemName: "xmark") }
                             .accessibilityLabel(L10n.text("Close")).accessibilityIdentifier("lab.episode.close")
@@ -45,10 +53,18 @@ struct LabEpisodeView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+        .overlay { LabMistakeWash(count: mistakes) }
         .overlay {
             if let won { LabFailReveal(fail: won) { self.won = nil }.transition(.identity) }
         }
+        .environment(\.labMistake) { mistakes += 1; LabHaptic.miss() }
         .labLines()
+    }
+
+    /// After the card is put in the deck: the season's own page when this card finished it, else back to the deck.
+    private func closeEngraving() {
+        guard engraving?.season != nil else { return dismiss() }
+        withAnimation(.easeInOut(duration: 0.5)) { phase = .season }
     }
 
     /// Four short bars: disaster, choice, tool, engraving.
@@ -98,11 +114,19 @@ struct LabEpisodeView: View {
             }
             VStack(spacing: 8) {
                 ForEach(episode.choices.indices, id: \.self) { index in
+                    let seen = seen(index)
                     Button { pick(index) } label: {
-                        Text(episode.choices[index].text.text).font(.system(size: 16, weight: .semibold)).multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
+                        HStack(spacing: 10) {
+                            Text(episode.choices[index].text.text).font(.system(size: 16, weight: .semibold)).multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            // Already pressed: it can be pressed again, but reads as done.
+                            if seen { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)) }
+                        }
+                        .padding(.vertical, 6)
                     }
                     .labSecondary().buttonBorderShape(.roundedRectangle(radius: 18))
+                    .opacity(seen ? 0.42 : 1)
+                    .accessibilityValue(seen ? L10n.text("lab.choice.seen") : "")
                     .accessibilityIdentifier("lab.choice.\(index)")
                 }
             }
@@ -139,13 +163,23 @@ struct LabEpisodeView: View {
         .transition(.opacity)
     }
 
+    /// A choice pressed before: in this visit, a trap whose 망작 already hangs, or the right one of a card already engraved.
+    private func seen(_ index: Int) -> Bool {
+        if tried.contains(index) { return true }
+        let choice = episode.choices[index]
+        if choice.isRight { return store.earned(episode) }
+        return episode.fails.first { $0.choice == choice.text }.map(store.hung) ?? false
+    }
+
     private func pick(_ index: Int) {
         let choice = episode.choices[index]
+        tried.insert(index)
         if choice.isRight {
             LabHaptic.pass()
         } else if let fail = episode.fails.first(where: { $0.choice == choice.text }) {
-            // No shaking and no penalty: a quiet tag, and the 망작 goes up in the gallery.
-            LabHaptic.press()
+            // No penalty: a red wash, a quiet tag, and the 망작 goes up in the gallery.
+            mistakes += 1
+            LabHaptic.miss()
             if store.hang(fail) {
                 hungNow.append(fail.id)
                 // Won for the first time: the answer is read in the chat first, then the 망작 comes up as a card won.
@@ -231,7 +265,7 @@ struct LabEngraveView: View {
                     } back: {
                         LabCardFace(serial: episode.serial, title: episode.title.text, line: line, color: store.course.color(episode), state: .earned,
                                     footer: [episode.label, season.map { L10n.text("lab.season", String($0.number)) }].compactMap { $0 }.joined(separator: " · "),
-                                    date: (store.progress.cards[episode.id] ?? LabStore.now).labStamp, engraved: revealed, large: true)
+                                    date: (store.engraved(episode) ?? LabStore.now).labStamp, engraved: revealed, large: true)
                             .overlay { LabSheen(progress: sheen).clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous)) }
                     }
                     .frame(width: height * 280 / 352, height: height)
@@ -276,15 +310,18 @@ struct LabEngraveView: View {
             }
             .rowPadding()
             .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.rate")
-            Divider()
-            HStack {
-                Text(store.shop.currency.text)
-                Spacer()
-                Text("+\(engraving.total)").font(LabFont.number(15))
-                Text(L10n.text("lab.engrave.income", String(engraving.cardReward), String(engraving.failReward))).font(.system(size: 13)).foregroundStyle(.secondary)
+            // An imported course pays no 연구비, so it has no row for it.
+            if !store.course.imported {
+                Divider()
+                HStack {
+                    Text(store.shop.currency.text)
+                    Spacer()
+                    Text("+\(engraving.total)").font(LabFont.number(15))
+                    Text(L10n.text("lab.engrave.income", String(engraving.cardReward), String(engraving.failReward))).font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+                .rowPadding()
+                .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.income")
             }
-            .rowPadding()
-            .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.income")
             Divider()
             HStack {
                 Text(L10n.text("lab.engrave.fails"))
@@ -352,10 +389,100 @@ struct LabShareCard: View {
         let store = LabStore.shared
         let card = LabCardFace(serial: episode.serial, title: episode.title.text, line: episode.card.line.text, color: store.course.color(episode), state: .earned,
                                footer: store.course.season(of: episode).map { L10n.text("lab.season", String($0.number)) },
-                               date: store.progress.cards[episode.id]?.labStamp, large: true)
+                               date: store.engraved(episode)?.labStamp, large: true)
             .frame(width: 280, height: 352).padding(24).environment(\.colorScheme, .dark)
         let renderer = ImageRenderer(content: card)
         renderer.scale = 3
         return renderer.uiImage.map { Image(uiImage: $0) }
+    }
+}
+
+// MARK: - A season finished
+
+/// Shown once, right after the card that finishes a season is put in the deck: the season's cards fan out in their colours,
+/// with what the season added up to and the season that opens next.
+struct LabSeasonCompleteView: View {
+    let season: LabSeason
+    let done: () -> Void
+    private var store: LabStore { LabStore.shared }
+    @State private var fanned = false
+    @State private var settled = false
+
+    var body: some View {
+        let course = store.course
+        let cards = season.episodes.compactMap(course.episode)
+        let fails = cards.flatMap(\.fails)
+        let next = course.seasons.first { $0.opensAfter == season.number } ?? course.seasons.first { $0.number > season.number }
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            ZStack {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { index, episode in
+                    let middle = Double(cards.count - 1) / 2
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(labHex: course.color(episode)))
+                        .overlay(alignment: .topLeading) {
+                            Text(episode.digits).font(LabFont.number(12)).foregroundStyle(.white.opacity(0.85)).padding(10)
+                        }
+                        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.75) }
+                        .frame(width: 96, height: 136)
+                        .rotationEffect(.degrees(fanned ? (Double(index) - middle) * 9 : 0), anchor: .bottom)
+                        .offset(x: fanned ? (Double(index) - middle) * 34 : 0, y: fanned ? abs(Double(index) - middle) * 6 : 0)
+                        .labCardShadow(.black.opacity(0.3), radius: 10, y: 6)
+                }
+            }
+            .frame(height: 190)
+            .scaleEffect(fanned ? 1 : 0.7)
+            .opacity(fanned ? 1 : 0)
+            .accessibilityHidden(true)
+            VStack(spacing: 10) {
+                Text(L10n.text("lab.season.done", String(season.number))).font(.system(size: 13, weight: .bold)).tracking(1.4).foregroundStyle(LabPalette.pass)
+                    .accessibilityIdentifier("lab.season.done")
+                Text(season.title.text).font(LabFont.voice(28)).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                if let summary = season.summary { Text(summary.text).font(.system(size: 15)).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+            }
+            .padding(.horizontal, 28).padding(.top, 28)
+            .opacity(settled ? 1 : 0).offset(y: settled ? 0 : 14)
+            HStack(spacing: 0) {
+                stat(L10n.text("lab.season.cards"), "\(cards.count)")
+                Divider().frame(height: 36)
+                stat(course.info.gauge.text, "\(store.rate)%")
+                Divider().frame(height: 36)
+                stat(L10n.text("lab.season.fails"), "\(fails.filter(store.hung).count)/\(fails.count)")
+            }
+            .padding(.vertical, 14)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(.horizontal, 20).padding(.top, 26)
+            .opacity(settled ? 1 : 0)
+            Spacer(minLength: 24)
+            VStack(spacing: 10) {
+                if let next {
+                    Text(L10n.text("lab.season.next", String(next.number), next.title.text)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text(L10n.text("lab.season.all")).font(.system(size: 14, weight: .semibold)).foregroundStyle(.secondary)
+                }
+                Button(action: done) { Text(L10n.text("lab.season.continue")).frame(maxWidth: .infinity) }
+                    .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18))
+                    .accessibilityIdentifier("lab.season.continue")
+            }
+            .padding(.horizontal, 20).padding(.bottom, 10)
+            .opacity(settled ? 1 : 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemGroupedBackground))
+        .task {
+            LabHaptic.pass()
+            withAnimation(.spring(duration: 0.8, bounce: 0.25)) { fanned = true }
+            try? await Task.sleep(for: .milliseconds(450))
+            withAnimation(.easeOut(duration: 0.5)) { settled = true }
+        }
+    }
+
+    private func stat(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value).font(LabFont.number(19))
+            Text(title).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }

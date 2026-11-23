@@ -61,8 +61,8 @@ final class LabUITests: XCTestCase {
         // Courses: the lab is the one on screen, so its card opens nothing; the 2D course not bought shows its price.
         app.tabBars.buttons["코스"].firstMatch.tap()
         XCTAssertTrue(element(app, "lab.2d.buy").waitForExistence(timeout: 5))
-        XCTAssertFalse(element(app, "lab.courses.open.lab").exists)
-        XCTAssertFalse(element(app, "lab.courses.open.tags").exists, "A course not bought does not open from its card")
+        XCTAssertFalse(element(app, "lab.courses.open.ai-lab").exists)
+        XCTAssertFalse(element(app, "lab.courses.open.2d-ai").exists, "A course not bought does not open from its card")
     }
 
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {

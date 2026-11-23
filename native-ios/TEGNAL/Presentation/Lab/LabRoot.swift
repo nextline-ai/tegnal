@@ -17,7 +17,8 @@ enum LabTab: String, Hashable {
     }
 }
 
-/// AI 실험실: what learning mode shows. The stock tab bar and navigation stacks; the cards, paper and gauges are the lab's own.
+/// The deck engine: AI 실험실, and every imported deck course on the same screens (without the AI lab's cheat sheet and diagnosis).
+/// The stock tab bar and navigation stacks; the cards, paper and gauges are the lab's own.
 /// The way back to the home scene is the swipe up from the bottom, as everywhere in learning mode.
 struct LabRoot: View {
     @Environment(BooruStore.self) private var booru
@@ -51,7 +52,7 @@ struct LabRoot: View {
     @ViewBuilder private var tabs: some View {
         let deck = NavigationStack { LabDeckView(play: { playing = $0 }, diagnose: { diagnosing = true }, covered: playing != nil) }
         let fails = NavigationStack { LabFailsView(play: { playing = $0 }, open: { revealing = $0 }) }
-        let courses = NavigationStack { LabCoursesView(here: .lab) }
+        let courses = NavigationStack { LabCoursesView() }
         let shop = NavigationStack { LabShopView() }
         let sheet = NavigationStack { LabSheetView() }
         let newEdition: Text? = store.editionWaiting ? Text(L10n.text("lab.new")) : nil
@@ -61,9 +62,11 @@ struct LabRoot: View {
                 Tab(L10n.text("lab.tab.fails"), systemImage: "photo.fill", value: LabTab.fails) { fails }
                 Tab(L10n.text("lab.tab.courses"), systemImage: LabTab.coursesSymbol, value: LabTab.courses) { courses }
                 Tab(L10n.text("lab.tab.shop"), systemImage: "bag.fill", value: LabTab.shop) { shop }
-                // Like Smart in viewing mode: the cheat sheet stands apart at the right end of the dock.
-                Tab(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill", value: LabTab.sheet, role: LabTab.trailingRole) { sheet }
-                    .badge(newEdition)
+                // Like Smart in viewing mode: the cheat sheet stands apart at the right end of the dock. It is the AI lab's own.
+                if !store.course.imported {
+                    Tab(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill", value: LabTab.sheet, role: LabTab.trailingRole) { sheet }
+                        .badge(newEdition)
+                }
             }
         } else {
             TabView(selection: $mode.labTab) {
@@ -71,14 +74,17 @@ struct LabRoot: View {
                 fails.tabItem { Label(L10n.text("lab.tab.fails"), systemImage: "photo.fill") }.tag(LabTab.fails)
                 courses.tabItem { Label(L10n.text("lab.tab.courses"), systemImage: LabTab.coursesSymbol) }.tag(LabTab.courses)
                 shop.tabItem { Label(L10n.text("lab.tab.shop"), systemImage: "bag.fill") }.tag(LabTab.shop)
-                sheet.tabItem { Label(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill") }.tag(LabTab.sheet).badge(newEdition)
+                if !store.course.imported {
+                    sheet.tabItem { Label(L10n.text("lab.tab.sheet"), systemImage: "doc.text.fill") }.tag(LabTab.sheet).badge(newEdition)
+                }
             }
         }
     }
 
     /// Lessons of the 2D course finished so far, which pay once the course is bought. A learner who studied tags before the lab keeps it.
     private func countCourses() {
-        let lessons = ((try? booru.studyStore.lessons()) ?? [:]).count
+        // Lessons of imported courses (`course:<id>:…`) do not count: only 2D AI 배우기's own pay.
+        let lessons = ((try? booru.studyStore.lessons()) ?? [:]).keys.filter { !$0.hasPrefix("course:") && !$0.hasPrefix("addon:") }.count
         let xp = ((try? booru.studyStore.days()) ?? []).reduce(0) { $0 + $1.xp }
         store.grandfather(lessons: lessons, xp: xp)
         store.count(lessons: lessons, of: LabStore.tagCourse)
@@ -86,7 +92,7 @@ struct LabRoot: View {
 
     /// A first visit begins with the one-minute check, once the home scene has gone.
     private func greet() {
-        guard !store.progress.greeted, store.diagnosis != nil, !HomeStage.shared.coversScreen, !diagnosing else { return }
+        guard !store.progress.greeted, store.offersDiagnosis, !HomeStage.shared.coversScreen, !diagnosing else { return }
         store.greeted()
         Task { try? await Task.sleep(for: .milliseconds(400)); diagnosing = true }
     }
@@ -161,7 +167,8 @@ struct LabDeckView: View {
                         .accessibilityElement().accessibilityLabel(course.info.gauge.text).accessibilityValue("\(rate)%")
                         .accessibilityIdentifier("lab.rate")
                 }
-                let stacked = earned.count + (store.type != nil || store.diagnosis != nil ? 1 : 0)
+                LabSeasonTrack(course: course, shown: shown, current: (next ?? earned.last).flatMap(course.season))
+                let stacked = earned.count + (store.offersDiagnosis ? 1 : 0)
                 VStack(spacing: 0) {
                     if stacked > 2 {
                         Button { fan(!fanned) } label: {
@@ -178,6 +185,10 @@ struct LabDeckView: View {
                     VStack(spacing: 0) {
                         typeCard(depth: earned.count + 1)
                         ForEach(Array(earned.enumerated()), id: \.element.id) { index, episode in
+                            // Fanned out, each season's cards sit under its own heading.
+                            if fanned, let season = course.season(of: episode), index == 0 || course.season(of: earned[index - 1]) != season {
+                                seasonHeading(season).transition(.opacity)
+                            }
                             NavigationLink(value: episode.id) {
                                 band(depth: earned.count - index) {
                                     LabCardFace(serial: episode.serial, title: episode.title.text, line: episode.card.line.text, color: course.color(episode),
@@ -204,7 +215,15 @@ struct LabDeckView: View {
                     if !waiting.isEmpty {
                         VStack(spacing: Self.lockedPeek - Self.lockedHeight) {
                             ForEach(Array(waiting.enumerated()), id: \.element.id) { offset, episode in
-                                HStack {
+                                let before = offset == 0 ? next : waiting[offset - 1]
+                                let season = course.season(of: episode)
+                                HStack(spacing: 8) {
+                                    // A locked card that opens a new season carries its season's name.
+                                    if let season, before.flatMap(course.season) != season {
+                                        Text(L10n.text("lab.season", String(season.number)))
+                                            .font(.system(size: 11, weight: .bold)).padding(.horizontal, 7).padding(.vertical, 2)
+                                            .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.5), lineWidth: 1) }
+                                    }
                                     Text(episode.digits + " · " + episode.title.text).lineLimit(1)
                                     Spacer(minLength: 8)
                                     Text(L10n.text("lab.card.locked"))
@@ -233,7 +252,7 @@ struct LabDeckView: View {
             }
         }
         .appSheet(isPresented: $showingType) { LabTypeSheet(diagnose: diagnose) }
-        .onAppear { if !covered { shown = Set(store.progress.cards.keys) } }
+        .onAppear { if !covered { shown = store.earnedIDs } }
         .onChange(of: covered) { _, covered in
             guard !covered else { return }
             // The cover has gone. The blank card in front comes up in its engraved colours, settling to a card's size; then the
@@ -241,7 +260,7 @@ struct LabDeckView: View {
             // and the ring climbs.
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
-                let all = Set(store.progress.cards.keys)
+                let all = store.earnedIDs
                 let added = all.subtracting(shown)
                 guard added.count == 1, let id = added.first, store.course.episodes.first(where: { !shown.contains($0.id) })?.id == id else {
                     withAnimation(.spring(duration: 0.75, bounce: 0.1)) { shown = all }
@@ -261,7 +280,20 @@ struct LabDeckView: View {
                 LabHaptic.snap()
             }
         }
-        .onChange(of: store.progress.cards.count) { if !covered { withAnimation(.spring(duration: 0.6)) { shown = Set(store.progress.cards.keys) } } }
+        .onChange(of: store.earnedIDs.count) { if !covered { withAnimation(.spring(duration: 0.6)) { shown = store.earnedIDs } } }
+    }
+
+    /// A season's name over its cards, when the deck is fanned out.
+    private func seasonHeading(_ season: LabSeason) -> some View {
+        HStack(spacing: 8) {
+            Text(L10n.text("lab.season", String(season.number))).font(.system(size: 12, weight: .bold)).foregroundStyle(.secondary)
+            Text(season.title.text).font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary).lineLimit(1)
+            Rectangle().fill(Color.secondary.opacity(0.25)).frame(height: 1)
+        }
+        .padding(.horizontal, 6).padding(.top, 14).padding(.bottom, 10)
+        // The page's own background, so the heading cuts cleanly across the foot of the card above it.
+        .background(Color(uiColor: .systemBackground))
+        .accessibilityAddTraits(.isHeader)
     }
 
     /// "시즌 1 · 3/15", under the title.
@@ -291,7 +323,9 @@ struct LabDeckView: View {
 
     /// Card No. 000: the learner's type, or the paper card that invites the check. It sits at the back of the stack.
     @ViewBuilder private func typeCard(depth: Int) -> some View {
-        if let type = store.type {
+        if !store.offersDiagnosis {
+            EmptyView()
+        } else if let type = store.type {
             Button { showingType = true } label: {
                 band(depth: depth) {
                     LabCardFace(serial: "No. 000", title: type.name.text, line: type.name.text, color: LabPalette.ink, state: .earned,
@@ -299,7 +333,7 @@ struct LabDeckView: View {
                 }
             }
             .buttonStyle(LabPressStyle()).accessibilityIdentifier("lab.deck.type")
-        } else if store.diagnosis != nil {
+        } else {
             Button(action: diagnose) {
                 band(depth: depth) {
                     LabCardFace(serial: "No. 000 · " + L10n.text("lab.card.blank"), title: L10n.text("lab.deck.diagnose"), state: .blank, top: true)
@@ -349,7 +383,7 @@ struct LabDeckView: View {
             Spacer(minLength: 18)
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 5) {
-                    (Text(L10n.text("lab.card.impact") + " ") + Text("+\(episode.impact)%").font(LabFont.number(11)).foregroundColor(LabPalette.paperInk))
+                    (Text((store.course.imported ? L10n.text("lab.card.impactOf", store.course.info.gauge.text) : L10n.text("lab.card.impact")) + " ") + Text("+\(episode.impact)%").font(LabFont.number(11)).foregroundColor(LabPalette.paperInk))
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(LabPalette.paperMuted)
                     LabImpactPips(impact: episode.impact)
                 }
@@ -419,7 +453,7 @@ struct LabCardDetailView: View {
             Section {
                 LabCardFace(serial: episode.serial, title: episode.title.text, line: episode.card.line.text, color: store.course.color(episode), state: .earned,
                             footer: [episode.label, season.map { L10n.text("lab.season", String($0.number)) }].compactMap { $0 }.joined(separator: " · "),
-                            date: store.progress.cards[episode.id]?.labStamp, large: true)
+                            date: store.engraved(episode)?.labStamp, large: true)
                     .frame(width: 280, height: 352).frame(maxWidth: .infinity)
                     .labCardShadow(Color(labHex: store.course.color(episode)).opacity(0.45), radius: 24, y: 14)
             }
@@ -480,134 +514,42 @@ struct LabRow: View {
     }
 }
 
-// MARK: - Courses
-
-/// The 코스 tab, in the lab and in the 2D AI course alike: every course as a card, the way the 2D course was shown before it was
-/// bought. The course on screen now is marked on its card; another one owned opens with a button under it; one not bought yet
-/// shows its price and the balance.
-struct LabCoursesView: View {
-    enum Place { case lab, tags }
-    let here: Place
-    @State private var store = LabStore.shared
-    @State private var confirming = false
+/// The seasons side by side under the deck's title: one bar per season, as long as it has cards and filled as far as they are
+/// engraved, the season in play picked out, with its name below. Seasons read as chapters of their own.
+struct LabSeasonTrack: View {
+    let course: LabCourse
+    let shown: Set<String>
+    let current: LabSeason?
 
     var body: some View {
-        let item = store.shop.item(LabStore.tagCourse)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                LabHeader(kicker: Text(L10n.text("lab.courses.subtitle")), title: L10n.text("lab.tab.courses"))
-                // A course owned and not on screen opens with a tap on its card.
-                opening(here == .lab ? nil : { StudyMode.shared.closeTags() }, id: "lab.courses.open.lab") { labCard }
-                VStack(alignment: .leading, spacing: 12) {
-                    opening(here == .tags || !store.ownsTagCourse ? nil : { StudyMode.shared.openTags() }, id: "lab.courses.open.tags") { tagsCard }
-                    if !store.ownsTagCourse, let item, let price = item.price {
-                        purchase(item, price)
+        VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { proxy in
+                let total = CGFloat(max(1, course.episodes.count))
+                let room = proxy.size.width - 5 * CGFloat(max(0, course.seasons.count - 1))
+                HStack(spacing: 5) {
+                    ForEach(course.seasons) { season in
+                        let done = season.episodes.filter(shown.contains).count
+                        let here = season == current
+                        let width = room * CGFloat(season.episodes.count) / total
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.secondary.opacity(here ? 0.3 : 0.16))
+                            Capsule().fill(done == season.episodes.count ? LabPalette.pass : Color.primary)
+                                .frame(width: width * CGFloat(done) / CGFloat(max(1, season.episodes.count)))
+                        }
+                        .frame(width: width, height: here ? 6 : 4)
+                        .accessibilityElement()
+                        .accessibilityLabel(L10n.text("lab.season", String(season.number)) + " · " + season.title.text)
+                        .accessibilityValue("\(done)/\(season.episodes.count)")
                     }
                 }
+                .frame(maxHeight: .infinity)
             }
-            .padding(.horizontal, 20).padding(.bottom, 32)
-        }
-        .scrollIndicators(.hidden)
-        .toolbar(.hidden, for: .navigationBar)
-        .labLines()
-        .alert(L10n.text("lab.shop.confirm", L10n.text("Tag Study")), isPresented: $confirming) {
-            Button(L10n.text("lab.shop.buy", String(item?.price ?? 0))) {
-                if let item, store.buy(item) == .bought { LabHaptic.pass(); StudyMode.shared.openTags() }
+            .frame(height: 6)
+            if let current {
+                Text(current.title.text).font(.system(size: 14, weight: .semibold)).foregroundStyle(.secondary).lineLimit(2)
+                    .accessibilityIdentifier("lab.season.current")
             }
-            Button(L10n.text("Cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.text("lab.shop.confirmNote", String(store.balance - (item?.price ?? 0))))
         }
-    }
-
-    /// The AI lab: ink, with a small fan of its card colours in the corner.
-    private var labCard: some View {
-        let colors = store.course.info.cardColors ?? [LabPalette.ink]
-        return card(kicker: L10n.text("lab.courses.lab.kicker"), title: store.course.title, current: here == .lab, fill: Color(labHex: "2C2C2E").gradient, glow: .black.opacity(0.3),
-                    features: [("rectangle.stack.fill", L10n.text("lab.courses.lab.cards", String(store.course.episodes.count), String(store.course.seasons.count))),
-                               ("doc.text.fill", L10n.text("lab.courses.lab.sheet")),
-                               ("gauge.with.dots.needle.67percent", L10n.text("lab.courses.lab.rate", store.course.info.gauge.text, "\(store.rate)%"))]) {
-            ZStack {
-                ForEach(Array(colors.prefix(3).enumerated()), id: \.offset) { index, hex in
-                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(labHex: hex))
-                        .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.75) }
-                        .frame(width: 58, height: 78)
-                        .rotationEffect(.degrees(Double(index - 1) * 11), anchor: .bottom)
-                        .offset(x: CGFloat(index - 1) * 14)
-                        .labCardShadow(.black.opacity(0.35), radius: 6, y: 3)
-                }
-            }
-            .offset(x: -30, y: 16)
-            .accessibilityHidden(true)
-        }
-    }
-
-    /// 2D AI 배우기: the course's purple, with its guide leaning in from the corner.
-    private var tagsCard: some View {
-        card(kicker: L10n.text("lab.courses.tags.kicker"), title: L10n.text("Tag Study"), current: here == .tags, fill: StudyTheme.primary.gradient, glow: StudyTheme.primary.opacity(0.35),
-             features: [("map.fill", L10n.text("lab.2d.lessons", String(StudyPath.bundled.lessons.count))),
-                        ("tag.fill", L10n.text("lab.2d.tags", String(StudyCurriculum.bundled.tags.count))),
-                        ("wand.and.stars", L10n.text("lab.2d.studio"))]) {
-            StudyMascot(pose: .wave, size: 132).offset(x: 8, y: 6).accessibilityHidden(true)
-        }
-    }
-
-    private func card<Fill: ShapeStyle, Art: View>(kicker: String, title: String, current: Bool, fill: Fill, glow: Color,
-                                                   features: [(String, String)], @ViewBuilder art: () -> Art) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(kicker).font(.system(size: 11, weight: .bold)).tracking(1.6).foregroundStyle(.white.opacity(0.75))
-                    Spacer(minLength: 8)
-                    if current {
-                        Label(L10n.text("lab.courses.here"), systemImage: "checkmark")
-                            .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 10).frame(height: 26).background(.white.opacity(0.2), in: Capsule())
-                            .accessibilityIdentifier("lab.courses.here")
-                    }
-                }
-                Text(title).font(LabFont.voice(30)).foregroundStyle(.white)
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(features, id: \.1) { symbol, text in
-                    Label(text, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                }
-            }
-            .padding(.trailing, 96)
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(alignment: .bottomTrailing) { art() }
-        .background(fill, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .labCardShadow(glow, radius: 20, y: 10)
-        .accessibilityElement(children: .contain)
-    }
-
-    /// A card that opens its course when tapped, or just the card when there is nothing to open.
-    @ViewBuilder private func opening<Card: View>(_ action: (() -> Void)?, id: String, @ViewBuilder card: () -> Card) -> some View {
-        if let action {
-            Button { LabHaptic.tick(); action() } label: { card() }
-                .buttonStyle(LabPressStyle())
-                .accessibilityIdentifier(id)
-                .accessibilityHint(L10n.text("lab.shop.open"))
-        } else {
-            card()
-        }
-    }
-
-    private func purchase(_ item: LabShopItem, _ price: Int) -> some View {
-        let state = store.canBuy(item)
-        return VStack(alignment: .leading, spacing: 12) {
-            VStack(spacing: 8) {
-                Button { confirming = true } label: { Text(L10n.text("lab.shop.buy", String(price))).frame(maxWidth: .infinity) }
-                    .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18)).disabled(state != .bought)
-                    .accessibilityIdentifier("lab.2d.buy")
-                Text(state == .bought ? L10n.text("lab.2d.balance", String(store.balance)) : L10n.text("lab.2d.short", String(store.balance), String(price - store.balance)))
-                    .font(.system(size: 13)).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            Text(L10n.text("lab.2d.how")).font(.system(size: 13)).foregroundStyle(.secondary)
-        }
+        .animation(.spring(duration: 0.6), value: shown)
     }
 }

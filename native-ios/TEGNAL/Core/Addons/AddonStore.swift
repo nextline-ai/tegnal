@@ -15,22 +15,6 @@ struct InstalledAddon: Identifiable, Equatable, Sendable {
     var id: String { addon.id }
 }
 
-/// A learning-mode track brought by an add-on, ready for the path.
-struct StudyTrack: Identifiable, Sendable {
-    /// The add-on's identifier.
-    let id: String
-    let title: StudyText
-    let summary: StudyText
-    let color: String
-    let symbol: String
-    /// The track's own sections. Its lesson identifiers start with `addon:<add-on>:` so that they never meet the main path's.
-    let path: StudyPath
-    /// The tags the track teaches beyond the app's curriculum.
-    let unit: StudyUnit?
-
-    func complete(_ records: [String: StudyLessonRecord]) -> Bool { !path.lessons.isEmpty && path.lessons.allSatisfy { records[$0.id] != nil } }
-}
-
 /// What the add-ons that are on change, gathered in one place.
 struct AddonEffects: Sendable {
     var enabledIDs: Set<String> = []
@@ -46,11 +30,9 @@ struct AddonEffects: Sendable {
     var comicsInclude: [String] = []
     var comicsExclude: [String] = []
     var imageExclude: [String] = []
-    var tracks: [StudyTrack] = []
 
     static let challengePrefix = "addon:"
     static func challengeID(addon: String, game: String) -> String { challengePrefix + addon + ":" + game }
-    static func lessonID(addon: String, lesson: String) -> String { "addon:" + addon + ":" + lesson }
 
     /// Add-ons installed later win where two translate the same tag.
     init(_ installed: [InstalledAddon] = []) {
@@ -64,7 +46,6 @@ struct AddonEffects: Sendable {
             for term in contents.searchTags?.comics?.include ?? [] where seenInclude.insert(term.lowercased()).inserted { comicsInclude.append(term) }
             for term in contents.searchTags?.comics?.exclude ?? [] where seenExclude.insert(term.lowercased()).inserted { comicsExclude.append(term) }
             for rule in contents.searchTags?.images?.exclude ?? [] where seenRules.insert(rule.lowercased()).inserted { imageExclude.append(rule) }
-            if let track = contents.learningTrack { tracks.append(Self.track(track, addon: addon.id)) }
         }
         for (mode, entries) in translations {
             var byWords: [String: String] = [:], list: [(folded: String, tag: String, words: String)] = []
@@ -139,35 +120,9 @@ struct AddonEffects: Sendable {
         }
         return result.joined(separator: " ")
     }
-
-    private static func symbol(_ name: String?, fallback: String) -> String {
-        guard let name, UIImage(systemName: name) != nil else { return fallback }
-        return name
-    }
-
-    private static func track(_ track: AddonTrack, addon: String) -> StudyTrack {
-        let sections = track.sections.map { section in
-            StudyPathSection(id: "addon:" + addon + ":" + section.id, title: section.title, summary: section.summary, color: section.color, lessons: section.lessons.map { lesson in
-                let steps = lesson.steps?.map { step -> StudyPathLesson.Step in
-                    var step = step
-                    if var card = step.card {
-                        card.symbol = card.symbol.map { symbol($0, fallback: "sparkles") }
-                        card.action = nil
-                        step.card = card
-                    }
-                    return step
-                }
-                return StudyPathLesson(id: lessonID(addon: addon, lesson: lesson.id), kind: lesson.kind, symbol: symbol(lesson.symbol, fallback: "book.fill"),
-                                       title: lesson.title, summary: lesson.summary, tags: lesson.tags, steps: steps)
-            })
-        }
-        let unit = (track.groups ?? []).isEmpty ? nil : StudyUnit(id: "addon:" + addon, title: track.title, summary: track.summary, groups: track.groups ?? [])
-        return StudyTrack(id: addon, title: track.title, summary: track.summary, color: track.color, symbol: symbol(track.symbol, fallback: "graduationcap.fill"),
-                          path: StudyPath(version: 3, sections: sections), unit: unit)
-    }
 }
 
-/// The effects of the add-ons that are on, read by searches, tag lists and learning mode.
+/// The effects of the add-ons that are on, read by searches and tag lists.
 /// Reads are safe from any thread; changes are made on the main thread.
 @Observable
 final class AddonRuntime: @unchecked Sendable {
@@ -250,7 +205,7 @@ struct AddonStore {
         try database.write { db in try db.execute(sql: "UPDATE addons SET enabled = ? WHERE id = ?", arguments: [enabled ? 1 : 0, id]) }
     }
 
-    /// Removes an add-on and the challenges it brought. Lessons finished in its track stay in the learner's record.
+    /// Removes an add-on and the challenges it brought.
     func remove(_ id: String) throws {
         try database.write { db in
             try db.execute(sql: "DELETE FROM addons WHERE id = ?", arguments: [id])

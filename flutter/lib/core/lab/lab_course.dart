@@ -49,12 +49,19 @@ String _string(Object? json) => json is String ? json : throw FormatException('E
 
 // MARK: - The course
 
-/// A lab course: its seasons and, from its own files, the episodes in them.
+/// A deck course: its seasons and the episodes in them. The AI lab is the bundled one (`assets/lab/`); others are
+/// imported from one-file course files (`LabCourseFile`) and play on the same deck.
 class LabCourse {
-  const LabCourse({required this.info, required this.episodes});
+  const LabCourse({required this.info, required this.episodes, this.imported = false});
 
   final LabCourseInfo info;
   final List<LabEpisode> episodes;
+
+  /// Imported by the learner from a course file. Such a course pays no 연구비, has no cheat sheet or diagnosis of its own,
+  /// and keeps its records under its own id (`LabStore.key`).
+  final bool imported;
+
+  String get id => info.id;
 
   List<LabSeason> get seasons => info.seasons;
   String get title => info.title.text;
@@ -135,21 +142,15 @@ class LabCourseInfo {
   /// The colours engraved cards take, used in turn down the deck: card 1 the first, card 6 the first again.
   final List<String>? cardColors;
 
-  static final empty = LabCourseInfo(
-    id: '',
-    title: const LabText({}),
-    gauge: const LabText({}),
-    base: 0,
-    rewards: const LabRewards(fail: 0, edition: 0, courseLesson: 0),
-    seasons: const [],
-  );
+  static final empty = LabCourseInfo(id: '', title: const LabText({}), gauge: const LabText({}), base: 0, rewards: LabRewards.none, seasons: const []);
 
   factory LabCourseInfo.fromJson(Map<String, Object?> json) => LabCourseInfo(
     id: _string(json['id']),
     title: LabText.parse(json['title']),
     gauge: LabText.parse(json['gauge']),
     base: _int(json['base']),
-    rewards: LabRewards.fromJson(_object(json['rewards'])),
+    // May be left out, as in an imported course, which pays nothing anyway.
+    rewards: json['rewards'] == null ? LabRewards.none : LabRewards.fromJson(_object(json['rewards'])),
     seasons: _list(json['seasons'], (value) => LabSeason.fromJson(_object(value))),
     cardColors: _listOrNull(json['cardColors'], _string),
   );
@@ -167,6 +168,8 @@ class LabRewards {
 
   /// Each lesson of a bought course finished after buying it.
   final int courseLesson;
+
+  static const none = LabRewards(fail: 0, edition: 0, courseLesson: 0);
 
   factory LabRewards.fromJson(Map<String, Object?> json) =>
       LabRewards(fail: _int(json['fail']), edition: _int(json['edition']), courseLesson: _int(json['courseLesson']));

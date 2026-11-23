@@ -60,29 +60,15 @@ abstract final class LabPalette {
 /// monospaced for numbers. Every line sits 130% of its font size below the one before.
 abstract final class LabFont {
   static const lines = 1.3;
-  static const serif = 'Noto Serif KR';
 
-  /// The content voice at its heaviest: titles and verdicts.
-  static TextStyle voice(double size, {Color? color, double tracking = -0.3}) => TextStyle(
-    fontFamily: serif,
-    fontFamilyFallback: TegnalType.fallback,
-    fontSize: size,
-    fontWeight: FontWeight.w900,
-    height: lines,
-    letterSpacing: tracking,
-    color: color,
-  );
+  /// The content voice at its heaviest: titles and verdicts. The app's own sans-serif, like the rest of learning mode
+  /// (user, 2026-11-24: the serif is kept only for viewing mode).
+  static TextStyle voice(double size, {Color? color, double tracking = -0.3}) =>
+      TegnalType.style(size, weight: FontWeight.w700, color: color, height: lines).copyWith(letterSpacing: tracking);
 
   /// The content voice, lighter: a line on a small card.
-  static TextStyle line(double size, {Color? color}) => TextStyle(
-    fontFamily: serif,
-    fontFamilyFallback: TegnalType.fallback,
-    fontSize: size,
-    fontWeight: FontWeight.w600,
-    height: lines,
-    letterSpacing: -0.2,
-    color: color,
-  );
+  static TextStyle line(double size, {Color? color}) =>
+      TegnalType.style(size, weight: FontWeight.w600, color: color, height: lines).copyWith(letterSpacing: -0.2);
 
   /// The app's voice, at 130%.
   static TextStyle text(double size, {FontWeight weight = FontWeight.w400, Color? color, double? tracking}) {
@@ -868,5 +854,65 @@ String labOrdinal(int number, {String? language}) {
     default:
       final suffix = (number % 100 >= 11 && number % 100 <= 13) ? 'th' : const {1: 'st', 2: 'nd', 3: 'rd'}[number % 10] ?? 'th';
       return '$number$suffix';
+  }
+}
+
+// MARK: - A wrong answer
+
+/// Gives the tools inside an episode a way to wash the whole screen red for a moment after a wrong answer
+/// (`EnvironmentValues.labMistake`).
+class LabMistake extends InheritedWidget {
+  const LabMistake({super.key, required this.signal, required super.child});
+  final VoidCallback signal;
+
+  /// Washes the episode red, where there is one above [context].
+  static void of(BuildContext context) => context.getInheritedWidgetOfExactType<LabMistake>()?.signal();
+
+  @override
+  bool updateShouldNotify(LabMistake oldWidget) => false;
+}
+
+/// The red wash over the whole screen after a wrong answer: in fast, out slowly. Lets touches through.
+class LabMistakeWash extends StatefulWidget {
+  const LabMistakeWash({super.key, required this.count});
+
+  /// Bumped once per wrong answer.
+  final int count;
+
+  @override
+  State<LabMistakeWash> createState() => _LabMistakeWashState();
+}
+
+class _LabMistakeWashState extends State<LabMistakeWash> with SingleTickerProviderStateMixin {
+  late final AnimationController _wash = AnimationController(vsync: this, duration: const Duration(milliseconds: 750));
+  static final _curve = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween<double>(begin: 0, end: 1).chain(CurveTween(curve: Curves.easeOut)), weight: 12),
+    TweenSequenceItem(tween: ConstantTween<double>(1), weight: 12),
+    TweenSequenceItem(tween: Tween<double>(begin: 1, end: 0).chain(CurveTween(curve: Curves.easeIn)), weight: 76),
+  ]);
+
+  @override
+  void didUpdateWidget(LabMistakeWash oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.count != oldWidget.count) _wash.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _wash.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final red = LabPalette.fail.resolveFrom(context);
+    return IgnorePointer(
+      child: ExcludeSemantics(
+        child: AnimatedBuilder(
+          animation: _wash,
+          builder: (context, _) => ColoredBox(color: red.withValues(alpha: 0.22 * _curve.evaluate(_wash))),
+        ),
+      ),
+    );
   }
 }

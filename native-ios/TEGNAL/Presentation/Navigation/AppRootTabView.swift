@@ -19,11 +19,11 @@ public struct AppRootTabView: View {
             // Learning mode takes over the whole screen, dock included; the library waits underneath.
             if studying, stage.studyMounted || stage.place != .home {
                 Group {
-                    // Learning mode opens on the AI lab; the tag course bought in its shop takes its place while open.
-                    if StudyMode.shared.tagsOpen {
-                        StudyModeRoot().transition(.move(edge: .trailing))
-                    } else {
-                        LabRoot().transition(.move(edge: .leading))
+                    // The course on screen, on its engine: the 2D course's own screens, or the deck that the AI lab and every
+                    // imported course play on. Learning mode opens on the AI lab.
+                    switch StudyMode.shared.engine {
+                    case .tags: StudyModeRoot().id(StudyMode.shared.courseID).transition(.move(edge: .trailing))
+                    case .deck: LabRoot().id(StudyMode.shared.courseID).transition(.move(edge: .leading))
                     }
                 }
                 .environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language))

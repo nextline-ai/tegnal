@@ -93,7 +93,6 @@ class Addon {
     for (final key in ['name', 'summary']) {
       if (filled[key] != null) filled[key] = _fillEnglish(filled[key], 0);
     }
-    if (contents['learningTrack'] != null) filled['contents'] = {...contents, 'learningTrack': _fillEnglish(contents['learningTrack'], 0)};
     return (addon: fromJson(filled), digest: digest(data));
   }
 
@@ -153,7 +152,7 @@ class Addon {
 
   static String digest(List<int> data) => sha256.convert(data).toString();
 
-  static const limits = (translations: 100000, searchTags: 500, challenges: 50, sections: 40, lessons: 300, steps: 80, groups: 60, tags: 2000);
+  static const limits = (translations: 100000, searchTags: 500, challenges: 50);
 
   void validate() {
     void require(bool value, String field) {
@@ -166,11 +165,10 @@ class Addon {
     );
     require(AddonCheck.identifier(id), 'id');
     require(AddonCheck.version(version), 'version');
-    // A comics add-on cannot reach image servers, challenges or learning mode, and an image add-on cannot reach comics searches.
+    // A comics add-on cannot reach image servers or challenges, and an image add-on cannot reach comics searches.
     switch (mode) {
       case AddonMode.comics:
         require(contents.challenges == null, 'challenges');
-        require(contents.learningTrack == null, 'learningTrack');
         require(contents.searchTags?.imageExclude == null, 'searchTags.images');
       case AddonMode.images:
         require(contents.searchTags?.comicsInclude == null && contents.searchTags?.comicsExclude == null, 'searchTags.comics');
@@ -225,12 +223,12 @@ class Addon {
       }
     }
 
-    contents.learningTrack?.validate();
   }
 }
 
 /// The mode an add-on belongs to. Comics add-ons bring tag translations and comics search tags; image add-ons
-/// bring tag translations, image blacklist rules, challenges and learning tracks.
+/// bring tag translations, image blacklist rules and challenges.
+/// Learning courses are not add-ons: they are imported in learning mode's 코스 tab (`LearningCourses`).
 enum AddonMode {
   comics,
   images;
@@ -244,34 +242,30 @@ enum AddonMode {
 enum AddonKind {
   translations,
   searchTags,
-  challenges,
-  track;
+  challenges;
 
   String get title => switch (this) {
     translations => L10n.text('Tag Translations'),
     searchTags => L10n.text('Default and Excluded Tags'),
     challenges => L10n.text('Challenge Roulette'),
-    track => L10n.text('Learning Track'),
   };
 }
 
-/// What an add-on brings. One file may bring several of these together, such as a track with the translations it uses.
+/// What an add-on brings. One file may bring several of these together, such as translations with the search tags that use them.
 class AddonContents {
-  AddonContents._({this.tagTranslations, this.searchTags, this.challenges, this.learningTrack, required this.json});
+  AddonContents._({this.tagTranslations, this.searchTags, this.challenges, required this.json});
 
   final AddonTranslations? tagTranslations;
   final AddonSearchTags? searchTags;
   final List<ChallengeDefinition>? challenges;
-  final AddonTrack? learningTrack;
   final JsonObject json;
 
-  static const keys = {'tagTranslations', 'searchTags', 'challenges', 'learningTrack'};
+  static const keys = {'tagTranslations', 'searchTags', 'challenges'};
 
   List<AddonKind> get kinds => [
     if (tagTranslations != null) AddonKind.translations,
     if (searchTags != null) AddonKind.searchTags,
     if (challenges != null) AddonKind.challenges,
-    if (learningTrack != null) AddonKind.track,
   ];
 
   factory AddonContents._fromJson(JsonObject json) {
@@ -287,17 +281,14 @@ class AddonContents {
         }
       });
     }
-    final track = json.objectOrNull('learningTrack') == null ? null : AddonTrack._fromJson(json.object('learningTrack'));
     return AddonContents._(
       tagTranslations: translations,
       searchTags: search,
       challenges: games,
-      learningTrack: track,
       json: {
         'tagTranslations': ?translations?.json,
         'searchTags': ?search?.json,
         if (games != null) 'challenges': [for (final game in games) game.toJson()],
-        'learningTrack': ?track?.json,
       },
     );
   }
@@ -348,235 +339,6 @@ class AddonSearchTags {
   }
 }
 
-/// A learning-mode track finished apart from the main track. Its sections keep the shape of the
-/// bundled `StudyPath.json`; they are read here only to be checked, and kept with only the keys the
-/// path reads.
-class AddonTrack {
-  AddonTrack._({required this.title, required this.summary, required this.color, this.symbol, this.groups, required this.sections, required this.json});
-
-  final StudyText title;
-  final StudyText summary;
-
-  /// Six hexadecimal digits.
-  final String color;
-  final String? symbol;
-
-  /// Tags the track teaches that the bundled curriculum does not, in its group format.
-  final List<StudyGroup>? groups;
-
-  /// Sections as `StudyPath.json` writes them, cleaned to the keys the path reads.
-  final List<JsonObject> sections;
-  final JsonObject json;
-
-  static const poses = {'wave', 'cheer', 'think', 'sad', 'read', 'close-up', 'full-body'};
-
-  List<JsonObject> get lessons => [for (final section in sections) ...(section['lessons']! as List).cast<JsonObject>()];
-
-  factory AddonTrack._fromJson(JsonObject json) {
-    final groups = json.listOrNull('groups', (value) => StudyGroup.fromJson(jsonObject(value)));
-    final sections = json.list('sections', (value) => _section(jsonObject(value)));
-    return AddonTrack._(
-      title: json.dictionary('title', jsonString),
-      summary: json.dictionary('summary', jsonString),
-      color: json.string('color'),
-      symbol: json.stringOrNull('symbol'),
-      groups: groups,
-      sections: sections,
-      json: {
-        'title': json.dictionary('title', jsonString),
-        'summary': json.dictionary('summary', jsonString),
-        'color': json.string('color'),
-        'symbol': ?json.stringOrNull('symbol'),
-        if (groups != null) 'groups': [for (final group in groups) _groupJson(group)],
-        'sections': sections,
-      },
-    );
-  }
-
-  static JsonObject _groupJson(StudyGroup group) => {
-    'id': group.id,
-    'title': group.title,
-    'exclusive': group.exclusive,
-    'visual': group.visual,
-    'tags': [
-      for (final tag in group.tags) {'name': tag.name, 'ko': ?tag.ko, 'ja': ?tag.ja, 'note': tag.note, 'confusable': ?tag.confusable},
-    ],
-  };
-
-  static StudyText _text(JsonObject json, String key) => json.dictionary(key, jsonString);
-  static StudyText? _textOrNull(JsonObject json, String key) => json.dictionaryOrNull(key, jsonString);
-
-  // The same keys Swift's `StudyPathLesson` decodes; anything else is dropped from the kept copy.
-  static JsonObject _section(JsonObject json) => {
-    'id': json.string('id'),
-    'title': _text(json, 'title'),
-    'summary': _text(json, 'summary'),
-    'color': json.string('color'),
-    'lessons': json.list('lessons', (value) => _lesson(jsonObject(value))),
-  };
-
-  static JsonObject _lesson(JsonObject json) {
-    final kind = json.string('kind');
-    if (!const {'concept', 'tags', 'boss'}.contains(kind)) throw SwiftJsonError('Unknown value for "kind"');
-    return {
-      'id': json.string('id'),
-      'kind': kind,
-      'symbol': json.string('symbol'),
-      'title': _text(json, 'title'),
-      'summary': ?_textOrNull(json, 'summary'),
-      'tags': ?json.stringsOrNull('tags'),
-      if (json['steps'] != null) 'steps': json.list('steps', (value) => _step(jsonObject(value))),
-    };
-  }
-
-  static JsonObject _step(JsonObject json) => {
-    if (json.objectOrNull('card') case final card?)
-      'card': {
-        'title': _text(card, 'title'),
-        'body': _text(card, 'body'),
-        'code': ?card.stringOrNull('code'),
-        'symbol': ?card.stringOrNull('symbol'),
-        'pose': ?card.stringOrNull('pose'),
-        'action': ?card.stringOrNull('action'),
-      },
-    if (json.objectOrNull('ask') case final ask?)
-      'ask': {
-        'question': _text(ask, 'question'),
-        'choices': ask.list('choices', (value) => jsonObject(value).map((key, inner) => MapEntry(key, jsonString(inner)))),
-        'answer': ask.integer('answer'),
-        'why': _text(ask, 'why'),
-        'code': ?ask.booleanOrNull('code'),
-      },
-    if (json.objectOrNull('build') case final build?)
-      'build': {'brief': _text(build, 'brief'), 'answer': build.strings('answer'), 'extras': build.strings('extras')},
-    if (json.objectOrNull('order') case final order?)
-      'order': {
-        'brief': _text(order, 'brief'),
-        'items': order.list('items', (value) => jsonObject(value).map((key, inner) => MapEntry(key, jsonString(inner)))),
-        'why': _text(order, 'why'),
-      },
-    if (json.objectOrNull('sort') case final sort?)
-      'sort': {
-        'brief': _text(sort, 'brief'),
-        'left': _text(sort, 'left'),
-        'right': _text(sort, 'right'),
-        'items': sort.list('items', (value) {
-          final item = jsonObject(value);
-          return {'text': _text(item, 'text'), 'right': item.boolean('right')};
-        }),
-        'why': _text(sort, 'why'),
-      },
-  };
-
-  void validate() {
-    void require(bool value, String field) {
-      if (!value) throw AddonError.invalid('learningTrack: $field');
-    }
-
-    require(AddonCheck.text(title, max: 80), 'title');
-    require(AddonCheck.text(summary, max: 400, multiline: true), 'summary');
-    require(AddonCheck.color(color), 'color');
-    if (symbol case final symbol?) require(AddonCheck.symbol(symbol), 'symbol');
-
-    final known = <String>{};
-    final groups = this.groups ?? const <StudyGroup>[];
-    require(groups.length <= Addon.limits.groups, 'groups');
-    require(groups.map((group) => group.id).toSet().length == groups.length, 'groups');
-    for (final group in groups) {
-      require(AddonCheck.identifier(group.id) && AddonCheck.text(group.title, max: 80), 'groups: ${AddonCheck.preview(group.id)}');
-      require(group.tags.isNotEmpty, 'groups: ${AddonCheck.preview(group.id)}');
-      for (final tag in group.tags) {
-        final field = 'tag ${AddonCheck.preview(tag.name)}';
-        require(AddonCheck.tag(tag.name, namespaced: false), field);
-        require(AddonCheck.text(tag.note, max: 400, multiline: true), field);
-        for (final name in [?tag.ko, ?tag.ja]) {
-          require(AddonCheck.line(name, max: 80), field);
-        }
-        final confusable = tag.confusable ?? const <String>[];
-        require(confusable.length <= 10 && confusable.every((name) => AddonCheck.tag(name, namespaced: false)), field);
-        require(known.add(tag.name), field);
-      }
-    }
-    require(known.length <= Addon.limits.tags, 'groups');
-
-    require(sections.isNotEmpty && sections.length <= Addon.limits.sections, 'sections');
-    require(sections.map((section) => section['id']).toSet().length == sections.length, 'sections');
-    final lessons = this.lessons;
-    require(lessons.isNotEmpty && lessons.length <= Addon.limits.lessons, 'lessons');
-    require(lessons.map((lesson) => lesson['id']).toSet().length == lessons.length, 'lessons');
-    for (final section in sections) {
-      final id = section['id']! as String;
-      require(AddonCheck.identifier(id), 'section ${AddonCheck.preview(id)}');
-      require(
-        AddonCheck.text(section['title']! as StudyText, max: 80) &&
-            AddonCheck.text(section['summary']! as StudyText, max: 400, multiline: true) &&
-            AddonCheck.color(section['color']! as String),
-        'section ${AddonCheck.preview(id)}',
-      );
-      for (final lesson in (section['lessons']! as List).cast<JsonObject>()) {
-        _validateLesson(lesson, known);
-      }
-    }
-  }
-
-  void _validateLesson(JsonObject lesson, Set<String> known) {
-    final id = lesson['id']! as String;
-    void require(bool value) {
-      if (!value) throw AddonError.invalid('learningTrack: lesson ${AddonCheck.preview(id)}');
-    }
-
-    StudyText text(Object? value) => value! as StudyText;
-    bool texts(Object? value, int max, {bool multiline = false}) =>
-        value is List && value.every((item) => AddonCheck.text(item as StudyText, max: max, multiline: multiline));
-
-    require(AddonCheck.identifier(id) && AddonCheck.symbol(lesson['symbol']! as String) && AddonCheck.text(text(lesson['title']), max: 80));
-    if (lesson['summary'] case final StudyText summary) require(AddonCheck.text(summary, max: 400, multiline: true));
-    final tags = (lesson['tags'] as List<String>?) ?? const <String>[];
-    final steps = (lesson['steps'] as List?)?.cast<JsonObject>() ?? const <JsonObject>[];
-    bool taught(String name) => known.contains(name) || StudyCurriculum.bundled.contains(name);
-    if (lesson['kind'] == 'tags') {
-      // Every tag of a tags lesson needs a meaning, from the app's curriculum or from the track's own groups.
-      require(steps.isEmpty && tags.isNotEmpty && tags.length <= 12 && tags.toSet().length == tags.length && tags.every(taught));
-      return;
-    }
-    require(tags.isEmpty && steps.isNotEmpty && steps.length <= Addon.limits.steps);
-    for (final step in steps) {
-      require(step.length == 1);
-      if (step['card'] case final JsonObject card) {
-        // Cards in add-ons only tell: they never open a page, a key sheet or the generator.
-        require(card['action'] == null);
-        require(AddonCheck.text(text(card['title']), max: 120) && AddonCheck.text(text(card['body']), max: 2000, multiline: true));
-        require(card['code'] == null || AddonCheck.line(card['code']! as String, max: 1000, multiline: true));
-        require(card['symbol'] == null || AddonCheck.symbol(card['symbol']! as String));
-        require(card['pose'] == null || poses.contains(card['pose']));
-      }
-      if (step['ask'] case final JsonObject ask) {
-        final choices = ask['choices']! as List;
-        final answer = ask['answer']! as int;
-        require(AddonCheck.text(text(ask['question']), max: 400, multiline: true) && AddonCheck.text(text(ask['why']), max: 600, multiline: true));
-        require(choices.length >= 2 && choices.length <= 6 && answer >= 0 && answer < choices.length && texts(choices, 300, multiline: true));
-      }
-      if (step['build'] case final JsonObject build) {
-        final answer = build['answer']! as List<String>, extras = build['extras']! as List<String>;
-        require(AddonCheck.text(text(build['brief']), max: 400, multiline: true));
-        require(answer.isNotEmpty && answer.length <= 12 && answer.toSet().length == answer.length && extras.length <= 12);
-        require([...answer, ...extras].every((tag) => AddonCheck.tag(tag, namespaced: false)) && answer.toSet().intersection(extras.toSet()).isEmpty);
-      }
-      if (step['order'] case final JsonObject order) {
-        final items = order['items']! as List;
-        require(AddonCheck.text(text(order['brief']), max: 400, multiline: true) && AddonCheck.text(text(order['why']), max: 600, multiline: true));
-        require(items.length >= 2 && items.length <= 8 && texts(items, 200));
-      }
-      if (step['sort'] case final JsonObject sort) {
-        final items = (sort['items']! as List).cast<JsonObject>();
-        require(AddonCheck.text(text(sort['brief']), max: 400, multiline: true) && AddonCheck.text(text(sort['why']), max: 600, multiline: true));
-        require(AddonCheck.text(text(sort['left']), max: 60) && AddonCheck.text(text(sort['right']), max: 60));
-        require(items.length >= 2 && items.length <= 12 && items.every((item) => AddonCheck.text(text(item['text']), max: 200)));
-      }
-    }
-  }
-}
-
 // MARK: - Errors
 
 class AddonError implements Exception {
@@ -596,6 +358,8 @@ class AddonError implements Exception {
     'tooLarge' => L10n.text('This add-on file is too large.'),
     'notAddon' => L10n.text('This file is not a TEGNAL add-on.'),
     'newerFormat' => L10n.text('This add-on needs a newer version of TEGNAL.'),
+    // Learning tracks left add-ons for learning mode's own course files.
+    'unknownContent' when detail == 'learningTrack' => L10n.text('addon.trackMoved'),
     'unknownContent' => L10n.text('This add-on contains something TEGNAL does not support: %@', [detail!]),
     'empty' => L10n.text('This add-on contains nothing to add.'),
     'otherMode' => L10n.text(

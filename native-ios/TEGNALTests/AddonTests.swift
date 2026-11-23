@@ -33,15 +33,22 @@ final class AddonTests: XCTestCase {
     ]]
 
     func testAValidFileDecodesWithItsFingerprintAndFillsInEnglish() throws {
-        let data = file(Self.translations.merging(Self.track) { $1 })
+        let data = file(Self.translations, extra: ["name": ["ko": "배경 팩"]])
         let (addon, digest) = try Addon.decode(data)
         XCTAssertEqual(addon.id, "maker.sample-pack")
-        XCTAssertEqual(addon.contents.kinds, [.translations, .track])
+        XCTAssertEqual(addon.contents.kinds, [.translations])
         XCTAssertEqual(digest, Addon.digest(data))
         XCTAssertEqual(digest.count, 64)
         // Text written in Korean only gets an English wording too, so that it is never blank.
-        XCTAssertEqual(addon.contents.learningTrack?.title["en"], "배경 트랙")
-        XCTAssertEqual(addon.contents.learningTrack?.sections.first?.lessons.first?.steps?.first?.card?.title["en"], "안녕")
+        XCTAssertEqual(addon.name["en"], "배경 팩")
+    }
+
+    /// Learning tracks left add-ons: learning courses are imported in learning mode's 코스 tab instead.
+    func testLearningTracksAreNoLongerAddons() {
+        XCTAssertThrowsError(try Addon.decode(file(Self.track))) { error in
+            XCTAssertEqual(error as? AddonError, .unknownContent("learningTrack"))
+            XCTAssertEqual((error as? AddonError)?.errorDescription, L10n.text("addon.trackMoved"))
+        }
     }
 
     func testFilesThatAreNotAddonsOrAreNewerAreRefused() {
@@ -92,20 +99,6 @@ final class AddonTests: XCTestCase {
         XCTAssertThrowsError(try Addon.decode(search(["images": ["exclude": ["id:123"]]])))
         XCTAssertThrowsError(try Addon.decode(search(["images": ["exclude": ["rating:whatever"]]])))
         XCTAssertThrowsError(try Addon.decode(search(["comics": ["include": []]])), "Nothing to add")
-    }
-
-    func testTrackCardsCannotOpenAnythingAndTagLessonsNeedMeanings() {
-        var track = Self.track["learningTrack"] as! [String: Any]
-        var sections = track["sections"] as! [[String: Any]]
-        var lessons = sections[0]["lessons"] as! [[String: Any]]
-        var withAction = lessons
-        withAction[0]["steps"] = [["card": ["title": ["en": "Go"], "body": ["en": "Spend"], "code": "1girl", "action": "generator"]]]
-        sections[0]["lessons"] = withAction; track["sections"] = sections
-        XCTAssertThrowsError(try Addon.decode(file(["learningTrack": track])), "Cards in add-ons only tell")
-
-        lessons[1]["tags"] = ["lighthouse", "not_a_known_tag_anywhere"]
-        sections[0]["lessons"] = lessons; track["sections"] = sections
-        XCTAssertThrowsError(try Addon.decode(file(["learningTrack": track])), "Every tag needs a meaning")
     }
 
     func testChallengesFollowTheChallengeRulesAndTheAddonTextRules() throws {
@@ -180,21 +173,6 @@ final class AddonTests: XCTestCase {
         XCTAssertEqual(installed.map(\.addon.version), ["1.1"])
         XCTAssertEqual(installed.first?.enabled, false)
         XCTAssertEqual(try booru.database.read { try String.fetchAll($0, sql: "SELECT id FROM challenges") }, ["addon:maker.sample-pack:second"])
-    }
-
-    func testTracksBecomePathsOfTheirOwnWithTheirTagsInTheCurriculum() throws {
-        let (addon, _) = try Addon.decode(file(Self.track))
-        let effects = AddonEffects([InstalledAddon(addon: addon, enabled: true, installed: .now, digest: "")])
-        let track = try XCTUnwrap(effects.tracks.first)
-        XCTAssertEqual(track.path.lessons.map(\.id), ["addon:maker.sample-pack:intro", "addon:maker.sample-pack:tags"])
-        XCTAssertFalse(StudyPath.bundled.lessons.contains { $0.id.hasPrefix("addon:") })
-        let curriculum = StudyCurriculum(version: 1, units: StudyCurriculum.bundled.units + [try XCTUnwrap(track.unit)])
-        XCTAssertEqual(curriculum.tag("lighthouse")?.title("ko"), "등대")
-        XCTAssertNotNil(curriculum.tag("long_hair"), "The app's own tags stay")
-        let records = Dictionary(uniqueKeysWithValues: track.path.lessons.map { ($0.id, StudyLessonRecord(lesson: $0.id, stars: 3, runs: 1)) })
-        XCTAssertTrue(track.complete(records))
-        XCTAssertFalse(track.complete([:]))
-        XCTAssertTrue(AddonEffects([InstalledAddon(addon: addon, enabled: false, installed: .now, digest: "")]).tracks.isEmpty)
     }
 
     func testLaterAddonsWinWhenTwoTranslateTheSameTag() throws {
@@ -309,7 +287,6 @@ final class AddonTests: XCTestCase {
         var noMode = try JSONSerialization.jsonObject(with: file(Self.translations)) as! [String: Any]
         noMode["mode"] = nil
         XCTAssertThrowsError(try Addon.decode(JSONSerialization.data(withJSONObject: noMode))) { XCTAssertEqual($0 as? AddonError, .invalid("mode")) }
-        XCTAssertThrowsError(try Addon.decode(file(Self.track, mode: "comics"))) { XCTAssertEqual($0 as? AddonError, .invalid("learningTrack")) }
         var game = ChallengeDefinition.croquis(); game.id = "sketch"
         XCTAssertThrowsError(try Addon.decode(file(["challenges": [try JSONSerialization.jsonObject(with: JSONEncoder().encode(game))]], mode: "comics"))) {
             XCTAssertEqual($0 as? AddonError, .invalid("challenges"))

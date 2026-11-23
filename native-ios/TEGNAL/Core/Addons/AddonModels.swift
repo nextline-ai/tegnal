@@ -32,7 +32,8 @@ struct Addon: Codable, Equatable, Sendable {
 }
 
 /// The mode an add-on belongs to. Comics add-ons bring tag translations and comics search tags; image add-ons
-/// bring tag translations, image blacklist rules, challenges and learning tracks.
+/// bring tag translations, image blacklist rules and challenges.
+/// Learning courses are not add-ons: they are imported in learning mode's 코스 tab (`LearningCourses`).
 enum AddonMode: String, Codable, CaseIterable, Sendable {
     case comics, images
 
@@ -42,32 +43,29 @@ enum AddonMode: String, Codable, CaseIterable, Sendable {
     var title: String { L10n.text(self == .comics ? "Comics Mode" : "Image Mode") }
 }
 
-/// What an add-on brings. One file may bring several of these together, such as a track with the translations it uses.
+/// What an add-on brings. One file may bring several of these together, such as translations with the search tags that use them.
 struct AddonContents: Codable, Equatable, Sendable {
     var tagTranslations: AddonTranslations?
     var searchTags: AddonSearchTags?
     var challenges: [ChallengeDefinition]?
-    var learningTrack: AddonTrack?
 
-    static let keys: Set<String> = ["tagTranslations", "searchTags", "challenges", "learningTrack"]
+    static let keys: Set<String> = ["tagTranslations", "searchTags", "challenges"]
     var kinds: [AddonKind] {
         var kinds: [AddonKind] = []
         if tagTranslations != nil { kinds.append(.translations) }
         if searchTags != nil { kinds.append(.searchTags) }
         if challenges != nil { kinds.append(.challenges) }
-        if learningTrack != nil { kinds.append(.track) }
         return kinds
     }
 }
 
 enum AddonKind: String, CaseIterable, Sendable {
-    case translations, searchTags, challenges, track
+    case translations, searchTags, challenges
     var title: String {
         switch self {
         case .translations: return L10n.text("Tag Translations")
         case .searchTags: return L10n.text("Default and Excluded Tags")
         case .challenges: return L10n.text("Challenge Roulette")
-        case .track: return L10n.text("Learning Track")
         }
     }
     var symbol: String {
@@ -75,7 +73,6 @@ enum AddonKind: String, CaseIterable, Sendable {
         case .translations: return "character.bubble"
         case .searchTags: return "line.3.horizontal.decrease.circle"
         case .challenges: return "dice"
-        case .track: return "graduationcap"
         }
     }
 }
@@ -105,18 +102,6 @@ struct AddonSearchTags: Codable, Equatable, Sendable {
     var images: Images?
 }
 
-/// A learning-mode track finished apart from the main path.
-struct AddonTrack: Codable, Equatable, Sendable {
-    var title: StudyText
-    var summary: StudyText
-    /// Six hexadecimal digits.
-    var color: String
-    var symbol: String?
-    /// Tags the track teaches that the bundled curriculum does not, in its group format.
-    var groups: [StudyGroup]?
-    var sections: [StudyPathSection]
-}
-
 // MARK: - Errors
 
 enum AddonError: LocalizedError, Equatable {
@@ -126,6 +111,8 @@ enum AddonError: LocalizedError, Equatable {
         case .tooLarge: return L10n.text("This add-on file is too large.")
         case .notAddon: return L10n.text("This file is not a TEGNAL add-on.")
         case .newerFormat: return L10n.text("This add-on needs a newer version of TEGNAL.")
+        // Learning tracks left add-ons for learning mode's own course files.
+        case .unknownContent("learningTrack"): return L10n.text("addon.trackMoved")
         case .unknownContent(let key): return L10n.text("This add-on contains something TEGNAL does not support: %@", key)
         case .empty: return L10n.text("This add-on contains nothing to add.")
         case .invalid(let field): return L10n.text("This add-on was not added because a part of it is not allowed: %@", field)
@@ -162,9 +149,6 @@ extension Addon {
         // Text written in Korean or Japanese only is shown in English too, rather than left blank.
         var filled = top
         for key in ["name", "summary"] { if let text = filled[key] { filled[key] = Self.fillEnglish(text, depth: 0) } }
-        if let track = contents["learningTrack"] {
-            var inner = contents; inner["learningTrack"] = Self.fillEnglish(track, depth: 0); filled["contents"] = inner
-        }
         let addon: Addon
         do {
             let normalized = try JSONSerialization.data(withJSONObject: filled)
@@ -204,18 +188,17 @@ extension Addon {
         return text.isEmpty ? L10n.text("File") : text
     }
 
-    static let limits = (translations: 100_000, searchTags: 500, challenges: 50, sections: 40, lessons: 300, steps: 80, groups: 60, tags: 2_000)
+    static let limits = (translations: 100_000, searchTags: 500, challenges: 50)
 
     func validate() throws {
         func require(_ value: Bool, _ field: String) throws { if !value { throw AddonError.invalid(field) } }
         try require(format == Self.format && schemaVersion >= 1 && schemaVersion <= Self.schemaVersion, "format")
         try require(AddonCheck.identifier(id), "id")
         try require(AddonCheck.version(version), "version")
-        // A comics add-on cannot reach image servers, challenges or learning mode, and an image add-on cannot reach comics searches.
+        // A comics add-on cannot reach image servers or challenges, and an image add-on cannot reach comics searches.
         switch mode {
         case .comics:
             try require(contents.challenges == nil, "challenges")
-            try require(contents.learningTrack == nil, "learningTrack")
             try require(contents.searchTags?.images == nil, "searchTags.images")
         case .images:
             try require(contents.searchTags?.comics == nil, "searchTags.comics")
@@ -261,95 +244,6 @@ extension Addon {
                 try require(AddonCheck.identifier(game.id, max: 48), "challenges: " + AddonCheck.preview(game.id))
                 do { try game.validate() } catch { throw AddonError.invalid("challenges: " + AddonCheck.preview(game.title)) }
                 try require(AddonCheck.challengeText(game), "challenges: " + AddonCheck.preview(game.title))
-            }
-        }
-
-        if let track = contents.learningTrack { try track.validate() }
-    }
-}
-
-extension AddonTrack {
-    static let poses: Set<String> = ["wave", "cheer", "think", "sad", "read", "close-up", "full-body"]
-
-    func validate() throws {
-        func require(_ value: Bool, _ field: String) throws { if !value { throw AddonError.invalid("learningTrack: " + field) } }
-        try require(AddonCheck.text(title, max: 80), "title")
-        try require(AddonCheck.text(summary, max: 400, multiline: true), "summary")
-        try require(AddonCheck.color(color), "color")
-        if let symbol { try require(AddonCheck.symbol(symbol), "symbol") }
-
-        var known = Set<String>()
-        let groups = groups ?? []
-        try require(groups.count <= Addon.limits.groups, "groups")
-        try require(Set(groups.map(\.id)).count == groups.count, "groups")
-        for group in groups {
-            try require(AddonCheck.identifier(group.id, max: 48) && AddonCheck.text(group.title, max: 80), "groups: " + AddonCheck.preview(group.id))
-            try require(!group.tags.isEmpty, "groups: " + AddonCheck.preview(group.id))
-            for tag in group.tags {
-                try require(AddonCheck.tag(tag.name, namespaced: false), "tag " + AddonCheck.preview(tag.name))
-                try require(AddonCheck.text(tag.note, max: 400, multiline: true), "tag " + AddonCheck.preview(tag.name))
-                for name in [tag.ko, tag.ja].compactMap({ $0 }) { try require(AddonCheck.line(name, max: 80), "tag " + AddonCheck.preview(tag.name)) }
-                try require((tag.confusable ?? []).count <= 10 && (tag.confusable ?? []).allSatisfy { AddonCheck.tag($0, namespaced: false) }, "tag " + AddonCheck.preview(tag.name))
-                try require(known.insert(tag.name).inserted, "tag " + AddonCheck.preview(tag.name))
-            }
-        }
-        try require(known.count <= Addon.limits.tags, "groups")
-
-        try require(!sections.isEmpty && sections.count <= Addon.limits.sections, "sections")
-        try require(Set(sections.map(\.id)).count == sections.count, "sections")
-        let lessons = sections.flatMap(\.lessons)
-        try require(!lessons.isEmpty && lessons.count <= Addon.limits.lessons, "lessons")
-        try require(Set(lessons.map(\.id)).count == lessons.count, "lessons")
-        for section in sections {
-            try require(AddonCheck.identifier(section.id, max: 48), "section " + AddonCheck.preview(section.id))
-            try require(AddonCheck.text(section.title, max: 80) && AddonCheck.text(section.summary, max: 400, multiline: true) && AddonCheck.color(section.color), "section " + AddonCheck.preview(section.id))
-            for lesson in section.lessons { try validate(lesson, known: known) }
-        }
-    }
-
-    private func validate(_ lesson: StudyPathLesson, known: Set<String>) throws {
-        let field = "lesson " + AddonCheck.preview(lesson.id)
-        func require(_ value: Bool) throws { if !value { throw AddonError.invalid("learningTrack: " + field) } }
-        try require(AddonCheck.identifier(lesson.id, max: 48) && AddonCheck.symbol(lesson.symbol) && AddonCheck.text(lesson.title, max: 80))
-        if let summary = lesson.summary { try require(AddonCheck.text(summary, max: 400, multiline: true)) }
-        let taught: (String) -> Bool = { known.contains($0) || StudyCurriculum.bundled.contains($0) }
-        switch lesson.kind {
-        case .tags:
-            let tags = lesson.tags ?? []
-            // Every tag of a tags lesson needs a meaning, from the app's curriculum or from the track's own groups.
-            try require((lesson.steps ?? []).isEmpty && (1...12).contains(tags.count) && Set(tags).count == tags.count && tags.allSatisfy(taught))
-        case .concept, .boss:
-            let steps = lesson.steps ?? []
-            try require((lesson.tags ?? []).isEmpty && !steps.isEmpty && steps.count <= Addon.limits.steps)
-            for step in steps {
-                let parts = [step.card != nil, step.ask != nil, step.build != nil, step.order != nil, step.sort != nil].filter { $0 }.count
-                try require(parts == 1)
-                if let card = step.card {
-                    // Cards in add-ons only tell: they never open a page, a key sheet or the generator.
-                    try require(card.action == nil)
-                    try require(AddonCheck.text(card.title, max: 120) && AddonCheck.text(card.body, max: 2000, multiline: true))
-                    try require(card.code.map { AddonCheck.line($0, max: 1000, multiline: true) } ?? true)
-                    try require(card.symbol.map(AddonCheck.symbol) ?? true)
-                    try require(card.pose.map { Self.poses.contains($0) } ?? true)
-                }
-                if let ask = step.ask {
-                    try require(AddonCheck.text(ask.question, max: 400, multiline: true) && AddonCheck.text(ask.why, max: 600, multiline: true))
-                    try require((2...6).contains(ask.choices.count) && ask.choices.indices.contains(ask.answer) && ask.choices.allSatisfy { AddonCheck.text($0, max: 300, multiline: true) })
-                }
-                if let build = step.build {
-                    try require(AddonCheck.text(build.brief, max: 400, multiline: true))
-                    try require((1...12).contains(build.answer.count) && Set(build.answer).count == build.answer.count && build.extras.count <= 12)
-                    try require((build.answer + build.extras).allSatisfy { AddonCheck.tag($0, namespaced: false) } && Set(build.answer).isDisjoint(with: build.extras))
-                }
-                if let order = step.order {
-                    try require(AddonCheck.text(order.brief, max: 400, multiline: true) && AddonCheck.text(order.why, max: 600, multiline: true))
-                    try require((2...8).contains(order.items.count) && order.items.allSatisfy { AddonCheck.text($0, max: 200) })
-                }
-                if let sort = step.sort {
-                    try require(AddonCheck.text(sort.brief, max: 400, multiline: true) && AddonCheck.text(sort.why, max: 600, multiline: true))
-                    try require(AddonCheck.text(sort.left, max: 60) && AddonCheck.text(sort.right, max: 60))
-                    try require((2...12).contains(sort.items.count) && sort.items.allSatisfy { AddonCheck.text($0.text, max: 200) })
-                }
             }
         }
     }

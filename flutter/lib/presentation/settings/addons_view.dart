@@ -14,7 +14,6 @@ import '../design/grouped_form.dart';
 import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
-import '../study/study_widgets.dart' show StudySymbols;
 import 'settings_page.dart';
 import 'settings_rows.dart';
 
@@ -23,7 +22,6 @@ Widget addonKindSymbol(AddonKind kind, Color color, {double size = 22}) => switc
   AddonKind.translations => Icon(CupertinoIcons.chat_bubble_text, size: size, color: color),
   AddonKind.searchTags => Icon(CupertinoIcons.line_horizontal_3_decrease_circle, size: size, color: color),
   AddonKind.challenges => DiceSymbol(size: size, color: color),
-  AddonKind.track => Icon(StudySymbols.graduationCap, size: size, color: color),
 };
 
 /// `.monospaced()` text: fingerprints and tag lists.
@@ -687,7 +685,6 @@ class _AddonDetailViewState extends State<AddonDetailView> {
           settingsSectionGap,
           FormSection(
             rowColor: row,
-            footer: item.addon.contents.learningTrack == null ? null : Text(L10n.text('Lessons you finished in its track stay in your learning record.')),
             children: [
               SettingsLinkRow(title: L10n.text('Remove Add-on'), icon: CupertinoIcons.trash, destructive: true, chevron: false, onTap: _confirmRemove),
             ],
@@ -1031,50 +1028,6 @@ List<Widget> _addonContentsSections(Addon addon, BuildContext context, {Color? r
                   ],
                 ),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-  if (contents.learningTrack case final track?) {
-    final lessons = track.lessons.length;
-    final tags = (track.groups ?? const []).fold<int>(0, (sum, group) => sum + group.tags.length);
-    sections.add(
-      FormSection(
-        rowColor: rowColor,
-        header: _kindHeader(AddonKind.track, context),
-        footer: Text(
-          [
-            L10n.text('A track of %@ lessons in learning mode, finished apart from the main path.', ['$lessons']),
-            if (tags > 0) L10n.text('It teaches %@ tags of its own.', ['$tags']),
-            L10n.text('Its lessons find example pictures on your chosen picture server, as the main path does.'),
-          ].join(' '),
-        ),
-        children: [
-          FormRow(
-            child: SizedBox(
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      track.title.addonResolved(),
-                      style: TegnalType.style(17, weight: FontWeight.w600, color: TegnalColors.label.resolveFrom(context)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(track.summary.addonResolved(), style: TegnalType.style(16, color: secondary)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          for (final section in track.sections)
-            SettingsValueRow(
-              title: (section['title']! as Map).cast<String, String>().addonResolved(),
-              value: L10n.text('%@ lessons', ['${(section['lessons']! as List).length}']),
             ),
         ],
       ),

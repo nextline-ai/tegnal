@@ -523,7 +523,11 @@ class _LabStampsToolState extends State<LabStampsTool> {
   List<String> get labels => [for (final stamp in widget.tool.stamps ?? const <LabText>[]) stamp.text];
 
   void _stamp(int index) {
-    LabHaptic.press();
+    if (items[stamped.length].answer == index) {
+      LabHaptic.press();
+    } else {
+      LabMistake.of(context);
+    }
     setState(() => stamped.add(index));
     if (stamped.length == items.length) {
       LabHaptic.pass();
@@ -592,7 +596,8 @@ class _LabStampsToolState extends State<LabStampsTool> {
         ],
         for (final (index, pick) in stamped.indexed.toList().reversed) ...[
           const SizedBox(height: 8),
-          _StampedRow(item: items[index], pick: pick, label: pick < labels.length ? labels[pick] : ''),
+          // The stamp shows the right answer: green when it was picked, red when another was.
+          _StampedRow(item: items[index], pick: pick, label: items[index].answer < labels.length ? labels[items[index].answer] : ''),
         ],
       ],
     );
@@ -684,7 +689,7 @@ class _LabMarksToolState extends State<LabMarksTool> {
     final piece = pieces[index];
     if (style != 'cut' && !piece.isTarget) {
       // Only made-up or private pieces can be marked; anything else says why and stays.
-      LabHaptic.miss();
+      LabMistake.of(context);
       setState(() {
         complaint = tool.wrong?.text;
         shaking = index;
