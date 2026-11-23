@@ -2690,6 +2690,12 @@
 "study.chest.lesson" = "レッスン完了";
 "study.chest.stars" = "はじめての星3つ";
 "study.chest.section" = "セクション完了";
-"lab.engrave.gemsDetail" = "+%1$@ · カード%2$@、迷作%3$@";
-"lab.engrave.gemsSeason" = "+%1$@ · カード%2$@、迷作%3$@、シーズン達成%4$@";
+"lab.engrave.gemsDetail" = "カード%1$@、迷作%2$@";
+"lab.engrave.gemsSeason" = "カード%1$@、迷作%2$@、シーズン%3$@";
+"lab.gems.card" = "カードの刻印";
+"lab.gems.fails" = "迷作%@点を展示";
+"lab.gems.season" = "シーズン%@達成";
+"lab.gems.next" = "次の目標";
+"lab.gems.left" = "あと%@";
+"lab.gems.ready" = "今すぐ買えます";
 "lab.shop.subtitle" = "学んだぶんだけ開きます";

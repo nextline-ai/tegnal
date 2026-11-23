@@ -2690,6 +2690,12 @@
 "study.chest.lesson" = "Lesson finished";
 "study.chest.stars" = "First three stars";
 "study.chest.section" = "Section finished";
-"lab.engrave.gemsDetail" = "+%1$@ · card %2$@, flops %3$@";
-"lab.engrave.gemsSeason" = "+%1$@ · card %2$@, flops %3$@, season %4$@";
+"lab.engrave.gemsDetail" = "card %1$@, flops %2$@";
+"lab.engrave.gemsSeason" = "card %1$@, flops %2$@, season %3$@";
+"lab.gems.card" = "Card engraved";
+"lab.gems.fails" = "%@ flops hung";
+"lab.gems.season" = "Season %@ finished";
+"lab.gems.next" = "Next goal";
+"lab.gems.left" = "%@ to go";
+"lab.gems.ready" = "Ready to buy";
 "lab.shop.subtitle" = "Opened by what you learn";

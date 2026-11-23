@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/lab/lab_course.dart';
+import '../../core/lab/lab_sheet.dart';
 import '../../core/lab/lab_store.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/privacy_settings.dart';
@@ -40,7 +42,7 @@ Future<void> showLabEpisode(BuildContext context, LabEpisode episode) => Navigat
   ),
 );
 
-enum _Phase { choice, tool, engrave, season }
+enum _Phase { choice, tool, engrave, gems, season }
 
 class LabEpisodeView extends StatefulWidget {
   const LabEpisodeView({super.key, required this.episode, this.store});
@@ -85,8 +87,14 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
     return fail != null && store.hung(fail);
   }
 
-  /// After the card is put in the deck: the season's own page when this card finished it, else back to the deck.
+  /// After the card is put in the deck: the 보석 it paid on a page of their own, then the season's page when this card
+  /// finished it, else back to the deck.
   void _closeEngraving() {
+    if ((engraving?.total ?? 0) > 0 && !store.course.imported) return setState(() => phase = _Phase.gems);
+    _closeGems();
+  }
+
+  void _closeGems() {
     if (engraving?.season == null) return Navigator.of(context).pop();
     setState(() => phase = _Phase.season);
   }
@@ -163,6 +171,7 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
                     store: store,
                     done: _closeEngraving,
                   ),
+                  _Phase.gems => LabGemsView(key: const ValueKey(_Phase.gems), engraving: engraving!, store: store, done: _closeGems),
                   _Phase.season => LabSeasonCompleteView(
                     key: const ValueKey(_Phase.season),
                     season: store.course.seasons.firstWhere((season) => season.number == engraving!.season),
@@ -497,8 +506,6 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
   bool settled = false;
   int? shownRate;
 
-  /// The balance as shown: from before the engraving, climbing to now once the numbers settle in.
-  int? shownBalance;
   bool _gone = false;
 
   LabEpisode get episode => widget.episode;
@@ -529,7 +536,6 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
       setState(() {
         settled = true;
         shownRate = widget.engraving?.after;
-        shownBalance = widget.store.balance;
       });
       return;
     }
@@ -557,11 +563,6 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
     if (_gone) return;
     setState(() => shownRate = widget.engraving?.after);
     if (widget.engraving?.first == true) LabHaptic.pass();
-    // Then the 보석, once the rate has moved.
-    await _wait(600);
-    if (_gone) return;
-    if ((widget.engraving?.total ?? 0) > 0) LabHaptic.tick();
-    setState(() => shownBalance = widget.store.balance);
   }
 
   @override
@@ -769,45 +770,17 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
           // An imported course pays no 보석, so it has no row for it.
           if (!widget.store.course.imported) ...[
             divider,
-            // The balance climbs from before the card to now, as the rate does above; what paid sits under it.
-            Builder(
-              builder: (context) {
-                final before = widget.store.balance - engraving.total;
-                final gauge = LabPalette.gauge.resolveFrom(context);
-                return Padding(
-                  key: const Key('lab.engrave.income'),
-                  padding: const EdgeInsets.only(right: 16, top: 9, bottom: 9),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 3,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(CupertinoIcons.rhombus_fill, size: 17, color: gauge),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(widget.store.shop.currency.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: LabFont.text(17, color: label)),
-                          ),
-                          Text('$before → ', style: LabFont.number(17, color: secondary)),
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: before.toDouble(), end: (shownBalance ?? before).toDouble()),
-                            duration: const Duration(milliseconds: 1200),
-                            curve: Curves.easeOutCubic,
-                            builder: (context, value, _) => Text('${value.round()}', style: LabFont.number(17, color: gauge)),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        engraving.seasonReward > 0
-                            ? L10n.text('lab.engrave.gemsSeason', ['${engraving.total}', '${engraving.cardReward}', '${engraving.failReward}', '${engraving.seasonReward}'])
-                            : L10n.text('lab.engrave.gemsDetail', ['${engraving.total}', '${engraving.cardReward}', '${engraving.failReward}']),
-                        style: LabFont.text(13, color: secondary),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+            // What paid; the balance climbs on the page that follows.
+            row(const Key('lab.engrave.income'), widget.store.shop.currency.text, [
+              Text('+${engraving.total}', style: LabFont.number(15, color: LabPalette.gauge.resolveFrom(context))),
+              const SizedBox(width: 4),
+              Text(
+                engraving.seasonReward > 0
+                    ? L10n.text('lab.engrave.gemsSeason', ['${engraving.cardReward}', '${engraving.failReward}', '${engraving.seasonReward}'])
+                    : L10n.text('lab.engrave.gemsDetail', ['${engraving.cardReward}', '${engraving.failReward}']),
+                style: LabFont.text(13, color: secondary),
+              ),
+            ]),
           ],
           divider,
           row(null, L10n.text('lab.engrave.fails'), [
@@ -1019,6 +992,305 @@ class _LabSeasonCompleteViewState extends State<LabSeasonCompleteView> with Tick
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// MARK: - 보석
+
+/// The 보석 a card paid, on a page of its own after the card is put in the deck: a gem tile crossed once by light, the balance
+/// rolling from before to now, what paid line by line, and how far the balance has come toward the next thing in the shop
+/// (`LabGemsView`).
+class LabGemsView extends StatefulWidget {
+  const LabGemsView({super.key, required this.engraving, required this.store, required this.done, this.settled = false});
+  final LabEngraving engraving;
+  final LabStore store;
+  final VoidCallback done;
+
+  /// Starts the page at its end, for pictures of it.
+  final bool settled;
+
+  @override
+  State<LabGemsView> createState() => _LabGemsViewState();
+}
+
+class _LabGemsViewState extends State<LabGemsView> with TickerProviderStateMixin {
+  late bool _shown = widget.settled, _counted = widget.settled, _listed = widget.settled;
+  late final AnimationController _sheen = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+  late final AnimationController _bounce = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.settled) WidgetsBinding.instance.addPostFrameCallback((_) => _play());
+  }
+
+  Future<void> _play() async {
+    if (!mounted) return;
+    if (MediaQuery.disableAnimationsOf(context)) return setState(() => _shown = _counted = _listed = true);
+    setState(() => _shown = true);
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted) return;
+    LabHaptic.pass();
+    setState(() => _counted = true);
+    unawaited(_sheen.animateTo(1, curve: Curves.easeInOut));
+    unawaited(_bounce.forward(from: 0));
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (mounted) setState(() => _listed = true);
+  }
+
+  @override
+  void dispose() {
+    _sheen.dispose();
+    _bounce.dispose();
+    super.dispose();
+  }
+
+  /// The cheapest thing on sale that is not owned yet and can be bought now or later.
+  LabShopItem? get _goal {
+    final store = widget.store;
+    final items =
+        store.shop.items
+            .where(
+              (item) => !item.isRepeat && !item.isSoon && item.price != null && !store.owns(item.id) && (item.requires == null || store.owns(item.requires!)),
+            )
+            .toList()
+          ..sort((a, b) => a.price!.compareTo(b.price!));
+    return items.firstOrNull;
+  }
+
+  /// Fades in and rises 10 points once [on], after [delay] seconds.
+  Widget _rise(bool on, Widget child, {double delay = 0}) => TweenAnimationBuilder<double>(
+    tween: Tween(end: on ? 1 : 0),
+    duration: Duration(milliseconds: 400 + (delay * 1000).round()),
+    curve: Interval(delay / (0.4 + delay), 1, curve: Curves.easeOut),
+    builder: (context, value, child) => Opacity(
+      opacity: value,
+      child: Transform.translate(offset: Offset(0, 10 * (1 - value)), child: child),
+    ),
+    child: child,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store, engraving = widget.engraving;
+    final after = store.balance, before = after - engraving.total;
+    final gauge = LabPalette.gauge.resolveFrom(context), secondary = labSecondary(context), label = labLabel(context);
+    final goal = _goal;
+    return ColoredBox(
+      key: const Key('lab.gems'),
+      color: TegnalColors.background.resolveFrom(context),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.paddingOf(context).bottom + 10),
+        child: Column(
+          children: [
+            const Spacer(),
+            TweenAnimationBuilder<double>(
+              tween: Tween(end: _shown ? 1 : 0),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeOutBack,
+              builder: (context, value, child) => Opacity(
+                opacity: value.clamp(0, 1),
+                child: Transform.scale(scale: 0.6 + 0.4 * value, child: child),
+              ),
+              child: SizedBox.square(
+                dimension: 108,
+                child: ClipRSuperellipse(
+                  borderRadius: BorderRadius.circular(30),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned.fill(child: ColoredBox(color: LabPalette.surface(context))),
+                      AnimatedBuilder(
+                        animation: _bounce,
+                        builder: (context, child) => Transform.scale(scale: 1 + 0.12 * math.sin(_bounce.value * math.pi), child: child),
+                        child: Icon(CupertinoIcons.rhombus_fill, size: 56, color: gauge),
+                      ),
+                      Positioned.fill(
+                        child: AnimatedBuilder(
+                          animation: _sheen,
+                          builder: (context, _) => LabSheen(progress: _sheen.value),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            AnimatedOpacity(
+              opacity: _shown ? 1 : 0,
+              duration: const Duration(milliseconds: 300),
+              child: Column(
+                children: [
+                  Text(
+                    store.shop.currency.text,
+                    style: LabFont.text(13, weight: FontWeight.w700, color: secondary, tracking: 1.4),
+                  ),
+                  const SizedBox(height: 2),
+                  TweenAnimationBuilder<double>(
+                    key: const Key('lab.gems.balance'),
+                    tween: Tween(begin: before.toDouble(), end: (_counted ? after : before).toDouble()),
+                    duration: const Duration(milliseconds: 1000),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, _) => Text('${value.round()}', style: LabFont.number(60, color: label)),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedScale(
+              scale: _counted ? 1 : 0.8,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutBack,
+              child: AnimatedOpacity(
+                opacity: _counted ? 1 : 0,
+                duration: const Duration(milliseconds: 300),
+                child: Container(
+                  key: const Key('lab.gems.total'),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: ShapeDecoration(color: gauge.withValues(alpha: 0.14), shape: const StadiumBorder()),
+                  child: Text('+${engraving.total}', style: LabFont.number(15, color: gauge)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+            _ledger(context, gauge, label),
+            if (goal != null) ...[const SizedBox(height: 12), _next(context, goal, before, after, gauge, secondary, label)],
+            const Spacer(),
+            AnimatedOpacity(
+              opacity: _listed ? 1 : 0,
+              duration: const Duration(milliseconds: 300),
+              child: LabButton(
+                key: const Key('lab.gems.continue'),
+                style: LabButtonStyle.primary,
+                expand: true,
+                onPressed: widget.done,
+                child: Text(L10n.text('lab.season.continue')),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// What paid, as a stock inset list draws it, the lines coming in one after another.
+  Widget _ledger(BuildContext context, Color gauge, Color label) {
+    final engraving = widget.engraving;
+    final rows = [
+      (L10n.text('lab.gems.card'), engraving.cardReward),
+      (L10n.text('lab.gems.fails', ['${engraving.failsHung}']), engraving.failReward),
+      (engraving.season == null ? '' : L10n.text('lab.gems.season', ['${engraving.season}']), engraving.seasonReward),
+    ].where((row) => row.$2 > 0).toList();
+    final divider = Container(height: 0.5, color: TegnalColors.separator.resolveFrom(context));
+    return Container(
+      key: const Key('lab.gems.ledger'),
+      padding: const EdgeInsets.only(left: 16),
+      decoration: ShapeDecoration(
+        color: FormColors.listRow.resolveFrom(context),
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(22)),
+      ),
+      child: Column(
+        children: [
+          for (final (index, row) in rows.indexed) ...[
+            if (index > 0) divider,
+            _rise(
+              _listed,
+              delay: index * 0.08,
+              MergeSemantics(
+                child: SizedBox(
+                  height: 48,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(row.$1, style: LabFont.text(17, color: label)),
+                        ),
+                        Text('+${row.$2}', style: LabFont.number(15, color: gauge)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// The next thing to buy and how far the balance has come toward it.
+  Widget _next(BuildContext context, LabShopItem item, int before, int after, Color gauge, Color secondary, Color label) {
+    final price = math.max(1, item.price ?? 1);
+    final ready = after >= price;
+    final pass = LabPalette.pass.resolveFrom(context);
+    return _rise(
+      _listed,
+      delay: 0.24,
+      MergeSemantics(
+        child: Container(
+          key: const Key('lab.gems.next'),
+          padding: const EdgeInsets.all(16),
+          decoration: ShapeDecoration(
+            color: FormColors.listRow.resolveFrom(context),
+            shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(22)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      L10n.text('lab.gems.next'),
+                      style: LabFont.text(13, weight: FontWeight.w600, color: secondary),
+                    ),
+                  ),
+                  Text(
+                    ready ? L10n.text('lab.gems.ready') : L10n.text('lab.gems.left', ['${price - after}']),
+                    style: LabFont.text(13, weight: FontWeight.w600, color: ready ? pass : secondary),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.name.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LabFont.text(16, weight: FontWeight.w600, color: label),
+                    ),
+                  ),
+                  Text('${math.min(after, price)} / $price', style: LabFont.number(13, color: secondary)),
+                ],
+              ),
+              SizedBox(
+                height: 8,
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Stack(
+                    children: [
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: ShapeDecoration(color: LabPalette.surface(context, 1), shape: const StadiumBorder()),
+                        ),
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 1000),
+                        curve: Curves.easeOutCubic,
+                        width: constraints.maxWidth * math.min(price, _counted ? after : before) / price,
+                        decoration: ShapeDecoration(color: ready ? pass : gauge, shape: const StadiumBorder()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

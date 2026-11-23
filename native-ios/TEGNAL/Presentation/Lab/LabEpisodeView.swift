@@ -6,7 +6,7 @@ struct LabEpisodeView: View {
     @Environment(\.dismiss) private var dismiss
     private var store: LabStore { LabStore.shared }
 
-    enum Phase: Int { case choice, tool, engrave, season }
+    enum Phase: Int { case choice, tool, engrave, gems, season }
     @State private var phase = Phase.choice
     /// The choice picked, shown with its verdict until the learner goes back to the choices.
     @State private var picked: Int?
@@ -30,6 +30,8 @@ struct LabEpisodeView: View {
                 case .tool: toolStage.transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
                 case .engrave: LabEngraveView(episode: episode, engraving: engraving, seconds: Date().timeIntervalSince(started), hung: hungNow) { closeEngraving() }
                     .transition(.opacity)
+                case .gems:
+                    if let engraving { LabGemsView(engraving: engraving) { closeGems() }.transition(.opacity) }
                 case .season:
                     if let number = engraving?.season, let season = store.course.seasons.first(where: { $0.number == number }) {
                         LabSeasonCompleteView(season: season) { dismiss() }.transition(.opacity)
@@ -61,8 +63,17 @@ struct LabEpisodeView: View {
         .labLines()
     }
 
-    /// After the card is put in the deck: the season's own page when this card finished it, else back to the deck.
+    /// After the card is put in the deck: the 보석 it paid on a page of their own, then the season's page when this card finished
+    /// it, else back to the deck.
     private func closeEngraving() {
+        if (engraving?.total ?? 0) > 0, !store.course.imported {
+            withAnimation(.easeInOut(duration: 0.45)) { phase = .gems }
+        } else {
+            closeGems()
+        }
+    }
+
+    private func closeGems() {
         guard engraving?.season != nil else { return dismiss() }
         withAnimation(.easeInOut(duration: 0.5)) { phase = .season }
     }
@@ -243,8 +254,6 @@ struct LabEngraveView: View {
     @State private var sheen: Double = 0
     @State private var settled = false
     @State private var shownRate: Int?
-    /// The balance as shown: from before the engraving, climbing to now once the numbers settle in.
-    @State private var shownBalance: Int?
 
     var body: some View {
         let line = episode.card.line.text
@@ -315,22 +324,16 @@ struct LabEngraveView: View {
             // An imported course pays no 보석, so it has no row for it.
             if !store.course.imported {
                 Divider()
-                // The balance climbs from before the card to now, as the rate does above; what paid sits under it.
-                let before = store.balance - engraving.total
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Label { Text(store.shop.currency.text) } icon: { Image(systemName: "diamond.fill").foregroundStyle(LabPalette.gauge) }
-                        Spacer()
-                        Text("\(before) → ").font(LabFont.number(17)).foregroundStyle(.secondary)
-                        Text("\(shownBalance ?? before)").font(LabFont.number(17)).foregroundStyle(LabPalette.gauge)
-                            .contentTransition(.numericText(value: Double(shownBalance ?? before)))
-                    }
+                // What paid; the balance climbs on the page that follows.
+                HStack {
+                    Text(store.shop.currency.text)
+                    Spacer()
+                    Text("+\(engraving.total)").font(LabFont.number(15)).foregroundStyle(LabPalette.gauge)
                     Text(engraving.seasonReward > 0
-                         ? L10n.text("lab.engrave.gemsSeason", String(engraving.total), String(engraving.cardReward), String(engraving.failReward), String(engraving.seasonReward))
-                         : L10n.text("lab.engrave.gemsDetail", String(engraving.total), String(engraving.cardReward), String(engraving.failReward)))
+                         ? L10n.text("lab.engrave.gemsSeason", String(engraving.cardReward), String(engraving.failReward), String(engraving.seasonReward))
+                         : L10n.text("lab.engrave.gemsDetail", String(engraving.cardReward), String(engraving.failReward)))
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 8)
                 .rowPadding()
                 .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.income")
             }
@@ -352,7 +355,7 @@ struct LabEngraveView: View {
     private func play(_ line: String) async {
         let count = Double(line.count)
         if reduceMotion {
-            angle = 180; revealed = count + 1; settled = true; shownRate = engraving?.after; shownBalance = store.balance
+            angle = 180; revealed = count + 1; settled = true; shownRate = engraving?.after
             return
         }
         try? await Task.sleep(for: .milliseconds(450))
@@ -373,10 +376,6 @@ struct LabEngraveView: View {
         try? await Task.sleep(for: .milliseconds(250))
         withAnimation(.spring(duration: 1.2)) { shownRate = engraving?.after }
         if engraving?.first == true { LabHaptic.pass() }
-        // Then the 보석, once the rate has moved.
-        try? await Task.sleep(for: .milliseconds(600))
-        if (engraving?.total ?? 0) > 0 { LabHaptic.tick() }
-        withAnimation(.spring(duration: 1.2)) { shownBalance = store.balance }
     }
 }
 
@@ -502,3 +501,148 @@ struct LabSeasonCompleteView: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+// MARK: - 보석
+
+/// The 보석 a card paid, on a page of its own after the card is put in the deck: a gem tile crossed once by light, the balance
+/// rolling from before to now, what paid line by line, and how far the balance has come toward the next thing in the shop.
+struct LabGemsView: View {
+    let engraving: LabEngraving
+    let done: () -> Void
+    private var store: LabStore { LabStore.shared }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown: Bool
+    @State private var counted: Bool
+    @State private var listed: Bool
+    @State private var sheen = 0.0
+
+    /// `settled` starts the page at its end, for pictures of it.
+    init(engraving: LabEngraving, settled: Bool = false, done: @escaping () -> Void) {
+        self.engraving = engraving
+        self.done = done
+        _shown = State(initialValue: settled)
+        _counted = State(initialValue: settled)
+        _listed = State(initialValue: settled)
+    }
+
+    /// The cheapest thing on sale that is not owned yet and can be bought now or later.
+    private var goal: LabShopItem? {
+        store.shop.items
+            .filter { !$0.isRepeat && !$0.isSoon && $0.price != nil && !store.owns($0.id) && ($0.requires.map(store.owns) ?? true) }
+            .min { ($0.price ?? 0) < ($1.price ?? 0) }
+    }
+
+    var body: some View {
+        let after = store.balance, before = after - engraving.total
+        let shownBalance = counted ? after : before
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            ZStack {
+                RoundedRectangle(cornerRadius: 30, style: .continuous).fill(LabPalette.surface())
+                Image(systemName: "diamond.fill").font(.system(size: 52, weight: .semibold)).foregroundStyle(LabPalette.gauge)
+                    .symbolEffect(.bounce, value: counted)
+            }
+            .frame(width: 108, height: 108)
+            .overlay { LabSheen(progress: sheen).clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous)) }
+            .scaleEffect(shown ? 1 : 0.6).opacity(shown ? 1 : 0)
+            .accessibilityHidden(true)
+            Text(store.shop.currency.text).font(.system(size: 13, weight: .bold)).tracking(1.4).foregroundStyle(.secondary)
+                .padding(.top, 24)
+                .opacity(shown ? 1 : 0)
+            Text(String(shownBalance)).font(LabFont.number(60)).monospacedDigit()
+                .contentTransition(.numericText(value: Double(shownBalance)))
+                .padding(.top, 2)
+                .opacity(shown ? 1 : 0)
+                .accessibilityIdentifier("lab.gems.balance")
+            Text("+\(engraving.total)").font(LabFont.number(15)).foregroundStyle(LabPalette.gauge)
+                .padding(.horizontal, 12).padding(.vertical, 5)
+                .background(LabPalette.gauge.opacity(0.14), in: Capsule())
+                .scaleEffect(counted ? 1 : 0.8).opacity(counted ? 1 : 0)
+                .accessibilityIdentifier("lab.gems.total")
+            ledger.padding(.horizontal, 20).padding(.top, 28)
+            if let goal { next(goal, before: before, after: after).padding(.horizontal, 20).padding(.top, 12) }
+            Spacer(minLength: 24)
+            Button(action: done) { Text(L10n.text("lab.season.continue")).frame(maxWidth: .infinity) }
+                .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18))
+                .padding(.horizontal, 20).padding(.bottom, 10)
+                .opacity(listed ? 1 : 0)
+                .accessibilityIdentifier("lab.gems.continue")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemGroupedBackground))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("lab.gems")
+        .task {
+            guard !counted else { return }
+            guard !reduceMotion else { shown = true; counted = true; listed = true; return }
+            withAnimation(.spring(duration: 0.6, bounce: 0.3)) { shown = true }
+            try? await Task.sleep(for: .milliseconds(450))
+            LabHaptic.pass()
+            withAnimation(.spring(duration: 1.0, bounce: 0.15)) { counted = true }
+            withAnimation(.easeInOut(duration: 0.9)) { sheen = 1 }
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeOut(duration: 0.45)) { listed = true }
+        }
+    }
+
+    /// What paid, as a stock inset list draws it, the lines coming in one after another.
+    private var ledger: some View {
+        let rows: [(String, Int)] = [
+            (L10n.text("lab.gems.card"), engraving.cardReward),
+            (L10n.text("lab.gems.fails", String(engraving.failsHung)), engraving.failReward),
+            (engraving.season.map { L10n.text("lab.gems.season", String($0)) } ?? "", engraving.seasonReward)
+        ].filter { $0.1 > 0 }
+        return VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                if index > 0 { Divider() }
+                HStack {
+                    Text(row.0)
+                    Spacer()
+                    Text("+\(row.1)").font(LabFont.number(15)).foregroundStyle(LabPalette.gauge)
+                }
+                .padding(.trailing, 16).frame(minHeight: 48)
+                .opacity(listed ? 1 : 0).offset(y: listed ? 0 : 10)
+                .animation(.easeOut(duration: 0.4).delay(Double(index) * 0.08), value: listed)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(.leading, 16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .accessibilityIdentifier("lab.gems.ledger")
+    }
+
+    /// The next thing to buy and how far the balance has come toward it.
+    private func next(_ item: LabShopItem, before: Int, after: Int) -> some View {
+        let price = max(1, item.price ?? 1)
+        let ready = after >= price
+        let fraction = Double(min(price, counted ? after : before)) / Double(price)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(L10n.text("lab.gems.next")).font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Text(ready ? L10n.text("lab.gems.ready") : L10n.text("lab.gems.left", String(price - after)))
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(ready ? LabPalette.pass : .secondary)
+            }
+            HStack {
+                Text(item.name.text).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                Spacer()
+                Text("\(min(after, price)) / \(price)").font(LabFont.number(13)).foregroundStyle(.secondary)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(LabPalette.surface(1))
+                    Capsule().fill(ready ? LabPalette.pass : LabPalette.gauge).frame(width: proxy.size.width * fraction)
+                }
+            }
+            .frame(height: 8)
+            .animation(.spring(duration: 1.0, bounce: 0.1), value: counted)
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .opacity(listed ? 1 : 0).offset(y: listed ? 0 : 10)
+        .animation(.easeOut(duration: 0.4).delay(0.24), value: listed)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("lab.gems.next")
+    }
+}
+

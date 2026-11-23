@@ -1694,8 +1694,9 @@ extension _Let<T> on T {
   R let<R>(R Function(T value) transform) => transform(this);
 }
 
-/// The seasons side by side under the deck's title: one bar per season, as long as it has cards and filled as far as they
-/// are engraved, the season in play picked out, with its name below (`LabSeasonTrack`).
+/// The seasons side by side under the deck's title: one bar per season, filled as far as its cards are engraved. The season
+/// in play is the long bar; finished seasons and those still ahead are short ones beside it; with no season in play (all
+/// done) the bars share the width evenly. Its name is below (`LabSeasonTrack`).
 class LabSeasonTrack extends StatelessWidget {
   const LabSeasonTrack({super.key, required this.course, required this.shown, required this.current});
   final LabCourse course;
@@ -1704,7 +1705,9 @@ class LabSeasonTrack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = course.episodes.isEmpty ? 1 : course.episodes.length;
+    // The season in play weighs four short bars.
+    double weight(LabSeason season) => current == null ? 1 : (season.number == current!.number ? 4 : 1);
+    final total = course.seasons.fold(0.0, (sum, season) => sum + weight(season));
     final label = labLabel(context), secondary = labSecondary(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1722,12 +1725,14 @@ class LabSeasonTrack extends StatelessWidget {
                       builder: (context) {
                         final done = season.episodes.where(shown.contains).length;
                         final here = season.number == current?.number;
-                        final width = room * season.episodes.length / total;
+                        final width = room * weight(season) / (total == 0 ? 1 : total);
                         final count = season.episodes.isEmpty ? 1 : season.episodes.length;
                         return Semantics(
                           label: '${L10n.text('lab.season', ['${season.number}'])} · ${season.title.text}',
                           value: '$done/${season.episodes.length}',
-                          child: SizedBox(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutCubic,
                             width: width,
                             height: here ? 6 : 4,
                             child: Stack(
