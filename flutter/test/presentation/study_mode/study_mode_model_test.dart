@@ -115,7 +115,7 @@ void main() {
     subject.reload();
     expect(subject.newlyCompletedTrack(finishing: 's0-order'), isNull, reason: 'A main-path lesson finishes no track');
     expect(subject.newlyCompletedTrack(finishing: lessons.last)?.id, 'maker.track');
-    expect(harness.preferences.booruDefaults.boolean('study.trackDone.maker.track'), isTrue);
+    expect(harness.store.studyStore.stats()['trackDone.maker.track'], 1, reason: 'Kept in study_stats, so it syncs');
     expect(subject.newlyCompletedTrack(finishing: lessons.last), isNull, reason: 'Only once');
     expect(subject.tracks.single.complete(subject.records), isTrue);
   });

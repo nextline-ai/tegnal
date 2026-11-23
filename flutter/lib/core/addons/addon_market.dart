@@ -216,16 +216,7 @@ class AddonMarket {
   /// Entries that do not pass are left out.
   static AddonCatalog verify(List<int> data, List<int> der, ECPublicKey key) {
     if (data.length > AddonCatalog.maximumBytes) throw const AddonMarketError.unsigned();
-    final signature = _signature(der);
-    if (signature == null) throw const AddonMarketError.unsigned();
-    final signer = ECDSASigner(SHA256Digest())..init(false, PublicKeyParameter<ECPublicKey>(key));
-    final bool valid;
-    try {
-      valid = signer.verifySignature(Uint8List.fromList(data), signature);
-    } on Object {
-      throw const AddonMarketError.unsigned();
-    }
-    if (!valid) throw const AddonMarketError.unsigned();
+    if (!isSigned(data, der, key)) throw const AddonMarketError.unsigned();
     final Object? top;
     try {
       top = jsonDecode(utf8.decode(data));
@@ -248,6 +239,19 @@ class AddonMarket {
     final read = Addon.decode(data);
     if (read.addon.id != listing.id || read.addon.version != listing.version || read.addon.mode != listing.mode) throw const AddonMarketError.damaged();
     return read;
+  }
+
+  /// Whether [der] is a valid signature (ECDSA P-256 with SHA-256) of exactly [data] by [key]. The AI lab's cheat sheet is
+  /// signed the same way.
+  static bool isSigned(List<int> data, List<int> der, ECPublicKey key) {
+    final signature = _signature(der);
+    if (signature == null) return false;
+    final signer = ECDSASigner(SHA256Digest())..init(false, PublicKeyParameter<ECPublicKey>(key));
+    try {
+      return signer.verifySignature(Uint8List.fromList(data), signature);
+    } on Object {
+      return false;
+    }
   }
 
   /// A DER `SEQUENCE { INTEGER r, INTEGER s }`, read strictly.

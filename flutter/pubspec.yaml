@@ -49,6 +49,9 @@ flutter:
     - assets/study/sounds/
     - assets/home/
     - assets/home/art/
+    - assets/lab/
+    - assets/lab/episodes/
+    - assets/fonts/NotoSerifKR-OFL.txt
   fonts:
     - family: Pretendard
       fonts:
@@ -56,3 +59,10 @@ flutter:
     - family: Pretendard JP
       fonts:
         - asset: assets/fonts/PretendardJPVariable.ttf
+    # The AI lab's content voice: Noto Serif KR, trimmed to Hangul, Latin and punctuation (as on iOS).
+    - family: Noto Serif KR
+      fonts:
+        - asset: assets/fonts/NotoSerifKR-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/NotoSerifKR-Black.otf
+          weight: 900

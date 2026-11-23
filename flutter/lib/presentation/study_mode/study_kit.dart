@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
+import '../../core/lab/lab_store.dart';
 import '../home/home_stage.dart';
+import '../lab/lab_root.dart' show LabTab;
 import 'study_reactions.dart';
 import 'study_symbols.dart';
 
@@ -35,6 +37,68 @@ class StudyMode extends ChangeNotifier {
   bool _startsActive = false;
   bool _startsInLibrary = false;
   StudyTab _tab = StudyTab.path;
+  bool _tagsOpen = false;
+  LabTab _labTab = LabTab.deck;
+
+  /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on the course.
+  bool _wantsTags = false;
+
+  /// Learning mode opens on the AI lab. The 2D AI course, bought in the lab's shop, is shown in its place while this is true.
+  bool get tagsOpen => _tagsOpen;
+
+  /// The lab tab shown.
+  LabTab get labTab => _labTab;
+  set labTab(LabTab value) {
+    if (_labTab == value) return;
+    _labTab = value;
+    notifyListeners();
+  }
+
+  /// Learning mode has been reached through the home scene: the lab, unless a 2D AI entry asked for the course.
+  void arrive() {
+    _tagsOpen = _wantsTags && LabStore.shared.ownsTagCourse;
+    _wantsTags = false;
+    notifyListeners();
+  }
+
+  /// Opens learning mode on the AI lab.
+  void enterLab([LabTab tab = LabTab.deck]) {
+    _tagsOpen = false;
+    _wantsTags = false;
+    _labTab = tab;
+    if (_active) {
+      notifyListeners();
+      return;
+    }
+    final stage = _stage;
+    if (stage != null) {
+      notifyListeners();
+      stage.enterStudy();
+      return;
+    }
+    _active = true;
+    notifyListeners();
+  }
+
+  /// Shows the 2D AI course in place of the lab, once it is bought; before that, the lab tab where it is sold.
+  void openTags([StudyTab tab = StudyTab.path]) {
+    if (!LabStore.shared.ownsTagCourse) {
+      _labTab = LabTab.twoD;
+      _tagsOpen = false;
+      notifyListeners();
+      return;
+    }
+    _tab = tab;
+    _tagsOpen = true;
+    notifyListeners();
+  }
+
+  /// Back from the 2D AI course to the lab.
+  void closeTags() {
+    _tagsOpen = false;
+    notifyListeners();
+    StudySound.rest();
+  }
 
   /// Reads the stored start-up choice from the image-mode preferences (`ReaderPreferences.booruDefaults`). The app
   /// calls this once at start-up. [fixture] defaults to whether `TEGNAL_FIXTURE` names `studyMode`.
@@ -43,8 +107,11 @@ class StudyMode extends ChangeNotifier {
     StudySound.attach(preferences);
     _startsActive = preferences.boolean(startKey) ?? false;
     _startsInLibrary = !_startsActive && (preferences.boolean(HomeStage.libraryStartKey) ?? false);
-    final launchedIn = fixture ?? _fixture.split(',').map((name) => name.trim()).contains('studyMode');
-    _active = _startsActive || launchedIn;
+    final names = _fixture.split(',').map((name) => name.trim()).toSet();
+    final launchedIn = fixture ?? names.contains('studyMode');
+    _active = _startsActive || launchedIn || names.contains('labMode');
+    // `studyMode` opens the 2D AI course itself, for its own tests; `labMode` opens the lab.
+    _tagsOpen = launchedIn;
     notifyListeners();
   }
 
@@ -63,8 +130,14 @@ class StudyMode extends ChangeNotifier {
     final stage = _stage;
     if (stage == null) return;
     final left = _active && !stage.studying;
+    final arrived = !_active && stage.studying;
     if (_active == stage.studying && _startsActive == stage.startsLearning && _startsInLibrary == stage.startsInLibrary) return;
     _active = stage.studying;
+    // The home scene's learning mode is the AI lab; only the library's 2D AI entries ask for the course itself.
+    if (arrived) {
+      _tagsOpen = _wantsTags && LabStore.shared.ownsTagCourse;
+      _wantsTags = false;
+    }
     _startsActive = stage.startsLearning;
     _startsInLibrary = stage.startsInLibrary;
     notifyListeners();
@@ -121,6 +194,11 @@ class StudyMode extends ChangeNotifier {
   /// Opens learning mode, on [tab]. From the library, the way there leads back up through the home scene and on into the sky.
   void enter([StudyTab tab = StudyTab.path]) {
     _tab = tab;
+    // The library's 2D AI entries lead to the course when it is owned, and to the lab's 2D tab when not.
+    LabStore.shared.reload();
+    _tagsOpen = LabStore.shared.ownsTagCourse;
+    _wantsTags = _tagsOpen;
+    if (!_tagsOpen) _labTab = LabTab.twoD;
     final stage = _stage;
     if (stage != null) {
       notifyListeners();
@@ -144,13 +222,19 @@ class StudyMode extends ChangeNotifier {
   }
 }
 
-/// The five tabs of learning mode.
+/// The 2D AI course's dock. The collection lives on the Me tab; `aiLab` is not a page but the way back to the AI lab.
 enum StudyTab {
   path('Map', 'map.fill'),
   practice('Practice', 'dumbbell.fill'),
-  dex('Collection', 'square.grid.2x2.fill'),
   lab('Studio', 'wand.and.stars'),
+  aiLab('lab.title.short', 'flask.fill'),
   me('Me', 'person.crop.circle.fill');
+
+  /// The tabs that show a page.
+  static List<StudyTab> get pages => [
+    for (final tab in values)
+      if (tab != aiLab) tab,
+  ];
 
   const StudyTab(this._title, this.symbol);
   final String _title;
@@ -906,6 +990,18 @@ abstract final class StudyGlyph {
   /// The icon for an SF Symbol name; an unknown name gives a circle.
   static IconData icon(String symbol) => switch (symbol) {
     'arrow.left.arrow.right' => CupertinoIcons.arrow_left_right,
+    'flask.fill' => CupertinoIcons.lab_flask_solid,
+    // The AI lab's shop items and tools.
+    'bag' => CupertinoIcons.bag,
+    'books.vertical' => CupertinoIcons.book,
+    'bubble.left.and.bubble.right' => CupertinoIcons.bubble_left_bubble_right,
+    'camera' => CupertinoIcons.camera,
+    'film' => CupertinoIcons.film,
+    'folder' => CupertinoIcons.folder,
+    'puzzlepiece' => CupertinoIcons.cube,
+    'snowflake' => CupertinoIcons.snow,
+    'sunset' => CupertinoIcons.sunset,
+    'text.alignleft' => CupertinoIcons.text_alignleft,
     'scope' => CupertinoIcons.scope,
     'arrow.right.circle' => CupertinoIcons.arrow_right_circle,
     'arrow.triangle.2.circlepath' => CupertinoIcons.arrow_2_circlepath,

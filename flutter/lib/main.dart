@@ -20,6 +20,9 @@ import 'core/booru/booru_fixture_source.dart';
 import 'core/booru/booru_image_cache.dart';
 import 'core/booru/booru_models.dart';
 import 'core/booru/booru_store.dart';
+import 'core/lab/lab_course.dart';
+import 'core/lab/lab_sheet.dart';
+import 'core/lab/lab_store.dart';
 import 'core/taste/taste_fixtures.dart';
 import 'core/taste/taste_models.dart';
 import 'core/content/content_environment.dart';
@@ -109,6 +112,16 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
       );
     }
   }
+}
+
+/// The AI lab's scripts, shop, check and cheat sheet, and the license of its serif.
+Future<void> _loadLab() async {
+  await Future.wait([LabCourse.loadBundled(), LabShop.loadBundled(), LabDiagnosis.loadBundled(), LabEdition.loadBundled()]);
+  final saved = await LabSheetSource.saved();
+  if (saved != null) LabStore.shared.show(saved);
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['Noto Serif KR'], await rootBundle.loadString('assets/fonts/NotoSerifKR-OFL.txt'));
+  });
 }
 
 Future<void> main() async {
@@ -241,7 +254,7 @@ Future<AppServices> _launch() async {
   unawaited(AITranslationModel.check());
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
   // The tag study curriculum is empty until its file is read.
-  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled(), StudyPath.loadBundled()]);
+  final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled(), StudyPath.loadBundled(), _loadLab()]);
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
   ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
@@ -280,6 +293,9 @@ Future<AppServices> _launch() async {
   // A track's symbols that learning mode cannot draw give way to its stand-ins, as iOS does for unknown SF Symbols.
   AddonEffects.symbolExists = StudyGlyph.knows;
   AddonRuntime.shared.reload(booru);
+  // The lab's records live in the image database and travel with it; a sync or a restored backup may bring new ones.
+  LabStore.shared.attach(booru.database);
+  booru.addListener(LabStore.shared.reload);
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
   booru.warmSavedPreview = (post, server) {
     final url = post.previewURL ?? post.sampleURL;
@@ -319,6 +335,7 @@ Future<AppServices> _launchFixture() async {
   await StudyCurriculum.loadBundled();
   await StudyGuide.loadBundled();
   await StudyPath.loadBundled();
+  await _loadLab();
   final names = _fixture.split(',').map((name) => name.trim()).toSet();
   StudyMode.shared.attach(preferences.booruDefaults);
   final options = {for (final name in names) ...FixtureOption.values.where((option) => option.name == name)};
@@ -333,6 +350,8 @@ Future<AppServices> _launchFixture() async {
   _seedLibrary(database, names);
   final booruOptions = {for (final name in names) ...BooruFixtureOption.values.where((option) => option.name == name)};
   final booru = BooruStore.inMemory(preferences: preferences);
+  LabStore.shared.attach(booru.database);
+  booru.addListener(LabStore.shared.reload);
   if (_mode == 'booru' || names.any(_tasteFixtures.contains)) {
     // The taste fixtures save their own favorites below; seeding them here too would undo them.
     BooruFixtureEnvironment.seed(booru, options: booruOptions.difference({BooruFixtureOption.tasteRich}));

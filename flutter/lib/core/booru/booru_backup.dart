@@ -123,6 +123,21 @@ class BooruBackupAward {
   JsonObject toJson() => {'id': id, 'earned': earned};
 }
 
+/// One record of the AI lab (`lab_records`); `at` is seconds since 1970.
+class BooruBackupLab {
+  BooruBackupLab({required this.key, required this.value, this.text, required this.at});
+  final String key;
+  final int value;
+  final String? text;
+  final double at;
+
+  factory BooruBackupLab.fromJson(JsonObject json) =>
+      BooruBackupLab(key: json.string('key'), value: json.integer('value'), text: json.stringOrNull('text'), at: json.number('at'));
+  JsonObject toJson() => <String, Object?>{'key': key, 'value': value, 'at': at}..putIfPresent('text', text);
+
+  bool get isValid => key.isNotEmpty && key.characters.length <= 200 && value >= 0 && (text?.characters.length ?? 0) <= 2000 && at.isFinite;
+}
+
 /// Tag study: what has been learned and each day's answers, and learning mode's lessons, badges and counters.
 class BooruBackupStudy {
   BooruBackupStudy({required this.progress, required this.days, this.lessons, this.awards, this.stats});
@@ -190,6 +205,7 @@ class BooruBackup {
     this.folderRules,
     this.recentImages,
     this.study,
+    this.lab,
   }) : exportedAt = exportedAt ?? DateTime.now();
 
   String format;
@@ -212,6 +228,9 @@ class BooruBackup {
   /// Tag study progress. Optional so backups from before tag study still read.
   BooruBackupStudy? study;
 
+  /// The AI lab's records. Optional so older backups still read.
+  List<BooruBackupLab>? lab;
+
   static const maximumBytes = 64 * 1024 * 1024;
 
   factory BooruBackup.fromJson(JsonObject json) => BooruBackup(
@@ -229,6 +248,7 @@ class BooruBackup {
     folderRules: json.listOrNull('folderRules', (value) => FolderRule.fromJson(jsonObject(value))),
     recentImages: json.listOrNull('recentImages', (value) => BooruBackupRecent.fromJson(jsonObject(value))),
     study: json.objectOrNull('study') == null ? null : BooruBackupStudy.fromJson(json.object('study')),
+    lab: json.listOrNull('lab', (value) => BooruBackupLab.fromJson(jsonObject(value))),
   );
 
   JsonObject toJson() =>
@@ -246,7 +266,8 @@ class BooruBackup {
         }
         ..putIfPresent('folderRules', folderRules == null ? null : [for (final rule in folderRules!) rule.toJson()])
         ..putIfPresent('recentImages', recentImages == null ? null : [for (final recent in recentImages!) recent.toJson()])
-        ..putIfPresent('study', study?.toJson());
+        ..putIfPresent('study', study?.toJson())
+        ..putIfPresent('lab', lab == null ? null : [for (final record in lab!) record.toJson()]);
 
   static BooruBackup read(File file) {
     if (file.lengthSync() > maximumBytes) throw const BooruError(BooruErrorKind.invalidResponse);
@@ -292,7 +313,9 @@ class BooruBackup {
         serverIDs.containsAll(selectedServerIDs) &&
         (folderRules ?? []).every((rule) => folderIDs.contains(rule.folder) && rule.query.isNotEmpty) &&
         (recentImages ?? []).every((recent) => serverIDs.contains(recent.post.serverID) && recent.post.postID > 0 && recent.openedAt.isFinite) &&
-        (study?.isValid ?? true);
+        (study?.isValid ?? true) &&
+        (lab ?? const <BooruBackupLab>[]).every((record) => record.isValid) &&
+        (lab ?? const <BooruBackupLab>[]).map((record) => record.key).toSet().length == (lab ?? const <BooruBackupLab>[]).length;
     if (!valid) throw const BooruError(BooruErrorKind.invalidResponse);
     for (final post in [for (final favorite in favorites) favorite.post, for (final recent in recentImages ?? const <BooruBackupRecent>[]) recent.post]) {
       for (final url in [post.previewURL, post.sampleURL, post.fileURL, post.animationVideoURL].nonNulls) {
@@ -373,6 +396,10 @@ extension BooruStoreBackup on BooruStore {
         BooruBackupAward(id: row['id'] as String, earned: (row['earned'] as num).toDouble()),
     ];
     final stats = {for (final row in db.rows('SELECT name, value FROM study_stats')) row['name'] as String: row['value'] as int};
+    final lab = [
+      for (final row in db.rows('SELECT key, value, text, at FROM lab_records ORDER BY key'))
+        BooruBackupLab(key: row['key'] as String, value: row['value'] as int, text: row['text'] as String?, at: (row['at'] as num).toDouble()),
+    ];
     return BooruBackup(
       servers: servers,
       folders: folders,
@@ -385,6 +412,7 @@ extension BooruStoreBackup on BooruStore {
       study: learned.isEmpty && days.isEmpty && lessons.isEmpty && awards.isEmpty && stats.isEmpty
           ? null
           : BooruBackupStudy(progress: learned, days: days, lessons: lessons, awards: awards, stats: stats),
+      lab: lab.isEmpty ? null : lab,
     );
   });
 
@@ -510,6 +538,16 @@ extension BooruStoreBackup on BooruStore {
         ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)
         ''',
         [entry.key, entry.value],
+      );
+    }
+    // Lab records merge as in sync: the larger count and the earlier time.
+    for (final value in backup.lab ?? const <BooruBackupLab>[]) {
+      db.execute(
+        '''
+        INSERT INTO lab_records (key, value, text, at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = MAX(value, excluded.value), at = MIN(at, excluded.at), text = COALESCE(excluded.text, text)
+        ''',
+        [value.key, value.value, value.text, value.at],
       );
     }
     // Folders of an older backup go where their images are when each server keeps its own folders,

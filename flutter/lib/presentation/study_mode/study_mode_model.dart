@@ -124,17 +124,24 @@ class StudyModeModel extends ChangeNotifier {
   }
 
   /// A track finished for the first time, once: the lessons of an add-on track all done, and not yet celebrated.
+  /// Kept as a counter in `study_stats`, so a certificate shown on one device is not shown again on another.
   StudyTrack? newlyCompletedTrack({required String finishing}) {
+    final stats = _read(booru.store.studyStore.stats, const <String, int>{});
     final done = tracks
         .where(
           (track) =>
               track.path.lessons.any((lesson) => lesson.id == finishing) &&
               track.complete(records) &&
+              stats['trackDone.${track.id}'] == null &&
               !(booru.booruDefaults.boolean('study.trackDone.${track.id}') ?? false),
         )
         .firstOrNull;
     if (done == null) return null;
-    booru.booruDefaults.set('study.trackDone.${done.id}', true);
+    try {
+      booru.store.studyStore.raise('trackDone.${done.id}', 1);
+    } on Object catch (error) {
+      debugPrint('StudyModeModel: the certificate could not be recorded: $error');
+    }
     return done;
   }
 

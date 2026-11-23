@@ -236,10 +236,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   Future<void> _welcome() async {
     if (_welcoming) return;
     _welcoming = true;
-    await _cover<void>(
-      context,
-      (context) => StudyWelcomeView(booru: booru, model: model, finish: () => Navigator.of(context).pop()),
-    );
+    await _cover<void>(context, (context) => StudyWelcomeView(booru: booru, model: model, finish: () => Navigator.of(context).pop()));
     _welcoming = false;
     model.welcomed();
     model.reload();
@@ -370,7 +367,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   Widget _page(StudyTab tab) => switch (tab) {
     StudyTab.path => StudyPathView(model: model, celebrating: _celebrating, start: _start),
     StudyTab.practice => StudyPracticeView(model: model, start: _start, startSpeed: _startSpeed),
-    StudyTab.dex => StudyDexView(model: model),
+    StudyTab.aiLab => const SizedBox.shrink(),
     StudyTab.lab => StudyLabView(model: model, start: _start, closed: _celebrate, generation: widget.generation),
     StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode, reset: _restarted),
   };
@@ -404,7 +401,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
                         children: [
                           // The tab on screen is laid last, over the ones kept underneath.
                           for (final tab in [
-                            for (final tab in StudyTab.values)
+                            for (final tab in StudyTab.pages)
                               if (_opened.contains(tab) && tab != mode.tab) tab,
                             mode.tab,
                           ])
@@ -430,7 +427,8 @@ class _StudyModeRootState extends State<StudyModeRoot> {
                         color: theme.background,
                         child: Padding(
                           padding: EdgeInsets.only(bottom: media.padding.bottom),
-                          child: StudyDock(selection: mode.tab, onSelected: (tab) => mode.tab = tab),
+                          // The 실험실 tab leads out of the course, back to the AI lab.
+                          child: StudyDock(selection: mode.tab, onSelected: (tab) => tab == StudyTab.aiLab ? mode.closeTags() : mode.tab = tab),
                         ),
                       ),
                     ),
@@ -1459,6 +1457,83 @@ class StudyPracticeView extends StatelessWidget {
 
 // MARK: - Collection
 
+/// The collection on the Me tab: how many tags have been met, the latest few, and the whole collection a tap away.
+class StudyDexCard extends StatelessWidget {
+  const StudyDexCard({super.key, required this.model});
+  final StudyModeModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = StudyTheme.of(context);
+    final met = [
+      for (final tag in model.curriculum.tags)
+        if (model.progress[tag.name] case final progress? when !progress.isNew) tag,
+    ];
+    final total = model.summary.total;
+    return StudyCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(L10n.text('Collection'), style: StudyTheme.body(17, StudyTheme.heavy).copyWith(color: theme.ink)),
+              ),
+              Text(
+                '${met.length}/$total',
+                style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.muted, fontFeatures: const [FontFeature.tabularFigures()]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          StudyBar(value: total == 0 ? 0 : met.length / total, color: theme.primary),
+          const SizedBox(height: 12),
+          if (met.isEmpty)
+            Text(L10n.text('Tags you learn on the map are kept here.'), style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: theme.muted))
+          else ...[
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  for (final (index, tag) in met.take(12).indexed) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    StudyPressButton(
+                      key: Key('study.dex.${tag.name}'),
+                      radius: 12,
+                      depth: 3,
+                      outlined: true,
+                      onPressed: () => _showStudySheet(context, (context) => StudyTagView(booru: model.booru, name: tag.name)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Text(tag.english, maxLines: 1, style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.ink)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            StudyPressButton(
+              key: const Key('study.dex.all'),
+              radius: 14,
+              depth: 4,
+              outlined: true,
+              onPressed: () => _showStudySheet(context, (context) => StudyDexView(model: model)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Center(
+                  child: Text(L10n.text('lab.2d.allTags'), style: StudyTheme.body(15, StudyTheme.heavy).copyWith(color: theme.ink)),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// `StudyDexView`: the tags met so far, each opening its page.
 class StudyDexView extends StatelessWidget {
   const StudyDexView({super.key, required this.model});
@@ -1875,6 +1950,9 @@ class _StudyMeViewState extends State<StudyMeView> {
               Expanded(child: _tile('bolt.fill', theme.gold, '${game.xp}', 'XP')),
             ],
           ),
+          const SizedBox(height: 16),
+          // The collection, once a tab of its own, sits here above the daily goal.
+          StudyDexCard(model: model),
           const SizedBox(height: 16),
           StudyCard(
             child: Column(

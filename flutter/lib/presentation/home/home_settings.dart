@@ -3,6 +3,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import '../../core/support/l10n.dart';
 import '../design/grouped_form.dart';
 import '../settings/settings_rows.dart';
+import '../study_mode/study_kit.dart';
 import 'home_stage.dart';
 
 /// `StudyModeSettings`: where the app opens, shown beside Safe Mode in both modes' settings. Only one
@@ -43,7 +44,7 @@ class HomeStartSettings extends StatelessWidget {
                 title: L10n.text('Enter Learning Mode'),
                 tinted: true,
                 chevron: false,
-                onTap: stage.enterStudy,
+                onTap: () => StudyMode.shared.enterLab(),
               ),
             ],
           ),

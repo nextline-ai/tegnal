@@ -63,6 +63,8 @@ import '../presentation/settings/drive_sync_section.dart';
 import '../presentation/settings/automatic_backups_view.dart';
 import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
+import '../presentation/lab/lab_root.dart';
+import '../presentation/study_mode/study_kit.dart';
 import '../presentation/study_mode/study_mode_root.dart';
 import '../presentation/settings/site_account_section.dart';
 import '../presentation/onboarding/onboarding_view.dart';
@@ -584,8 +586,35 @@ class _RootState extends State<_Root> {
     );
   }
 
-  /// Learning mode as a place of its own: it takes the whole screen, its own dock included.
-  Widget _studyPlace() => StudyModeRoot(booru: _booru);
+  /// Learning mode as a place of its own: it takes the whole screen, its own dock included. It opens on the AI lab; the
+  /// 2D AI course bought in the lab's shop takes its place while open.
+  Widget _studyPlace() => ListenableBuilder(
+    listenable: StudyMode.shared,
+    builder: (context, _) {
+      final tags = StudyMode.shared.tagsOpen;
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final course = child.key == const ValueKey('tags');
+          return SlideTransition(
+            position: Tween(begin: Offset(course ? 1 : -1, 0), end: Offset.zero).animate(animation),
+            child: child,
+          );
+        },
+        child: tags
+            ? KeyedSubtree(
+                key: const ValueKey('tags'),
+                child: StudyModeRoot(booru: _booru),
+              )
+            : KeyedSubtree(
+                key: const ValueKey('lab'),
+                child: LabRoot(booru: services.booru),
+              ),
+      );
+    },
+  );
 
   Widget _libraryPlace(BuildContext context) {
     // `RetainedModeContainer`: both libraries stay alive while the other one shows.
