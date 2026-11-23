@@ -2,8 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../booru/booru_store.dart';
 import '../challenge/challenge_models.dart';
-import '../study/study_models.dart';
-import '../study/study_path.dart';
 import '../support/sql_database.dart';
 import '../support/swift_json.dart';
 import 'addon_models.dart';
@@ -21,31 +19,6 @@ class InstalledAddon {
   /// Installed from the official add-ons, checked against TEGNAL's signed catalog, rather than opened from a file.
   final bool official;
   String get id => addon.id;
-}
-
-/// A learning-mode track brought by an add-on, ready for the path (`StudyTrack`).
-class StudyTrack {
-  const StudyTrack({required this.id, required this.title, required this.summary, required this.color, required this.symbol, required this.path, this.unit});
-
-  /// The add-on's identifier.
-  final String id;
-  final StudyText title;
-  final StudyText summary;
-
-  /// Six hexadecimal digits.
-  final String color;
-
-  /// An SF Symbol name.
-  final String symbol;
-
-  /// The track's own sections. Its lesson identifiers start with `addon:<add-on>:` so that they never meet the main path's.
-  final StudyPath path;
-
-  /// The tags the track teaches beyond the app's curriculum.
-  final StudyUnit? unit;
-
-  /// Every lesson of the track is done.
-  bool complete(Map<String, StudyLessonRecord> records) => path.lessons.isNotEmpty && path.lessons.every((lesson) => records[lesson.id] != null);
 }
 
 /// What the add-ons that are on change, gathered in one place (`AddonEffects`).
@@ -69,14 +42,6 @@ class AddonEffects {
       }
       for (final rule in contents.searchTags?.imageExclude ?? const <String>[]) {
         if (seenRules.add(rule.toLowerCase())) imageExclude.add(rule);
-      }
-      if (contents.learningTrack case final track?) {
-        try {
-          tracks.add(_track(track, item.id));
-        } on Object catch (error) {
-          // The add-on was checked when it was kept; a track that still cannot be read is left out, never half used.
-          debugPrint('AddonEffects: the track of ${item.id} could not be read: $error');
-        }
       }
     }
     for (final MapEntry(key: mode, value: entries) in translations.entries) {
@@ -110,62 +75,9 @@ class AddonEffects {
   final comicsExclude = <String>[];
   final imageExclude = <String>[];
 
-  /// The tracks of the add-ons that are on, oldest first.
-  final tracks = <StudyTrack>[];
 
   static const challengePrefix = 'addon:';
   static String challengeID(String addon, String game) => '$challengePrefix$addon:$game';
-  static String lessonID(String addon, String lesson) => 'addon:$addon:$lesson';
-
-  /// Whether a symbol name can be drawn (`UIImage(systemName:) != nil`). The app sets this to what learning mode's
-  /// icons know at start-up; until then every name is kept.
-  static bool Function(String name) symbolExists = _anySymbol;
-  static bool _anySymbol(String name) => true;
-
-  static String _symbol(String? name, String fallback) => name != null && symbolExists(name) ? name : fallback;
-
-  /// The track's sections as a path of its own, with identifiers under the add-on's, and its own tags as a unit.
-  static StudyTrack _track(AddonTrack track, String addon) {
-    final sections = [
-      for (final section in track.sections)
-        StudyPathSection.fromJson({
-          ...section,
-          'id': 'addon:$addon:${section['id']}',
-          'lessons': [
-            for (final lesson in (section['lessons']! as List).cast<JsonObject>())
-              {
-                ...lesson,
-                'id': lessonID(addon, lesson['id']! as String),
-                'symbol': _symbol(lesson['symbol'] as String?, 'book.fill'),
-                if (lesson['steps'] case final List<Object?> steps)
-                  'steps': [
-                    for (final step in steps.cast<JsonObject>())
-                      {
-                        ...step,
-                        // A card's way into the app's own screens is not the add-on's to use.
-                        if (step['card'] case final JsonObject card)
-                          'card': {
-                            for (final MapEntry(:key, :value) in card.entries)
-                              if (key != 'action') key: value,
-                            if (card['symbol'] case final String symbol) 'symbol': _symbol(symbol, 'sparkles'),
-                          },
-                      },
-                  ],
-              },
-          ],
-        }),
-    ];
-    final groups = track.groups ?? const <StudyGroup>[];
-    return StudyTrack(
-      id: addon,
-      title: track.title,
-      summary: track.summary,
-      color: track.color,
-      symbol: _symbol(track.symbol, 'graduationcap.fill'),
-      path: StudyPath(version: 3, sections: sections),
-      unit: groups.isEmpty ? null : StudyUnit(id: 'addon:$addon', title: track.title, summary: track.summary, groups: groups),
-    );
-  }
 
   int enabledCount(AddonMode mode) => enabledModes.values.where((value) => value == mode).length;
 

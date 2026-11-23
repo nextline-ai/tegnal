@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
-import '../../core/addons/addon_store.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/generation/generation_store.dart';
+import '../../core/lab/tag_course.dart';
 import '../../core/study/study_awards.dart';
 import '../../core/study/study_models.dart';
 import '../../core/study/study_path.dart';
@@ -12,44 +12,30 @@ import '../booru/booru_common.dart';
 /// `StudyModeModel`: everything learning mode shows, read again whenever a lesson may have changed it.
 /// Every screen of the mode reads from one of these and calls [reload] after it has changed the store.
 class StudyModeModel extends ChangeNotifier {
-  StudyModeModel(this.booru) {
+  StudyModeModel(this.booru, {this.course}) {
     final saved = booru.booruDefaults.integer(goalKey);
     _goal = StudyGame.goals.contains(saved) ? saved : StudyGame.defaultGoal;
-    _trackID = booru.booruDefaults.string(trackKey);
   }
 
   /// `study.goal`: the experience the learner means to earn each day.
   static const goalKey = 'study.goal';
 
-  /// `study.track`: the add-on track the path shows; missing for the main path.
-  static const trackKey = 'study.track';
-
   final BooruContext booru;
 
-  /// The main path. Tracks from add-ons are finished apart from it and never count toward its badges.
-  StudyPath get path => StudyPath.bundled;
+  /// An imported course on this engine (`"engine": "tags"`), or null for 2D AI 배우기 itself.
+  final TagCourse? course;
 
-  /// The app's curriculum, with the tags of the tracks that are on added after it. Lessons are started with an
-  /// engine built from this one.
-  StudyCurriculum curriculum = StudyCurriculum.bundled;
+  /// Badges and the placement test belong to 2D AI 배우기's own path.
+  bool get isMain => course == null;
 
-  /// Tracks brought by add-ons that are on.
-  List<StudyTrack> tracks = const [];
+  /// The path shown: the course's own, or the bundled one.
+  StudyPath get path => course?.path ?? StudyPath.bundled;
 
-  String? _trackID;
-
-  /// The track the path shows, null for the main path.
-  String? get trackID => _trackID;
-  set trackID(String? value) {
-    _trackID = value;
-    booru.booruDefaults.set(trackKey, value);
-    notifyListeners();
-  }
-
-  StudyTrack? get track => tracks.where((track) => track.id == _trackID).firstOrNull;
-
-  /// The path being shown: the chosen track's, or the main one.
-  StudyPath get shownPath => track?.path ?? path;
+  /// The app's curriculum, with an imported course's own tags after it. Lessons are started with an engine built from this.
+  late final StudyCurriculum curriculum = switch (course?.unit) {
+    final unit? => StudyCurriculum(version: StudyCurriculum.bundled.version, units: [...StudyCurriculum.bundled.units, unit]),
+    null => StudyCurriculum.bundled,
+  };
 
   Map<String, StudyLessonRecord> records = {};
   Map<String, StudyProgress> progress = {};
@@ -74,11 +60,8 @@ class StudyModeModel extends ChangeNotifier {
   /// How many lessons at the start of the main path the placement test passed by.
   int placed = 0;
 
-  /// What the shown path counts as passed by: the placement belongs to the main path only.
-  int get shownPlaced => track == null ? placed : 0;
-
   /// True until the learner has been welcomed, on a first visit and again after a reset.
-  bool get needsWelcome => StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: booru.booruDefaults);
+  bool get needsWelcome => isMain && StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: booru.booruDefaults);
 
   /// Marks the welcome as gone through on this device.
   void welcomed() => booru.booruDefaults.set(StudyPlacement.welcomedKey, true);
@@ -105,48 +88,7 @@ class StudyModeModel extends ChangeNotifier {
     }
   }
 
-  /// Takes in the tracks of the add-ons that are on. A track that was turned off or removed hands the path back to the
-  /// main one.
-  void _loadTracks() {
-    final next = AddonRuntime.shared.effects.tracks;
-    if (!listEquals([for (final track in next) track.id], [for (final track in tracks) track.id]) ||
-        !listEquals([for (final track in next) track.path.lessons.length], [for (final track in tracks) track.path.lessons.length])) {
-      tracks = next;
-      final units = [for (final track in next) ?track.unit];
-      curriculum = units.isEmpty
-          ? StudyCurriculum.bundled
-          : StudyCurriculum(version: StudyCurriculum.bundled.version, units: [...StudyCurriculum.bundled.units, ...units]);
-    }
-    if (_trackID != null && !tracks.any((track) => track.id == _trackID)) {
-      _trackID = null;
-      booru.booruDefaults.set(trackKey, null);
-    }
-  }
-
-  /// A track finished for the first time, once: the lessons of an add-on track all done, and not yet celebrated.
-  /// Kept as a counter in `study_stats`, so a certificate shown on one device is not shown again on another.
-  StudyTrack? newlyCompletedTrack({required String finishing}) {
-    final stats = _read(booru.store.studyStore.stats, const <String, int>{});
-    final done = tracks
-        .where(
-          (track) =>
-              track.path.lessons.any((lesson) => lesson.id == finishing) &&
-              track.complete(records) &&
-              stats['trackDone.${track.id}'] == null &&
-              !(booru.booruDefaults.boolean('study.trackDone.${track.id}') ?? false),
-        )
-        .firstOrNull;
-    if (done == null) return null;
-    try {
-      booru.store.studyStore.raise('trackDone.${done.id}', 1);
-    } on Object catch (error) {
-      debugPrint('StudyModeModel: the certificate could not be recorded: $error');
-    }
-    return done;
-  }
-
   void reload() {
-    _loadTracks();
     final study = booru.store.studyStore;
     days = _read(study.days, const []);
     records = _read(study.lessons, const {});
@@ -155,11 +97,11 @@ class StudyModeModel extends ChangeNotifier {
     game = StudyGame.of(days: days, goal: _goal);
     server = StudyServer.current(booru.store, defaults: booru.booruDefaults);
     needsServer = StudyServer.needsChoice(booru.store, defaults: booru.booruDefaults);
-    if (awards.isEmpty) awards = StudyAward.all(path);
+    if (awards.isEmpty) awards = StudyAward.all(StudyPath.bundled);
     earned = _read(study.awards, const {});
     final stats = _read(study.stats, const <String, int>{});
-    placed = stats[StudyPlacement.counter] ?? 0;
-    facts = StudyFacts.of(path: path, records: records, days: days, progress: progress, stats: stats);
+    placed = isMain ? stats[StudyPlacement.counter] ?? 0 : 0;
+    facts = StudyFacts.of(path: StudyPath.bundled, records: records, days: days, progress: progress, stats: stats);
     weak = progress.values.where((value) => value.wrong > 0 && curriculum.contains(value.tag)).length;
     notifyListeners();
   }
@@ -180,7 +122,7 @@ class StudyModeModel extends ChangeNotifier {
       debugPrint('StudyModeModel: the generator store is unavailable: $error');
     }
     try {
-      return StudyAwards.refresh(booru.store, path: path, generation: store);
+      return StudyAwards.refresh(booru.store, path: StudyPath.bundled, generation: store);
     } on Object catch (error) {
       debugPrint('StudyModeModel: badges could not be refreshed: $error');
       return const [];

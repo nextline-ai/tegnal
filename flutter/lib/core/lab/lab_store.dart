@@ -17,6 +17,7 @@ class LabEngraving {
     required this.failsHung,
     required this.failsLeft,
     required this.first,
+    this.season,
   });
   final int before;
   final int after;
@@ -25,6 +26,9 @@ class LabEngraving {
   final int failsHung;
   final int failsLeft;
   final bool first;
+
+  /// The number of the season this card finished, the first time it was finished.
+  final int? season;
   int get total => cardReward + failReward;
 }
 
@@ -77,7 +81,26 @@ class LabStore extends ChangeNotifier {
   final LabShop? _shop;
   final LabDiagnosis? _diagnosis;
   final bool _useBundledDiagnosis;
-  LabCourse get course => _course ?? LabCourse.bundled;
+
+  /// The bundled AI lab: what pays, and what the cheat sheet and diagnosis belong to.
+  LabCourse get main => _course ?? LabCourse.bundled;
+
+  /// The deck course on screen: the AI lab, or one the learner imported. Null for the AI lab.
+  LabCourse? _shown;
+  LabCourse get course => _shown ?? main;
+
+  /// Shows another deck course. Its cards, 망작 and rate are read from now on; the money stays the AI lab's.
+  void showCourse(LabCourse course) {
+    final next = course.imported ? course : null;
+    if (identical(next, _shown)) return;
+    _shown = next;
+    notifyListeners();
+  }
+
+  /// Where a card or 망작 of the course on screen is recorded. The AI lab keeps its plain ids, as it always has; an imported
+  /// course's are put under its id, so two courses never meet.
+  String key(String id) => keyIn(id, course);
+  static String keyIn(String id, LabCourse course) => course.imported ? '${course.id}/$id' : id;
   LabShop get shop => _shop ?? LabShop.bundled;
   LabDiagnosis? get diagnosis => _diagnosis ?? (_useBundledDiagnosis ? LabDiagnosis.bundled : null);
 
@@ -126,7 +149,7 @@ class LabStore extends ChangeNotifier {
 
   // MARK: Cards
 
-  bool earned(LabEpisode episode) => progress.cards.containsKey(episode.id);
+  bool earned(LabEpisode episode) => progress.cards.containsKey(key(episode.id));
 
   /// A season opens once the season it waits for is finished.
   bool seasonOpened(LabSeason season) {
@@ -136,7 +159,7 @@ class LabStore extends ChangeNotifier {
     return previous == null || complete(previous);
   }
 
-  bool complete(LabSeason season) => season.episodes.every(progress.cards.containsKey);
+  bool complete(LabSeason season) => season.episodes.every((id) => progress.cards.containsKey(key(id)));
 
   LabCardStatus state(LabEpisode episode) {
     if (earned(episode)) return LabCardStatus.earned;
@@ -144,32 +167,44 @@ class LabStore extends ChangeNotifier {
     if (season == null || !seasonOpened(season)) return LabCardStatus.locked;
     if (season.free) return LabCardStatus.open;
     // In a fixed season only the first card not yet engraved is open.
-    final first = season.episodes.where((id) => !progress.cards.containsKey(id)).firstOrNull;
+    final first = season.episodes.where((id) => !progress.cards.containsKey(key(id))).firstOrNull;
     return first == episode.id ? LabCardStatus.open : LabCardStatus.locked;
   }
 
   /// The card the deck offers next: the first open one in deck order.
   LabEpisode? get next => course.episodes.where((episode) => state(episode) == LabCardStatus.open).firstOrNull;
   List<LabEpisode> get earnedCards => course.episodes.where(earned).toList();
+
+  /// The ids of the course's engraved episodes, as the deck tracks them.
+  Set<String> get earnedIDs => {for (final episode in earnedCards) episode.id};
+
+  /// When a card of the course on screen was engraved.
+  double? engraved(LabEpisode episode) => progress.cards[key(episode.id)];
+
+  /// Card No. 000 and the welcome check belong to the AI lab.
+  bool get offersDiagnosis => !course.imported && diagnosis != null;
   List<LabEpisode> get openCards => course.episodes.where((episode) => state(episode) == LabCardStatus.open).toList();
 
-  /// AI 성능 인출률: the base plus every engraved card's share. It never goes down.
+  /// The course's rate (the AI lab's AI 성능 인출률): the base plus every engraved card's share. It never goes down.
   int get rate => course.base + earnedCards.fold(0, (total, episode) => total + episode.impact);
 
   /// Engraves an episode's card. Playing an engraved card again changes nothing but its fails.
   LabEngraving engrave(LabEpisode episode, {required int failsHung}) {
     final before = rate;
-    final first = !progress.cards.containsKey(episode.id);
+    final first = !progress.cards.containsKey(key(episode.id));
     if (first) {
-      progress.cards[episode.id] = now;
+      progress.cards[key(episode.id)] = now;
       _save();
     }
-    final left = episode.fails.where((fail) => !progress.fails.containsKey(fail.id)).length;
+    final left = episode.fails.where((fail) => !progress.fails.containsKey(key(fail.id))).length;
+    final pays = !course.imported;
+    final season = course.seasonOf(episode);
     return LabEngraving(
+      season: first && season != null && complete(season) ? season.number : null,
       before: before,
       after: rate,
-      cardReward: first ? episode.reward : 0,
-      failReward: failsHung * course.info.rewards.fail,
+      cardReward: first && pays ? episode.reward : 0,
+      failReward: pays ? failsHung * course.info.rewards.fail : 0,
       failsHung: failsHung,
       failsLeft: left,
       first: first,
@@ -178,12 +213,15 @@ class LabStore extends ChangeNotifier {
 
   // MARK: 망작
 
-  bool hung(LabFail fail) => progress.fails.containsKey(fail.id);
+  bool hung(LabFail fail) => progress.fails.containsKey(key(fail.id));
+
+  /// What hanging one 망작 pays in the course on screen: nothing in an imported course.
+  int get failReward => course.imported ? 0 : course.info.rewards.fail;
 
   /// Hangs a 망작 in the gallery. True the first time, when it also pays.
   bool hang(LabFail fail) {
-    if (progress.fails.containsKey(fail.id)) return false;
-    progress.fails[fail.id] = now;
+    if (progress.fails.containsKey(key(fail.id))) return false;
+    progress.fails[key(fail.id)] = now;
     _save();
     return true;
   }
@@ -196,7 +234,7 @@ class LabStore extends ChangeNotifier {
 
   // MARK: Cheat sheet
 
-  /// Whether a section of the sheet is open: the card it waits for has been engraved.
+  /// Whether a section of the sheet is open: the AI lab card it waits for has been engraved.
   bool sectionOpened(LabSheetSection section) => section.opens == null || progress.cards.containsKey(section.opens);
 
   /// True when an edition newer than the last one looked at is waiting, and the learner can read part of it.
@@ -214,7 +252,7 @@ class LabStore extends ChangeNotifier {
     progress.seenEdition = edition.id;
     var paid = 0;
     if (!progress.editions.containsKey(edition.id)) {
-      paid = edition.reward ?? course.info.rewards.edition;
+      paid = edition.reward ?? main.info.rewards.edition;
       progress.editions[edition.id] = paid;
     }
     _save();
@@ -230,15 +268,16 @@ class LabStore extends ChangeNotifier {
 
   // MARK: 연구비
 
+  /// Only the AI lab pays: its cards, its 망작, cheat-sheet editions and lessons of bought courses. Imported courses pay nothing.
   int get income {
-    final cards = earnedCards.fold(0, (total, episode) => total + episode.reward);
-    final fails = progress.fails.length * course.info.rewards.fail;
+    final cards = main.episodes.where((episode) => progress.cards.containsKey(episode.id)).fold(0, (total, episode) => total + episode.reward);
+    final fails = main.fails.where((fail) => progress.fails.containsKey(fail.id)).length * main.info.rewards.fail;
     final editions = progress.editions.values.fold(0, (total, value) => total + value);
     var courses = 0;
     for (final entry in progress.purchases.entries) {
       final baseline = entry.value.baseline, done = courseLessons[entry.key];
       if (baseline == null || done == null) continue;
-      courses += (done - baseline < 0 ? 0 : done - baseline) * course.info.rewards.courseLesson;
+      courses += (done - baseline < 0 ? 0 : done - baseline) * main.info.rewards.courseLesson;
     }
     return cards + fails + editions + courses;
   }
@@ -301,7 +340,7 @@ class LabStore extends ChangeNotifier {
     _save();
   }
 
-  /// Starts the lab over: cards, gallery, money and purchases.
+  /// Starts learning mode's records over: every course's cards, the gallery, money and purchases.
   void reset() {
     progress = LabProgress();
     _save();
@@ -313,13 +352,13 @@ class LabStore extends ChangeNotifier {
     if (arguments.contains('reset')) progress = LabProgress();
     final seed = value('seed');
     if (seed != null) {
-      for (final episode in course.episodes.takeWhile((episode) => episode.id != seed)) {
+      for (final episode in main.episodes.takeWhile((episode) => episode.id != seed)) {
         progress.cards.putIfAbsent(episode.id, () => now);
       }
     }
     final fails = int.tryParse(value('fails') ?? '');
     if (fails != null) {
-      for (final fail in course.fails.take(fails)) {
+      for (final fail in main.fails.take(fails)) {
         progress.fails.putIfAbsent(fail.id, () => now);
       }
     }

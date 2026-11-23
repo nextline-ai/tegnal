@@ -10,7 +10,7 @@ import 'package:tegnal/core/challenge/challenge_models.dart';
 import 'package:tegnal/core/challenge/challenge_store.dart';
 import 'package:tegnal/core/content/content_environment.dart';
 import 'package:tegnal/core/study/study_models.dart';
-import 'package:tegnal/core/study/study_path.dart';
+import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/taste/taste_models.dart' show TasteMode;
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/presentation/content/gallery_preview_models.dart';
@@ -133,16 +133,20 @@ void main() {
   // MARK: Files
 
   test('a valid file decodes with its fingerprint and fills in English', () {
-    final data = _file({..._translations(), ..._track()});
+    final data = _file(_translations(), extra: {'name': {'ko': '배경 팩'}});
     final (:addon, :digest) = Addon.decode(data);
     expect(addon.id, 'maker.sample-pack');
-    expect(addon.contents.kinds, [AddonKind.translations, AddonKind.track]);
+    expect(addon.contents.kinds, [AddonKind.translations]);
     expect(digest, Addon.digest(data));
     expect(digest.length, 64);
     // Text written in Korean only gets an English wording too, so that it is never blank.
-    expect(addon.contents.learningTrack!.title['en'], '배경 트랙');
-    final card = (addon.contents.learningTrack!.lessons.first['steps']! as List).first as Map;
-    expect((card['card'] as Map)['title'], containsPair('en', '안녕'));
+    expect(addon.name['en'], '배경 팩');
+  });
+
+  /// Learning tracks left add-ons: learning courses are imported in learning mode's 코스 tab instead.
+  test('learning tracks are no longer add-ons', () {
+    _refused(_file(_track()), const AddonError.unknownContent('learningTrack'));
+    expect(const AddonError.unknownContent('learningTrack').errorDescription, L10n.text('addon.trackMoved'));
   });
 
   test('files that are not add-ons or are newer are refused', () {
@@ -278,36 +282,6 @@ void main() {
     );
   });
 
-  test('track cards cannot open anything and tag lessons need meanings', () {
-    final track = _trackJson();
-    final sections = <Json>[...(track['sections']! as List).cast<Json>()];
-    final lessons = <Json>[...(sections[0]['lessons']! as List).cast<Json>()];
-    sections[0] = {...sections[0], 'lessons': lessons};
-    track['sections'] = sections;
-    final intro = Map<String, Object?>.of(lessons[0]);
-    lessons[0] = {
-      ...intro,
-      'steps': [
-        {
-          'card': {
-            'title': {'en': 'Go'},
-            'body': {'en': 'Spend'},
-            'code': '1girl',
-            'action': 'generator',
-          },
-        },
-      ],
-    };
-    _refused(_file({'learningTrack': track})); // Cards in add-ons only tell.
-
-    lessons[0] = intro;
-    lessons[1] = {
-      ...lessons[1],
-      'tags': ['lighthouse', 'not_a_known_tag_anywhere'],
-    };
-    _refused(_file({'learningTrack': track})); // Every tag needs a meaning.
-  });
-
   test('challenges follow the challenge rules and the add-on text rules', () {
     expect(
       () => Addon.decode(
@@ -413,91 +387,6 @@ void main() {
     expect(booru.database.read((db) => db.column<String>('SELECT id FROM challenges')), ['addon:maker.sample-pack:second']);
   });
 
-  test('tracks are parsed and listed only for add-ons that are on', () {
-    final (:addon, digest: _) = Addon.decode(_file(_track()));
-    final track = addon.contents.learningTrack!;
-    expect(track.sections.length, 1);
-    expect(track.lessons.map((lesson) => lesson['id']), ['intro', 'tags']);
-    expect(track.lessons.every((lesson) => !lesson.containsKey('bogus')), isTrue, reason: 'Unknown keys are dropped from the kept copy');
-    expect(track.groups!.single.tags.single.name, 'lighthouse');
-    expect(((addon.json['contents']! as Map)['learningTrack']! as Map)['sections'], isA<List>());
-    expect(bundled.tag('long_hair'), isNotNull, reason: "The app's own tags stay");
-
-    expect(AddonEffects([_installed(addon)]).tracks.map((item) => item.id), ['maker.sample-pack']);
-    expect(AddonEffects([_installed(addon, enabled: false)]).tracks, isEmpty);
-    final plain = Addon.decode(_file(_translations(), id: 'maker.plain')).addon;
-    expect(AddonEffects([_installed(plain)]).tracks, isEmpty, reason: 'Only add-ons with tracks are listed');
-    expect(AddonEffects.lessonID('maker.sample-pack', 'intro'), 'addon:maker.sample-pack:intro');
-  });
-
-  test('a track becomes a path of its own, under the add-on, with its tags as a unit after the app\'s', () {
-    final addon = Addon.decode(_file(_track())).addon;
-    final track = AddonEffects([_installed(addon)]).tracks.single;
-    expect(track.id, 'maker.sample-pack');
-    expect(track.title, addon.contents.learningTrack!.title);
-    expect(track.title['ko'], '배경 트랙');
-    expect(track.summary['ko'], '배경을 배웁니다');
-    expect(track.color, '2F9E6E');
-    expect(track.symbol, 'mountain.2', reason: 'Every name is kept until the app says which it can draw');
-    expect(track.path.version, 3);
-    expect(track.path.sections.single.id, 'addon:maker.sample-pack:one');
-    expect(track.path.sections.single.color, '2F9E6E');
-    expect(track.path.lessons.map((lesson) => lesson.id), ['addon:maker.sample-pack:intro', 'addon:maker.sample-pack:tags']);
-    expect(track.path.lessons.map((lesson) => lesson.id), [AddonEffects.lessonID(addon.id, 'intro'), AddonEffects.lessonID(addon.id, 'tags')]);
-    expect(track.path.lessons.first.kind, StudyPathLessonKind.concept);
-    expect(track.path.lessons.first.steps!.length, 2);
-    expect(track.path.lessons.first.steps!.first.card!.title['ko'], '안녕');
-    expect(track.path.lessons.last.tags, ['lighthouse', 'long_hair']);
-    expect(track.unit!.id, 'addon:maker.sample-pack');
-    expect(track.unit!.title, track.title);
-    expect(track.unit!.tags.map((tag) => tag.name), ['lighthouse']);
-
-    expect(track.complete({}), isFalse);
-    final intro = StudyLessonRecord(lesson: track.path.lessons.first.id, stars: 3, runs: 1);
-    expect(track.complete({intro.lesson: intro}), isFalse);
-    final tags = StudyLessonRecord(lesson: track.path.lessons.last.id, stars: 1, runs: 1);
-    expect(track.complete({intro.lesson: intro, tags.lesson: tags}), isTrue);
-    expect(StudyTrack(id: 'empty', title: const {}, summary: const {}, color: '000000', symbol: 'book', path: const StudyPath()).complete({}), isFalse);
-  });
-
-  test('a track with no tags of its own brings no unit, and its unknown symbols give way to stand-ins', () {
-    final json = (jsonDecode(jsonEncode(_trackJson())) as Json)..remove('groups');
-    final sections = json['sections']! as List;
-    final lessons = (sections.single as Json)['lessons']! as List;
-    lessons.removeLast();
-    final steps = (lessons.single as Json)['steps']! as List;
-    (steps.first as Json)['card'] = {
-      'title': {'ko': '안녕'},
-      'body': {'ko': '배경 이야기'},
-      'symbol': 'no.such.symbol',
-    };
-    final addon = Addon.decode(_file({'learningTrack': json})).addon;
-    final previous = AddonEffects.symbolExists;
-    addTearDown(() => AddonEffects.symbolExists = previous);
-    AddonEffects.symbolExists = (name) => name == 'tag';
-    final track = AddonEffects([_installed(addon)]).tracks.single;
-    expect(track.unit, isNull);
-    expect(track.symbol, 'graduationcap.fill');
-    expect(track.path.lessons.single.symbol, 'book.fill');
-    final card = track.path.lessons.single.steps!.first.card!;
-    expect(card.symbol, 'sparkles');
-    expect(card.action, isNull);
-
-    AddonEffects.symbolExists = (name) => true;
-    final kept = AddonEffects([_installed(addon)]).tracks.single;
-    expect(kept.path.lessons.single.symbol, 'book');
-    expect(kept.path.lessons.single.steps!.first.card!.symbol, 'no.such.symbol');
-    expect(kept.path.lessons.single.steps!.first.card!.action, isNull);
-  });
-
-  test('tracks follow the order the add-ons were installed in', () {
-    final first = Addon.decode(_file(_track(), id: 'maker.first')).addon;
-    final second = Addon.decode(_file(_track(), id: 'maker.second')).addon;
-    final effects = AddonEffects([_installed(second, at: 2), _installed(first, at: 1)]);
-    expect(effects.tracks.map((track) => track.id), ['maker.first', 'maker.second']);
-    expect(effects.tracks.last.path.lessons.first.id, 'addon:maker.second:intro');
-  });
-
   test('later add-ons win when two translate the same tag', () {
     final first = Addon.decode(_file(_translations({'long_hair': '긴 머리'}), id: 'maker.first')).addon;
     final second = Addon.decode(_file(_translations({'long_hair': '장발'}), id: 'maker.second')).addon;
@@ -524,7 +413,6 @@ void main() {
     _refused(_file(_translations(), mode: 'both'), const AddonError.invalid('mode'));
     final noMode = jsonDecode(utf8.decode(_file(_translations()))) as Json..remove('mode');
     _refused(utf8.encode(jsonEncode(noMode)), const AddonError.invalid('mode'));
-    _refused(_file(_track(), mode: 'comics'), const AddonError.invalid('learningTrack'));
     _refused(
       _file({
         'challenges': [_game('sketch')],

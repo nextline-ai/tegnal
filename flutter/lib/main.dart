@@ -23,6 +23,8 @@ import 'core/booru/booru_store.dart';
 import 'core/lab/lab_course.dart';
 import 'core/lab/lab_sheet.dart';
 import 'core/lab/lab_store.dart';
+import 'core/lab/learning_courses.dart';
+import 'core/lab/tag_course.dart';
 import 'core/taste/taste_fixtures.dart';
 import 'core/taste/taste_models.dart';
 import 'core/content/content_environment.dart';
@@ -114,14 +116,11 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
   }
 }
 
-/// The AI lab's scripts, shop, check and cheat sheet, and the license of its serif.
+/// The AI lab's scripts, shop, check and cheat sheet.
 Future<void> _loadLab() async {
   await Future.wait([LabCourse.loadBundled(), LabShop.loadBundled(), LabDiagnosis.loadBundled(), LabEdition.loadBundled()]);
   final saved = await LabSheetSource.saved();
   if (saved != null) LabStore.shared.show(saved);
-  LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(['Noto Serif KR'], await rootBundle.loadString('assets/fonts/NotoSerifKR-OFL.txt'));
-  });
 }
 
 Future<void> main() async {
@@ -290,11 +289,13 @@ Future<AppServices> _launch() async {
   WorkSiteMemory.shared = WorkSiteMemory(file: WorkSiteMemory.defaultFile(support));
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
-  // A track's symbols that learning mode cannot draw give way to its stand-ins, as iOS does for unknown SF Symbols.
-  AddonEffects.symbolExists = StudyGlyph.knows;
   AddonRuntime.shared.reload(booru);
   // The lab's records live in the image database and travel with it; a sync or a restored backup may bring new ones.
   LabStore.shared.attach(booru.database);
+  // Courses the learner imported in the 코스 tab, one checked file each.
+  // Symbols an imported course names that learning mode cannot draw give way to stand-ins, as iOS does for unknown SF Symbols.
+  TagCourse.symbolExists = StudyGlyph.knows;
+  LearningCourses.shared.attach(Directory('${support.path}/LearningCourses'));
   booru.addListener(LabStore.shared.reload);
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
   booru.warmSavedPreview = (post, server) {

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/preferences.dart';
 import '../../core/lab/lab_store.dart';
+import '../../core/lab/learning_courses.dart';
 import '../home/home_stage.dart';
 import '../lab/lab_root.dart' show LabTab;
 import 'study_reactions.dart';
@@ -37,14 +38,17 @@ class StudyMode extends ChangeNotifier {
   bool _startsActive = false;
   bool _startsInLibrary = false;
   StudyTab _tab = StudyTab.path;
-  bool _tagsOpen = false;
+  String _courseID = LearningCourse.labID;
   LabTab _labTab = LabTab.deck;
 
-  /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on the course.
-  bool _wantsTags = false;
+  /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on that course.
+  String? _wanted;
 
-  /// Learning mode opens on the AI lab. The 2D AI course, bought in the lab's shop, is shown in its place while this is true.
-  bool get tagsOpen => _tagsOpen;
+  /// The course on screen (`LearningCourse.id`). Learning mode opens on the AI lab; the 코스 tab switches to another.
+  String get courseID => _courseID;
+
+  /// The engine of the course on screen, which decides the screens learning mode shows.
+  LearningEngine get engine => LearningCourses.shared.course(_courseID)?.engine ?? LearningEngine.deck;
 
   /// The lab tab shown.
   LabTab get labTab => _labTab;
@@ -56,15 +60,15 @@ class StudyMode extends ChangeNotifier {
 
   /// Learning mode has been reached through the home scene: the lab, unless a 2D AI entry asked for the course.
   void arrive() {
-    _tagsOpen = _wantsTags && LabStore.shared.ownsTagCourse;
-    _wantsTags = false;
+    _show(_wanted ?? LearningCourse.labID);
+    _wanted = null;
     notifyListeners();
   }
 
   /// Opens learning mode on the AI lab.
   void enterLab([LabTab tab = LabTab.deck]) {
-    _tagsOpen = false;
-    _wantsTags = false;
+    _show(LearningCourse.labID);
+    _wanted = null;
     _labTab = tab;
     if (_active) {
       notifyListeners();
@@ -80,25 +84,30 @@ class StudyMode extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Shows the 2D AI course in place of the lab, once it is bought; before that, the lab tab where it is sold.
-  void openTags([StudyTab tab = StudyTab.path]) {
-    if (!LabStore.shared.ownsTagCourse) {
+  /// Switches to a course from the 코스 tab. A course not bought yet leaves the lab on its 코스 tab, where it is sold.
+  void open(String id, [StudyTab tab = StudyTab.path]) {
+    final course = LearningCourses.shared.course(id);
+    if (course == null || !LearningCourses.shared.owned(course)) {
+      _show(LearningCourse.labID);
       _labTab = LabTab.courses;
-      _tagsOpen = false;
       notifyListeners();
       return;
     }
     _tab = tab;
-    _tagsOpen = true;
+    _show(id);
     notifyListeners();
   }
 
-  /// Back from the 2D AI course to the lab, on its deck.
-  void closeTags() {
-    _labTab = LabTab.deck;
-    _tagsOpen = false;
-    notifyListeners();
-    StudySound.rest();
+  /// Puts a course on screen. A deck course lands on its cards; leaving the 2D AI course quiets its sounds.
+  void _show(String id) {
+    final course = LearningCourses.shared.course(id);
+    if (course == null) return _show(LearningCourse.labID);
+    if (engine == LearningEngine.tags && id != _courseID) StudySound.rest();
+    if (course.deck case final deck?) {
+      LabStore.shared.showCourse(deck);
+      if (id != _courseID) _labTab = LabTab.deck;
+    }
+    _courseID = id;
   }
 
   /// Reads the stored start-up choice from the image-mode preferences (`ReaderPreferences.booruDefaults`). The app
@@ -112,7 +121,7 @@ class StudyMode extends ChangeNotifier {
     final launchedIn = fixture ?? names.contains('studyMode');
     _active = _startsActive || launchedIn || names.contains('labMode');
     // `studyMode` opens the 2D AI course itself, for its own tests; `labMode` opens the lab.
-    _tagsOpen = launchedIn;
+    _courseID = launchedIn ? LearningCourse.tagsID : LearningCourse.labID;
     notifyListeners();
   }
 
@@ -136,8 +145,8 @@ class StudyMode extends ChangeNotifier {
     _active = stage.studying;
     // The home scene's learning mode is the AI lab; only the library's 2D AI entries ask for the course itself.
     if (arrived) {
-      _tagsOpen = _wantsTags && LabStore.shared.ownsTagCourse;
-      _wantsTags = false;
+      _show(_wanted ?? LearningCourse.labID);
+      _wanted = null;
     }
     _startsActive = stage.startsLearning;
     _startsInLibrary = stage.startsInLibrary;
@@ -195,11 +204,15 @@ class StudyMode extends ChangeNotifier {
   /// Opens learning mode, on [tab]. From the library, the way there leads back up through the home scene and on into the sky.
   void enter([StudyTab tab = StudyTab.path]) {
     _tab = tab;
-    // The library's 2D AI entries lead to the course when it is owned, and to the lab's 2D tab when not.
+    // The library's 2D AI entries lead to the course when it is owned, and to the lab's 코스 tab, where it is sold, when not.
     LabStore.shared.reload();
-    _tagsOpen = LabStore.shared.ownsTagCourse;
-    _wantsTags = _tagsOpen;
-    if (!_tagsOpen) _labTab = LabTab.courses;
+    if (LabStore.shared.ownsTagCourse) {
+      _show(LearningCourse.tagsID);
+      _wanted = LearningCourse.tagsID;
+    } else {
+      _show(LearningCourse.labID);
+      _labTab = LabTab.courses;
+    }
     final stage = _stage;
     if (stage != null) {
       notifyListeners();

@@ -10,16 +10,18 @@ final class StudyMode {
     var active: Bool
     /// The tab learning mode opens on the next time it is entered.
     var tab = StudyTab.path
-    /// Learning mode opens on the AI lab. The tag course, bought in the lab's shop, is shown in its place while this is true.
-    var tagsOpen: Bool
-    /// The lab tab shown.
+    /// The course on screen (`LearningCourse.id`). Learning mode opens on the AI lab; the 코스 tab switches to another.
+    private(set) var courseID: String
+    /// The lab tab shown, in whichever deck course is on screen.
     var labTab = LabTab.deck
-    /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on the course.
-    private var wantsTags = false
+    /// The engine of the course on screen, which decides the screens learning mode shows.
+    var engine: LearningCourse.Engine { LearningCourses.shared.course(courseID)?.engine ?? .deck }
+    /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on that course.
+    private var wanted: String?
     /// Learning mode has been reached through the home scene: the lab, unless a 2D AI entry asked for the course.
     func arrive() {
-        tagsOpen = wantsTags && LabStore.shared.ownsTagCourse
-        wantsTags = false
+        show(wanted ?? LearningCourse.labID)
+        wanted = nil
     }
     /// Open straight into learning mode when the app starts.
     var startsActive: Bool { didSet { defaults.set(startsActive, forKey: Self.startKey); if startsActive, startsInLibrary { startsInLibrary = false } } }
@@ -34,37 +36,38 @@ final class StudyMode {
         let arguments = ProcessInfo.processInfo.arguments
         active = starts || arguments.contains("--study-mode") || arguments.contains("--lab-mode")
         // `--study-mode` opens the tag course itself, for its own tests; `--lab-mode` opens the lab.
-        tagsOpen = arguments.contains("--study-mode")
+        courseID = arguments.contains("--study-mode") ? LearningCourse.tagsID : LearningCourse.labID
     }
     /// Opens learning mode on the AI lab.
     func enterLab(_ tab: LabTab = .deck) {
-        tagsOpen = false
-        wantsTags = false
+        show(LearningCourse.labID)
+        wanted = nil
         labTab = tab
         if active { return }
         if HomeStage.shared.cross(to: .study) { return }
         withAnimation(.snappy(duration: 0.35)) { active = true }
     }
-    /// Shows the tag course in place of the lab, once it is bought; before that, the shop where it is sold.
-    func openTags(_ tab: StudyTab = .path) {
-        guard LabStore.shared.ownsTagCourse else { labTab = .courses; tagsOpen = false; return }
+    /// Switches to a course from the 코스 tab. A course not bought yet leaves the lab on its 코스 tab, where it is sold.
+    func open(_ id: String, tab: StudyTab = .path) {
+        guard let course = LearningCourses.shared.course(id), LearningCourses.shared.owned(course) else {
+            show(LearningCourse.labID); labTab = .courses; return
+        }
         self.tab = tab
-        withAnimation(.snappy(duration: 0.35)) { tagsOpen = true }
+        withAnimation(.snappy(duration: 0.35)) { show(id) }
     }
-    /// Back from the tag course to the lab, on its deck.
-    func closeTags() {
-        labTab = .deck
-        withAnimation(.snappy(duration: 0.35)) { tagsOpen = false }
-        StudySound.rest()
+    /// Puts a course on screen. A deck course lands on its cards; leaving the 2D course quiets its sounds.
+    private func show(_ id: String) {
+        guard let course = LearningCourses.shared.course(id) else { return show(LearningCourse.labID) }
+        if engine == .tags, id != courseID { StudySound.rest() }
+        if let deck = course.deck { LabStore.shared.show(course: deck); if id != courseID { labTab = .deck } }
+        courseID = id
     }
     /// Opens learning mode. From the library, the way there leads back up through the home scene and on into the sky.
     func enter(_ tab: StudyTab = .path) {
         self.tab = tab
-        // The library's tag-study entries lead to the course when it is owned, and to the lab's shop when not.
+        // The library's tag-study entries lead to the course when it is owned, and to the lab's 코스 tab, where it is sold, when not.
         LabStore.shared.reload()
-        tagsOpen = LabStore.shared.ownsTagCourse
-        wantsTags = tagsOpen
-        if !tagsOpen { labTab = .courses }
+        if LabStore.shared.ownsTagCourse { show(LearningCourse.tagsID); wanted = LearningCourse.tagsID } else { show(LearningCourse.labID); labTab = .courses }
         if HomeStage.shared.cross(to: .study) { return }
         withAnimation(.snappy(duration: 0.35)) { active = true }
     }

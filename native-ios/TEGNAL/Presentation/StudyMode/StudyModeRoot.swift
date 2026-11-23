@@ -4,18 +4,14 @@ import SwiftUI
 @MainActor @Observable
 final class StudyModeModel {
     static let goalKey = "study.goal"
-    static let trackKey = "study.track"
-    /// The main path. Tracks from add-ons are finished apart from it and never count toward its badges.
-    let path = StudyPath.bundled
-    /// The app's curriculum, with the tags of the tracks that are on added after it.
-    private(set) var curriculum = StudyCurriculum.bundled
-    /// Tracks brought by add-ons that are on.
-    private(set) var tracks: [StudyTrack] = []
-    /// The track the path shows, nil for the main path.
-    var trackID: String? { didSet { defaults.set(trackID, forKey: Self.trackKey) } }
-    var track: StudyTrack? { tracks.first { $0.id == trackID } }
-    /// The path being shown: the chosen track's, or the main one.
-    var shownPath: StudyPath { track?.path ?? path }
+    /// An imported course on this engine (`"engine": "tags"`), or nil for 2D AI 배우기 itself.
+    let course: TagCourse?
+    /// The path shown: the course's own, or the bundled one.
+    let path: StudyPath
+    /// The app's curriculum, with an imported course's own tags after it.
+    let curriculum: StudyCurriculum
+    /// Badges and the placement test belong to 2D AI 배우기's own path.
+    var isMain: Bool { course == nil }
     private let defaults = ReaderPreferences.booruDefaults
     private(set) var records: [String: StudyLessonRecord] = [:]
     private(set) var progress: [String: StudyProgress] = [:]
@@ -31,45 +27,22 @@ final class StudyModeModel {
     private(set) var weak = 0
     /// How many lessons at the start of the main path the placement test passed by.
     private(set) var placed = 0
-    /// What the shown path counts as passed by: the placement belongs to the main path only.
-    var shownPlaced: Int { track == nil ? placed : 0 }
     /// True until the learner has been welcomed, on a first visit and again after a reset.
-    var needsWelcome: Bool { StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: defaults) }
+    var needsWelcome: Bool { isMain && StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: defaults) }
     /// Marks the welcome as gone through on this device.
     func welcomed() { defaults.set(true, forKey: StudyPlacement.welcomedKey) }
     var goal: Int { didSet { defaults.set(goal, forKey: Self.goalKey) } }
 
-    init() {
+    init(course: TagCourse? = nil) {
+        self.course = course
+        path = course?.path ?? .bundled
+        let bundled = StudyCurriculum.bundled
+        curriculum = course?.unit.map { StudyCurriculum(version: bundled.version, units: bundled.units + [$0]) } ?? bundled
         let saved = ReaderPreferences.booruDefaults.integer(forKey: Self.goalKey)
         goal = StudyGame.goals.contains(saved) ? saved : StudyGame.defaultGoal
-        trackID = ReaderPreferences.booruDefaults.string(forKey: Self.trackKey)
-    }
-
-    /// Takes in the tracks of the add-ons that are on. A track that was turned off or removed hands the path back to the main one.
-    private func loadTracks() {
-        let next = AddonRuntime.shared.effects.tracks
-        if next.map(\.id) != tracks.map(\.id) || next.map(\.path.lessons.count) != tracks.map(\.path.lessons.count) {
-            tracks = next
-            let units = next.compactMap(\.unit)
-            curriculum = units.isEmpty ? .bundled : StudyCurriculum(version: StudyCurriculum.bundled.version, units: StudyCurriculum.bundled.units + units)
-        }
-        if let trackID, !tracks.contains(where: { $0.id == trackID }) { self.trackID = nil }
-    }
-
-    /// A track finished for the first time, once: the lessons of an add-on track all done, and not yet celebrated.
-    /// Kept as a counter in `study_stats`, so a certificate shown on one device is not shown again on another.
-    func newlyCompletedTrack(finishing lesson: String, store: BooruStore) -> StudyTrack? {
-        let stats = (try? store.studyStore.stats()) ?? [:]
-        guard let done = tracks.first(where: { track in
-            track.path.lessons.contains { $0.id == lesson } && track.complete(records)
-                && stats["trackDone." + track.id] == nil && !defaults.bool(forKey: "study.trackDone." + track.id)
-        }) else { return nil }
-        try? store.studyStore.raise("trackDone." + done.id, to: 1)
-        return done
     }
 
     func reload(_ store: BooruStore) {
-        loadTracks()
         let study = store.studyStore
         let days = (try? study.days()) ?? []
         records = (try? study.lessons()) ?? [:]
@@ -78,11 +51,11 @@ final class StudyModeModel {
         game = StudyGame(days: days, goal: goal)
         server = StudyServer.current(store, defaults: defaults)
         needsServer = StudyServer.needsChoice(store, defaults: defaults)
-        if awards.isEmpty { awards = StudyAward.all(path) }
+        if awards.isEmpty { awards = StudyAward.all(.bundled) }
         earned = (try? study.awards()) ?? [:]
         let stats = (try? study.stats()) ?? [:]
-        placed = stats[StudyPlacement.counter] ?? 0
-        facts = StudyFacts(path: path, records: records, days: days, progress: progress, stats: stats)
+        placed = isMain ? stats[StudyPlacement.counter] ?? 0 : 0
+        facts = StudyFacts(path: .bundled, records: records, days: days, progress: progress, stats: stats)
         weak = progress.values.filter { $0.wrong > 0 && curriculum.contains($0.tag) }.count
     }
 
@@ -96,7 +69,7 @@ final class StudyModeModel {
 struct StudyModeRoot: View {
     @Environment(BooruStore.self) private var store
     @State private var mode = StudyMode.shared
-    @State private var model = StudyModeModel()
+    @State private var model = StudyModeModel(course: LearningCourses.shared.course(StudyMode.shared.courseID)?.lessons)
     @State private var session: StudyLessonSession?
     @State private var choosingServer = false
     /// The lesson that has just been finished, while the path celebrates it.
@@ -106,8 +79,6 @@ struct StudyModeRoot: View {
     @State private var showingAwards = false
     /// Badges earned away from a lesson, waiting for their celebration.
     @State private var parade: [StudyAward] = []
-    /// An add-on track just finished, while its certificate is shown.
-    @State private var graduated: StudyTrack?
     private let source: any BooruProviding = TasteSources.booru
 
     /// Whether this visit's opening question or celebration has been shown.
@@ -138,7 +109,7 @@ struct StudyModeRoot: View {
         switch tab {
         case .path: StudyPathView(model: model, celebrating: celebrating, start: start)
         case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
-        case .courses: LabCoursesView(here: .tags)
+        case .courses: LabCoursesView()
         case .lab: StudyLabView(model: model, start: start, closed: celebrate)
         case .me: StudyMeView(model: model, source: source, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true }, reset: {
             // A reset starts learning mode over, welcome and placement test included.
@@ -190,7 +161,6 @@ struct StudyModeRoot: View {
         .appSheet(isPresented: $choosingServer) { StudyServerPicker(model: model).presentationDetents([.medium, .large]) }
         .appFullScreenCover(item: $speed, onDismiss: { withAnimation { model.reload(store) }; celebrate() }) { StudySpeedView(round: $0) }
         .appFullScreenCover(isPresented: $showingAwards) { StudyAwardsGallery(model: model) }
-        .appFullScreenCover(item: $graduated) { StudyTrackCertificate(track: $0) { graduated = nil } }
         .appFullScreenCover(isPresented: Binding(get: { !parade.isEmpty }, set: { if !$0 { parade = [] } })) {
             StudyAwardParade(awards: parade) { parade = []; model.reload(store) }
         }
@@ -217,7 +187,7 @@ struct StudyModeRoot: View {
             }
             // Badges the seeds earn are not celebrated: the seeded lessons were never played.
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--study-seed-") }) {
-                try? store.studyStore.markSeen(StudyAwards.refresh(store, path: model.path).map(\.id))
+                try? store.studyStore.markSeen(StudyAwards.refresh(store, path: .bundled).map(\.id))
             }
             #endif
             model.reload(store)
@@ -227,7 +197,6 @@ struct StudyModeRoot: View {
         }
         .onChange(of: HomeStage.shared.coversScreen) { _, _ in greet() }
         .onChange(of: store.revision) { model.reload(store) }
-        .onChange(of: AddonRuntime.shared.effects.tracks.map(\.id)) { model.reload(store) }
         // The path behind a finished lesson is already up to date when the lesson closes.
         .onChange(of: session?.phase) { _, phase in
             guard phase == .finished else { return }
@@ -238,7 +207,7 @@ struct StudyModeRoot: View {
 
     /// Shows the badges earned since the last look that no lesson's results have shown, such as one for a picture generated.
     private func celebrate() {
-        let unseen = StudyAwards.refresh(store, path: model.path)
+        let unseen = StudyAwards.refresh(store, path: .bundled)
         model.reload(store)
         guard !unseen.isEmpty, session == nil, speed == nil else { return }
         try? store.studyStore.markSeen(unseen.map(\.id))
@@ -253,10 +222,6 @@ struct StudyModeRoot: View {
         guard let done = finished else { return }
         finished = nil
         mode.tab = .path
-        // The last lesson of an add-on track earns its certificate, once, after the stop has burst.
-        if let track = model.newlyCompletedTrack(finishing: done, store: store) {
-            Task { try? await Task.sleep(for: .seconds(1.6)); if session == nil, parade.isEmpty { graduated = track } }
-        }
         Task {
             try? await Task.sleep(for: .milliseconds(250))
             celebrating = done
@@ -268,7 +233,6 @@ struct StudyModeRoot: View {
     }
 
     private func start(_ plan: StudyLessonPlan) {
-        // Lessons of an add-on track can teach tags of its own, so the curriculum with them is used.
         session = StudyLessonSession(plan: plan, store: store, source: source, server: model.server, engine: StudyEngine(curriculum: model.curriculum))
     }
 }
@@ -312,13 +276,12 @@ struct StudyPathView: View {
     private static let sway: [CGFloat] = [0, 58, 86, 58, 0, -58, -86, -58]
 
     var body: some View {
-        let current = model.shownPath.current(model.records, placed: model.shownPlaced)
+        let current = model.path.current(model.records, placed: model.placed)
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
-                    if !model.tracks.isEmpty { StudyTrackPicker(model: model).padding(.top, 10) }
-                    if let track = model.track { StudyTrackHeader(track: track, records: model.records).padding(.top, 14) }
-                    ForEach(model.shownPath.sections) { section in
+                    if let course = model.course { courseHeader(course).padding(.top, 14) }
+                    ForEach(model.path.sections) { section in
                         banner(section).padding(.top, 18).padding(.bottom, 22)
                         if section.lessons.isEmpty {
                             Label(L10n.text("Opens in a coming update"), systemImage: "lock.fill")
@@ -360,6 +323,38 @@ struct StudyPathView: View {
         .onChange(of: current?.id) { dismissed = false }
     }
 
+    /// An imported course's name, what it teaches and how far along it is, above its path.
+    private func courseHeader(_ course: TagCourse) -> some View {
+        let lessons = course.path.lessons
+        let done = lessons.filter { model.records[$0.id] != nil }.count
+        let color = Color(studyHex: course.color)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: course.symbol).font(.system(size: 22, weight: .heavy)).foregroundStyle(color)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(course.title.resolved()).font(StudyTheme.title(20)).foregroundStyle(StudyTheme.ink)
+                    Text(L10n.text("lab.courses.imported.kicker")).font(StudyTheme.body(12, .bold)).foregroundStyle(StudyTheme.muted)
+                }
+                Spacer(minLength: 0)
+                if course.complete(model.records) {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 26)).foregroundStyle(StudyTheme.good)
+                        .accessibilityLabel(L10n.text("lab.course.done"))
+                }
+            }
+            Text(course.summary.resolved()).font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                StudyBar(value: Double(done) / Double(max(1, lessons.count)), color: color, height: 10)
+                Text("\(done)/\(lessons.count)").font(StudyTheme.body(13, .heavy)).foregroundStyle(StudyTheme.muted).monospacedDigit()
+            }
+        }
+        .padding(18)
+        .background(StudyTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 2) }
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("study.course.header")
+    }
+
     private func banner(_ section: StudyPathSection) -> some View {
         let done = section.lessons.filter { model.records[$0.id] != nil }.count
         let color = Color(studyHex: section.color)
@@ -383,7 +378,7 @@ struct StudyPathView: View {
     private func node(_ lesson: StudyPathLesson, _ color: Color, current: Bool) -> some View {
         let record = model.records[lesson.id]
         // A lesson the placement test passed by stays open, to be played whenever the learner likes.
-        let skipped = model.shownPath.isSkipped(lesson, model.records, placed: model.shownPlaced)
+        let skipped = model.path.isSkipped(lesson, model.records, placed: model.placed)
         let open = record != nil || current || skipped
         let size: CGFloat = lesson.kind == .boss ? 92 : 76
         return VStack(spacing: 8) {
@@ -607,7 +602,7 @@ struct StudyLabView: View {
     /// Generating needs an API key. Until one is saved, this card says so and leads to the lessons that explain it.
     private var connection: some View {
         let connected = generation.hasKey
-        let lesson = model.path.lessons.first { $0.id == "api-what" }
+        let lesson = StudyPath.bundled.lessons.first { $0.id == "api-what" }
         return StudyCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 14) {

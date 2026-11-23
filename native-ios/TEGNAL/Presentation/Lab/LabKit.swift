@@ -55,24 +55,14 @@ extension Color {
 
 /// Three voices: serif for the content (titles, verdicts, the engraved line), the system font for the app, monospaced for numbers.
 enum LabFont {
-    enum Weight { case black, semibold }
-    /// Noto Serif KR is bundled (`LabFonts/`, trimmed to Hangul, Latin and punctuation); Japanese uses the system's Hiragino Mincho.
-    private static func serif(_ weight: Weight) -> String? {
-        let name: String
-        switch L10n.language {
-        case "ja": name = weight == .black ? "HiraMinProN-W6" : "HiraMinProN-W3"
-        default: name = weight == .black ? "NotoSerifKR-Black" : "NotoSerifKR-SemiBold"
-        }
-        return UIFont(name: name, size: 12) == nil ? nil : name
-    }
-
-    /// The content voice at its heaviest: titles and verdicts.
+    /// The content voice at its heaviest: titles and verdicts. The system's sans-serif, like the rest of learning mode
+    /// (user, 2026-11-24: the serif is kept only for viewing mode's recap).
     static func voice(_ size: CGFloat, relativeTo style: Font.TextStyle = .title) -> Font {
-        serif(.black).map { .custom($0, size: size, relativeTo: style) } ?? .system(size: size, weight: .heavy, design: .serif)
+        .system(size: size, weight: .bold)
     }
     /// The content voice, lighter: a line on a small card.
     static func line(_ size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        serif(.semibold).map { .custom($0, size: size, relativeTo: style) } ?? .system(size: size, weight: .semibold, design: .serif)
+        .system(size: size, weight: .semibold)
     }
 
     static func number(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font { .system(size: size, weight: weight, design: .monospaced) }
@@ -528,5 +518,28 @@ enum LabOrdinal {
             let suffix = (11...13).contains(number % 100) ? "th" : [1: "st", 2: "nd", 3: "rd"][number % 10] ?? "th"
             return "\(number)\(suffix)"
         }
+    }
+}
+
+// MARK: - A wrong answer
+
+extension EnvironmentValues {
+    /// Tints the whole episode red for a moment: a wrong answer, felt at once. Set by `LabEpisodeView`; tools call it.
+    @Entry var labMistake: @MainActor () -> Void = {}
+}
+
+/// The red wash over the whole screen after a wrong answer: in fast, out slowly. Lets touches through.
+struct LabMistakeWash: View {
+    let count: Int
+    @State private var shown = false
+    var body: some View {
+        LabPalette.fail.opacity(shown ? 0.22 : 0)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: count) {
+                withAnimation(.easeOut(duration: 0.08)) { shown = true }
+                withAnimation(.easeIn(duration: 0.55).delay(0.12)) { shown = false }
+            }
     }
 }

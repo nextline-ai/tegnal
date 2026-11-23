@@ -63,6 +63,7 @@ import '../presentation/settings/drive_sync_section.dart';
 import '../presentation/settings/automatic_backups_view.dart';
 import '../presentation/settings/library_management_view.dart';
 import '../presentation/settings/settings_view.dart';
+import '../core/lab/learning_courses.dart';
 import '../presentation/lab/lab_root.dart';
 import '../presentation/study_mode/study_kit.dart';
 import '../presentation/study_mode/study_mode_root.dart';
@@ -586,12 +587,13 @@ class _RootState extends State<_Root> {
     );
   }
 
-  /// Learning mode as a place of its own: it takes the whole screen, its own dock included. It opens on the AI lab; the
-  /// 2D AI course bought in the lab's shop takes its place while open.
+  /// Learning mode as a place of its own: it takes the whole screen, its own dock included. It shows the course on screen
+  /// on its engine: the 2D AI course's own screens, or the deck that the AI lab and every imported course play on.
+  /// It opens on the AI lab.
   Widget _studyPlace() => ListenableBuilder(
     listenable: StudyMode.shared,
     builder: (context, _) {
-      final tags = StudyMode.shared.tagsOpen;
+      final tags = StudyMode.shared.engine == LearningEngine.tags;
       return AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
         switchInCurve: Curves.easeOutCubic,
@@ -606,10 +608,12 @@ class _RootState extends State<_Root> {
         child: tags
             ? KeyedSubtree(
                 key: const ValueKey('tags'),
-                child: StudyModeRoot(booru: _booru),
+                // Each course on this engine gets its own screens, built for its own path.
+                child: StudyModeRoot(key: ValueKey(StudyMode.shared.courseID), booru: _booru),
               )
             : KeyedSubtree(
-                key: const ValueKey('lab'),
+                // Each deck course gets its own lab, so nothing of one course's screens is left in another's.
+                key: ValueKey('deck:${StudyMode.shared.courseID}'),
                 child: LabRoot(booru: services.booru),
               ),
       );

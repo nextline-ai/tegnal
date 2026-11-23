@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../core/addons/addon_store.dart';
+import '../../core/lab/learning_courses.dart';
+import '../../core/lab/tag_course.dart';
 import '../../core/booru/booru_models.dart';
 import '../../core/generation/generation_store.dart';
 import '../../core/study/study_engine.dart';
@@ -32,7 +32,6 @@ import 'study_lesson_view.dart';
 import 'study_mode_model.dart';
 import 'study_reactions.dart';
 import 'study_speed_view.dart';
-import 'study_track_views.dart';
 import 'study_welcome_view.dart';
 
 // Learning mode's frame: its tabs, its dock and its top bar, laid over the library. Ported from `StudyModeRoot.swift`
@@ -106,7 +105,7 @@ class StudyModeRoot extends StatefulWidget {
 }
 
 class _StudyModeRootState extends State<StudyModeRoot> {
-  late final StudyModeModel model = StudyModeModel(widget.booru);
+  late final StudyModeModel model = StudyModeModel(widget.booru, course: LearningCourses.shared.course(mode.courseID)?.lessons);
   StudyMode get mode => widget.mode ?? StudyMode.shared;
   BooruContext get booru => widget.booru;
 
@@ -138,9 +137,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   /// The home scene's stage, which says when the learner has arrived.
   final HomeStage _stage = HomeStage.shared;
 
-  /// The add-on tracks last seen, so that the path is read again when one is turned on, off or removed.
-  List<String> _trackIDs = const [];
-
   @override
   void initState() {
     super.initState();
@@ -151,8 +147,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     _stage.addListener(_greet);
     booru.store.addListener(_storeChanged);
     booru.state.addListener(_storeChanged);
-    _trackIDs = _currentTrackIDs();
-    AddonRuntime.shared.addListener(_addonsChanged);
     StudySound.warm();
     _opened.add(mode.tab);
     // A learner who already has servers says once which one the pictures come from.
@@ -166,7 +160,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     _stage.removeListener(_greet);
     booru.store.removeListener(_storeChanged);
     booru.state.removeListener(_storeChanged);
-    AddonRuntime.shared.removeListener(_addonsChanged);
     _session?.removeListener(_sessionChanged);
     _paradeTimer?.cancel();
     model.dispose();
@@ -179,16 +172,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   }
 
   void _storeChanged() => model.reload();
-
-  static List<String> _currentTrackIDs() => [for (final track in AddonRuntime.shared.effects.tracks) track.id];
-
-  /// `.onChange(of: AddonRuntime.shared.effects.tracks.map(\.id))`.
-  void _addonsChanged() {
-    final ids = _currentTrackIDs();
-    if (listEquals(ids, _trackIDs)) return;
-    _trackIDs = ids;
-    model.reload();
-  }
 
   /// For tests and screenshots, when the app runs with a fixture: the seeds the iOS DEBUG launch arguments plant.
   void _seed() {
@@ -332,14 +315,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     if (done == null) return;
     _finished = null;
     mode.tab = StudyTab.path;
-    // The last lesson of an add-on track earns its certificate, once, after the stop has burst.
-    if (model.newlyCompletedTrack(finishing: done) case final track?) {
-      unawaited(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 1600));
-        if (!mounted || _session != null || _paradeOpen) return;
-        await _cover<void>(context, (context) => StudyTrackCertificate(track: track, close: () => Navigator.of(context).pop()));
-      }());
-    }
     unawaited(() async {
       await Future<void>.delayed(const Duration(milliseconds: 250));
       if (!mounted) return;
@@ -353,7 +328,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
 
   Future<void> _startSpeed() async {
     if (_speed != null) return;
-    // As on iOS, the round asks the app's own tags, not those of add-on tracks.
     final round = StudySpeedRound(store: booru.store, curriculum: StudyCurriculum.bundled);
     _speed = round;
     await _cover<void>(context, (context) => StudySpeedView(round: round));
@@ -369,7 +343,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
   Widget _page(StudyTab tab) => switch (tab) {
     StudyTab.path => StudyPathView(model: model, celebrating: _celebrating, start: _start),
     StudyTab.practice => StudyPracticeView(model: model, start: _start, startSpeed: _startSpeed),
-    StudyTab.courses => LabCoursesView(here: LabCoursePlace.tags, mode: mode, bottom: 24),
+    StudyTab.courses => LabCoursesView(mode: mode, bottom: 24, lessons: () => model.records.keys.toSet()),
     StudyTab.lab => StudyLabView(model: model, start: _start, closed: _celebrate, generation: widget.generation),
     StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode, reset: _restarted),
   };
@@ -626,7 +600,7 @@ class _StudyPathViewState extends State<StudyPathView> {
   String? _current;
 
   StudyModeModel get model => widget.model;
-  StudyPathLesson? get _currentLesson => model.shownPath.current(model.records, placed: model.shownPlaced);
+  StudyPathLesson? get _currentLesson => model.path.current(model.records, placed: model.placed);
 
   GlobalKey _key(String id) => _keys.putIfAbsent(id, GlobalKey.new);
 
@@ -699,17 +673,8 @@ class _StudyPathViewState extends State<StudyPathView> {
                 constraints: const BoxConstraints(maxWidth: 560),
                 child: Column(
                   children: [
-                    if (model.tracks.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: StudyTrackPicker(model: model),
-                      ),
-                    if (model.track case final track?)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 14),
-                        child: StudyTrackHeader(track: track, records: model.records),
-                      ),
-                    for (final section in model.shownPath.sections) ...[
+                    if (model.course case final course?) Padding(padding: const EdgeInsets.only(top: 14), child: _courseHeader(course)),
+                    for (final section in model.path.sections) ...[
                       Padding(padding: const EdgeInsets.only(top: 18, bottom: 22), child: _banner(section)),
                       if (section.lessons.isEmpty) _Locked(),
                       for (final (index, lesson) in section.lessons.indexed)
@@ -748,6 +713,58 @@ class _StudyPathViewState extends State<StudyPathView> {
           ),
         ),
       ],
+    );
+  }
+
+  /// An imported course's name, what it teaches and how far along it is, above its path.
+  Widget _courseHeader(TagCourse course) {
+    final theme = StudyTheme.of(context);
+    final lessons = course.path.lessons;
+    final done = lessons.where((lesson) => model.records[lesson.id] != null).length;
+    final color = studyHex(course.color);
+    return Semantics(
+      key: const Key('study.course.header'),
+      container: true,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.all(18),
+        decoration: ShapeDecoration(
+          color: theme.surface,
+          shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(22), side: BorderSide(color: theme.line, width: 2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                StudyIcon(course.symbol, size: 22, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(course.title.resolved(), style: StudyTheme.title(20).copyWith(color: theme.ink)),
+                      Text(L10n.text('lab.courses.imported.kicker'), style: StudyTheme.body(12, StudyTheme.bold).copyWith(color: theme.muted)),
+                    ],
+                  ),
+                ),
+                if (course.complete(model.records))
+                  Semantics(label: L10n.text('lab.course.done'), child: Icon(CupertinoIcons.checkmark_seal_fill, size: 26, color: studyHex('1FBF8F'))),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(course.summary.resolved(), style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: theme.muted)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: StudyBar(value: lessons.isEmpty ? 0 : done / lessons.length, color: color, height: 10)),
+                const SizedBox(width: 8),
+                Text('$done/${lessons.length}', style: StudyTheme.body(13, StudyTheme.heavy).copyWith(color: theme.muted)),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -863,7 +880,7 @@ class _StudyPathViewState extends State<StudyPathView> {
     final theme = StudyTheme.of(context);
     final record = model.records[lesson.id];
     // A lesson the placement test passed by stays open, to be played whenever the learner likes.
-    final skipped = model.shownPath.isSkipped(lesson, model.records, placed: model.shownPlaced);
+    final skipped = model.path.isSkipped(lesson, model.records, placed: model.placed);
     final open = record != null || current || skipped;
     final size = lesson.kind == StudyPathLessonKind.boss ? 92.0 : 76.0;
     final celebrating = widget.celebrating == lesson.id;
@@ -1258,7 +1275,7 @@ class StudyPracticeView extends StatelessWidget {
                   child: Text(L10n.text('lab.tab.shop'), style: StudyTheme.title(21).copyWith(color: theme.ink)),
                 ),
                 const SizedBox(height: 14),
-                LabShopView(openTags: StudyMode.shared.openTags, embedded: true),
+                LabShopView(open: StudyMode.shared.open, embedded: true),
               ],
             ),
           ),
@@ -1622,7 +1639,7 @@ class _StudyLabViewState extends State<StudyLabView> {
   Widget _connection(BuildContext context) {
     final theme = StudyTheme.of(context);
     final connected = _generation?.hasKey ?? false;
-    final lesson = widget.model.path.lessons.where((lesson) => lesson.id == 'api-what').firstOrNull;
+    final lesson = StudyPath.bundled.lessons.where((lesson) => lesson.id == 'api-what').firstOrNull;
     return StudyCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

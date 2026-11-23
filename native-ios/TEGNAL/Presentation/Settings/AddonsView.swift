@@ -259,8 +259,6 @@ struct AddonDetailView: View {
                 Section {
                     Button(L10n.text("Remove Add-on"), systemImage: "trash", role: .destructive) { confirmRemove = true }
                         .accessibilityIdentifier("addons.remove")
-                } footer: {
-                    if item.addon.contents.learningTrack != nil { Text(L10n.text("Lessons you finished in its track stay in your learning record.")) }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
             }
@@ -428,23 +426,6 @@ struct AddonContentsSections: View {
                 }
             } header: { Label(AddonKind.challenges.title, systemImage: AddonKind.challenges.symbol) } footer: {
                 Text(L10n.text("Added to your challenge library."))
-            }
-        }
-        if let track = contents.learningTrack {
-            let lessons = track.sections.flatMap(\.lessons)
-            let tags = (track.groups ?? []).reduce(0) { $0 + $1.tags.count }
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(track.title.addonResolved()).font(.headline)
-                    Text(track.summary.addonResolved()).font(.callout).foregroundStyle(.secondary)
-                }
-                ForEach(track.sections) { section in
-                    LabeledContent(section.title.addonResolved(), value: L10n.text("%@ lessons", String(section.lessons.count)))
-                }
-            } header: { Label(AddonKind.track.title, systemImage: AddonKind.track.symbol) } footer: {
-                Text(L10n.text("A track of %@ lessons in learning mode, finished apart from the main path.", String(lessons.count))
-                     + (tags > 0 ? " " + L10n.text("It teaches %@ tags of its own.", String(tags)) : "")
-                     + " " + L10n.text("Its lessons find example pictures on your chosen picture server, as the main path does."))
             }
         }
     }

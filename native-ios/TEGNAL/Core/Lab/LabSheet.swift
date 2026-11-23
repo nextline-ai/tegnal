@@ -56,7 +56,7 @@ struct LabSheetSection: Codable, Equatable, Sendable, Identifiable {
     var rows: [LabSheetRow]
 }
 
-struct LabSheetRow: Codable, Equatable, Sendable {
+struct LabSheetRow: Codable, Equatable, Sendable, Identifiable {
     var task: LabSheetText
     var example: LabSheetText?
     /// The product or tool to use now. Real names live only here, never in the course.
@@ -64,6 +64,27 @@ struct LabSheetRow: Codable, Equatable, Sendable {
     var why: LabSheetText?
     /// A pick not settled yet: the sheet marks it as a draft.
     var draft: Bool?
+
+    // What a tap on the row opens (all optional; an app that predates them simply does not show them).
+    /// A system symbol for the job, drawn beside it.
+    var symbol: String?
+    /// The longer story: when the pick is right, and when it is not.
+    var detail: LabSheetText?
+    /// How to get the most out of the pick, a few short lines.
+    var tips: [LabSheetText]?
+    /// A prompt to copy and try.
+    var prompt: LabSheetText?
+    /// Other picks for the same job, with when to choose them.
+    var alternatives: [LabSheetAlternative]?
+
+    var id: String { task.values.sorted { $0.key < $1.key }.map(\.value).joined(separator: "|") + "/" + pick }
+    /// Whether a tap has anything more to show than the row itself.
+    var hasDetail: Bool { detail != nil || !(tips ?? []).isEmpty || prompt != nil || !(alternatives ?? []).isEmpty }
+}
+
+struct LabSheetAlternative: Codable, Equatable, Sendable {
+    var pick: String
+    var why: LabSheetText?
 }
 
 /// Downloads newer editions from TEGNAL's add-on server and keeps the last one.

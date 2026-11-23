@@ -45,11 +45,6 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>UIAppFonts</key>
-	<array>
-		<string>LabFonts/NotoSerifKR-Black.otf</string>
-		<string>LabFonts/NotoSerifKR-SemiBold.otf</string>
-	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>
@@ -102,6 +97,23 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>tegnaladdon</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>TEGNAL Learning Course</string>
+			<key>UTTypeIdentifier</key>
+			<string>work.nextline.tegnal.course</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>tegnalcourse</string>
 				</array>
 			</dict>
 		</dict>

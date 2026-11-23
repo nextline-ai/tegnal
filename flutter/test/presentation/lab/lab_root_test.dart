@@ -14,15 +14,19 @@ import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/lab/lab_course.dart';
 import 'package:tegnal/core/lab/lab_sheet.dart';
 import 'package:tegnal/core/lab/lab_store.dart';
+import 'package:tegnal/core/lab/learning_courses.dart';
 import 'package:tegnal/core/study/study_models.dart';
 import 'package:tegnal/core/study/study_path.dart';
 import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
+import 'package:tegnal/core/lab/lab_course_file.dart';
 import 'package:tegnal/presentation/design/tegnal_theme.dart';
 import 'package:tegnal/presentation/lab/lab_episode_view.dart';
 import 'package:tegnal/presentation/lab/lab_kit.dart';
 import 'package:tegnal/presentation/lab/lab_root.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
+
+import '../../core/lab/lab_course_file_support.dart';
 
 Finder key(String name) => find.byKey(Key(name));
 
@@ -45,7 +49,6 @@ void main() {
       L10n.language = 'ko';
       L10n.table = (jsonDecode(File('assets/l10n/ko.json').readAsStringSync()) as Map).cast<String, String>();
       for (final (family, files) in [
-        ('Noto Serif KR', ['assets/fonts/NotoSerifKR-SemiBold.otf', 'assets/fonts/NotoSerifKR-Black.otf']),
         ('Pretendard', ['assets/fonts/PretendardVariable.ttf']),
         ('packages/cupertino_icons/CupertinoIcons', ['packages/cupertino_icons/assets/CupertinoIcons.ttf']),
       ]) {
@@ -64,6 +67,7 @@ void main() {
     LabStore.shared.attach(booru.database);
     LabStore.shared.reset();
     LabStore.shared.greeted();
+    LabStore.shared.showCourse(LabCourse.bundled);
     mode = StudyMode.forTesting();
   });
 
@@ -175,6 +179,46 @@ void main() {
     expect(key('lab.sheet.locked.harness'), findsOneWidget);
     expect(key('lab.sheet.paid'), findsOneWidget);
     expect(LabStore.shared.editionWaiting, isFalse);
+    // A row opens its details: the pick, why, how to use it and other picks.
+    await tester.tap(key('lab.sheet.row.models.0'));
+    await tester.pumpAndSettle();
+    expect(key('lab.sheet.detail'), findsOneWidget);
+    expect(find.text(L10n.text('lab.sheet.alternatives')), findsOneWidget);
+    await shot(tester, '10b-sheet-detail');
+  });
+
+  testWidgets('a choice pressed before stays pressable but is drawn as done, and a wrong one washes the screen red', (tester) async {
+    final episode = LabStore.shared.course.episodes.first;
+    await pump(tester, LabEpisodeView(episode: episode));
+    final trap = episode.choices.indexWhere((choice) => !choice.isRight);
+    expect(key('lab.choice.seen.$trap'), findsNothing);
+    await tester.tap(key('lab.choice.$trap'));
+    await tester.pump(const Duration(milliseconds: 100));
+    final wash = tester.widget<LabMistakeWash>(find.byType(LabMistakeWash));
+    expect(wash.count, 1, reason: 'A wrong answer washes the screen');
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    if (key('lab.fail.reveal.done').evaluate().isNotEmpty) {
+      await tester.tap(key('lab.fail.reveal.done'));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(key('lab.choice.back'));
+    await tester.pumpAndSettle();
+    expect(key('lab.choice.seen.$trap'), findsOneWidget);
+    await tester.tap(key('lab.choice.$trap'));
+    await tester.pumpAndSettle();
+    expect(key('lab.choice.back'), findsOneWidget, reason: 'It can still be pressed');
+  });
+
+  testWidgets('the card that finishes a season brings up the season page', (tester) async {
+    final season = LabStore.shared.course.seasons.first;
+    await pump(tester, LabSeasonCompleteView(season: season, store: LabStore.shared, done: () {}));
+    await tester.pump(const Duration(seconds: 1));
+    expect(key('lab.season.done'), findsOneWidget);
+    expect(find.text(season.title.text), findsOneWidget);
+    expect(key('lab.season.continue'), findsOneWidget);
+    await shot(tester, '16-season-done');
   });
 
   testWidgets('the courses tab sells the 2D course once season 1 has paid for it, and then opens it', (tester) async {
@@ -189,24 +233,24 @@ void main() {
     expect(mode.labTab, LabTab.courses);
     expect(find.byType(LabCoursesView), findsOneWidget);
     // The lab is marked as the course on screen; the 2D course shows its price.
-    expect(find.descendant(of: key('lab.courses.lab'), matching: key('lab.courses.here')), findsOneWidget);
-    expect(find.descendant(of: key('lab.courses.tags'), matching: key('lab.courses.here')), findsNothing);
+    expect(find.descendant(of: key('lab.courses.card.ai-lab'), matching: key('lab.courses.here')), findsOneWidget);
+    expect(find.descendant(of: key('lab.courses.card.2d-ai'), matching: key('lab.courses.here')), findsNothing);
     await shot(tester, '12-courses');
     await tester.tap(key('lab.2d.buy'));
     await tester.pump(const Duration(seconds: 1));
     await tester.tap(find.text(L10n.text('lab.shop.buy', ['600'])).last);
     await tester.pump(const Duration(seconds: 1));
     expect(LabStore.shared.ownsTagCourse, isTrue);
-    expect(mode.tagsOpen, isTrue, reason: 'Buying opens the course');
+    expect(mode.courseID, LearningCourse.tagsID, reason: 'Buying opens the course');
     // Back in the lab, the courses tab now offers to open the course rather than sell it.
-    mode.closeTags();
+    mode.open(LearningCourse.labID);
     expect(mode.labTab, LabTab.deck, reason: 'Coming back from the course lands on the deck');
     mode.labTab = LabTab.courses;
     await tester.pump(const Duration(seconds: 1));
     expect(key('lab.2d.buy'), findsNothing);
-    await tester.tap(key('lab.courses.open.tags'));
+    await tester.tap(key('lab.courses.open.2d-ai'));
     await tester.pump(const Duration(seconds: 1));
-    expect(mode.tagsOpen, isTrue);
+    expect(mode.courseID, LearningCourse.tagsID);
   });
 
   testWidgets('a trap won for the first time brings its 망작 up as a card, over the chat that keeps the reply', (tester) async {
@@ -262,15 +306,51 @@ void main() {
     await pump(tester, LabRoot(booru: booru, mode: mode));
     await tester.tap(key('lab.tab.courses'));
     await tester.pump(const Duration(seconds: 1));
-    expect(key('lab.courses.open.lab'), findsNothing);
+    expect(key('lab.courses.open.ai-lab'), findsNothing);
     expect(find.text(L10n.text('lab.courses.open', [L10n.text('Tag Study')])), findsNothing, reason: 'No open button under the card');
-    await tester.tap(key('lab.courses.open.tags'));
+    await tester.tap(key('lab.courses.open.2d-ai'));
     await tester.pump(const Duration(seconds: 1));
-    expect(mode.tagsOpen, isTrue);
+    expect(mode.courseID, LearningCourse.tagsID);
   });
 
   testWidgets('an episode shows no number at its top right', (tester) async {
     await pump(tester, LabEpisodeView(episode: LabStore.shared.course.episodes.first));
     expect(find.text(LabStore.shared.course.episodes.first.serial), findsNothing);
+  });
+
+  testWidgets('a course file imported in the courses tab opens on the deck, without the AI lab\'s cheat sheet', (tester) async {
+    final folder = Directory.systemTemp.createTempSync('courses-');
+    addTearDown(() {
+      LearningCourses.shared.attach(Directory('${folder.path}-gone'));
+      folder.deleteSync(recursive: true);
+    });
+    LearningCourses.shared.attach(Directory('${folder.path}/kept'));
+    final file = File('${folder.path}/basics.tegnalcourse')..writeAsBytesSync(labCourseFile());
+    // The 2D course's guide keeps moving on this page, so the screen never settles; time is pumped instead.
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(CupertinoApp(theme: tegnalTheme(Brightness.dark), home: LabCoursesView(mode: mode, pick: () async => file)));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text(L10n.text('lab.courses.import')), findsOneWidget);
+    await tester.ensureVisible(key('lab.courses.import'));
+    await tester.tap(key('lab.courses.import'));
+    // Reading the file is real I/O, which fake time does not move along.
+    for (var step = 0; step < 20 && mode.courseID != 'maker.prompt-basics'; step++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    await tester.pump(const Duration(seconds: 1));
+    expect(mode.courseID, 'maker.prompt-basics', reason: 'An imported course opens at once');
+    expect(LabStore.shared.course.id, 'maker.prompt-basics');
+    expect(key('lab.courses.card.maker.prompt-basics'), findsOneWidget);
+    expect(LabCourseFile.decode(File('${folder.path}/kept/maker.prompt-basics.json').readAsBytesSync()).id, 'maker.prompt-basics');
+
+    await pump(tester, LabRoot(booru: booru, mode: mode));
+    expect(key('lab.tab.sheet'), findsNothing, reason: 'The cheat sheet is the AI lab\'s');
+    expect(key('lab.deck.diagnose'), findsNothing, reason: 'So is card No. 000');
+    expect(LabStore.shared.next?.id, 'a1', reason: 'The deck offers the imported course\'s first card');
+    expect(key('lab.deck.start'), findsOneWidget);
+    await shot(tester, '15-imported-course');
   });
 }

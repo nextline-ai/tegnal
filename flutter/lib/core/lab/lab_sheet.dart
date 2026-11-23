@@ -94,13 +94,34 @@ class LabSheetSection {
           pick: value['pick'] as String,
           why: LabText.parseOrNull(value['why']),
           draft: value['draft'] as bool?,
+          symbol: value['symbol'] as String?,
+          detail: LabText.parseOrNull(value['detail']),
+          tips: value['tips'] is List ? [for (final tip in value['tips'] as List) LabText.parse(tip)] : null,
+          prompt: LabText.parseOrNull(value['prompt']),
+          alternatives: value['alternatives'] is List
+              ? [
+                  for (final item in value['alternatives'] as List)
+                    LabSheetAlternative(pick: (item as Map)['pick'] as String, why: LabText.parseOrNull(item['why'])),
+                ]
+              : null,
         ),
     ],
   );
 }
 
 class LabSheetRow {
-  const LabSheetRow({required this.task, this.example, required this.pick, this.why, this.draft});
+  const LabSheetRow({
+    required this.task,
+    this.example,
+    required this.pick,
+    this.why,
+    this.draft,
+    this.symbol,
+    this.detail,
+    this.tips,
+    this.prompt,
+    this.alternatives,
+  });
   final LabText task;
   final LabText? example;
 
@@ -110,6 +131,28 @@ class LabSheetRow {
 
   /// A pick not settled yet: the sheet marks it as a draft.
   final bool? draft;
+
+  // What a tap on the row opens (all optional; an app that predates them simply does not show them).
+  /// A system symbol for the job, drawn beside it.
+  final String? symbol;
+
+  /// The longer story: when the pick is right, and when it is not.
+  final LabText? detail;
+
+  /// How to get the most out of the pick, a few short lines.
+  final List<LabText>? tips;
+
+  /// A prompt to copy and try.
+  final LabText? prompt;
+
+  /// Other picks for the same job, with when to choose them.
+  final List<LabSheetAlternative>? alternatives;
+}
+
+class LabSheetAlternative {
+  const LabSheetAlternative({required this.pick, this.why});
+  final String pick;
+  final LabText? why;
 }
 
 /// Downloads newer editions from TEGNAL's add-on server and keeps the last one.

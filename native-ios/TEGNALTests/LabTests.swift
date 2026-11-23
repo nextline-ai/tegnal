@@ -47,51 +47,9 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(course.top, 100)
     }
 
-    /// Each tool must be finishable with what its file gives it.
-    func testEveryToolCanBePassed() {
-        for episode in course.episodes {
-            let tool = episode.tool
-            switch tool.kind {
-            case .switches:
-                let controls = tool.controls ?? []
-                XCTAssertFalse(controls.isEmpty, episode.id)
-                let passing = (tool.results ?? []).filter { $0.pass == true }
-                XCTAssertTrue(tool.compose != nil || passing.count >= (tool.need ?? 1), "\(episode.id): not enough passing results")
-                for result in tool.results ?? [] {
-                    XCTAssertEqual(result.when.count, controls.count, "\(episode.id): a result names every switch")
-                    for (index, value) in result.when.enumerated() where value >= 0 {
-                        XCTAssertTrue(controls[index].options.indices.contains(value), "\(episode.id): result points past a switch's positions")
-                    }
-                }
-                if tool.compose != nil {
-                    XCTAssertTrue(controls.allSatisfy { $0.options.allSatisfy { $0.line != nil } }, "\(episode.id): composed answers need a line for every position")
-                }
-            case .chips:
-                let chips = tool.chips ?? []
-                if tool.mode == "toggle" {
-                    XCTAssertGreaterThanOrEqual(chips.filter { $0.line != nil }.count, tool.need ?? 1, episode.id)
-                } else {
-                    XCTAssertTrue(chips.contains { $0.pass == true }, "\(episode.id): one chip passes")
-                    XCTAssertTrue(chips.allSatisfy { !($0.replies ?? []).isEmpty }, "\(episode.id): every chip answers")
-                }
-            case .stamps:
-                let labels = tool.stamps ?? []
-                XCTAssertEqual(labels.count, 2, episode.id)
-                XCTAssertTrue((tool.items ?? []).allSatisfy { labels.indices.contains($0.answer) }, episode.id)
-                XCTAssertFalse((tool.items ?? []).isEmpty, episode.id)
-            case .marks:
-                XCTAssertTrue((tool.pieces ?? []).contains(where: \.isTarget), episode.id)
-                XCTAssertTrue(["cut", "flag", "mask"].contains(tool.style ?? "cut"), episode.id)
-                if tool.style == "mask" { XCTAssertTrue((tool.pieces ?? []).filter(\.isTarget).allSatisfy { $0.swap != nil }, episode.id) }
-            case .equip:
-                let gear = Set((tool.gear ?? []).map(\.id))
-                XCTAssertFalse((tool.missions ?? []).isEmpty, episode.id)
-                for mission in tool.missions ?? [] { XCTAssertTrue(Set(mission.needs).isSubset(of: gear), "\(episode.id): a mission needs gear that is not there") }
-            case .rot:
-                XCTAssertGreaterThanOrEqual((tool.replies ?? []).count, tool.minRetries ?? 2, episode.id)
-                XCTAssertNotNil(tool.fresh, episode.id)
-            }
-        }
+    /// Each tool must be finishable with what its file gives it, and the course keeps every rule an imported course is held to.
+    func testTheBundledCourseKeepsTheCourseRules() {
+        XCTAssertEqual(course.problems(), [])
     }
 
     func testTextCanBeOneStringLinesOrPerLanguage() throws {
@@ -275,5 +233,188 @@ final class LabTests: XCTestCase {
         let target = try BooruStore()
         try target.restoreBackup(backup)
         XCTAssertNotNil(LabProgress(records: try LabDatabaseRecords(database: target.database).all()).cards["ep03"])
+    }
+
+    // MARK: - Course files and the 코스 tab
+
+    /// A small deck course in one file, as the 코스 tab imports it: one season of two episodes.
+    static func courseFile(id: String = "maker.prompt-basics", edit: (inout [String: Any]) -> Void = { _ in }) -> Data {
+        func episode(_ id: String, _ number: Int) -> [String: Any] {
+            ["id": id, "number": number, "title": "제목 \(number)", "impact": 10, "reward": 999,
+             "disaster": ["ask": "질문", "reply": "답", "verdict": "판정", "question": "어떻게 할까요?"],
+             "choices": [["text": "맞는 길", "right": true, "verdict": "좋아요"],
+                         ["text": "함정", "verdict": "아쉬워요", "fail": ["id": "\(id)-trap", "name": "망작", "reply": "엉망인 답"]]],
+             "tool": ["kind": "stamps", "title": "도장", "stamps": ["맞음", "틀림"], "items": [["text": "문장", "answer": 0]]],
+             "card": ["line": "새길 문장", "uses": ["하나", "둘", "셋"]]]
+        }
+        var top: [String: Any] = ["format": "tegnal-lab-course", "version": 1, "id": id, "title": "프롬프트 기초", "gauge": "실력", "base": 20,
+                                  "cardColors": ["1F4D3A", "2B2F77"],
+                                  "seasons": [["number": 1, "title": "첫 시즌", "order": "fixed", "episodes": ["a1", "a2"]]],
+                                  "episodes": [episode("a1", 1), episode("a2", 2)]]
+        edit(&top)
+        return try! JSONSerialization.data(withJSONObject: top)
+    }
+
+    func testACourseFileDecodesAsAnImportedDeckCourse() throws {
+        let imported = try XCTUnwrap(LabCourseFile.decode(Self.courseFile()).deck)
+        XCTAssertTrue(imported.imported)
+        XCTAssertEqual(imported.id, "maker.prompt-basics")
+        XCTAssertEqual(imported.episodes.map(\.id), ["a1", "a2"])
+        XCTAssertEqual(imported.top, 40)
+        XCTAssertEqual(imported.info.rewards.fail, 0, "Rewards may be left out")
+    }
+
+    func testCourseFilesAreRefusedRatherThanCleaned() {
+        func refused(_ data: Data, _ expected: LabCourseFileError? = nil, _ message: String = "") {
+            XCTAssertThrowsError(try LabCourseFile.decode(data), message) { if let expected { XCTAssertEqual($0 as? LabCourseFileError, expected, message) } }
+        }
+        refused(Data("[]".utf8), .notCourse)
+        refused(Self.courseFile { $0["format"] = "tegnal-addon" }, .notCourse)
+        refused(Self.courseFile { $0["version"] = 2 }, .newer)
+        refused(Self.courseFile { $0["engine"] = "flashcards" }, .newer, "An engine this app does not know asks for an update")
+        refused(Self.courseFile { top in
+            var episodes = top["episodes"] as! [[String: Any]]
+            episodes[0]["tool"] = ["kind": "hologram", "title": "새 도구"]
+            top["episodes"] = episodes
+        }, .newer, "So does a tool it does not know")
+        refused(Data(count: LabCourseFile.maximumBytes + 1), .tooLarge)
+        refused(Self.courseFile(id: LearningCourse.labID), .invalid("id"), "The app's own course ids are taken")
+        refused(Self.courseFile(id: "Bad ID"), .invalid("id"))
+        refused(Self.courseFile { $0["title"] = "숨은\u{202E}글자" }, nil, "Direction overrides are refused")
+        refused(Self.courseFile { $0["seasons"] = [["number": 1, "title": "시즌", "order": "fixed", "episodes": ["a1"]]] }, .invalid("episodes"), "Every episode sits in a season")
+        refused(Self.courseFile { top in
+            var episodes = top["episodes"] as! [[String: Any]]
+            episodes[0]["choices"] = [["text": "함정뿐", "verdict": "판정"], ["text": "또 함정", "verdict": "판정"]]
+            top["episodes"] = episodes
+        }, nil, "An episode needs a right choice and every trap its 망작")
+        refused(Self.courseFile { top in
+            var episodes = top["episodes"] as! [[String: Any]]
+            episodes[1]["tool"] = ["kind": "stamps", "title": "도장", "stamps": ["하나"], "items": [["text": "문장", "answer": 3]]]
+            top["episodes"] = episodes
+        }, .invalid("episodes.a2.tool.stamps"), "A tool that cannot be passed is refused")
+    }
+
+    /// An imported course keeps its records under its own id and pays nothing; the AI lab's money is untouched by it.
+    func testAnImportedCourseKeepsItsOwnRecordsAndPaysNothing() throws {
+        let store = store()
+        let imported = try XCTUnwrap(LabCourseFile.decode(Self.courseFile()).deck)
+        store.show(course: imported)
+        XCTAssertEqual(store.next?.id, "a1")
+        XCTAssertEqual(store.rate, 20)
+        let engraving = store.engrave(imported.episodes[0], failsHung: 1)
+        XCTAssertTrue(store.hang(imported.fails[0]))
+        XCTAssertEqual(engraving.cardReward, 0)
+        XCTAssertEqual(engraving.failReward, 0)
+        XCTAssertEqual(store.failReward, 0)
+        XCTAssertEqual(store.rate, 30)
+        XCTAssertEqual(store.balance, 0, "Nothing in an imported course pays")
+        XCTAssertNotNil(store.progress.cards["maker.prompt-basics/a1"])
+        XCTAssertNotNil(store.progress.fails["maker.prompt-basics/a1-trap"])
+        XCTAssertFalse(store.offersDiagnosis, "Card No. 000 is the AI lab's")
+
+        store.show(course: course)
+        XCTAssertEqual(store.next?.id, "ep01", "The AI lab's deck is as it was")
+        XCTAssertEqual(store.rate, course.base)
+        XCTAssertTrue(store.offersDiagnosis)
+    }
+
+    func testTheCatalogKeepsImportedCoursesAndRemovesThem() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let catalog = LearningCourses(folder: folder)
+        XCTAssertEqual(catalog.all.map(\.id), [LearningCourse.labID, LearningCourse.tagsID])
+        let data = Self.courseFile()
+        try catalog.add(data: data)
+        try catalog.add(data: data)
+        XCTAssertEqual(catalog.all.map(\.id), [LearningCourse.labID, LearningCourse.tagsID, "maker.prompt-basics"], "The same course again replaces it")
+        XCTAssertEqual(catalog.course("maker.prompt-basics")?.engine, .deck)
+        XCTAssertEqual(LearningCourses(folder: folder).imported.map(\.id), ["maker.prompt-basics"], "Kept for the next launch")
+        catalog.remove("maker.prompt-basics")
+        XCTAssertEqual(LearningCourses(folder: folder).imported.count, 0)
+        XCTAssertThrowsError(try catalog.add(data: Self.courseFile(id: LearningCourse.labID)), "A bundled course's id is never taken")
+    }
+
+    /// Course files kept in the local docs (packed with `scripts/pack_course.py`) import as they are.
+    func testTheSampleCoursesInTheDocsFolderPass() throws {
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("docs/edu/courses")
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?.filter { $0.pathExtension == LabCourseFile.fileExtension } ?? []
+        try XCTSkipIf(files.isEmpty, "The samples are local only")
+        for url in files { XCTAssertNoThrow(try LabCourseFile.decode(LabCourseFile.data(url)), url.lastPathComponent) }
+    }
+
+    /// A course on the 2D AI course's engine: its own path, under ids of its own, with its own tags in the curriculum.
+    static func tagsCourseFile(edit: (inout [String: Any]) -> Void = { _ in }) -> Data {
+        var top: [String: Any] = [
+            "format": "tegnal-lab-course", "version": 1, "engine": "tags", "id": "maker.backgrounds",
+            "title": ["ko": "배경과 장소"], "summary": ["ko": "배경을 배웁니다"], "color": "2F9E6E", "symbol": "mountain.2",
+            "groups": [["id": "places", "title": ["ko": "장소"], "tags": [["name": "lighthouse", "ko": "등대", "note": ["ko": "바닷가의 등대"]]]]],
+            "sections": [["id": "one", "title": ["ko": "첫 구간"], "summary": ["ko": "요약"], "color": "2F9E6E", "lessons": [
+                ["id": "intro", "kind": "concept", "symbol": "book", "title": ["ko": "소개"], "steps": [
+                    ["card": ["title": ["ko": "안녕"], "body": ["ko": "배경 이야기"]]],
+                    ["ask": ["question": ["ko": "질문"], "choices": [["ko": "가"], ["ko": "나"]], "answer": 0, "why": ["ko": "이유"]]]
+                ]],
+                ["id": "tags", "kind": "tags", "symbol": "tag", "title": ["ko": "태그"], "tags": ["lighthouse", "long_hair"]]
+            ]]]
+        ]
+        edit(&top)
+        return try! JSONSerialization.data(withJSONObject: top)
+    }
+
+    func testACourseOnTheTagsEngineBringsAPathAndTagsOfItsOwn() throws {
+        let course = try LabCourseFile.decode(Self.tagsCourseFile())
+        XCTAssertEqual(course.engine, .tags)
+        let lessons = try XCTUnwrap(course.lessons)
+        XCTAssertEqual(lessons.path.lessons.map(\.id), ["course:maker.backgrounds:intro", "course:maker.backgrounds:tags"])
+        XCTAssertEqual(lessons.title["en"], "배경과 장소", "Korean-only text is shown in English too")
+        let model = StudyModeModel(course: lessons)
+        XCTAssertFalse(model.isMain)
+        XCTAssertEqual(model.curriculum.tag("lighthouse")?.title("ko"), "등대")
+        XCTAssertNotNil(model.curriculum.tag("long_hair"), "The app's own tags stay")
+        XCTAssertTrue(StudyModeModel().isMain)
+
+        XCTAssertThrowsError(try LabCourseFile.decode(Self.tagsCourseFile { top in
+            var sections = top["sections"] as! [[String: Any]]
+            var lessons = sections[0]["lessons"] as! [[String: Any]]
+            lessons[0]["steps"] = [["card": ["title": ["ko": "가자"], "body": ["ko": "생성기"], "action": "generator"]]]
+            sections[0]["lessons"] = lessons; top["sections"] = sections
+        }), "Cards in course files only tell: they open nothing")
+        XCTAssertThrowsError(try LabCourseFile.decode(Self.tagsCourseFile { top in
+            var sections = top["sections"] as! [[String: Any]]
+            var lessons = sections[0]["lessons"] as! [[String: Any]]
+            lessons[1]["tags"] = ["lighthouse", "not_a_known_tag_anywhere"]
+            sections[0]["lessons"] = lessons; top["sections"] = sections
+        }), "Every tag of a tags lesson needs a meaning")
+        XCTAssertThrowsError(try LabCourseFile.decode(Self.tagsCourseFile { top in
+            var sections = top["sections"] as! [[String: Any]]
+            var lessons = sections[0]["lessons"] as! [[String: Any]]
+            lessons[0]["steps"] = [["match": ["pairs": []]]]
+            sections[0]["lessons"] = lessons; top["sections"] = sections
+        })) { XCTAssertEqual($0 as? LabCourseFileError, .newer, "A step this app does not know asks for an update") }
+    }
+
+    /// A course for a newer app is kept, named and waiting; once the app can read it, it opens like any other.
+    func testACourseForANewerAppWaitsInTheCatalog() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let catalog = LearningCourses(folder: folder)
+        XCTAssertThrowsError(try catalog.add(data: Self.courseFile { $0["engine"] = "flashcards"; $0["title"] = "미래 코스" })) {
+            XCTAssertEqual($0 as? LabCourseFileError, .newer)
+        }
+        XCTAssertEqual(catalog.waiting, [WaitingCourse(id: "maker.prompt-basics", title: "미래 코스")])
+        XCTAssertNil(catalog.course("maker.prompt-basics"))
+        XCTAssertEqual(LearningCourses(folder: folder).waiting.map(\.id), ["maker.prompt-basics"], "Kept for after the update")
+        try catalog.add(data: Self.courseFile())
+        XCTAssertTrue(catalog.waiting.isEmpty)
+        XCTAssertNotNil(catalog.course("maker.prompt-basics"))
+    }
+
+    /// The card that finishes a season says so, once.
+    func testTheCardThatFinishesASeasonSaysSo() {
+        let store = store()
+        let season = course.seasons[0]
+        for id in season.episodes.dropLast() { XCTAssertNil(store.engrave(course.episode(id)!, failsHung: 0).season) }
+        let last = course.episode(season.episodes.last!)!
+        XCTAssertEqual(store.engrave(last, failsHung: 0).season, season.number)
+        XCTAssertNil(store.engrave(last, failsHung: 0).season, "Playing it again finishes nothing new")
     }
 }
