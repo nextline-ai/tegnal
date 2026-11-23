@@ -53,7 +53,7 @@ struct StudyEntrySection: View {
     @State private var board = StudyBoard()
     private var detail: String {
         let summary = board.summary
-        if summary.started == 0 { return L10n.text("Learn the tags image AI is prompted with, from real pictures.") }
+        if summary.started == 0 { return L10n.text("lab.2d.tagline") }
         if summary.due > 0 { return L10n.text("%@ to review · %@ of %@ learned", String(summary.due), String(summary.learned), String(summary.total)) }
         return L10n.text("%@ of %@ learned", String(summary.learned), String(summary.total))
     }

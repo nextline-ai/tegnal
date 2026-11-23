@@ -177,6 +177,7 @@ final class BooruStore: @unchecked Sendable {
         migrations.registerMigration("booru_v17_addons") { try AddonStore.migrate($0) }
         migrations.registerMigration("booru_v18_addon_origin") { try AddonStore.migrateOrigin($0) }
         migrations.registerMigration("booru_v19_system_folder_colors") { try AppDatabase.adoptFolderPalette($0) }
+        migrations.registerMigration("booru_v20_lab_records") { try LabDatabaseRecords.migrate($0) }
         return migrations
     }
 

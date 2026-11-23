@@ -9,7 +9,7 @@ final class StudyUITests: XCTestCase {
         let entry = element(app, "study.entry")
         XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
         // A first visit is welcomed: a hello, a daily goal, and how much the learner knows.
-        XCTAssertTrue(app.staticTexts["Welcome to Learning Mode!"].waitForExistence(timeout: 5), "A first visit is welcomed")
+        XCTAssertTrue(app.staticTexts["Welcome to Learn 2D AI!"].waitForExistence(timeout: 5), "A first visit is welcomed")
         element(app, "study.welcome.next").tap()
         XCTAssertTrue(element(app, "study.welcome.goal.20").waitForExistence(timeout: 5))
         element(app, "study.welcome.goal.30").tap()
@@ -39,7 +39,7 @@ final class StudyUITests: XCTestCase {
 
     func testThePlacementTestEndsAtTheFirstQuestionNotKnown() {
         let app = launch()
-        XCTAssertTrue(app.staticTexts["Welcome to Learning Mode!"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Welcome to Learn 2D AI!"].waitForExistence(timeout: 10))
         element(app, "study.welcome.next").tap()
         element(app, "study.welcome.next").tap()
         XCTAssertTrue(element(app, "study.welcome.some").waitForExistence(timeout: 5))
@@ -57,7 +57,7 @@ final class StudyUITests: XCTestCase {
         if app.staticTexts["Where should the pictures come from?"].waitForExistence(timeout: 3) { element(app, "study.serverChoice.Danbooru").tap() }
         XCTAssertTrue(element(app, "study.node.s0-order").waitForExistence(timeout: 5))
         XCTAssertEqual(element(app, "study.node.s0-tags").value as? String, "Locked")
-        XCTAssertFalse(app.staticTexts["Welcome to Learning Mode!"].exists, "The welcome has closed")
+        XCTAssertFalse(app.staticTexts["Welcome to Learn 2D AI!"].exists, "The welcome has closed")
     }
 
     func testAFirstLessonExplainsFromNothingAsksAndPaysOut() {
@@ -108,8 +108,8 @@ final class StudyUITests: XCTestCase {
         XCTAssertTrue(typed, "A tag is typed from memory before the lesson ends")
         XCTAssertGreaterThan(worded, 0)
         finish(app)
-        element(app, "study.dock.dex").tap()
-        XCTAssertTrue(element(app, "study.dex.1girl").waitForExistence(timeout: 5), "Tags met in a lesson are kept in the collection")
+        element(app, "study.dock.me").tap()
+        XCTAssertTrue(element(app, "study.dex.1girl").waitForExistence(timeout: 5), "Tags met in a lesson are kept in the collection, on the Me tab")
     }
 
     func testTheLastLessonOfASectionHasPromptsBuiltFromABankOfTags() {

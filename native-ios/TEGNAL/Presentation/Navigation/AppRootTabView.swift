@@ -18,15 +18,27 @@ public struct AppRootTabView: View {
             }
             // Learning mode takes over the whole screen, dock included; the library waits underneath.
             if studying, stage.studyMounted || stage.place != .home {
-                StudyModeRoot().environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language))
-                    .transition(.opacity.combined(with: .scale(scale: 1.03))).zIndex(1)
+                Group {
+                    // Learning mode opens on the AI lab; the tag course bought in its shop takes its place while open.
+                    if StudyMode.shared.tagsOpen {
+                        StudyModeRoot().transition(.move(edge: .trailing))
+                    } else {
+                        LabRoot().transition(.move(edge: .leading))
+                    }
+                }
+                .environment(env).environment(env.booru).environment(\.locale, Locale(identifier: L10n.language))
+                .transition(.opacity.combined(with: .scale(scale: 1.03))).zIndex(1)
             }
         }
         .onAppear {
             guard !didSetup else { return }
             didSetup = true
+            // The lab's records live in the image database and travel with it.
+            LabStore.shared.attach(env.booru.database)
             setupApp()
         }
+        // A sync or a restored backup may have brought lab records from another device.
+        .onChange(of: env.booru.revision) { LabStore.shared.reload() }
         .modifier(BackupReminderModifier())
         .onChange(of: studying) { _, studying in stage.follow(studying: studying) }
         // Filling in saved works is the library's work; it waits until the library has been opened.

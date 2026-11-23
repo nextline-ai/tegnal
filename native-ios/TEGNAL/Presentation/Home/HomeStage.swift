@@ -240,6 +240,8 @@ final class HomeStage {
             var quiet = Transaction(); quiet.disablesAnimations = true
             withTransaction(quiet) {
                 StudyMode.shared.active = realm == .study
+                // The home scene's learning mode is the AI lab; only the library's 2D AI entries ask for the course itself.
+                if realm == .study { StudyMode.shared.arrive() }
                 if realm == .library { self.libraryMounted = true } else { self.studyMounted = true }
             }
         }
