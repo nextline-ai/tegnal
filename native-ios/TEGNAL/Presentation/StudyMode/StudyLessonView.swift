@@ -998,6 +998,12 @@ struct StudyLessonResult: View {
     @State private var milestones: [StudyMilestone] = []
     /// Zero shows the results; later pages show the milestones in turn.
     @State private var page = 0
+    /// Whether the treasure chest on the 보석 page has been opened; until then the button opens it.
+    @State private var chestOpened = false
+    private var chestWaiting: Bool {
+        guard page > 0, milestones.indices.contains(page - 1), case .gems = milestones[page - 1] else { return false }
+        return !chestOpened
+    }
 
     private var accuracy: Int { session.asked == 0 ? 100 : Int((Double(session.asked - session.mistakes) / Double(session.asked) * 100).rounded()) }
     private var empty: Bool { session.asked == 0 && session.plan.lesson == nil }
@@ -1006,13 +1012,15 @@ struct StudyLessonResult: View {
         ZStack(alignment: .top) {
             if page == 0 { results.transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity))) }
             else {
-                StudyMilestoneView(milestone: milestones[page - 1], days: days).id(page)
+                StudyMilestoneView(milestone: milestones[page - 1], days: days, chestOpened: $chestOpened).id(page)
                     .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
             }
         }
         .animation(.spring(duration: 0.45, bounce: 0.2), value: page)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            StudyMainButton(title: L10n.text("Continue")) {
+            StudyMainButton(title: L10n.text(chestWaiting ? "study.chest.open" : "Continue"), color: chestWaiting ? StudyTheme.gold : StudyTheme.primary,
+                            symbol: chestWaiting ? "sparkles" : nil) {
+                if chestWaiting { chestOpened = true; return }
                 StudySound.tap.play()
                 if page < milestones.count { page += 1 } else { done() }
             }
@@ -1097,7 +1105,8 @@ struct StudyLessonResult: View {
         let saved = ReaderPreferences.booruDefaults.integer(forKey: StudyModeModel.goalKey)
         game = StudyGame(days: days, goal: StudyGame.goals.contains(saved) ? saved : StudyGame.defaultGoal)
         streak = StudySummary(curriculum: .bundled, progress: [:], days: days).streak
-        milestones = StudyMilestone.reached(before: session.before, earned: session.earned, goal: game.goal, streak: streak)
+        // The treasure chest comes first: what the lesson paid in 보석, the currency the AI lab's shop takes.
+        milestones = (session.gems.map { [.gems($0)] } ?? []) + StudyMilestone.reached(before: session.before, earned: session.earned, goal: game.goal, streak: streak)
         // Badges this lesson earned get their pages after the streak, the goal and the level.
         let badges = StudyAwards.refresh(store)
         try? store.studyStore.markSeen(badges.map(\.id))

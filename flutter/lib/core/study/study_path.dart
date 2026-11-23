@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../booru/booru_client.dart';
 import '../booru/booru_models.dart';
 import '../booru/booru_store.dart';
+import '../lab/lab_store.dart';
 import '../support/l10n.dart';
 import '../support/preferences.dart';
 import '../support/swift_json.dart';
@@ -415,9 +416,25 @@ class StudyStanding {
   String toString() => 'StudyStanding($xp xp, $today today, studiedToday $studiedToday)';
 }
 
+/// What a lesson paid in 보석, and the balance before it: the treasure chest's contents.
+class StudyGemReward {
+  const StudyGemReward({required this.paid, required this.before});
+  final LabTagPayout paid;
+  final int before;
+  int get after => before + paid.total;
+
+  @override
+  bool operator ==(Object other) => other is StudyGemReward && other.paid == paid && other.before == before;
+  @override
+  int get hashCode => Object.hash(paid, before);
+}
+
 /// What a finished lesson is worth celebrating beyond its own results.
 sealed class StudyMilestone {
   const StudyMilestone();
+
+  /// 보석 paid by the lesson, opened from a treasure chest. Shown first.
+  const factory StudyMilestone.gems(StudyGemReward reward) = StudyGemsMilestone;
   const factory StudyMilestone.streak(int days) = StudyStreakMilestone;
   const factory StudyMilestone.goal(int xp) = StudyGoalMilestone;
   const factory StudyMilestone.level(int level) = StudyLevelMilestone;
@@ -435,6 +452,17 @@ sealed class StudyMilestone {
     if (level > before.xp ~/ StudyGame.levelSize + 1) found.add(StudyMilestone.level(level));
     return found;
   }
+}
+
+class StudyGemsMilestone extends StudyMilestone {
+  const StudyGemsMilestone(this.reward);
+  final StudyGemReward reward;
+  @override
+  bool operator ==(Object other) => other is StudyGemsMilestone && other.reward == reward;
+  @override
+  int get hashCode => Object.hash(5, reward);
+  @override
+  String toString() => 'StudyMilestone.gems(${reward.paid.total})';
 }
 
 class StudyStreakMilestone extends StudyMilestone {
@@ -734,6 +762,11 @@ class StudyLessonSession extends ChangeNotifier {
   int get mistakes => _mistakes;
   int get asked => _asked;
   int get earned => _earned;
+
+  /// The 보석 this lesson paid — a 2D AI 배우기 lesson finished, or finished with three stars, for the first time, and the
+  /// section it finished — with the balance before, for the treasure chest after the results. Null when it paid nothing.
+  StudyGemReward? get gems => _gems;
+  StudyGemReward? _gems;
   int get stars => _stars;
 
   /// Pictures that fit the prompts built in this lesson, by the build's brief.
@@ -1046,6 +1079,11 @@ class StudyLessonSession extends ChangeNotifier {
       store.studyStore.earn(_earned, lesson: plan.lesson?.id, stars: _stars, now: _now(), utcOffset: utcOffset);
     } on Object {
       // The result is still shown when it cannot be saved.
+    }
+    if (plan.lesson != null) {
+      final before = LabStore.shared.balance;
+      final paid = LabStore.shared.settleTagCourse(store.studyStore);
+      if (paid.total > 0) _gems = StudyGemReward(paid: paid, before: before);
     }
   }
 }

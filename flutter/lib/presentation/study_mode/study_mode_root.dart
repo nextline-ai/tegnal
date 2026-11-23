@@ -1262,7 +1262,7 @@ class StudyPracticeView extends StatelessWidget {
             id: 'study.speed',
             action: startSpeed,
           ),
-          // The AI lab's shop, at the foot of the page: the same 연구비, which this course earns too.
+          // The AI lab's shop, at the foot of the page: the same 보석, which this course earns too.
           const SizedBox(height: 34),
           Semantics(
             key: const Key('study.shop'),

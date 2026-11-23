@@ -6,9 +6,12 @@
   "gauge": "AI 성능 인출률",
   "base": 10,
   "rewards": {
-    "fail": 10,
-    "edition": 20,
-    "courseLesson": 10
+    "fail": 20,
+    "edition": 30,
+    "season": 100,
+    "courseLesson": 20,
+    "courseStars": 10,
+    "courseSection": 50
   },
   "cardColors": ["1F4D3A", "2B2F77", "6B1F2A", "6E4A12", "0F4C5C"],
   "seasons": [

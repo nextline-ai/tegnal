@@ -17,6 +17,7 @@ import 'package:tegnal/core/lab/lab_store.dart';
 import 'package:tegnal/core/lab/learning_courses.dart';
 import 'package:tegnal/core/study/study_models.dart';
 import 'package:tegnal/core/study/study_path.dart';
+import 'package:tegnal/core/study/study_store.dart';
 import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/lab/lab_course_file.dart';
@@ -223,6 +224,24 @@ void main() {
     await shot(tester, '16-season-done');
   });
 
+  testWidgets('2D progress from before the course was sold pays, is told once, and still needs the course bought', (tester) async {
+    for (final lesson in StudyPath.bundled.lessons.take(5)) {
+      booru.studyStore.earn(10, lesson: lesson.id, stars: 3);
+    }
+    await pump(tester, LabRoot(booru: booru, mode: mode));
+    await tester.pump(const Duration(milliseconds: 500));
+    final paid = LabStore.shared.tagCoursePaid;
+    expect(paid.lessons, 5);
+    expect(find.text(L10n.text('lab.legacy.message', ['5', '${paid.gems}'])), findsOneWidget);
+    expect(LabStore.shared.ownsTagCourse, isFalse);
+    expect(LabStore.shared.balance, paid.gems);
+    await tester.tap(find.text(L10n.text('lab.legacy.open')));
+    await tester.pump(const Duration(seconds: 1));
+    expect(mode.labTab, LabTab.courses);
+    expect(find.text(L10n.text('lab.2d.kept', ['5'])), findsOneWidget);
+    expect(LabStore.shared.owesLegacyNotice, isFalse, reason: 'Told once');
+  });
+
   testWidgets('the courses tab sells the 2D course once season 1 has paid for it, and then opens it', (tester) async {
     seed('ep05');
     await pump(tester, LabRoot(booru: booru, mode: mode));
@@ -240,7 +259,7 @@ void main() {
     await shot(tester, '12-courses');
     await tester.tap(key('lab.2d.buy'));
     await tester.pump(const Duration(seconds: 1));
-    await tester.tap(find.text(L10n.text('lab.shop.buy', ['600'])).last);
+    await tester.tap(find.text(L10n.text('lab.shop.buy', ['${LabStore.shared.shop.item(LabStore.tagCourse)!.price}'])).last);
     await tester.pump(const Duration(seconds: 1));
     expect(LabStore.shared.ownsTagCourse, isTrue);
     expect(mode.courseID, LearningCourse.tagsID, reason: 'Buying opens the course');

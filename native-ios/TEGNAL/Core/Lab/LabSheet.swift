@@ -11,7 +11,7 @@ struct LabEdition: Codable, Equatable, Sendable, Identifiable {
     var id: String
     /// The day it was curated, `yyyy-MM-dd`. Shown to the day; there is never a date for the next one.
     var date: String
-    /// 연구비 for reading it the first time. Missing means the course's usual amount; 0 pays nothing.
+    /// 보석 for reading it the first time. Missing means the course's usual amount; 0 pays nothing.
     var reward: Int?
     /// What changed since the last edition, one line.
     var change: LabSheetText?
@@ -124,7 +124,7 @@ enum LabSheetSource {
 
 // MARK: - The shop
 
-/// What 연구비 buys. `AILab/shop.json`.
+/// What 보석 buys. `AILab/shop.json`.
 struct LabShop: Decodable, Sendable {
     var currency: LabText
     var note: LabText?
@@ -145,7 +145,7 @@ struct LabShop: Decodable, Sendable {
     static let bundled: LabShop = {
         guard let url = Bundle.main.url(forResource: "shop", withExtension: "json", subdirectory: "AILab"),
               let data = try? Data(contentsOf: url), let shop = try? JSONDecoder().decode(LabShop.self, from: data) else {
-            return LabShop(currency: "연구비", note: nil, sections: [])
+            return LabShop(currency: "보석", note: nil, sections: [])
         }
         return shop
     }()
@@ -165,6 +165,8 @@ struct LabShopItem: Decodable, Sendable, Identifiable, Hashable {
     var `repeat`: Bool?
     /// Shown, but not on sale yet.
     var soon: Bool?
+    /// The item that must be owned first, such as 2D AI 배우기 for the tickets its picture generator uses.
+    var requires: String?
 
     var isLimited: Bool { limited ?? false }
     var isRepeat: Bool { self.repeat ?? false }

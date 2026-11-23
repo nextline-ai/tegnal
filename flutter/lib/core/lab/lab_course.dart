@@ -57,7 +57,7 @@ class LabCourse {
   final LabCourseInfo info;
   final List<LabEpisode> episodes;
 
-  /// Imported by the learner from a course file. Such a course pays no 연구비, has no cheat sheet or diagnosis of its own,
+  /// Imported by the learner from a course file. Such a course pays no 보석, has no cheat sheet or diagnosis of its own,
   /// and keeps its records under its own id (`LabStore.key`).
   final bool imported;
 
@@ -156,9 +156,9 @@ class LabCourseInfo {
   );
 }
 
-/// What the lab pays, apart from each card's own amount.
+/// What the lab pays in 보석, apart from each card's own amount. The `course…` amounts are what 2D AI 배우기 pays.
 class LabRewards {
-  const LabRewards({required this.fail, required this.edition, required this.courseLesson});
+  const LabRewards({required this.fail, required this.edition, this.season = 0, required this.courseLesson, this.courseStars = 0, this.courseSection = 0});
 
   /// Each trap pressed for the first time, once its 망작 is hung in the gallery.
   final int fail;
@@ -166,13 +166,29 @@ class LabRewards {
   /// Each new cheat-sheet edition read, unless the edition says otherwise.
   final int edition;
 
-  /// Each lesson of a bought course finished after buying it.
+  /// Each season of cards finished.
+  final int season;
+
+  /// Each lesson of 2D AI 배우기 finished for the first time.
   final int courseLesson;
+
+  /// Each of its lessons finished with three stars for the first time.
+  final int courseStars;
+
+  /// Each of its sections with every lesson finished.
+  final int courseSection;
 
   static const none = LabRewards(fail: 0, edition: 0, courseLesson: 0);
 
-  factory LabRewards.fromJson(Map<String, Object?> json) =>
-      LabRewards(fail: _int(json['fail']), edition: _int(json['edition']), courseLesson: _int(json['courseLesson']));
+  /// Amounts left out pay nothing, so older course files still read.
+  factory LabRewards.fromJson(Map<String, Object?> json) => LabRewards(
+    fail: _int(json['fail']),
+    edition: _int(json['edition']),
+    season: _int(json['season']),
+    courseLesson: _int(json['courseLesson']),
+    courseStars: _int(json['courseStars']),
+    courseSection: _int(json['courseSection']),
+  );
 }
 
 class LabSeason {
@@ -229,7 +245,7 @@ class LabEpisode {
   /// How many points of the rate its card adds.
   final int impact;
 
-  /// 연구비 paid when its card is engraved.
+  /// 보석 paid when its card is engraved.
   final int reward;
   final LabDisaster disaster;
   final List<LabChoice> choices;

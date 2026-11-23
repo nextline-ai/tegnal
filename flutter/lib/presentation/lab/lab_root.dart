@@ -89,27 +89,44 @@ class _LabRootState extends State<LabRoot> {
     super.dispose();
   }
 
-  /// Lessons of the 2D course finished so far, which pay once the course is bought. A learner who studied tags before the
-  /// lab keeps it.
+  /// Pays what 2D AI 배우기's progress has not paid yet. A learner who studied it before it was sold is told once what it paid
+  /// and that it now opens from the shop.
   void _countCourses() {
-    final study = widget.booru.studyStore;
-    int lessons;
-    int xp;
-    try {
-      // Lessons of imported courses (`course:<id>:…`) do not count: only 2D AI 배우기's own pay.
-      lessons = study.lessons().keys.where((id) => !id.startsWith('course:') && !id.startsWith('addon:')).length;
-      xp = study.days().fold(0, (total, day) => total + day.xp);
-    } on Object {
-      return;
-    }
-    store
-      ..grandfather(lessons: lessons, xp: xp)
-      ..count(lessons: lessons, of: LabStore.tagCourse);
+    store.settleTagCourse(widget.booru.studyStore);
+    // Told once the home scene has gone, before the welcome check.
+    if (!store.owesLegacyNotice || HomeStage.shared.coversScreen || _telling) return;
+    _telling = true;
+    final paid = store.tagCoursePaid;
+    store.noticeLegacy();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tellLegacy(paid));
+  }
+
+  /// True while the notice for earlier 2D progress is on screen; the welcome check waits for it.
+  bool _telling = false;
+
+  Future<void> _tellLegacy(({int gems, int lessons}) paid) async {
+    if (!mounted) return;
+    final open = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => TegnalAlertDialog(
+        title: Text(L10n.text('lab.legacy.title')),
+        content: Text(L10n.text('lab.legacy.message', ['${paid.lessons}', '${paid.gems}'])),
+        actions: [
+          CupertinoDialogAction(key: const Key('lab.legacy.open'), onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('lab.legacy.open'))),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('OK'))),
+        ],
+      ),
+    );
+    _telling = false;
+    if (!mounted) return;
+    if (open == true) mode.labTab = LabTab.courses;
+    _greet();
   }
 
   /// A first visit begins with the one-minute check, once the home scene has gone.
   void _greet() {
     if (!mounted || store.progress.greeted || !store.offersDiagnosis || HomeStage.shared.coversScreen || !mode.active) return;
+    if (_telling || store.owesLegacyNotice) return _countCourses();
     store.greeted();
     Future<void>.delayed(const Duration(milliseconds: 400), () {
       if (mounted) unawaited(showLabDiagnosis(context));
@@ -1477,6 +1494,14 @@ class _LabCoursesViewState extends State<LabCoursesView> {
                     : L10n.text('lab.2d.short', ['${store.balance}', '${price - store.balance}']),
                 style: LabFont.text(13, weight: FontWeight.w600, color: white.withValues(alpha: 0.9)),
               ),
+              // A learner who studied the course before it was sold: the lessons stay, waiting for it to be bought.
+              if (course.id == LearningCourse.tagsID && store.tagCoursePaid.lessons > 0) ...[
+                const SizedBox(height: 3),
+                Text(
+                  L10n.text('lab.2d.kept', ['${store.tagCoursePaid.lessons}']),
+                  style: LabFont.text(12, weight: FontWeight.w600, color: white.withValues(alpha: 0.85)),
+                ),
+              ],
               if (!state.isBought) ...[const SizedBox(height: 3), Text(L10n.text('lab.2d.how'), style: LabFont.text(12, color: white.withValues(alpha: 0.7)))],
             ],
           ),

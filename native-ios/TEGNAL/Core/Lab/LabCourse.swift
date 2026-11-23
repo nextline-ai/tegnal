@@ -41,7 +41,7 @@ private struct LabLines: Decodable {
 struct LabCourse: Sendable {
     let info: LabCourseInfo
     let episodes: [LabEpisode]
-    /// Imported by the learner from a course file. Such a course pays no 연구비, has no cheat sheet or diagnosis of its own,
+    /// Imported by the learner from a course file. Such a course pays no 보석, has no cheat sheet or diagnosis of its own,
     /// and keeps its records under its own id (`LabStore.key`).
     var imported = false
 
@@ -118,16 +118,35 @@ struct LabCourseInfo: Decodable, Sendable {
     private enum Keys: String, CodingKey { case id, title, gauge, base, rewards, seasons, cardColors }
 }
 
-/// What the lab pays, apart from each card's own amount.
+/// What the lab pays in 보석, apart from each card's own amount. The `course…` amounts are what 2D AI 배우기 pays.
 struct LabRewards: Decodable, Sendable {
     /// Each trap pressed for the first time, once its 망작 is hung in the gallery.
     var fail: Int
     /// Each new cheat-sheet edition read, unless the edition says otherwise.
     var edition: Int
-    /// Each lesson of a bought course finished after buying it.
+    /// Each season of cards finished.
+    var season: Int = 0
+    /// Each lesson of 2D AI 배우기 finished for the first time.
     var courseLesson: Int
+    /// Each of its lessons finished with three stars for the first time.
+    var courseStars: Int = 0
+    /// Each of its sections with every lesson finished.
+    var courseSection: Int = 0
 
     static let none = LabRewards(fail: 0, edition: 0, courseLesson: 0)
+
+    init(fail: Int, edition: Int, season: Int = 0, courseLesson: Int, courseStars: Int = 0, courseSection: Int = 0) {
+        (self.fail, self.edition, self.season, self.courseLesson, self.courseStars, self.courseSection) = (fail, edition, season, courseLesson, courseStars, courseSection)
+    }
+
+    /// Amounts left out pay nothing, so older course files still read.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        func amount(_ key: Keys) throws -> Int { try container.decodeIfPresent(Int.self, forKey: key) ?? 0 }
+        self.init(fail: try amount(.fail), edition: try amount(.edition), season: try amount(.season), courseLesson: try amount(.courseLesson),
+                  courseStars: try amount(.courseStars), courseSection: try amount(.courseSection))
+    }
+    private enum Keys: String, CodingKey { case fail, edition, season, courseLesson, courseStars, courseSection }
 }
 
 struct LabSeason: Decodable, Hashable, Sendable, Identifiable {
@@ -155,7 +174,7 @@ struct LabEpisode: Decodable, Hashable, Sendable, Identifiable {
     var teaser: LabText?
     /// How many points of the rate its card adds. Bigger for what makes a bigger difference.
     var impact: Int
-    /// 연구비 paid when its card is engraved.
+    /// 보석 paid when its card is engraved.
     var reward: Int
     var disaster: LabDisaster
     var choices: [LabChoice]

@@ -701,10 +701,7 @@ class _LabCodeBlockState extends State<LabCodeBlock> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.code,
-            style: LabFont.text(15, color: labLabel(context)),
-          ),
+          Text(widget.code, style: LabFont.text(15, color: labLabel(context))),
           const SizedBox(height: 10),
           GestureDetector(
             key: const Key('lab.sheet.copy'),
@@ -919,7 +916,7 @@ class _DashedFrame extends CustomPainter {
 
 // MARK: - Shop
 
-/// The shop: what 연구비 buys, as square cards.
+/// The shop: what 보석 buys, as square cards.
 class LabShopView extends StatelessWidget {
   const LabShopView({super.key, required this.open, this.mode, this.embedded = false});
 
@@ -1051,6 +1048,8 @@ class LabShopView extends StatelessWidget {
         ? L10n.text('lab.shop.soon')
         : state.kind == 'short'
         ? L10n.text('lab.shop.short', ['${state.short}'])
+        : state.kind == 'needs'
+        ? L10n.text('lab.shop.needs', [store.shop.item(state.needed!)?.name.text ?? state.needed!])
         : item.summary?.text ?? '';
     return Opacity(
       key: Key('lab.shop.item.${item.id}'),
@@ -1180,7 +1179,7 @@ class LabShopView extends StatelessWidget {
   }
 }
 
-/// Asks before spending 연구비, then buys. True when bought.
+/// Asks before spending 보석, then buys. True when bought.
 Future<bool> confirmLabPurchase(BuildContext context, LabShopItem item) async {
   final store = LabStore.shared;
   final yes = await showCupertinoDialog<bool>(
@@ -1554,7 +1553,7 @@ class LabFailFrame extends StatelessWidget {
 }
 
 /// The moment a 망작 is won, the first time its trap is pressed: the chat dims and blurs, a ring of light opens, the framed
-/// 망작 drops in from above, swings on its pin and settles a little crooked, and only then its name, number and the 연구비 it
+/// 망작 drops in from above, swings on its pin and settles a little crooked, and only then its name, number and the 보석 it
 /// paid come in. Ported from `LabFailReveal` in `LabPages.swift`.
 class LabFailReveal extends StatefulWidget {
   const LabFailReveal({super.key, required this.fail, required this.done, this.won = true});

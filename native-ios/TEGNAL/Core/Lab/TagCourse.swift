@@ -4,7 +4,7 @@ import UIKit
 /// A course on the 2D AI course's engine, from a course file with `"engine": "tags"`: its own path of lessons (the shape of
 /// `StudyPath.json`), and tags of its own beyond the app's curriculum (the shape of `TagStudy.json` groups). It plays on the 2D
 /// AI course's screens, with its lessons kept apart from the bundled path (`course:<id>:<lesson>`), and earns XP and stars
-/// as lessons do, but no badges, placement or 연구비.
+/// as lessons do, but no badges, placement or 보석.
 ///
 /// ```json
 /// { "format": "tegnal-lab-course", "version": 1, "engine": "tags", "id": "maker.backgrounds",

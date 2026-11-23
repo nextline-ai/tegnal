@@ -483,7 +483,7 @@ struct StudyPracticeView: View {
                      enabled: model.weak > 0, id: "study.weak") { start(.weak) }
                 game("timer", StudyTheme.flame, "Speed Round", met >= StudySpeedRound.needed ? L10n.text("As many as you can in a minute.") : L10n.text("Opens once you have learned 4 tags."),
                      enabled: met >= StudySpeedRound.needed, id: "study.speed", action: startSpeed)
-                // The AI lab's shop, at the foot of the page: the same 연구비, which this course earns too.
+                // The AI lab's shop, at the foot of the page: the same 보석, which this course earns too.
                 VStack(alignment: .leading, spacing: 14) {
                     Text(L10n.text("lab.tab.shop")).font(StudyTheme.title(21)).foregroundStyle(StudyTheme.ink)
                         .accessibilityAddTraits(.isHeader)

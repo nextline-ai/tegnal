@@ -435,7 +435,7 @@ struct LabFailFrame: View {
 }
 
 /// The moment a 망작 is won, the first time its trap is pressed: the chat dims, a ring of light opens, the framed 망작 drops in
-/// from above, swings on its pin and settles a little crooked, and only then its name, number and the 연구비 it paid come in.
+/// from above, swings on its pin and settles a little crooked, and only then its name, number and the 보석 it paid come in.
 struct LabFailReveal: View {
     let fail: LabFail
     /// Won just now; false when it is opened again from the gallery, which shows the trap that made it instead.
@@ -534,7 +534,7 @@ struct LabFailReveal: View {
 
 // MARK: - Shop
 
-/// The shop: what 연구비 buys, as square cards.
+/// The shop: what 보석 buys, as square cards.
 struct LabShopView: View {
     var body: some View {
         ScrollView {
@@ -594,7 +594,11 @@ struct LabShopContent: View {
         let owned = store.owns(item.id) && !item.isRepeat
         let note: String = owned ? L10n.text("lab.shop.owned")
             : item.isSoon ? L10n.text("lab.shop.soon")
-            : { if case .short(let missing) = state { return L10n.text("lab.shop.short", String(missing)) }; return item.summary?.text ?? "" }()
+            : { switch state {
+                case .short(let missing): return L10n.text("lab.shop.short", String(missing))
+                case .needs(let id): return L10n.text("lab.shop.needs", store.shop.item(id)?.name.text ?? id)
+                default: return item.summary?.text ?? ""
+            } }()
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 Image(systemName: item.symbol ?? "bag").font(.system(size: 22, weight: .semibold))
