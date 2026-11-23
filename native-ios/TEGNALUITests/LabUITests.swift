@@ -46,6 +46,13 @@ final class LabUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [shown], timeout: 15), .completed, "The way back appears once the line is engraved")
         put.tap()
 
+        // The 보석 it paid come on a page of their own, the balance rolling up.
+        XCTAssertTrue(element(app, "lab.gems").waitForExistence(timeout: 5), "A card that pays shows its 보석 on a page of its own")
+        let more = element(app, "lab.gems.continue")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: more)], timeout: 5), .completed)
+        XCTAssertTrue(element(app, "lab.gems.ledger").exists)
+        more.tap()
+
         // Back on the deck: the rate has climbed and card 001 is in the stack.
         XCTAssertTrue(element(app, "lab.deck.earned.ep01").waitForExistence(timeout: 5))
         XCTAssertEqual(element(app, "lab.rate").value as? String, "24%")

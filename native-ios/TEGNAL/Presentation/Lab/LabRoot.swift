@@ -523,8 +523,9 @@ struct LabRow: View {
     }
 }
 
-/// The seasons side by side under the deck's title: one bar per season, as long as it has cards and filled as far as they are
-/// engraved, the season in play picked out, with its name below. Seasons read as chapters of their own.
+/// The seasons side by side under the deck's title: one bar per season, filled as far as its cards are engraved. The season in
+/// play is the long bar; finished seasons and those still ahead are short ones beside it. With no season in play (all done),
+/// the bars share the width evenly. Seasons read as chapters of their own.
 struct LabSeasonTrack: View {
     let course: LabCourse
     let shown: Set<String>
@@ -533,13 +534,15 @@ struct LabSeasonTrack: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { proxy in
-                let total = CGFloat(max(1, course.episodes.count))
                 let room = proxy.size.width - 5 * CGFloat(max(0, course.seasons.count - 1))
+                // The season in play weighs four short bars.
+                let weight = { (season: LabSeason) -> CGFloat in current == nil ? 1 : season == current ? 4 : 1 }
+                let total = course.seasons.reduce(CGFloat(0)) { $0 + weight($1) }
                 HStack(spacing: 5) {
                     ForEach(course.seasons) { season in
                         let done = season.episodes.filter(shown.contains).count
                         let here = season == current
-                        let width = room * CGFloat(season.episodes.count) / total
+                        let width = room * weight(season) / max(1, total)
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.secondary.opacity(here ? 0.3 : 0.16))
                             Capsule().fill(done == season.episodes.count ? LabPalette.pass : Color.primary)
@@ -560,5 +563,6 @@ struct LabSeasonTrack: View {
             }
         }
         .animation(.spring(duration: 0.6), value: shown)
+        .animation(.spring(duration: 0.6, bounce: 0.15), value: current)
     }
 }

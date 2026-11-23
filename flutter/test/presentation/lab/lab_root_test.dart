@@ -153,6 +153,15 @@ void main() {
 
     await tester.tap(key('lab.engrave.put'));
     await tester.pumpAndSettle();
+    // The 보석 it paid, on a page of their own, the balance rolled up to now.
+    expect(key('lab.gems'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: key('lab.gems.balance'), matching: find.text('${LabStore.shared.balance}')), findsOneWidget);
+    expect(key('lab.gems.ledger'), findsOneWidget);
+    await shot(tester, '06b-gems');
+    await tester.tap(key('lab.gems.continue'));
+    await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     expect(key('lab.deck.earned.ep01'), findsOneWidget);
