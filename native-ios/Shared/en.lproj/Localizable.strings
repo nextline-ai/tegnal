@@ -2555,12 +2555,12 @@
 
 /* AI Lab */
 "lab.title" = "AI Lab";
-"lab.tab.deck" = "Deck";
+"lab.tab.deck" = "Cards";
 "lab.tab.sheet" = "Cheat Sheet";
 "lab.tab.fails" = "Flops";
 "lab.tab.shop" = "Shop";
 "lab.new" = "NEW";
-"lab.deck.title" = "My Deck";
+"lab.deck.title" = "My Cards";
 "lab.deck.fold" = "Fold";
 "lab.deck.unfold" = "%@ earlier cards";
 "lab.deck.diagnose" = "One-minute check: make your first card";
@@ -2648,7 +2648,6 @@
 "lab.courses.lab.rate" = "%1$@ now %2$@";
 "lab.courses.tags.kicker" = "AN EXTRA COURSE";
 "lab.courses.here" = "You are here";
-"lab.courses.open" = "Open %@";
 "lab.2d.lessons" = "%@ lessons on a map";
 "lab.2d.tags" = "%@ tags from real pictures";
 "lab.2d.studio" = "A studio to draw with your own key";

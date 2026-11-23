@@ -49,6 +49,20 @@ final class LabUITests: XCTestCase {
         // Back on the deck: the rate has climbed and card 001 is in the stack.
         XCTAssertTrue(element(app, "lab.deck.earned.ep01").waitForExistence(timeout: 5))
         XCTAssertEqual(element(app, "lab.rate").value as? String, "24%")
+
+        // The gallery brings a 망작 up close the way it came up when it was won.
+        app.tabBars.buttons["망작"].firstMatch.tap()
+        element(app, "lab.fail.ep01-1").tap()
+        let close = element(app, "lab.fail.reveal.done")
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "A 망작 opens from the gallery as a card")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: close)], timeout: 5), .completed)
+        close.tap()
+
+        // Courses: the lab is the one on screen, so its card opens nothing; the 2D course not bought shows its price.
+        app.tabBars.buttons["코스"].firstMatch.tap()
+        XCTAssertTrue(element(app, "lab.2d.buy").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "lab.courses.open.lab").exists)
+        XCTAssertFalse(element(app, "lab.courses.open.tags").exists, "A course not bought does not open from its card")
     }
 
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {

@@ -212,8 +212,9 @@ struct LabSheetPaper: View {
 /// Every trap's 망작, framed once it has been pressed. Traps not yet pressed are empty frames that call the learner back.
 struct LabFailsView: View {
     let play: (LabEpisode) -> Void
+    /// Brings a 망작 up close, the same way it came up when it was won.
+    let open: (LabFail) -> Void
     @State private var store = LabStore.shared
-    @State private var shown: LabFail?
 
     var body: some View {
         let fails = store.course.fails
@@ -227,7 +228,7 @@ struct LabFailsView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 18) {
                     ForEach(fails) { fail in
                         if store.hung(fail) {
-                            Button { shown = fail } label: { frame(fail) }.buttonStyle(LabPressStyle()).accessibilityIdentifier("lab.fail.\(fail.id)")
+                            Button { LabHaptic.tick(); open(fail) } label: { frame(fail) }.buttonStyle(LabPressStyle()).accessibilityIdentifier("lab.fail.\(fail.id)")
                         } else {
                             empty(fail)
                         }
@@ -237,7 +238,6 @@ struct LabFailsView: View {
             .padding(.horizontal, 20).padding(.bottom, 32)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .appSheet(item: $shown) { fail in LabFailSheet(fail: fail, play: play).presentationDetents([.medium, .large]) }
     }
 
     private func frame(_ fail: LabFail) -> some View { LabFailFrame(fail: fail) }
@@ -293,6 +293,8 @@ struct LabFailFrame: View {
 /// from above, swings on its pin and settles a little crooked, and only then its name, number and the 연구비 it paid come in.
 struct LabFailReveal: View {
     let fail: LabFail
+    /// Won just now; false when it is opened again from the gallery, which shows the trap that made it instead.
+    var won = true
     let done: () -> Void
     private var store: LabStore { .shared }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -315,8 +317,14 @@ struct LabFailReveal: View {
             VStack(spacing: 22) {
                 VStack(spacing: 8) {
                     LabTag(text: String(format: "No. %02d", store.number(fail)), color: LabPalette.fail, mono: true)
-                    Text(L10n.text("lab.fail.got")).font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
-                        .accessibilityAddTraits(.isHeader)
+                    if won {
+                        Text(L10n.text("lab.fail.got")).font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
+                            .accessibilityAddTraits(.isHeader)
+                    } else {
+                        // The trap that made it, as the learner pressed it.
+                        Text("“" + fail.choice.text + "”").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
+                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .opacity(settled ? 1 : 0).offset(y: settled ? 0 : -10)
 
@@ -341,7 +349,8 @@ struct LabFailReveal: View {
 
                 VStack(spacing: 6) {
                     Text(fail.name.text).font(LabFont.voice(24)).foregroundStyle(.white).multilineTextAlignment(.center)
-                    Text(L10n.text("lab.card.number", episode?.digits ?? "") + " · " + L10n.text("lab.fail.gotNote", store.shop.currency.text, String(store.course.info.rewards.fail)))
+                    Text(won ? L10n.text("lab.card.number", episode?.digits ?? "") + " · " + L10n.text("lab.fail.gotNote", store.shop.currency.text, String(store.course.info.rewards.fail))
+                             : L10n.text("lab.card.number", episode?.digits ?? "") + (episode.map { " · " + $0.title.text } ?? ""))
                         .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
                 }
                 .opacity(settled ? 1 : 0).offset(y: settled ? 0 : 12)
@@ -378,65 +387,50 @@ struct LabFailReveal: View {
     }
 }
 
-/// One 망작, close up: the trap that made it and what came out.
-struct LabFailSheet: View {
-    let fail: LabFail
-    let play: (LabEpisode) -> Void
-    @Environment(\.dismiss) private var dismiss
-    private var store: LabStore { .shared }
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    LabTag(text: String(format: "No. %02d", store.number(fail)), color: LabPalette.fail, mono: true)
-                    Text(fail.name.text).font(LabFont.voice(26))
-                    LabBubble(text: fail.choice.text, mine: true)
-                    LabBubble(text: fail.reply.text)
-                }
-                .padding(20)
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel(L10n.text("Close")) }
-            }
-        }
-        .labLines()
-    }
-}
-
 // MARK: - Shop
 
 /// The shop: what 연구비 buys, as square cards.
 struct LabShopView: View {
-    @State private var store = LabStore.shared
-    @State private var confirming: LabShopItem?
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 LabHeader(kicker: Text(L10n.text("lab.shop.subtitle")), title: L10n.text("lab.tab.shop"))
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(store.shop.currency.text).font(.system(size: 15, weight: .semibold))
-                        Spacer()
-                        Text(String(store.balance)).font(LabFont.number(34)).contentTransition(.numericText(value: Double(store.balance)))
-                            .accessibilityIdentifier("lab.shop.balance")
-                    }
-                    if let note = store.shop.note { Text(note.text).font(.system(size: 13)).foregroundStyle(.secondary) }
-                }
-                .padding(18)
-                .background(LabPalette.surface(), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                ForEach(store.shop.sections) { section in
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(section.title.text).font(.system(size: 20, weight: .bold)).accessibilityAddTraits(.isHeader)
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                            ForEach(section.items) { item in card(item) }
-                        }
-                    }
-                }
+                LabShopContent()
             }
             .padding(.horizontal, 20).padding(.bottom, 32)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// What the shop holds: the balance, then each section's square cards. Its own page in the lab; the foot of the 연습 tab in
+/// the 2D AI course.
+struct LabShopContent: View {
+    @State private var store = LabStore.shared
+    @State private var confirming: LabShopItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(store.shop.currency.text).font(.system(size: 15, weight: .semibold))
+                    Spacer()
+                    Text(String(store.balance)).font(LabFont.number(34)).contentTransition(.numericText(value: Double(store.balance)))
+                        .accessibilityIdentifier("lab.shop.balance")
+                }
+                if let note = store.shop.note { Text(note.text).font(.system(size: 13)).foregroundStyle(.secondary) }
+            }
+            .padding(18)
+            .background(LabPalette.surface(), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            ForEach(store.shop.sections) { section in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(section.title.text).font(.system(size: 20, weight: .bold)).accessibilityAddTraits(.isHeader)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(section.items) { item in card(item) }
+                    }
+                }
+            }
+        }
         .animation(.snappy, value: store.balance)
         .alert(confirming.map { L10n.text("lab.shop.confirm", $0.name.text) } ?? "", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), presenting: confirming) { item in
             Button(L10n.text("lab.shop.buy", String(item.price ?? 0))) {

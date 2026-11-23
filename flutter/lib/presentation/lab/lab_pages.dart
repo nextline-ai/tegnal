@@ -11,12 +11,10 @@ import '../../core/lab/lab_sheet.dart';
 import '../../core/lab/lab_store.dart';
 import '../../core/support/l10n.dart';
 import '../design/alert_dialog.dart';
-import '../design/app_sheet.dart';
 import '../design/glass.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import '../study_mode/study_kit.dart';
-import 'lab_episode_view.dart';
 import 'lab_kit.dart';
 
 // The cheat sheet, the 망작 gallery, the shop and the diagnosis. Ported from `LabPages.swift`.
@@ -558,12 +556,20 @@ class LabFailsView extends StatelessWidget {
     },
   );
 
-  void _open(BuildContext context, LabFail fail) => showAppSheet<void>(
-    context,
-    medium: true,
-    grabber: true,
-    builder: (sheetContext, controller) => LabFailSheet(fail: fail, controller: controller),
-  );
+  /// Brings a 망작 up close over everything, dock included, the same way it came up when it was won.
+  void _open(BuildContext context, LabFail fail) {
+    LabHaptic.tick();
+    unawaited(
+      Navigator.of(context, rootNavigator: true).push(
+        PageRouteBuilder<void>(
+          opaque: false,
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (routeContext, _, _) => LabFailReveal(fail: fail, won: false, done: () => Navigator.of(routeContext).pop()),
+        ),
+      ),
+    );
+  }
 
   Widget _frame(BuildContext context, LabFail fail) => LabFailFrame(fail: fail);
 
@@ -632,121 +638,88 @@ class _DashedFrame extends CustomPainter {
   bool shouldRepaint(_DashedFrame old) => old.color != color;
 }
 
-/// A 망작 up close: what was asked, what came back, and the episode to play again.
-class LabFailSheet extends StatelessWidget {
-  const LabFailSheet({super.key, required this.fail, required this.controller});
-  final LabFail fail;
-  final ScrollController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final store = LabStore.shared;
-    final episode = store.course.episode(fail.episode);
-    return Stack(
-      children: [
-        ListView(
-          controller: controller,
-          padding: const EdgeInsets.fromLTRB(20, 64, 20, 32),
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: LabTag(text: 'No. ${store.number(fail).toString().padLeft(2, '0')}', color: LabPalette.fail.resolveFrom(context), mono: true),
-            ),
-            const SizedBox(height: 14),
-            Text(labWords(fail.name.text), style: LabFont.voice(26, color: labLabel(context))),
-            const SizedBox(height: 14),
-            LabBubble(text: fail.choice.text, mine: true),
-            const SizedBox(height: 14),
-            LabBubble(text: fail.reply.text),
-            if (episode != null) ...[
-              const SizedBox(height: 22),
-              LabButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  showLabEpisode(context, episode);
-                },
-                expand: true,
-                child: Text(L10n.text('lab.card.again')),
-              ),
-            ],
-          ],
-        ),
-        Positioned(
-          right: 16,
-          top: 14,
-          child: Semantics(
-            button: true,
-            label: L10n.text('Close'),
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Glass.circle(
-                elevated: true,
-                child: SizedBox.square(dimension: 44, child: Icon(CupertinoIcons.xmark, size: 18, color: labLabel(context))),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 // MARK: - Shop
 
 /// The shop: what 연구비 buys, as square cards.
 class LabShopView extends StatelessWidget {
-  const LabShopView({super.key, required this.openTags, this.controller});
+  const LabShopView({super.key, required this.openTags, this.embedded = false});
   final VoidCallback openTags;
 
-  /// The scroll controller of the sheet the shop is shown in, from the 2D AI course's 연구비 counter.
-  final ScrollController? controller;
+  /// Only what the shop holds, the balance and each section's cards, without a page or scrolling of its own: the foot of
+  /// the 2D AI course's Practice tab.
+  final bool embedded;
   LabStore get store => LabStore.shared;
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: store,
-    builder: (context, _) => CustomScrollView(
-      controller: controller,
-      slivers: [
-        SliverSafeArea(
-          bottom: false,
-          sliver: SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, labDockClearance),
-            sliver: SliverMainAxisGroup(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: LabHeader(
-                    kicker: TextSpan(text: L10n.text('lab.shop.subtitle')),
-                    title: L10n.text('lab.tab.shop'),
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 22)),
-                SliverToBoxAdapter(child: _balance(context)),
-                for (final section in store.shop.sections) ...[
-                  const SliverToBoxAdapter(child: SizedBox(height: 22)),
-                  SliverToBoxAdapter(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        section.title.text,
-                        style: LabFont.text(20, weight: FontWeight.w700, color: labLabel(context)),
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                  SliverGrid.count(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    children: [for (final item in section.items) _card(context, item)],
-                  ),
-                ],
-              ],
-            ),
+  Widget build(BuildContext context) => ListenableBuilder(listenable: store, builder: (context, _) => embedded ? _content(context) : _page(context));
+
+  Widget _content(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _balance(context),
+      for (final section in store.shop.sections) ...[
+        const SizedBox(height: 22),
+        Semantics(
+          header: true,
+          child: Text(
+            section.title.text,
+            style: LabFont.text(20, weight: FontWeight.w700, color: labLabel(context)),
           ),
         ),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [for (final item in section.items) _card(context, item)],
+        ),
       ],
-    ),
+    ],
+  );
+
+  Widget _page(BuildContext context) => CustomScrollView(
+    slivers: [
+      SliverSafeArea(
+        bottom: false,
+        sliver: SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, labDockClearance),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(
+                child: LabHeader(
+                  kicker: TextSpan(text: L10n.text('lab.shop.subtitle')),
+                  title: L10n.text('lab.tab.shop'),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 22)),
+              SliverToBoxAdapter(child: _balance(context)),
+              for (final section in store.shop.sections) ...[
+                const SliverToBoxAdapter(child: SizedBox(height: 22)),
+                SliverToBoxAdapter(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      section.title.text,
+                      style: LabFont.text(20, weight: FontWeight.w700, color: labLabel(context)),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                SliverGrid.count(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  children: [for (final item in section.items) _card(context, item)],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ],
   );
 
   Widget _balance(BuildContext context) => Container(
@@ -1299,9 +1272,12 @@ class LabFailFrame extends StatelessWidget {
 /// 망작 drops in from above, swings on its pin and settles a little crooked, and only then its name, number and the 연구비 it
 /// paid come in. Ported from `LabFailReveal` in `LabPages.swift`.
 class LabFailReveal extends StatefulWidget {
-  const LabFailReveal({super.key, required this.fail, required this.done});
+  const LabFailReveal({super.key, required this.fail, required this.done, this.won = true});
   final LabFail fail;
   final VoidCallback done;
+
+  /// Won just now; false when it is opened again from the gallery, which shows the trap that made it instead.
+  final bool won;
 
   @override
   State<LabFailReveal> createState() => _LabFailRevealState();
@@ -1400,13 +1376,21 @@ class _LabFailRevealState extends State<LabFailReveal> with TickerProviderStateM
                             children: [
                               LabTag(text: 'No. ${store.number(fail).toString().padLeft(2, '0')}', color: failColor, mono: true),
                               const SizedBox(height: 8),
-                              Semantics(
-                                header: true,
-                                child: Text(
-                                  L10n.text('lab.fail.got'),
-                                  style: LabFont.text(24, weight: FontWeight.w700, color: white),
+                              if (widget.won)
+                                Semantics(
+                                  header: true,
+                                  child: Text(
+                                    L10n.text('lab.fail.got'),
+                                    style: LabFont.text(24, weight: FontWeight.w700, color: white),
+                                  ),
+                                )
+                              else
+                                // The trap that made it, as the learner pressed it.
+                                Text(
+                                  '“${fail.choice.text}”',
+                                  textAlign: TextAlign.center,
+                                  style: LabFont.text(17, weight: FontWeight.w600, color: white.withValues(alpha: 0.85)),
                                 ),
-                              ),
                             ],
                           ),
                         ),
@@ -1479,8 +1463,10 @@ class _LabFailRevealState extends State<LabFailReveal> with TickerProviderStateM
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                '${L10n.text('lab.card.number', [episode?.digits ?? ''])} · '
-                                '${L10n.text('lab.fail.gotNote', [store.shop.currency.text, '${store.course.info.rewards.fail}'])}',
+                                widget.won
+                                    ? '${L10n.text('lab.card.number', [episode?.digits ?? ''])} · '
+                                          '${L10n.text('lab.fail.gotNote', [store.shop.currency.text, '${store.course.info.rewards.fail}'])}'
+                                    : '${L10n.text('lab.card.number', [episode?.digits ?? ''])}${episode == null ? '' : ' · ${episode.title.text}'}',
                                 textAlign: TextAlign.center,
                                 style: LabFont.text(13, weight: FontWeight.w600, color: white.withValues(alpha: 0.7)),
                               ),

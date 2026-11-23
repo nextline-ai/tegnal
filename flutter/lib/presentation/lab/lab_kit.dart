@@ -113,43 +113,49 @@ Color labSecondary(BuildContext context) => TegnalColors.secondaryLabel.resolveF
 
 /// The top of each lab tab: a quiet line above a large title, and something on the right.
 class LabHeader extends StatelessWidget {
-  const LabHeader({super.key, required this.kicker, required this.title, this.trailing});
+  const LabHeader({super.key, required this.kicker, required this.title, this.trailing, this.below = false});
   final InlineSpan kicker;
   final String title;
   final Widget? trailing;
 
+  /// The quiet line goes under the title instead of over it.
+  final bool below;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 8),
-    child: Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text.rich(
-                kicker,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
-              ),
-              const SizedBox(height: 2),
-              Semantics(
-                header: true,
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: LabFont.text(34, weight: FontWeight.w800, color: labLabel(context), tracking: -0.5),
+  Widget build(BuildContext context) {
+    final line = Text.rich(
+      kicker,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: LabFont.text(13, weight: FontWeight.w600, color: labSecondary(context)),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!below) ...[line, const SizedBox(height: 2)],
+                Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LabFont.text(34, weight: FontWeight.w800, color: labLabel(context), tracking: -0.5),
+                  ),
                 ),
-              ),
-            ],
+                if (below) ...[const SizedBox(height: 2), line],
+              ],
+            ),
           ),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-      ],
-    ),
-  );
+          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+        ],
+      ),
+    );
+  }
 }
 
 // MARK: - The card

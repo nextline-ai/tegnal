@@ -99,19 +99,24 @@ extension View {
 struct LabHeader<Trailing: View>: View {
     let kicker: Text
     let title: String
+    /// The quiet line goes under the title instead of over it.
+    var below = false
     @ViewBuilder var trailing: Trailing
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                kicker.font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
+                if !below { line }
                 Text(title).font(.system(size: 34, weight: .heavy)).tracking(-0.5).lineLimit(1).minimumScaleFactor(0.7)
                     .accessibilityAddTraits(.isHeader)
+                if below { line }
             }
             Spacer(minLength: 8)
             trailing
         }
         .padding(.top, 8)
     }
+
+    private var line: some View { kicker.font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1) }
 }
 
 extension LabHeader where Trailing == EmptyView {

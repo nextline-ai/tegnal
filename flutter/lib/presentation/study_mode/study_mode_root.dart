@@ -14,7 +14,6 @@ import '../../core/study/study_path.dart';
 import '../../core/study/study_speed.dart';
 import '../../core/study/study_store.dart';
 import '../../core/support/l10n.dart';
-import '../../core/lab/lab_store.dart';
 import '../booru/booru_common.dart';
 import '../design/app_sheet.dart';
 import '../design/ios_controls.dart';
@@ -545,41 +544,15 @@ class StudyHUD extends StatelessWidget {
               excludeSemantics: true,
               child: StudyStat(symbol: 'flame.fill', color: streak > 0 ? theme.flame : theme.muted, value: '$streak'),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Semantics(
               key: const Key('study.hud.xp'),
               label: 'XP ${game.xp}',
               excludeSemantics: true,
               child: StudyStat(symbol: 'bolt.fill', color: theme.gold, value: '${game.xp}'),
             ),
-            const SizedBox(width: 14),
-            // The lab's 연구비, which this course earns too; tapping it opens the lab's shop.
-            ListenableBuilder(
-              listenable: LabStore.shared,
-              builder: (context, _) {
-                final lab = LabStore.shared;
-                return Semantics(
-                  key: const Key('study.hud.shop'),
-                  button: true,
-                  label: '${L10n.text('lab.tab.shop')}, ${lab.shop.currency.text} ${lab.balance}',
-                  excludeSemantics: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      StudySound.tap.play();
-                      showAppSheet<void>(
-                        context,
-                        grabber: true,
-                        builder: (sheetContext, controller) => LabShopView(openTags: StudyMode.shared.openTags, controller: controller),
-                      );
-                    },
-                    child: StudyStat(symbol: 'bag.fill', color: theme.primary, value: '${lab.balance}'),
-                  ),
-                );
-              },
-            ),
             const Spacer(),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Semantics(
               key: const Key('study.hud.goal'),
               label: '${L10n.text("Today's goal")} ${game.today}/${game.goal}',
@@ -588,7 +561,7 @@ class StudyHUD extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 52,
+                    width: 74,
                     child: StudyBar(value: game.goalProgress, color: game.goalMet ? theme.good : theme.gold, height: 12),
                   ),
                   const SizedBox(width: 8),
@@ -1272,6 +1245,24 @@ class StudyPracticeView extends StatelessWidget {
             id: 'study.speed',
             action: startSpeed,
           ),
+          // The AI lab's shop, at the foot of the page: the same 연구비, which this course earns too.
+          const SizedBox(height: 34),
+          Semantics(
+            key: const Key('study.shop'),
+            container: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(L10n.text('lab.tab.shop'), style: StudyTheme.title(21).copyWith(color: theme.ink)),
+                ),
+                const SizedBox(height: 14),
+                LabShopView(openTags: StudyMode.shared.openTags, embedded: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );
