@@ -9,7 +9,7 @@ import 'lab_course_file.dart';
 /// A course on the 2D AI course's engine, from a course file with `"engine": "tags"` (`TagCourse`): its own path of lessons
 /// (the shape of `StudyPath.json`), and tags of its own beyond the app's curriculum. It plays on the 2D AI course's screens,
 /// with its lessons kept apart from the bundled path (`course:<id>:<lesson>`), and earns XP and stars as lessons do, but no
-/// badges, placement or 연구비.
+/// badges, placement or 보석.
 @immutable
 class TagCourse {
   const TagCourse._({required this.id, required this.title, required this.summary, required this.color, required this.symbol, required this.path, this.unit});

@@ -11,6 +11,7 @@ import '../../core/support/l10n.dart';
 import '../booru/booru_common.dart';
 import '../study/study_result_view.dart' show StudyConfetti;
 import 'study_award_views.dart';
+import 'study_chest.dart';
 import 'study_kit.dart';
 import 'study_lesson_parts.dart';
 import 'study_mode_model.dart';
@@ -69,6 +70,10 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
 
   /// Zero shows the results; later pages show the milestones in turn.
   int _page = 0;
+
+  /// Whether the treasure chest on the 보석 page has been opened; until then the button opens it.
+  bool _chestOpened = false;
+  bool get _chestWaiting => _page > 0 && _page <= _milestones.length && _milestones[_page - 1] is StudyGemsMilestone && !_chestOpened;
   bool _unfolded = false;
   bool _disposed = false;
 
@@ -116,7 +121,9 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
     } on Object {
       // A badge that cannot be marked is celebrated again later.
     }
-    _milestones = [...milestones, for (final badge in badges) StudyMilestone.award(badge)];
+    // The treasure chest comes first: what the lesson paid in 보석, the currency the AI lab's shop takes.
+    final gems = _session.gems;
+    _milestones = [if (gems != null) StudyMilestone.gems(gems), ...milestones, for (final badge in badges) StudyMilestone.award(badge)];
     if (_empty) return;
     StudySound.complete.play();
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -145,6 +152,7 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
   }
 
   void _continue() {
+    if (_chestWaiting) return setState(() => _chestOpened = true);
     StudySound.tap.play();
     if (_page < _milestones.length) {
       setState(() => _page += 1);
@@ -160,7 +168,15 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
     final reduce = MediaQuery.disableAnimationsOf(context);
     final page = _page == 0
         ? KeyedSubtree(key: const ValueKey(0), child: _results(context))
-        : StudyMilestoneView(key: ValueKey(_page), milestone: _milestones[_page - 1], days: _days);
+        : switch (_milestones[_page - 1]) {
+            StudyGemsMilestone(:final reward) => StudyChestPage(
+              key: ValueKey(_page),
+              reward: reward,
+              opened: _chestOpened,
+              onOpen: () => setState(() => _chestOpened = true),
+            ),
+            final milestone => StudyMilestoneView(key: ValueKey(_page), milestone: milestone, days: _days),
+          };
     return Column(
       children: [
         Expanded(
@@ -195,7 +211,13 @@ class _StudyLessonResultState extends State<StudyLessonResult> {
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 560),
-                child: StudyMainButton(key: const Key('study.done'), title: L10n.text('Continue'), onPressed: _continue),
+                child: StudyMainButton(
+                  key: const Key('study.done'),
+                  title: L10n.text(_chestWaiting ? 'study.chest.open' : 'Continue'),
+                  color: _chestWaiting ? theme.gold : null,
+                  symbol: _chestWaiting ? 'sparkles' : null,
+                  onPressed: _continue,
+                ),
               ),
             ),
           ),
@@ -552,7 +574,7 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
           StudySound.combo.play();
         case StudyLevelMilestone():
           StudySound.levelup.play();
-        case StudyAwardMilestone():
+        case StudyAwardMilestone() || StudyGemsMilestone():
           break;
       }
       if (!reduce) {
@@ -578,7 +600,7 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
   Color _color(StudyTheme theme) => switch (widget.milestone) {
     StudyStreakMilestone() => theme.flame,
     StudyGoalMilestone() => theme.good,
-    StudyLevelMilestone() || StudyAwardMilestone() => theme.gold,
+    StudyLevelMilestone() || StudyAwardMilestone() || StudyGemsMilestone() => theme.gold,
   };
 
   String get _title => switch (widget.milestone) {
@@ -586,6 +608,7 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
     StudyGoalMilestone() => L10n.text('Daily Goal Met!'),
     StudyLevelMilestone(:final level) => L10n.text('Level %@!', ['$level']),
     StudyAwardMilestone(:final award) => award.name,
+    StudyGemsMilestone(:final reward) => '${reward.paid.total}',
   };
 
   String get _detail => switch (widget.milestone) {
@@ -595,6 +618,7 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
     StudyGoalMilestone(:final xp) => L10n.text('You earned the %@ XP you set for today.', ['$xp']),
     StudyLevelMilestone() => L10n.text('You know more tags than you did yesterday. Keep climbing.'),
     StudyAwardMilestone(:final award) => award.explanation,
+    StudyGemsMilestone() => '',
   };
 
   @override
@@ -753,7 +777,7 @@ class _StudyMilestoneViewState extends State<StudyMilestoneView> with TickerProv
             ),
           ],
         );
-      case StudyAwardMilestone():
+      case StudyAwardMilestone() || StudyGemsMilestone():
         return const SizedBox.shrink();
     }
   }

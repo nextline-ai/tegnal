@@ -4,11 +4,15 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/generation/generation_store.dart';
+import 'package:tegnal/core/lab/lab_course.dart';
+import 'package:tegnal/core/lab/lab_records.dart';
+import 'package:tegnal/core/lab/lab_store.dart';
 import 'package:tegnal/core/storage/app_storage.dart';
 import 'package:tegnal/core/study/study_awards.dart';
 import 'package:tegnal/core/study/study_engine.dart';
 import 'package:tegnal/core/study/study_path.dart';
 import 'package:tegnal/core/study/study_store.dart';
+import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/presentation/design/tegnal_theme.dart';
 import 'package:tegnal/presentation/study_mode/study_award_views.dart';
 import 'package:tegnal/presentation/study_mode/study_lesson_result.dart';
@@ -181,6 +185,47 @@ void main() {
     final card = tester.widget<Opacity>(find.ancestor(of: find.text("Today's goal"), matching: find.byType(Opacity)).first);
     expect(card.opacity, 1);
     await _wait(tester, 1000);
+  });
+
+  testWidgets('a first finish of a bought 2D course pays 보석 from a treasure chest opened after the results', (tester) async {
+    final course = await tester.runAsync(LabCourse.loadBundled);
+    final lab = LabStore.shared..reset();
+    addTearDown(lab.reset);
+    lab.progress
+      ..legacyNoticed = true
+      ..purchases[LabStore.tagCourse] = const LabPurchase(price: 0, count: 1, date: 0);
+    // The test lesson stands in for the path's only lesson, so finishing it also finishes its section.
+    StudyPath.useBundled(const StudyPath(sections: [StudyPathSection(id: 'test', title: {'en': 'Test'}, summary: {'en': ''}, color: '7C5CFF', lessons: [_lesson])]));
+    addTearDown(() => StudyPath.useBundled(null));
+    final harness = StudyHarness();
+    final session = await _played(harness);
+    final rates = course!.info.rewards;
+    expect(
+      session.gems?.paid,
+      LabTagPayout(lesson: rates.courseLesson, stars: rates.courseStars, section: rates.courseSection),
+      reason: 'A lesson without a mistake pays for itself, its three stars and its section',
+    );
+    final paid = session.gems!.paid.total;
+    await _pump(tester, StudyLessonResult(booru: harness.booru, session: session, model: StudyModeModel(harness.booru), done: () {}));
+    await _wait(tester, 3000);
+    await tester.tap(find.byKey(const Key('study.done')));
+    await _wait(tester, 800);
+    // The chest waits shut, with the balance before; the button opens it.
+    expect(find.text(L10n.text('study.chest.title')), findsWidgets);
+    expect(find.text('${session.gems!.before}'), findsOneWidget);
+    expect(find.text(L10n.text('study.chest.open')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('study.done')));
+    await _wait(tester, 3500);
+    expect(find.text(L10n.text('study.chest.got', ['$paid'])), findsOneWidget);
+    expect(find.text('${session.gems!.after}'), findsOneWidget, reason: 'The balance has climbed');
+    expect(find.text('+${rates.courseSection}'), findsOneWidget);
+    expect(find.text(L10n.text('Continue')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('study.done')));
+    await _wait(tester, 1500);
+    expect(find.byKey(const Key('study.milestone')), findsOneWidget, reason: 'The streak comes after the chest');
+
+    final again = await _played(harness);
+    expect(again.gems, isNull, reason: 'Playing a lesson again pays nothing');
   });
 
   testWidgets('a review with nothing asked says there is nothing to review', (tester) async {

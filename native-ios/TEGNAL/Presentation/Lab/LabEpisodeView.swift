@@ -243,6 +243,8 @@ struct LabEngraveView: View {
     @State private var sheen: Double = 0
     @State private var settled = false
     @State private var shownRate: Int?
+    /// The balance as shown: from before the engraving, climbing to now once the numbers settle in.
+    @State private var shownBalance: Int?
 
     var body: some View {
         let line = episode.card.line.text
@@ -298,7 +300,7 @@ struct LabEngraveView: View {
         .task { await play(line) }
     }
 
-    /// The rate, the 연구비 and the 망작, grouped as a stock inset list draws them.
+    /// The rate, the 보석 and the 망작, grouped as a stock inset list draws them.
     private func rows(_ engraving: LabEngraving) -> some View {
         VStack(spacing: 0) {
             HStack {
@@ -310,15 +312,25 @@ struct LabEngraveView: View {
             }
             .rowPadding()
             .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.rate")
-            // An imported course pays no 연구비, so it has no row for it.
+            // An imported course pays no 보석, so it has no row for it.
             if !store.course.imported {
                 Divider()
-                HStack {
-                    Text(store.shop.currency.text)
-                    Spacer()
-                    Text("+\(engraving.total)").font(LabFont.number(15))
-                    Text(L10n.text("lab.engrave.income", String(engraving.cardReward), String(engraving.failReward))).font(.system(size: 13)).foregroundStyle(.secondary)
+                // The balance climbs from before the card to now, as the rate does above; what paid sits under it.
+                let before = store.balance - engraving.total
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Label { Text(store.shop.currency.text) } icon: { Image(systemName: "diamond.fill").foregroundStyle(LabPalette.gauge) }
+                        Spacer()
+                        Text("\(before) → ").font(LabFont.number(17)).foregroundStyle(.secondary)
+                        Text("\(shownBalance ?? before)").font(LabFont.number(17)).foregroundStyle(LabPalette.gauge)
+                            .contentTransition(.numericText(value: Double(shownBalance ?? before)))
+                    }
+                    Text(engraving.seasonReward > 0
+                         ? L10n.text("lab.engrave.gemsSeason", String(engraving.total), String(engraving.cardReward), String(engraving.failReward), String(engraving.seasonReward))
+                         : L10n.text("lab.engrave.gemsDetail", String(engraving.total), String(engraving.cardReward), String(engraving.failReward)))
+                        .font(.system(size: 13)).foregroundStyle(.secondary)
                 }
+                .padding(.vertical, 8)
                 .rowPadding()
                 .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.income")
             }
@@ -340,7 +352,7 @@ struct LabEngraveView: View {
     private func play(_ line: String) async {
         let count = Double(line.count)
         if reduceMotion {
-            angle = 180; revealed = count + 1; settled = true; shownRate = engraving?.after
+            angle = 180; revealed = count + 1; settled = true; shownRate = engraving?.after; shownBalance = store.balance
             return
         }
         try? await Task.sleep(for: .milliseconds(450))
@@ -361,6 +373,10 @@ struct LabEngraveView: View {
         try? await Task.sleep(for: .milliseconds(250))
         withAnimation(.spring(duration: 1.2)) { shownRate = engraving?.after }
         if engraving?.first == true { LabHaptic.pass() }
+        // Then the 보석, once the rate has moved.
+        try? await Task.sleep(for: .milliseconds(600))
+        if (engraving?.total ?? 0) > 0 { LabHaptic.tick() }
+        withAnimation(.spring(duration: 1.2)) { shownBalance = store.balance }
     }
 }
 

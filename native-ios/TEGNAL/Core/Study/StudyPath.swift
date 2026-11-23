@@ -196,7 +196,16 @@ struct StudyStanding: Equatable, Sendable {
 }
 
 /// What a finished lesson is worth celebrating beyond its own results.
+/// What a lesson paid in 보석, and the balance before it: the treasure chest's contents.
+struct StudyGemReward: Hashable, Sendable {
+    var paid: LabTagPayout
+    var before: Int
+    var after: Int { before + paid.total }
+}
+
 enum StudyMilestone: Hashable, Sendable {
+    /// 보석 paid by the lesson, opened from a treasure chest. Shown first.
+    case gems(StudyGemReward)
     case streak(Int)
     case goal(Int)
     case level(Int)
@@ -302,6 +311,9 @@ final class StudyLessonSession: Identifiable {
     private(set) var mistakes = 0
     private(set) var asked = 0
     private(set) var earned = 0
+    /// The 보석 this lesson paid — a 2D AI 배우기 lesson finished, or finished with three stars, for the first time, and the
+    /// section it finished — with the balance before, for the treasure chest after the results. Nil when it paid nothing.
+    private(set) var gems: StudyGemReward?
     private(set) var stars = 0
     /// Pictures that fit the prompts built in this lesson, by the build's brief.
     private(set) var builtPictures: [StudyPathLesson.Build: BooruPost] = [:]
@@ -542,6 +554,11 @@ final class StudyLessonSession: Identifiable {
         before.today = days.first { $0.day == StudyDay.key(.now) }?.xp ?? 0
         try? store.studyStore.raise(StudyCounter.combo, to: bestCombo)
         try? store.studyStore.earn(earned, lesson: plan.lesson?.id, stars: stars)
+        if plan.lesson != nil {
+            let before = LabStore.shared.balance
+            let paid = LabStore.shared.settleTagCourse(in: store.studyStore)
+            if paid.total > 0 { gems = StudyGemReward(paid: paid, before: before) }
+        }
     }
 }
 

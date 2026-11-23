@@ -72,8 +72,16 @@ final class StudyUITests: XCTestCase {
         XCTAssertTrue(element(app, "study.stars").exists)
         XCTAssertTrue(app.staticTexts["Today's goal"].waitForExistence(timeout: 8))
         element(app, "study.done").tap()
-        XCTAssertTrue(element(app, "study.milestone").waitForExistence(timeout: 5), "The day's first lesson gets a page for the streak it starts")
-        XCTAssertTrue(app.staticTexts["1-Day Streak!"].exists)
+        // The 보석 it paid come first, in a treasure chest that the button (or a tap on it) opens.
+        XCTAssertTrue(element(app, "study.chest").waitForExistence(timeout: 5), "A first finish pays 보석, opened from a chest")
+        let balance = element(app, "study.chest.balance")
+        let before = balance.label
+        element(app, "study.done").tap()
+        XCTAssertTrue(element(app, "study.chest.lines").waitForExistence(timeout: 6), "Opened, it lists what paid")
+        let climbed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", before), object: balance)
+        XCTAssertEqual(XCTWaiter.wait(for: [climbed], timeout: 6), .completed, "The balance climbs once the gems land")
+        element(app, "study.done").tap()
+        XCTAssertTrue(app.staticTexts["1-Day Streak!"].waitForExistence(timeout: 5), "The day's first lesson gets a page for the streak it starts")
         finish(app)
         XCTAssertTrue(element(app, "study.node.s0-tags").waitForExistence(timeout: 5))
         XCTAssertEqual(element(app, "study.node.s0-tags").value as? String, "Next", "Finishing a lesson opens the one after it")
@@ -211,7 +219,7 @@ final class StudyUITests: XCTestCase {
         play(app) { if element(app, "study.choice.0").exists { element(app, "study.choice.0").tap() } }
         var celebrated = false
         let done = element(app, "study.done")
-        for _ in 0..<6 where done.exists {
+        for _ in 0..<9 where done.exists {
             if app.staticTexts["Achievement Unlocked!"].exists { celebrated = true; XCTAssertTrue(app.staticTexts["First Step"].exists) }
             done.tap()
             _ = element(app, "study.dock.path").waitForExistence(timeout: 1.5)
@@ -358,7 +366,7 @@ final class StudyUITests: XCTestCase {
     /// Leaves a finished lesson, passing any page shown for a streak, a goal or a level.
     private func finish(_ app: XCUIApplication) {
         let done = element(app, "study.done")
-        for _ in 0..<5 where done.exists {
+        for _ in 0..<8 where done.exists {
             done.tap()
             _ = element(app, "study.dock.path").waitForExistence(timeout: 1.5)
         }

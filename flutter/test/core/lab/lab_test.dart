@@ -14,6 +14,8 @@ import 'package:tegnal/core/lab/lab_store.dart';
 import 'package:tegnal/core/lab/learning_courses.dart';
 import 'package:tegnal/core/storage/app_database.dart';
 import 'package:tegnal/core/study/study_models.dart';
+import 'package:tegnal/core/study/study_path.dart';
+import 'package:tegnal/core/study/study_store.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/sync/library_sync_adapter.dart';
 import 'package:tegnal/core/sync/library_sync_record.dart';
@@ -207,38 +209,119 @@ void main() {
     expect(lab.balance, course.info.rewards.fail);
   });
 
+  StudyPath path() => StudyPath.parse(File('assets/study/StudyPath.json').readAsStringSync());
+
+  // What every bundled course pays when finished; cheat-sheet editions are left out, as they keep coming.
+  int labPayout() =>
+      course.episodes.fold(0, (total, episode) => total + episode.reward) +
+      course.fails.length * course.info.rewards.fail +
+      course.seasons.length * course.info.rewards.season;
+  int tagPayout() {
+    final rates = course.info.rewards, lessons = path().sections.fold(0, (total, section) => total + section.lessons.length);
+    return lessons * (rates.courseLesson + rates.courseStars) + path().sections.length * rates.courseSection;
+  }
+
   test('prices follow the agreed rules', () {
     final shop = LabShop.bundled;
-    final seasonOne = course.seasons.first.episodes.map(course.episode).nonNulls.fold(0, (total, episode) => total + episode.reward);
-    final cheapest = shop.items.where((item) => !item.isRepeat && !item.isSoon).map((item) => item.price).nonNulls.reduce((a, b) => a < b ? a : b);
-    expect(seasonOne, greaterThanOrEqualTo(cheapest), reason: 'Season 1 pays for a first purchase');
-    final cards = course.episodes.fold(0, (total, episode) => total + episode.reward);
-    final share = cards / shop.permanentTotal;
-    expect(share, inInclusiveRange(0.6, 0.7));
+    // Season 1's cards and its season pay for the first course, without a single 망작.
+    final seasonOne =
+        course.seasons.first.episodes.map(course.episode).nonNulls.fold(0, (total, episode) => total + episode.reward) + course.info.rewards.season;
+    final course2D = shop.item(LabStore.tagCourse)!.price!;
+    expect(seasonOne, greaterThanOrEqualTo(course2D), reason: 'Season 1 pays for 2D AI 배우기');
+    // A bought course pays back several times its price.
+    expect(tagPayout(), greaterThanOrEqualTo(4 * course2D));
+    // Everything that lasts costs 50–70% of what all courses pay; the rest is left for tickets.
+    expect(shop.permanentTotal / (labPayout() + tagPayout()), inInclusiveRange(0.5, 0.7));
+    expect(labPayout(), lessThan(shop.permanentTotal), reason: 'The free course alone does not buy everything');
   });
 
-  test('buying the 2D course, and its lessons paying afterwards', () {
+  test('amounts paid are kept when the files change later', () async {
+    final records = LabMemoryRecords();
+    final first = LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: records);
+    LabEngraving? last;
+    for (final id in ['ep01', 'ep02', 'ep03', 'ep04']) {
+      last = first.engrave(course.episode(id)!, failsHung: 0);
+    }
+    expect(last?.seasonReward, course.info.rewards.season, reason: 'The card that finishes a season pays for it');
+    first.hang(course.fails.first);
+    final balance = first.balance;
+    expect(records.all().firstWhere((record) => record.key == 'card:ep01').value, course.episode('ep01')!.reward);
+
+    // The same course with every amount changed.
+    final cheaper = await LabCourse.load((path) async {
+      final json = jsonDecode(File('assets/lab/$path').readAsStringSync()) as Map<String, Object?>;
+      if (path == 'course.json') json['rewards'] = {'fail': 2, 'edition': 2, 'season': 2, 'courseLesson': 2};
+      if (path.startsWith('episodes/')) json['reward'] = 3;
+      return jsonEncode(json);
+    });
+    final later = LabStore(course: cheaper, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: records);
+    expect(later.balance, balance, reason: 'Nothing already earned moves');
+    later.engrave(cheaper.episode('ep05')!, failsHung: 0);
+    expect(later.balance, balance + 3, reason: 'What is earned from now on pays the new amount');
+  });
+
+  test('older records count at the present amount', () {
+    final progress = LabProgress.fromRecords(const [LabRecord(key: 'card:ep01', value: 1, at: 10)]);
+    expect(progress.cardGems['ep01'], isNull);
+    final records = LabMemoryRecords()..replace(progress.records);
+    final lab = LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: records);
+    expect(lab.balance, course.episode('ep01')!.reward);
+  });
+
+  test('season 1 buys the 2D course, and its tickets wait for it', () {
     final lab = store();
     final item = lab.shop.item(LabStore.tagCourse)!;
     expect(lab.canBuy(item), LabBuyResult.shortBy(item.price!));
     for (final id in ['ep01', 'ep02', 'ep03', 'ep04']) {
       lab.engrave(course.episode(id)!, failsHung: 0);
     }
-    lab.count(lessons: 5, of: LabStore.tagCourse);
+    final listed = lab.shop.items.firstWhere((item) => item.kind == 'ticket');
+    expect(listed.requires, LabStore.tagCourse);
+    final tickets = LabShopItem(id: listed.id, kind: listed.kind, name: listed.name, price: listed.price, repeat: true, requires: listed.requires);
+    expect(lab.canBuy(tickets), const LabBuyResult.needs(LabStore.tagCourse), reason: 'Tickets are for the generator 2D AI 배우기 opens');
     expect(lab.buy(item), LabBuyResult.bought);
     expect(lab.ownsTagCourse, isTrue);
     expect(lab.canBuy(item), LabBuyResult.owned);
-    final after = lab.balance;
-    lab.count(lessons: 8, of: LabStore.tagCourse);
-    expect(lab.balance, after + 3 * course.info.rewards.courseLesson, reason: 'Only lessons finished after buying pay');
+    expect(lab.canBuy(tickets), isNot(const LabBuyResult.needs(LabStore.tagCourse)));
   });
 
-  test('a learner who studied tags before keeps the course free', () {
-    final lab = store()..grandfather(lessons: 12, xp: 300);
-    expect(lab.ownsTagCourse, isTrue);
+  test('2D lessons, three stars and sections pay once', () {
+    final booru = BooruStore.inMemory();
+    final lab = store();
+    final rates = course.info.rewards, section = path().sections.first;
+    final ids = [for (final lesson in section.lessons) lesson.id];
+    booru.studyStore.earn(10, lesson: ids.first, stars: 2);
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, rates.courseLesson);
+    booru.studyStore.earn(10, lesson: ids.first, stars: 2);
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, 0, reason: 'Playing a lesson again pays nothing');
+    booru.studyStore.earn(10, lesson: ids.first, stars: 3);
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, rates.courseStars, reason: 'Three stars pay once');
+    for (final id in ids.skip(1)) {
+      booru.studyStore.earn(10, lesson: id, stars: 1);
+    }
+    expect(lab.settleTagCourse(booru.studyStore, path: path()), LabTagPayout(lesson: (ids.length - 1) * rates.courseLesson, section: rates.courseSection));
+    booru.studyStore.earn(10, lesson: 'course:other:one', stars: 3);
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, 0, reason: "An imported course's lesson pays nothing");
+    final balance = lab.balance;
+    booru.studyStore.reset();
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, 0);
+    expect(lab.balance, balance, reason: 'Resetting the course takes nothing back');
+  });
+
+  test('progress from before the course was sold pays but does not open it', () {
+    final booru = BooruStore.inMemory();
+    final lab = store();
+    expect(lab.owesLegacyNotice, isFalse, reason: 'Nothing to tell someone who never studied it');
+    for (final lesson in path().sections.expand((section) => section.lessons).take(6)) {
+      booru.studyStore.earn(10, lesson: lesson.id, stars: 3);
+    }
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, greaterThan(0));
+    expect(lab.ownsTagCourse, isFalse);
+    expect(lab.tagCoursePaid.lessons, 6);
+    expect(lab.owesLegacyNotice, isTrue);
+    lab.noticeLegacy();
+    expect(lab.owesLegacyNotice, isFalse);
     expect(lab.spent, 0);
-    final fresh = store()..grandfather(lessons: 0, xp: 0);
-    expect(fresh.ownsTagCourse, isFalse);
   });
 
   test('items not on sale cannot be bought', () {

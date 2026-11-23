@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../study/study_path.dart';
+import '../study/study_store.dart';
 import '../support/sql_database.dart';
 import 'lab_course.dart';
 import 'lab_records.dart';
@@ -8,6 +10,22 @@ import 'lab_sheet.dart';
 // The lab's progress and its money: one shared store, saved after every change. Ported from `LabStore.swift`.
 
 /// What a card's engraving added, for the reward screen.
+/// What settling 2D AI 배우기 paid, by kind, for the treasure chest a lesson opens.
+class LabTagPayout {
+  const LabTagPayout({this.lesson = 0, this.stars = 0, this.section = 0});
+  final int lesson;
+  final int stars;
+  final int section;
+  int get total => lesson + stars + section;
+
+  @override
+  bool operator ==(Object other) => other is LabTagPayout && other.lesson == lesson && other.stars == stars && other.section == section;
+  @override
+  int get hashCode => Object.hash(lesson, stars, section);
+  @override
+  String toString() => 'LabTagPayout(lesson $lesson, stars $stars, section $section)';
+}
+
 class LabEngraving {
   const LabEngraving({
     required this.before,
@@ -18,6 +36,7 @@ class LabEngraving {
     required this.failsLeft,
     required this.first,
     this.season,
+    this.seasonReward = 0,
   });
   final int before;
   final int after;
@@ -29,26 +48,33 @@ class LabEngraving {
 
   /// The number of the season this card finished, the first time it was finished.
   final int? season;
-  int get total => cardReward + failReward;
+
+  /// What finishing that season paid.
+  final int seasonReward;
+  int get total => cardReward + failReward + seasonReward;
 }
 
 enum LabCardStatus { earned, open, locked }
 
 /// The outcome of buying, or of asking whether something can be bought. [short] is how much is missing.
 class LabBuyResult {
-  const LabBuyResult._(this.kind, [this.short = 0]);
   static const bought = LabBuyResult._('bought');
   static const owned = LabBuyResult._('owned');
   static const unavailable = LabBuyResult._('unavailable');
   const LabBuyResult.shortBy(int amount) : this._('short', amount);
+
+  /// Another item, by id, must be owned first.
+  const LabBuyResult.needs(String item) : kind = 'needs', short = 0, needed = item;
+  const LabBuyResult._(this.kind, [this.short = 0]) : needed = null;
   final String kind;
   final int short;
+  final String? needed;
   bool get isBought => kind == 'bought';
 
   @override
-  bool operator ==(Object other) => other is LabBuyResult && other.kind == kind && other.short == short;
+  bool operator ==(Object other) => other is LabBuyResult && other.kind == kind && other.short == short && other.needed == needed;
   @override
-  int get hashCode => Object.hash(kind, short);
+  int get hashCode => Object.hash(kind, short, needed);
 }
 
 class LabStore extends ChangeNotifier {
@@ -110,9 +136,6 @@ class LabStore extends ChangeNotifier {
   /// The cheat-sheet edition shown: the newest of the bundled, saved and downloaded copies.
   LabEdition? _edition;
   LabEdition? get edition => _edition ?? LabEdition.bundled;
-
-  /// Lessons of bought courses finished so far, by course id.
-  final Map<String, int> courseLessons = {};
 
   LabProgress _read() {
     try {
@@ -192,15 +215,24 @@ class LabStore extends ChangeNotifier {
   LabEngraving engrave(LabEpisode episode, {required int failsHung}) {
     final before = rate;
     final first = !progress.cards.containsKey(key(episode.id));
+    final pays = !course.imported;
     if (first) {
       progress.cards[key(episode.id)] = now;
+      if (pays) progress.cardGems[key(episode.id)] = episode.reward;
       _save();
     }
     final left = episode.fails.where((fail) => !progress.fails.containsKey(key(fail.id))).length;
-    final pays = !course.imported;
     final season = course.seasonOf(episode);
+    final finished = first && season != null && complete(season) ? season.number : null;
+    var seasonReward = 0;
+    if (finished != null && pays && course.info.rewards.season > 0 && !progress.seasonGems.containsKey('$finished')) {
+      seasonReward = course.info.rewards.season;
+      progress.seasonGems['$finished'] = seasonReward;
+      _save();
+    }
     return LabEngraving(
-      season: first && season != null && complete(season) ? season.number : null,
+      season: finished,
+      seasonReward: seasonReward,
       before: before,
       after: rate,
       cardReward: first && pays ? episode.reward : 0,
@@ -222,6 +254,7 @@ class LabStore extends ChangeNotifier {
   bool hang(LabFail fail) {
     if (progress.fails.containsKey(key(fail.id))) return false;
     progress.fails[key(fail.id)] = now;
+    if (failReward > 0) progress.failGems[key(fail.id)] = failReward;
     _save();
     return true;
   }
@@ -266,20 +299,23 @@ class LabStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // MARK: 연구비
+  // MARK: 보석
 
-  /// Only the AI lab pays: its cards, its 망작, cheat-sheet editions and lessons of bought courses. Imported courses pay nothing.
+  /// What has been earned, each at the amount it paid when earned: the AI lab's cards, 망작 and seasons, cheat-sheet editions,
+  /// and 2D AI 배우기's lessons, three-star lessons and sections. Imported courses pay nothing.
   int get income {
-    final cards = main.episodes.where((episode) => progress.cards.containsKey(episode.id)).fold(0, (total, episode) => total + episode.reward);
-    final fails = main.fails.where((fail) => progress.fails.containsKey(fail.id)).length * main.info.rewards.fail;
+    final cards = main.episodes
+        .where((episode) => progress.cards.containsKey(episode.id))
+        .fold(0, (total, episode) => total + (progress.cardGems[episode.id] ?? episode.reward));
+    final fails = main.fails
+        .where((fail) => progress.fails.containsKey(fail.id))
+        .fold(0, (total, fail) => total + (progress.failGems[fail.id] ?? main.info.rewards.fail));
+    final seasons = main.seasons
+        .where((season) => season.episodes.every(progress.cards.containsKey))
+        .fold(0, (total, season) => total + (progress.seasonGems['${season.number}'] ?? main.info.rewards.season));
     final editions = progress.editions.values.fold(0, (total, value) => total + value);
-    var courses = 0;
-    for (final entry in progress.purchases.entries) {
-      final baseline = entry.value.baseline, done = courseLessons[entry.key];
-      if (baseline == null || done == null) continue;
-      courses += (done - baseline < 0 ? 0 : done - baseline) * main.info.rewards.courseLesson;
-    }
-    return cards + fails + editions + courses;
+    final courses = progress.coursePaid.values.fold(0, (total, value) => total + value);
+    return cards + fails + seasons + editions + courses;
   }
 
   int get spent => progress.purchases.values.fold(0, (total, purchase) => total + purchase.price * purchase.count);
@@ -292,6 +328,8 @@ class LabStore extends ChangeNotifier {
     final price = item.price;
     if (item.isSoon || price == null) return LabBuyResult.unavailable;
     if (owns(item.id) && !item.isRepeat) return LabBuyResult.owned;
+    final needed = item.requires;
+    if (needed != null && !owns(needed)) return LabBuyResult.needs(needed);
     return balance >= price ? LabBuyResult.bought : LabBuyResult.shortBy(price - balance);
   }
 
@@ -300,25 +338,68 @@ class LabStore extends ChangeNotifier {
     final price = item.price;
     if (!result.isBought || price == null) return result;
     final entry = progress.purchases[item.id] ?? LabPurchase(price: price, count: 0, date: now);
-    progress.purchases[item.id] = entry.copyWith(count: entry.count + 1, date: now, baseline: item.kind == 'course' ? (courseLessons[item.id] ?? 0) : null);
+    progress.purchases[item.id] = entry.copyWith(count: entry.count + 1, date: now);
     _save();
     return LabBuyResult.bought;
   }
 
-  /// Tells the store how many lessons of a course are finished, so its lessons can pay.
-  void count({required int lessons, required String of}) {
-    if (courseLessons[of] == lessons) return;
-    courseLessons[of] = lessons;
-    notifyListeners();
+  // MARK: 2D AI 배우기
+
+  /// Pays what 2D AI 배우기's finished lessons, three-star lessons and finished sections have not paid yet, and returns the
+  /// 보석 paid now. Progress from before the course was sold pays the same way, once; the course must still be bought to go on.
+  /// Lessons of imported courses (`course:<id>:…`) are not on the bundled path, so they pay nothing.
+  LabTagPayout settleTagCourse(StudyStore study, {StudyPath? path}) {
+    Map<String, StudyLessonRecord> records;
+    try {
+      records = study.lessons();
+    } on Object {
+      return const LabTagPayout();
+    }
+    final rates = main.info.rewards;
+    var lesson = 0, stars = 0, section = 0;
+    void pay(String kind, String id, int amount) {
+      final key = '$kind:$tagCourse/$id';
+      if (amount <= 0 || progress.coursePaid.containsKey(key)) return;
+      progress.coursePaid[key] = amount;
+      switch (kind) {
+        case 'lesson':
+          lesson += amount;
+        case 'stars':
+          stars += amount;
+        default:
+          section += amount;
+      }
+    }
+
+    for (final section in (path ?? StudyPath.bundled).sections) {
+      for (final lesson in section.lessons) {
+        final record = records[lesson.id];
+        if (record == null) continue;
+        pay('lesson', lesson.id, rates.courseLesson);
+        if (record.stars >= 3) pay('stars', lesson.id, rates.courseStars);
+      }
+      if (section.lessons.isNotEmpty && section.lessons.every((lesson) => records.containsKey(lesson.id))) {
+        pay('section', section.id, rates.courseSection);
+      }
+    }
+    final paid = LabTagPayout(lesson: lesson, stars: stars, section: section);
+    if (paid.total > 0) _save();
+    return paid;
   }
 
-  /// A learner who studied tags before the lab came keeps the course, free, and is paid only for lessons after this.
-  void grandfather({required int lessons, required int xp}) {
-    if (progress.grandfathered) return;
-    progress.grandfathered = true;
-    if ((lessons > 0 || xp > 0) && !progress.purchases.containsKey(tagCourse)) {
-      progress.purchases[tagCourse] = LabPurchase(price: 0, count: 1, date: now, baseline: lessons);
-    }
+  /// What 2D AI 배우기 has paid so far, and for how many lessons.
+  ({int gems, int lessons}) get tagCoursePaid {
+    final prefix = ':$tagCourse/';
+    final entries = progress.coursePaid.entries.where((entry) => entry.key.contains(prefix));
+    return (gems: entries.fold(0, (total, entry) => total + entry.value), lessons: entries.where((entry) => entry.key.startsWith('lesson:')).length);
+  }
+
+  /// True when a learner who studied 2D AI 배우기 before it was sold should be told it now opens from the shop.
+  bool get owesLegacyNotice => !progress.legacyNoticed && !ownsTagCourse && tagCoursePaid.gems > 0;
+
+  void noticeLegacy() {
+    if (progress.legacyNoticed) return;
+    progress.legacyNoticed = true;
     _save();
   }
 
@@ -365,13 +446,13 @@ class LabStore extends ChangeNotifier {
     if (arguments.contains('greeted') || seed != null) {
       progress
         ..greeted = true
-        ..grandfathered = true;
+        ..legacyNoticed = true;
     }
     final income = int.tryParse(value('income') ?? '');
     if (income != null) progress.editions['test-income'] = income;
     if (arguments.contains('owned')) {
-      progress.purchases.putIfAbsent(tagCourse, () => LabPurchase(price: 0, count: 1, date: now, baseline: 0));
-      progress.grandfathered = true;
+      progress.purchases.putIfAbsent(tagCourse, () => LabPurchase(price: 0, count: 1, date: now));
+      progress.legacyNoticed = true;
     }
     _save();
   }

@@ -496,6 +496,9 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
   final _card = GlobalKey();
   bool settled = false;
   int? shownRate;
+
+  /// The balance as shown: from before the engraving, climbing to now once the numbers settle in.
+  int? shownBalance;
   bool _gone = false;
 
   LabEpisode get episode => widget.episode;
@@ -526,6 +529,7 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
       setState(() {
         settled = true;
         shownRate = widget.engraving?.after;
+        shownBalance = widget.store.balance;
       });
       return;
     }
@@ -553,6 +557,11 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
     if (_gone) return;
     setState(() => shownRate = widget.engraving?.after);
     if (widget.engraving?.first == true) LabHaptic.pass();
+    // Then the 보석, once the rate has moved.
+    await _wait(600);
+    if (_gone) return;
+    if ((widget.engraving?.total ?? 0) > 0) LabHaptic.tick();
+    setState(() => shownBalance = widget.store.balance);
   }
 
   @override
@@ -705,7 +714,7 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
     );
   }
 
-  /// The rate, the 연구비 and the 망작, grouped as a stock inset list draws them.
+  /// The rate, the 보석 and the 망작, grouped as a stock inset list draws them.
   Widget _rows(BuildContext context, LabEngraving engraving) {
     final secondary = labSecondary(context), label = labLabel(context);
     Widget row(Key? key, String title, List<Widget> trailing) => Padding(
@@ -757,14 +766,48 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
               builder: (context, value, _) => Text('${value.round()}%', style: LabFont.number(17, color: LabPalette.gauge.resolveFrom(context))),
             ),
           ]),
-          // An imported course pays no 연구비, so it has no row for it.
+          // An imported course pays no 보석, so it has no row for it.
           if (!widget.store.course.imported) ...[
             divider,
-            row(const Key('lab.engrave.income'), widget.store.shop.currency.text, [
-              Text('+${engraving.total}', style: LabFont.number(15, color: label)),
-              const SizedBox(width: 4),
-              Text(L10n.text('lab.engrave.income', ['${engraving.cardReward}', '${engraving.failReward}']), style: LabFont.text(13, color: secondary)),
-            ]),
+            // The balance climbs from before the card to now, as the rate does above; what paid sits under it.
+            Builder(
+              builder: (context) {
+                final before = widget.store.balance - engraving.total;
+                final gauge = LabPalette.gauge.resolveFrom(context);
+                return Padding(
+                  key: const Key('lab.engrave.income'),
+                  padding: const EdgeInsets.only(right: 16, top: 9, bottom: 9),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 3,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(CupertinoIcons.rhombus_fill, size: 17, color: gauge),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(widget.store.shop.currency.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: LabFont.text(17, color: label)),
+                          ),
+                          Text('$before → ', style: LabFont.number(17, color: secondary)),
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: before.toDouble(), end: (shownBalance ?? before).toDouble()),
+                            duration: const Duration(milliseconds: 1200),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, _) => Text('${value.round()}', style: LabFont.number(17, color: gauge)),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        engraving.seasonReward > 0
+                            ? L10n.text('lab.engrave.gemsSeason', ['${engraving.total}', '${engraving.cardReward}', '${engraving.failReward}', '${engraving.seasonReward}'])
+                            : L10n.text('lab.engrave.gemsDetail', ['${engraving.total}', '${engraving.cardReward}', '${engraving.failReward}']),
+                        style: LabFont.text(13, color: secondary),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
           divider,
           row(null, L10n.text('lab.engrave.fails'), [

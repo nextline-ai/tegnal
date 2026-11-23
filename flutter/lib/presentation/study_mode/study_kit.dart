@@ -237,7 +237,7 @@ class StudyMode extends ChangeNotifier {
 }
 
 /// The 2D AI course's tabs. The collection lives on the Me tab; `courses` lists the lab's courses and leads back to the
-/// AI lab. The lab's shop opens from the 연구비 counter in the bar above the tabs (a sixth tab would not fit the bar).
+/// AI lab. The lab's shop opens from the 보석 counter in the bar above the tabs (a sixth tab would not fit the bar).
 enum StudyTab {
   path('Map', 'map.fill'),
   practice('Practice', 'dumbbell.fill'),
@@ -1057,6 +1057,7 @@ abstract final class StudyGlyph {
     'desktopcomputer' => CupertinoIcons.desktopcomputer,
     'dial.low' => CupertinoIcons.dial,
     'diamond' => CupertinoIcons.rhombus,
+    'diamond.fill' => CupertinoIcons.rhombus_fill,
     'dice' => CupertinoIcons.cube,
     'doc.on.doc' => CupertinoIcons.doc_on_doc,
     'doc.text' => CupertinoIcons.doc_text,
@@ -1075,6 +1076,7 @@ abstract final class StudyGlyph {
     'figure.walk' => CupertinoIcons.person_alt,
     'flag.fill' => CupertinoIcons.flag_fill,
     'forward.fill' => CupertinoIcons.forward_fill,
+    'flag.checkered' => CupertinoIcons.flag_fill,
     'flame.fill' => CupertinoIcons.flame_fill,
     'function' => CupertinoIcons.function,
     'gauge.with.dots.needle.33percent' => CupertinoIcons.gauge,

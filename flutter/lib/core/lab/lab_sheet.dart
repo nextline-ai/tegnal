@@ -22,7 +22,7 @@ class LabEdition {
   /// The day it was curated, `yyyy-MM-dd`.
   final String date;
 
-  /// 연구비 for reading it the first time. Missing means the course's usual amount; 0 pays nothing.
+  /// 보석 for reading it the first time. Missing means the course's usual amount; 0 pays nothing.
   final int? reward;
 
   /// What changed since the last edition, one line.
@@ -219,7 +219,7 @@ class LabSheetSource {
 
 // MARK: - The shop
 
-/// What 연구비 buys. `assets/lab/shop.json`.
+/// What 보석 buys. `assets/lab/shop.json`.
 class LabShop {
   const LabShop({required this.currency, this.note, required this.sections});
   final LabText currency;
@@ -232,7 +232,7 @@ class LabShop {
   /// The permanent goods together: what can be owned once, not used up. The cards are priced against this.
   int get permanentTotal => items.where((item) => !item.isRepeat).fold(0, (total, item) => total + (item.price ?? 0));
 
-  static final empty = LabShop(currency: LabText.plain('연구비'), sections: const []);
+  static final empty = LabShop(currency: LabText.plain('보석'), sections: const []);
   static LabShop? _bundled;
   static LabShop get bundled => _bundled ?? empty;
   static void useBundled(LabShop? shop) => _bundled = shop;
@@ -266,7 +266,18 @@ class LabShopSection {
 }
 
 class LabShopItem {
-  const LabShopItem({required this.id, required this.kind, required this.name, this.summary, this.symbol, this.price, this.limited, this.repeat, this.soon});
+  const LabShopItem({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.summary,
+    this.symbol,
+    this.price,
+    this.limited,
+    this.repeat,
+    this.soon,
+    this.requires,
+  });
   final String id;
 
   /// `course`, `home`, `ticket` or `addon`.
@@ -285,6 +296,9 @@ class LabShopItem {
   /// Shown, but not on sale yet.
   final bool? soon;
 
+  /// The item that must be owned first, such as 2D AI 배우기 for the tickets its picture generator uses.
+  final String? requires;
+
   bool get isLimited => limited ?? false;
   bool get isRepeat => repeat ?? false;
   bool get isSoon => soon ?? false;
@@ -299,5 +313,6 @@ class LabShopItem {
     limited: json['limited'] as bool?,
     repeat: json['repeat'] as bool?,
     soon: json['soon'] as bool?,
+    requires: json['requires'] as String?,
   );
 }

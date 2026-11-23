@@ -8,6 +8,16 @@ struct LabProgress: Codable, Equatable, Sendable {
     var cards: [String: Date] = [:]
     /// 망작 hung in the gallery, by fail id (namespaced like cards).
     var fails: [String: Date] = [:]
+    /// The 보석 each card and 망작 paid when it was earned, by the same ids. Kept so that a later change to the amounts in the
+    /// course files never moves a balance already earned. Missing for records written before amounts were kept: those count
+    /// at the course's present amount.
+    var cardGems: [String: Int] = [:]
+    var failGems: [String: Int] = [:]
+    /// The 보석 each finished season of the AI lab paid, by season number.
+    var seasonGems: [String: Int] = [:]
+    /// The 보석 2D AI 배우기 paid, by record key: `lesson:<course>/<lesson>` (finished), `stars:<course>/<lesson>` (three stars) and
+    /// `section:<course>/<section>` (every lesson finished). Each pays once; resetting the course's progress takes nothing back.
+    var coursePaid: [String: Int] = [:]
     /// Cheat-sheet editions read, by edition id, with what each paid.
     var editions: [String: Int] = [:]
     /// The newest edition the learner has looked at, so a newer one can be pointed out.
@@ -19,8 +29,8 @@ struct LabProgress: Codable, Equatable, Sendable {
     var diagnosed: Date?
     /// True once the welcome check has been offered, taken or skipped.
     var greeted = false
-    /// True once a learner who already had tag-study progress was given that course.
-    var grandfathered = false
+    /// True once a learner who studied 2D AI 배우기 before it was sold has been told the course now opens from the shop.
+    var legacyNoticed = false
 }
 
 struct LabPurchase: Codable, Equatable, Sendable {
@@ -28,8 +38,14 @@ struct LabPurchase: Codable, Equatable, Sendable {
     var price: Int
     var count: Int
     var date: Date
-    /// For a course: how many of its lessons were finished when it was bought. Only lessons after that pay.
-    var baseline: Int?
+}
+
+/// What settling 2D AI 배우기 paid, by kind, for the treasure chest a lesson opens.
+struct LabTagPayout: Hashable, Sendable {
+    var lesson = 0
+    var stars = 0
+    var section = 0
+    var total: Int { lesson + stars + section }
 }
 
 /// What a card's engraving added, for the reward screen.
@@ -43,11 +59,14 @@ struct LabEngraving: Equatable, Sendable {
     var first: Bool
     /// The number of the season this card finished, the first time it was finished.
     var season: Int? = nil
-    var total: Int { cardReward + failReward }
+    /// What finishing that season paid.
+    var seasonReward = 0
+    var total: Int { cardReward + failReward + seasonReward }
 }
 
 /// Learning mode's records and money: every deck course's cards and 망작, the shop's purchases, the cheat sheet and the diagnosis.
-/// One shared store, saved after every change. `course` is the deck on screen; the AI lab (`main`) alone pays 연구비.
+/// One shared store, saved after every change. `course` is the deck on screen. 보석, the one currency of learning mode, is paid by
+/// the AI lab (`main`) and by the courses bought in its shop; imported courses pay nothing.
 @MainActor @Observable
 final class LabStore {
     static let shared = LabStore()
@@ -64,8 +83,6 @@ final class LabStore {
     private(set) var progress: LabProgress
     /// The cheat-sheet edition shown: the newest of the bundled, saved and downloaded copies.
     private(set) var edition: LabEdition?
-    /// Lessons of bought courses finished so far, by course id. Read from the courses' own stores.
-    private(set) var courseLessons: [String: Int] = [:]
     /// Where the records are kept: the image database once it is reached, so they travel in iCloud sync and backups.
     private var records: LabRecordStore
 
@@ -152,12 +169,22 @@ final class LabStore {
     func engrave(_ episode: LabEpisode, failsHung: Int) -> LabEngraving {
         let before = rate
         let first = progress.cards[key(episode.id)] == nil
-        if first { progress.cards[key(episode.id)] = LabStore.now; save() }
-        let left = episode.fails.filter { progress.fails[key($0.id)] == nil }.count
         let pays = !course.imported
+        if first {
+            progress.cards[key(episode.id)] = LabStore.now
+            if pays { progress.cardGems[key(episode.id)] = episode.reward }
+            save()
+        }
+        let left = episode.fails.filter { progress.fails[key($0.id)] == nil }.count
         let finished = course.season(of: episode).flatMap { first && complete($0) ? $0.number : nil }
+        var seasonReward = 0
+        if let finished, pays, course.info.rewards.season > 0, progress.seasonGems[String(finished)] == nil {
+            seasonReward = course.info.rewards.season
+            progress.seasonGems[String(finished)] = seasonReward
+            save()
+        }
         return LabEngraving(before: before, after: rate, cardReward: first && pays ? episode.reward : 0, failReward: pays ? failsHung * course.info.rewards.fail : 0,
-                            failsHung: failsHung, failsLeft: left, first: first, season: finished)
+                            failsHung: failsHung, failsLeft: left, first: first, season: finished, seasonReward: seasonReward)
     }
 
     // MARK: 망작
@@ -172,6 +199,7 @@ final class LabStore {
     func hang(_ fail: LabFail) -> Bool {
         guard progress.fails[key(fail.id)] == nil else { return false }
         progress.fails[key(fail.id)] = LabStore.now
+        if failReward > 0 { progress.failGems[key(fail.id)] = failReward }
         save()
         return true
     }
@@ -212,18 +240,17 @@ final class LabStore {
         self.edition = edition
     }
 
-    // MARK: 연구비
+    // MARK: 보석
 
-    /// Only the AI lab pays: its cards, its 망작, cheat-sheet editions and lessons of bought courses. Imported courses pay nothing.
+    /// What has been earned, each at the amount it paid when earned: the AI lab's cards, 망작 and seasons, cheat-sheet editions,
+    /// and 2D AI 배우기's lessons, three-star lessons and sections. Imported courses pay nothing.
     var income: Int {
-        let cards = main.episodes.filter { progress.cards[$0.id] != nil }.reduce(0) { $0 + $1.reward }
-        let fails = main.fails.filter { progress.fails[$0.id] != nil }.count * main.info.rewards.fail
+        let cards = main.episodes.filter { progress.cards[$0.id] != nil }.reduce(0) { $0 + (progress.cardGems[$1.id] ?? $1.reward) }
+        let fails = main.fails.filter { progress.fails[$0.id] != nil }.reduce(0) { $0 + (progress.failGems[$1.id] ?? main.info.rewards.fail) }
+        let seasons = main.seasons.filter { $0.episodes.allSatisfy { progress.cards[$0] != nil } }
+            .reduce(0) { $0 + (progress.seasonGems[String($1.number)] ?? main.info.rewards.season) }
         let editions = progress.editions.values.reduce(0, +)
-        let courses = progress.purchases.reduce(0) { total, entry in
-            guard let baseline = entry.value.baseline, let done = courseLessons[entry.key] else { return total }
-            return total + max(0, done - baseline) * main.info.rewards.courseLesson
-        }
-        return cards + fails + editions + courses
+        return cards + fails + seasons + editions + progress.coursePaid.values.reduce(0, +)
     }
     var spent: Int { progress.purchases.values.reduce(0) { $0 + $1.price * $1.count } }
     var balance: Int { income - spent }
@@ -231,11 +258,13 @@ final class LabStore {
     func owns(_ id: String) -> Bool { (progress.purchases[id]?.count ?? 0) > 0 }
     var ownsTagCourse: Bool { owns(Self.tagCourse) }
 
-    enum BuyResult: Equatable { case bought, owned, short(Int), unavailable }
+    /// `needs`: another item (by id) must be owned first.
+    enum BuyResult: Equatable { case bought, owned, short(Int), needs(String), unavailable }
 
     func canBuy(_ item: LabShopItem) -> BuyResult {
         guard !item.isSoon, let price = item.price else { return .unavailable }
         if owns(item.id), !item.isRepeat { return .owned }
+        if let needed = item.requires, !owns(needed) { return .needs(needed) }
         return balance >= price ? .bought : .short(price - balance)
     }
 
@@ -246,24 +275,56 @@ final class LabStore {
         var entry = progress.purchases[item.id] ?? LabPurchase(price: price, count: 0, date: LabStore.now)
         entry.count += 1
         entry.date = LabStore.now
-        if item.kind == "course" { entry.baseline = courseLessons[item.id] ?? 0 }
         progress.purchases[item.id] = entry
         save()
         return .bought
     }
 
-    /// Tells the store how many lessons of a course are finished, so its lessons can pay.
-    func count(lessons: Int, of course: String) {
-        if courseLessons[course] != lessons { courseLessons[course] = lessons }
+    // MARK: 2D AI 배우기
+
+    /// Pays what 2D AI 배우기's finished lessons, three-star lessons and finished sections have not paid yet, and returns the
+    /// 보석 paid now. Progress from before the course was sold pays the same way, once; the course must still be bought to go on.
+    /// Lessons of imported courses (`course:<id>:…`) are not on the bundled path, so they pay nothing.
+    @discardableResult
+    func settleTagCourse(in studyStore: StudyStore, path: StudyPath = .bundled) -> LabTagPayout {
+        guard let records = try? studyStore.lessons() else { return LabTagPayout() }
+        let rates = main.info.rewards
+        var paid = LabTagPayout()
+        func pay(_ kind: String, _ id: String, _ amount: Int) {
+            let key = "\(kind):\(Self.tagCourse)/\(id)"
+            guard amount > 0, progress.coursePaid[key] == nil else { return }
+            progress.coursePaid[key] = amount
+            switch kind {
+            case "lesson": paid.lesson += amount
+            case "stars": paid.stars += amount
+            default: paid.section += amount
+            }
+        }
+        for section in path.sections {
+            for lesson in section.lessons {
+                guard let record = records[lesson.id] else { continue }
+                pay("lesson", lesson.id, rates.courseLesson)
+                if record.stars >= 3 { pay("stars", lesson.id, rates.courseStars) }
+            }
+            if !section.lessons.isEmpty, section.lessons.allSatisfy({ records[$0.id] != nil }) { pay("section", section.id, rates.courseSection) }
+        }
+        if paid.total > 0 { save() }
+        return paid
     }
 
-    /// A learner who studied tags before the lab came keeps the course, free, and is paid only for lessons after this.
-    func grandfather(lessons: Int, xp: Int) {
-        guard !progress.grandfathered else { return }
-        progress.grandfathered = true
-        if (lessons > 0 || xp > 0), progress.purchases[Self.tagCourse] == nil {
-            progress.purchases[Self.tagCourse] = LabPurchase(price: 0, count: 1, date: LabStore.now, baseline: lessons)
-        }
+    /// What 2D AI 배우기 has paid so far, and for how many lessons.
+    var tagCoursePaid: (gems: Int, lessons: Int) {
+        let prefix = ":" + Self.tagCourse + "/"
+        let entries = progress.coursePaid.filter { $0.key.contains(prefix) }
+        return (entries.values.reduce(0, +), entries.keys.filter { $0.hasPrefix("lesson:") }.count)
+    }
+
+    /// True when a learner who studied 2D AI 배우기 before it was sold should be told it now opens from the shop.
+    var owesLegacyNotice: Bool { !progress.legacyNoticed && !ownsTagCourse && tagCoursePaid.gems > 0 }
+
+    func noticeLegacy() {
+        guard !progress.legacyNoticed else { return }
+        progress.legacyNoticed = true
         save()
     }
 
@@ -284,7 +345,8 @@ final class LabStore {
         save()
     }
 
-    /// Starts learning mode's records over: every course's cards, the gallery, money and purchases. A course given to an earlier learner is given again on the next visit.
+    /// Starts learning mode's records over: every course's cards, the gallery, money and purchases. 2D AI 배우기's progress stays in
+    /// its own store, so it pays again on the next visit.
     func reset() {
         progress = LabProgress()
         save()
@@ -292,7 +354,7 @@ final class LabStore {
 
     #if DEBUG
     /// Test arguments: `--lab-reset` starts over; `--lab-seed=<episode>` engraves every card before that episode;
-    /// `--lab-fails=<n>` hangs the first n 망작; `--lab-greeted` skips the welcome check; `--lab-income=<n>` adds 연구비.
+    /// `--lab-fails=<n>` hangs the first n 망작; `--lab-greeted` skips the welcome check; `--lab-income=<n>` adds 보석.
     private func applyTestArguments() {
         let arguments = ProcessInfo.processInfo.arguments
         func value(_ name: String) -> String? { arguments.first { $0.hasPrefix(name + "=") }.map { String($0.dropFirst(name.count + 1)) } }
@@ -305,12 +367,12 @@ final class LabStore {
         if let count = value("--lab-fails").flatMap(Int.init) {
             for fail in main.fails.prefix(count) where progress.fails[fail.id] == nil { progress.fails[fail.id] = LabStore.now }
         }
-        if arguments.contains("--lab-greeted") || arguments.contains(where: { $0.hasPrefix("--lab-seed=") }) { progress.greeted = true; progress.grandfathered = true }
+        if arguments.contains("--lab-greeted") || arguments.contains(where: { $0.hasPrefix("--lab-seed=") }) { progress.greeted = true; progress.legacyNoticed = true }
         if let extra = value("--lab-income").flatMap(Int.init) { progress.editions["test-income"] = extra }
         // The tag course's own UI tests enter it from the library, as a learner who owns it.
         if arguments.contains("--study-ui-test"), progress.purchases[Self.tagCourse] == nil {
-            progress.purchases[Self.tagCourse] = LabPurchase(price: 0, count: 1, date: LabStore.now, baseline: 0)
-            progress.grandfathered = true
+            progress.purchases[Self.tagCourse] = LabPurchase(price: 0, count: 1, date: LabStore.now)
+            progress.legacyNoticed = true
             save()
         }
         if arguments.contains(where: { $0.hasPrefix("--lab-") }) { save() }

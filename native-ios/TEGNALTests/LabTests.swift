@@ -130,39 +130,112 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(store.balance, course.info.rewards.fail)
     }
 
-    /// The first purchase can be made when season 1 ends, and all cards together buy most, not all, of what lasts.
-    func testPricesFollowTheAgreedRules() {
-        let shop = LabShop.bundled
-        let seasonOne = course.seasons[0].episodes.compactMap(course.episode).reduce(0) { $0 + $1.reward }
-        let cheapest = shop.items.filter { !$0.isRepeat && !$0.isSoon }.compactMap(\.price).min() ?? .max
-        XCTAssertGreaterThanOrEqual(seasonOne, cheapest, "Season 1 pays for a first purchase")
-        let cards = course.episodes.reduce(0) { $0 + $1.reward }
-        let share = Double(cards) / Double(shop.permanentTotal)
-        XCTAssertTrue((0.6...0.7).contains(share), "All cards buy \(Int(share * 100))% of the permanent goods")
+    /// What every bundled course pays when finished: the AI lab's cards, 망작 and seasons, and 2D AI 배우기's lessons, three-star
+    /// lessons and sections. Cheat-sheet editions are left out: they keep coming.
+    private var labPayout: Int {
+        course.episodes.reduce(0) { $0 + $1.reward } + course.fails.count * course.info.rewards.fail + course.seasons.count * course.info.rewards.season
+    }
+    private var tagPayout: Int {
+        let rates = course.info.rewards, path = StudyPath.bundled
+        return path.lessons.count * (rates.courseLesson + rates.courseStars) + path.sections.count * rates.courseSection
     }
 
-    func testBuyingTheTagCourseAndItsLessonsPayingAfterwards() {
+    /// The rules in `docs/features/gem-economy.md`, for every course there is.
+    func testPricesFollowTheAgreedRules() throws {
+        let shop = LabShop.bundled
+        // Season 1's cards and its season pay for the first course, without a single 망작.
+        let seasonOne = course.seasons[0].episodes.compactMap(course.episode).reduce(0) { $0 + $1.reward } + course.info.rewards.season
+        let course2D = try XCTUnwrap(shop.item(LabStore.tagCourse)?.price)
+        XCTAssertGreaterThanOrEqual(seasonOne, course2D, "Season 1 pays for 2D AI 배우기")
+        // A bought course pays back several times its price.
+        XCTAssertGreaterThanOrEqual(tagPayout, 4 * course2D, "2D AI 배우기 pays back \(tagPayout) for \(course2D)")
+        // Everything that lasts costs 50–70% of what all courses pay; the rest is left for tickets.
+        let share = Double(shop.permanentTotal) / Double(labPayout + tagPayout)
+        XCTAssertTrue((0.5...0.7).contains(share), "What lasts costs \(Int(share * 100))% of all courses")
+        XCTAssertLessThan(labPayout, shop.permanentTotal, "The free course alone does not buy everything")
+    }
+
+    /// What a card, a 망작 or a season paid stays paid when the course files change their amounts later.
+    func testAmountsPaidAreKeptWhenTheFilesChangeLater() throws {
+        let records = LabMemoryRecords()
+        let first = LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: records, edition: nil)
+        var last: LabEngraving?
+        for id in ["ep01", "ep02", "ep03", "ep04"] { last = first.engrave(course.episode(id)!, failsHung: 0) }
+        XCTAssertEqual(last?.seasonReward, course.info.rewards.season, "The card that finishes a season pays for it")
+        first.hang(course.fails[0])
+        let balance = first.balance
+        XCTAssertEqual(try records.all().first { $0.key == "card:ep01" }?.value, course.episode("ep01")!.reward)
+
+        var info = course.info
+        info.rewards = LabRewards(fail: 2, edition: 2, season: 2, courseLesson: 2)
+        let cheaper = LabCourse(info: info, episodes: course.episodes.map { var episode = $0; episode.reward = 3; return episode })
+        let later = LabStore(course: cheaper, shop: .bundled, diagnosis: .bundled, records: records, edition: nil)
+        XCTAssertEqual(later.balance, balance, "Nothing already earned moves")
+        later.engrave(cheaper.episode("ep05")!, failsHung: 0)
+        XCTAssertEqual(later.balance, balance + 3, "What is earned from now on pays the new amount")
+    }
+
+    /// A card written before amounts were kept (value 1) counts at the course's present amount.
+    func testOlderRecordsCountAtThePresentAmount() {
+        let progress = LabProgress(records: [LabRecord(key: "card:ep01", value: 1, at: Date(timeIntervalSince1970: 10))])
+        XCTAssertNil(progress.cardGems["ep01"])
+        let store = LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: { let r = LabMemoryRecords(); try? r.replace(with: progress.records); return r }(), edition: nil)
+        XCTAssertEqual(store.balance, course.episode("ep01")!.reward)
+    }
+
+    func testSeasonOneBuysTheTagCourseAndItsTicketsWaitForIt() throws {
         let store = store()
-        let item = try! XCTUnwrap(store.shop.item(LabStore.tagCourse))
+        let item = try XCTUnwrap(store.shop.item(LabStore.tagCourse))
         XCTAssertEqual(store.canBuy(item), .short(item.price!))
         for id in ["ep01", "ep02", "ep03", "ep04"] { store.engrave(course.episode(id)!, failsHung: 0) }
-        store.count(lessons: 5, of: LabStore.tagCourse)
+        var tickets = try XCTUnwrap(store.shop.items.first { $0.kind == "ticket" })
+        XCTAssertEqual(tickets.requires, LabStore.tagCourse)
+        tickets.soon = false
+        XCTAssertEqual(store.canBuy(tickets), .needs(LabStore.tagCourse), "Tickets are for the generator 2D AI 배우기 opens")
         XCTAssertEqual(store.buy(item), .bought)
         XCTAssertTrue(store.ownsTagCourse)
         XCTAssertEqual(store.canBuy(item), .owned)
-        let after = store.balance
-        store.count(lessons: 8, of: LabStore.tagCourse)
-        XCTAssertEqual(store.balance, after + 3 * course.info.rewards.courseLesson, "Only lessons finished after buying pay")
+        XCTAssertNotEqual(store.canBuy(tickets), .needs(LabStore.tagCourse))
     }
 
-    func testALearnerWhoStudiedTagsBeforeKeepsTheCourseFree() {
+    /// A 2D AI 배우기 lesson pays the first time it is finished, again the first time it gets three stars, and a section pays once
+    /// all its lessons are finished. Playing again, resetting the course's progress or an imported course's lesson pays nothing.
+    func testTagLessonsStarsAndSectionsPayOnce() throws {
+        let booru = try BooruStore()
         let store = store()
-        store.grandfather(lessons: 12, xp: 300)
-        XCTAssertTrue(store.ownsTagCourse)
+        let rates = course.info.rewards, section = try XCTUnwrap(StudyPath.bundled.sections.first)
+        let ids = section.lessons.map(\.id)
+        try booru.studyStore.earn(10, lesson: ids[0], stars: 2)
+        XCTAssertEqual(store.settleTagCourse(in: booru.studyStore).total, rates.courseLesson)
+        try booru.studyStore.earn(10, lesson: ids[0], stars: 2)
+        XCTAssertEqual(store.settleTagCourse(in: booru.studyStore).total, 0, "Playing a lesson again pays nothing")
+        try booru.studyStore.earn(10, lesson: ids[0], stars: 3)
+        XCTAssertEqual(store.settleTagCourse(in: booru.studyStore).total, rates.courseStars, "Three stars pay once")
+        for id in ids.dropFirst() { try booru.studyStore.earn(10, lesson: id, stars: 1) }
+        let last = store.settleTagCourse(in: booru.studyStore)
+        XCTAssertEqual(last, LabTagPayout(lesson: (ids.count - 1) * rates.courseLesson, stars: 0, section: rates.courseSection), "The section pays when its last lesson is done")
+        try booru.studyStore.earn(10, lesson: "course:other:one", stars: 3)
+        XCTAssertEqual(store.settleTagCourse(in: booru.studyStore).total, 0, "An imported course's lesson pays nothing")
+        let balance = store.balance
+        try booru.studyStore.reset()
+        XCTAssertEqual(store.settleTagCourse(in: booru.studyStore).total, 0)
+        XCTAssertEqual(store.balance, balance, "Resetting the course takes nothing back")
+    }
+
+    /// 2D AI 배우기 came before the lab and was free. Its progress stays and pays, but the course must be bought to go on; the
+    /// learner is told once.
+    func testProgressFromBeforeTheCourseWasSoldPaysButDoesNotOpenIt() throws {
+        let booru = try BooruStore()
+        let store = store()
+        XCTAssertFalse(store.owesLegacyNotice, "Nothing to tell someone who never studied it")
+        for id in StudyPath.bundled.lessons.prefix(6).map(\.id) { try booru.studyStore.earn(10, lesson: id, stars: 3) }
+        XCTAssertGreaterThan(store.settleTagCourse(in: booru.studyStore).total, 0)
+        XCTAssertFalse(store.ownsTagCourse)
+        XCTAssertEqual(store.tagCoursePaid.lessons, 6)
+        XCTAssertTrue(store.owesLegacyNotice)
+        store.noticeLegacy()
+        XCTAssertFalse(store.owesLegacyNotice)
         XCTAssertEqual(store.spent, 0)
-        let fresh = self.store()
-        fresh.grandfather(lessons: 0, xp: 0)
-        XCTAssertFalse(fresh.ownsTagCourse)
     }
 
     func testItemsNotOnSaleCannotBeBought() {

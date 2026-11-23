@@ -26,6 +26,8 @@ struct LabRoot: View {
     @State private var store = LabStore.shared
     @State private var playing: LabEpisode?
     @State private var diagnosing = false
+    /// Told once to a learner who studied 2D AI 배우기 before it was sold: what it paid, and that it now opens from the shop.
+    @State private var legacy: (gems: Int, lessons: Int)?
     /// A 망작 opened from the gallery, shown over everything, dock included.
     @State private var revealing: LabFail?
 
@@ -37,13 +39,19 @@ struct LabRoot: View {
             .labLines()
             .appFullScreenCover(item: $playing) { LabEpisodeView(episode: $0) }
             .appFullScreenCover(isPresented: $diagnosing) { LabDiagnosisView() }
+            .alert(L10n.text("lab.legacy.title"), isPresented: Binding(get: { legacy != nil }, set: { if !$0 { legacy = nil } })) {
+                Button(L10n.text("lab.legacy.open")) { mode.labTab = .courses; legacy = nil; greet() }
+                Button(L10n.text("OK"), role: .cancel) { legacy = nil; greet() }
+            } message: {
+                if let legacy { Text(L10n.text("lab.legacy.message", String(legacy.lessons), String(legacy.gems))) }
+            }
             .onAppear {
                 store.reload()
                 countCourses()
                 greet()
             }
             .onChange(of: booru.revision) { countCourses() }
-            .onChange(of: HomeStage.shared.coversScreen) { _, _ in greet() }
+            .onChange(of: HomeStage.shared.coversScreen) { _, _ in countCourses(); greet() }
             .task {
                 if let edition = await LabSheetSource.fetch() { store.show(edition) }
             }
@@ -83,16 +91,17 @@ struct LabRoot: View {
 
     /// Lessons of the 2D course finished so far, which pay once the course is bought. A learner who studied tags before the lab keeps it.
     private func countCourses() {
-        // Lessons of imported courses (`course:<id>:…`) do not count: only 2D AI 배우기's own pay.
-        let lessons = ((try? booru.studyStore.lessons()) ?? [:]).keys.filter { !$0.hasPrefix("course:") && !$0.hasPrefix("addon:") }.count
-        let xp = ((try? booru.studyStore.days()) ?? []).reduce(0) { $0 + $1.xp }
-        store.grandfather(lessons: lessons, xp: xp)
-        store.count(lessons: lessons, of: LabStore.tagCourse)
+        store.settleTagCourse(in: booru.studyStore)
+        // Told once the home scene has gone, before the welcome check.
+        if store.owesLegacyNotice, !HomeStage.shared.coversScreen {
+            legacy = store.tagCoursePaid
+            store.noticeLegacy()
+        }
     }
 
     /// A first visit begins with the one-minute check, once the home scene has gone.
     private func greet() {
-        guard !store.progress.greeted, store.offersDiagnosis, !HomeStage.shared.coversScreen, !diagnosing else { return }
+        guard !store.progress.greeted, store.offersDiagnosis, !HomeStage.shared.coversScreen, !diagnosing, legacy == nil, !store.owesLegacyNotice else { return }
         store.greeted()
         Task { try? await Task.sleep(for: .milliseconds(400)); diagnosing = true }
     }

@@ -3,8 +3,10 @@ import GRDB
 
 /// One fact about the lab, as kept in the image database's `lab_records` table so it travels in iCloud sync and backups.
 ///
-/// Keys: `card:<episode>` (engraved), `fail:<id>` (망작 hung), `edition:<id>` (value = 연구비 paid), `purchase:<item>` (value = count,
-/// text = `{"price":…,"baseline":…}`), and `state:type` (text = type id), `state:greeted`, `state:grandfathered`, `state:seenEdition` (text).
+/// Keys: `card:<episode>` and `fail:<id>` (engraved, hung; value = 보석 paid, or 1 when it paid nothing or was written before
+/// amounts were kept), `season:<number>`, `edition:<id>`, `lesson:<course>/<lesson>`, `stars:<course>/<lesson>` and
+/// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`), and `state:type`
+/// (text = type id), `state:greeted`, `state:legacyNoticed`, `state:seenEdition` (text).
 /// Merging two devices keeps the larger value and the earlier time, so nothing earned is lost.
 struct LabRecord: Equatable, Sendable {
     var key: String
@@ -73,18 +75,21 @@ extension LabProgress {
             guard parts.count == 2 else { continue }
             let (kind, id) = (parts[0], parts[1])
             switch kind {
-            case "card": cards[id] = record.at
-            case "fail": fails[id] = record.at
+            // A value above 1 is the 보석 it paid; no card or 망작 pays as little as 1.
+            case "card": cards[id] = record.at; if record.value > 1 { cardGems[id] = record.value }
+            case "fail": fails[id] = record.at; if record.value > 1 { failGems[id] = record.value }
             case "edition": editions[id] = record.value
+            case "season": seasonGems[id] = record.value
+            case "lesson", "stars", "section": coursePaid[record.key] = record.value
             case "purchase":
-                struct Detail: Decodable { var price: Int; var baseline: Int? }
+                struct Detail: Decodable { var price: Int }
                 let detail = record.text.flatMap { try? JSONDecoder().decode(Detail.self, from: Data($0.utf8)) }
-                purchases[id] = LabPurchase(price: detail?.price ?? 0, count: record.value, date: record.at, baseline: detail?.baseline)
+                purchases[id] = LabPurchase(price: detail?.price ?? 0, count: record.value, date: record.at)
             case "state":
                 switch id {
                 case "type": type = record.text; diagnosed = record.at
                 case "greeted": greeted = record.value > 0
-                case "grandfathered": grandfathered = record.value > 0
+                case "legacyNoticed": legacyNoticed = record.value > 0
                 case "seenEdition": seenEdition = record.text
                 default: break
                 }
@@ -95,17 +100,18 @@ extension LabProgress {
 
     var records: [LabRecord] {
         var list: [LabRecord] = []
-        for (id, at) in cards { list.append(LabRecord(key: "card:" + id, value: 1, at: at)) }
-        for (id, at) in fails { list.append(LabRecord(key: "fail:" + id, value: 1, at: at)) }
+        for (id, at) in cards { list.append(LabRecord(key: "card:" + id, value: max(1, cardGems[id] ?? 1), at: at)) }
+        for (id, at) in fails { list.append(LabRecord(key: "fail:" + id, value: max(1, failGems[id] ?? 1), at: at)) }
         // Editions have no date of their own here; the day in the id is enough to order them.
         for (id, paid) in editions { list.append(LabRecord(key: "edition:" + id, value: paid, at: Date(timeIntervalSince1970: 0))) }
+        for (id, paid) in seasonGems { list.append(LabRecord(key: "season:" + id, value: paid, at: Date(timeIntervalSince1970: 0))) }
+        for (key, paid) in coursePaid { list.append(LabRecord(key: key, value: paid, at: Date(timeIntervalSince1970: 0))) }
         for (id, purchase) in purchases {
-            let detail = purchase.baseline.map { "{\"price\":\(purchase.price),\"baseline\":\($0)}" } ?? "{\"price\":\(purchase.price)}"
-            list.append(LabRecord(key: "purchase:" + id, value: purchase.count, text: detail, at: purchase.date))
+            list.append(LabRecord(key: "purchase:" + id, value: purchase.count, text: "{\"price\":\(purchase.price)}", at: purchase.date))
         }
         if let type { list.append(LabRecord(key: "state:type", value: 1, text: type, at: diagnosed ?? Date(timeIntervalSince1970: 0))) }
         if greeted { list.append(LabRecord(key: "state:greeted", value: 1, at: Date(timeIntervalSince1970: 0))) }
-        if grandfathered { list.append(LabRecord(key: "state:grandfathered", value: 1, at: Date(timeIntervalSince1970: 0))) }
+        if legacyNoticed { list.append(LabRecord(key: "state:legacyNoticed", value: 1, at: Date(timeIntervalSince1970: 0))) }
         if let seenEdition { list.append(LabRecord(key: "state:seenEdition", value: 1, text: seenEdition, at: Date(timeIntervalSince1970: 0))) }
         return list
     }

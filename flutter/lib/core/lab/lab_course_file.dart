@@ -14,7 +14,7 @@ import 'tag_course.dart';
 /// Learners import these in learning mode's 코스 tab (`.tegnalcourse`, or plain `.json`).
 ///
 /// Like add-ons, a course file is data only: nothing in it is run, fetched or opened. It is refused, never cleaned, when
-/// any part breaks the rules below, so what the 코스 tab shows is all the file holds. An imported course pays no 연구비,
+/// any part breaks the rules below, so what the 코스 tab shows is all the file holds. An imported course pays no 보석,
 /// so a made-up course can never buy what the lab's own cards earn.
 abstract final class LabCourseFile {
   static const format = 'tegnal-lab-course';

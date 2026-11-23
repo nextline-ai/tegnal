@@ -203,6 +203,11 @@ struct LabCoursesView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(state == .bought ? L10n.text("lab.2d.balance", String(store.balance)) : L10n.text("lab.2d.short", String(store.balance), String(price - store.balance)))
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                // A learner who studied the course before it was sold: the lessons stay, waiting for it to be bought.
+                if course.id == LearningCourse.tagsID, store.tagCoursePaid.lessons > 0 {
+                    Text(L10n.text("lab.2d.kept", String(store.tagCoursePaid.lessons))).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if state != .bought {
                     Text(L10n.text("lab.2d.how")).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 }
