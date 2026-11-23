@@ -417,4 +417,24 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(store.engrave(last, failsHung: 0).season, season.number)
         XCTAssertNil(store.engrave(last, failsHung: 0).season, "Playing it again finishes nothing new")
     }
+
+    func testMarkdownDetailsReadAsHeadingsListsQuotesAndCode() {
+        let blocks = LabMarkdown.blocks("첫 줄\n이어서\n\n### 제목\n1. 하나\n- 점\n> 인용\n---\n```\n코드 한 줄\n```")
+        XCTAssertEqual(blocks, [.paragraph("첫 줄 이어서"), .heading(3, "제목"), .numbered("1", "하나"), .bullet("점"), .quote("인용"), .rule, .code("코드 한 줄")])
+        let inline = LabMarkdown.inline("**굵게** [링크](https://example.com)")
+        XCTAssertEqual(String(inline.characters), "굵게 링크")
+        XCTAssertTrue(inline.runs.allSatisfy { $0.link == nil }, "Links keep only their words")
+    }
+
+    /// The bundled sheet's rows name icons from the set both apps draw, and their colours are six hex digits.
+    func testTheBundledCheatSheetRowsUseTheSharedIcons() throws {
+        let shared: Set<String> = ["doc.text", "doc.richtext", "chevron.left.forwardslash.chevron.right", "terminal", "magnifyingglass",
+                                   "bubble.left.and.bubble.right", "photo", "film", "music.note", "mic", "safari", "globe", "chart.bar", "book",
+                                   "pencil", "paintbrush", "lightbulb", "briefcase", "cart", "envelope", "calendar", "person.2", "wand.and.stars", "sparkles"]
+        for name in shared { XCTAssertNotNil(UIImage(systemName: name), name) }
+        for row in try XCTUnwrap(LabEdition.bundled).sections.flatMap(\.rows) {
+            if let symbol = row.symbol { XCTAssertTrue(shared.contains(symbol), symbol) }
+            for hex in [row.color, row.labelColor].compactMap({ $0 }) { XCTAssertTrue(hex.count == 6 && hex.allSatisfy(\.isHexDigit), hex) }
+        }
+    }
 }

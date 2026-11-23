@@ -2613,16 +2613,11 @@
 "lab.sheet.paid" = "新版の閲覧で+%@ %@";
 "lab.sheet.example" = "例: %@";
 "lab.sheet.edition" = "今回の版";
-"lab.sheet.openedBy" = "カード%@が開いた行";
 "lab.sheet.more" = "詳しく見る";
 "lab.sheet.pick" = "今は";
 "lab.sheet.draftNote" = "まだ決まっていない下書きです。";
-"lab.sheet.detailTitle" = "向いている場面";
-"lab.sheet.tips" = "こう使ってみましょう";
-"lab.sheet.prompt" = "試せるプロンプト";
 "lab.sheet.copy" = "プロンプトをコピー";
 "lab.sheet.copied" = "コピーしました";
-"lab.sheet.alternatives" = "ほかの選択肢";
 "lab.shop.limited" = "数量限定";
 "lab.shop.owned" = "所持中";
 "lab.shop.ownedShort" = "所持";

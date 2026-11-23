@@ -84,28 +84,12 @@ class _LabSheetViewState extends State<LabSheetView> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, labDockClearance),
               sliver: SliverList.list(
                 children: [
-                  // The page and the day it was curated, as a small red stamp beside the title, then what changed.
+                  // The page and the day it was curated, as a small red stamp beside the title.
                   LabHeader(
                     kicker: TextSpan(text: L10n.text('lab.sheet.subtitle')),
                     title: L10n.text('lab.tab.sheet'),
                     trailing: edition == null ? null : LabSheetStamp(edition: edition),
                   ),
-                  if (edition?.change case final change?) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      key: const Key('lab.sheet.change'),
-                      children: [
-                        Icon(CupertinoIcons.sparkles, size: 15, color: labSecondary(context)),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            change.text,
-                            style: LabFont.text(14, weight: FontWeight.w500, color: labSecondary(context)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                   // What reading a new edition paid, where it is seen at once.
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),
@@ -231,19 +215,16 @@ class LabSheetBoard extends StatelessWidget {
             style: LabFont.text(20, weight: FontWeight.w700, color: labLabel(context)),
           ),
         ),
-        if (card != null) ...[
+        // Only while locked: which card opens it. Once open, nothing more needs saying.
+        if (card != null && !open) ...[
           const SizedBox(height: 4),
           Row(
             children: [
-              Icon(
-                open ? CupertinoIcons.lock_open_fill : CupertinoIcons.lock_fill,
-                size: 12,
-                color: open ? labSecondary(context) : LabPalette.fail.resolveFrom(context),
-              ),
+              Icon(CupertinoIcons.lock_fill, size: 12, color: LabPalette.fail.resolveFrom(context)),
               const SizedBox(width: 5),
               Text(
-                L10n.text(open ? 'lab.sheet.openedBy' : 'lab.sheet.locked', [card.digits]),
-                style: LabFont.text(12, weight: FontWeight.w600, color: open ? labSecondary(context) : LabPalette.fail.resolveFrom(context)),
+                L10n.text('lab.sheet.locked', [card.digits]),
+                style: LabFont.text(12, weight: FontWeight.w600, color: LabPalette.fail.resolveFrom(context)),
               ),
             ],
           ),
@@ -269,7 +250,6 @@ class LabSheetBoard extends StatelessWidget {
 
   /// One job: its symbol and name as the label, the pick large, the reason in a line or two.
   Widget _tile(BuildContext context, LabSheetSection section, int index, LabSheetRow row, bool open) {
-    final gauge = LabPalette.gauge.resolveFrom(context);
     final secondary = labSecondary(context);
     final tile = Container(
       padding: const EdgeInsets.all(14),
@@ -282,7 +262,7 @@ class LabSheetBoard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(labSheetSymbol(row.symbol), size: 13, color: gauge),
+              Icon(labSheetSymbol(row.symbol), size: 13, color: labSheetTint(context, row)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -294,8 +274,8 @@ class LabSheetBoard extends StatelessWidget {
               ),
               if (!open)
                 Icon(CupertinoIcons.lock_fill, size: 11, color: TegnalColors.tertiaryLabel.resolveFrom(context))
-              else if (row.draft == true)
-                const Flexible(child: LabSheetDraftMark()),
+              else
+                Flexible(child: LabSheetLabel(row: row)),
             ],
           ),
           const SizedBox(height: 8),
@@ -352,207 +332,133 @@ class LabSheetBoard extends StatelessWidget {
   }
 }
 
-/// "초안": a pick not settled yet.
-class LabSheetDraftMark extends StatelessWidget {
-  const LabSheetDraftMark({super.key});
+/// The tag at a tile's top right (`LabSheetLabel`): the row's own `label` in its `labelColor` (a tinted capsule), or a quiet
+/// dashed outline without a colour; "초안" for a draft pick that names no label of its own.
+class LabSheetLabel extends StatelessWidget {
+  const LabSheetLabel({super.key, required this.row, this.large = false});
+  final LabSheetRow row;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
+    final text = row.label?.text ?? (row.draft == true ? L10n.text('lab.sheet.draft') : null);
+    if (text == null || text.isEmpty) return const SizedBox.shrink();
+    final hex = labSheetHex(row.labelColor);
     final secondary = labSecondary(context);
+    final color = hex ?? secondary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: ShapeDecoration(
-        shape: StadiumBorder(side: BorderSide(color: secondary.withValues(alpha: 0.5))),
-      ),
+      key: const Key('lab.sheet.label'),
+      padding: EdgeInsets.symmetric(horizontal: hex == null ? 6 : 7, vertical: 2),
+      decoration: hex == null
+          ? ShapeDecoration(
+              shape: StadiumBorder(side: BorderSide(color: secondary.withValues(alpha: 0.5))),
+            )
+          : ShapeDecoration(color: hex.withValues(alpha: 0.16), shape: const StadiumBorder()),
       child: Text(
-        L10n.text('lab.sheet.draft'),
+        text,
         maxLines: 1,
         overflow: TextOverflow.clip,
-        style: LabFont.text(10, weight: FontWeight.w900, color: secondary),
+        style: LabFont.text(large ? 12 : 10, weight: FontWeight.w900, color: color),
       ),
     );
   }
 }
 
+/// A row's colour from six hexadecimal digits, or null.
+Color? labSheetHex(String? hex) {
+  if (hex == null || !RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(hex)) return null;
+  return Color(0xFF000000 | int.parse(hex, radix: 16));
+}
+
+/// The row's own colour for its symbol, or the lab's gauge colour.
+Color labSheetTint(BuildContext context, LabSheetRow row) => labSheetHex(row.color) ?? LabPalette.gauge.resolveFrom(context);
+
 /// A cheat-sheet row's symbol, by the SF Symbol name the sheet gives (as iOS draws it), or sparkles.
 IconData labSheetSymbol(String? name) => switch (name) {
   'doc.text' => CupertinoIcons.doc_text,
+  'doc.richtext' => CupertinoIcons.doc_richtext,
   'chevron.left.forwardslash.chevron.right' => CupertinoIcons.chevron_left_slash_chevron_right,
+  'terminal' => CupertinoIcons.chevron_right_square,
   'magnifyingglass' => CupertinoIcons.search,
   'bubble.left.and.bubble.right' => CupertinoIcons.chat_bubble_2,
   'photo' => CupertinoIcons.photo,
   'film' => CupertinoIcons.film,
-  'doc.richtext' => CupertinoIcons.doc_richtext,
+  'music.note' => CupertinoIcons.music_note,
+  'mic' => CupertinoIcons.mic,
   'safari' => CupertinoIcons.compass,
-  'terminal' => CupertinoIcons.chevron_right_square,
+  'globe' => CupertinoIcons.globe,
+  'chart.bar' => CupertinoIcons.chart_bar,
+  'book' => CupertinoIcons.book,
+  'pencil' => CupertinoIcons.pencil,
+  'paintbrush' => CupertinoIcons.paintbrush,
+  'lightbulb' => CupertinoIcons.lightbulb,
+  'briefcase' => CupertinoIcons.briefcase,
+  'cart' => CupertinoIcons.cart,
+  'envelope' => CupertinoIcons.envelope,
+  'calendar' => CupertinoIcons.calendar,
+  'person.2' => CupertinoIcons.person_2,
+  'wand.and.stars' => CupertinoIcons.wand_stars,
   _ => CupertinoIcons.sparkles,
 };
 
-/// What a tap on a cheat-sheet row opens: the pick and why, the longer story, how to use it, a prompt to copy and the
-/// other picks for the same job.
-class LabSheetRowDetail extends StatefulWidget {
+/// What a tap on a cheat-sheet row opens (`LabSheetRowDetail`): the job, the pick large, why and an example, then the row's
+/// own writing rendered from Markdown.
+class LabSheetRowDetail extends StatelessWidget {
   const LabSheetRowDetail({super.key, required this.row, required this.controller});
   final LabSheetRow row;
   final ScrollController controller;
 
   @override
-  State<LabSheetRowDetail> createState() => _LabSheetRowDetailState();
-}
-
-class _LabSheetRowDetailState extends State<LabSheetRowDetail> {
-  bool copied = false;
-
-  @override
   Widget build(BuildContext context) {
-    final row = widget.row;
     final label = labLabel(context), secondary = labSecondary(context);
-    final gauge = LabPalette.gauge.resolveFrom(context);
-    // A grouped page of its own, like a stock sheet: the sheet paints its own background.
     return ColoredBox(
-      color: FormColors.background.resolveFrom(context),
+      color: TegnalColors.background.resolveFrom(context),
       child: Stack(
         children: [
           ListView(
             key: const Key('lab.sheet.detail'),
-            controller: widget.controller,
-            padding: const EdgeInsets.fromLTRB(0, 64, 0, 32),
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(20, 64, 20, 32),
             children: [
-              FormSection(
+              // The answer first: the job as its label, the pick as large as the page's title, then why.
+              Row(
                 children: [
-                  FormRow(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      // The answer first: the job as its label, the pick as large as the page's title, then why.
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(labSheetSymbol(row.symbol), size: 16, color: gauge),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  row.task.text,
-                                  style: LabFont.text(15, weight: FontWeight.w600, color: secondary),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: [
-                              Text(
-                                row.pick,
-                                style: LabFont.text(32, weight: FontWeight.w800, color: label),
-                              ),
-                              if (row.draft == true) const LabSheetDraftMark(),
-                            ],
-                          ),
-                          if (row.why case final why?) ...[const SizedBox(height: 10), Text(why.text, style: LabFont.text(17, color: label))],
-                          if (row.example case final example?) ...[
-                            const SizedBox(height: 10),
-                            Text(L10n.text('lab.sheet.example', [example.text]), style: LabFont.text(14, color: secondary)),
-                          ],
-                          if (row.draft == true) ...[
-                            const SizedBox(height: 10),
-                            Text(L10n.text('lab.sheet.draftNote'), style: LabFont.text(12, color: secondary)),
-                          ],
-                        ],
-                      ),
+                  Icon(labSheetSymbol(row.symbol), size: 16, color: labSheetTint(context, row)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      row.task.text,
+                      style: LabFont.text(15, weight: FontWeight.w600, color: secondary),
                     ),
                   ),
                 ],
               ),
-              if (row.detail case final detail?)
-                FormSection(
-                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.detailTitle'))),
-                  children: [
-                    FormRow(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Text(detail.text, style: LabFont.text(16, color: label)),
-                      ),
-                    ),
-                  ],
-                ),
-              if (row.tips case final tips? when tips.isNotEmpty)
-                FormSection(
-                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.tips'))),
-                  children: [
-                    for (final (index, tip) in tips.indexed)
-                      FormRow(
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 24,
-                              child: Text('${index + 1}', style: LabFont.number(13, color: gauge)),
-                            ),
-                            Expanded(
-                              child: Text(tip.text, style: LabFont.text(16, color: label)),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              if (row.prompt case final prompt?)
-                FormSection(
-                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.prompt'))),
-                  children: [
-                    FormRow(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Text(
-                          prompt.text,
-                          style: LabFont.number(15, weight: FontWeight.w400, color: label),
-                        ),
-                      ),
-                    ),
-                    FormRow(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: prompt.text));
-                        LabHaptic.pass();
-                        setState(() => copied = true);
-                      },
-                      child: Row(
-                        key: const Key('lab.sheet.copy'),
-                        children: [
-                          Icon(copied ? CupertinoIcons.checkmark_alt : CupertinoIcons.doc_on_doc, size: 18, color: TegnalColors.tint.resolveFrom(context)),
-                          const SizedBox(width: 10),
-                          Text(
-                            L10n.text(copied ? 'lab.sheet.copied' : 'lab.sheet.copy'),
-                            style: LabFont.text(17, color: TegnalColors.tint.resolveFrom(context)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              if (row.alternatives case final alternatives? when alternatives.isNotEmpty)
-                FormSection(
-                  header: Padding(padding: const EdgeInsets.only(top: 14), child: Text(L10n.text('lab.sheet.alternatives'))),
-                  children: [
-                    for (final alternative in alternatives)
-                      FormRow(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                alternative.pick,
-                                style: LabFont.text(16, weight: FontWeight.w600, color: label),
-                              ),
-                              if (alternative.why case final why?) Text(why.text, style: LabFont.text(14, color: secondary)),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+              const SizedBox(height: 10),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    row.pick,
+                    style: LabFont.text(32, weight: FontWeight.w800, color: label),
+                  ),
+                  LabSheetLabel(row: row, large: true),
+                ],
+              ),
+              if (row.why case final why?) ...[const SizedBox(height: 10), Text(why.text, style: LabFont.text(17, color: label))],
+              if (row.example case final example?) ...[
+                const SizedBox(height: 10),
+                Text(L10n.text('lab.sheet.example', [example.text]), style: LabFont.text(14, color: secondary)),
+              ],
+              if (row.draft == true) ...[const SizedBox(height: 10), Text(L10n.text('lab.sheet.draftNote'), style: LabFont.text(12, color: secondary))],
+              // The rest is the sheet's own writing, as Markdown.
+              if (row.detail case final detail?) ...[
+                const SizedBox(height: 22),
+                Container(height: 0.5, color: TegnalColors.separator.resolveFrom(context)),
+                const SizedBox(height: 22),
+                LabMarkdown(text: detail.text),
+              ],
             ],
           ),
           Positioned(
@@ -568,6 +474,256 @@ class _LabSheetRowDetailState extends State<LabSheetRowDetail> {
                   child: SizedBox.square(dimension: 44, child: Icon(CupertinoIcons.xmark, size: 18, color: label)),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One block of Markdown (`LabMarkdown.Block`).
+sealed class LabMarkdownBlock {
+  const LabMarkdownBlock();
+}
+
+class LabMarkdownHeading extends LabMarkdownBlock {
+  const LabMarkdownHeading(this.level, this.text);
+  final int level;
+  final String text;
+}
+
+class LabMarkdownParagraph extends LabMarkdownBlock {
+  const LabMarkdownParagraph(this.text);
+  final String text;
+}
+
+class LabMarkdownBullet extends LabMarkdownBlock {
+  const LabMarkdownBullet(this.text);
+  final String text;
+}
+
+class LabMarkdownNumbered extends LabMarkdownBlock {
+  const LabMarkdownNumbered(this.number, this.text);
+  final String number;
+  final String text;
+}
+
+class LabMarkdownQuote extends LabMarkdownBlock {
+  const LabMarkdownQuote(this.text);
+  final String text;
+}
+
+class LabMarkdownCode extends LabMarkdownBlock {
+  const LabMarkdownCode(this.code);
+  final String code;
+}
+
+class LabMarkdownRule extends LabMarkdownBlock {
+  const LabMarkdownRule();
+}
+
+/// A small Markdown renderer for writing that comes with the app's own data, such as a cheat-sheet row's details (iOS
+/// `LabMarkdown`): paragraphs, `#`–`###` headings, `-`/`*` and `1.` lists, `>` quotes, `---` rules and fenced code shown with a
+/// copy button; inline **bold**, *italic* and `code`. Links show as their text and open nothing.
+class LabMarkdown extends StatelessWidget {
+  const LabMarkdown({super.key, required this.text});
+  final String text;
+
+  static final _numbered = RegExp(r'^(\d+)\. (.*)$');
+  static final _heading = RegExp(r'^(#{1,6}) (.*)$');
+
+  /// The blocks of a Markdown text, in order.
+  static List<LabMarkdownBlock> blocks(String text) {
+    final blocks = <LabMarkdownBlock>[];
+    final paragraph = <String>[];
+    List<String>? code;
+    void flush() {
+      if (paragraph.isEmpty) return;
+      blocks.add(LabMarkdownParagraph(paragraph.join(' ')));
+      paragraph.clear();
+    }
+
+    for (final raw in text.split('\n')) {
+      final line = raw.trim();
+      if (line.startsWith('```')) {
+        if (code != null) {
+          blocks.add(LabMarkdownCode(code.join('\n')));
+          code = null;
+        } else {
+          flush();
+          code = [];
+        }
+        continue;
+      }
+      if (code != null) {
+        code.add(raw);
+        continue;
+      }
+      if (line.isEmpty) {
+        flush();
+        continue;
+      }
+      final heading = _heading.firstMatch(line);
+      final numbered = _numbered.firstMatch(line);
+      if (heading != null) {
+        flush();
+        blocks.add(LabMarkdownHeading(heading[1]!.length.clamp(1, 3), heading[2]!.trim()));
+      } else if (line == '---' || line == '***') {
+        flush();
+        blocks.add(const LabMarkdownRule());
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        flush();
+        blocks.add(LabMarkdownBullet(line.substring(2)));
+      } else if (numbered != null) {
+        flush();
+        blocks.add(LabMarkdownNumbered(numbered[1]!, numbered[2]!));
+      } else if (line.startsWith('>')) {
+        flush();
+        blocks.add(LabMarkdownQuote(line.substring(1).trim()));
+      } else {
+        paragraph.add(line);
+      }
+    }
+    if (code != null) blocks.add(LabMarkdownCode(code.join('\n')));
+    flush();
+    return blocks;
+  }
+
+  static final _inline = RegExp(r'\*\*(.+?)\*\*|`([^`]+)`|\*(.+?)\*|_(.+?)_|\[([^\]]+)\]\([^)]*\)');
+
+  /// Inline Markdown as styled spans, with links kept as plain words.
+  static TextSpan inline(String text, TextStyle style) {
+    final spans = <InlineSpan>[];
+    var at = 0;
+    for (final match in _inline.allMatches(text)) {
+      if (match.start > at) spans.add(TextSpan(text: text.substring(at, match.start)));
+      if (match[1] != null) {
+        spans.add(
+          TextSpan(
+            text: match[1],
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        );
+      } else if (match[2] != null) {
+        spans.add(
+          TextSpan(
+            text: match[2],
+            style: LabFont.number(style.fontSize ?? 16, weight: FontWeight.w500, color: style.color),
+          ),
+        );
+      } else if (match[3] != null || match[4] != null) {
+        spans.add(
+          TextSpan(
+            text: match[3] ?? match[4],
+            style: const TextStyle(fontStyle: FontStyle.italic),
+          ),
+        );
+      } else {
+        spans.add(TextSpan(text: match[5]));
+      }
+      at = match.end;
+    }
+    if (at < text.length) spans.add(TextSpan(text: text.substring(at)));
+    return TextSpan(style: style, children: spans);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = labLabel(context), secondary = labSecondary(context);
+    final body = LabFont.text(16, color: label);
+    Widget item(Widget marker, String text) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 22, child: marker),
+        Expanded(child: Text.rich(inline(text, body))),
+      ],
+    );
+    final children = <Widget>[];
+    for (final block in blocks(text)) {
+      if (children.isNotEmpty) children.add(const SizedBox(height: 12));
+      children.add(switch (block) {
+        LabMarkdownHeading(:final level, :final text) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Semantics(
+            header: true,
+            child: Text.rich(inline(text, LabFont.text(const [22.0, 19.0, 17.0][level - 1], weight: FontWeight.w700, color: label))),
+          ),
+        ),
+        LabMarkdownParagraph(:final text) => Text.rich(inline(text, body)),
+        LabMarkdownBullet(:final text) => item(
+          Text(
+            '•',
+            style: LabFont.text(16, weight: FontWeight.w700, color: secondary),
+          ),
+          text,
+        ),
+        LabMarkdownNumbered(:final number, :final text) => item(
+          Text('$number.', style: LabFont.number(14, color: LabPalette.gauge.resolveFrom(context))),
+          text,
+        ),
+        LabMarkdownQuote(:final text) => Container(
+          padding: const EdgeInsets.only(left: 12),
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: secondary.withValues(alpha: 0.4), width: 3)),
+          ),
+          child: Text.rich(inline(text, LabFont.text(16, color: secondary))),
+        ),
+        LabMarkdownCode(:final code) => LabCodeBlock(code: code),
+        LabMarkdownRule() => Container(height: 0.5, color: TegnalColors.separator.resolveFrom(context)),
+      });
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+  }
+}
+
+/// Fenced code in Markdown: set in a fixed-width face on a tinted plate, with a button that copies it.
+class LabCodeBlock extends StatefulWidget {
+  const LabCodeBlock({super.key, required this.code});
+  final String code;
+
+  @override
+  State<LabCodeBlock> createState() => _LabCodeBlockState();
+}
+
+class _LabCodeBlockState extends State<LabCodeBlock> {
+  bool copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = TegnalColors.tint.resolveFrom(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ShapeDecoration(
+        color: FormColors.listRow.resolveFrom(context),
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.code,
+            style: LabFont.text(15, color: labLabel(context)),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            key: const Key('lab.sheet.copy'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: widget.code));
+              LabHaptic.pass();
+              setState(() => copied = true);
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(copied ? CupertinoIcons.checkmark_alt : CupertinoIcons.doc_on_doc, size: 16, color: tint),
+                const SizedBox(width: 6),
+                Text(
+                  L10n.text(copied ? 'lab.sheet.copied' : 'lab.sheet.copy'),
+                  style: LabFont.text(14, weight: FontWeight.w600, color: tint),
+                ),
+              ],
             ),
           ),
         ],

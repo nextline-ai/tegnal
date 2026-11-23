@@ -95,15 +95,10 @@ class LabSheetSection {
           why: LabText.parseOrNull(value['why']),
           draft: value['draft'] as bool?,
           symbol: value['symbol'] as String?,
+          color: value['color'] as String?,
+          label: LabText.parseOrNull(value['label']),
+          labelColor: value['labelColor'] as String?,
           detail: LabText.parseOrNull(value['detail']),
-          tips: value['tips'] is List ? [for (final tip in value['tips'] as List) LabText.parse(tip)] : null,
-          prompt: LabText.parseOrNull(value['prompt']),
-          alternatives: value['alternatives'] is List
-              ? [
-                  for (final item in value['alternatives'] as List)
-                    LabSheetAlternative(pick: (item as Map)['pick'] as String, why: LabText.parseOrNull(item['why'])),
-                ]
-              : null,
         ),
     ],
   );
@@ -117,10 +112,10 @@ class LabSheetRow {
     this.why,
     this.draft,
     this.symbol,
+    this.color,
+    this.label,
+    this.labelColor,
     this.detail,
-    this.tips,
-    this.prompt,
-    this.alternatives,
   });
   final LabText task;
   final LabText? example;
@@ -133,26 +128,20 @@ class LabSheetRow {
   final bool? draft;
 
   // What a tap on the row opens (all optional; an app that predates them simply does not show them).
-  /// A system symbol for the job, drawn beside it.
+  /// A system symbol for the job, drawn beside it. The lab editor offers the set both apps draw (`labSheetSymbol`).
   final String? symbol;
 
-  /// The longer story: when the pick is right, and when it is not.
+  /// The symbol's colour, six hexadecimal digits. Null: the lab's gauge colour.
+  final String? color;
+
+  /// The tag at the tile's top right, such as "추천" or "무료". Null: "초안" for a draft pick, else nothing.
+  final LabText? label;
+
+  /// The tag's colour, six hexadecimal digits. Null: a quiet dashed outline.
+  final String? labelColor;
+
+  /// What a tap on the row shows under the pick, written as Markdown (`LabMarkdown`).
   final LabText? detail;
-
-  /// How to get the most out of the pick, a few short lines.
-  final List<LabText>? tips;
-
-  /// A prompt to copy and try.
-  final LabText? prompt;
-
-  /// Other picks for the same job, with when to choose them.
-  final List<LabSheetAlternative>? alternatives;
-}
-
-class LabSheetAlternative {
-  const LabSheetAlternative({required this.pick, this.why});
-  final String pick;
-  final LabText? why;
 }
 
 /// Downloads newer editions from TEGNAL's add-on server and keeps the last one.

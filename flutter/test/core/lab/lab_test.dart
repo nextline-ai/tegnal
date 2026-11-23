@@ -17,6 +17,8 @@ import 'package:tegnal/core/study/study_models.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/sync/library_sync_adapter.dart';
 import 'package:tegnal/core/sync/library_sync_record.dart';
+import 'package:tegnal/presentation/lab/lab_pages.dart';
+import 'package:flutter/painting.dart';
 
 import '../../support/addon_market_fixtures.dart';
 import 'lab_course_file_support.dart';
@@ -491,5 +493,30 @@ void main() {
     final last = course.episode(season.episodes.last)!;
     expect(lab.engrave(last, failsHung: 0).season, season.number);
     expect(lab.engrave(last, failsHung: 0).season, isNull, reason: 'Playing it again finishes nothing new');
+  });
+
+  test('markdown details read as headings, lists, quotes and fenced code', () {
+    final blocks = LabMarkdown.blocks('첫 줄\n이어서\n\n### 제목\n1. 하나\n- 점\n> 인용\n---\n```\n코드 한 줄\n```');
+    expect(blocks.map((block) => block.runtimeType.toString()), [
+      'LabMarkdownParagraph',
+      'LabMarkdownHeading',
+      'LabMarkdownNumbered',
+      'LabMarkdownBullet',
+      'LabMarkdownQuote',
+      'LabMarkdownRule',
+      'LabMarkdownCode',
+    ]);
+    expect((blocks.first as LabMarkdownParagraph).text, '첫 줄 이어서');
+    expect((blocks.last as LabMarkdownCode).code, '코드 한 줄');
+    final spans = LabMarkdown.inline('**굵게** 그리고 `코드` [링크](https://example.com)', const TextStyle()).children!;
+    expect(spans.map((span) => (span as TextSpan).text), ['굵게', ' 그리고 ', '코드', ' ', '링크'], reason: 'Links keep only their words');
+  });
+
+  test('every bundled cheat-sheet row names an icon both apps draw', () {
+    for (final section in LabEdition.bundled!.sections) {
+      for (final row in section.rows) {
+        if (row.symbol case final symbol?) expect(labSheetSymbol(symbol), isNot(labSheetSymbol(null)), reason: symbol);
+      }
+    }
   });
 }

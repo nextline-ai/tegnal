@@ -99,7 +99,7 @@ Color labSecondary(BuildContext context) => TegnalColors.secondaryLabel.resolveF
 
 /// The top of each lab tab: a quiet line above a large title, and something on the right.
 class LabHeader extends StatelessWidget {
-  const LabHeader({super.key, required this.kicker, required this.title, this.trailing, this.below = false});
+  const LabHeader({super.key, required this.kicker, required this.title, this.trailing, this.below = true});
   final InlineSpan kicker;
   final String title;
   final Widget? trailing;

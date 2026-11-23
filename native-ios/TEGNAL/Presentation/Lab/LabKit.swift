@@ -89,8 +89,8 @@ extension View {
 struct LabHeader<Trailing: View>: View {
     let kicker: Text
     let title: String
-    /// The quiet line goes under the title instead of over it.
-    var below = false
+    /// The quiet line goes under the title, as on every tab of the lab.
+    var below = true
     @ViewBuilder var trailing: Trailing
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
