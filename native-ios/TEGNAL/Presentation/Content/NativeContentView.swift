@@ -1406,7 +1406,7 @@ private struct GalleryDetailMetadata: View {
     }
     private var languageSaved: Bool { savedTagQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true)) }
     private var languageMenu: some View {
-        ArtworkTagMenu(copy: gallery.language, saved: languageSaved) { saveTag(gallery.language, kind: .language) }
+        ArtworkTagMenu(copy: AppEnvironment.excludedTagRule("language:" + gallery.language), saved: languageSaved) { saveTag(gallery.language, kind: .language) }
     }
     /// Default Excluded Tags as the tags' menus compare them: lowercased, without a minus sign.
     private var excludedQueries: Set<String> {
@@ -1519,7 +1519,7 @@ private struct MangaArtistTag: View {
             .buttonStyle(.plain)
             .layoutValue(key: FlowReservedWidth.self, value: favorite ? 0 : starRoom)
             .contextMenu {
-                ArtworkTagMenu(copy: name.replacingOccurrences(of: "_", with: " "), saved: favorite,
+                ArtworkTagMenu(copy: AppEnvironment.excludedTagRule("artist:" + name), saved: favorite,
                                saveTitle: "Add to Artists", removeTitle: "Remove from Artists", save: saveFavorite,
                                excluded: excluded, exclude: exclude)
             }

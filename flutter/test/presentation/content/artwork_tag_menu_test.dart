@@ -4,6 +4,7 @@
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tegnal/core/content/content_environment.dart';
 import 'package:tegnal/presentation/content/gallery_detail_view.dart';
 
 void main() {
@@ -23,7 +24,7 @@ void main() {
             color: const Color(0xFFFF2D55),
             onTap: () => chosen.add('search'),
             menu: () => artworkTagMenu(
-              copy: 'big breasts',
+              copy: ContentEnvironment.excludedTagRule('female:big breasts'),
               saved: saved,
               save: () {
                 saved = !saved;
@@ -52,7 +53,7 @@ void main() {
     expect(find.text('Remove Saved Tag'), findsOneWidget, reason: 'The menu now offers to remove it');
     await tester.tap(find.text('Copy Tag'));
     await tester.pumpAndSettle();
-    expect(copied, 'big breasts');
+    expect(copied, 'female:big_breasts', reason: 'A comics tag copies as searches write it');
 
     await tester.tap(pill);
     await tester.pumpAndSettle();

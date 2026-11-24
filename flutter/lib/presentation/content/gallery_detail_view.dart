@@ -970,7 +970,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
                         starred: favoriteArtists.contains(MangaArtistFavorite.key(name)),
                         onTap: search == null ? null : () => search!('artist:${name.replaceAll(' ', '_')}'),
                         menu: () => artworkTagMenu(
-                          copy: name.replaceAll('_', ' '),
+                          copy: ContentEnvironment.excludedTagRule('artist:$name'),
                           saved: favoriteArtists.contains(MangaArtistFavorite.key(name)),
                           saveTitle: 'Add to Artists',
                           removeTitle: 'Remove from Artists',
@@ -998,8 +998,11 @@ class _GalleryDetailMetadata extends StatelessWidget {
                       color: languageColor,
                       starred: languageSaved,
                       onTap: search == null ? null : () => search!('language:${gallery.language.replaceAll(' ', '_')}'),
-                      menu: () =>
-                          artworkTagMenu(copy: gallery.language, saved: languageSaved, save: () => toggleSaved(gallery.language, SavedCollectionKind.language)),
+                      menu: () => artworkTagMenu(
+                        copy: ContentEnvironment.excludedTagRule('language:${gallery.language}'),
+                        saved: languageSaved,
+                        save: () => toggleSaved(gallery.language, SavedCollectionKind.language),
+                      ),
                       child: Text(gallery.language),
                     ),
                   ],
@@ -1101,7 +1104,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
             starred: savedQueries.contains(tag.query.replaceAll(' ', '_')),
             onTap: search == null ? null : () => search!(tag.query.replaceAll(' ', '_')),
             menu: () => artworkTagMenu(
-              copy: tag.original ?? tag.name,
+              copy: ContentEnvironment.excludedTagRule(tag.query),
               saved: savedQueries.contains(tag.query.replaceAll(' ', '_')),
               save: () => toggleSaved(tag.query, tag.category.savedKind),
               excluded: content.excludesMangaTag(tag.query),

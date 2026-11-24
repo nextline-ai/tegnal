@@ -74,6 +74,7 @@ final class NativeContentTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: name) }
         let env = AppEnvironment(database: try AppDatabase.inMemory(), browserPreferences: defaults)
         env.defaultExcludedTags = "tag:excluded -female:Big_Breasts"
+        XCTAssertEqual(AppEnvironment.excludedTagRule("female:big breasts"), "female:big_breasts", "Copy Tag and exclusions keep the category and underscores")
         XCTAssertTrue(env.excludesMangaTag("female:big breasts"), "A minus sign and letter case do not matter")
         XCTAssertFalse(env.toggleExcludedMangaTag("female:big breasts"))
         XCTAssertEqual(env.defaultExcludedTags, "tag:excluded")

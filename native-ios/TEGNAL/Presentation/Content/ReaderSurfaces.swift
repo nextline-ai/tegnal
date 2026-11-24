@@ -360,7 +360,7 @@ private struct ArtworkTagCloudItem: View {
     var body: some View {
         if let save {
             link.contextMenu {
-                ArtworkTagMenu(copy: tag.original ?? tag.name, saved: saved, save: { save(tag) },
+                ArtworkTagMenu(copy: AppEnvironment.excludedTagRule(tag.query), saved: saved, save: { save(tag) },
                                excluded: excluded, exclude: exclude.map { exclude in { exclude(tag) } })
             }
                 .accessibilityAction(named: L10n.text(saved ? "Remove Saved Tag" : "Save Tag")) { save(tag) }
@@ -383,7 +383,7 @@ private struct ArtworkTagCloudItem: View {
 
 /// What holding a tag in Work Information offers: saving it, copying it and leaving it out of every search.
 struct ArtworkTagMenu: View {
-    /// The tag as it is written, copied without its category.
+    /// The tag as searches write it, such as `female:big_breasts`: with its category and underscores.
     let copy: String
     let saved: Bool
     var saveTitle = "Save Tag"
