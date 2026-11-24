@@ -3,7 +3,7 @@
   "version": 1,
   "id": "ai-lab",
   "title": "AI 실험실",
-  "gauge": "AI 성능 인출률",
+  "gauge": "AI 성능",
   "base": 10,
   "rewards": {
     "fail": 20,

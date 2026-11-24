@@ -2,7 +2,7 @@
   "id": "ep04",
   "number": 4,
   "name": "하네스",
-  "title": "AI가 못 하는 건 '뇌'가 아니라 전부 '하네스(장비)' 탓입니다",
+  "title": "AI가 못 하는 건 없습니다 - 하네스란?",
   "teaser": "\"거봐, AI 별거 없네.\" 친구의 결론은 틀렸습니다.",
   "impact": 9,
   "reward": 100,
@@ -35,7 +35,7 @@
     },
     {
       "text": "프롬프트가 부족해서. 더 자세히 쓴다",
-      "verdict": "아무리 잘 시켜도, 손이 없으면 못 만듭니다.",
+      "verdict": "아무리 잘 시켜도, 도구가 없으면 못 만듭니다.",
       "why": "글은 더 좋아졌지만 영상은 여전히 없습니다.",
       "fail": {
         "name": "300자 콘티",
@@ -47,22 +47,22 @@
       }
     },
     {
-      "text": "그 앱에 영상 만드는 장비가 없어서",
+      "text": "그 앱에 영상 만드는 도구가 없어서",
       "right": true,
-      "verdict": "뇌는 그대로. 장비가 없었습니다.",
-      "why": "AI를 감싸고 일을 실제로 하는 도구를 하네스라고 부릅니다. 직접 끼워 보세요."
+      "verdict": "도구가 없었습니다.",
+      "why": "AI에게 도구를 쥐어주는걸 '하네스'라고 부릅니다. 간단하죠?"
     }
   ],
   "tool": {
     "kind": "equip",
-    "title": "뇌는 그대로, 장비만 갈아 끼우기",
-    "hint": "가운데 뇌는 그대로 둡니다. 장비를 끌어다 끼워 보세요. 눌러도 됩니다.",
-    "core": "같은 AI 뇌",
+    "title": "하네스(도구)를 끼우기",
+    "hint": "도구를 끼워보세요.",
+    "core": "같은 AI 모델",
     "gear": [
-      { "id": "video", "label": "영상 하네스", "symbol": "film" },
-      { "id": "files", "label": "파일 작업 하네스", "symbol": "folder" },
-      { "id": "browser", "label": "브라우저 하네스", "symbol": "globe" },
-      { "id": "polite", "label": "공손한 말투", "symbol": "face.smiling", "miss": "말투만 바뀌었습니다. 미션은 그대로." }
+      { "id": "video", "label": "HiggsField (영상 하네스)", "symbol": "film" },
+      { "id": "files", "label": "Google Docs (문서 하네스)", "symbol": "folder" },
+      { "id": "browser", "label": "Chrome (웹브라우저 하네스)", "symbol": "globe" },
+      { "id": "polite", "label": "polite.md (말투 하네스)", "symbol": "face.smiling", "miss": "필요한 하네스(도구)만 사용하세요! 필요 없는 하네스를 너무 많이 적용하면 AI가 멍청해집니다." }
     ],
     "missions": [
       {

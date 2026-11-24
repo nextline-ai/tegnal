@@ -226,7 +226,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(key('lab.sheet.detail'), findsOneWidget);
     expect(find.byType(LabMarkdown), findsOneWidget, reason: 'The details are the row\'s own Markdown');
-    expect(key('lab.sheet.copy'), findsOneWidget, reason: 'A fenced prompt comes with a copy button');
+    // A fenced prompt comes with a copy button; whether the first row has one is up to the edition's writer.
+    final fenced = LabEdition.bundled!.sections.first.rows.first.detail?.text.contains('```') ?? false;
+    expect(key('lab.sheet.copy'), fenced ? findsOneWidget : findsNothing, reason: 'A fenced prompt, and only one, comes with a copy button');
     await shot(tester, '10b-sheet-detail');
   });
 
