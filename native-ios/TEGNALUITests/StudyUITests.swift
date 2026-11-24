@@ -8,8 +8,11 @@ final class StudyUITests: XCTestCase {
         tab(app, "Tags").tap()
         let entry = element(app, "study.entry")
         XCTAssertTrue(entry.waitForExistence(timeout: 10)); entry.tap()
-        // A first visit is welcomed: a hello, a daily goal, and how much the learner knows.
+        // A first visit is welcomed: a hello, who made the course, a daily goal, and how much the learner knows.
         XCTAssertTrue(app.staticTexts["Welcome to Learn 2D AI!"].waitForExistence(timeout: 5), "A first visit is welcomed")
+        element(app, "study.welcome.next").tap()
+        XCTAssertTrue(element(app, "creator.profile").waitForExistence(timeout: 5), "Then who made the course")
+        XCTAssertTrue(element(app, "creator.site").exists, "with a way to their site")
         element(app, "study.welcome.next").tap()
         XCTAssertTrue(element(app, "study.welcome.goal.20").waitForExistence(timeout: 5))
         element(app, "study.welcome.goal.30").tap()
@@ -40,6 +43,7 @@ final class StudyUITests: XCTestCase {
     func testThePlacementTestEndsAtTheFirstQuestionNotKnown() {
         let app = launch()
         XCTAssertTrue(app.staticTexts["Welcome to Learn 2D AI!"].waitForExistence(timeout: 10))
+        element(app, "study.welcome.next").tap()
         element(app, "study.welcome.next").tap()
         element(app, "study.welcome.next").tap()
         XCTAssertTrue(element(app, "study.welcome.some").waitForExistence(timeout: 5))

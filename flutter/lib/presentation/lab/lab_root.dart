@@ -30,6 +30,7 @@ import '../navigation/tab_navigator.dart';
 import '../settings/settings_page.dart';
 import '../study_mode/study_kit.dart';
 import 'lab_episode_view.dart';
+import 'creator_view.dart';
 import 'lab_kit.dart';
 import 'lab_pages.dart';
 
@@ -129,7 +130,7 @@ class _LabRootState extends State<LabRoot> {
     if (_telling || store.owesLegacyNotice) return _countCourses();
     store.greeted();
     Future<void>.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) unawaited(showLabDiagnosis(context));
+      if (mounted) unawaited(showLabDiagnosis(context, introduces: true));
     });
   }
 
@@ -1273,6 +1274,9 @@ class _LabCoursesViewState extends State<LabCoursesView> {
                 textAlign: TextAlign.center,
                 style: LabFont.text(13, color: labSecondary(context)),
               ),
+              // Who made the courses, at their foot.
+              const SizedBox(height: 24),
+              const CreatorButton(),
             ],
           ),
         );

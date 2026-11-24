@@ -21,6 +21,7 @@
 		6236DC0DE5D7CC8414113384 /* TEGNAL/Core/Lab/LabCourseFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927D4DFC28F9A718060CDF25 /* TEGNAL/Core/Lab/LabCourseFile.swift */; };
 		29F4EE45AB11BAB4F7EEBFD0 /* TEGNAL/Core/Lab/LearningCourses.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78DB1AB586D3F9617B2127C4 /* TEGNAL/Core/Lab/LearningCourses.swift */; };
 		91C1A0912CE5E22C93142A55 /* TEGNAL/Presentation/Lab/LabCoursesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B941BDE82233BED68CE0D5 /* TEGNAL/Presentation/Lab/LabCoursesView.swift */; };
+		A1C3E5F7091B2D4F6A8C0E31 /* TEGNAL/Presentation/Lab/CreatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3E5F7091B2D4F6A8C0E32 /* TEGNAL/Presentation/Lab/CreatorView.swift */; };
 		B325E06D04A8F12D1F212041 /* TEGNAL/Core/Lab/TagCourse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CEF1A399492EE28200EA2E /* TEGNAL/Core/Lab/TagCourse.swift */; };
 		860B0A5851F86D4BF3509FEE /* TEGNAL/Core/Lab/LabStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5F2177EAB0A8E30E1A2BAC /* TEGNAL/Core/Lab/LabStore.swift */; };
 		26C481914A83C3E11B2E1F65 /* TEGNAL/Core/Lab/LabCourse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF5DD6E8059F26E434DAE0F /* TEGNAL/Core/Lab/LabCourse.swift */; };
@@ -325,6 +326,7 @@
 		927D4DFC28F9A718060CDF25 /* TEGNAL/Core/Lab/LabCourseFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Lab/LabCourseFile.swift; sourceTree = SOURCE_ROOT; };
 		78DB1AB586D3F9617B2127C4 /* TEGNAL/Core/Lab/LearningCourses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Lab/LearningCourses.swift; sourceTree = SOURCE_ROOT; };
 		B0B941BDE82233BED68CE0D5 /* TEGNAL/Presentation/Lab/LabCoursesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Lab/LabCoursesView.swift; sourceTree = SOURCE_ROOT; };
+		A1C3E5F7091B2D4F6A8C0E32 /* TEGNAL/Presentation/Lab/CreatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Presentation/Lab/CreatorView.swift; sourceTree = SOURCE_ROOT; };
 		A2CEF1A399492EE28200EA2E /* TEGNAL/Core/Lab/TagCourse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Lab/TagCourse.swift; sourceTree = SOURCE_ROOT; };
 		DF5F2177EAB0A8E30E1A2BAC /* TEGNAL/Core/Lab/LabStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Lab/LabStore.swift; sourceTree = SOURCE_ROOT; };
 		2AF5DD6E8059F26E434DAE0F /* TEGNAL/Core/Lab/LabCourse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TEGNAL/Core/Lab/LabCourse.swift; sourceTree = SOURCE_ROOT; };
@@ -964,6 +966,7 @@
 				927D4DFC28F9A718060CDF25 /* TEGNAL/Core/Lab/LabCourseFile.swift */,
 				78DB1AB586D3F9617B2127C4 /* TEGNAL/Core/Lab/LearningCourses.swift */,
 				B0B941BDE82233BED68CE0D5 /* TEGNAL/Presentation/Lab/LabCoursesView.swift */,
+				A1C3E5F7091B2D4F6A8C0E32 /* TEGNAL/Presentation/Lab/CreatorView.swift */,
 				A2CEF1A399492EE28200EA2E /* TEGNAL/Core/Lab/TagCourse.swift */,
 				DF5F2177EAB0A8E30E1A2BAC /* TEGNAL/Core/Lab/LabStore.swift */,
 				1E2F80C45B7D286AF73BDB88 /* TEGNAL/Core/Lab/LabRecords.swift */,
@@ -1313,6 +1316,7 @@
 				6236DC0DE5D7CC8414113384 /* TEGNAL/Core/Lab/LabCourseFile.swift in Sources */,
 				29F4EE45AB11BAB4F7EEBFD0 /* TEGNAL/Core/Lab/LearningCourses.swift in Sources */,
 				91C1A0912CE5E22C93142A55 /* TEGNAL/Presentation/Lab/LabCoursesView.swift in Sources */,
+				A1C3E5F7091B2D4F6A8C0E31 /* TEGNAL/Presentation/Lab/CreatorView.swift in Sources */,
 				B325E06D04A8F12D1F212041 /* TEGNAL/Core/Lab/TagCourse.swift in Sources */,
 				860B0A5851F86D4BF3509FEE /* TEGNAL/Core/Lab/LabStore.swift in Sources */,
 				37AD1E0864BE1CAFB13B13A2 /* TEGNAL/Core/Lab/LabRecords.swift in Sources */,

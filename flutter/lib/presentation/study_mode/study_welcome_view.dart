@@ -5,6 +5,7 @@ import '../../core/study/study_engine.dart';
 import '../../core/study/study_models.dart';
 import '../../core/study/study_path.dart';
 import '../../core/support/l10n.dart';
+import '../lab/creator_view.dart';
 import '../booru/booru_common.dart';
 import '../study/study_result_view.dart' show StudyConfetti;
 import 'study_kit.dart';
@@ -26,7 +27,7 @@ class StudyWelcomeView extends StatefulWidget {
 }
 
 class _StudyWelcomeViewState extends State<StudyWelcomeView> {
-  static const _last = 2;
+  static const _last = 3;
   static const _goalNames = {10: 'Casual', 20: 'Regular', 30: 'Serious', 50: 'Intense'};
   static final _slide = StudySpring(0.32, 0.1);
 
@@ -147,7 +148,9 @@ class _StudyWelcomeViewState extends State<StudyWelcomeView> {
                   constraints: const BoxConstraints(maxWidth: 560),
                   child: switch (_page) {
                     0 => _hello(theme),
-                    1 => _goals(theme),
+                    // Who made the course, before the learner commits a daily goal to it.
+                    1 => const CreatorProfile(onboarding: true),
+                    2 => _goals(theme),
                     _ => _level(theme),
                   },
                 ),

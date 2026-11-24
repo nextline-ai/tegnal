@@ -30,6 +30,7 @@ import '../home/home_stage.dart';
 import '../study/study_guide_view.dart';
 import '../study/study_tag_view.dart';
 import '../study/study_widgets.dart';
+import '../lab/creator_view.dart';
 import '../lab/lab_pages.dart';
 import '../lab/lab_root.dart';
 import 'study_award_views.dart';
@@ -2357,6 +2358,9 @@ class _StudyMeViewState extends State<StudyMeView> {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          // Who stands behind the lessons, a tap away.
+          const StudyCard(padding: 6, child: CreatorButton(style: CreatorButtonStyle.study)),
           const SizedBox(height: 16),
           StudyMainButton(
             key: const Key('study.leave'),

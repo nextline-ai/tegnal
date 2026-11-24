@@ -72,10 +72,14 @@ void main() {
   Widget root() => StudyModeRoot(booru: harness.booru, mode: mode, generation: generationStore(directory));
 
   group('welcome', () {
-    testWidgets('a first visit is welcomed: a hello, a daily goal and how much the learner knows, then the server question', (tester) async {
+    testWidgets('a first visit is welcomed: a hello, who made the course, a daily goal and how much the learner knows, then the server question', (tester) async {
       prepare(choose: false, welcomed: false);
       await pumpMode(tester, root());
       expect(find.text('Welcome to Learning Mode!'), findsOneWidget);
+      await tester.tap(key('study.welcome.next'));
+      await tester.pumpAndSettle();
+      expect(key('creator.profile'), findsOneWidget, reason: 'Then who made the course');
+      expect(key('creator.site'), findsOneWidget);
       await tester.tap(key('study.welcome.next'));
       await tester.pumpAndSettle();
       expect(key('study.welcome.goal.20'), findsOneWidget);
@@ -97,10 +101,10 @@ void main() {
     testWidgets('the placement test ends at the first question not known and starts at the beginning', (tester) async {
       prepare(welcomed: false);
       await pumpMode(tester, root());
-      await tester.tap(key('study.welcome.next'));
-      await tester.pumpAndSettle();
-      await tester.tap(key('study.welcome.next'));
-      await tester.pumpAndSettle();
+      for (var page = 0; page < 3; page++) {
+        await tester.tap(key('study.welcome.next'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(key('study.welcome.some'));
       await tester.pumpAndSettle();
       await tester.tap(key('study.welcome.next'));

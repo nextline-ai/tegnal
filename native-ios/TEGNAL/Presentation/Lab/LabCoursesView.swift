@@ -29,6 +29,7 @@ struct LabCoursesView: View {
                 }
                 ForEach(courses.waiting) { waiting in waitingCard(waiting) }
                 importer
+                CreatorButton().padding(.top, 4)
             }
             .padding(.horizontal, 20).padding(.bottom, 32)
         }
