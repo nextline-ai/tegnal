@@ -150,6 +150,9 @@ class HomeStage extends ChangeNotifier {
   bool get coversScreen => enabled && (place == HomePlace.home || moving);
   bool get atHome => enabled && place == HomePlace.home;
 
+  /// The library is what shows, with nothing moving: viewing mode's own first-run questions wait for this.
+  bool get libraryOnScreen => place == HomePlace.library && !moving;
+
   /// The place the app is set to open in, if any. The scene is then passed through quickly, not skipped.
   HomeRealm? get preferred => _startsLearning
       ? HomeRealm.study

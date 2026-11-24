@@ -162,6 +162,8 @@ final class HomeStage {
     /// The scene covers the screen: nothing underneath should ask a question or speak.
     var coversScreen: Bool { enabled && (place == .home || moving) }
     var atHome: Bool { enabled && place == .home }
+    /// The library is what shows, with nothing moving: viewing mode's own first-run questions wait for this.
+    var libraryOnScreen: Bool { enabled ? place == .library && !moving : !StudyMode.shared.active }
 
     private init() {
         let arguments = ProcessInfo.processInfo.arguments

@@ -235,8 +235,8 @@ struct TEGNALApp: App {
                 if phase == .background { LabSheetAlerts.schedule() }
             }
             // An app set to open in a place goes straight on to it: after the blur, or once it has been set up.
-            .onChange(of: stage.introFinished) { _, finished in if finished, env.isOnboardingCompleted || isContentUITest { stage.openPreferred() } }
-            .onChange(of: env.isOnboardingCompleted) { _, completed in if completed { stage.openPreferred(after: 0.7) } }
+            // Viewing mode's onboarding no longer covers the scene, so nothing waits for it.
+            .onChange(of: stage.introFinished) { _, finished in if finished { stage.openPreferred() } }
             .onChange(of: env.mode) { _, _ in env.setCoverQueueActive(scenePhase == .active) }
             .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
                 env.setCoverQueueActive(scenePhase == .active)
@@ -264,7 +264,9 @@ struct TEGNALApp: App {
             .appFullScreenCover(isPresented: Binding(
                 get: {
                     let allowsOnboarding = !isContentUITest || ProcessInfo.processInfo.arguments.contains("--onboarding-test")
-                    return allowsOnboarding && !env.isOnboardingCompleted && (!isSplashScreenVisible || !splashEnabled)
+                    // Viewing mode's onboarding (websites, imports, the mode switch) opens on the first arrival in viewing mode,
+                    // not at launch: learning mode has its own, shown by each course.
+                    return allowsOnboarding && !env.isOnboardingCompleted && stage.libraryOnScreen
                 },
                 set: { _ in }
             )) {
