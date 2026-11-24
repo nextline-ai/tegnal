@@ -66,6 +66,25 @@ void main() {
     expect(stage.atHome, isTrue);
   });
 
+  test('viewing mode\'s onboarding waits for the library itself', () {
+    final stage = make();
+    expect(stage.libraryOnScreen, isFalse, reason: 'The home scene is on screen');
+    stage.mount(HomeRealm.study);
+    stage.depart(HomeRealm.study);
+    stage.arrive(HomeRealm.study);
+    expect(stage.libraryOnScreen, isFalse, reason: 'Learning mode has onboardings of its own');
+    stage.arriveHome();
+    stage.mount(HomeRealm.library);
+    stage.depart(HomeRealm.library);
+    expect(stage.libraryOnScreen, isFalse, reason: 'Still on the way');
+    stage.arrive(HomeRealm.library);
+    expect(stage.libraryOnScreen, isTrue);
+    final direct = make(enabled: false);
+    expect(direct.libraryOnScreen, isTrue);
+    direct.enterStudy();
+    expect(direct.libraryOnScreen, isFalse);
+  });
+
   test('crossing between places goes through the scene', () {
     final stage = make();
     final asked = <HomeRealm>[];

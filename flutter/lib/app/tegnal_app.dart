@@ -381,9 +381,6 @@ class _RootState extends State<_Root> {
   /// Whether the first-run website page is what the app shows: no comics website and no image server yet.
   bool get _isFirstRun => !services.content.isSiteVerified && services.booru.servers.isEmpty;
 
-  /// Shows onboarding once, at a new user's first launch, after the home scene's opening blur, as on iOS.
-  /// Someone who already has a website or an image server (an update from a version without onboarding)
-  /// is counted as done. Fixture runs show it only when `onboarding` names it.
   /// With cheat-sheet alerts on, the job is handed this launch's words (the language may have changed).
   Future<void> _startSheetAlerts() async {
     if (await LabSheetAlerts.isOn()) await LabSheetAlerts.configure();
@@ -395,6 +392,10 @@ class _RootState extends State<_Root> {
     if (await LabSheetAlerts.takeOpen() && mounted) StudyMode.shared.enterLab(LabTab.sheet);
   }
 
+  /// Shows viewing mode's onboarding once, on a new user's first arrival in viewing mode, as on iOS: not over the
+  /// home scene, and not in learning mode, whose courses have onboardings of their own.
+  /// Someone who already has a website or an image server (an update from a version without onboarding)
+  /// is counted as done. Fixture runs show it only when `onboarding` names it.
   void _watchFirstRun() {
     final content = services.content;
     if (services.isTesting) {
@@ -406,17 +407,17 @@ class _RootState extends State<_Root> {
       content.isOnboardingCompleted = true;
       return;
     }
-    if (!_stage.enabled || _stage.introFinished) {
+    if (_stage.libraryOnScreen) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showOnboarding());
       return;
     }
-    void opened() {
-      if (!_stage.introFinished) return;
-      _stage.removeListener(opened);
+    void arrived() {
+      if (!_stage.libraryOnScreen) return;
+      _stage.removeListener(arrived);
       _showOnboarding();
     }
 
-    _stage.addListener(opened);
+    _stage.addListener(arrived);
   }
 
   void _showOnboarding() {
