@@ -25,6 +25,7 @@ import '../../core/addons/addon_models.dart';
 import '../../core/addons/addon_store.dart';
 import 'addons_view.dart';
 import 'comics_cache_settings_view.dart';
+import '../lab/creator_view.dart';
 import 'settings_home.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
@@ -180,6 +181,7 @@ class _SettingsViewState extends State<SettingsView> {
                       open: _open,
                       addonsCount: AddonRuntime.shared.effects.enabledCount(AddonMode.comics),
                       leading: [if (_deps.invitation != null) _deps.invitation!(context)],
+                      bottom: const [DeveloperSection()],
                       top: [
                         // The website comes first, as an account does in the system Settings app.
                         if (_content.comicSites.isEmpty)
@@ -492,8 +494,6 @@ class _SettingsViewState extends State<SettingsView> {
             ),
           ],
         ),
-        settingsSectionGap,
-        const DeveloperSection(),
       ],
       SettingsCategory.taste || SettingsCategory.addons || SettingsCategory.privacy => const [],
     };
@@ -838,7 +838,6 @@ class DeveloperSection extends StatelessWidget {
     return FormSection(
       prominentHeader: true,
       rowColor: FormColors.listRow.resolveFrom(context),
-      header: Text(L10n.text('Developer')),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -853,7 +852,30 @@ class DeveloperSection extends StatelessWidget {
             ),
           ),
         ),
-        SettingsValueRow(title: L10n.text('Developer'), value: 'NextLine'),
+        // "누가 만들었나요?": the page the courses show, about NextLine.
+        FormRow(
+          key: const Key('settings.creator'),
+          separatorInset: settingsIconInset,
+          onTap: () => showCreator(context),
+          child: Row(
+            children: [
+              Container(
+                width: 29,
+                height: 29,
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: Creator.ground,
+                  shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(7)),
+                ),
+                child: const NextLineMark(width: 17, height: 14),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(L10n.text('creator.button'), style: TegnalType.style(17, color: tint)),
+              ),
+            ],
+          ),
+        ),
         FormRow(
           separatorInset: settingsIconInset,
           onTap: () => launchUrl(website, mode: LaunchMode.externalApplication),

@@ -1,10 +1,12 @@
 import SwiftUI
 import WebKit
 
-/// The same developer identity and support destinations in both library modes.
+/// The same developer identity and support destinations in both library modes, last on Settings'
+/// top level, with the "누가 만들었나요?" page the courses show.
 struct DeveloperInfoSection: View {
     private let website = URL(string: "https://nextline.work")!
     private let community = URL(string: "https://discord.gg/DFT9Hm66Gz")!
+    @State private var showingCreator = false
 
     var body: some View {
         Section {
@@ -15,7 +17,17 @@ struct DeveloperInfoSection: View {
                     .accessibilityIdentifier("developer.logo")
                 Spacer(minLength: 0)
             }.padding(.vertical, 8)
-            LabeledContent(L10n.text("Developer"), value: "NextLine")
+            Button { showingCreator = true } label: {
+                Label {
+                    Text(L10n.text("creator.button")).foregroundStyle(.primary)
+                } icon: {
+                    NextLineMark().fill(Creator.gradient).frame(width: 17, height: 14)
+                        .frame(width: 29, height: 29)
+                        .background(Creator.ground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+            }
+            .accessibilityIdentifier("settings.creator")
+            .appSheet(isPresented: $showingCreator) { CreatorView() }
             Link(destination: website) {
                 HStack(spacing: 12) {
                     Label(L10n.text("Website"), systemImage: "globe")
@@ -35,9 +47,6 @@ struct DeveloperInfoSection: View {
                 developerButton("Discord", destination: community, identifier: "developer.community")
                 developerButton("GitHub", destination: URL(string: "https://github.com/nextline-ai/tegnal")!, identifier: "developer.github")
             }.padding(.vertical, 8)
-
-        } header: {
-            Text(L10n.text("Developer"))
         }
     }
     private func developerButton(_ service: String, destination: URL, identifier: String) -> some View {

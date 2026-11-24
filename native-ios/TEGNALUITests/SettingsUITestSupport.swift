@@ -16,12 +16,14 @@ extension XCUIApplication {
             "library": ["settings.libraryManagement", "booru.libraryManagement", "settings.downloads", "booru.downloadsLink", "settings.imageCache",
                         "settings.clearCache", "settings.defaultFolder", "settings.folderRules", "booru.folderRules"],
             "start": ["booru.safeMode", "settings.startInStudyMode", "settings.startInViewingMode", "settings.enterStudyMode"],
-            "help": ["settings.onboarding", "settings.privacyPolicyRow", "settings.shortcuts", "settings.reset", "developer.logo", "developer.website", "developer.email",
-                     "developer.community", "developer.github", "developer.publisher"],
+            "help": ["settings.onboarding", "settings.privacyPolicyRow", "settings.shortcuts", "settings.reset"],
         ]
         for (page, ids) in rows { for id in ids { pages[id] = page } }
         return pages
     }()
+    /// Rows on the top level itself: the developer section, last.
+    static let settingsTopRows: Set<String> = ["developer.logo", "developer.website", "developer.email", "developer.community", "developer.github",
+                                               "developer.publisher", "settings.creator"]
     /// Rows that used to sit in the list and are now top-level pages themselves.
     static let settingsPageRows = ["settings.addons": "addons", "settings.privacy": "privacy", "settings.taste": "taste",
                                    "settings.reader": "viewer", "booru.readerSettings": "viewer"]
@@ -64,6 +66,7 @@ extension XCUIApplication {
         }
         let row = any(id)
         if row.exists && row.isHittable { return row }
+        if Self.settingsTopRows.contains(id) { openSettingsTop() }
         if let page = Self.settingsPages[id], !any("settings.page." + page).exists { openSettingsPage(page) }
         for _ in 0..<6 where !(row.exists && row.isHittable) { swipeUp() }
         XCTAssertTrue(row.isHittable, "Missing Settings row: " + id)

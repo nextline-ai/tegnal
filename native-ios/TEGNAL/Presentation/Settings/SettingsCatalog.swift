@@ -369,7 +369,6 @@ enum SettingsCatalog {
         add(.init(id: "help.privacyPolicy", titleKey: "Privacy Policy", category: .help))
         add(.init(id: "help.licenses", titleKey: "Open Source Licenses", category: .help))
         add(.init(id: "help.reset", titleKey: "Reset Settings to Defaults", category: .help, keywords: "reset default"))
-        add(.init(id: "help.developer", titleKey: "Developer", category: .help, keywords: "contact discord github email"))
         return items
     }
 
