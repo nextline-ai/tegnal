@@ -6,11 +6,15 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/lab/lab_goods.dart';
+
 /// The night colours at the head and foot of the illustration, which the sky and the ground continue.
+/// A home scene bought in the shop may bring colours of its own (`HomeScenes`).
 abstract final class HomePalette {
-  static const sky = Color(0xFF0B0717);
-  static const ground = Color(0xFF1E1430);
-  static const dusk = Color(0xFF2A1E51);
+  static Color get sky => _color('sky', 0x0B0717);
+  static Color get ground => _color('ground', 0x1E1430);
+  static Color get dusk => _color('dusk', 0x2A1E51);
+  static Color _color(String name, int fallback) => Color(0xFF000000 | (HomeScenes.color(name) ?? fallback));
 }
 
 /// How the picture sits on a screen. A phone shows all of it. A tablet or a desktop window is another
@@ -53,8 +57,11 @@ abstract final class HomeStill {
   static Future<void> load() async {
     if (image != null) return;
     try {
-      final data = await rootBundle.load(asset);
-      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+      // A home scene bought in the shop brings its own, which the app shows once it has started.
+      await HomeScenes.prepare();
+      final chosen = HomeScenes.file('still');
+      final bytes = chosen != null ? await chosen.readAsBytes() : await rootBundle.load(asset).then((data) => data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+      final codec = await ui.instantiateImageCodec(bytes);
       image = (await codec.getNextFrame()).image;
       codec.dispose();
     } on Object {
@@ -90,9 +97,18 @@ class HomeFilm extends ChangeNotifier {
 
   bool get firstFrame => _firstFrame;
 
+  /// The chosen home scene's film for `intro` or `loop`, else the app's own.
+  static VideoPlayerController _controller(String role) {
+    final file = HomeScenes.file(role);
+    return file != null
+        ? VideoPlayerController.file(file, videoPlayerOptions: _quietOptions)
+        : VideoPlayerController.asset('assets/home/home_$role.mp4', videoPlayerOptions: _quietOptions);
+  }
+
   Future<void> load() async {
-    final loop = this.loop = VideoPlayerController.asset('assets/home/home_loop.mp4', videoPlayerOptions: _quietOptions);
-    final intro = this.intro = VideoPlayerController.asset('assets/home/home_intro.mp4', videoPlayerOptions: _quietOptions);
+    HomeScenes.chosenScene.addListener(_swapScene);
+    final loop = this.loop = _controller('loop');
+    final intro = this.intro = _controller('intro');
     final loading = [
       _prepare(loop).then((ready) async {
         if (!ready) return;
@@ -192,8 +208,32 @@ class HomeFilm extends ChangeNotifier {
 
   VideoPlayerController? get _current => _handingOver ? loop : intro ?? loop;
 
+  /// Another home scene chosen in the shop: its loop plays in place of the one playing. The opening film is for opening the app.
+  Future<void> _swapScene() async {
+    if (_disposed) return;
+    final next = _controller('loop');
+    if (!await _prepare(next)) {
+      await next.dispose();
+      return;
+    }
+    await next.setLooping(true);
+    final old = [intro, loop];
+    intro?.removeListener(_watchIntro);
+    intro = null;
+    loop = next;
+    _handingOver = false;
+    if (_cleared && _wantsPlayback) await next.play();
+    notifyListeners();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in old) {
+        controller?.dispose();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    HomeScenes.chosenScene.removeListener(_swapScene);
     _disposed = true;
     intro?.dispose();
     loop?.dispose();
@@ -249,7 +289,18 @@ class HomeSceneView extends StatelessWidget {
           children: [
             Positioned.fromRect(
               rect: frame,
-              child: const Image(image: AssetImage('assets/home/home_poster.jpg'), fit: BoxFit.fill, gaplessPlayback: true),
+              child: ValueListenableBuilder(
+                valueListenable: HomeScenes.chosenScene,
+                builder: (context, _, _) {
+                  // A scene bought in the shop has no clear poster of its own; its still stands under its film.
+                  final still = HomeScenes.file('still');
+                  return Image(
+                    image: still != null ? FileImage(still) : const AssetImage('assets/home/home_poster.jpg'),
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                  );
+                },
+              ),
             ),
             Positioned.fromRect(
               rect: frame,
@@ -261,9 +312,13 @@ class HomeSceneView extends StatelessWidget {
               right: 0,
               top: 0,
               height: size.height * 0.16,
-              child: const DecoratedBox(
+              child: DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [HomePalette.sky, Color(0x000B0717)]),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [HomePalette.sky, HomePalette.sky.withValues(alpha: 0)],
+                  ),
                 ),
               ),
             ),
@@ -272,9 +327,13 @@ class HomeSceneView extends StatelessWidget {
               right: 0,
               top: size.height * 0.9,
               height: size.height * 0.1,
-              child: const DecoratedBox(
+              child: DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x001E1430), HomePalette.ground]),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [HomePalette.ground.withValues(alpha: 0), HomePalette.ground],
+                  ),
                 ),
               ),
             ),
@@ -389,6 +448,20 @@ class HomeMusic {
   Timer? _fade;
   Timer? _quiet;
 
+  HomeMusic() {
+    HomeScenes.chosenScene.addListener(_swapScene);
+  }
+
+  /// Another home scene's music is read the next time the music starts, or now when it is playing.
+  void _swapScene() {
+    final player = _player;
+    if (player == null || _disposed) return;
+    final playing = player.value.isPlaying;
+    _player = null;
+    player.dispose();
+    if (playing && _wanted) _load(const Duration(milliseconds: 600));
+  }
+
   void play(Duration fade) {
     _wanted = true;
     _quiet?.cancel();
@@ -404,7 +477,10 @@ class HomeMusic {
   Future<void> _load(Duration fade) async {
     if (_loading) return;
     _loading = true;
-    final player = VideoPlayerController.asset('assets/home/home_theme.mp3', videoPlayerOptions: _quietOptions);
+    final chosen = HomeScenes.file('theme');
+    final player = chosen != null
+        ? VideoPlayerController.file(chosen, videoPlayerOptions: _quietOptions)
+        : VideoPlayerController.asset('assets/home/home_theme.mp3', videoPlayerOptions: _quietOptions);
     try {
       await player.initialize();
       await player.setLooping(true);
@@ -470,6 +546,7 @@ class HomeMusic {
   }
 
   void dispose() {
+    HomeScenes.chosenScene.removeListener(_swapScene);
     _disposed = true;
     _fade?.cancel();
     _quiet?.cancel();

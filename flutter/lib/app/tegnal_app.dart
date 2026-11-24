@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cupertino_ui/cupertino_ui.dart';
 
 import '../core/addons/addon_models.dart';
+import 'app_notice.dart';
 import '../core/addons/addon_store.dart';
 import '../core/booru/booru_account.dart';
 import '../core/booru/booru_client.dart';
@@ -260,7 +261,9 @@ class _TegnalAppState extends State<TegnalApp> {
           builder: (context, child) => ReadingQueueScope(
             queue: widget.services.readingQueue,
             child: AppLockGate(
-              child: PendingRestoreGate(backups: widget.services.backups, navigatorKey: _navigatorKey, child: child!),
+              child: AppNoticeGate(
+                child: PendingRestoreGate(backups: widget.services.backups, navigatorKey: _navigatorKey, child: child!),
+              ),
             ),
           ),
           home: _Root(state: _state, services: widget.services, homeFreeze: widget.homeFreeze),

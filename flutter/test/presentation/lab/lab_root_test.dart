@@ -30,6 +30,7 @@ import 'package:tegnal/presentation/lab/lab_root.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
 
 import '../../core/lab/lab_course_file_support.dart';
+import '../../support/lab_shop_fixtures.dart';
 
 Finder key(String name) => find.byKey(Key(name));
 
@@ -43,7 +44,7 @@ void main() {
 
   setUpAll(() async {
     await LabCourse.loadBundled();
-    await LabShop.loadBundled();
+    LabStore.shared.use(testShop());
     await LabDiagnosis.loadBundled();
     await LabEdition.loadBundled();
     StudyPath.useBundled(StudyPath.parse(File('assets/study/StudyPath.json').readAsStringSync()));

@@ -73,9 +73,9 @@
             "ja": "このアプリでは"
           },
           "body": {
-            "en": "“View as a Prompt” on any picture writes its tags in this order, so a picture you like becomes a prompt to study.",
-            "ko": "그림의 “프롬프트로 보기”는 그 그림의 태그를 이 순서로 써 줍니다. 마음에 드는 그림이 곧 공부할 프롬프트가 됩니다.",
-            "ja": "どの画像でも「プロンプトとして見る」を使うと、タグがこの順序で書き出されます。気に入った画像が、そのまま学習用のプロンプトになります。"
+            "en": "“Prompt Analyzer” on any picture writes its tags in this order, so a picture you like becomes a prompt to study.",
+            "ko": "그림의 “프롬프트 분석기”는 그 그림의 태그를 이 순서로 써 줍니다. 마음에 드는 그림이 곧 공부할 프롬프트가 됩니다.",
+            "ja": "どの画像でも「プロンプトアナライザー」を使うと、タグがこの順序で書き出されます。気に入った画像が、そのまま学習用のプロンプトになります。"
           }
         }
       ],
@@ -306,9 +306,9 @@
             "ja": "タグ自身の括弧"
           },
           "body": {
-            "en": "Many tags carry brackets of their own, such as `watercolor_(medium)`. Left as they are, the web UI reads them as emphasis, so each one is escaped with a backslash. The “Escaped Brackets” format of “View as a Prompt” does this for you.",
-            "ko": "`watercolor_(medium)`처럼 태그 자체에 괄호가 든 경우가 많습니다. 그대로 두면 web UI가 강조로 읽으므로, 괄호마다 역슬래시를 붙입니다. “프롬프트로 보기”의 “괄호 처리” 형식이 이 일을 대신 해 줍니다.",
-            "ja": "`watercolor_(medium)` のように、括弧を含むタグは多くあります。そのままだと web UI が強調と解釈してしまうため、1 つずつバックスラッシュでエスケープします。「プロンプトとして見る」の「括弧エスケープ」形式を使えば、自動で処理されます。"
+            "en": "Many tags carry brackets of their own, such as `watercolor_(medium)`. Left as they are, the web UI reads them as emphasis, so each one is escaped with a backslash. The “Escaped Brackets” format of “Prompt Analyzer” does this for you.",
+            "ko": "`watercolor_(medium)`처럼 태그 자체에 괄호가 든 경우가 많습니다. 그대로 두면 web UI가 강조로 읽으므로, 괄호마다 역슬래시를 붙입니다. “프롬프트 분석기”의 “괄호 처리” 형식이 이 일을 대신 해 줍니다.",
+            "ja": "`watercolor_(medium)` のように、括弧を含むタグは多くあります。そのままだと web UI が強調と解釈してしまうため、1 つずつバックスラッシュでエスケープします。「プロンプトアナライザー」の「括弧エスケープ」形式を使えば、自動で処理されます。"
           },
           "examples": [
             {
@@ -1121,9 +1121,9 @@
             "ja": "好きな画像から学ぶ"
           },
           "body": {
-            "en": "Open “View as a Prompt” on a picture, read which tags make it what it is, and practise the ones you did not know.",
-            "ko": "그림에서 “프롬프트로 보기”를 열어 어떤 태그가 그 그림을 이루는지 읽고, 몰랐던 태그를 연습합니다.",
-            "ja": "画像で「プロンプトとして見る」を開き、どのタグがその画像らしさを作っているかを読み取って、知らなかったタグを練習しましょう。"
+            "en": "Open “Prompt Analyzer” on a picture, read which tags make it what it is, and practise the ones you did not know.",
+            "ko": "그림에서 “프롬프트 분석기”를 열어 어떤 태그가 그 그림을 이루는지 읽고, 몰랐던 태그를 연습합니다.",
+            "ja": "画像で「プロンプトアナライザー」を開き、どのタグがその画像らしさを作っているかを読み取って、知らなかったタグを練習しましょう。"
           }
         }
       ],

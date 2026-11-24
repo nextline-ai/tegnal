@@ -3,7 +3,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tegnal/app/app_notice.dart';
+import 'package:tegnal/core/addons/addon_market.dart';
+import 'package:tegnal/core/lab/lab_goods.dart';
+import 'package:tegnal/core/lab/lab_shop.dart';
 import 'package:tegnal/core/booru/booru_backup.dart';
 import 'package:tegnal/core/booru/booru_store.dart';
 import 'package:tegnal/core/lab/lab_course.dart';
@@ -20,9 +25,9 @@ import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/sync/library_sync_adapter.dart';
 import 'package:tegnal/core/sync/library_sync_record.dart';
 import 'package:tegnal/presentation/lab/lab_pages.dart';
-import 'package:flutter/painting.dart';
 
 import '../../support/addon_market_fixtures.dart';
+import '../../support/lab_shop_fixtures.dart';
 import 'lab_course_file_support.dart';
 
 void main() {
@@ -33,13 +38,12 @@ void main() {
     course = await LabCourse.loadBundled();
     // A tags lesson may teach the app's own tags, so course files are checked against the curriculum.
     StudyCurriculum.useBundled(StudyCurriculum.parse(File('assets/study/TagStudy.json').readAsStringSync()));
-    await LabShop.loadBundled();
     await LabDiagnosis.loadBundled();
     await LabEdition.loadBundled();
   });
 
   LabStore store() =>
-      LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: LabMemoryRecords(), edition: LabEdition.bundled);
+      LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: LabMemoryRecords(), edition: LabEdition.bundled);
 
   // MARK: Script files
 
@@ -222,7 +226,9 @@ void main() {
   }
 
   test('prices follow the agreed rules', () {
-    final shop = LabShop.bundled;
+    // The rules are checked on the list as published (`docs/live/shop.json`, local only).
+    final shop = liveShop();
+    if (shop == null) return markTestSkipped('docs/live/shop.json is local only');
     // Season 1's cards and its season pay for the first course, without a single 망작.
     final seasonOne =
         course.seasons.first.episodes.map(course.episode).nonNulls.fold(0, (total, episode) => total + episode.reward) + course.info.rewards.season;
@@ -233,11 +239,34 @@ void main() {
     // Everything that lasts costs 50–70% of what all courses pay; the rest is left for tickets.
     expect(shop.permanentTotal / (labPayout() + tagPayout()), inInclusiveRange(0.5, 0.7));
     expect(labPayout(), lessThan(shop.permanentTotal), reason: 'The free course alone does not buy everything');
+    // What the app sells offline costs what the published list asks.
+    for (final item in LabShop.builtIn.items) {
+      expect(item.price, shop.item(item.id)?.price, reason: "${item.id}: the app's offline price matches docs/live/shop.json");
+      expect(item.supported, isTrue, reason: item.id);
+    }
+  });
+
+  test("the app's own goods can be bought offline", () async {
+    final lab = LabStore(course: course, diagnosis: LabDiagnosis.bundled, records: LabMemoryRecords());
+    await lab.refreshShop(
+      market: AddonMarket(base: AddonMarket.liveBase, publicKey: TestSigningKey().public, fetch: (url, limit) async => throw const AddonMarketError.offline()),
+    );
+    expect(lab.shopState, LabShopState.failed);
+    for (final episode in course.episodes.take(4)) {
+      lab.engrave(episode, failsHung: 0);
+    }
+    expect(lab.buy(lab.shop.item(LabStore.tagCourse)!), LabBuyResult.bought);
+    for (final episode in course.episodes.skip(4).take(2)) {
+      lab.engrave(episode, failsHung: 0);
+    }
+    expect(lab.buy(lab.shop.item(LabFeature.promptAnalyzer.item)!), LabBuyResult.bought);
+    expect(lab.unlocked(LabFeature.promptAnalyzer), isTrue);
+    expect(lab.progress.purchases[LabFeature.promptAnalyzer.item]?.price, 200);
   });
 
   test('amounts paid are kept when the files change later', () async {
     final records = LabMemoryRecords();
-    final first = LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: records);
+    final first = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
     LabEngraving? last;
     for (final id in ['ep01', 'ep02', 'ep03', 'ep04']) {
       last = first.engrave(course.episode(id)!, failsHung: 0);
@@ -254,7 +283,7 @@ void main() {
       if (path.startsWith('episodes/')) json['reward'] = 3;
       return jsonEncode(json);
     });
-    final later = LabStore(course: cheaper, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: records);
+    final later = LabStore(course: cheaper, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
     expect(later.balance, balance, reason: 'Nothing already earned moves');
     later.engrave(cheaper.episode('ep05')!, failsHung: 0);
     expect(later.balance, balance + 3, reason: 'What is earned from now on pays the new amount');
@@ -264,7 +293,7 @@ void main() {
     final progress = LabProgress.fromRecords(const [LabRecord(key: 'card:ep01', value: 1, at: 10)]);
     expect(progress.cardGems['ep01'], isNull);
     final records = LabMemoryRecords()..replace(progress.records);
-    final lab = LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: records);
+    final lab = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
     expect(lab.balance, course.episode('ep01')!.reward);
   });
 
@@ -277,7 +306,7 @@ void main() {
     }
     final listed = lab.shop.items.firstWhere((item) => item.kind == 'ticket');
     expect(listed.requires, LabStore.tagCourse);
-    final tickets = LabShopItem(id: listed.id, kind: listed.kind, name: listed.name, price: listed.price, repeat: true, requires: listed.requires);
+    final tickets = listed.copyWith(soon: false);
     expect(lab.canBuy(tickets), const LabBuyResult.needs(LabStore.tagCourse), reason: 'Tickets are for the generator 2D AI 배우기 opens');
     expect(lab.buy(item), LabBuyResult.bought);
     expect(lab.ownsTagCourse, isTrue);
@@ -329,6 +358,275 @@ void main() {
     expect(lab.canBuy(lab.shop.items.firstWhere((item) => item.isSoon)), LabBuyResult.unavailable);
   });
 
+  // MARK: The shop from the server
+
+  test('the shop list is read only when TEGNAL signed it', () {
+    final key = TestSigningKey(), other = TestSigningKey();
+    final (shop, payload) = LabShopSource.open(signedShop(fixtureShopJson, key), key.public);
+    expect([for (final item in shop.items) item.id], ['course.tags', 'feature.prompt-analyzer', 'tickets.10']);
+    expect(payload, utf8.encode(fixtureShopJson), reason: "What is kept is the list's own bytes");
+    expect(() => LabShopSource.open(signedShop(fixtureShopJson, other), key.public), throwsA(LabShopError.unsigned));
+    final newer = fixtureShopJson.replaceFirst('"schemaVersion": 1', '"schemaVersion": 2');
+    expect(() => LabShopSource.open(signedShop(newer, key), key.public), throwsA(LabShopError.newer), reason: 'A list for a later app asks for an update');
+    expect(() => LabShop.decode(utf8.encode('{"format": "tegnal-addon-catalog", "schemaVersion": 1}')), throwsA(LabShopError.invalid));
+  });
+
+  test('the store shows the list it read and keeps it when the server fails', () async {
+    final key = TestSigningKey();
+    final lab = LabStore(course: course, diagnosis: LabDiagnosis.bundled, records: LabMemoryRecords());
+    expect(lab.shopState, LabShopState.loading);
+    expect([for (final item in lab.shop.items) item.id], ['course.tags', 'feature.prompt-analyzer'], reason: 'Before the list is read, only the goods the app carries');
+    var file = signedShop(fixtureShopJson, key);
+    Object? failure;
+    final market = AddonMarket(
+      base: AddonMarket.liveBase,
+      publicKey: key.public,
+      fetch: (url, limit) async {
+        if (failure case final failure?) throw failure;
+        return file;
+      },
+    );
+    await lab.refreshShop(market: market);
+    expect(lab.shopState, LabShopState.ready);
+    expect(lab.shop.item('feature.prompt-analyzer'), isNotNull);
+    failure = const AddonMarketError.offline();
+    await lab.refreshShop(market: market);
+    expect(lab.shopState, LabShopState.ready, reason: 'A list already read stays when the server cannot be reached');
+    expect(lab.shop.item('course.tags'), isNotNull);
+    failure = null;
+    file = signedShop(fixtureShopJson.replaceFirst('"schemaVersion": 1', '"schemaVersion": 2'), key);
+    await lab.refreshShop(market: market);
+    expect(lab.shopState, LabShopState.newer);
+    expect(
+      [for (final item in lab.shop.items) item.id],
+      [for (final item in LabShop.builtIn.items) item.id],
+      reason: "An old list is not sold from once a newer one is out; the app's own goods are",
+    );
+  });
+
+  test('goods this app does not know ask for an update', () {
+    const json = '''
+      {"format": "tegnal-lab-shop", "schemaVersion": 1, "currency": "보석", "sections": [{"title": "새 상품", "items": [
+        {"id": "sticker.cat", "kind": "sticker", "name": "고양이 스티커", "price": 10, "sticker": {"shape": "round"}},
+        {"id": "feature.prompt-analyzer", "kind": "feature", "version": 2, "feature": "prompt-analyzer", "name": "새 분석기", "price": 10},
+        {"id": "feature.voice", "kind": "feature", "feature": "voice", "name": "음성", "price": 10},
+        {"id": "feature.other", "kind": "feature", "feature": "prompt-analyzer", "name": "다른 ID", "price": 10},
+        {"id": "home.broken", "kind": "home", "name": "파일 없는 홈", "price": 10},
+        {"id": "BAD ID", "kind": "feature", "name": "모양이 틀림"},
+        {"id": "tickets.5", "kind": "ticket", "count": 5, "name": "생성권", "price": 10, "repeat": true}
+      ]}]}''';
+    final shop = LabShop.decode(utf8.encode(json));
+    expect(
+      [for (final item in shop.items) item.id],
+      ['sticker.cat', 'feature.prompt-analyzer', 'feature.voice', 'feature.other', 'home.broken', 'tickets.5'],
+      reason: 'An item not shaped like one is left out; the others stay',
+    );
+    final lab = LabStore(course: course, shop: shop, diagnosis: LabDiagnosis.bundled, records: LabMemoryRecords());
+    for (final id in ['sticker.cat', 'feature.prompt-analyzer', 'feature.voice', 'feature.other', 'home.broken']) {
+      expect(shop.item(id)!.supported, isFalse, reason: id);
+      expect(lab.canBuy(shop.item(id)!), LabBuyResult.update, reason: id);
+    }
+    expect(shop.item('tickets.5')!.supported, isTrue);
+  });
+
+  test('what docs/live/publish_live.py signs opens with the key the app carries', () {
+    final shop = File('../docs/live/dist/v1/lab/shop.json');
+    if (!shop.existsSync()) return markTestSkipped('docs/live/dist is local only');
+    final (list, _) = LabShopSource.open(shop.readAsBytesSync(), AddonMarket.live.publicKey);
+    expect(list.item(LabStore.tagCourse), isNotNull);
+    expect(list.items.every((item) => item.supported), isTrue, reason: 'Everything published is something this app knows');
+    final notice = File('../docs/live/dist/v1/app/notice.json');
+    if (notice.existsSync()) AppNotice.decode(LabSigned.payload(notice.readAsBytesSync(), AddonMarket.live.publicKey, AppNotice.maximumBytes));
+  });
+
+  test("an item's picture is read only when it is a proper file", () {
+    final hash = 'a' * 64;
+    LabShopItem item(Object image) => LabShopItem.parse({'id': 'home.dusk', 'kind': 'home', 'name': '노을', 'soon': true, 'image': image})!;
+    expect(item({'path': 'goods/home.dusk/0123abcd-card.jpg', 'size': 1000, 'sha256': hash}).image?.path, 'goods/home.dusk/0123abcd-card.jpg');
+    expect(item({'path': '../x.jpg', 'size': 1000, 'sha256': hash}).image, isNull);
+    expect(item({'path': 'goods/a.jpg', 'size': 3000000, 'sha256': hash}).image, isNull, reason: 'Larger than 2 MB');
+    expect(item('goods/a.jpg').image, isNull, reason: 'A local path is only for the source list');
+    expect(item('goods/a.jpg').supported, isTrue, reason: 'A picture never stops an item from being sold');
+  });
+
+  test('the prompt analyzer needs the 2D course and stays open without the list', () {
+    final records = LabMemoryRecords();
+    final lab = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
+    final analyzer = lab.shop.item(LabFeature.promptAnalyzer.item)!;
+    expect(analyzer.requires, LabStore.tagCourse);
+    expect(lab.unlocked(LabFeature.promptAnalyzer), isFalse);
+    expect(lab.canBuy(analyzer), const LabBuyResult.needs(LabStore.tagCourse));
+    for (final episode in course.episodes) {
+      lab.engrave(episode, failsHung: 0);
+    }
+    expect(lab.buy(lab.shop.item(LabStore.tagCourse)!), LabBuyResult.bought);
+    expect(lab.buy(analyzer), LabBuyResult.bought);
+    expect(lab.unlocked(LabFeature.promptAnalyzer), isTrue);
+    expect(lab.canBuy(analyzer), LabBuyResult.owned);
+    final later = LabStore(course: course, diagnosis: LabDiagnosis.bundled, records: records);
+    expect(later.unlocked(LabFeature.promptAnalyzer), isTrue, reason: 'What was bought opens without the shop list');
+  });
+
+  test('tickets count what each purchase brought', () {
+    final lab = store();
+    final tickets = lab.shop.items.firstWhere((item) => item.kind == 'ticket').copyWith(soon: false, count: 10);
+    for (final episode in course.episodes) {
+      lab.engrave(episode, failsHung: 0);
+    }
+    lab.buy(lab.shop.item(LabStore.tagCourse)!);
+    expect(lab.buy(tickets), LabBuyResult.bought);
+    expect(lab.buy(tickets), LabBuyResult.bought);
+    expect(lab.tickets, 20);
+    expect(LabProgress.fromRecords(lab.progress.records).purchases[tickets.id]?.each, 10, reason: 'Kept in the records');
+  });
+
+  test('a course from the shop pays', () {
+    final lab = store();
+    final official = LabCourseFile.decode(labCourseFile(edit: (top) => top['rewards'] = {'fail': 20, 'season': 100})).deck!.asOfficial();
+    lab.showCourse(official);
+    expect(lab.pays, isTrue);
+    final first = lab.engrave(official.episodes[0], failsHung: 0);
+    expect(first.cardReward, 999);
+    expect(lab.hang(official.fails.first), isTrue);
+    final second = lab.engrave(official.episodes[1], failsHung: 0);
+    expect(second.seasonReward, 100, reason: 'Its season pays too');
+    expect(lab.balance, 999 * 2 + 20 + 100);
+    final reread = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: LabMemoryRecords()..replace(lab.progress.records));
+    expect(reread.balance, lab.balance, reason: 'Read back from the records');
+    expect(lab.progress.seasonGems['1'], isNull, reason: "The AI lab's season 1 is untouched");
+  });
+
+  test('the catalog keeps courses from the shop apart from imported ones', () {
+    final folder = Directory.systemTemp.createTempSync('shop-courses');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final catalog = LearningCourses(folder: folder);
+    catalog.add(labCourseFile());
+    final official = catalog.addOfficial(labCourseFile(), 'course.prompt-basics');
+    expect(official.official, isTrue);
+    expect(official.item, 'course.prompt-basics');
+    expect(official.deck?.official, isTrue);
+    expect(
+      [for (final course in catalog.all) course.id],
+      [LearningCourse.labID, LearningCourse.tagsID, 'maker.prompt-basics'],
+      reason: 'The official copy replaces the imported one',
+    );
+    expect(catalog.has('course.prompt-basics'), isTrue);
+    expect(() => catalog.add(labCourseFile()), throwsA(const LabCourseFileError.reserved()), reason: "A file cannot take an official course's id");
+    final reread = LearningCourses(folder: folder);
+    expect([for (final course in reread.official) course.item], ['course.prompt-basics']);
+    expect(reread.imported, isEmpty);
+  });
+
+  test('goods are checked against the list', () async {
+    final data = utf8.encode('film');
+    final file = LabShopFile(path: 'goods/home.test/loop.mp4', size: data.length, sha256: LabCourseFile.digest(data));
+    List<int> served = data;
+    final goods = LabGoods(
+      market: AddonMarket(
+        base: AddonMarket.liveBase,
+        publicKey: TestSigningKey().public,
+        fetch: (url, limit) async {
+          expect(url.toString(), 'https://addons.nextline.work/v1/goods/home.test/loop.mp4');
+          return served;
+        },
+      ),
+    );
+    expect(await goods.download(file), data);
+    served = utf8.encode('fake');
+    await expectLater(goods.download(file), throwsA(const AddonMarketError.damaged()), reason: 'A different file is refused');
+    for (final path in ['../etc/passwd', '/goods/a', 'goods//a', 'goods/한글', '']) {
+      expect(LabShopFile(path: path, size: 1, sha256: file.sha256).valid, isFalse, reason: path);
+    }
+  });
+
+  test('home scenes are kept and chosen', () {
+    final root = Directory.systemTemp.createTempSync('home-scenes');
+    addTearDown(() {
+      HomeScenes.root = null;
+      HomeScenes.chosenScene.value = null;
+      root.deleteSync(recursive: true);
+    });
+    HomeScenes.use(root);
+    LabShopFile file(String name, List<int> data) => LabShopFile(path: 'goods/home.test/$name', size: data.length, sha256: LabCourseFile.digest(data));
+    final films = {'intro': utf8.encode('intro'), 'loop': utf8.encode('loop'), 'still': utf8.encode('still')};
+    final home = LabShopHome(
+      intro: file('intro.mp4', films['intro']!),
+      loop: file('loop.mp4', films['loop']!),
+      still: file('still.jpg', films['still']!),
+      palette: const {'sky': '102030'},
+    );
+    expect(home.valid, isTrue);
+    expect(HomeScenes.has('home.test', home), isFalse);
+    HomeScenes.keep('home.test', home, films);
+    expect(HomeScenes.has('home.test', home), isTrue);
+    expect(HomeScenes.file('loop'), isNull, reason: 'Kept is not chosen');
+    HomeScenes.choose('home.test');
+    expect(HomeScenes.file('loop')!.readAsBytesSync(), films['loop']);
+    expect(HomeScenes.file('theme'), isNull, reason: "No music of its own: the app's plays");
+    expect(HomeScenes.color('sky'), 0x102030);
+    expect(HomeScenes.color('ground'), isNull);
+    HomeScenes.use(root);
+    expect(HomeScenes.chosen, 'home.test', reason: 'The choice is kept for the next launch');
+    final newer = LabShopHome(intro: home.intro, loop: file('loop.mp4', utf8.encode('loop 2')), still: home.still);
+    expect(HomeScenes.has('home.test', newer), isFalse, reason: 'A new version of a file is downloaded again');
+    HomeScenes.choose(null);
+    expect(HomeScenes.file('loop'), isNull);
+  });
+
+  // MARK: Update notice
+
+  test('an update notice shows only on older builds, and a recommended one can be put off', () {
+    const json = '''
+      {"format": "tegnal-app-notice", "schemaVersion": 1, "id": "n1", "level": "recommended", "title": "업데이트", "message": "새 버전",
+       "android": {"below": 22, "url": "https://play.google.com/store/apps/details?id=work.nextline.tegnal"}}''';
+    final notice = AppNotice.decode(utf8.encode(json));
+    expect(notice.appliesTo(21), isTrue);
+    expect(notice.appliesTo(22), isFalse);
+    expect(() => AppNotice.decode(utf8.encode(json.replaceFirst('"schemaVersion": 1', '"schemaVersion": 2'))), throwsA(LabShopError.invalid));
+    expect(() => AppNotice.decode(utf8.encode(json.replaceFirst('recommended', 'someday'))), throwsA(LabShopError.invalid));
+    String? putOff;
+    final old = AppNotices(build: 21, fetch: () async => const [], putOffStore: (read: () => putOff, write: (id) => putOff = id));
+    old.show(notice);
+    expect(old.current, notice);
+    old.putOff();
+    expect(old.current, isNull);
+    old.show(notice);
+    expect(old.current, isNull, reason: 'Put off once, not shown again');
+    final urgent = notice.copyWith(id: 'n2', level: AppNoticeLevel.required);
+    old.show(urgent);
+    old.putOff();
+    expect(old.current, urgent, reason: 'A required notice cannot be put off');
+    final current = AppNotices(build: 22, fetch: () async => const []);
+    current.show(urgent);
+    expect(current.current, isNull, reason: 'Builds that are new enough see nothing');
+    old.show(urgent.copyWith(noAndroid: true));
+    expect(old.current, isNull, reason: 'A notice for the other platform only');
+  });
+
+  testWidgets('a required update notice stays over the app', (tester) async {
+    final notices = AppNotices(build: 1, fetch: () async => const []);
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AppNoticeGate(notices: notices, child: const CupertinoPageScaffold(child: Center(child: Text('app')))),
+      ),
+    );
+    notices.show(
+      const AppNotice(
+        id: 'n',
+        level: AppNoticeLevel.required,
+        title: LabText({'en': 'Update Required'}),
+        message: LabText({'en': 'Please update.'}),
+        android: AppNoticePlatform(below: 2),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('notice.title')), findsOneWidget);
+    expect(find.byKey(const Key('notice.update')), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byKey(const Key('notice.title')), findsOneWidget, reason: 'Back does not leave it');
+  });
+
   // MARK: Diagnosis
 
   test('the diagnosis picks the type most answers point to', () {
@@ -345,11 +643,11 @@ void main() {
 
   test('progress is saved in the image database and read back', () {
     final booru = BooruStore.inMemory();
-    final first = LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: LabDatabaseRecords(booru.database));
+    final first = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: LabDatabaseRecords(booru.database));
     first.engrave(course.episode('ep01')!, failsHung: 0);
     first.hang(course.fails.first);
     first.diagnose(first.diagnosis!.types.first);
-    final second = LabStore(course: course, shop: LabShop.bundled, diagnosis: LabDiagnosis.bundled, records: LabDatabaseRecords(booru.database));
+    final second = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: LabDatabaseRecords(booru.database));
     expect(second.earned(course.episode('ep01')!), isTrue);
     expect(second.hung(course.fails.first), isTrue);
     expect(second.progress.type, first.progress.type);

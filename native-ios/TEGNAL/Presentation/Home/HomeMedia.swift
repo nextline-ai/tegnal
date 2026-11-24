@@ -2,15 +2,23 @@ import AVFoundation
 import UIKit
 
 /// The night colours at the head and foot of the illustration, which the sky and the ground continue.
+/// A home scene bought in the shop may bring colours of its own (`HomeScenes`).
 enum HomePalette {
-    static let sky = UIColor(red: 0x0B / 255, green: 0x07 / 255, blue: 0x17 / 255, alpha: 1)
-    static let ground = UIColor(red: 0x1E / 255, green: 0x14 / 255, blue: 0x30 / 255, alpha: 1)
-    static let dusk = UIColor(red: 0x2A / 255, green: 0x1E / 255, blue: 0x51 / 255, alpha: 1)
+    static var sky: UIColor { color("sky", 0x0B0717) }
+    static var ground: UIColor { color("ground", 0x1E1430) }
+    static var dusk: UIColor { color("dusk", 0x2A1E51) }
+
+    private static func color(_ name: String, _ fallback: UInt32) -> UIColor {
+        let value = HomeScenes.color(name) ?? fallback
+        return UIColor(red: CGFloat(value >> 16 & 0xFF) / 255, green: CGFloat(value >> 8 & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
 }
 
 enum HomeMediaFile {
+    /// The chosen home scene's file for `home_intro`, `home_loop` or `home_theme`, else the app's own.
     static func url(_ name: String, _ type: String) -> URL? {
-        Bundle.main.url(forResource: name, withExtension: type, subdirectory: "HomeMedia")
+        if let chosen = HomeScenes.url(String(name.dropFirst("home_".count))) { return chosen }
+        return Bundle.main.url(forResource: name, withExtension: type, subdirectory: "HomeMedia")
     }
 }
 
@@ -43,7 +51,8 @@ enum HomeFraming {
 /// from, and what covers the app in the app switcher. It is framed exactly as the film is.
 @MainActor final class HomeStillView: UIView {
     /// A plain file in the app, not a catalogue entry: the system's launch screen can only read it that way.
-    static let picture = UIImage(named: "HomeBlur.jpg")
+    /// A home scene bought in the shop brings its own, which the app shows once it has started.
+    static var picture: UIImage? { HomeScenes.url("still").flatMap { UIImage(contentsOfFile: $0.path) } ?? UIImage(named: "HomeBlur.jpg") }
     let imageView = UIImageView(image: HomeStillView.picture)
 
     init() {
@@ -71,6 +80,8 @@ enum HomeFraming {
     private let footShade = CAGradientLayer()
     private let veil = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
     private let still = HomeStillView()
+    /// The system's launch screen is plain black, so that every home scene can follow it; the scene fades in from that black.
+    private let curtain = UIView()
     private var loopAsset: AVURLAsset?
     private var ending: NSObjectProtocol?
     private var ready: NSKeyValueObservation?
@@ -104,6 +115,9 @@ enum HomeFraming {
         veil.isUserInteractionEnabled = false
         addSubview(veil)
         addSubview(still)
+        curtain.backgroundColor = .black
+        curtain.isUserInteractionEnabled = false
+        addSubview(curtain)
         picture.transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
 
         player.isMuted = true
@@ -113,6 +127,26 @@ enum HomeFraming {
         player.preventsDisplaySleepDuringVideoPlayback = false
         player.automaticallyWaitsToMinimizeStalling = false
         load()
+        // Another home scene chosen in the shop plays from its first frame of loop.
+        sceneChange = NotificationCenter.default.addObserver(forName: HomeScenes.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.swapScene() }
+        }
+    }
+
+    private var sceneChange: NSObjectProtocol?
+
+    /// Plays the chosen scene's loop in place of the one playing, with its colours. The opening film is for opening the app.
+    private func swapScene() {
+        backgroundColor = HomePalette.dusk
+        headShade.colors = [HomePalette.sky.cgColor, HomePalette.sky.withAlphaComponent(0).cgColor]
+        footShade.colors = [HomePalette.ground.withAlphaComponent(0).cgColor, HomePalette.ground.cgColor]
+        guard let loop = HomeMediaFile.url("home_loop", "mp4") else { return }
+        let asset = AVURLAsset(url: loop)
+        loopAsset = asset
+        let playing = player.rate > 0
+        player.removeAllItems()
+        for _ in 0..<2 { player.insert(AVPlayerItem(asset: asset), after: nil) }
+        if playing || (cleared && wantsPlayback) { player.play() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -155,7 +189,16 @@ enum HomeFraming {
         footShade.frame = CGRect(x: 0, y: size.height * 0.9, width: size.width, height: size.height * 0.1)
         veil.frame = bounds
         still.frame = bounds
+        curtain.frame = bounds
         CATransaction.commit()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil, curtain.superview != nil, curtain.alpha == 1 else { return }
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0.2 : 0.5, delay: 0.05, options: [.curveEaseOut]) {
+            self.curtain.alpha = 0
+        } completion: { _ in self.curtain.removeFromSuperview() }
     }
 
     /// Shows the blur the live way, without its still, and keeps it. For taking the still's picture.
@@ -209,6 +252,21 @@ enum HomeFraming {
     private var loading = false
     private var wanted = false
     private var quiet: Task<Void, Never>?
+
+    private var sceneChange: NSObjectProtocol?
+
+    init() {
+        // Another home scene's music is read the next time the music starts.
+        sceneChange = NotificationCenter.default.addObserver(forName: HomeScenes.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let playing = self.player?.isPlaying ?? false
+                self.player?.stop()
+                self.player = nil
+                if playing { self.load(fade: 0.6) }
+            }
+        }
+    }
 
     func play(fade: TimeInterval) {
         wanted = true

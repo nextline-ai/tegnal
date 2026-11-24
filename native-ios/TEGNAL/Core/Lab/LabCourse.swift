@@ -44,6 +44,8 @@ struct LabCourse: Sendable {
     /// Imported by the learner from a course file. Such a course pays no 보석, has no cheat sheet or diagnosis of its own,
     /// and keeps its records under its own id (`LabStore.key`).
     var imported = false
+    /// Sold in the shop and downloaded from TEGNAL (`LabGoods`): kept under its own id like an imported course, but it pays 보석.
+    var official = false
 
     var id: String { info.id }
 

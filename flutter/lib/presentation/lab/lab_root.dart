@@ -33,6 +33,7 @@ import 'lab_episode_view.dart';
 import 'creator_view.dart';
 import 'lab_kit.dart';
 import 'lab_pages.dart';
+import 'lab_shop_views.dart';
 
 // AI 실험실: what learning mode opens on. Ported from `LabRoot.swift`.
 
@@ -1176,6 +1177,13 @@ class _LabCoursesViewState extends State<LabCoursesView> {
   LearningCourses get _courses => widget.courses ?? LearningCourses.shared;
   bool _reading = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // The price of a course not bought yet comes from the shop list on TEGNAL's server.
+    LabStore.shared.refreshShop();
+  }
+
   String _title(LearningCourse course) => course.title;
 
   Future<void> _import() async {
@@ -1361,7 +1369,13 @@ class _LabCoursesViewState extends State<LabCoursesView> {
       context,
       key: Key('lab.courses.card.${course.id}'),
       open: open,
-      kicker: L10n.text(deck.imported ? 'lab.courses.imported.kicker' : 'lab.courses.lab.kicker'),
+      kicker: L10n.text(
+        deck.official
+            ? 'lab.courses.official.kicker'
+            : deck.imported
+            ? 'lab.courses.imported.kicker'
+            : 'lab.courses.lab.kicker',
+      ),
       title: deck.title,
       current: here,
       colors: deck.imported ? [Color.lerp(first, const Color(0xFFFFFFFF), 0.12)!, first] : const [Color(0xFF3A3A3C), Color(0xFF1C1C1E)],
@@ -1373,7 +1387,7 @@ class _LabCoursesViewState extends State<LabCoursesView> {
       ],
       art: _fan(colors),
     );
-    if (!deck.imported) return card;
+    if (!deck.imported || deck.official) return card;
     return GestureDetector(key: Key('lab.courses.menu.${course.id}'), onLongPress: () => _remove(course), child: card);
   }
 
@@ -1478,7 +1492,15 @@ class _LabCoursesViewState extends State<LabCoursesView> {
     if (_courses.owned(course, store)) return null;
     final item = course.item == null ? null : store.shop.item(course.item!);
     final price = item?.price;
-    if (item == null || price == null) return null;
+    if (item == null || price == null) {
+      // The shop list is not here yet, or no longer sells the course.
+      final text = switch (store.shopState) {
+        LabShopState.loading => 'lab.shop.loading',
+        LabShopState.newer => 'lab.shop.newer',
+        _ => 'lab.shop.failed',
+      };
+      return Text(L10n.text(text), style: LabFont.text(13, weight: FontWeight.w600, color: const Color(0xD9FFFFFF)));
+    }
     final state = store.canBuy(item);
     const white = Color(0xFFFFFFFF);
     final key = Key(course.id == LearningCourse.tagsID ? 'lab.2d.buy' : 'lab.courses.buy.${course.id}');

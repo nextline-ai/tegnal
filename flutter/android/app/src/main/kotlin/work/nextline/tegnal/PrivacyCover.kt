@@ -3,6 +3,7 @@ package work.nextline.tegnal
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.ActivityManager
+import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.os.Build
 import android.provider.Settings
@@ -13,6 +14,8 @@ import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.io.File
 
 /**
  * The native app's `PrivacyCoverManager`: the home scene's blurred still over the whole window,
@@ -24,6 +27,8 @@ class PrivacyCover(private val activity: Activity) {
     private val decor: ViewGroup? get() = activity.window.decorView as? ViewGroup
     private val dusk: Int get() = ContextCompat.getColor(activity, R.color.home_dusk)
     private var cover: FrameLayout? = null
+    private var picture: ImageView? = null
+    private var stillKey: String? = null
     private var hiding = false
     private var generation = 0
     private var hiddenContent: View? = null
@@ -49,12 +54,20 @@ class PrivacyCover(private val activity: Activity) {
         }
     }
 
-    /** Covers the window right away, keeping it until [hide]. */
-    fun show() {
+    /**
+     * Covers the window right away, keeping it until [hide]. At [launch] the cover is plain black, as the system launch screen
+     * is, so every home scene can fade in from it; later it is the chosen home scene's blurred still.
+     */
+    fun show(launch: Boolean = false) {
         val root = decor ?: return
         generation++
         hiding = false
         val view = cover ?: makeCover().also { cover = it }
+        view.setBackgroundColor(if (launch) ContextCompat.getColor(activity, R.color.launch_black) else dusk)
+        picture?.let { image ->
+            image.visibility = if (launch) View.GONE else View.VISIBLE
+            if (!launch) showStill(image)
+        }
         view.animate().cancel()
         view.alpha = 1f
         view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
@@ -94,7 +107,7 @@ class PrivacyCover(private val activity: Activity) {
             .start()
     }
 
-    /** The dusk colour with the still over it, framed as the home scene frames it. */
+    /** The dusk colour with the still over it, framed as the home scene frames it (black alone at launch). */
     private fun makeCover(): FrameLayout = FrameLayout(activity).apply {
         setBackgroundColor(dusk)
         // The cover takes every touch, so nothing under it can be pressed while it is shown.
@@ -102,14 +115,39 @@ class PrivacyCover(private val activity: Activity) {
         isFocusable = false
         contentDescription = "TEGNAL"
         setOnTouchListener { _, _ -> true }
-        val picture = ImageView(activity).apply {
+        val image = ImageView(activity).apply {
             setImageResource(R.drawable.home_blur)
             scaleType = ImageView.ScaleType.MATRIX
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
+        picture = image
         // The matrix follows every layout change: rotation, split screen, a resized window.
-        picture.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> frame(v as ImageView) }
-        addView(picture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        image.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> frame(v as ImageView) }
+        addView(image, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    /** The still of the home scene chosen in the shop (`HomeScenes` in `lab_goods.dart`), else the app's own. */
+    private fun showStill(image: ImageView) {
+        val chosen = try {
+            val root = File(activity.filesDir, "HomeScenes")
+            val item = File(root, "chosen.txt").takeIf { it.isFile }?.readText()?.trim().orEmpty()
+            if (item.isEmpty()) {
+                null
+            } else {
+                val scene = JSONObject(File(root, "$item/scene.json").readText())
+                val name = scene.getJSONObject("files").getJSONArray("still").getString(0)
+                File(root, "$item/$name").takeIf { it.isFile }
+            }
+        } catch (_: Exception) {
+            null
+        }
+        // Decoded once per file: the cover goes up as the app leaves, when there is no time to spare.
+        val key = chosen?.let { "${it.path}:${it.lastModified()}" }
+        if (key == stillKey) return
+        stillKey = key
+        val bitmap = chosen?.let { BitmapFactory.decodeFile(it.path) }
+        if (bitmap != null) image.setImageBitmap(bitmap) else image.setImageResource(R.drawable.home_blur)
+        frame(image)
     }
 
     /**

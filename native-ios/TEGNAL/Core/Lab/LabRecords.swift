@@ -5,7 +5,7 @@ import GRDB
 ///
 /// Keys: `card:<episode>` and `fail:<id>` (engraved, hung; value = 보석 paid, or 1 when it paid nothing or was written before
 /// amounts were kept), `season:<number>`, `edition:<id>`, `lesson:<course>/<lesson>`, `stars:<course>/<lesson>` and
-/// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`), and `state:type`
+/// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`, plus `"each"` tickets for ticket goods), and `state:type`
 /// (text = type id), `state:greeted`, `state:legacyNoticed`, `state:seenEdition` (text).
 /// Merging two devices keeps the larger value and the earlier time, so nothing earned is lost.
 struct LabRecord: Equatable, Sendable {
@@ -82,9 +82,9 @@ extension LabProgress {
             case "season": seasonGems[id] = record.value
             case "lesson", "stars", "section": coursePaid[record.key] = record.value
             case "purchase":
-                struct Detail: Decodable { var price: Int }
+                struct Detail: Decodable { var price: Int; var each: Int? }
                 let detail = record.text.flatMap { try? JSONDecoder().decode(Detail.self, from: Data($0.utf8)) }
-                purchases[id] = LabPurchase(price: detail?.price ?? 0, count: record.value, date: record.at)
+                purchases[id] = LabPurchase(price: detail?.price ?? 0, count: record.value, date: record.at, each: detail?.each)
             case "state":
                 switch id {
                 case "type": type = record.text; diagnosed = record.at
@@ -107,7 +107,8 @@ extension LabProgress {
         for (id, paid) in seasonGems { list.append(LabRecord(key: "season:" + id, value: paid, at: Date(timeIntervalSince1970: 0))) }
         for (key, paid) in coursePaid { list.append(LabRecord(key: key, value: paid, at: Date(timeIntervalSince1970: 0))) }
         for (id, purchase) in purchases {
-            list.append(LabRecord(key: "purchase:" + id, value: purchase.count, text: "{\"price\":\(purchase.price)}", at: purchase.date))
+            let each = purchase.each.map { ",\"each\":\($0)" } ?? ""
+            list.append(LabRecord(key: "purchase:" + id, value: purchase.count, text: "{\"price\":\(purchase.price)\(each)}", at: purchase.date))
         }
         if let type { list.append(LabRecord(key: "state:type", value: 1, text: type, at: diagnosed ?? Date(timeIntervalSince1970: 0))) }
         if greeted { list.append(LabRecord(key: "state:greeted", value: 1, at: Date(timeIntervalSince1970: 0))) }

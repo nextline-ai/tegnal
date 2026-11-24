@@ -55,8 +55,8 @@ class MainActivity : FlutterActivity() {
         LabSheetAlerts.take(intent)
         preferHighestRefreshRate()
         privacyCover.protectTaskSnapshot()
-        // The artwork covers the window from the start, as the native launch splash does.
-        privacyCover.show()
+        // Plain black covers the window from the start, as the system launch screen does; the home scene fades in from it.
+        privacyCover.show(launch = true)
     }
 
     override fun onNewIntent(intent: Intent) {

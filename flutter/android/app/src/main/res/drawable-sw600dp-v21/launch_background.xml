@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tablets and other wide screens show only the dusk colour, so the blurred still is not stretched. -->
+<!-- The launch window before Android 12: plain black, with no picture and no icon (user, 2026-11-24), so that every
+     home scene, the app's own or one bought in the shop, can fade in from it. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/home_dusk" />
+    <item android:drawable="@color/launch_black" />
 </layer-list>

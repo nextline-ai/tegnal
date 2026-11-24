@@ -31,7 +31,7 @@ import '../study/study_guide_view.dart';
 import '../study/study_tag_view.dart';
 import '../study/study_widgets.dart';
 import '../lab/creator_view.dart';
-import '../lab/lab_pages.dart';
+import '../lab/lab_shop_views.dart';
 import '../lab/lab_root.dart';
 import 'study_award_views.dart';
 import 'study_kit.dart';

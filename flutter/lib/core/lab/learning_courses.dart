@@ -20,7 +20,7 @@ import 'tag_course.dart';
 enum LearningEngine { deck, tags }
 
 class LearningCourse {
-  const LearningCourse({required this.id, required this.engine, this.item, this.deck, this.lessons, this.imported = false});
+  const LearningCourse({required this.id, required this.engine, this.item, this.deck, this.lessons, this.imported = false, this.official = false});
 
   static const labID = 'ai-lab';
   static const tagsID = '2d-ai';
@@ -39,6 +39,9 @@ class LearningCourse {
 
   /// Imported by the learner from a course file, rather than bundled.
   final bool imported;
+
+  /// Bought in the shop and downloaded from TEGNAL: it pays 보석, and no file may take its id.
+  final bool official;
 
   String get title => deck?.title ?? lessons?.title.resolved() ?? L10n.text('Tag Study');
 }
@@ -65,6 +68,9 @@ class LearningCourses extends ChangeNotifier {
   /// The app-wide catalog. The app attaches its folder at start-up.
   static final LearningCourses shared = LearningCourses();
 
+  /// Courses bought in the shop and downloaded, read from their files.
+  List<LearningCourse> official = const [];
+
   /// Imported courses, read from their files.
   List<LearningCourse> imported = const [];
 
@@ -78,7 +84,8 @@ class LearningCourses extends ChangeNotifier {
   void attach(Directory folder) {
     _folder = folder;
     final (courses, kept) = _load(folder);
-    imported = courses;
+    official = _loadOfficial(Directory('${folder.path}/shop'));
+    imported = [...courses.where((course) => !official.any((value) => value.id == course.id))];
     waiting = kept;
     notifyListeners();
   }
@@ -87,7 +94,7 @@ class LearningCourses extends ChangeNotifier {
   static const tags = LearningCourse(id: LearningCourse.tagsID, engine: LearningEngine.tags, item: LabStore.tagCourse);
   static List<LearningCourse> get bundled => [lab, tags];
 
-  List<LearningCourse> get all => [...bundled, ...imported];
+  List<LearningCourse> get all => [...bundled, ...official, ...imported];
 
   LearningCourse? course(String id) => all.where((course) => course.id == id).firstOrNull;
 
@@ -103,6 +110,7 @@ class LearningCourses extends ChangeNotifier {
   LearningCourse add(List<int> data) {
     try {
       final course = LabCourseFile.decode(data);
+      if (official.any((value) => value.id == course.id)) throw const LabCourseFileError.reserved();
       _keep(course.id, data);
       imported = [...imported.where((value) => value.id != course.id), course];
       waiting = [...waiting.where((value) => value.id != course.id)];
@@ -143,6 +151,56 @@ class LearningCourses extends ChangeNotifier {
   }
 
   static File _file(Directory folder, String id) => File('${folder.path}/$id.json');
+
+  // MARK: Courses from the shop
+
+  /// True when the course a shop item sells is on this device.
+  bool has(String item) => official.any((course) => course.item == item);
+
+  /// Keeps a course file the shop delivered for an item, already checked against the signed list. An imported course with the
+  /// same id is taken out of the way: the official one replaces it, and its records stay.
+  LearningCourse addOfficial(List<int> data, String item) {
+    final folder = _folder;
+    if (folder == null) throw const LabCourseFileError.reserved();
+    final course = _official(LabCourseFile.decode(data), item);
+    final shop = Directory('${folder.path}/shop')..createSync(recursive: true);
+    final target = File('${shop.path}/$item.json');
+    File('${target.path}.part')
+      ..writeAsBytesSync(data, flush: true)
+      ..renameSync(target.path);
+    if (imported.any((value) => value.id == course.id)) remove(course.id);
+    official = [...official.where((value) => value.item != item), course];
+    notifyListeners();
+    return course;
+  }
+
+  /// A course read from its file, as one sold by the shop.
+  static LearningCourse _official(LearningCourse course, String item) => LearningCourse(
+    id: course.id,
+    engine: course.engine,
+    item: item,
+    deck: course.deck?.asOfficial(),
+    lessons: course.lessons,
+    official: true,
+  );
+
+  static List<LearningCourse> _loadOfficial(Directory folder) {
+    if (!folder.existsSync()) return const [];
+    final files = folder.listSync().whereType<File>().where((file) => file.path.endsWith('.json')).toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    return [for (final file in files) ?_readOfficial(file)];
+  }
+
+  static LearningCourse? _readOfficial(File file) {
+    try {
+      final course = LabCourseFile.decode(file.readAsBytesSync());
+      if (LabCourseFile.reserved.contains(course.id)) return null;
+      final name = file.uri.pathSegments.last;
+      return _official(course, name.substring(0, name.length - 5));
+    } on Object {
+      return null;
+    }
+  }
 
   /// Reads the kept files, oldest first. A file this app is too old for waits; one that no longer passes the checks is left out.
   static (List<LearningCourse>, List<WaitingCourse>) _load(Directory folder) {

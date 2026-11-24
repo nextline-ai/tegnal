@@ -8,8 +8,27 @@ import XCTest
 final class LabTests: XCTestCase {
     private var course: LabCourse { LabCourse.bundled }
 
+    /// The shop list as it is published: its source, `docs/live/shop.json` (local only). Nil in a checkout without it.
+    static let liveShop: LabShop? = {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/live/shop.json")
+        return (try? Data(contentsOf: url)).flatMap { try? LabShop.decode($0) }
+    }()
+
+    /// A small list shaped like the published one, for checkouts without it.
+    static let fixtureShop = """
+        {"format": "tegnal-lab-shop", "schemaVersion": 1, "currency": {"ko": "보석", "en": "Gems"}, "sections": [
+          {"title": "코스", "items": [{"id": "course.tags", "kind": "course", "course": "2d-ai", "name": "2D AI 배우기", "price": 500}]},
+          {"title": "도구", "items": [{"id": "feature.prompt-analyzer", "kind": "feature", "feature": "prompt-analyzer", "name": "프롬프트 분석기", "price": 200, "requires": "course.tags"}]},
+          {"title": "생성권", "items": [{"id": "tickets.10", "kind": "ticket", "count": 10, "name": "생성권 10장", "price": 100, "repeat": true, "requires": "course.tags", "soon": true}]}
+        ]}
+        """
+
+    /// The published list where it is checked out, else the small one.
+    static let shop: LabShop = liveShop ?? (try! LabShop.decode(Data(fixtureShop.utf8)))
+
     private func store() -> LabStore {
-        LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: LabMemoryRecords(), edition: LabEdition.bundled)
+        LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: LabMemoryRecords(), edition: LabEdition.bundled)
     }
 
     // MARK: - Script files
@@ -142,7 +161,7 @@ final class LabTests: XCTestCase {
 
     /// The rules in `docs/features/gem-economy.md`, for every course there is.
     func testPricesFollowTheAgreedRules() throws {
-        let shop = LabShop.bundled
+        guard let shop = Self.liveShop else { throw XCTSkip("docs/live/shop.json, the list these rules are checked on, is local only") }
         // Season 1's cards and its season pay for the first course, without a single 망작.
         let seasonOne = course.seasons[0].episodes.compactMap(course.episode).reduce(0) { $0 + $1.reward } + course.info.rewards.season
         let course2D = try XCTUnwrap(shop.item(LabStore.tagCourse)?.price)
@@ -153,12 +172,32 @@ final class LabTests: XCTestCase {
         let share = Double(shop.permanentTotal) / Double(labPayout + tagPayout)
         XCTAssertTrue((0.5...0.7).contains(share), "What lasts costs \(Int(share * 100))% of all courses")
         XCTAssertLessThan(labPayout, shop.permanentTotal, "The free course alone does not buy everything")
+        // What the app sells offline costs what the published list asks.
+        for item in LabShop.builtIn.items {
+            XCTAssertEqual(item.price, shop.item(item.id)?.price, "\(item.id): the app's offline price matches docs/live/shop.json")
+            XCTAssertTrue(item.supported, item.id)
+        }
+    }
+
+    /// Offline, with no list ever read, the course the app carries and the prompt analyzer can still be bought.
+    func testTheAppsOwnGoodsCanBeBoughtOffline() async throws {
+        let store = LabStore(course: .bundled, shop: nil, diagnosis: .bundled, records: LabMemoryRecords(), edition: nil)
+        var market = AddonMarket(base: AddonMarket.liveBase, publicKey: P256.Signing.PrivateKey().publicKey)
+        market.fetch = { _, _ in throw AddonMarketError.offline }
+        await store.refreshShop(market: market)
+        XCTAssertEqual(store.shopState, .failed)
+        for episode in course.episodes.prefix(4) { store.engrave(episode, failsHung: 0) }
+        XCTAssertEqual(store.buy(try XCTUnwrap(store.shop.item(LabStore.tagCourse))), .bought)
+        for episode in course.episodes.dropFirst(4).prefix(2) { store.engrave(episode, failsHung: 0) }
+        XCTAssertEqual(store.buy(try XCTUnwrap(store.shop.item(LabFeature.promptAnalyzer.item))), .bought)
+        XCTAssertTrue(store.unlocked(.promptAnalyzer))
+        XCTAssertEqual(store.progress.purchases[LabFeature.promptAnalyzer.item]?.price, 200)
     }
 
     /// What a card, a 망작 or a season paid stays paid when the course files change their amounts later.
     func testAmountsPaidAreKeptWhenTheFilesChangeLater() throws {
         let records = LabMemoryRecords()
-        let first = LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: records, edition: nil)
+        let first = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
         var last: LabEngraving?
         for id in ["ep01", "ep02", "ep03", "ep04"] { last = first.engrave(course.episode(id)!, failsHung: 0) }
         XCTAssertEqual(last?.seasonReward, course.info.rewards.season, "The card that finishes a season pays for it")
@@ -169,7 +208,7 @@ final class LabTests: XCTestCase {
         var info = course.info
         info.rewards = LabRewards(fail: 2, edition: 2, season: 2, courseLesson: 2)
         let cheaper = LabCourse(info: info, episodes: course.episodes.map { var episode = $0; episode.reward = 3; return episode })
-        let later = LabStore(course: cheaper, shop: .bundled, diagnosis: .bundled, records: records, edition: nil)
+        let later = LabStore(course: cheaper, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
         XCTAssertEqual(later.balance, balance, "Nothing already earned moves")
         later.engrave(cheaper.episode("ep05")!, failsHung: 0)
         XCTAssertEqual(later.balance, balance + 3, "What is earned from now on pays the new amount")
@@ -179,7 +218,7 @@ final class LabTests: XCTestCase {
     func testOlderRecordsCountAtThePresentAmount() {
         let progress = LabProgress(records: [LabRecord(key: "card:ep01", value: 1, at: Date(timeIntervalSince1970: 10))])
         XCTAssertNil(progress.cardGems["ep01"])
-        let store = LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: { let r = LabMemoryRecords(); try? r.replace(with: progress.records); return r }(), edition: nil)
+        let store = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: { let r = LabMemoryRecords(); try? r.replace(with: progress.records); return r }(), edition: nil)
         XCTAssertEqual(store.balance, course.episode("ep01")!.reward)
     }
 
@@ -244,6 +283,244 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(store.canBuy(soon), .unavailable)
     }
 
+    // MARK: - The shop from the server
+
+    /// A list signed with a key made for the test, in the envelope the server publishes.
+    private func signed(_ json: String, key: P256.Signing.PrivateKey) throws -> Data {
+        let payload = Data(json.utf8)
+        let signature = try key.signature(for: payload).derRepresentation
+        return try JSONEncoder().encode(["payload": payload.base64EncodedString(), "signature": signature.base64EncodedString()])
+    }
+
+    func testTheShopListIsReadOnlyWhenTEGNALSignedIt() throws {
+        let key = P256.Signing.PrivateKey(), other = P256.Signing.PrivateKey()
+        let (shop, payload) = try LabShopSource.open(signed(Self.fixtureShop, key: key), key: key.publicKey)
+        XCTAssertEqual(shop.items.map(\.id), ["course.tags", "feature.prompt-analyzer", "tickets.10"])
+        XCTAssertEqual(payload, Data(Self.fixtureShop.utf8), "What is kept is the list's own bytes")
+        XCTAssertThrowsError(try LabShopSource.open(signed(Self.fixtureShop, key: other), key: key.publicKey)) { XCTAssertEqual($0 as? LabShopError, .unsigned) }
+        let newer = Self.fixtureShop.replacingOccurrences(of: "\"schemaVersion\": 1", with: "\"schemaVersion\": 2")
+        XCTAssertThrowsError(try LabShopSource.open(signed(newer, key: key), key: key.publicKey)) { XCTAssertEqual($0 as? LabShopError, .newer, "A list for a later app asks for an update") }
+        XCTAssertThrowsError(try LabShop.decode(Data(#"{"format": "tegnal-addon-catalog", "schemaVersion": 1}"#.utf8)))
+    }
+
+    func testTheStoreShowsTheListItReadAndKeepsItWhenTheServerFails() async throws {
+        let key = P256.Signing.PrivateKey()
+        let store = LabStore(course: .bundled, shop: nil, diagnosis: .bundled, records: LabMemoryRecords(), edition: nil)
+        XCTAssertEqual(store.shopState, .loading)
+        XCTAssertEqual(store.shop.items.map(\.id), ["course.tags", "feature.prompt-analyzer"], "Before the list is read, only the goods the app carries")
+        let file = try signed(Self.fixtureShop, key: key)
+        var market = AddonMarket(base: AddonMarket.liveBase, publicKey: key.publicKey)
+        market.fetch = { _, _ in file }
+        await store.refreshShop(market: market)
+        XCTAssertEqual(store.shopState, .ready)
+        XCTAssertNotNil(store.shop.item("feature.prompt-analyzer"))
+        market.fetch = { _, _ in throw AddonMarketError.offline }
+        await store.refreshShop(market: market)
+        XCTAssertEqual(store.shopState, .ready, "A list already read stays when the server cannot be reached")
+        XCTAssertNotNil(store.shop.item("course.tags"))
+        let newer = try signed(Self.fixtureShop.replacingOccurrences(of: "\"schemaVersion\": 1", with: "\"schemaVersion\": 2"), key: key)
+        market.fetch = { _, _ in newer }
+        await store.refreshShop(market: market)
+        XCTAssertEqual(store.shopState, .newer)
+        XCTAssertEqual(store.shop.items.map(\.id), LabShop.builtIn.items.map(\.id), "An old list is not sold from once a newer one is out; the app's own goods are")
+    }
+
+    /// Goods of a kind, a version or a feature this app does not know are shown, and ask for an update instead of a price.
+    func testGoodsThisAppDoesNotKnowAskForAnUpdate() throws {
+        let json = """
+            {"format": "tegnal-lab-shop", "schemaVersion": 1, "currency": "보석", "sections": [{"title": "새 상품", "items": [
+              {"id": "sticker.cat", "kind": "sticker", "name": "고양이 스티커", "price": 10, "sticker": {"shape": "round"}},
+              {"id": "feature.prompt-analyzer", "kind": "feature", "version": 2, "feature": "prompt-analyzer", "name": "새 분석기", "price": 10},
+              {"id": "feature.voice", "kind": "feature", "feature": "voice", "name": "음성", "price": 10},
+              {"id": "feature.other", "kind": "feature", "feature": "prompt-analyzer", "name": "다른 ID", "price": 10},
+              {"id": "home.broken", "kind": "home", "name": "파일 없는 홈", "price": 10},
+              {"id": "BAD ID", "kind": "feature", "name": "모양이 틀림"},
+              {"id": "tickets.5", "kind": "ticket", "count": 5, "name": "생성권", "price": 10, "repeat": true}
+            ]}]}
+            """
+        let shop = try LabShop.decode(Data(json.utf8))
+        XCTAssertEqual(shop.items.map(\.id), ["sticker.cat", "feature.prompt-analyzer", "feature.voice", "feature.other", "home.broken", "tickets.5"],
+                       "An item not shaped like one is left out; the others stay")
+        let store = LabStore(course: .bundled, shop: shop, diagnosis: .bundled, records: LabMemoryRecords(), edition: nil)
+        for id in ["sticker.cat", "feature.prompt-analyzer", "feature.voice", "feature.other", "home.broken"] {
+            XCTAssertFalse(shop.item(id)!.supported, id)
+            XCTAssertEqual(store.canBuy(shop.item(id)!), .update, id)
+        }
+        XCTAssertTrue(shop.item("tickets.5")!.supported)
+    }
+
+    /// What `docs/live/publish_live.py` signs opens with the key the app carries (local only).
+    func testTheSignedListsInTheDocsFolderOpenWithTheLiveKey() throws {
+        let dist = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/live/dist/v1")
+        guard let shop = try? Data(contentsOf: dist.appendingPathComponent("lab/shop.json")) else { throw XCTSkip("docs/live/dist is local only") }
+        let (list, _) = try LabShopSource.open(shop, key: AddonMarket.live.publicKey)
+        XCTAssertNotNil(list.item(LabStore.tagCourse))
+        XCTAssertTrue(list.items.allSatisfy(\.supported), "Everything published is something this app knows")
+        if let notice = try? Data(contentsOf: dist.appendingPathComponent("app/notice.json")) {
+            XCTAssertNoThrow(try AppNotice.decode(LabSigned.payload(notice, key: AddonMarket.live.publicKey, limit: AppNotice.maximumBytes)))
+        }
+    }
+
+    /// An item's picture is a file the list names exactly, small enough; anything else is left out and its symbol shows.
+    func testAnItemsPictureIsReadOnlyWhenItIsAProperFile() throws {
+        func item(_ image: String) throws -> LabShopItem {
+            try JSONDecoder().decode(LabShopItem.self, from: Data(#"{"id": "home.dusk", "kind": "home", "name": "노을", "soon": true, "image": \#(image)}"#.utf8))
+        }
+        let good = try item(#"{"path": "goods/home.dusk/0123abcd-card.jpg", "size": 1000, "sha256": "\#(String(repeating: "a", count: 64))"}"#)
+        XCTAssertEqual(good.image?.path, "goods/home.dusk/0123abcd-card.jpg")
+        XCTAssertNil(try item(#"{"path": "../x.jpg", "size": 1000, "sha256": "\#(String(repeating: "a", count: 64))"}"#).image)
+        XCTAssertNil(try item(#"{"path": "goods/a.jpg", "size": 3000000, "sha256": "\#(String(repeating: "a", count: 64))"}"#).image, "Larger than 2 MB")
+        XCTAssertNil(try item(#""goods/a.jpg""#).image, "A local path is only for the source list")
+        XCTAssertTrue(try item(#""goods/a.jpg""#).supported, "A picture never stops an item from being sold")
+    }
+
+    /// The prompt analyzer is sold for 보석 once 2D AI 배우기 is owned, and stays open from the records alone.
+    func testThePromptAnalyzerNeedsTheTagCourseAndStaysOpenWithoutTheList() throws {
+        let records = LabMemoryRecords()
+        let store = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
+        let analyzer = try XCTUnwrap(store.shop.item(LabFeature.promptAnalyzer.item))
+        XCTAssertEqual(analyzer.requires, LabStore.tagCourse)
+        XCTAssertFalse(store.unlocked(.promptAnalyzer))
+        XCTAssertEqual(store.canBuy(analyzer), .needs(LabStore.tagCourse))
+        for episode in course.episodes { store.engrave(episode, failsHung: 0) }
+        XCTAssertEqual(store.buy(store.shop.item(LabStore.tagCourse)!), .bought)
+        XCTAssertEqual(store.buy(analyzer), .bought)
+        XCTAssertTrue(store.unlocked(.promptAnalyzer))
+        XCTAssertEqual(store.canBuy(analyzer), .owned)
+        let later = LabStore(course: .bundled, shop: nil, diagnosis: .bundled, records: records, edition: nil)
+        XCTAssertTrue(later.unlocked(.promptAnalyzer), "What was bought opens without the shop list")
+    }
+
+    func testTicketsCountWhatEachPurchaseBrought() throws {
+        let store = store()
+        var tickets = try XCTUnwrap(store.shop.items.first { $0.kind == "ticket" })
+        tickets.soon = false
+        tickets.count = 10
+        for episode in course.episodes { store.engrave(episode, failsHung: 0) }
+        store.buy(store.shop.item(LabStore.tagCourse)!)
+        XCTAssertEqual(store.buy(tickets), .bought)
+        XCTAssertEqual(store.buy(tickets), .bought)
+        XCTAssertEqual(store.tickets, 20)
+        XCTAssertEqual(LabProgress(records: store.progress.records).purchases[tickets.id]?.each, 10, "Kept in the records")
+    }
+
+    /// A course bought in the shop keeps its records under its own id like an imported one, but pays like the AI lab.
+    func testACourseFromTheShopPays() throws {
+        let store = store()
+        var official = try XCTUnwrap(LabCourseFile.decode(Self.courseFile { $0["rewards"] = ["fail": 20, "season": 100] }).deck)
+        official.official = true
+        store.show(course: official)
+        XCTAssertTrue(store.pays)
+        let first = store.engrave(official.episodes[0], failsHung: 0)
+        XCTAssertEqual(first.cardReward, 999)
+        XCTAssertTrue(store.hang(official.fails[0]))
+        let second = store.engrave(official.episodes[1], failsHung: 0)
+        XCTAssertEqual(second.seasonReward, 100, "Its season pays too")
+        XCTAssertEqual(store.balance, 999 * 2 + 20 + 100)
+        XCTAssertEqual(LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: { let r = LabMemoryRecords(); try? r.replace(with: store.progress.records); return r }(), edition: nil).balance,
+                       store.balance, "Read back from the records")
+        XCTAssertNil(store.progress.seasonGems["1"], "The AI lab's season 1 is untouched")
+    }
+
+    func testTheCatalogKeepsCoursesFromTheShopApartFromImportedOnes() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let catalog = LearningCourses(folder: folder)
+        try catalog.add(data: Self.courseFile())
+        let course = try catalog.addOfficial(data: Self.courseFile(), item: "course.prompt-basics")
+        XCTAssertTrue(course.official)
+        XCTAssertEqual(course.item, "course.prompt-basics")
+        XCTAssertTrue(course.deck?.official ?? false)
+        XCTAssertEqual(catalog.all.map(\.id), [LearningCourse.labID, LearningCourse.tagsID, "maker.prompt-basics"], "The official copy replaces the imported one")
+        XCTAssertTrue(catalog.has(item: "course.prompt-basics"))
+        XCTAssertThrowsError(try catalog.add(data: Self.courseFile()), "A file cannot take an official course's id") {
+            XCTAssertEqual($0 as? LabCourseFileError, .reserved)
+        }
+        let reread = LearningCourses(folder: folder)
+        XCTAssertEqual(reread.official.map(\.item), ["course.prompt-basics"])
+        XCTAssertTrue(reread.imported.isEmpty)
+    }
+
+    /// Goods are downloaded only as exactly the files the signed list names.
+    func testGoodsAreCheckedAgainstTheList() async throws {
+        let data = Data("film".utf8)
+        let file = LabShopFile(path: "goods/home.test/loop.mp4", size: data.count, sha256: LabCourseFile.digest(data))
+        let goods = LabGoods()
+        goods.market.fetch = { url, _ in
+            XCTAssertEqual(url.absoluteString, "https://addons.nextline.work/v1/goods/home.test/loop.mp4")
+            return data
+        }
+        let downloaded = try await goods.download(file)
+        XCTAssertEqual(downloaded, data)
+        goods.market.fetch = { _, _ in Data("fake".utf8) }
+        do { _ = try await goods.download(file); XCTFail("A different file is refused") } catch { XCTAssertEqual(error as? AddonMarketError, .damaged) }
+        for path in ["../etc/passwd", "/goods/a", "goods//a", "goods/한글", ""] {
+            XCTAssertFalse(LabShopFile(path: path, size: 1, sha256: file.sha256).valid, path)
+        }
+    }
+
+    func testHomeScenesAreKeptAndChosen() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let (savedRoot, savedDefaults) = (HomeScenes.root, HomeScenes.defaults)
+        HomeScenes.root = root; HomeScenes.defaults = defaults
+        defer { HomeScenes.root = savedRoot; HomeScenes.defaults = savedDefaults; try? FileManager.default.removeItem(at: root) }
+        func file(_ name: String, _ data: Data) -> LabShopFile { LabShopFile(path: "goods/home.test/" + name, size: data.count, sha256: LabCourseFile.digest(data)) }
+        let films = ["intro": Data("intro".utf8), "loop": Data("loop".utf8), "still": Data("still".utf8)]
+        let home = LabShopHome(intro: file("intro.mp4", films["intro"]!), loop: file("loop.mp4", films["loop"]!), still: file("still.jpg", films["still"]!),
+                               theme: nil, palette: ["sky": "102030"])
+        XCTAssertTrue(home.valid)
+        XCTAssertFalse(HomeScenes.has("home.test", home))
+        try HomeScenes.keep("home.test", home: home, files: films)
+        XCTAssertTrue(HomeScenes.has("home.test", home))
+        XCTAssertNil(HomeScenes.url("loop"), "Kept is not chosen")
+        HomeScenes.choose("home.test")
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(HomeScenes.url("loop"))), films["loop"])
+        XCTAssertNil(HomeScenes.url("theme"), "No music of its own: the app's plays")
+        XCTAssertEqual(HomeScenes.color("sky"), 0x102030)
+        XCTAssertNil(HomeScenes.color("ground"))
+        var newer = home
+        newer.loop = file("loop.mp4", Data("loop 2".utf8))
+        XCTAssertFalse(HomeScenes.has("home.test", newer), "A new version of a file is downloaded again")
+        HomeScenes.choose(nil)
+        XCTAssertNil(HomeScenes.url("loop"))
+    }
+
+    // MARK: - Update notice
+
+    func testAnUpdateNoticeShowsOnlyOnOlderBuildsAndARecommendedOneCanBePutOff() throws {
+        let json = """
+            {"format": "tegnal-app-notice", "schemaVersion": 1, "id": "n1", "level": "recommended", "title": "업데이트", "message": "새 버전",
+             "ios": {"below": 50, "url": "https://apps.apple.com/app/id6825935560"}}
+            """
+        let notice = try AppNotice.decode(Data(json.utf8))
+        XCTAssertTrue(notice.applies(to: 49))
+        XCTAssertFalse(notice.applies(to: 50))
+        XCTAssertThrowsError(try AppNotice.decode(Data(json.replacingOccurrences(of: "\"schemaVersion\": 1", with: "\"schemaVersion\": 2").utf8)))
+        XCTAssertThrowsError(try AppNotice.decode(Data(json.replacingOccurrences(of: "recommended", with: "someday").utf8)))
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let old = AppNotices(defaults: defaults, build: 49) { Data() }
+        old.show(notice)
+        XCTAssertEqual(old.current, notice)
+        old.putOff()
+        XCTAssertNil(old.current)
+        old.show(notice)
+        XCTAssertNil(old.current, "Put off once, not shown again")
+        var urgent = notice
+        urgent.id = "n2"; urgent.level = .required
+        old.show(urgent)
+        old.putOff()
+        XCTAssertEqual(old.current, urgent, "A required notice cannot be put off")
+        let current = AppNotices(defaults: defaults, build: 50) { Data() }
+        current.show(urgent)
+        XCTAssertNil(current.current, "Builds that are new enough see nothing")
+        var android = urgent
+        android.ios = nil
+        old.show(android)
+        XCTAssertNil(old.current, "A notice for the other platform only")
+    }
+
     // MARK: - Diagnosis
 
     func testTheDiagnosisPicksTheTypeMostAnswersPointTo() throws {
@@ -261,11 +538,11 @@ final class LabTests: XCTestCase {
     /// Records are kept in the image database, so sync and backups carry them; reading them back gives the same progress.
     func testProgressIsSavedInTheImageDatabaseAndReadBack() throws {
         let booru = try BooruStore()
-        let first = LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: LabDatabaseRecords(database: booru.database), edition: nil)
+        let first = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: LabDatabaseRecords(database: booru.database), edition: nil)
         first.engrave(course.episode("ep01")!, failsHung: 0)
         first.hang(course.fails[0])
         first.diagnose(try XCTUnwrap(first.diagnosis?.types.first))
-        let second = LabStore(course: .bundled, shop: .bundled, diagnosis: .bundled, records: LabDatabaseRecords(database: booru.database), edition: nil)
+        let second = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: LabDatabaseRecords(database: booru.database), edition: nil)
         XCTAssertTrue(second.earned(course.episode("ep01")!))
         XCTAssertTrue(second.hung(course.fails[0]))
         XCTAssertEqual(second.progress.type, first.progress.type)

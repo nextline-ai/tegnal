@@ -66,7 +66,7 @@ struct LabEpisodeView: View {
     /// After the card is put in the deck: the 보석 it paid on a page of their own, then the season's page when this card finished
     /// it, else back to the deck.
     private func closeEngraving() {
-        if (engraving?.total ?? 0) > 0, !store.course.imported {
+        if (engraving?.total ?? 0) > 0, store.pays {
             withAnimation(.easeInOut(duration: 0.45)) { phase = .gems }
         } else {
             closeGems()
@@ -325,7 +325,7 @@ struct LabEngraveView: View {
             .rowPadding()
             .accessibilityElement(children: .combine).accessibilityIdentifier("lab.engrave.rate")
             // An imported course pays no 보석, so it has no row for it.
-            if !store.course.imported {
+            if store.pays {
                 Divider()
                 // What paid; the balance climbs on the page that follows.
                 HStack {

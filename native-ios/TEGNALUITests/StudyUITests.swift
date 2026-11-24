@@ -323,13 +323,35 @@ final class StudyUITests: XCTestCase {
         XCTAssertTrue(element(app, "generator.removeKey").waitForExistence(timeout: 5))
     }
 
-    func testAPictureOpensAsAPromptWithItsTagsInPromptOrder() {
-        let app = launch(mode: false)
+    /// A required update notice covers the app and cannot be put away.
+    func testARequiredUpdateNoticeStaysOverTheApp() {
+        let app = launch(mode: false, extra: ["--app-notice=required"])
+        XCTAssertTrue(element(app, "notice.title").waitForExistence(timeout: 15))
+        XCTAssertTrue(element(app, "notice.update").exists)
+        app.swipeDown(velocity: .fast)
+        XCTAssertTrue(element(app, "notice.title").waitForExistence(timeout: 2), "It cannot be swiped away")
+    }
+
+    /// The prompt analyzer is sold in the lab's shop: the first tap offers it, and once bought it opens the picture as a prompt.
+    func testThePromptAnalyzerIsBoughtThenOpensAPictureAsAPromptInPromptOrder() throws {
+        let list = FileManager.default.temporaryDirectory.appending(path: "shop-\(UUID().uuidString).json")
+        try Data("""
+            {"format": "tegnal-lab-shop", "schemaVersion": 1, "currency": "Gems", "sections": [{"title": "Tools", "items": [
+              {"id": "feature.prompt-analyzer", "kind": "feature", "feature": "prompt-analyzer", "name": "Prompt Analyzer", "price": 200, "requires": "course.tags"}]}]}
+            """.utf8).write(to: list)
+        // A purchase from an earlier run would open the analyzer at once: start the lab's records over.
+        let app = launch(mode: false, extra: ["--lab-reset", "--lab-shop=\(list.path)", "--lab-income=1000"])
         tab(app, "Explore").tap()
         let post = element(app, "booru.post.101")
         XCTAssertTrue(post.waitForExistence(timeout: 10)); post.tap()
         openMenu(app); element(app, "booru.info").tap()
         reveal(app, "booru.prompt").tap()
+        let buy = element(app, "lab.shop.buy.feature.prompt-analyzer")
+        XCTAssertTrue(buy.waitForExistence(timeout: 5), "Not bought yet: the analyzer's page offers it for 보석")
+        XCTAssertFalse(element(app, "study.prompt").exists)
+        buy.tap()
+        XCTAssertTrue(element(app, "lab.shop.bought").waitForExistence(timeout: 5), "Bought on its page, with no second question")
+        element(app, "lab.shop.open.feature.prompt-analyzer").tap()
         let prompt = element(app, "study.prompt")
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         XCTAssertEqual(prompt.label, "scenery, mountain", "Artist names stay out unless asked for")
