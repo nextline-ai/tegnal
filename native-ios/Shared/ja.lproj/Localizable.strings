@@ -1267,6 +1267,11 @@
 /* Library maintenance and viewer feedback */
 "Removed from Tags" = "タグの保存を解除しました";
 "Remove Saved Tag" = "タグの保存を解除";
+"Copy Tag" = "タグをコピー";
+"Exclude from Searches" = "検索から除外";
+"Include in Searches" = "検索の除外を解除";
+"Excluded from Searches" = "検索から除外しました";
+"Included in Searches" = "検索の除外を解除しました";
 "Reset Settings to Defaults" = "設定を初期値に戻す";
 "Reset Settings to Defaults?" = "設定を初期値に戻しますか？";
 "Resets this mode’s viewer options. Saved works and reading progress are kept." = "このモードのビューア設定を初期化します。保存した作品と読書位置は残ります。";
@@ -1307,7 +1312,7 @@
 "Official Discord" = "公式Discord";
 
 /* Reader coach marks and information hints. */
-"Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "作品情報でタグや作家名を長押しすると、ここに保存できます。もう一度長押しすると保存を解除できます。";
+"Hold a tag or artist name in Work Information and save it from its menu to see it here." = "作品情報でタグや作家名を長押しし、メニューから保存するとここに表示されます。";
 "Turn Pages" = "ページ移動";
 "Step %@ of %@" = "%@ / %@ ステップ";
 "Start Reading" = "読み始める";
@@ -1501,7 +1506,7 @@
 "Today's picks" = "今日のおすすめ";
 "One each from your usual taste, recent interests and something new." = "いつもの好み、最近の関心、新しい発見から一つずつ選びました。";
 "Chosen from what you've been saving and viewing." = "保存や鑑賞した作品をもとに選びました。";
-"Hold an artist or tag to add it to your favorites. Hold it again to remove it." = "作家やタグを長押しするとお気に入りに追加されます。もう一度長押しすると解除されます。";
+"Hold an artist or tag to add it to your favorites, copy it or leave it out of searches." = "作家やタグを長押しすると、お気に入りへの追加、コピー、検索からの除外を選べます。";
 "No Works in This Language" = "この言語の作品はありません";
 "Show All Languages" = "すべての言語を表示";
 "Artist Works Language" = "作家の作品の言語";

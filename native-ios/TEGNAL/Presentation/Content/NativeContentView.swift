@@ -1327,7 +1327,9 @@ private struct GalleryDetailMetadata: View {
                 else {
                     FlowLayout(spacing: 6) {
                         ForEach(artists, id: \.self) { name in
-                            MangaArtistTag(name: name, favorite: isFavorite(name), search: search) { saveTag(name, kind: .artist) }
+                            MangaArtistTag(name: name, favorite: isFavorite(name), search: search,
+                                           excluded: excludedQueries.contains(AppEnvironment.excludedTagRule("artist:" + name).lowercased()),
+                                           exclude: { exclude("artist:" + name) }) { saveTag(name, kind: .artist) }
                         }
                     }
                 }
@@ -1339,7 +1341,8 @@ private struct GalleryDetailMetadata: View {
                         destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
                         action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
                         savedQueries: savedTagQueries,
-                        save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) })
+                        save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) },
+                        excludedQueries: excludedQueries, exclude: { exclude($0.query) })
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
@@ -1348,11 +1351,11 @@ private struct GalleryDetailMetadata: View {
                 else if let search {
                     Button { search("language:" + gallery.language.replacingOccurrences(of: " ", with: "_")) } label: { languageTag }
                         .buttonStyle(.plain).accessibilityIdentifier("content.detail.language")
-                        .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(gallery.language, kind: .language) })
+                        .contextMenu { languageMenu }
                 } else {
                     NavigationLink(value: ContentRoute.query("language:" + gallery.language)) { languageTag }
                         .buttonStyle(.plain).accessibilityIdentifier("content.detail.language")
-                        .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(gallery.language, kind: .language) })
+                        .contextMenu { languageMenu }
                 }
                 // Other versions belong with the language, a step below it.
                 if let openVersion, !versions.isEmpty {
@@ -1370,13 +1373,14 @@ private struct GalleryDetailMetadata: View {
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
-                SettingsHelpLabel("Tags", help: "Hold an artist or tag to add it to your favorites. Hold it again to remove it.").font(.headline)
+                SettingsHelpLabel("Tags", help: "Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.").font(.headline)
                     .padding(.leading, GalleryDetailInset.label)
                 ArtworkTagCloud(groups: [tags], headingStyle: .hidden,
                     destination: search == nil ? { .query($0.query.replacingOccurrences(of: " ", with: "_")) } : nil,
                     action: { search?($0.query.replacingOccurrences(of: " ", with: "_")) },
                     savedQueries: savedTagQueries,
-                    save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) })
+                    save: { saveTag($0.query, kind: SavedCollectionKind(category: $0.category)) },
+                    excludedQueries: excludedQueries, exclude: { exclude($0.query) })
             }
             // Who put the work up, where the website says so. Searches for it differ from site to site, so it copies like the number.
             if let uploader = gallery.uploader?.trimmingCharacters(in: .whitespacesAndNewlines), !uploader.isEmpty {
@@ -1401,6 +1405,19 @@ private struct GalleryDetailMetadata: View {
         }.foregroundStyle(ArtworkTagCategory.language.color).modifier(ArtworkTagPill(color: ArtworkTagCategory.language.color))
     }
     private var languageSaved: Bool { savedTagQueries.contains(SavedCollectionKind.language.query(gallery.language, manga: true)) }
+    private var languageMenu: some View {
+        ArtworkTagMenu(copy: gallery.language, saved: languageSaved) { saveTag(gallery.language, kind: .language) }
+    }
+    /// Default Excluded Tags as the tags' menus compare them: lowercased, without a minus sign.
+    private var excludedQueries: Set<String> {
+        Set(env.defaultExcludedTags.split(whereSeparator: \.isWhitespace).map { term in
+            let term = term.lowercased()
+            return term.hasPrefix("-") ? String(term.dropFirst()) : term
+        })
+    }
+    private func exclude(_ tag: String) {
+        SavedTagFeedback.notifyExcluded(env.toggleExcludedMangaTag(tag))
+    }
     private var languageTag: some View {
         HStack(spacing: 4) {
             if languageSaved { SavedTagStar(font: .body) }
@@ -1493,13 +1510,19 @@ private struct MangaArtistTag: View {
     let name: String
     let favorite: Bool
     let search: ((String) -> Void)?
+    let excluded: Bool
+    let exclude: () -> Void
     let saveFavorite: () -> Void
     @ScaledMetric(relativeTo: .body) private var starRoom: CGFloat = 26
     var body: some View {
         link
             .buttonStyle(.plain)
             .layoutValue(key: FlowReservedWidth.self, value: favorite ? 0 : starRoom)
-            .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveFavorite() })
+            .contextMenu {
+                ArtworkTagMenu(copy: name.replacingOccurrences(of: "_", with: " "), saved: favorite,
+                               saveTitle: "Add to Artists", removeTitle: "Remove from Artists", save: saveFavorite,
+                               excluded: excluded, exclude: exclude)
+            }
             .accessibilityValue(L10n.text(favorite ? "Favorite Artist" : "Not a Favorite Artist"))
             .accessibilityAction(named: L10n.text(favorite ? "Remove from Artists" : "Add to Artists"), saveFavorite)
             .accessibilityIdentifier("content.detail.artist." + name)

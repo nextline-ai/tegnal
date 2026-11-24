@@ -472,12 +472,37 @@ public final class AppEnvironment: @unchecked Sendable {
     }
 
     func blockMangaArtist(_ name: String) {
-        let artist = name.split(whereSeparator: \.isWhitespace).joined(separator: "_")
-        guard !artist.isEmpty else { return }
-        let rule = "artist:" + artist
+        let artist = Self.excludedTagRule(name)
+        guard !artist.isEmpty, !excludesMangaTag("artist:" + artist) else { return }
+        toggleExcludedMangaTag("artist:" + artist)
+    }
+
+    /// Whether every comics search leaves out works with this tag, such as `female:big breasts` or `artist:name`.
+    func excludesMangaTag(_ tag: String) -> Bool {
+        let rule = Self.excludedTagRule(tag)
+        return !rule.isEmpty && defaultExcludedTags.split(whereSeparator: \.isWhitespace).contains { Self.sameExclusion(String($0), rule) }
+    }
+
+    /// Adds the tag to Default Excluded Tags, or takes it out again. Returns whether searches now leave it out.
+    @discardableResult func toggleExcludedMangaTag(_ tag: String) -> Bool {
+        let rule = Self.excludedTagRule(tag)
+        guard !rule.isEmpty else { return false }
         let existing = defaultExcludedTags.split(whereSeparator: \.isWhitespace).map(String.init)
-        guard !existing.contains(where: { $0.lowercased() == rule.lowercased() || $0.lowercased() == "-" + rule.lowercased() }) else { return }
+        if existing.contains(where: { Self.sameExclusion($0, rule) }) {
+            defaultExcludedTags = existing.filter { !Self.sameExclusion($0, rule) }.joined(separator: " ")
+            return false
+        }
         defaultExcludedTags = (existing + [rule]).joined(separator: " ")
+        return true
+    }
+
+    /// A tag as Default Excluded Tags writes it: underscores inside, no minus sign.
+    static func excludedTagRule(_ tag: String) -> String {
+        tag.split(whereSeparator: \.isWhitespace).joined(separator: "_")
+    }
+    private static func sameExclusion(_ term: String, _ rule: String) -> Bool {
+        let term = term.lowercased(), rule = rule.lowercased()
+        return term == rule || term == "-" + rule
     }
 
     @MainActor var taste: TasteController {

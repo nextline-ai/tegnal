@@ -838,9 +838,9 @@
  "Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you.": "Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you.",
  "Hint": "Hint",
  "Hold a folder to make it a smart folder. Smart folders show %@ after their name.": "Hold a folder to make it a smart folder. Smart folders show %@ after their name.",
- "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.": "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.",
+ "Hold a tag or artist name in Work Information and save it from its menu to see it here.": "Hold a tag or artist name in Work Information and save it from its menu to see it here.",
  "Hold a work in Explore and drag it down to the panel that appears.": "Hold a work in Explore and drag it down to the panel that appears.",
- "Hold an artist or tag to add it to your favorites. Hold it again to remove it.": "Hold an artist or tag to add it to your favorites. Hold it again to remove it.",
+ "Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.": "Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.",
  "Hold an artist tag in Work Information to add it to your favorite artists.": "Hold an artist tag in Work Information to add it to your favorite artists.",
  "Hold an image to save it, or choose Save to Folder from its menu.": "Hold an image to save it, or choose Save to Folder from its menu.",
  "Hold to Keep It Off": "Hold to Keep It Off",
@@ -2522,5 +2522,10 @@
  "lab.courses.waiting.kicker": "NEEDS AN UPDATE",
  "lab.courses.waiting.note": "Update TEGNAL to the latest version to open this course. It is kept here and opens as soon as the app is updated.",
  "lab.courses.lessonsDone": "Lessons done %1$@/%2$@",
- "lab.sheet.example": "For example: %@"
+ "lab.sheet.example": "For example: %@",
+ "Copy Tag": "Copy Tag",
+ "Exclude from Searches": "Exclude from Searches",
+ "Include in Searches": "Include in Searches",
+ "Excluded from Searches": "Excluded from Searches",
+ "Included in Searches": "Included in Searches"
 }

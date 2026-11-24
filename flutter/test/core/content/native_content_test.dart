@@ -98,6 +98,22 @@ void main() {
     expect(ContentEnvironment(browserPreferences: defaults).hiddenMangaGalleryIDs, isEmpty);
   });
 
+  test("a tag's menu excludes it from searches and takes it back out", () {
+    final defaults = MemoryPreferences();
+    final env = ContentEnvironment(browserPreferences: defaults);
+    env.defaultExcludedTags = 'tag:excluded -female:Big_Breasts';
+    expect(env.excludesMangaTag('female:big breasts'), isTrue, reason: 'A minus sign and letter case do not matter');
+    expect(env.toggleExcludedMangaTag('female:big breasts'), isFalse);
+    expect(env.defaultExcludedTags, 'tag:excluded');
+    expect(env.toggleExcludedMangaTag('male:sole male'), isTrue);
+    expect(ContentEnvironment(browserPreferences: defaults).defaultExcludedTags, 'tag:excluded male:sole_male');
+    expect(env.launchMangaQuery.text.contains('-male:sole_male'), isTrue);
+    env.blockMangaArtist('Sample Artist');
+    expect(env.excludesMangaTag('artist:sample artist'), isTrue);
+    expect(env.toggleExcludedMangaTag('artist:Sample Artist'), isFalse);
+    expect(env.defaultExcludedTags, 'tag:excluded male:sole_male');
+  });
+
   test('browser fallback is opt in and persists separately from legacy preference', () {
     final defaults = MemoryPreferences()..set('use_in_app_browser', true);
     final env = ContentEnvironment(browserPreferences: defaults);

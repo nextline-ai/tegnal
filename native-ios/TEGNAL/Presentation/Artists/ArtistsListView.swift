@@ -194,7 +194,7 @@ struct SavedCollectionsBrowser: View {
                         .accessibilityIdentifier(model.isManga ? "manga.saveTag" : "booru.saveTag")
                 }
             } header: { Text(L10n.text("Save a Tag or Artist")) }
-              footer: { Text(L10n.text("Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.")) }
+              footer: { Text(L10n.text("Hold a tag or artist name in Work Information and save it from its menu to see it here.")) }
         }.listStyle(.insetGrouped)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton().accessibilityIdentifier("collections.edit") } }
             .environment(\.editMode, $editMode)
@@ -375,6 +375,13 @@ extension SavedCollectionKind {
         WorkSaveFeedback.haptic(saved ? .added(.comics) : .removed(.comics))
         if UIAccessibility.isVoiceOverRunning {
             UIAccessibility.post(notification: .announcement, argument: L10n.text(saved ? "Saved to Tags" : "Removed from Tags"))
+        }
+    }
+    /// A tag added to Default Excluded Tags, or taken out of them, from its menu.
+    static func notifyExcluded(_ excluded: Bool) {
+        WorkSaveFeedback.haptic(excluded ? .added(.comics) : .removed(.comics))
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .announcement, argument: L10n.text(excluded ? "Excluded from Searches" : "Included in Searches"))
         }
     }
 }

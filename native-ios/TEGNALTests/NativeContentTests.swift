@@ -68,6 +68,24 @@ final class NativeContentTests: XCTestCase {
         XCTAssertTrue(AppEnvironment(database: database, browserPreferences: defaults).hiddenMangaGalleryIDs.isEmpty)
     }
 
+    @MainActor func testATagsMenuExcludesItFromSearchesAndTakesItBackOut() throws {
+        let name = "manga-tag-exclusion-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let env = AppEnvironment(database: try AppDatabase.inMemory(), browserPreferences: defaults)
+        env.defaultExcludedTags = "tag:excluded -female:Big_Breasts"
+        XCTAssertTrue(env.excludesMangaTag("female:big breasts"), "A minus sign and letter case do not matter")
+        XCTAssertFalse(env.toggleExcludedMangaTag("female:big breasts"))
+        XCTAssertEqual(env.defaultExcludedTags, "tag:excluded")
+        XCTAssertTrue(env.toggleExcludedMangaTag("male:sole male"))
+        XCTAssertEqual(AppEnvironment(database: try AppDatabase.inMemory(), browserPreferences: defaults).defaultExcludedTags, "tag:excluded male:sole_male")
+        XCTAssertTrue(env.launchMangaQuery.text.contains("-male:sole_male"))
+        env.blockMangaArtist("Sample Artist")
+        XCTAssertTrue(env.excludesMangaTag("artist:sample artist"))
+        XCTAssertFalse(env.toggleExcludedMangaTag("artist:Sample Artist"))
+        XCTAssertEqual(env.defaultExcludedTags, "tag:excluded male:sole_male")
+    }
+
     @MainActor func testBrowserFallbackIsOptInAndPersistsSeparatelyFromLegacyPreference() throws {
         let suite = "browser-preference-test-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

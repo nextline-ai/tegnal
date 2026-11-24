@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../settings/site_account_section.dart';
@@ -20,6 +21,8 @@ import '../../core/storage/app_database.dart';
 import '../../core/support/l10n.dart';
 import '../../domain/models.dart';
 import '../design/app_sheet.dart';
+import '../design/context_menu.dart';
+import '../design/pull_down_menu.dart' show anchorRectOf;
 import '../design/glass.dart';
 import '../design/grouped_form.dart';
 import '../design/symbols.dart';
@@ -814,9 +817,34 @@ Color artworkTagColor(ArtworkTagCategory category, BuildContext context) => swit
   ArtworkTagCategory.general => TegnalColors.label,
 }.resolveFrom(context);
 
+/// `ArtworkTagMenu`: what holding a tag in Work Information offers: saving it, copying it and,
+/// with [exclude], leaving it out of every search.
+List<ContextMenuAction> artworkTagMenu({
+  required String copy,
+  required bool saved,
+  String saveTitle = 'Save Tag',
+  String removeTitle = 'Remove Saved Tag',
+  required VoidCallback save,
+  bool excluded = false,
+  VoidCallback? exclude,
+}) => [
+  ContextMenuAction(title: L10n.text(saved ? removeTitle : saveTitle), icon: saved ? CupertinoIcons.star_slash : CupertinoIcons.star, onSelected: save),
+  ContextMenuAction(
+    title: L10n.text('Copy Tag'),
+    icon: CupertinoIcons.doc_on_doc,
+    onSelected: () => Clipboard.setData(ClipboardData(text: copy)),
+  ),
+  if (exclude != null)
+    ContextMenuAction(
+      title: L10n.text(excluded ? 'Include in Searches' : 'Exclude from Searches'),
+      icon: excluded ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+      onSelected: exclude,
+    ),
+];
+
 /// `ArtworkTagPill`: body text in a capsule tinted 12% with the tag's color.
 class ArtworkTagPill extends StatelessWidget {
-  const ArtworkTagPill({super.key, required this.color, required this.child, this.onTap, this.onLongPress, this.starred = false, this.hint});
+  const ArtworkTagPill({super.key, required this.color, required this.child, this.onTap, this.onLongPress, this.menu, this.starred = false, this.hint});
   final Color color;
 
   /// Read after the label: the tag itself when the pill shows an add-on's translation of it.
@@ -824,30 +852,46 @@ class ArtworkTagPill extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
+  /// When set, holding the pill lifts it and opens these actions, as the native `contextMenu` does.
+  final List<ContextMenuAction> Function()? menu;
   final bool starred;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    hint: hint,
-    child: GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: AnimatedScale(
-        scale: 1,
-        duration: const Duration(milliseconds: 320),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: ShapeDecoration(color: color.withValues(alpha: 0.12), shape: const StadiumBorder()),
-          child: DefaultTextStyle(
-            style: TegnalType.style(17, color: color),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (starred) ...[Icon(Symbols.starFill, size: 15, color: CupertinoColors.systemYellow.resolveFrom(context)), const SizedBox(width: 4)],
-                child,
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) {
+    final pill = _pill(context);
+    return Semantics(
+      hint: hint,
+      customSemanticsActions: menu == null
+          ? null
+          : {
+              for (final action in menu!())
+                if (action.onSelected != null) CustomSemanticsAction(label: action.title): action.onSelected!,
+            },
+      child: Builder(
+        builder: (pillContext) => GestureDetector(
+          onTap: onTap,
+          onLongPress: menu == null ? onLongPress : () => showContextMenu(pillContext, anchor: anchorRectOf(pillContext), actions: menu!(), child: pill),
+          child: pill,
+        ),
+      ),
+    );
+  }
+
+  Widget _pill(BuildContext context) => AnimatedScale(
+    scale: 1,
+    duration: const Duration(milliseconds: 320),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: ShapeDecoration(color: color.withValues(alpha: 0.12), shape: const StadiumBorder()),
+      child: DefaultTextStyle(
+        style: TegnalType.style(17, color: color),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (starred) ...[Icon(Symbols.starFill, size: 15, color: CupertinoColors.systemYellow.resolveFrom(context)), const SizedBox(width: 4)],
+            child,
+          ],
         ),
       ),
     ),
@@ -925,7 +969,15 @@ class _GalleryDetailMetadata extends StatelessWidget {
                         color: artistColor,
                         starred: favoriteArtists.contains(MangaArtistFavorite.key(name)),
                         onTap: search == null ? null : () => search!('artist:${name.replaceAll(' ', '_')}'),
-                        onLongPress: () => toggleSaved(name, SavedCollectionKind.artist),
+                        menu: () => artworkTagMenu(
+                          copy: name.replaceAll('_', ' '),
+                          saved: favoriteArtists.contains(MangaArtistFavorite.key(name)),
+                          saveTitle: 'Add to Artists',
+                          removeTitle: 'Remove from Artists',
+                          save: () => toggleSaved(name, SavedCollectionKind.artist),
+                          excluded: content.excludesMangaTag('artist:$name'),
+                          exclude: () => _exclude(context, 'artist:$name'),
+                        ),
                         child: Text(name.replaceAll('_', ' ')),
                       ),
                   ],
@@ -946,7 +998,8 @@ class _GalleryDetailMetadata extends StatelessWidget {
                       color: languageColor,
                       starred: languageSaved,
                       onTap: search == null ? null : () => search!('language:${gallery.language.replaceAll(' ', '_')}'),
-                      onLongPress: () => toggleSaved(gallery.language, SavedCollectionKind.language),
+                      menu: () =>
+                          artworkTagMenu(copy: gallery.language, saved: languageSaved, save: () => toggleSaved(gallery.language, SavedCollectionKind.language)),
                       child: Text(gallery.language),
                     ),
                   ],
@@ -1005,7 +1058,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
                     barrierDismissible: true,
                     builder: (context) => TegnalAlertDialog(
                       title: Text(L10n.text('Tags')),
-                      content: Text(L10n.text('Hold an artist or tag to add it to your favorites. Hold it again to remove it.')),
+                      content: Text(L10n.text('Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.')),
                       actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context), child: Text(L10n.text('Done')))],
                     ),
                   ),
@@ -1029,6 +1082,13 @@ class _GalleryDetailMetadata extends StatelessWidget {
     );
   }
 
+  /// Adds the tag to Default Excluded Tags from its menu, or takes it out again.
+  void _exclude(BuildContext context, String tag) {
+    final excluded = content.toggleExcludedMangaTag(tag);
+    HapticFeedback.mediumImpact();
+    SemanticsService.sendAnnouncement(View.of(context), L10n.text(excluded ? 'Excluded from Searches' : 'Included in Searches'), Directionality.of(context));
+  }
+
   /// Each tag keeps its own category's color, so tags gathered in one section stay apart.
   Widget _tagFlow(BuildContext context, ArtworkTagGroup group) {
     if (group.tags.isEmpty) return const _MetadataPlaceholder();
@@ -1040,7 +1100,13 @@ class _GalleryDetailMetadata extends StatelessWidget {
             color: artworkTagColor(tag.category, context),
             starred: savedQueries.contains(tag.query.replaceAll(' ', '_')),
             onTap: search == null ? null : () => search!(tag.query.replaceAll(' ', '_')),
-            onLongPress: () => toggleSaved(tag.query, tag.category.savedKind),
+            menu: () => artworkTagMenu(
+              copy: tag.original ?? tag.name,
+              saved: savedQueries.contains(tag.query.replaceAll(' ', '_')),
+              save: () => toggleSaved(tag.query, tag.category.savedKind),
+              excluded: content.excludesMangaTag(tag.query),
+              exclude: () => _exclude(context, tag.query),
+            ),
             hint: tag.original,
             child: Text(tag.name),
           ),
