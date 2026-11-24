@@ -170,6 +170,23 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertFalse(app.webViews.firstMatch.exists)
     }
 
+    func testWorksByOneArtistPostedTogetherShareOneRow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "--author-run-test", "-AppleLanguages", "(en)"]
+        app.launch()
+        let run = element(app, "content.authorRun.900000003")
+        XCTAssertTrue(run.waitForExistence(timeout: 15))
+        XCTAssertTrue(run.staticTexts["Serial Artist"].exists)
+        XCTAssertTrue(run.staticTexts["4 works in a row"].exists)
+        // The run's works are cards in its strip; the works between them stay in the grid.
+        let member = element(app, "content.gallery.900000005")
+        let between = element(app, "content.gallery.900000004")
+        XCTAssertTrue(member.exists && between.exists)
+        XCTAssertTrue(run.frame.contains(member.frame.origin), "\(run.frame) \(member.frame)")
+        XCTAssertFalse(run.frame.intersects(between.frame))
+        capture(app, "One artist's works in one row")
+    }
+
     func testCategoryMenuNarrowsTheFeedAndCardsShowTheirCategory() {
         let app = XCUIApplication()
         app.launchArguments = ["--native-content-ui-test", "--native-content-long-feed", "--show-categories", "-AppleLanguages", "(en)"]

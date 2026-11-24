@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 
 import '../../core/content/combined_catalog.dart';
 import '../../core/content/content_errors.dart';
+import '../../core/content/cover_queue.dart';
 import '../../core/content/gallery_content.dart';
 import 'page_image_store.dart';
 
@@ -13,12 +15,16 @@ import 'page_image_store.dart';
 class GalleryDisplay {
   GalleryDisplay(NativeGallery gallery)
     : title = gallery.title,
+      artistNames = List.unmodifiable(gallery.artists),
       artists = gallery.artists.join(', '),
       language = gallery.language,
       type = gallery.type,
       pages = gallery.displayedPageCount;
 
   final String title;
+
+  /// Each artist on their own, for telling works by one artist apart.
+  final List<String> artistNames;
   final String artists;
   final String language;
   final String type;
@@ -138,6 +144,14 @@ class GalleryFeedLoader extends ChangeNotifier {
   bool _suspended = false;
   Future<void>? _task;
   Set<FeedItem> _retained = {};
+  final Set<FeedItem> _prefetching = {};
+  List<FeedItem> _prefetchQueue = [];
+  List<FeedItem> _prefetchWindow = [];
+  int? _previousCoverIndex;
+
+  /// Whether backfill is allowed now; tests replace it.
+  @visibleForTesting
+  bool Function() allowsBackfill = () => CoverQueuePolicy.allowsBackfill;
 
   /// The websites a combined list shows; null while it shows the checked one.
   List<String>? combinedSites;
@@ -170,6 +184,7 @@ class GalleryFeedLoader extends ChangeNotifier {
       }
       previews.clear();
       _retained = {};
+      _stopPrefetch();
       items = [];
       _nextOffset = 0;
       hasMore = false;
@@ -199,9 +214,12 @@ class GalleryFeedLoader extends ChangeNotifier {
         final seen = resetting ? <FeedItem>{} : items.toSet();
         final incoming = batch.items.where(seen.add).toList();
         final updated = [...(resetting ? const <FeedItem>[] : items), ...incoming];
-        if (resetting) previews.clear();
+        if (resetting) {
+          previews.clear();
+          _stopPrefetch();
+        }
         for (final item in incoming) {
-          previews[item] = GalleryFeedPreview(id: item.id, source: sourceFor(item), images: imagesFor(item));
+          previews[item] = _watchArtists(GalleryFeedPreview(id: item.id, source: sourceFor(item), images: imagesFor(item)));
         }
         items = updated;
         didLoad = true;
@@ -215,6 +233,33 @@ class GalleryFeedLoader extends ChangeNotifier {
         notifyListeners();
       }
     }();
+  }
+
+  /// A feed groups works by artist, so it lays out again when a work's artists become known.
+  GalleryFeedPreview _watchArtists(GalleryFeedPreview preview) {
+    var known = preview.display?.artistNames;
+    preview.addListener(() {
+      final now = preview.display?.artistNames;
+      if (listEquals(now, known)) return;
+      known = now;
+      if (_artistsChanged || _disposed) return;
+      _artistsChanged = true;
+      // Covers arriving together lay the feed out once.
+      scheduleMicrotask(() {
+        _artistsChanged = false;
+        if (!_disposed) notifyListeners();
+      });
+    });
+    return preview;
+  }
+
+  bool _artistsChanged = false;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   Future<void> retry(GalleryQuery query) => load(query, reset: _lastReset, combinedSites: combinedSites);
@@ -235,11 +280,63 @@ class GalleryFeedLoader extends ChangeNotifier {
   void suspend() {
     _suspended = true;
     _generation = Object();
+    _prefetchQueue = [];
     if (loading) {
       loading = false;
       notifyListeners();
     }
   }
 
-  void resume() => _suspended = false;
+  void resume() {
+    if (!_suspended) return;
+    _suspended = false;
+    // Restore the small viewport window, never all retained pages.
+    _prefetchQueue = _waiting(_prefetchWindow);
+    _startPrefetch();
+  }
+
+  /// `prioritizeCovers(startingAt:count:columns:)`: only the rows near the viewport merit
+  /// speculation, so their works' details and covers load before they are seen, never a whole
+  /// page just because its numbers arrived. Scrolling back up prepares one row at a time.
+  void prioritizeCovers(int index, {required int count, int columns = 1}) {
+    if (_suspended || index < 0 || index >= items.length || count <= 0) return;
+    final returning = _previousCoverIndex != null && index < _previousCoverIndex!;
+    _previousCoverIndex = index;
+    retainCovers(index);
+    final int end = index + math.min<int>(returning ? math.max(1, math.min(columns, count)) : count, items.length - index);
+    final int start = returning ? math.max(0, end - count) : index;
+    final window = items.sublist(start, end);
+    _prefetchWindow = returning ? window.reversed.toList() : window;
+    for (final item in _prefetchWindow) {
+      previews[item]?.restoreCachedContent();
+    }
+    _prefetchQueue = _waiting(_prefetchWindow);
+    _startPrefetch();
+  }
+
+  List<FeedItem> _waiting(List<FeedItem> window) => [
+    for (final item in window)
+      if (previews[item] case final preview? when preview.image == null || preview.display == null) item,
+  ];
+
+  /// Two works at a time, as on iOS.
+  void _startPrefetch() {
+    if (_suspended || _disposed || !allowsBackfill()) return;
+    while (_prefetching.length < 2 && _prefetchQueue.isNotEmpty) {
+      final item = _prefetchQueue.removeAt(0);
+      final preview = previews[item];
+      if (preview == null || _prefetching.contains(item) || (preview.image != null && preview.display != null)) continue;
+      _prefetching.add(item);
+      preview.load().whenComplete(() {
+        _prefetching.remove(item);
+        _startPrefetch();
+      });
+    }
+  }
+
+  void _stopPrefetch() {
+    _prefetchQueue = [];
+    _prefetchWindow = [];
+    _previousCoverIndex = null;
+  }
 }

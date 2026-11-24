@@ -2780,3 +2780,6 @@
 "Changes are made on this device by Apple Intelligence, and each can be undone." = "Apple Intelligence가 기기 안에서 바꾸며, 바꾼 설정은 하나씩 되돌릴 수 있습니다.";
 "Ask for a change" = "바꾸고 싶은 점을 말해 보세요";
 "Changed %@." = "%@ 설정을 바꿨어요.";
+
+"%@ works in a row" = "연달아 올라온 작품 %@개";
+"Shows all works by this artist" = "이 작가의 작품을 모두 봅니다";

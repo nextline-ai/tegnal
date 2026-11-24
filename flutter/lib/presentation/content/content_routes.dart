@@ -145,6 +145,7 @@ class ContentRoutes {
         content: content,
         initialQuery: text,
         onBack: () => Navigator.of(context).pop(),
+        search: (text) => search(context, text),
         openGallery: (id) => openThumbnail(context, id),
         details: (id) => openGallery(context, id),
         bookmark: (id, gallery, {site, images}) => toggleBookmark(context, id, gallery, aboveTabBar: true, site: site, images: images),

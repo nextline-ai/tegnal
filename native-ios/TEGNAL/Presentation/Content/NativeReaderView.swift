@@ -813,9 +813,11 @@ enum MangaViewerReturn {
         guard let openedID, openedID != viewedID, availableIDs.contains(viewedID) else { return nil }
         return viewedID
     }
-    @MainActor static func restore<IDs: Sequence>(openedID: Int64?, viewedID: Int64, availableIDs: IDs, using proxy: ScrollViewProxy) where IDs.Element == Int64 {
+    /// `line` names the view that shows a work, where several works share one.
+    @MainActor static func restore<IDs: Sequence>(openedID: Int64?, viewedID: Int64, availableIDs: IDs, using proxy: ScrollViewProxy,
+                                                  line: (Int64) -> Int64 = { $0 }) where IDs.Element == Int64 {
         guard let target = targetID(openedID: openedID, viewedID: viewedID, availableIDs: availableIDs) else { return }
         var transaction = Transaction(); transaction.disablesAnimations = true
-        withTransaction(transaction) { proxy.scrollTo(target, anchor: .center) }
+        withTransaction(transaction) { proxy.scrollTo(line(target), anchor: .center) }
     }
 }

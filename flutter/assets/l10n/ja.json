@@ -2577,5 +2577,7 @@
  "No Matching Settings": "一致する設定はありません",
  "Explore & Search Filters": "探索・検索フィルタ",
  "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.": "デフォルトタグと除外タグは、検索だけでなく探索にも適用されます。作品のタグを長押しして「デフォルト除外タグに登録」を選ぶと、すぐに非表示にできます。",
- "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "サーバーごとにタグのブラックリストがあり、探索と検索の両方で該当する画像を非表示にします。"
+ "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "サーバーごとにタグのブラックリストがあり、探索と検索の両方で該当する画像を非表示にします。",
+ "%@ works in a row": "続けて投稿された作品 %@件",
+ "Shows all works by this artist": "この作家の作品をすべて表示します"
 }

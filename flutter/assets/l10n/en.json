@@ -2577,5 +2577,7 @@
  "No Matching Settings": "No Matching Settings",
  "Explore & Search Filters": "Explore & Search Filters",
  "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.": "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.",
- "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "Each server keeps its own tag blacklist, which hides images in Explore and in searches."
+ "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "Each server keeps its own tag blacklist, which hides images in Explore and in searches.",
+ "%@ works in a row": "%@ works in a row",
+ "Shows all works by this artist": "Shows all works by this artist"
 }
