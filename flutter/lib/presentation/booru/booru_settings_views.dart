@@ -205,6 +205,7 @@ class _BooruMoreViewState extends State<BooruMoreView> {
                       open: _open,
                       addonsCount: AddonRuntime.shared.effects.enabledCount(AddonMode.images),
                       leading: [if (_deps.invitation != null) _deps.invitation!(context)],
+                      bottom: const [DeveloperSection()],
                       // The servers and the places they lead come first, as an account does in the system Settings app.
                       top: [
                         SettingsLinkRow(
@@ -426,8 +427,6 @@ class _BooruMoreViewState extends State<BooruMoreView> {
             ),
           ],
         ),
-        settingsSectionGap,
-        const DeveloperSection(),
       ],
       SettingsCategory.viewer || SettingsCategory.taste || SettingsCategory.addons || SettingsCategory.privacy => const [],
     };

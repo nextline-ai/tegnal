@@ -65,6 +65,8 @@ void main() {
                 open: opened.add,
                 addonsCount: 2,
                 top: const [SizedBox(key: Key('top'), height: 52)],
+                leading: const [SizedBox(key: Key('invitation'), height: 44)],
+                bottom: const [SizedBox(key: Key('developer'), height: 80)],
               ),
             ],
           ),
@@ -72,6 +74,16 @@ void main() {
       ),
     );
     expect(find.byKey(const Key('top')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('invitation'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('settings.search'))).dy),
+      reason: 'the community invitation comes first',
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('developer'))).dy,
+      greaterThan(tester.getTopLeft(find.byKey(const Key('settings.category.help'))).dy),
+      reason: 'the developer section comes last',
+    );
     final browsing = tester.getTopLeft(find.byKey(const Key('settings.category.browsing')));
     final viewer = tester.getTopLeft(find.byKey(const Key('settings.category.viewer')));
     expect(browsing.dy, lessThan(viewer.dy));

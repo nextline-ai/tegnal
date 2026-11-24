@@ -225,7 +225,6 @@ abstract final class SettingsCatalog {
       const SettingsItem('help.privacyPolicy', 'Privacy Policy', h),
       const SettingsItem('help.licenses', 'Open Source Licenses', h),
       const SettingsItem('help.reset', 'Reset Settings to Defaults', h, keywords: 'reset default'),
-      const SettingsItem('help.developer', 'Developer', h, keywords: 'contact discord github email'),
     ];
   }
 
@@ -262,14 +261,17 @@ abstract final class SettingsCatalog {
 /// `SettingsHome`: Settings' top level for either mode. A search field, the mode's own
 /// connection rows, then a short list of pages, those that change the most first.
 class SettingsHome extends StatefulWidget {
-  const SettingsHome({super.key, required this.booru, required this.top, required this.open, this.leading = const [], this.addonsCount});
+  const SettingsHome({super.key, required this.booru, required this.top, required this.open, this.leading = const [], this.bottom = const [], this.addonsCount});
   final bool booru;
 
   /// The website or server rows, first as an account is in the system Settings app.
   final List<Widget> top;
 
-  /// Above the search results and pages, such as the community invitation.
+  /// First, above search, such as the community invitation.
   final List<Widget> leading;
+
+  /// Last, under the pages, such as the developer section.
+  final List<Widget> bottom;
   final void Function(SettingsCategory category) open;
 
   /// The add-ons turned on, beside the Add-ons page.
@@ -312,6 +314,8 @@ class _SettingsHomeState extends State<SettingsHome> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // The community invitation comes first, above everything else, while it is due.
+        if (query.isEmpty) ...widget.leading,
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           child: CupertinoSearchTextField(key: const Key('settings.search'), controller: _query, placeholder: L10n.text('Search Settings')),
@@ -336,12 +340,12 @@ class _SettingsHomeState extends State<SettingsHome> {
             ],
           )
         else ...[
-          ...widget.leading,
           FormSection(rowColor: row, children: [...widget.top, _pageRow(SettingsCategory.addons)]),
           for (final group in SettingsCategory.groups) ...[
             const SizedBox(height: 28),
             FormSection(rowColor: row, children: [for (final category in group) _pageRow(category)]),
           ],
+          if (widget.bottom.isNotEmpty) ...[const SizedBox(height: 28), ...widget.bottom],
         ],
       ],
     );

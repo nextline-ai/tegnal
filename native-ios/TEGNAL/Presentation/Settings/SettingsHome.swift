@@ -26,6 +26,8 @@ struct SettingsHome<Top: View>: View {
 
     private var list: some View {
         List {
+            // The community invitation comes first, above everything else, while it is due.
+            if env.discordInvitationVisible, trimmedQuery.isEmpty { Section { DiscordInvitationBanner() } }
             if assistantAvailable {
                 Section {
                     SettingsAssistantHero(assistant: assistant, suggestions: suggestionKeys.map { L10n.text($0) }, minHeight: height * 0.7, ask: ask) { turn in
@@ -48,7 +50,6 @@ struct SettingsHome<Top: View>: View {
                 }
             }
             if trimmedQuery.isEmpty {
-                if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
                 Section {
                     top()
                     SettingsCategoryRow(category: .addons, booru: booru)
@@ -56,6 +57,7 @@ struct SettingsHome<Top: View>: View {
                 ForEach(Array(SettingsCategory.groups.enumerated()), id: \.offset) { _, group in
                     Section { ForEach(group) { SettingsCategoryRow(category: $0, booru: booru) } }
                 }
+                DeveloperInfoSection()
             } else {
                 results
             }
@@ -432,6 +434,5 @@ private struct SettingsHelpPage: View {
     var body: some View {
         SettingsSupportSection(showOnboarding: $showOnboarding, booru: booru)
             .appFullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
-        DeveloperInfoSection()
     }
 }
