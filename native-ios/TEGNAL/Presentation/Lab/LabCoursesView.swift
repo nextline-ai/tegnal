@@ -115,7 +115,7 @@ struct LabCoursesView: View {
 
     /// A deck course's rate, read whether or not it is the course on screen.
     private func rate(_ deck: LabCourse) -> Int {
-        deck.base + deck.episodes.filter { store.progress.cards[LabStore.key($0.id, in: deck)] != nil }.reduce(0) { $0 + $1.impact }
+        deck.base + deck.episodes.filter { store.progress.cards[LabStore.key($0.id, in: deck, round: store.round(of: deck))] != nil }.reduce(0) { $0 + $1.impact }
     }
 
     private func fan(_ colors: [String]) -> some View {
@@ -240,7 +240,7 @@ struct LabCoursesView: View {
     }
 
     /// Lessons finished in any course on the tags engine, for an imported course's count.
-    private var lessonDone: Set<String> { Set(((try? booru.studyStore.lessons()) ?? [:]).keys) }
+    private var lessonDone: Set<String> { Set(((try? booru.studyStore.lessons(round: store.tagRound)) ?? [:]).keys) }
 
     /// A course kept although this app is too old for it: named, greyed, and asking for an update.
     private func waitingCard(_ waiting: WaitingCourse) -> some View {

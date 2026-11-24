@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -33,17 +34,31 @@ class BooruThumbnailDiskCache {
   var _bytes = 0;
   var _indexed = false;
 
+  /// The full index, read on this isolate. Only for what needs every file at once (the size used, a new limit, clearing);
+  /// everything else waits for [_scanInBackground] and looks at its one file meanwhile.
   void _ensureIndex() {
     if (_indexed) return;
     _indexed = true;
+    for (final (name, size, modified) in _scan(directory.path, fileExtension)) {
+      if (_entries.containsKey(name)) continue;
+      final time = DateTime.fromMillisecondsSinceEpoch(modified);
+      _entries[name] = _Entry(size, time, time);
+      _bytes += size;
+    }
+    _trim();
+  }
+
+  /// Lists the cache directory with each file's size and time. On a slow phone with a full cache this is thousands of file
+  /// checks, so the app runs it on another isolate ([_scanInBackground]); on the UI isolate, which Android now runs on the
+  /// main thread, it held up input long enough for "Input dispatching timed out".
+  static List<(String, int, int)> _scan(String path, String extension) {
+    final found = <(String, int, int)>[];
     try {
-      for (final file in directory.listSync(followLinks: false)) {
-        if (file is! File || !file.path.endsWith('.$fileExtension')) continue;
+      for (final file in Directory(path).listSync(followLinks: false)) {
+        if (file is! File || !file.path.endsWith('.$extension')) continue;
         try {
           final stat = file.statSync();
-          final entry = _Entry(stat.size, stat.modified, stat.modified);
-          _entries[file.uri.pathSegments.last] = entry;
-          _bytes += entry.size;
+          found.add((file.uri.pathSegments.last, stat.size, stat.modified.millisecondsSinceEpoch));
         } on FileSystemException {
           continue;
         }
@@ -51,21 +66,64 @@ class BooruThumbnailDiskCache {
     } on FileSystemException {
       // No directory yet.
     }
+    return found;
+  }
+
+  Future<void>? _scanning;
+
+  /// Builds the index on another isolate, once. Called by the first lookup; [prepare] starts it earlier.
+  Future<void> _scanInBackground() => _scanning ??= () async {
+    final path = directory.path, extension = fileExtension;
+    final List<(String, int, int)> found;
+    try {
+      found = await Isolate.run(() => _scan(path, extension));
+    } on Object {
+      return;
+    }
+    if (_indexed) return;
+    _indexed = true;
+    for (final (name, size, modified) in found) {
+      // A file looked up, written or removed meanwhile is already known as it is now.
+      if (_entries.containsKey(name) || _removed.contains(name)) continue;
+      final time = DateTime.fromMillisecondsSinceEpoch(modified);
+      _entries[name] = _Entry(size, time, time);
+      _bytes += size;
+    }
+    _removed.clear();
     _trim();
+  }();
+
+  /// Starts reading the index in the background, so the first thumbnail needs no scan at all.
+  Future<void> prepare() => _indexed ? Future.value() : _scanInBackground();
+
+  final _removed = <String>{};
+
+  /// The entry for one file: from the index, or until it is read, from that file alone (one quick check).
+  _Entry? _entry(String name) {
+    final known = _entries[name];
+    if (known != null || _indexed) return known;
+    _scanInBackground();
+    if (_removed.contains(name)) return null;
+    try {
+      final stat = _file(name).statSync();
+      if (stat.type != FileSystemEntityType.file) return null;
+      final entry = _Entry(stat.size, stat.modified, stat.modified);
+      _entries[name] = entry;
+      _bytes += stat.size;
+      return entry;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   String _name(String key) => '${sha256.convert(utf8.encode(key))}.$fileExtension';
   File _file(String name) => File('${directory.path}/$name');
 
-  bool contains(String key) {
-    _ensureIndex();
-    return _entries.containsKey(_name(key));
-  }
+  bool contains(String key) => _entry(_name(key)) != null;
 
   Uint8List? read(String key, {DateTime? now}) {
-    _ensureIndex();
     final name = _name(key), file = _file(name);
-    final entry = _entries[name];
+    final entry = _entry(name);
     if (entry == null) return null;
     final pending = _writing[name];
     if (pending != null) {
@@ -94,13 +152,14 @@ class BooruThumbnailDiskCache {
   }
 
   void write(Uint8List data, String key, {DateTime? now}) {
-    _ensureIndex();
+    if (!_indexed) _scanInBackground();
     if (data.length > capacity) return;
     final time = now ?? DateTime.now();
     final name = _name(key);
     _bytes -= _entries[name]?.size ?? 0;
     _entries[name] = _Entry(data.length, time, time);
     _bytes += data.length;
+    _removed.remove(name);
     _writing[name] = data;
     _trim();
     // Saving happens off the frame: the bytes stay readable from memory until the file lands.
@@ -137,9 +196,8 @@ class BooruThumbnailDiskCache {
 
   /// [read] without blocking the frame on the file.
   Future<Uint8List?> readAsync(String key, {DateTime? now}) async {
-    _ensureIndex();
     final name = _name(key);
-    final entry = _entries[name];
+    final entry = _entry(name);
     if (entry == null) return null;
     final time = now ?? DateTime.now();
     entry.accessed = time;
@@ -160,8 +218,9 @@ class BooruThumbnailDiskCache {
   }
 
   void remove(String key) {
-    _ensureIndex();
-    _removeName(_name(key));
+    final name = _name(key);
+    if (!_indexed) _removed.add(name);
+    _removeName(name);
   }
 
   void _removeName(String name) {
@@ -176,6 +235,7 @@ class BooruThumbnailDiskCache {
   }
 
   void _trim() {
+    // Before the full index lands this trims among the files known so far; the index trims again once it arrives.
     if (_bytes <= capacity) return;
     final names = _entries.keys.toList()..sort((a, b) => _entries[a]!.accessed.compareTo(_entries[b]!.accessed));
     for (final name in names) {

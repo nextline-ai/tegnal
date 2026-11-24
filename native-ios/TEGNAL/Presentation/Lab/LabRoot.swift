@@ -130,6 +130,7 @@ struct LabDeckView: View {
     /// The front card's height as laid out, and whether it is held there, so it can shrink smoothly to a card's size.
     @State private var frontHeight: CGFloat = 290
     @State private var pinned = false
+    @State private var confirmingStartOver = false
     @Namespace private var space
 
     private static let earnedHeight: CGFloat = 200
@@ -253,11 +254,19 @@ struct LabDeckView: View {
                         .padding(.top, 16)
                     }
                 }
+                if store.finished, next == nil { startOver }
             }
             .padding(.horizontal, 20).padding(.bottom, 32)
         }
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
+        .alert(L10n.text("lab.restart.confirm"), isPresented: $confirmingStartOver) {
+            Button(L10n.text("lab.restart.action"), role: .destructive) {
+                LabHaptic.snap()
+                withAnimation(.spring(duration: 0.6)) { store.startOver(); shown = store.earnedIDs; fanned = false }
+            }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: { Text(L10n.text("lab.restart.message")) }
         .navigationDestination(for: String.self) { id in
             if let episode = course.episode(id) {
                 LabCardDetailView(episode: episode, play: play).navigationZoomIfAvailable(id: id, in: space)
@@ -311,8 +320,23 @@ struct LabDeckView: View {
     /// "시즌 1 · 3/15", under the title.
     private func kicker(_ episode: LabEpisode?) -> Text {
         let season = episode.flatMap { store.course.season(of: $0) }?.number ?? 1
-        return Text(L10n.text("lab.season", String(season)) + " · ")
+        let text = Text(L10n.text("lab.season", String(season)) + " · ")
             + Text("\(shown.count)/\(store.course.episodes.count)").font(LabFont.number(13))
+        // A course started over says so, and that it pays a quarter now.
+        return store.round > 0 ? text + Text(" · " + L10n.text("lab.restart.round", String(store.round + 1))) : text
+    }
+
+    /// Under a finished deck: the way to play the course again from its first card.
+    private var startOver: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { confirmingStartOver = true } label: {
+                Label(L10n.text("lab.restart.action"), systemImage: "arrow.counterclockwise").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
+            .accessibilityIdentifier("lab.deck.restart")
+            Text(L10n.text("lab.restart.note")).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 8)
     }
 
     /// A card further up the stack: smaller and fainter the further back it sits, and only its top showing above the card in front.

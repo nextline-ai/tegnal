@@ -163,16 +163,36 @@ extension StudyStore {
             """)
     }
 
-    func lessons() throws -> [String: StudyLessonRecord] {
+    /// A lesson's row in `study_lessons`. 2D AI 배우기 started over (`LabStore.tagRound`) keeps each later round's lessons under
+    /// `r<round>/<lesson>`, so earlier rounds stay in the records and a sync can never bring them into the new one. An imported
+    /// course's lessons (`course:<id>:…`) have no rounds.
+    static func lessonKey(_ lesson: String, round: Int) -> String {
+        round > 0 && !lesson.hasPrefix("course:") ? "r\(round)/" + lesson : lesson
+    }
+
+    /// The round a stored row belongs to, and the lesson's own id.
+    static func lessonRound(_ key: String) -> (round: Int, lesson: String) {
+        guard key.hasPrefix("r"), let slash = key.firstIndex(of: "/"),
+              let round = Int(key[key.index(after: key.startIndex)..<slash]), round > 0 else { return (0, key) }
+        return (round, String(key[key.index(after: slash)...]))
+    }
+
+    /// The lessons finished in a round of 2D AI 배우기, by the lesson's own id, with every imported course's lessons.
+    func lessons(round: Int = 0) throws -> [String: StudyLessonRecord] {
         try database.read { db in
-            Dictionary(uniqueKeysWithValues: try Row.fetchAll(db, sql: "SELECT lesson, stars, runs FROM study_lessons").map {
-                ($0["lesson"] as String, StudyLessonRecord(lesson: $0["lesson"], stars: $0["stars"], runs: $0["runs"]))
-            })
+            var found: [String: StudyLessonRecord] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT lesson, stars, runs FROM study_lessons") {
+                let (held, lesson) = Self.lessonRound(row["lesson"])
+                guard held == round || lesson.hasPrefix("course:") else { continue }
+                found[lesson] = StudyLessonRecord(lesson: lesson, stars: row["stars"], runs: row["runs"])
+            }
+            return found
         }
     }
 
-    /// Adds experience to a day, and marks a lesson finished when one is named. The best stars are kept.
-    func earn(_ xp: Int, lesson: String? = nil, stars: Int = 0, now: Date = .now, calendar: Calendar = .current) throws {
+    /// Adds experience to a day, and marks a lesson finished when one is named, in the round of 2D AI 배우기 being played.
+    /// The best stars are kept.
+    func earn(_ xp: Int, lesson: String? = nil, stars: Int = 0, round: Int = 0, now: Date = .now, calendar: Calendar = .current) throws {
         try database.write { db in
             try db.execute(sql: """
                 INSERT INTO study_days (day, answered, correct, xp) VALUES (?, 0, 0, ?)
@@ -182,7 +202,7 @@ extension StudyStore {
             try db.execute(sql: """
                 INSERT INTO study_lessons (lesson, stars, runs, finished) VALUES (?, ?, 1, ?)
                 ON CONFLICT(lesson) DO UPDATE SET stars = MAX(stars, excluded.stars), runs = runs + 1, finished = excluded.finished
-                """, arguments: [lesson, min(3, max(1, stars)), now.timeIntervalSince1970])
+                """, arguments: [Self.lessonKey(lesson, round: round), min(3, max(1, stars)), now.timeIntervalSince1970])
         }
     }
 }
@@ -553,7 +573,7 @@ final class StudyLessonSession: Identifiable {
         before.xp = days.reduce(0) { $0 + $1.xp }
         before.today = days.first { $0.day == StudyDay.key(.now) }?.xp ?? 0
         try? store.studyStore.raise(StudyCounter.combo, to: bestCombo)
-        try? store.studyStore.earn(earned, lesson: plan.lesson?.id, stars: stars)
+        try? store.studyStore.earn(earned, lesson: plan.lesson?.id, stars: stars, round: LabStore.shared.tagRound)
         if plan.lesson != nil {
             let before = LabStore.shared.balance
             let paid = LabStore.shared.settleTagCourse(in: store.studyStore)

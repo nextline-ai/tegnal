@@ -6,7 +6,8 @@ import GRDB
 /// Keys: `card:<episode>` and `fail:<id>` (engraved, hung; value = 보석 paid, or 1 when it paid nothing or was written before
 /// amounts were kept), `season:<number>`, `edition:<id>`, `lesson:<course>/<lesson>`, `stars:<course>/<lesson>` and
 /// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`, plus `"each"` tickets for ticket goods), and `state:type`
-/// (text = type id), `state:greeted`, `state:legacyNoticed`, `state:seenEdition` (text).
+/// (text = type id), `state:greeted`, `state:legacyNoticed`, `state:seenEdition` (text), `state:round:<course>` (value = times started over; that round's cards and
+/// 망작 are `card:r<n>/<episode>` and `fail:r<n>/<id>`).
 /// Merging two devices keeps the larger value and the earlier time, so nothing earned is lost.
 struct LabRecord: Equatable, Sendable {
     var key: String
@@ -91,7 +92,8 @@ extension LabProgress {
                 case "greeted": greeted = record.value > 0
                 case "legacyNoticed": legacyNoticed = record.value > 0
                 case "seenEdition": seenEdition = record.text
-                default: break
+                default:
+                    if id.hasPrefix("round:") { rounds[String(id.dropFirst(6))] = record.value }
                 }
             default: break
             }
@@ -114,6 +116,7 @@ extension LabProgress {
         if greeted { list.append(LabRecord(key: "state:greeted", value: 1, at: Date(timeIntervalSince1970: 0))) }
         if legacyNoticed { list.append(LabRecord(key: "state:legacyNoticed", value: 1, at: Date(timeIntervalSince1970: 0))) }
         if let seenEdition { list.append(LabRecord(key: "state:seenEdition", value: 1, text: seenEdition, at: Date(timeIntervalSince1970: 0))) }
+        for (course, round) in rounds where round > 0 { list.append(LabRecord(key: "state:round:" + course, value: round, at: Date(timeIntervalSince1970: 0))) }
         return list
     }
 }

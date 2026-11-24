@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../core/lab/lab_store.dart';
 import '../../core/lab/learning_courses.dart';
 import '../../core/lab/tag_course.dart';
 import '../../core/booru/booru_models.dart';
@@ -18,6 +19,7 @@ import '../../core/study/study_awards.dart';
 import '../../core/study/study_store.dart';
 import '../../core/support/l10n.dart';
 import '../booru/booru_common.dart';
+import '../design/alert_dialog.dart';
 import '../design/app_sheet.dart';
 import '../design/ios_controls.dart';
 import '../design/pull_down_menu.dart';
@@ -185,9 +187,10 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     final study = booru.store.studyStore;
     try {
       if (_seedPath.isNotEmpty) {
-        final records = study.lessons();
+        final round = LabStore.shared.tagRound;
+        final records = study.lessons(round: round);
         for (final lesson in model.path.lessons.takeWhile((lesson) => lesson.id != _seedPath)) {
-          if (records[lesson.id] == null) study.earn(15, lesson: lesson.id, stars: 3);
+          if (records[lesson.id] == null) study.earn(15, lesson: lesson.id, stars: 3, round: round);
         }
         booru.booruDefaults.set(StudyServer.key, StudyServer.recommended(StudyServer.choices(booru.store)).id);
         // A seeded learner has been welcomed already; the welcome has tests of its own.
@@ -240,14 +243,6 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     } else {
       _celebrate();
     }
-  }
-
-  /// After a reset learning mode starts over, welcome and placement test included.
-  void _restarted() {
-    model.forgetWelcome();
-    model.reload();
-    mode.tab = StudyTab.path;
-    unawaited(_welcome());
   }
 
   Future<void> _chooseServer() => showAppSheet<void>(
@@ -352,7 +347,7 @@ class _StudyModeRootState extends State<StudyModeRoot> {
     StudyTab.practice => StudyPracticeView(model: model, start: _start, startSpeed: _startSpeed),
     StudyTab.courses => LabCoursesView(mode: mode, bottom: 24, lessons: () => model.records.keys.toSet()),
     StudyTab.lab => StudyLabView(model: model, start: _start, closed: _celebrate, generation: widget.generation),
-    StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode, reset: _restarted),
+    StudyTab.me => StudyMeView(model: model, chooseServer: _chooseServer, openAwards: _openAwards, mode: mode),
   };
 
   @override
@@ -681,6 +676,8 @@ class _StudyPathViewState extends State<StudyPathView> {
                 child: Column(
                   children: [
                     if (model.course case final course?) Padding(padding: const EdgeInsets.only(top: 14), child: _courseHeader(course)),
+                    // A round started over says so, and that it pays a quarter now.
+                    if (model.round > 0) Padding(padding: const EdgeInsets.only(top: 14), child: _roundPill()),
                     for (final section in model.path.sections) ...[
                       Padding(padding: const EdgeInsets.only(top: 18, bottom: 22), child: _banner(section)),
                       if (section.lessons.isEmpty) _Locked(),
@@ -691,6 +688,7 @@ class _StudyPathViewState extends State<StudyPathView> {
                           child: _row(lesson, index, studyHex(section.color), current: current?.id == lesson.id),
                         ),
                     ],
+                    if (model.finished) Padding(padding: const EdgeInsets.only(top: 8), child: _startOverCard()),
                     SizedBox(height: 190 + inset.bottom),
                   ],
                 ),
@@ -721,6 +719,89 @@ class _StudyPathViewState extends State<StudyPathView> {
         ),
       ],
     );
+  }
+
+  /// "2회차 · 보석 1/4", above the path of a round started over.
+  Widget _roundPill() {
+    final theme = StudyTheme.of(context);
+    return Semantics(
+      key: const Key('study.path.round'),
+      container: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: ShapeDecoration(color: theme.surface, shape: StadiumBorder(side: BorderSide(color: theme.line, width: 2))),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.arrow_counterclockwise, size: 14, color: theme.muted),
+            const SizedBox(width: 6),
+            Text(L10n.text('lab.restart.round', ['${model.round + 1}']), style: StudyTheme.body(13, StudyTheme.heavy).copyWith(color: theme.muted)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Under a finished path: the way to play 2D AI 배우기 again from its first lesson.
+  Widget _startOverCard() {
+    final theme = StudyTheme.of(context);
+    const white = Color(0xFFFFFFFF);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.all(18),
+      decoration: ShapeDecoration(
+        color: theme.surface,
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(22), side: BorderSide(color: theme.line, width: 2)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            L10n.text('lab.restart.2d.note'),
+            textAlign: TextAlign.center,
+            style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: theme.muted),
+          ),
+          const SizedBox(height: 10),
+          StudyPressButton(
+            key: const Key('study.path.restart'),
+            radius: 16,
+            depth: 4,
+            onPressed: _confirmStartOver,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(CupertinoIcons.arrow_counterclockwise, size: 17, color: white),
+                  const SizedBox(width: 8),
+                  Text(L10n.text('lab.restart.action'), style: StudyTheme.body(16, StudyTheme.heavy).copyWith(color: white)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmStartOver() async {
+    final yes = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => TegnalAlertDialog(
+        title: Text(L10n.text('lab.restart.confirm')),
+        content: Text(L10n.text('lab.restart.2d.message')),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          CupertinoDialogAction(
+            key: const Key('study.path.restart.confirm'),
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(L10n.text('lab.restart.action')),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    model.startOver();
   }
 
   /// An imported course's name, what it teaches and how far along it is, above its path.
@@ -2192,13 +2273,11 @@ class _StudyLabViewState extends State<StudyLabView> {
 
 /// `StudyMeView`: the level, the badges, the daily goal and the mode's settings.
 class StudyMeView extends StatefulWidget {
-  const StudyMeView({super.key, required this.model, required this.chooseServer, this.openAwards, this.mode, this.reset});
+  const StudyMeView({super.key, required this.model, required this.chooseServer, this.openAwards, this.mode});
   final StudyModeModel model;
   final VoidCallback chooseServer;
   final VoidCallback? openAwards;
 
-  /// Called after progress is reset, so learning mode can welcome the learner again.
-  final VoidCallback? reset;
 
   /// The mode whose settings are shown; null is [StudyMode.shared].
   final StudyMode? mode;
@@ -2211,39 +2290,10 @@ class _StudyMeViewState extends State<StudyMeView> {
   StudyModeModel get model => widget.model;
   StudyMode get mode => widget.mode ?? StudyMode.shared;
 
-  Future<void> _confirmReset() async {
-    final reset = await showCupertinoModalPopup<bool>(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(L10n.text('Reset study progress?')),
-        message: Text(L10n.text('Every tag goes back to not started. This cannot be undone.')),
-        actions: [
-          CupertinoActionSheetAction(
-            key: const Key('study.resetConfirm'),
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(L10n.text('Reset')),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
-      ),
-    );
-    if (reset != true) return;
-    try {
-      model.booru.store.studyStore.reset();
-    } on Object {
-      // Nothing was reset; the screen reads the store again either way.
-    }
-    model.reload();
-    widget.reset?.call();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = StudyTheme.of(context);
     final game = model.game;
-    final canReset = !(game.xp == 0 && model.summary.started == 0 && model.placed == 0);
-    final red = CupertinoColors.systemRed.resolveFrom(context);
     return _Scroll(
       padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 16),
       child: Column(
@@ -2368,23 +2418,6 @@ class _StudyMeViewState extends State<StudyMeView> {
             color: theme.muted,
             symbol: 'books.vertical.fill',
             onPressed: mode.leave,
-          ),
-          const SizedBox(height: 16 + 4),
-          Semantics(
-            button: true,
-            enabled: canReset,
-            child: GestureDetector(
-              key: const Key('study.reset'),
-              behavior: HitTestBehavior.opaque,
-              onTap: canReset ? _confirmReset : null,
-              child: Opacity(
-                opacity: canReset ? 1 : 0.4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(L10n.text('Reset Study Progress'), style: StudyTheme.body(14, StudyTheme.bold).copyWith(color: red)),
-                ),
-              ),
-            ),
           ),
         ],
       ),

@@ -44,7 +44,6 @@
           "task": "검색 · 조사",
           "example": "최신 정보, 출처 확인",
           "pick": "Gemini",
-          "draft": true,
           "why": "검색과 출처 표시가 기본",
           "symbol": "magnifyingglass",
           "detail": [
@@ -62,7 +61,6 @@
           "task": "일상 대화",
           "example": "고민 상담, 빠른 질문",
           "pick": "Gemini Hydrogen",
-          "draft": true,
           "why": "자존감 채워줌",
           "symbol": "bubble.left.and.bubble.right",
           "detail": [
@@ -77,7 +75,6 @@
           "task": "이미지",
           "example": "썸네일, 프로필, 상세컷",
           "pick": "GPT Images 2.6",
-          "draft": true,
           "why": "한글을 잘 씀",
           "symbol": "photo",
           "detail": [

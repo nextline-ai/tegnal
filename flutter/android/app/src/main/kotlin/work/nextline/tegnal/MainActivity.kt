@@ -49,7 +49,10 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge to edge on every Android version, as Android 15 and later draw an app targeting
         // SDK 35 or above: the Flutter UI already keeps clear of the system bars by their insets.
-        WindowCompat.enableEdgeToEdge(window)
+        // The bars' transparency comes from the themes (styles.xml), so nothing here calls the
+        // Window.setStatusBarColor / setNavigationBarColor that Android 15 deprecates;
+        // WindowCompat.enableEdgeToEdge did, and Play Console listed them.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         // Opened from a cheat-sheet alert: the Dart side takes it and opens the lab on the sheet.
         LabSheetAlerts.take(intent)

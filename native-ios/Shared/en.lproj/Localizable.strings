@@ -2817,3 +2817,10 @@
 "lab.shop.kind.home" = "Home Scene";
 "lab.shop.kind.ticket" = "Tickets";
 "lab.shop.locked" = "Not unlocked yet";
+"lab.restart.action" = "Start Over";
+"lab.restart.confirm" = "Start this course over?";
+"lab.restart.message" = "The deck and the flops gallery start empty and the rate goes back to its start. Gems earned so far stay yours; playing again pays a quarter for every card, flop and season.";
+"lab.restart.note" = "Every card is engraved. Start over to play it again; gems then come at a quarter.";
+"lab.restart.round" = "Round %@ · gems ¼";
+"lab.restart.2d.note" = "Every lesson is finished. Start over to play it again; gems then come at a quarter.";
+"lab.restart.2d.message" = "The path goes back to its first lesson. Gems, experience, badges and what you learned about each tag stay yours; playing again pays a quarter for every lesson, three stars and section.";

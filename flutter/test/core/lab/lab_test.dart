@@ -337,6 +337,41 @@ void main() {
     expect(lab.balance, balance, reason: 'Resetting the course takes nothing back');
   });
 
+  test('a finished 2D course starts over and pays a quarter', () {
+    final booru = BooruStore.inMemory();
+    final records = LabMemoryRecords();
+    final lab = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
+    final rates = course.info.rewards, lessons = path().lessons;
+    booru.studyStore.earn(10, lesson: lessons.first.id, stars: 3);
+    lab.startTagCourseOver(booru.studyStore, path: path());
+    expect(lab.tagRound, 0, reason: 'Only a finished course starts over');
+    for (final lesson in lessons) {
+      booru.studyStore.earn(10, lesson: lesson.id, stars: 3);
+    }
+    lab.settleTagCourse(booru.studyStore, path: path());
+    expect(LabStore.tagCourseFinished(booru.studyStore.lessons(), path: path()), isTrue);
+    final balance = lab.balance;
+    lab.startTagCourseOver(booru.studyStore, path: path());
+    expect(lab.tagRound, 1);
+    expect(booru.studyStore.lessons(round: 1), isEmpty, reason: 'The path starts again');
+    expect(booru.studyStore.lessons().length, lessons.length, reason: 'The first round stays in the records');
+    expect(lab.balance, balance, reason: 'What was earned stays');
+
+    booru.studyStore.earn(10, lesson: lessons.first.id, stars: 3, round: lab.tagRound);
+    booru.studyStore.earn(10, lesson: 'course:other:one', stars: 3, round: lab.tagRound);
+    expect(booru.studyStore.lessons(round: 1)['course:other:one'], isNotNull, reason: "An imported course's lessons have no rounds");
+    expect(
+      lab.settleTagCourse(booru.studyStore, path: path()),
+      LabTagPayout(lesson: LabStore.share(rates.courseLesson, 1), stars: LabStore.share(rates.courseStars, 1)),
+    );
+    expect(lab.settleTagCourse(booru.studyStore, path: path()).total, 0, reason: 'Each round pays once');
+    expect(lab.tagCoursePaid.lessons, lessons.length, reason: "The kept-lessons count is the first round's");
+
+    final synced = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
+    expect(synced.tagRound, 1);
+    expect(synced.balance, lab.balance);
+  });
+
   test('progress from before the course was sold pays but does not open it', () {
     final booru = BooruStore.inMemory();
     final lab = store();
@@ -478,6 +513,36 @@ void main() {
     expect(lab.buy(tickets), LabBuyResult.bought);
     expect(lab.tickets, 20);
     expect(LabProgress.fromRecords(lab.progress.records).purchases[tickets.id]?.each, 10, reason: 'Kept in the records');
+  });
+
+  test('a finished course starts over and pays a quarter, keeping what it paid', () {
+    final records = LabMemoryRecords();
+    final lab = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
+    lab.startOver();
+    expect(lab.round, 0, reason: 'Only a finished course starts over');
+    for (final episode in course.episodes) {
+      lab.engrave(episode, failsHung: 0);
+    }
+    lab.hang(course.fails.first);
+    expect(lab.finished, isTrue);
+    final balance = lab.balance, sheet = LabEdition.bundled!.sections.where(lab.sectionOpened).length;
+    lab.startOver();
+    expect(lab.round, 1);
+    expect(lab.finished, isFalse);
+    expect(lab.rate, course.base, reason: 'The rate starts again');
+    expect(lab.next?.id, course.episodes.first.id);
+    expect(lab.hung(course.fails.first), isFalse, reason: 'The gallery starts empty');
+    expect(lab.balance, balance, reason: 'What was earned stays');
+    expect(LabEdition.bundled!.sections.where(lab.sectionOpened).length, sheet, reason: 'The cheat sheet stays open');
+    final first = lab.engrave(course.episodes.first, failsHung: 1);
+    expect(first.cardReward, (course.episodes.first.reward / 4).round());
+    expect(lab.failReward, (course.info.rewards.fail / 4).round());
+    expect(lab.hang(course.fails.first), isTrue);
+    expect(lab.balance, balance + first.cardReward + lab.failReward);
+    final synced = LabStore(course: course, shop: testShop(), diagnosis: LabDiagnosis.bundled, records: records);
+    expect(synced.round, 1);
+    expect(synced.earnedIDs, {course.episodes.first.id});
+    expect(synced.balance, lab.balance);
   });
 
   test('a course from the shop pays', () {

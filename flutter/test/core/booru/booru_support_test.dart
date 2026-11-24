@@ -594,6 +594,23 @@ void main() {
       expect(root.listSync(), isEmpty);
     });
 
+    test('the index is read on another isolate, and a file is found before it lands', () async {
+      final root = Directory('${temporaryDirectory(addTearDown).path}/background');
+      final first = BooruThumbnailDiskCache(directory: root, capacity: 12);
+      first.write(Uint8List.fromList([1, 2, 3, 4]), 'a', now: DateTime.fromMillisecondsSinceEpoch(1000));
+      first.write(Uint8List.fromList([5, 6, 7, 8]), 'b', now: DateTime.fromMillisecondsSinceEpoch(2000));
+      await first.idle;
+      final relaunched = BooruThumbnailDiskCache(directory: root, capacity: 8);
+      expect(relaunched.read('b'), [5, 6, 7, 8], reason: 'Before the index lands, a lookup checks its one file');
+      relaunched.remove('a');
+      await relaunched.prepare();
+      expect(relaunched.contains('a'), isFalse, reason: 'A file removed while indexing does not come back');
+      expect(relaunched.contains('b'), isTrue);
+      relaunched.write(Uint8List.fromList([9, 10, 11, 12]), 'c');
+      relaunched.write(Uint8List.fromList([13, 14, 15, 16]), 'd');
+      expect(relaunched.contains('b'), isFalse, reason: 'With the full index, the size limit drops the oldest');
+    });
+
     test('a copy still being saved is readable, and removing it keeps it from landing', () async {
       final root = Directory('${temporaryDirectory(addTearDown).path}/pending');
       final disk = BooruThumbnailDiskCache(directory: root);

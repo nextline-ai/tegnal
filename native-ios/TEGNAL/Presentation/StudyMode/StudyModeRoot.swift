@@ -25,8 +25,12 @@ final class StudyModeModel {
     private(set) var facts = StudyFacts()
     /// How many tags have been missed at least once, for Weak Spots.
     private(set) var weak = 0
-    /// How many lessons at the start of the main path the placement test passed by.
+    /// How many lessons at the start of the main path the placement test passed by. None in a round started over.
     private(set) var placed = 0
+    /// How many times 2D AI 배우기 was finished and started over; a later round pays a quarter.
+    private(set) var round = 0
+    /// True once every lesson of 2D AI 배우기's path is finished in this round, when it can be started over.
+    var finished: Bool { isMain && LabStore.tagCourseFinished(records, path: path) }
     /// True until the learner has been welcomed, on a first visit and again after a reset.
     var needsWelcome: Bool { isMain && StudyPlacement.needsWelcome(records: records, xp: game.xp, placed: placed, defaults: defaults) }
     /// Marks the welcome as gone through on this device.
@@ -45,7 +49,8 @@ final class StudyModeModel {
     func reload(_ store: BooruStore) {
         let study = store.studyStore
         let days = (try? study.days()) ?? []
-        records = (try? study.lessons()) ?? [:]
+        round = isMain ? LabStore.shared.tagRound : 0
+        records = (try? study.lessons(round: LabStore.shared.tagRound)) ?? [:]
         progress = (try? study.progress()) ?? [:]
         summary = StudySummary(curriculum: curriculum, progress: progress, days: days)
         game = StudyGame(days: days, goal: goal)
@@ -54,7 +59,7 @@ final class StudyModeModel {
         if awards.isEmpty { awards = StudyAward.all(.bundled) }
         earned = (try? study.awards()) ?? [:]
         let stats = (try? study.stats()) ?? [:]
-        placed = isMain ? stats[StudyPlacement.counter] ?? 0 : 0
+        placed = isMain && round == 0 ? stats[StudyPlacement.counter] ?? 0 : 0
         facts = StudyFacts(path: .bundled, records: records, days: days, progress: progress, stats: stats)
         weak = progress.values.filter { $0.wrong > 0 && curriculum.contains($0.tag) }.count
     }
@@ -107,17 +112,14 @@ struct StudyModeRoot: View {
 
     @ViewBuilder private func page(_ tab: StudyTab) -> some View {
         switch tab {
-        case .path: StudyPathView(model: model, celebrating: celebrating, start: start)
+        case .path: StudyPathView(model: model, celebrating: celebrating, start: start) {
+            LabStore.shared.startTagCourseOver(in: store.studyStore)
+            withAnimation(.spring(duration: 0.6)) { model.reload(store) }
+        }
         case .practice: StudyPracticeView(model: model, start: start) { speed = StudySpeedRound(store: store) }
         case .courses: LabCoursesView()
         case .lab: StudyLabView(model: model, start: start, closed: celebrate)
-        case .me: StudyMeView(model: model, source: source, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true }, reset: {
-            // A reset starts learning mode over, welcome and placement test included.
-            ReaderPreferences.booruDefaults.removeObject(forKey: StudyPlacement.welcomedKey)
-            model.reload(store)
-            mode.tab = .path
-            welcoming = true
-        })
+        case .me: StudyMeView(model: model, source: source, chooseServer: { choosingServer = true }, openAwards: { showingAwards = true })
         }
     }
 
@@ -168,7 +170,9 @@ struct StudyModeRoot: View {
             #if DEBUG
             // For tests and screenshots: `--study-seed-path=<lesson>` starts with every lesson before that one finished.
             if let target = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--study-seed-path=") })?.dropFirst(18) {
-                for lesson in model.path.lessons.prefix(while: { $0.id != target }) { try? store.studyStore.earn(15, lesson: lesson.id, stars: 3) }
+                for lesson in model.path.lessons.prefix(while: { $0.id != target }) {
+                    try? store.studyStore.earn(15, lesson: lesson.id, stars: 3, round: LabStore.shared.tagRound)
+                }
                 ReaderPreferences.booruDefaults.set(StudyServer.recommended(StudyServer.choices(store)).id, forKey: StudyServer.key)
                 // A seeded learner has been welcomed already; the welcome has tests of its own.
                 ReaderPreferences.booruDefaults.set(true, forKey: StudyPlacement.welcomedKey)
@@ -271,8 +275,11 @@ struct StudyPathView: View {
     let model: StudyModeModel
     var celebrating: String?
     let start: (StudyLessonPlan) -> Void
+    /// Starts a finished 2D AI 배우기 over from its first lesson.
+    var startOver: () -> Void = {}
     /// True once the learner has closed the start card, until a lesson is finished.
     @State private var dismissed = false
+    @State private var confirmingStartOver = false
     private static let sway: [CGFloat] = [0, 58, 86, 58, 0, -58, -86, -58]
 
     var body: some View {
@@ -281,6 +288,16 @@ struct StudyPathView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     if let course = model.course { courseHeader(course).padding(.top, 14) }
+                    // A round started over says so, and that it pays a quarter now.
+                    if model.round > 0 {
+                        Label(L10n.text("lab.restart.round", String(model.round + 1)), systemImage: "arrow.counterclockwise")
+                            .font(StudyTheme.body(13, .heavy)).foregroundStyle(StudyTheme.muted)
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .background(StudyTheme.surface, in: Capsule())
+                            .overlay { Capsule().strokeBorder(StudyTheme.line, lineWidth: 2) }
+                            .padding(.top, 14)
+                            .accessibilityIdentifier("study.path.round")
+                    }
                     ForEach(model.path.sections) { section in
                         banner(section).padding(.top, 18).padding(.bottom, 22)
                         if section.lessons.isEmpty {
@@ -302,6 +319,7 @@ struct StudyPathView: View {
                                 .padding(.bottom, 20).id(lesson.id)
                         }
                     }
+                    if model.finished { startOverCard.padding(.top, 8) }
                     Color.clear.frame(height: 190)
                 }
                 .frame(maxWidth: 560).frame(maxWidth: .infinity)
@@ -321,6 +339,28 @@ struct StudyPathView: View {
         .animation(.spring(duration: 0.3, bounce: 0.2), value: dismissed)
         .animation(.spring(duration: 0.35, bounce: 0.2), value: celebrating)
         .onChange(of: current?.id) { dismissed = false }
+        .alert(L10n.text("lab.restart.confirm"), isPresented: $confirmingStartOver) {
+            Button(L10n.text("lab.restart.action"), role: .destructive) { startOver() }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: { Text(L10n.text("lab.restart.2d.message")) }
+    }
+
+    /// Under a finished path: the way to play 2D AI 배우기 again from its first lesson.
+    private var startOverCard: some View {
+        VStack(spacing: 10) {
+            Text(L10n.text("lab.restart.2d.note")).font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            Button { confirmingStartOver = true } label: {
+                Label(L10n.text("lab.restart.action"), systemImage: "arrow.counterclockwise")
+                    .font(StudyTheme.body(16, .heavy)).frame(maxWidth: .infinity).padding(.vertical, 14)
+            }
+            .buttonStyle(StudyPressStyle(radius: 16, depth: 4))
+            .accessibilityIdentifier("study.path.restart")
+        }
+        .padding(18)
+        .background(StudyTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 2) }
+        .padding(.horizontal, 18)
     }
 
     /// An imported course's name, what it teaches and how far along it is, above its path.
@@ -937,11 +977,8 @@ struct StudyMeView: View {
     var source: any BooruProviding = TasteSources.booru
     let chooseServer: () -> Void
     var openAwards: () -> Void = {}
-    /// Called after progress is reset, so learning mode can welcome the learner again.
-    var reset: () -> Void = {}
     @Environment(BooruStore.self) private var store
     @State private var mode = StudyMode.shared
-    @State private var confirmingReset = false
     @State private var sound = StudySound.isOn
 
     var body: some View {
@@ -999,14 +1036,9 @@ struct StudyMeView: View {
                 StudyCard(padding: 6) { CreatorButton(style: .study) }
                 StudyMainButton(title: L10n.text("Back to the Library"), color: StudyTheme.muted, symbol: "books.vertical.fill") { mode.leave() }
                     .accessibilityIdentifier("study.leave")
-                Button(L10n.text("Reset Study Progress"), role: .destructive) { confirmingReset = true }
-                    .font(StudyTheme.body(14, .bold)).padding(.top, 4).disabled(model.game.xp == 0 && model.summary.started == 0 && model.placed == 0)
             }
             .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
-        .confirmationDialog(L10n.text("Reset study progress?"), isPresented: $confirmingReset, titleVisibility: .visible) {
-            Button(L10n.text("Reset"), role: .destructive) { try? store.studyStore.reset(); model.reload(store); reset() }
-        } message: { Text(L10n.text("Every tag goes back to not started. This cannot be undone.")) }
     }
 
     private func tile(_ symbol: String, _ color: Color, _ value: String, _ title: String) -> some View {

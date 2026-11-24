@@ -31,6 +31,10 @@ struct LabProgress: Codable, Equatable, Sendable {
     var greeted = false
     /// True once a learner who studied 2D AI 배우기 before it was sold has been told the course now opens from the shop.
     var legacyNoticed = false
+    /// How many times each deck course was finished and started over, by course id. Each round keeps its cards and 망작 under
+    /// keys of its own (`LabStore.key`), so earlier rounds stay in the records: what they paid stays paid, and a sync can never
+    /// bring an old round's cards back into the new one.
+    var rounds: [String: Int] = [:]
 }
 
 struct LabPurchase: Codable, Equatable, Sendable {
@@ -153,9 +157,32 @@ final class LabStore {
     }
 
     /// Where a card or 망작 of the course on screen is recorded. The AI lab keeps its plain ids, as it always has; an imported
-    /// course's are put under its id, so two courses never meet.
-    func key(_ id: String) -> String { Self.key(id, in: course) }
-    nonisolated static func key(_ id: String, in course: LabCourse) -> String { course.imported ? course.id + "/" + id : id }
+    /// course's are put under its id, so two courses never meet; a course started over puts the round in front (`r1/…`).
+    func key(_ id: String) -> String { Self.key(id, in: course, round: round) }
+    nonisolated static func key(_ id: String, in course: LabCourse, round: Int = 0) -> String {
+        let base = course.imported ? course.id + "/" + id : id
+        return round > 0 ? "r\(round)/" + base : base
+    }
+
+    // MARK: Starting over
+
+    /// How many times the course on screen was finished and started over.
+    var round: Int { progress.rounds[course.id] ?? 0 }
+    func round(of course: LabCourse) -> Int { progress.rounds[course.id] ?? 0 }
+    /// Every card of the course on screen engraved in this round.
+    var finished: Bool { !course.episodes.isEmpty && course.episodes.allSatisfy(earned) }
+    /// A round after the first pays a quarter of every amount (user, 2026-11-25).
+    static let replayShare = 4
+    func paid(_ amount: Int) -> Int { Self.share(amount, round: round) }
+    nonisolated static func share(_ amount: Int, round: Int) -> Int { round > 0 ? Int((Double(amount) / Double(replayShare)).rounded()) : amount }
+
+    /// Starts a finished course over: an empty deck and gallery and the rate back at its start. What earlier rounds paid stays;
+    /// the cheat sheet and the diagnosis stay as they are.
+    func startOver() {
+        guard finished else { return }
+        progress.rounds[course.id] = round + 1
+        save()
+    }
     /// True when the course on screen pays 보석: the AI lab, and the courses bought in the shop.
     var pays: Bool { !course.imported || course.official }
 
@@ -205,18 +232,18 @@ final class LabStore {
         let pays = self.pays
         if first {
             progress.cards[key(episode.id)] = LabStore.now
-            if pays { progress.cardGems[key(episode.id)] = episode.reward }
+            if pays { progress.cardGems[key(episode.id)] = paid(episode.reward) }
             save()
         }
         let left = episode.fails.filter { progress.fails[key($0.id)] == nil }.count
         let finished = course.season(of: episode).flatMap { first && complete($0) ? $0.number : nil }
         var seasonReward = 0
         if let finished, pays, course.info.rewards.season > 0, progress.seasonGems[key(String(finished))] == nil {
-            seasonReward = course.info.rewards.season
+            seasonReward = paid(course.info.rewards.season)
             progress.seasonGems[key(String(finished))] = seasonReward
             save()
         }
-        return LabEngraving(before: before, after: rate, cardReward: first && pays ? episode.reward : 0, failReward: pays ? failsHung * course.info.rewards.fail : 0,
+        return LabEngraving(before: before, after: rate, cardReward: first && pays ? paid(episode.reward) : 0, failReward: failsHung * failReward,
                             failsHung: failsHung, failsLeft: left, first: first, season: finished, seasonReward: seasonReward)
     }
 
@@ -225,7 +252,7 @@ final class LabStore {
     func hung(_ fail: LabFail) -> Bool { progress.fails[key(fail.id)] != nil }
 
     /// What hanging one 망작 pays in the course on screen: nothing in an imported course.
-    var failReward: Int { pays ? course.info.rewards.fail : 0 }
+    var failReward: Int { pays ? paid(course.info.rewards.fail) : 0 }
 
     /// Hangs a 망작 in the gallery. True the first time, when it also pays.
     @discardableResult
@@ -327,13 +354,16 @@ final class LabStore {
     /// Pays what 2D AI 배우기's finished lessons, three-star lessons and finished sections have not paid yet, and returns the
     /// 보석 paid now. Progress from before the course was sold pays the same way, once; the course must still be bought to go on.
     /// Lessons of imported courses (`course:<id>:…`) are not on the bundled path, so they pay nothing.
+    /// A round after the first (`tagRound`) pays a quarter, under keys of its own (`lesson:course.tags/r1/<lesson>`).
     @discardableResult
     func settleTagCourse(in studyStore: StudyStore, path: StudyPath = .bundled) -> LabTagPayout {
-        guard let records = try? studyStore.lessons() else { return LabTagPayout() }
+        let round = tagRound
+        guard let records = try? studyStore.lessons(round: round) else { return LabTagPayout() }
         let rates = main.info.rewards
         var paid = LabTagPayout()
-        func pay(_ kind: String, _ id: String, _ amount: Int) {
-            let key = "\(kind):\(Self.tagCourse)/\(id)"
+        func pay(_ kind: String, _ id: String, _ full: Int) {
+            let key = "\(kind):\(Self.tagCourse)/" + StudyStore.lessonKey(id, round: round)
+            let amount = Self.share(full, round: round)
             guard amount > 0, progress.coursePaid[key] == nil else { return }
             progress.coursePaid[key] = amount
             switch kind {
@@ -354,11 +384,30 @@ final class LabStore {
         return paid
     }
 
-    /// What 2D AI 배우기 has paid so far, and for how many lessons.
+    /// What 2D AI 배우기 has paid so far, and for how many lessons of its first round.
     var tagCoursePaid: (gems: Int, lessons: Int) {
         let prefix = ":" + Self.tagCourse + "/"
         let entries = progress.coursePaid.filter { $0.key.contains(prefix) }
-        return (entries.values.reduce(0, +), entries.keys.filter { $0.hasPrefix("lesson:") }.count)
+        let lesson = "lesson" + prefix
+        let first = entries.keys.filter { $0.hasPrefix(lesson) && StudyStore.lessonRound(String($0.dropFirst(lesson.count))).round == 0 }
+        return (entries.values.reduce(0, +), first.count)
+    }
+
+    /// How many times 2D AI 배우기 was finished and started over.
+    var tagRound: Int { progress.rounds[Self.tagCourse] ?? 0 }
+
+    /// True when every lesson on 2D AI 배우기's path is finished in the round being played.
+    static func tagCourseFinished(_ records: [String: StudyLessonRecord], path: StudyPath = .bundled) -> Bool {
+        let lessons = path.lessons
+        return !lessons.isEmpty && lessons.allSatisfy { records[$0.id] != nil }
+    }
+
+    /// Starts a finished 2D AI 배우기 over: the path back at its first lesson, paying a quarter. What earlier rounds paid stays,
+    /// and so do experience, badges and what each tag has learned.
+    func startTagCourseOver(in studyStore: StudyStore, path: StudyPath = .bundled) {
+        guard Self.tagCourseFinished((try? studyStore.lessons(round: tagRound)) ?? [:], path: path) else { return }
+        progress.rounds[Self.tagCourse] = tagRound + 1
+        save()
     }
 
     /// True when a learner who studied 2D AI 배우기 before it was sold should be told it now opens from the shop.

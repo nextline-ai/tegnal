@@ -64,15 +64,34 @@ class StudyStore {
     ],
   );
 
-  Map<String, StudyLessonRecord> lessons() => database.read(
-    (db) => {
-      for (final row in db.rows('SELECT lesson, stars, runs FROM study_lessons'))
-        row['lesson'] as String: StudyLessonRecord(lesson: row['lesson'] as String, stars: row['stars'] as int, runs: row['runs'] as int),
-    },
-  );
+  /// A lesson's row in `study_lessons`. 2D AI 배우기 started over (`LabStore.tagRound`) keeps each later round's lessons under
+  /// `r<round>/<lesson>`, so earlier rounds stay in the records and a sync can never bring them into the new one. An imported
+  /// course's lessons (`course:<id>:…`) have no rounds.
+  static String lessonKey(String lesson, int round) => round > 0 && !lesson.startsWith('course:') ? 'r$round/$lesson' : lesson;
 
-  /// Adds experience to a day, and marks a lesson finished when one is named. The best stars are kept.
-  void earn(int xp, {String? lesson, int stars = 0, DateTime? now, Duration? utcOffset}) => database.write((db) {
+  static final _roundKey = RegExp(r'^r(\d+)/(.*)$', dotAll: true);
+
+  /// The round a stored row belongs to, and the lesson's own id.
+  static ({int round, String lesson}) lessonRound(String key) {
+    final match = _roundKey.firstMatch(key);
+    final round = match == null ? 0 : int.tryParse(match.group(1)!) ?? 0;
+    return round > 0 ? (round: round, lesson: match!.group(2)!) : (round: 0, lesson: key);
+  }
+
+  /// The lessons finished in a round of 2D AI 배우기, by the lesson's own id, with every imported course's lessons.
+  Map<String, StudyLessonRecord> lessons({int round = 0}) => database.read((db) {
+    final found = <String, StudyLessonRecord>{};
+    for (final row in db.rows('SELECT lesson, stars, runs FROM study_lessons')) {
+      final held = lessonRound(row['lesson'] as String);
+      if (held.round != round && !held.lesson.startsWith('course:')) continue;
+      found[held.lesson] = StudyLessonRecord(lesson: held.lesson, stars: row['stars'] as int, runs: row['runs'] as int);
+    }
+    return found;
+  });
+
+  /// Adds experience to a day, and marks a lesson finished when one is named, in the round of 2D AI 배우기 being played.
+  /// The best stars are kept.
+  void earn(int xp, {String? lesson, int stars = 0, int round = 0, DateTime? now, Duration? utcOffset}) => database.write((db) {
     final moment = now ?? DateTime.now();
     db.execute(
       '''
@@ -87,7 +106,7 @@ class StudyStore {
       INSERT INTO study_lessons (lesson, stars, runs, finished) VALUES (?, ?, 1, ?)
       ON CONFLICT(lesson) DO UPDATE SET stars = MAX(stars, excluded.stars), runs = runs + 1, finished = excluded.finished
       ''',
-      [lesson, min(3, max(1, stars)), seconds(moment)],
+      [lessonKey(lesson, round), min(3, max(1, stars)), seconds(moment)],
     );
   });
 

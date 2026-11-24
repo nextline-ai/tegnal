@@ -266,6 +266,7 @@ Future<AppServices> _launch() async {
   final studying = Future.wait([StudyCurriculum.loadBundled(), StudyGuide.loadBundled(), StudyPath.loadBundled(), _loadLab()]);
   final caches = await loadingCaches;
   PageImageStore.defaultDiskDirectory = Directory('${caches.path}/MangaPageCache');
+  ComicsPageCache.shared?.prepare().ignore();
   ReadingQueue.defaultCoverDirectory = Directory('${caches.path}/ReadingQueue');
   RecentWorks.defaultCoverDirectory = Directory('${caches.path}/RecentWorks');
   await preparingStorage;
@@ -309,6 +310,9 @@ Future<AppServices> _launch() async {
   LearningCourses.shared.attach(Directory('${support.path}/LearningCourses'));
   booru.addListener(LabStore.shared.reload);
   final thumbnails = BooruImageCache.sharedThumbnails = BooruImageCache.thumbnails(caches);
+  // Each disk cache indexes its folder on another isolate from the start: scanned on the main thread at the first image,
+  // a full cache on a slow tablet held up input past Android's limit (Play vitals ANR, 1.6.1).
+  thumbnails.prepare().ignore();
   booru.warmSavedPreview = (post, server) {
     final url = post.previewURL ?? post.sampleURL;
     if (url != null) thumbnails.prefetch([(url, server)]);
@@ -319,7 +323,7 @@ Future<AppServices> _launch() async {
     booru: booru,
     booruSource: BooruClient.shared,
     booruThumbnails: thumbnails,
-    booruViewerImages: BooruImageCache.sharedViewer = BooruImageCache.viewer(caches),
+    booruViewerImages: BooruImageCache.sharedViewer = BooruImageCache.viewer(caches)..prepare().ignore(),
     booruDownloads: BooruMediaDownloader(),
     // Saved works open from whichever connected website still carries them.
     content: ContentEnvironment(browserPreferences: preferences.defaults, source: SiteFallbackContent.shared),

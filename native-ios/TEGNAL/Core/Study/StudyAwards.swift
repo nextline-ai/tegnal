@@ -200,7 +200,7 @@ enum StudyAwards {
     static func facts(_ store: BooruStore, path: StudyPath = .bundled) -> StudyFacts {
         let study = store.studyStore
         let days = (try? study.days()) ?? []
-        return StudyFacts(path: path, records: (try? study.lessons()) ?? [:], days: days, progress: (try? study.progress()) ?? [:], stats: (try? study.stats()) ?? [:])
+        return StudyFacts(path: path, records: (try? study.lessons(round: LabStore.shared.tagRound)) ?? [:], days: days, progress: (try? study.progress()) ?? [:], stats: (try? study.stats()) ?? [:])
     }
 
     /// Brings the counters and the earned badges up to date. Returns the badges earned but not yet shown, in gallery order.

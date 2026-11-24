@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/booru/booru_models.dart';
 import '../../core/generation/generation_store.dart';
+import '../../core/lab/lab_store.dart';
 import '../../core/lab/tag_course.dart';
 import '../../core/study/study_awards.dart';
 import '../../core/study/study_models.dart';
@@ -38,6 +39,18 @@ class StudyModeModel extends ChangeNotifier {
   };
 
   Map<String, StudyLessonRecord> records = {};
+
+  /// How many times 2D AI 배우기 was finished and started over; a later round pays a quarter and skips no lessons.
+  int round = 0;
+
+  /// True once every lesson of 2D AI 배우기's path is finished in this round, when it can be started over.
+  bool get finished => isMain && LabStore.tagCourseFinished(records, path: path);
+
+  /// Starts a finished 2D AI 배우기 over from its first lesson.
+  void startOver() {
+    LabStore.shared.startTagCourseOver(booru.store.studyStore, path: path);
+    reload();
+  }
   Map<String, StudyProgress> progress = {};
   List<StudyDay> days = [];
   StudySummary summary = const StudySummary();
@@ -91,7 +104,8 @@ class StudyModeModel extends ChangeNotifier {
   void reload() {
     final study = booru.store.studyStore;
     days = _read(study.days, const []);
-    records = _read(study.lessons, const {});
+    round = isMain ? LabStore.shared.tagRound : 0;
+    records = _read(() => study.lessons(round: LabStore.shared.tagRound), const {});
     progress = _read(study.progress, const {});
     summary = StudySummary.of(curriculum: curriculum, progress: progress, days: days);
     game = StudyGame.of(days: days, goal: _goal);
@@ -100,7 +114,7 @@ class StudyModeModel extends ChangeNotifier {
     if (awards.isEmpty) awards = StudyAward.all(StudyPath.bundled);
     earned = _read(study.awards, const {});
     final stats = _read(study.stats, const <String, int>{});
-    placed = isMain ? stats[StudyPlacement.counter] ?? 0 : 0;
+    placed = isMain && round == 0 ? stats[StudyPlacement.counter] ?? 0 : 0;
     facts = StudyFacts.of(path: StudyPath.bundled, records: records, days: days, progress: progress, stats: stats);
     weak = progress.values.where((value) => value.wrong > 0 && curriculum.contains(value.tag)).length;
     notifyListeners();

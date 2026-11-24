@@ -139,8 +139,35 @@ class LabStore extends ChangeNotifier {
 
   /// Where a card or 망작 of the course on screen is recorded. The AI lab keeps its plain ids, as it always has; an imported
   /// course's are put under its id, so two courses never meet.
-  String key(String id) => keyIn(id, course);
-  static String keyIn(String id, LabCourse course) => course.imported ? '${course.id}/$id' : id;
+  String key(String id) => keyIn(id, course, round);
+
+  /// A course started over puts its round in front (`r1/…`).
+  static String keyIn(String id, LabCourse course, [int round = 0]) {
+    final base = course.imported ? '${course.id}/$id' : id;
+    return round > 0 ? 'r$round/$base' : base;
+  }
+
+  // MARK: Starting over
+
+  /// How many times the course on screen was finished and started over.
+  int get round => progress.rounds[course.id] ?? 0;
+  int roundOf(LabCourse course) => progress.rounds[course.id] ?? 0;
+
+  /// Every card of the course on screen engraved in this round.
+  bool get finished => course.episodes.isNotEmpty && course.episodes.every(earned);
+
+  /// A round after the first pays a quarter of every amount (user, 2026-11-25).
+  static const replayShare = 4;
+  int paid(int amount) => share(amount, round);
+  static int share(int amount, int round) => round > 0 ? (amount / replayShare).round() : amount;
+
+  /// Starts a finished course over: an empty deck and gallery and the rate back at its start. What earlier rounds paid stays;
+  /// the cheat sheet and the diagnosis stay as they are.
+  void startOver() {
+    if (!finished) return;
+    progress.rounds[course.id] = round + 1;
+    _save();
+  }
   LabShop get shop => _shop;
 
   /// True when the course on screen pays 보석: the AI lab, and the courses bought in the shop.
@@ -261,7 +288,7 @@ class LabStore extends ChangeNotifier {
     final pays = this.pays;
     if (first) {
       progress.cards[key(episode.id)] = now;
-      if (pays) progress.cardGems[key(episode.id)] = episode.reward;
+      if (pays) progress.cardGems[key(episode.id)] = paid(episode.reward);
       _save();
     }
     final left = episode.fails.where((fail) => !progress.fails.containsKey(key(fail.id))).length;
@@ -269,7 +296,7 @@ class LabStore extends ChangeNotifier {
     final finished = first && season != null && complete(season) ? season.number : null;
     var seasonReward = 0;
     if (finished != null && pays && course.info.rewards.season > 0 && !progress.seasonGems.containsKey(key('$finished'))) {
-      seasonReward = course.info.rewards.season;
+      seasonReward = paid(course.info.rewards.season);
       progress.seasonGems[key('$finished')] = seasonReward;
       _save();
     }
@@ -278,8 +305,8 @@ class LabStore extends ChangeNotifier {
       seasonReward: seasonReward,
       before: before,
       after: rate,
-      cardReward: first && pays ? episode.reward : 0,
-      failReward: pays ? failsHung * course.info.rewards.fail : 0,
+      cardReward: first && pays ? paid(episode.reward) : 0,
+      failReward: failsHung * failReward,
       failsHung: failsHung,
       failsLeft: left,
       first: first,
@@ -291,7 +318,7 @@ class LabStore extends ChangeNotifier {
   bool hung(LabFail fail) => progress.fails.containsKey(key(fail.id));
 
   /// What hanging one 망작 pays in the course on screen: nothing in an imported course.
-  int get failReward => pays ? course.info.rewards.fail : 0;
+  int get failReward => pays ? paid(course.info.rewards.fail) : 0;
 
   /// Hangs a 망작 in the gallery. True the first time, when it also pays.
   bool hang(LabFail fail) {
@@ -401,17 +428,20 @@ class LabStore extends ChangeNotifier {
   /// Pays what 2D AI 배우기's finished lessons, three-star lessons and finished sections have not paid yet, and returns the
   /// 보석 paid now. Progress from before the course was sold pays the same way, once; the course must still be bought to go on.
   /// Lessons of imported courses (`course:<id>:…`) are not on the bundled path, so they pay nothing.
+  /// A round after the first ([tagRound]) pays a quarter, under keys of its own (`lesson:course.tags/r1/<lesson>`).
   LabTagPayout settleTagCourse(StudyStore study, {StudyPath? path}) {
+    final round = tagRound;
     Map<String, StudyLessonRecord> records;
     try {
-      records = study.lessons();
+      records = study.lessons(round: round);
     } on Object {
       return const LabTagPayout();
     }
     final rates = main.info.rewards;
     var lesson = 0, stars = 0, section = 0;
-    void pay(String kind, String id, int amount) {
-      final key = '$kind:$tagCourse/$id';
+    void pay(String kind, String id, int full) {
+      final key = '$kind:$tagCourse/${StudyStore.lessonKey(id, round)}';
+      final amount = share(full, round);
       if (amount <= 0 || progress.coursePaid.containsKey(key)) return;
       progress.coursePaid[key] = amount;
       switch (kind) {
@@ -440,11 +470,36 @@ class LabStore extends ChangeNotifier {
     return paid;
   }
 
-  /// What 2D AI 배우기 has paid so far, and for how many lessons.
+  /// What 2D AI 배우기 has paid so far, and for how many lessons of its first round.
   ({int gems, int lessons}) get tagCoursePaid {
     final prefix = ':$tagCourse/';
     final entries = progress.coursePaid.entries.where((entry) => entry.key.contains(prefix));
-    return (gems: entries.fold(0, (total, entry) => total + entry.value), lessons: entries.where((entry) => entry.key.startsWith('lesson:')).length);
+    final lesson = 'lesson$prefix';
+    final first = entries.where((entry) => entry.key.startsWith(lesson) && StudyStore.lessonRound(entry.key.substring(lesson.length)).round == 0);
+    return (gems: entries.fold(0, (total, entry) => total + entry.value), lessons: first.length);
+  }
+
+  /// How many times 2D AI 배우기 was finished and started over.
+  int get tagRound => progress.rounds[tagCourse] ?? 0;
+
+  /// True when every lesson on 2D AI 배우기's path is finished in the round being played.
+  static bool tagCourseFinished(Map<String, StudyLessonRecord> records, {StudyPath? path}) {
+    final lessons = (path ?? StudyPath.bundled).lessons;
+    return lessons.isNotEmpty && lessons.every((lesson) => records.containsKey(lesson.id));
+  }
+
+  /// Starts a finished 2D AI 배우기 over: the path back at its first lesson, paying a quarter. What earlier rounds paid stays,
+  /// and so do experience, badges and what each tag has learned.
+  void startTagCourseOver(StudyStore study, {StudyPath? path}) {
+    Map<String, StudyLessonRecord> records;
+    try {
+      records = study.lessons(round: tagRound);
+    } on Object {
+      return;
+    }
+    if (!tagCourseFinished(records, path: path)) return;
+    progress.rounds[tagCourse] = tagRound + 1;
+    _save();
   }
 
   /// True when a learner who studied 2D AI 배우기 before it was sold should be told it now opens from the shop.
