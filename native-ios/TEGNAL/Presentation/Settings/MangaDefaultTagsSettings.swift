@@ -26,7 +26,9 @@ struct MangaDefaultTagsSettings: View {
                 .navigationTitle(L10n.text("Default Search Tags")).navigationBarTitleDisplayMode(.inline)
             } label: { Label(L10n.text("Default Search Tags"), systemImage: "line.3.horizontal.decrease") }
                 .accessibilityIdentifier("manga.defaultTagsSettings")
-        } header: { Text(L10n.text("Search")) }
+        } header: { Text(L10n.text("Explore & Search Filters")) } footer: {
+            Text(L10n.text("Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags."))
+        }
     }
 }
 

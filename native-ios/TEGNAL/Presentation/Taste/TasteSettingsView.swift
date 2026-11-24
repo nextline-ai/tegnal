@@ -87,16 +87,6 @@ struct TasteSettingsView: View {
     }
 }
 
-struct TasteSettingsSection: View {
-    let mode: TasteMode
-    var body: some View {
-        Section {
-            NavigationLink { TasteSettingsView(mode: mode) } label: { Label(L10n.text("Taste Analysis"), systemImage: "sparkles") }
-                .accessibilityIdentifier("settings.taste")
-        }
-    }
-}
-
 struct BrowseFilterMenu<Content: View>: View {
     let title: String
     let icon: String

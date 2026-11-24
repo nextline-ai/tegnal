@@ -39,6 +39,8 @@ SCOPES = {
     "study": ["StudyTests", "StudyGuideTests", "StudyPathTests", "StudyAwardsTests"],
     "generation": ["GenerationTests"],
     "presentation": ["AppPresentationTests"],
+    "settings": ["SettingsCatalogTests"],
+    "settings-model": ["SettingsAssistantModelTests"],
 }
 
 

@@ -4,68 +4,24 @@ import UniformTypeIdentifiers
 
 public struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var showReader = false
-    @State private var showOnboarding = false
     @State private var showConnection = false
-    @SwiftUI.AppStorage(MangaThumbnailOpening.preferenceKey, store: ReaderPreferences.defaults) private var showsInformationBeforeReading = false
     public init() {}
     public var body: some View {
-        @Bindable var env = env
-        List {
-            if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
-            Section {
-                if env.comicSites.isEmpty {
-                    Button { showConnection = true } label: {
-                        Label(L10n.text("Website Connection"), systemImage: "globe")
-                    }.accessibilityIdentifier("settings.connection")
-                } else {
-                    NavigationLink { ComicSitesView() } label: {
-                        LabeledContent { Text(env.mangaSiteAddress).lineLimit(1) } label: {
-                            Label(L10n.text("Website Connection"), systemImage: "globe")
-                        }
-                    }.accessibilityIdentifier("settings.connection")
-                }
-                Toggle(isOn: $env.useEmbeddedBrowser) {
-                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.", symbol: "safari")
-                }
-                    .accessibilityIdentifier("settings.embeddedBrowser")
-                Toggle(isOn: $showsInformationBeforeReading) {
-                    SettingsHelpLabel("Show Work Information Before Reading", help: "Shows the title, tags and page previews when you tap a work. When off, the work opens directly in the viewer.", symbol: "list.bullet.below.rectangle")
-                }
-                    .accessibilityIdentifier("settings.mangaInfoBeforeReading")
-                NavigationLink { ThumbnailGestureSettings() } label: {
-                    Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
-                }.accessibilityIdentifier("settings.thumbnailGestures")
-                AddonsSettingsRow(mode: .comics)
-            } header: { Text(L10n.text("Browsing")) }
-            ReaderSettingsSection(booru: false, isPresented: $showReader)
-            Section {
-                NavigationLink { DownloadsView(mode: .manga) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
-                    .accessibilityIdentifier("settings.downloads")
+        SettingsHome(booru: false) {
+            // The website comes first, as an account does in the system Settings app.
+            if env.comicSites.isEmpty {
+                Button { showConnection = true } label: {
+                    Label { Text(L10n.text("Website Connection")).foregroundStyle(.primary) } icon: { SettingsIconTile(symbol: "globe", tint: .blue) }
+                }.accessibilityIdentifier("settings.connection")
+            } else {
+                NavigationLink { ComicSitesView() } label: {
+                    LabeledContent { Text(env.mangaSiteAddress).lineLimit(1) } label: {
+                        Label { Text(L10n.text("Website Connection")) } icon: { SettingsIconTile(symbol: "globe", tint: .blue) }
+                    }
+                }.accessibilityIdentifier("settings.connection")
             }
-            SavedWorksSettingsSection()
-            ModeAppearanceSettings()
-            LanguageSettingsSection()
-            MangaDefaultTagsSettings()
-            SearchHistorySettings()
-            TasteSettingsSection(mode: .comics)
-            // Reachable from Comics Mode too, which Safe Mode keeps to Safebooru's pools.
-            BooruSafeModeSettings()
-            StudyModeSettings()
-            Section {
-                NavigationLink { MangaLibraryToolsView() } label: {
-                    Label(L10n.text("Library Management"), systemImage: "externaldrive")
-                }.accessibilityIdentifier("settings.libraryManagement")
-                NavigationLink { ComicsCacheSettingsView() } label: {
-                    Label(L10n.text("Image Cache"), systemImage: "photo.stack")
-                }.accessibilityIdentifier("settings.imageCache")
-            } header: { Text(L10n.text("Data & Storage")) }
-            PrivacySecuritySection()
-            SettingsSupportSection(showOnboarding: $showOnboarding)
-            DeveloperInfoSection()
         }
         .onAppear { env.presentDiscordInvitationIfDue() }
-        .listStyle(.insetGrouped)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -73,9 +29,7 @@ public struct SettingsView: View {
             ToolbarItem(placement: .principal) { AppModeSwitch() }
             ToolbarItem(placement: .topBarLeading) { LiquidGlassTitleCapsule(L10n.text("Settings")) }
         }
-        .appSheet(isPresented: $showReader) { ReaderSettingsView() }
         .appSheet(isPresented: $showConnection) { WebsiteConnectionEditor(server: nil, initialAddress: env.isSiteVerified ? env.mangaSiteAddress : "") }
-        .appFullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
     }
 }
 

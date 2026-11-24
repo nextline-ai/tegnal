@@ -1,16 +1,5 @@
 import SwiftUI
 
-/// The settings row both modes show for privacy and network choices.
-struct PrivacySecuritySection: View {
-    var body: some View {
-        Section {
-            NavigationLink { PrivacySecurityView() } label: {
-                Label(L10n.text("Privacy & Security"), systemImage: "lock.shield")
-            }.accessibilityIdentifier("settings.privacy")
-        }
-    }
-}
-
 struct PrivacySecurityView: View {
     @SwiftUI.AppStorage(PrivacySettings.incognitoKey, store: ContentPreferences.defaults) private var incognito = false
     @SwiftUI.AppStorage(PrivacySettings.captureProtectionKey, store: ContentPreferences.defaults) private var captureProtection = false

@@ -27,6 +27,7 @@ import '../../core/addons/addon_models.dart';
 import '../../core/addons/addon_store.dart';
 import '../settings/addons_view.dart';
 import '../settings/downloads_view.dart';
+import '../settings/settings_home.dart';
 import '../settings/settings_page.dart';
 import '../settings/settings_rows.dart';
 import '../settings/settings_view.dart' show DeveloperSection, GlassIconToolbarButton, LicensesPage, PrivacyPolicyPage, ThumbnailGestureSettings;
@@ -56,13 +57,13 @@ class BooruSettingsDependencies {
     this.resetSettings,
     this.sync,
     this.invitation,
-    this.tasteSettings,
+    this.openTasteSettings,
   });
 
   final BooruContext booru;
 
-  /// The Taste Analysis row, between search history and sync.
-  final Widget Function(BuildContext context)? tasteSettings;
+  /// Opens Taste Analysis, a page of Settings' top level.
+  final void Function(BuildContext context)? openTasteSettings;
   final ContentEnvironment content;
   final String version;
   final void Function(BuildContext context)? openLibraryManagement;
@@ -76,8 +77,11 @@ class BooruSettingsDependencies {
 
 /// `BooruMoreView`: image mode's settings, with each selected server's filters and connection.
 class BooruMoreView extends StatefulWidget {
-  const BooruMoreView({super.key, required this.dependencies});
+  const BooruMoreView({super.key, required this.dependencies, this.category});
   final BooruSettingsDependencies dependencies;
+
+  /// A page of Settings; null for its top level.
+  final SettingsCategory? category;
 
   @override
   State<BooruMoreView> createState() => _BooruMoreViewState();
@@ -155,9 +159,22 @@ class _BooruMoreViewState extends State<BooruMoreView> {
     if (mounted) setState(() {});
   }
 
+  /// Opens a page of Settings; Taste Analysis, Add-ons and Privacy & Security are screens of their own.
+  void _open(SettingsCategory category) {
+    switch (category) {
+      case SettingsCategory.taste:
+        _deps.openTasteSettings?.call(context);
+      case SettingsCategory.addons:
+        _push((_) => AddonsView(booru: _booru.store, mode: AddonMode.images));
+      case SettingsCategory.privacy:
+        _push((_) => const PrivacySecurityView());
+      default:
+        _push((_) => BooruMoreView(dependencies: _deps, category: category));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final top = rootContentTop(context);
     final row = FormColors.listRow.resolveFrom(context);
     final preferences = _booru.preferences;
     final viewer = _booru.booruDefaults;
@@ -169,238 +186,252 @@ class _BooruMoreViewState extends State<BooruMoreView> {
       footer: footer == null ? null : Text(footer),
       children: children,
     );
+    final category = widget.category;
+    if (category == null) {
+      final top = rootContentTop(context);
+      return ColoredBox(
+        color: FormColors.listBackground.resolveFrom(context),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ListView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.only(top: top + 20, bottom: tabBarClearance(context)),
+                children: [
+                  ListenableBuilder(
+                    listenable: AddonRuntime.shared,
+                    builder: (context, _) => SettingsHome(
+                      booru: true,
+                      open: _open,
+                      addonsCount: AddonRuntime.shared.effects.enabledCount(AddonMode.images),
+                      leading: [if (_deps.invitation != null) _deps.invitation!(context)],
+                      // The servers and the places they lead come first, as an account does in the system Settings app.
+                      top: [
+                        SettingsLinkRow(
+                          title: L10n.text('Servers'),
+                          symbol: (color) => ServerRackSymbol(color: color),
+                          onTap: () => _push((context) => BooruServersView(booru: _booru, content: _deps.content)),
+                        ),
+                        SettingsLinkRow(
+                          title: L10n.text('Challenge Roulette'),
+                          symbol: (_) => DiceSymbol(color: SystemColors.purple.resolveFrom(context)),
+                          onTap: () => _push((context) => ChallengeLibraryView(booru: _booru)),
+                        ),
+                        if (store.servers.isNotEmpty)
+                          SettingsLinkRow(
+                            title: L10n.text('Pools'),
+                            icon: CupertinoIcons.rectangle_stack,
+                            onTap: () => _push(
+                              (context) => store.selectedServers.length == 1
+                                  ? BooruPoolsView(booru: _booru, server: store.selectedServers.first)
+                                  : BooruPoolServersView(booru: _booru),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: RootHeader(
+                title: L10n.text('Settings'),
+                state: _booru.state,
+                trailing: BooruServerMenuButton(store: store),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (category == SettingsCategory.viewer) return ReaderSettingsView(preferences: viewer, booru: true, page: true);
     const automatic = 0;
     final columnOptions = [(automatic, L10n.text('Automatic')), for (var count = 1; count <= 5; count++) (count, '$count')];
     const columnHelp =
         'Automatic fits the columns to the screen, and cards grow a little on larger screens such as tablets. A number sets the columns on a phone; larger screens add columns in proportion.';
     final remember = viewer.boolean('booru.rememberHistory') ?? true;
-    return ColoredBox(
-      color: FormColors.listBackground.resolveFrom(context),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ListView(
-              padding: EdgeInsets.only(top: top + 35, bottom: tabBarClearance(context)),
-              children: [
-                if (_deps.invitation != null) _deps.invitation!(context),
-                section(
-                  header: L10n.text('Browsing'),
-                  children: [
-                    SettingsLinkRow(
-                      title: L10n.text('Servers'),
-                      symbol: (color) => ServerRackSymbol(color: color),
-                      onTap: () => _push((context) => BooruServersView(booru: _booru, content: _deps.content)),
-                    ),
-                    SettingsLinkRow(
-                      title: L10n.text('Challenge Roulette'),
-                      symbol: (_) => DiceSymbol(color: SystemColors.purple.resolveFrom(context)),
-                      onTap: () => _push((context) => ChallengeLibraryView(booru: _booru)),
-                    ),
-                    if (store.servers.isNotEmpty)
-                      SettingsLinkRow(
-                        title: L10n.text('Pools'),
-                        icon: CupertinoIcons.rectangle_stack,
-                        onTap: () => _push(
-                          (context) => store.selectedServers.length == 1
-                              ? BooruPoolsView(booru: _booru, server: store.selectedServers.first)
-                              : BooruPoolServersView(booru: _booru),
-                        ),
-                      ),
-                    SettingsLinkRow(
-                      title: L10n.text('Downloads'),
-                      icon: CupertinoIcons.arrow_down_circle,
-                      onTap: () => _push((context) => DownloadsView(downloads: _booru.downloads, booru: true)),
-                    ),
-                    SettingsLinkRow(
-                      title: L10n.text('Smart Folders'),
-                      icon: CupertinoIcons.sparkles,
-                      onTap: () => _push((context) => BooruFolderRulesPage(booru: _booru)),
-                    ),
-                    SettingsLinkRow(
-                      title: L10n.text('Thumbnail Gestures'),
-                      symbol: (color) => HandTapSymbol(size: 22, color: color),
-                      onTap: () => _push((context) => const ThumbnailGestureSettings(booru: true)),
-                    ),
-                    AddonsSettingsRow(booru: _booru.store, mode: AddonMode.images),
-                  ],
-                ),
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Viewer'),
-                  children: [
-                    SettingsLinkRow(
-                      title: L10n.text('Viewer Detail Settings'),
-                      icon: CupertinoIcons.slider_horizontal_3,
-                      tinted: true,
-                      onTap: () => showAppSheet<void>(
-                        context,
-                        grabber: true,
-                        builder: (context, controller) => ReaderSettingsView(preferences: viewer, booru: true, scrollController: controller),
-                      ),
-                    ),
-                  ],
-                ),
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Appearance'),
-                  children: [
-                    SettingsSegmentedRow<String>(
-                      options: [('dark', L10n.text('Dark Mode')), ('light', L10n.text('Light Mode')), ('system', L10n.text('System Default'))],
-                      selected: preferences.string('booru.app_theme') ?? 'dark',
-                      onSelected: (value) {
-                        _setBrowser('booru.app_theme', value);
-                        _booru.state.appearanceChanged();
-                      },
-                    ),
-                    SettingsSegmentedRow<int>(
-                      title: L10n.text('Folder Columns'),
-                      help: L10n.text(columnHelp),
-                      options: columnOptions,
-                      selected: _booru.folderColumns,
-                      onSelected: (value) => _setBrowser('booru.folder_columns', value),
-                    ),
-                    SettingsSegmentedRow<int>(
-                      title: L10n.text('Grid Columns'),
-                      help: L10n.text(columnHelp),
-                      options: columnOptions,
-                      selected: _booru.gridPreferences.columns,
-                      onSelected: (value) => _setBrowser('booru.grid_columns', value),
-                    ),
-                    SettingsToggleRow(
-                      title: L10n.text('Show Without Spacing'),
-                      help: L10n.text('Removes the gaps and outer margins around artwork and folder thumbnails.'),
-                      value: _booru.gridPreferences.removesPadding,
-                      onChanged: (value) => _setBrowser('booru.grid.noPadding', value),
-                    ),
-                    SettingsToggleRow(
-                      title: L10n.text('Fit Entire Thumbnails'),
-                      help: L10n.text('Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges.'),
-                      value: _booru.fitsThumbnails,
-                      onChanged: (value) => _setViewer('booru.fitThumbnails', value),
-                    ),
-                  ],
-                ),
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Language'),
-                  children: [
-                    SettingsPickerRow<String>(
-                      title: L10n.text('App Language'),
-                      options: [('system', L10n.text('System Language')), ('en', 'English'), ('ko', '한국어'), ('ja', '日本語')],
-                      selected: preferences.string('app.language') ?? 'system',
-                      onSelected: _setLanguage,
-                    ),
-                    if (AppPlatform.hasImageTranslation)
-                      SettingsLinkRow(
-                        title: L10n.text('Translation Language'),
-                        icon: CupertinoIcons.text_bubble,
-                        onTap: () => _push((_) => TranslationLanguagePage(preferences: _booru.booruDefaults)),
-                      ),
-                  ],
-                ),
-                if (AppPlatform.hasWebView) ...[
-                  settingsSectionGap,
-                  section(
-                    header: L10n.text('Website Connection'),
-                    children: [
-                      SettingsToggleRow(
-                        title: L10n.text('Use Embedded Browser'),
-                        help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
-                        icon: CupertinoIcons.compass,
-                        value: _booru.useEmbeddedBrowser,
-                        onChanged: (value) => setState(() => _booru.useEmbeddedBrowser = value),
-                      ),
-                    ],
-                  ),
-                ],
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Search History'),
-                  children: [
-                    SettingsToggleRow(
-                      title: L10n.text('Remember Search History'),
-                      value: remember,
-                      onChanged: (value) => _setViewer('booru.rememberHistory', value),
-                    ),
-                    SettingsPickerRow<int>(
-                      title: L10n.text('Keep History'),
-                      enabled: remember,
-                      options: [(3, L10n.text('3 Days')), (7, L10n.text('7 Days')), (30, L10n.text('30 Days')), (0, L10n.text('Always'))],
-                      selected: viewer.integerOrNull('search.retentionDays') ?? 0,
-                      onSelected: (value) => _setViewer('search.retentionDays', value),
-                    ),
-                    if (RecentImages.shared case final recents?) ...RecentWorksSettingsRows.images(context, recents: recents, booru: _booru),
-                  ],
-                ),
-                if (_deps.tasteSettings != null) ...[settingsSectionGap, _deps.tasteSettings!(context)],
-                if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
-                settingsSectionGap,
-                SafeModeSection(booru: _booru, rowColor: row),
-                settingsSectionGap,
-                HomeStartSettings(rowColor: row),
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Data & Storage'),
-                  children: [
-                    SettingsLinkRow(
-                      title: L10n.text('Library Management'),
-                      symbol: (color) => ExternalDriveSymbol(color: color),
-                      onTap: _deps.openLibraryManagement == null ? null : () => _deps.openLibraryManagement!(context),
-                    ),
-                    SettingsLinkRow(
-                      title: L10n.text(_cacheCleared ? 'Image Cache Cleared' : 'Clear Image Cache'),
-                      help: L10n.text(
-                        'Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed.',
-                      ),
-                      tinted: true,
-                      chevron: false,
-                      onTap: _clearCache,
-                    ),
-                  ],
-                ),
-                settingsSectionGap,
-                const PrivacySecuritySection(),
-                settingsSectionGap,
-                section(
-                  header: L10n.text('Help & Privacy'),
-                  children: [
-                    if (_deps.openOnboarding case final open?)
-                      SettingsLinkRow(
-                        key: const Key('settings.onboarding'),
-                        title: L10n.text('Replay Onboarding'),
-                        icon: CupertinoIcons.sparkles,
-                        chevron: false,
-                        onTap: () => open(context),
-                      ),
-                    SettingsLinkRow(title: L10n.text('Privacy Policy'), icon: CupertinoIcons.hand_raised, onTap: () => _push((_) => const PrivacyPolicyPage())),
-                    SettingsLinkRow(title: L10n.text('Open Source Licenses'), icon: CupertinoIcons.doc_text, onTap: () => _push((_) => const LicensesPage())),
-                    SettingsValueRow(title: L10n.text('Version'), value: _deps.version),
-                    SettingsLinkRow(
-                      title: L10n.text('Reset Settings to Defaults'),
-                      destructive: true,
-                      chevron: false,
-                      onTap: _deps.resetSettings == null ? null : _confirmReset,
-                    ),
-                  ],
-                ),
-                settingsSectionGap,
-                const DeveloperSection(),
-              ],
+    final List<Widget> children = switch (category) {
+      SettingsCategory.browsing => [
+        section(
+          header: L10n.text('Browsing'),
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Thumbnail Gestures'),
+              symbol: (color) => HandTapSymbol(size: 22, color: color),
+              onTap: () => _push((context) => const ThumbnailGestureSettings(booru: true)),
             ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: RootHeader(
-              title: L10n.text('Settings'),
-              state: _booru.state,
-              trailing: BooruServerMenuButton(store: store),
+            if (AppPlatform.hasWebView)
+              SettingsToggleRow(
+                title: L10n.text('Use Embedded Browser'),
+                help: L10n.text('Opens the website instead of the app’s native screens. Try this if a website does not load correctly.'),
+                icon: CupertinoIcons.compass,
+                value: _booru.useEmbeddedBrowser,
+                onChanged: (value) => setState(() => _booru.useEmbeddedBrowser = value),
+              ),
+          ],
+        ),
+        settingsSectionGap,
+        section(
+          header: L10n.text('Explore & Search Filters'),
+          footer: L10n.text('Each server keeps its own tag blacklist, which hides images in Explore and in searches.'),
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Tag Blacklist'),
+              icon: CupertinoIcons.eye_slash,
+              onTap: () => _push(
+                (context) => store.servers.length == 1
+                    ? BooruBlacklistView(booru: _booru, server: store.servers.first)
+                    : BooruServersView(booru: _booru, content: _deps.content),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+        settingsSectionGap,
+        section(
+          header: L10n.text('Search History'),
+          children: [
+            SettingsToggleRow(title: L10n.text('Remember Search History'), value: remember, onChanged: (value) => _setViewer('booru.rememberHistory', value)),
+            SettingsPickerRow<int>(
+              title: L10n.text('Keep History'),
+              enabled: remember,
+              options: [(3, L10n.text('3 Days')), (7, L10n.text('7 Days')), (30, L10n.text('30 Days')), (0, L10n.text('Always'))],
+              selected: viewer.integerOrNull('search.retentionDays') ?? 0,
+              onSelected: (value) => _setViewer('search.retentionDays', value),
+            ),
+            if (RecentImages.shared case final recents?) ...RecentWorksSettingsRows.images(context, recents: recents, booru: _booru),
+          ],
+        ),
+      ],
+      SettingsCategory.appearance => [
+        section(
+          header: L10n.text('Appearance'),
+          children: [
+            SettingsSegmentedRow<String>(
+              options: [('dark', L10n.text('Dark Mode')), ('light', L10n.text('Light Mode')), ('system', L10n.text('System Default'))],
+              selected: preferences.string('booru.app_theme') ?? 'dark',
+              onSelected: (value) {
+                _setBrowser('booru.app_theme', value);
+                _booru.state.appearanceChanged();
+              },
+            ),
+            SettingsSegmentedRow<int>(
+              title: L10n.text('Folder Columns'),
+              help: L10n.text(columnHelp),
+              options: columnOptions,
+              selected: _booru.folderColumns,
+              onSelected: (value) => _setBrowser('booru.folder_columns', value),
+            ),
+            SettingsSegmentedRow<int>(
+              title: L10n.text('Grid Columns'),
+              help: L10n.text(columnHelp),
+              options: columnOptions,
+              selected: _booru.gridPreferences.columns,
+              onSelected: (value) => _setBrowser('booru.grid_columns', value),
+            ),
+            SettingsToggleRow(
+              title: L10n.text('Show Without Spacing'),
+              help: L10n.text('Removes the gaps and outer margins around artwork and folder thumbnails.'),
+              value: _booru.gridPreferences.removesPadding,
+              onChanged: (value) => _setBrowser('booru.grid.noPadding', value),
+            ),
+            SettingsToggleRow(
+              title: L10n.text('Fit Entire Thumbnails'),
+              help: L10n.text('Shows the whole image inside each thumbnail. When off, thumbnails fill the card and may crop the edges.'),
+              value: _booru.fitsThumbnails,
+              onChanged: (value) => _setViewer('booru.fitThumbnails', value),
+            ),
+          ],
+        ),
+      ],
+      SettingsCategory.language => [
+        section(
+          header: L10n.text('Language'),
+          children: [
+            SettingsPickerRow<String>(
+              title: L10n.text('App Language'),
+              options: [('system', L10n.text('System Language')), ('en', 'English'), ('ko', '한국어'), ('ja', '日本語')],
+              selected: preferences.string('app.language') ?? 'system',
+              onSelected: _setLanguage,
+            ),
+            if (AppPlatform.hasImageTranslation)
+              SettingsLinkRow(
+                title: L10n.text('Translation Language'),
+                icon: CupertinoIcons.text_bubble,
+                onTap: () => _push((_) => TranslationLanguagePage(preferences: _booru.booruDefaults)),
+              ),
+          ],
+        ),
+      ],
+      SettingsCategory.library => [
+        section(
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Downloads'),
+              icon: CupertinoIcons.arrow_down_circle,
+              onTap: () => _push((context) => DownloadsView(downloads: _booru.downloads, booru: true)),
+            ),
+            SettingsLinkRow(
+              title: L10n.text('Smart Folders'),
+              icon: CupertinoIcons.sparkles,
+              onTap: () => _push((context) => BooruFolderRulesPage(booru: _booru)),
+            ),
+          ],
+        ),
+        if (_deps.sync != null) ...[settingsSectionGap, _deps.sync!(context)],
+        settingsSectionGap,
+        section(
+          header: L10n.text('Data & Storage'),
+          children: [
+            SettingsLinkRow(
+              title: L10n.text('Library Management'),
+              symbol: (color) => ExternalDriveSymbol(color: color),
+              onTap: _deps.openLibraryManagement == null ? null : () => _deps.openLibraryManagement!(context),
+            ),
+            SettingsLinkRow(
+              title: L10n.text(_cacheCleared ? 'Image Cache Cleared' : 'Clear Image Cache'),
+              help: L10n.text(
+                'Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed.',
+              ),
+              tinted: true,
+              chevron: false,
+              onTap: _clearCache,
+            ),
+          ],
+        ),
+      ],
+      SettingsCategory.start => [SafeModeSection(booru: _booru, rowColor: row), settingsSectionGap, HomeStartSettings(rowColor: row)],
+      SettingsCategory.help => [
+        section(
+          header: L10n.text('Help & Privacy'),
+          children: [
+            if (_deps.openOnboarding case final open?)
+              SettingsLinkRow(
+                key: const Key('settings.onboarding'),
+                title: L10n.text('Replay Onboarding'),
+                icon: CupertinoIcons.sparkles,
+                chevron: false,
+                onTap: () => open(context),
+              ),
+            SettingsLinkRow(title: L10n.text('Privacy Policy'), icon: CupertinoIcons.hand_raised, onTap: () => _push((_) => const PrivacyPolicyPage())),
+            SettingsLinkRow(title: L10n.text('Open Source Licenses'), icon: CupertinoIcons.doc_text, onTap: () => _push((_) => const LicensesPage())),
+            SettingsValueRow(title: L10n.text('Version'), value: _deps.version),
+            SettingsLinkRow(
+              title: L10n.text('Reset Settings to Defaults'),
+              destructive: true,
+              chevron: false,
+              onTap: _deps.resetSettings == null ? null : _confirmReset,
+            ),
+          ],
+        ),
+        settingsSectionGap,
+        const DeveloperSection(),
+      ],
+      SettingsCategory.viewer || SettingsCategory.taste || SettingsCategory.addons || SettingsCategory.privacy => const [],
+    };
+    return SettingsPage(title: category.title, children: children);
   }
 }
 

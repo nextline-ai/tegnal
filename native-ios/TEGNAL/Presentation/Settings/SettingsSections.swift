@@ -1,21 +1,5 @@
 import SwiftUI
 
-struct ReaderSettingsSection: View {
-    let booru: Bool
-    @Binding var isPresented: Bool
-    var body: some View {
-        Section {
-            Button { isPresented = true } label: {
-                HStack {
-                    Label { Text(L10n.text("Viewer Detail Settings")).foregroundStyle(.primary) } icon: { Image(systemName: "slider.horizontal.3") }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-                }
-            }.accessibilityIdentifier(booru ? "booru.readerSettings" : "settings.reader")
-        } header: { Text(L10n.text("Viewer")) }
-    }
-}
-
 struct SettingsSupportSection: View {
     @Binding var showOnboarding: Bool
     var booru = false
@@ -28,7 +12,7 @@ struct SettingsSupportSection: View {
                 .accessibilityIdentifier("settings.onboarding")
             NavigationLink { PrivacyPolicyView() } label: {
                 Label(L10n.text("Privacy Policy"), systemImage: "hand.raised")
-            }.accessibilityIdentifier("settings.privacy")
+            }.accessibilityIdentifier("settings.privacyPolicyRow")
             NavigationLink { AcknowledgmentsView() } label: {
                 Label(L10n.text("Open Source Licenses"), systemImage: "doc.text")
             }

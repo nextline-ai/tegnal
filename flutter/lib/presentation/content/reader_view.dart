@@ -19,6 +19,7 @@ import '../design/glass.dart';
 import '../design/symbols.dart';
 import '../design/system_colors.dart';
 import '../design/tegnal_theme.dart';
+import '../settings/settings_page.dart';
 import 'gallery_detail_view.dart';
 import 'image_translation.dart';
 import 'page_image_store.dart';
@@ -1143,9 +1144,12 @@ abstract final class ReaderScreen {
 
 /// `ReaderSettingsView` for comics, or with [booru] for the image viewer's own options.
 class ReaderSettingsView extends StatefulWidget {
-  const ReaderSettingsView({super.key, required this.preferences, this.booru = false, this.scrollController, this.onChanged, this.onShowGuide});
+  const ReaderSettingsView({super.key, required this.preferences, this.booru = false, this.scrollController, this.onChanged, this.onShowGuide, this.page = false});
   final Preferences preferences;
   final bool booru;
+
+  /// A page of Settings instead of a sheet over the reader.
+  final bool page;
   final ScrollController? scrollController;
   final VoidCallback? onChanged;
 
@@ -1201,15 +1205,7 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
     final prefetch = _defaults.integerOrNull('reader.prefetch') ?? 3;
     final dimming = (_defaults.object('reader.dimming') as num?)?.toDouble() ?? 0;
     final continuous = mode == ReaderMode.continuous.rawValue;
-    return ScrollEdgeSheet(
-      bar: SheetNavigationBar(
-        title: L10n.text('Viewer Detail Settings'),
-        trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()),
-      ),
-      child: ListView(
-        controller: widget.scrollController,
-        padding: EdgeInsets.only(top: 76 + 4, bottom: 32 + MediaQuery.paddingOf(context).bottom),
-        children: [
+    final children = <Widget>[
           if (!widget.booru) ...[
             FormSection(
               prominentHeader: true,
@@ -1495,7 +1491,18 @@ class _ReaderSettingsViewState extends State<ReaderSettingsView> {
               ),
             ],
           ),
-        ],
+        ];
+    // As the Viewer page of Settings, the same options sit on a pushed page.
+    if (widget.page) return SettingsPage(title: L10n.text('Viewer'), children: children);
+    return ScrollEdgeSheet(
+      bar: SheetNavigationBar(
+        title: L10n.text('Viewer Detail Settings'),
+        trailing: GlassTextButton(label: L10n.text('Done'), prominent: true, onPressed: () => Navigator.of(context).pop()),
+      ),
+      child: ListView(
+        controller: widget.scrollController,
+        padding: EdgeInsets.only(top: 76 + 4, bottom: 32 + MediaQuery.paddingOf(context).bottom),
+        children: children,
       ),
     );
   }

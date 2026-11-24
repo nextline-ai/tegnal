@@ -6,19 +6,6 @@ extension UTType {
     static let tegnalAddon = UTType(exportedAs: "work.nextline.tegnal.addon", conformingTo: .json)
 }
 
-/// The row that leads to a mode's add-ons, last in the Browsing section of that mode's settings.
-struct AddonsSettingsRow: View {
-    let mode: AddonMode
-    var body: some View {
-        NavigationLink { AddonsView(mode: mode) } label: {
-            LabeledContent {
-                let count = AddonRuntime.shared.effects.enabledCount(mode)
-                if count > 0 { Text(String(count)) }
-            } label: { Label(L10n.text("Add-ons"), systemImage: "puzzlepiece.extension") }
-        }.accessibilityIdentifier("settings.addons")
-    }
-}
-
 /// A checked add-on waiting for the learner to decide.
 struct AddonCandidate: Identifiable {
     let addon: Addon

@@ -381,7 +381,7 @@ extension SavedCollectionKind {
     static func notifyExcluded(_ excluded: Bool) {
         WorkSaveFeedback.haptic(excluded ? .added(.comics) : .removed(.comics))
         if UIAccessibility.isVoiceOverRunning {
-            UIAccessibility.post(notification: .announcement, argument: L10n.text(excluded ? "Excluded from Searches" : "Included in Searches"))
+            UIAccessibility.post(notification: .announcement, argument: L10n.text(excluded ? "Added to Default Excluded Tags" : "Removed from Default Excluded Tags"))
         }
     }
 }
