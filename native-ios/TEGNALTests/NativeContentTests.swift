@@ -32,6 +32,44 @@ final class NativeContentTests: XCTestCase {
         """
     }
 
+    func testThreeWorksByOneArtistWithinFiveWorksOfEachOtherMakeARun() {
+        // A at 0, 3 and 9: five other works between 3 and 9 still joins.
+        let artists: [[String]?] = [["A"], ["B"], ["C"], ["a "], ["D"], ["E"], ["F"], ["G"], ["H"], ["A"], ["I"]]
+        XCTAssertEqual(AuthorRuns.runs(artists: artists), [AuthorRuns.Run(artist: "A", members: [0, 3, 9])])
+        // Six works between two breaks the run, and two works alone are not one.
+        let apart: [[String]?] = [["A"], ["A"], ["B"], ["C"], ["D"], ["E"], ["F"], ["G"], ["A"]]
+        XCTAssertEqual(AuthorRuns.runs(artists: apart), [])
+        XCTAssertEqual(AuthorRuns.runs(artists: [["A"], ["A"], ["B"]]), [])
+    }
+
+    func testWorksNotLoadedYetCountAsWorksBetweenAndEachWorkJoinsOneRun() {
+        let unknown: [[String]?] = [["A"], nil, nil, nil, nil, nil, ["A"], ["A"], []]
+        XCTAssertEqual(AuthorRuns.runs(artists: unknown), [AuthorRuns.Run(artist: "A", members: [0, 6, 7])])
+        // A shared work goes to the longer run; the shorter keeps its run only while it still has three.
+        let shared: [[String]?] = [["A"], ["A", "B"], ["A"], ["B"], ["B"], ["A"], ["B"]]
+        XCTAssertEqual(AuthorRuns.runs(artists: shared), [AuthorRuns.Run(artist: "A", members: [0, 1, 2, 5]),
+                                                          AuthorRuns.Run(artist: "B", members: [3, 4, 6])])
+    }
+
+    func testARunHoldsMoreWorksThanARowFourInThreeColumns() {
+        let artists: [[String]?] = [["A"], ["B"], ["A"], ["A"], ["C"], ["D"], ["A"]]
+        XCTAssertEqual([1, 2, 3].map { AuthorRuns.minimum(columns: $0) }, [3, 3, 4])
+        XCTAssertEqual(AuthorRuns.runs(artists: Array(artists.prefix(4)), columns: 3), [])
+        XCTAssertEqual(AuthorRuns.runs(artists: artists, columns: 3), [AuthorRuns.Run(artist: "A", members: [0, 2, 3, 6])])
+        XCTAssertEqual(AuthorRuns.runs(artists: artists, columns: 4), [])
+    }
+
+    func testARunTakesItsFirstWorksPlaceAfterTheRowItStartsIn() {
+        let run = AuthorRuns.Run(artist: "A", members: [1, 2, 4])
+        XCTAssertEqual(AuthorRuns.rows(count: 7, runs: [run], columns: 2),
+                       [.works([0, 3]), .run(run), .works([5, 6])])
+        let atStart = AuthorRuns.Run(artist: "A", members: [0, 1, 2])
+        XCTAssertEqual(AuthorRuns.rows(count: 5, runs: [atStart], columns: 2), [.run(atStart), .works([3, 4])])
+        XCTAssertEqual(AuthorRuns.rows(count: 5, runs: [], columns: 3), [.works([0, 1, 2]), .works([3, 4])])
+        // A run waiting for a row the list never fills comes after the short last row.
+        XCTAssertEqual(AuthorRuns.rows(count: 4, runs: [run], columns: 3), [.works([0, 3]), .run(run)])
+    }
+
     @MainActor func testLanguageExceptionsDefaultOffAndPersistIntoLaunchQueries() throws {
         let name = "language-exceptions-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

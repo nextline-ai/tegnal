@@ -15,6 +15,7 @@ class ArtworkCellStyle {
     this.showsArtists = true,
     this.showsCategory = false,
     this.columns = 1,
+    this.spacing = 14,
   });
 
   final double width;
@@ -23,6 +24,19 @@ class ArtworkCellStyle {
   final bool showsArtists;
   final bool showsCategory;
   final int columns;
+
+  /// The gap between cards in the grid.
+  final double spacing;
+
+  ArtworkCellStyle copyWith({double? width, bool? showsArtists}) => ArtworkCellStyle(
+    width: width ?? this.width,
+    removesPadding: removesPadding,
+    showsTitle: showsTitle,
+    showsArtists: showsArtists ?? this.showsArtists,
+    showsCategory: showsCategory,
+    columns: columns,
+    spacing: spacing,
+  );
 
   double get scale => math.min(1, math.max(0.2, width / 160));
   double inset(double value) => removesPadding ? 0 : value * scale;
@@ -102,10 +116,27 @@ class ArtworkGridSliver extends StatelessWidget {
     this.preferences = const ArtworkGridPreferences(),
     this.topMarginScale = 1,
     this.folders = false,
-  });
+  }) : lineCount = null,
+       lineBuilder = null;
+
+  /// `ArtworkGrid(rows: true)`: the content lays out its own lines, each the grid's width,
+  /// instead of one card per cell. [lineCount] says how many lines the grid's columns make.
+  const ArtworkGridSliver.lines({
+    super.key,
+    required int Function(ArtworkCellStyle style) this.lineCount,
+    required Widget Function(BuildContext context, int line, ArtworkCellStyle style) this.lineBuilder,
+    this.preferences = const ArtworkGridPreferences(),
+    this.topMarginScale = 1,
+  }) : itemCount = 0,
+       itemBuilder = _noItem,
+       folders = false;
+
+  static Widget _noItem(BuildContext context, int index, ArtworkCellStyle style) => const SizedBox.shrink();
 
   final int itemCount;
   final Widget Function(BuildContext context, int index, ArtworkCellStyle style) itemBuilder;
+  final int Function(ArtworkCellStyle style)? lineCount;
+  final Widget Function(BuildContext context, int line, ArtworkCellStyle style)? lineBuilder;
   final ArtworkGridPreferences preferences;
   final double topMarginScale;
 
@@ -133,24 +164,30 @@ class ArtworkGridSliver extends StatelessWidget {
           showsArtists: preferences.showsArtists,
           showsCategory: preferences.showsCategories,
           columns: geometry.count,
+          spacing: geometry.spacing,
         );
-        final rows = (itemCount / geometry.count).ceil();
+        final lines = lineCount;
+        final rows = lines != null ? lines(style) : (itemCount / geometry.count).ceil();
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(geometry.margin, geometry.margin * topMarginScale, geometry.margin, geometry.margin),
           sliver: SliverList.separated(
             itemCount: rows,
             separatorBuilder: (_, _) => SizedBox(height: geometry.spacing),
-            itemBuilder: (context, row) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var column = 0; column < geometry.count; column++) ...[
-                  if (column > 0) SizedBox(width: geometry.spacing),
-                  Expanded(
-                    child: row * geometry.count + column < itemCount ? itemBuilder(context, row * geometry.count + column, style) : const SizedBox.shrink(),
+            itemBuilder: (context, row) => lines != null
+                ? lineBuilder!(context, row, style)
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var column = 0; column < geometry.count; column++) ...[
+                        if (column > 0) SizedBox(width: geometry.spacing),
+                        Expanded(
+                          child: row * geometry.count + column < itemCount
+                              ? itemBuilder(context, row * geometry.count + column, style)
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
           ),
         );
       },

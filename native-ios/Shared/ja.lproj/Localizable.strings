@@ -2780,3 +2780,6 @@
 "Changes are made on this device by Apple Intelligence, and each can be undone." = "Apple Intelligenceがこのデバイス上で変更し、変更はそれぞれ取り消せます。";
 "Ask for a change" = "変えたいことを入力";
 "Changed %@." = "%@を変更しました。";
+
+"%@ works in a row" = "続けて投稿された作品 %@件";
+"Shows all works by this artist" = "この作家の作品をすべて表示します";

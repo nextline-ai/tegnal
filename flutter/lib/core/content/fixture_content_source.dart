@@ -29,6 +29,9 @@ enum FixtureOption {
 
   /// `--reader-japanese-test`: pages carry Japanese text.
   japanesePages,
+
+  /// `--author-run-test`: with [longFeed], one artist's works come close together near the top.
+  authorRun,
 }
 
 /// Synthetic pages keep device UI automation independent of private library data and the
@@ -54,7 +57,7 @@ class FixtureContentSource extends ContentProviding {
     return NativeGallery(
       id: id,
       title: linked ? 'Work $id' : '네이티브 읽기 테스트',
-      artists: const ['TEGNAL'],
+      artists: _artists(id, scrolling: scrolling),
       language: version?.language ?? 'english',
       type: categories[id % 5],
       tags: const ['group:sample circle', 'female:sample', 'tag:example'],
@@ -71,6 +74,14 @@ class FixtureContentSource extends ContentProviding {
       versions: version == null ? null : versions,
       relatedIDs: version == null ? null : const [900000002, 900000011, 900000012],
     );
+  }
+
+  /// A long feed names eight artists in turn, too far apart to group. With [FixtureOption.authorRun]
+  /// one artist's works come close together near the top, as a feed does when many are posted at once.
+  List<String> _artists(int id, {required bool scrolling}) {
+    if (!scrolling) return const ['TEGNAL'];
+    if (options.contains(FixtureOption.authorRun) && const {900000003, 900000005, 900000008, 900000010}.contains(id)) return const ['Serial Artist'];
+    return ['Artist ${id % 8}'];
   }
 
   @override

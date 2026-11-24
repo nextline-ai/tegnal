@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -24,7 +25,9 @@ import '../navigation/app_state.dart';
 import '../navigation/root_tab_view.dart';
 import '../works/artwork_grid.dart';
 import '../works/search_controls.dart';
+import 'author_runs.dart';
 import 'gallery_feed_loader.dart';
+import 'gallery_preview_models.dart' show GalleryDetailMetadata;
 import 'page_image_store.dart';
 import 'reader_models.dart';
 import '../design/pull_down_menu.dart';
@@ -73,6 +76,7 @@ class ExploreView extends StatefulWidget {
     this.isActive = true,
     this.initialQuery = '',
     this.onBack,
+    this.search,
   });
 
   final AppState state;
@@ -92,6 +96,9 @@ class ExploreView extends StatefulWidget {
   /// A feed opened from a tag or search starts with that query and offers a way back.
   final String initialQuery;
   final VoidCallback? onBack;
+
+  /// Opens a feed of a search, as an artist's run does for the artist.
+  final void Function(String text)? search;
 
   @override
   State<ExploreView> createState() => _ExploreViewState();
@@ -327,6 +334,33 @@ class _ExploreViewState extends State<ExploreView> {
     }
   }
 
+  Widget _card(FeedItem item, ArtworkCellStyle style) {
+    final id = item.id;
+    final preview = _loader.previews[item];
+    final images = _loader.imagesFor(item);
+    return _GalleryGridCard(
+      key: ValueKey(item),
+      id: id,
+      site: _loader.combinedSites == null ? null : item.site,
+      marksSite: _loader.combinedSites != null && item.site != widget.content.mangaSiteAddress,
+      preview: preview,
+      style: style,
+      bookmarked: _bookmarked.contains(id),
+      open: () {
+        _showing(item);
+        widget.openGallery(id);
+      },
+      details: widget.details == null
+          ? null
+          : () {
+              _showing(item);
+              widget.details!(id);
+            },
+      hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery, site: item.site, images: images),
+      images: images,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -337,6 +371,15 @@ class _ExploreViewState extends State<ExploreView> {
         for (final item in _loader.items)
           if (!hidden.contains(item.id)) item,
     ];
+    // A feed of one artist's works lists them all as cards.
+    final artists = [for (final item in entries) _loader.previews[item]?.display?.artistNames];
+    final linesByColumns = <int, List<AuthorRunLine>>{};
+    List<AuthorRunLine> lines(int columns) => linesByColumns.putIfAbsent(
+      columns,
+      () => AuthorRuns.lines(entries.length, _browsesArtist ? const [] : AuthorRuns.runs(artists, columns: columns), columns),
+    );
+    Map<FeedItem, int>? itemIndices;
+    int itemIndex(FeedItem item) => (itemIndices ??= {for (var index = 0; index < _loader.items.length; index++) _loader.items[index]: index})[item] ?? 0;
     final title = _query.text.isEmpty ? L10n.text('Explore') : L10n.text('Search Results');
     return ColoredBox(
       color: TegnalColors.background.resolveFrom(context),
@@ -353,8 +396,7 @@ class _ExploreViewState extends State<ExploreView> {
                 sliver: SliverToBoxAdapter(child: _filters()),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              ArtworkGridSliver(
-                itemCount: entries.length,
+              ArtworkGridSliver.lines(
                 topMarginScale: 0.5,
                 preferences: ArtworkGridPreferences(
                   columns: widget.content.mangaColumns,
@@ -363,32 +405,42 @@ class _ExploreViewState extends State<ExploreView> {
                   showsArtists: widget.content.showsMangaArtists,
                   showsCategories: widget.content.showsMangaCategories,
                 ),
-                itemBuilder: (context, index, style) {
-                  _loader.retainCovers(index);
-                  final item = entries[index];
-                  final id = item.id;
-                  final preview = _loader.previews[item];
-                  final images = _loader.imagesFor(item);
-                  return _GalleryGridCard(
-                    key: ValueKey(item),
-                    id: id,
-                    site: _loader.combinedSites == null ? null : item.site,
-                    marksSite: _loader.combinedSites != null && item.site != widget.content.mangaSiteAddress,
-                    preview: preview,
-                    style: style,
-                    bookmarked: _bookmarked.contains(id),
-                    open: () {
-                      _showing(item);
-                      widget.openGallery(id);
-                    },
-                    details: widget.details == null
-                        ? null
-                        : () {
-                            _showing(item);
-                            widget.details!(id);
-                          },
-                    hold: widget.bookmark == null ? null : () => widget.bookmark!(id, preview?.gallery, site: item.site, images: images),
-                    images: images,
+                lineCount: (style) => lines(style.columns).length,
+                lineBuilder: (context, index, style) {
+                  final line = lines(style.columns)[index];
+                  final run = line.run;
+                  // `onAppear` of a line: its works and the next six rows' details load ahead.
+                  void appeared() {
+                    final first = line.positions.map((position) => itemIndex(entries[position])).reduce(math.min);
+                    _loader.prioritizeCovers(first, count: style.columns * 6, columns: style.columns);
+                  }
+
+                  if (run != null) {
+                    final first = entries[run.members.first];
+                    return _LineAppearance(
+                      key: ValueKey(('run', first)),
+                      onAppear: appeared,
+                      child: AuthorRunCard(
+                        artist: run.artist,
+                        count: run.members.length,
+                        style: style,
+                        openArtist: widget.search == null ? null : () => widget.search!(GalleryDetailMetadata.artistSearch(run.artist)),
+                        card: (member, strip) => _card(entries[run.members[member]], strip),
+                      ),
+                    );
+                  }
+                  return _LineAppearance(
+                    key: ValueKey(entries[line.first]),
+                    onAppear: appeared,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var column = 0; column < style.columns; column++) ...[
+                          if (column > 0) SizedBox(width: style.spacing),
+                          Expanded(child: column < line.positions.length ? _card(entries[line.positions[column]], style) : const SizedBox.shrink()),
+                        ],
+                      ],
+                    ),
                   );
                 },
               ),
@@ -717,6 +769,28 @@ class ContentUnavailable extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Runs [onAppear] once when a line of the feed is first laid out, as SwiftUI's `onAppear`
+/// does for a lazy row, rather than on every rebuild.
+class _LineAppearance extends StatefulWidget {
+  const _LineAppearance({super.key, required this.onAppear, required this.child});
+  final VoidCallback onAppear;
+  final Widget child;
+
+  @override
+  State<_LineAppearance> createState() => _LineAppearanceState();
+}
+
+class _LineAppearanceState extends State<_LineAppearance> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onAppear();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _GalleryGridCard extends StatefulWidget {

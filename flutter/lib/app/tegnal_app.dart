@@ -801,6 +801,7 @@ class _ExploreRoot extends StatelessWidget {
         database: services.database,
         content: content,
         isActive: state.tab == AppTab.works && state.mode == AppMode.manga,
+        search: (text) => routes.search(context, text),
         openGallery: (id) => routes.openThumbnail(context, id),
         details: (id) => routes.openGallery(context, id),
         bookmark: (id, gallery, {site, images}) => routes.toggleBookmark(context, id, gallery, aboveTabBar: true, site: site, images: images),

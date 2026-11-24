@@ -359,6 +359,8 @@ private struct GalleryFeedView: View {
     @State private var loadedSite: String?
     private struct InitialRequest: Hashable { let query: GalleryQuery; let site: String }
     @State private var loader: GalleryFeedLoader
+    /// Which line shows each work, for scrolling back to a work after reading.
+    @State private var lineAnchors = FeedLineAnchors()
 
     init(artist: String? = nil, initialQuery: String = "", source: any ContentProviding, images: PageImageStore, startup: LaunchFeedWarmup? = nil, navigate: @escaping (ContentRoute) -> Void) {
         self.artist = artist
@@ -441,31 +443,38 @@ private struct GalleryFeedView: View {
                 if picksNoSite {
                     ComicNoSiteSelectionView().padding(.top, 40)
                 } else {
-                ArtworkGrid(mode: .manga, surroundingPadding: 16, topMarginScale: 0.5) { style in
+                ArtworkGrid(mode: .manga, surroundingPadding: 16, topMarginScale: 0.5, rows: true) { style in
                     let prefetchColumns = style.columns
                     let lookahead = prefetchColumns * 6
                     let prefetchThresholdIndex = max(0, loader.ids.count - lookahead)
                     // Read once for the grid: each lazy cell reading the loader would observe it again.
                     let previews = loader.previews
-                    ForEach(visibleEntries, id: \.element) { index, item in
-                        let id = item.id
-                        let itemImages = loader.images(for: item) ?? images
-                        GalleryGridCard(id: id, preview: previews[item], isBookmarked: bookmarkedIDs.contains(id), source: loader.source(for: item), images: itemImages, site: item.site,
-                                        marksSite: env.listsSeveralComicSites && item.site != env.mangaSiteAddress,
-                                        details: { showing(item) { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) } },
-                                        open: { showing(item) {
-                                            // The reader steps through works of the website it reads.
-                                            readerSequence?.ids = visibleEntries.map(\.element).filter { $0.site == item.site }.map(\.id)
-                                            navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery))
-                                        } }) { gallery in
-                            saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: itemImages, context: discovery, site: item.site) }
-                        }
-                        .id(id)
-                        .onAppear {
-                            if index.isMultiple(of: prefetchColumns) {
-                                loader.prioritizeCovers(startingAt: index, count: lookahead, columns: prefetchColumns)
+                    let lines = feedLines(visibleEntries, previews: previews, columns: style.columns)
+                    ForEach(lines) { line in
+                        Group {
+                            switch line.row {
+                            case .works(let positions):
+                                HStack(alignment: .top, spacing: style.spacing) {
+                                    ForEach(positions.map { visibleEntries[$0] }, id: \.element) { entry in
+                                        card(entry.element, preview: previews[entry.element], entries: visibleEntries).frame(width: style.width)
+                                    }
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            case .run(let run):
+                                AuthorRunCard(artist: run.artist, count: run.members.count, openArtist: { navigate(.artist(run.artist)) }) {
+                                    ForEach(run.members.map { visibleEntries[$0] }, id: \.element) { entry in
+                                        card(entry.element, preview: previews[entry.element], entries: visibleEntries)
+                                            .frame(width: style.width)
+                                    }
+                                }.accessibilityElement(children: .contain).accessibilityIdentifier("content.authorRun.\(line.id.id)")
                             }
-                            if index >= prefetchThresholdIndex && loader.hasMore && !loader.loading && loader.error == nil {
+                        }
+                        .id(line.id.id)
+                        .onAppear {
+                            let indices = line.row.positions.map { visibleEntries[$0].offset }
+                            if let first = indices.min() {
+                                loader.prioritizeCovers(startingAt: first, count: lookahead, columns: prefetchColumns)
+                            }
+                            if let last = indices.max(), last >= prefetchThresholdIndex && loader.hasMore && !loader.loading && loader.error == nil {
                                 loader.load(effectiveQuery, reset: false)
                             }
                         }
@@ -647,15 +656,47 @@ private struct GalleryFeedView: View {
             else { await reload().value }
         })
         .onAppear {
-            let loader = loader, environment = env
+            let loader = loader, environment = env, anchors = lineAnchors
             readerSequence?.prepareReturn = { [weak loader, weak environment] opened, viewed in
                 guard let loader else { return }
                 MangaViewerReturn.restore(openedID: opened, viewedID: viewed,
-                    availableIDs: loader.ids.lazy.filter { !(environment?.hiddenMangaGalleryIDs.contains($0) ?? false) }, using: scrollProxy)
+                    availableIDs: loader.ids.lazy.filter { !(environment?.hiddenMangaGalleryIDs.contains($0) ?? false) }, using: scrollProxy) { anchors.ids[$0] ?? $0 }
             }
         }
         }
 
+    }
+
+    private struct FeedLine: Identifiable {
+        /// The first work the line shows.
+        let id: FeedItem
+        let row: AuthorRuns.Row
+    }
+
+    /// The feed's lines: rows of cards, with an artist's run of works as one line. A feed of one
+    /// artist's works lists them all as cards.
+    private func feedLines(_ entries: [(offset: Int, element: FeedItem)], previews: [FeedItem: GalleryFeedPreview], columns: Int) -> [FeedLine] {
+        let runs = browsesArtist ? [] : AuthorRuns.runs(artists: entries.map { previews[$0.element]?.display?.artistNames }, columns: columns)
+        let lines = AuthorRuns.rows(count: entries.count, runs: runs, columns: columns).map { FeedLine(id: entries[$0.first].element, row: $0) }
+        var anchors: [Int64: Int64] = [:]
+        for line in lines { for position in line.row.positions { anchors[entries[position].element.id] = line.id.id } }
+        lineAnchors.ids = anchors
+        return lines
+    }
+
+    private func card(_ item: FeedItem, preview: GalleryFeedPreview?, entries: [(offset: Int, element: FeedItem)]) -> some View {
+        let id = item.id
+        let itemImages = loader.images(for: item) ?? images
+        return GalleryGridCard(id: id, preview: preview, isBookmarked: bookmarkedIDs.contains(id), source: loader.source(for: item), images: itemImages, site: item.site,
+                               marksSite: env.listsSeveralComicSites && item.site != env.mangaSiteAddress,
+                               details: { showing(item) { navigate(MangaThumbnailOpening.information.route(for: id, context: discovery)) } },
+                               open: { showing(item) {
+                                   // The reader steps through works of the website it reads.
+                                   readerSequence?.ids = entries.map(\.element).filter { $0.site == item.site }.map(\.id)
+                                   navigate(MangaThumbnailOpening.stored().route(for: id, context: discovery))
+                               } }) { gallery in
+            saveFeedback = .perform(galleryID: id) { try ContentBookmarkAction.toggle(id: id, gallery: gallery, env: env, images: itemImages, context: discovery, site: item.site) }
+        }
     }
 
     private func resumeFeed() {
@@ -901,6 +942,11 @@ struct ThumbnailTaps: ViewModifier {
             }
             .onDisappear { waiting?.cancel(); waiting = nil }
     }
+}
+
+/// Written while the feed lays out its lines, read when the reader closes; never drawn from.
+private final class FeedLineAnchors {
+    var ids: [Int64: Int64] = [:]
 }
 
 private final class GalleryPaginationViewport {
@@ -1676,8 +1722,11 @@ final class GalleryFeedPreview {
         let language: String
         let type: String
         let pages: Int?
+        /// Each artist on their own, for telling works by one artist apart.
+        let artistNames: [String]
         init(_ gallery: NativeGallery) {
             title = gallery.title
+            artistNames = gallery.artists
             artists = gallery.artists.joined(separator: ", ")
             language = gallery.language
             type = gallery.type

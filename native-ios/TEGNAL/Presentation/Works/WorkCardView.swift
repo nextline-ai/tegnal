@@ -16,6 +16,8 @@ struct ArtworkCellStyle: Equatable {
     var showsArtists = true
     var showsCategory = false
     var columns = 1
+    /// The gap between cards in the grid.
+    var spacing: CGFloat = 14
     var scale: CGFloat { min(1, max(0.2, width / 160)) }
     func inset(_ value: CGFloat) -> CGFloat { removesPadding ? 0 : value * scale }
     func radius(_ value: CGFloat) -> CGFloat { inset(value) }
@@ -72,6 +74,8 @@ struct ArtworkGrid<Content: View>: View {
     /// The surrounding section keeps its own controls inset; the grid can reach the edges.
     var surroundingPadding: CGFloat = 0
     var topMarginScale: CGFloat = 1
+    /// The content lays out its own rows, each the grid's width, instead of one card per cell.
+    var rows = false
     @ViewBuilder let content: (ArtworkCellStyle) -> Content
     @Environment(AppEnvironment.self) private var env
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -85,9 +89,15 @@ struct ArtworkGrid<Content: View>: View {
             removesPadding: env.removesGridPadding(for: mode), maximumColumns: 12)
         let style = ArtworkCellStyle(width: geometry.cellWidth, removesPadding: env.removesGridPadding(for: mode),
             showsTitle: mode != .manga || env.showsMangaTitles, showsArtists: mode != .manga || env.showsMangaArtists,
-            showsCategory: mode == .manga && env.showsMangaCategories, columns: geometry.count)
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing, alignment: .top), count: geometry.count), alignment: .leading, spacing: geometry.spacing) {
-            content(style)
+            showsCategory: mode == .manga && env.showsMangaCategories, columns: geometry.count, spacing: geometry.spacing)
+        Group {
+            if rows {
+                LazyVStack(alignment: .leading, spacing: geometry.spacing) { content(style) }
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: geometry.spacing, alignment: .top), count: geometry.count), alignment: .leading, spacing: geometry.spacing) {
+                    content(style)
+                }
+            }
         }
         .environment(\.artworkCellStyle, style)
         .padding(.horizontal, geometry.margin)
