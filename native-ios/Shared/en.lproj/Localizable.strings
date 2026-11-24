@@ -2717,3 +2717,31 @@
 "lab.gems.left" = "%@ to go";
 "lab.gems.ready" = "Ready to buy";
 "lab.shop.subtitle" = "Opened by what you learn";
+
+/* Who made this (CreatorView) */
+"creator.kicker" = "Who Made This";
+"creator.studio" = "Experimental AI studio · Busan";
+"creator.motto" = "We write the next line\n— with AI.";
+"creator.about" = "TEGNAL and the courses in its learning mode are made by NextLine. We design prompts, build apps together with AI, and teach how it is done.";
+"creator.course" = "This course is built from the methods we use to ship real products.";
+"creator.records" = "The record in numbers";
+"creator.chatbot.value" = "11K";
+"creator.chatbot.label" = "paid conversions";
+"creator.chatbot.detail" = "A paid AI chatbot we designed · Korea's top 50 chatbots";
+"creator.app.label" = "App Store Entertainment chart";
+"creator.app.detail" = "TEGNAL · 3,000 users in its first month";
+"creator.edu.label" = "on an AI chatbot forum";
+"creator.edu.detail" = "AI design learning material";
+"creator.usage.value" = "₩6M / mo";
+"creator.usage.label" = "of AI used in real work";
+"creator.usage.detail" = "API-equivalent cost";
+"creator.records.note" = "Whoever uses the tools most deeply designs them best.";
+"creator.work" = "What we do";
+"creator.work.prompt" = "Prompt Engineering";
+"creator.work.design" = "AI Product & Conversation Design";
+"creator.work.build" = "Vibe Coding";
+"creator.work.teach" = "AI Design Education";
+"creator.site" = "Visit nextline.work";
+"creator.mail" = "Send an Email";
+"creator.button" = "Who Made This?";
+"creator.button.detail" = "About NextLine, the studio behind TEGNAL";

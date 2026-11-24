@@ -304,6 +304,9 @@ struct LabEngraveView: View {
             .padding(.horizontal, 20).padding(.vertical, 10)
             .opacity(settled ? 1 : 0)
             .offset(y: settled ? 0 : 24)
+            // Not there until it shows: no tap and no VoiceOver focus on a button still invisible.
+            .allowsHitTesting(settled)
+            .accessibilityHidden(!settled)
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .task { await play(line) }
@@ -645,4 +648,3 @@ struct LabGemsView: View {
         .accessibilityIdentifier("lab.gems.next")
     }
 }
-

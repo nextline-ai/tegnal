@@ -20,6 +20,7 @@ import '../design/ios_controls.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import '../study_mode/study_kit.dart';
+import 'creator_view.dart';
 import 'lab_kit.dart';
 
 // The cheat sheet, the 망작 gallery, the shop and the diagnosis. Ported from `LabPages.swift`.
@@ -1313,12 +1314,12 @@ Future<bool> confirmLabPurchase(BuildContext context, LabShopItem item) async {
 
 // MARK: - Diagnosis
 
-/// Opens the one-minute check over everything.
-Future<void> showLabDiagnosis(BuildContext context) => Navigator.of(context, rootNavigator: true).push(
+/// Opens the one-minute check over everything. As the lab's first welcome ([introduces]) it opens on who made the lab.
+Future<void> showLabDiagnosis(BuildContext context, {bool introduces = false}) => Navigator.of(context, rootNavigator: true).push(
   PageRouteBuilder<void>(
     transitionDuration: const Duration(milliseconds: 420),
     reverseTransitionDuration: const Duration(milliseconds: 320),
-    pageBuilder: (context, _, _) => const LabDiagnosisView(),
+    pageBuilder: (context, _, _) => LabDiagnosisView(introduces: introduces),
     transitionsBuilder: (context, animation, _, child) => SlideTransition(
       position: Tween(
         begin: const Offset(0, 1),
@@ -1331,7 +1332,10 @@ Future<void> showLabDiagnosis(BuildContext context) => Navigator.of(context, roo
 
 /// The one-minute check: four questions, then card No. 000 with the learner's type and the episodes to look for.
 class LabDiagnosisView extends StatefulWidget {
-  const LabDiagnosisView({super.key});
+  const LabDiagnosisView({super.key, this.introduces = false});
+
+  /// The lab's first welcome: who made it comes first, then the questions.
+  final bool introduces;
   @override
   State<LabDiagnosisView> createState() => _LabDiagnosisViewState();
 }
@@ -1339,6 +1343,7 @@ class LabDiagnosisView extends StatefulWidget {
 class _LabDiagnosisViewState extends State<LabDiagnosisView> {
   final List<int> answers = [];
   LabType? result;
+  late bool introducing = widget.introduces;
   LabStore get store => LabStore.shared;
 
   @override
@@ -1365,7 +1370,8 @@ class _LabDiagnosisViewState extends State<LabDiagnosisView> {
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                       const Spacer(),
-                      Text('${answers.length + 1}/${diagnosis?.questions.length ?? 0}', style: LabFont.number(13, color: labSecondary(context))),
+                      if (!introducing)
+                        Text('${answers.length + 1}/${diagnosis?.questions.length ?? 0}', style: LabFont.number(13, color: labSecondary(context))),
                     ],
                   ],
                 ),
@@ -1378,7 +1384,9 @@ class _LabDiagnosisViewState extends State<LabDiagnosisView> {
                   position: Tween(begin: const Offset(0.2, 0), end: Offset.zero).animate(animation),
                   child: FadeTransition(opacity: animation, child: child),
                 ),
-                child: diagnosis == null
+                child: introducing
+                    ? KeyedSubtree(key: const ValueKey('creator'), child: _creator(context, bottom))
+                    : diagnosis == null
                     ? const SizedBox.shrink()
                     : result != null
                     ? KeyedSubtree(key: const ValueKey('result'), child: _result(context, result!, bottom))
@@ -1390,6 +1398,33 @@ class _LabDiagnosisViewState extends State<LabDiagnosisView> {
       ),
     );
   }
+
+  /// Who made the lab, before its first question.
+  Widget _creator(BuildContext context, double bottom) => Stack(
+    children: [
+      ListView(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 90 + bottom),
+        children: [
+          Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: const CreatorProfile(onboarding: true))),
+        ],
+      ),
+      Positioned(
+        left: 20,
+        right: 20,
+        bottom: 10 + bottom,
+        child: LabButton(
+          key: const Key('lab.diagnosis.creator'),
+          style: LabButtonStyle.primary,
+          expand: true,
+          onPressed: () {
+            LabHaptic.tick();
+            setState(() => introducing = false);
+          },
+          child: Text(L10n.text('Continue')),
+        ),
+      ),
+    ],
+  );
 
   Widget _question(BuildContext context, LabDiagnosis diagnosis, int index, double bottom) {
     final question = diagnosis.questions[index];

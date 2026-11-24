@@ -22,6 +22,7 @@ import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/support/preferences.dart';
 import 'package:tegnal/core/lab/lab_course_file.dart';
 import 'package:tegnal/presentation/design/tegnal_theme.dart';
+import 'package:tegnal/presentation/lab/creator_view.dart';
 import 'package:tegnal/presentation/lab/lab_episode_view.dart';
 import 'package:tegnal/presentation/lab/lab_kit.dart';
 import 'package:tegnal/presentation/lab/lab_pages.dart';
@@ -104,6 +105,35 @@ void main() {
       LabStore.shared.engrave(episode, failsHung: 0);
     }
   }
+
+  testWidgets('the first check opens on who made the lab, then asks; one from the deck asks at once', (tester) async {
+    await pump(tester, const LabDiagnosisView(introduces: true));
+    await shot(tester, '00-creator');
+    expect(key('creator.profile'), findsOneWidget);
+    expect(key('lab.diagnosis.question'), findsNothing);
+    expect(key('lab.diagnosis.skip'), findsOneWidget, reason: 'The welcome can be skipped from its first page');
+    for (final value in ['TOP 25', '#1']) {
+      expect(find.text(value), findsOneWidget);
+    }
+    expect(find.text(L10n.text('creator.usage.label')), findsOneWidget, reason: 'All four records, the monthly AI use among them');
+    await tester.tap(key('lab.diagnosis.creator'));
+    await tester.pumpAndSettle();
+    expect(key('creator.profile'), findsNothing);
+    expect(key('lab.diagnosis.question'), findsOneWidget);
+
+    await pump(tester, const LabDiagnosisView());
+    expect(key('creator.profile'), findsNothing);
+    expect(key('lab.diagnosis.question'), findsOneWidget);
+  });
+
+  testWidgets('who made this opens from its button', (tester) async {
+    await pump(tester, const CupertinoPageScaffold(child: SafeArea(child: CreatorButton())));
+    await tester.tap(key('creator.button'));
+    await tester.pumpAndSettle();
+    await shot(tester, '00-creator-page');
+    expect(key('creator.profile'), findsOneWidget);
+    expect(key('creator.mail'), findsOneWidget);
+  });
 
   testWidgets('a first episode hangs a 망작, passes its tool and engraves its card into the deck', (tester) async {
     await pump(tester, LabRoot(booru: booru, mode: mode));

@@ -995,6 +995,8 @@ struct StudyMeView: View {
                             .onChange(of: sound) { _, on in StudySound.isOn = on; if on { StudySound.right.play() } }
                     }
                 }
+                // Who stands behind the lessons, a tap away.
+                StudyCard(padding: 6) { CreatorButton(style: .study) }
                 StudyMainButton(title: L10n.text("Back to the Library"), color: StudyTheme.muted, symbol: "books.vertical.fill") { mode.leave() }
                     .accessibilityIdentifier("study.leave")
                 Button(L10n.text("Reset Study Progress"), role: .destructive) { confirmingReset = true }
@@ -1086,8 +1088,8 @@ struct StudyModeSettings: View {
 
 // MARK: - Welcome
 
-/// What learning mode shows on a first visit and after a reset: a hello, a daily goal, and how much the learner already
-/// knows. Someone who knows some of it takes the placement test, played in place, which can start them further along.
+/// What learning mode shows on a first visit and after a reset: a hello, who made the course, a daily goal, and how much the
+/// learner already knows. Someone who knows some of it takes the placement test, played in place, which can start them further along.
 struct StudyWelcomeView: View {
     @Bindable var model: StudyModeModel
     let source: any BooruProviding
@@ -1097,7 +1099,7 @@ struct StudyWelcomeView: View {
     /// True for "I Know Some Already", false for "I'm New to This"; nil until one is picked.
     @State private var knowsSome: Bool?
     @State private var test: StudyLessonSession?
-    private static let last = 2
+    private static let last = 3
     private static let goalNames = [10: "Casual", 20: "Regular", 30: "Serious", 50: "Intense"]
 
     var body: some View {
@@ -1112,7 +1114,9 @@ struct StudyWelcomeView: View {
                         Group {
                             switch page {
                             case 0: hello
-                            case 1: goals
+                            // Who made the course, before the learner commits a daily goal to it.
+                            case 1: CreatorProfile(onboarding: true)
+                            case 2: goals
                             default: level
                             }
                         }

@@ -26,6 +26,8 @@ struct LabRoot: View {
     @State private var store = LabStore.shared
     @State private var playing: LabEpisode?
     @State private var diagnosing = false
+    /// True when the check is the lab's first welcome, which opens on who made the lab; a check opened from the deck clears it.
+    @State private var welcoming = false
     /// Told once to a learner who studied 2D AI 배우기 before it was sold: what it paid, and that it now opens from the shop.
     @State private var legacy: (gems: Int, lessons: Int)?
     /// A 망작 opened from the gallery, shown over everything, dock included.
@@ -38,7 +40,7 @@ struct LabRoot: View {
             }
             .labLines()
             .appFullScreenCover(item: $playing) { LabEpisodeView(episode: $0) }
-            .appFullScreenCover(isPresented: $diagnosing) { LabDiagnosisView() }
+            .appFullScreenCover(isPresented: $diagnosing) { LabDiagnosisView(introduces: welcoming) }
             .alert(L10n.text("lab.legacy.title"), isPresented: Binding(get: { legacy != nil }, set: { if !$0 { legacy = nil } })) {
                 Button(L10n.text("lab.legacy.open")) { mode.labTab = .courses; legacy = nil; greet() }
                 Button(L10n.text("OK"), role: .cancel) { legacy = nil; greet() }
@@ -58,7 +60,7 @@ struct LabRoot: View {
     }
 
     @ViewBuilder private var tabs: some View {
-        let deck = NavigationStack { LabDeckView(play: { playing = $0 }, diagnose: { diagnosing = true }, covered: playing != nil) }
+        let deck = NavigationStack { LabDeckView(play: { playing = $0 }, diagnose: { welcoming = false; diagnosing = true }, covered: playing != nil) }
         let fails = NavigationStack { LabFailsView(play: { playing = $0 }, open: { revealing = $0 }) }
         let courses = NavigationStack { LabCoursesView() }
         let shop = NavigationStack { LabShopView() }
@@ -103,6 +105,7 @@ struct LabRoot: View {
     private func greet() {
         guard !store.progress.greeted, store.offersDiagnosis, !HomeStage.shared.coversScreen, !diagnosing, legacy == nil, !store.owesLegacyNotice else { return }
         store.greeted()
+        welcoming = true
         Task { try? await Task.sleep(for: .milliseconds(400)); diagnosing = true }
     }
 }

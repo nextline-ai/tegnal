@@ -2717,3 +2717,31 @@
 "lab.gems.left" = "%@ 남음";
 "lab.gems.ready" = "지금 살 수 있습니다";
 "lab.shop.subtitle" = "배운 만큼 엽니다";
+
+/* Who made this (CreatorView) */
+"creator.kicker" = "누가 만들었나요";
+"creator.studio" = "부산의 실험적 AI 스튜디오";
+"creator.motto" = "다음 줄은,\nAI와 함께 씁니다.";
+"creator.about" = "TEGNAL과 학습 모드의 코스는 NextLine이 만듭니다. 프롬프트를 설계하고, AI와 함께 앱을 만들고, 그 방법을 가르칩니다.";
+"creator.course" = "이 코스에는 실제 제품을 만들며 써 온 방법을 그대로 담았습니다.";
+"creator.records" = "숫자로 남은 기록";
+"creator.chatbot.value" = "1.1만";
+"creator.chatbot.label" = "회 유료 전환";
+"creator.chatbot.detail" = "직접 설계한 AI 챗봇 · 국내 인기 TOP 50";
+"creator.app.label" = "App Store 엔터테인먼트 차트";
+"creator.app.detail" = "TEGNAL · 출시 한 달 만에 3,000명";
+"creator.edu.label" = "AI 챗봇 포럼 교육 자료";
+"creator.edu.detail" = "AI 디자인 교육 자료";
+"creator.usage.value" = "월 600만 원";
+"creator.usage.label" = "상당의 AI를 실무에 사용";
+"creator.usage.detail" = "API 환산 비용 기준";
+"creator.records.note" = "도구를 가장 깊이 써 본 사람이 가장 잘 설계합니다.";
+"creator.work" = "하는 일";
+"creator.work.prompt" = "프롬프트 엔지니어링";
+"creator.work.design" = "AI 제품·대화 디자인";
+"creator.work.build" = "바이브코딩";
+"creator.work.teach" = "AI 디자인 교육";
+"creator.site" = "nextline.work 방문하기";
+"creator.mail" = "메일 보내기";
+"creator.button" = "누가 만들었나요?";
+"creator.button.detail" = "TEGNAL을 만든 NextLine 소개";

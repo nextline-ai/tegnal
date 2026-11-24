@@ -7,9 +7,12 @@ final class LabUITests: XCTestCase {
         app.launchArguments = ["--booru-ui-test", "--lab-mode", "--lab-reset", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
         app.launch()
 
-        // A first visit begins with the one-minute check; it can be skipped.
+        // A first visit begins with who made the lab, then the one-minute check; it can be skipped.
         let skip = element(app, "lab.diagnosis.skip")
         XCTAssertTrue(skip.waitForExistence(timeout: 15), "A first visit is offered the check")
+        XCTAssertTrue(element(app, "creator.profile").exists, "It opens on who made the lab")
+        element(app, "lab.diagnosis.creator").tap()
+        XCTAssertTrue(element(app, "lab.diagnosis.question").waitForExistence(timeout: 5), "Then the questions")
         skip.tap()
 
         XCTAssertTrue(element(app, "lab.rate").waitForExistence(timeout: 5))
@@ -44,7 +47,9 @@ final class LabUITests: XCTestCase {
         let put = element(app, "lab.engrave.put")
         let shown = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: put)
         XCTAssertEqual(XCTWaiter.wait(for: [shown], timeout: 15), .completed, "The way back appears once the line is engraved")
-        put.tap()
+        // At its centre, as a finger would: XCUITest sometimes judges the centre covered and taps the far corner, outside the
+        // rounded button, where nothing happens.
+        put.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         // The 보석 it paid come on a page of their own, the balance rolling up.
         XCTAssertTrue(element(app, "lab.gems").waitForExistence(timeout: 5), "A card that pays shows its 보석 on a page of its own")
@@ -70,6 +75,13 @@ final class LabUITests: XCTestCase {
         XCTAssertTrue(element(app, "lab.2d.buy").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "lab.courses.open.ai-lab").exists)
         XCTAssertFalse(element(app, "lab.courses.open.2d-ai").exists, "A course not bought does not open from its card")
+
+        // At the foot of the courses, who made them.
+        let creator = element(app, "creator.button")
+        for _ in 0..<4 where !creator.isHittable { app.swipeUp() }
+        creator.tap()
+        XCTAssertTrue(element(app, "creator.profile").waitForExistence(timeout: 5), "The button opens who made the course")
+        XCTAssertTrue(element(app, "creator.mail").exists)
     }
 
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {

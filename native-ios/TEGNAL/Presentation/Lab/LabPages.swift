@@ -716,22 +716,26 @@ struct LabShopContent: View {
 
 /// The one-minute check: four questions, then card No. 000 with the learner's type and the episodes to look for.
 struct LabDiagnosisView: View {
+    /// The lab's first welcome: who made it comes first, then the questions. A check taken again from the deck goes straight in.
+    var introduces = false
     @Environment(\.dismiss) private var dismiss
     @State private var answers: [Int] = []
     @State private var result: LabType?
+    @State private var introduced = false
     private var store: LabStore { .shared }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let diagnosis = store.diagnosis {
+                if introduces, !introduced { creator } else if let diagnosis = store.diagnosis {
                     if let result { resultPage(result) } else if answers.count < diagnosis.questions.count { question(diagnosis, answers.count) }
                 }
             }
             .animation(.snappy(duration: 0.3), value: answers)
             .animation(.snappy(duration: 0.3), value: result)
+            .animation(.snappy(duration: 0.3), value: introduced)
             .toolbar {
-                if result == nil {
+                if result == nil, !introduces || introduced {
                     ToolbarItem(placement: .topBarLeading) {
                         Button(L10n.text("lab.diagnosis.skip")) { dismiss() }.accessibilityIdentifier("lab.diagnosis.skip")
                     }
@@ -743,6 +747,25 @@ struct LabDiagnosisView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .labLines()
+    }
+
+    /// Who made the lab, before its first question.
+    private var creator: some View {
+        ScrollView {
+            CreatorProfile(onboarding: true).padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 560).frame(maxWidth: .infinity)
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button { LabHaptic.tick(); introduced = true } label: { Text(L10n.text("Continue")).frame(maxWidth: .infinity) }
+                .labPrimary().buttonBorderShape(.roundedRectangle(radius: 18))
+                .padding(.horizontal, 20).padding(.vertical, 10)
+                .accessibilityIdentifier("lab.diagnosis.creator")
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(L10n.text("lab.diagnosis.skip")) { dismiss() }.accessibilityIdentifier("lab.diagnosis.skip")
+            }
+        }
+        .transition(.opacity)
     }
 
     private func question(_ diagnosis: LabDiagnosis, _ index: Int) -> some View {
