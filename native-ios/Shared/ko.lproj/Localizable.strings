@@ -2096,7 +2096,7 @@
 /* Learning mode */
 "Practice" = "연습";
 "Collection" = "도감";
-"Studio" = "실전";
+"Studio" = "생성기";
 "Me" = "나";
 "Back to the Library" = "라이브러리로 돌아가기";
 "Today's goal" = "오늘의 목표";
@@ -2174,7 +2174,7 @@
 "Open the Generator" = "생성기 열기";
 "Connect an API Key First" = "먼저 API 키를 연결하세요";
 "You can generate pictures. Each one is paid for with Buzz from your Civitai account." = "그림을 생성할 수 있습니다. 한 장마다 Civitai 계정의 Buzz가 듭니다.";
-"Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "그림은 Civitai의 서버가 그립니다. 그래서 실전에는 내 Civitai API 키가 필요합니다.";
+"Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "그림은 Civitai의 서버가 그립니다. 그래서 생성기에는 내 Civitai API 키가 필요합니다.";
 "Learn What an API Key Is" = "API 키가 뭔지 배우기";
 "Sound Effects" = "효과음";
 "Viewing Mode" = "감상 모드";
@@ -2228,7 +2228,14 @@
 "Generate your first picture." = "첫 그림을 생성하기";
 "Advanced Unlocked" = "고급 설정 해금";
 "Generate 3 pictures. This opens the generator's advanced settings." = "그림 3장 생성하기. 생성기의 고급 설정이 열립니다.";
-"Studio Regular" = "실전 단골";
+"Studio Regular" = "생성기 단골";
+"studio.empty.title" = "아직 그린 그림이 없어요";
+"studio.empty.detail" = "프롬프트를 쓰고 모델을 고른 뒤 ‘생성’을 눌러 보세요. 다 그린 그림이 여기에 크게 나와요.";
+"studio.placeholder" = "그리고 싶은 것을 태그로 적어 보세요. 예: 1girl, smile, cherry blossoms";
+"studio.presets" = "추천 태그";
+"studio.all" = "모두 보기";
+"studio.more" = "모든 설정";
+"studio.more.detail" = "크기, 단계, LoRA, 피할 것까지";
 "Generate 10 pictures." = "그림 10장을 생성하기";
 "Prolific" = "다작가";
 "Generate 50 pictures." = "그림 50장을 생성하기";
@@ -2622,6 +2629,12 @@
 "lab.sheet.draftNote" = "아직 정해지지 않은 초안입니다.";
 "lab.sheet.copy" = "프롬프트 복사";
 "lab.sheet.copied" = "복사했습니다";
+"lab.sheet.alerts" = "새 판 알림";
+"lab.sheet.alerts.detail" = "치트시트가 업데이트되면 알림으로 알려 드려요.";
+"lab.sheet.alerts.blocked" = "TEGNAL의 알림이 꺼져 있어요. 설정에서 알림을 허용해 주세요.";
+"lab.sheet.alerts.settings" = "알림 설정 열기";
+"lab.sheet.alert.title" = "새 치트시트가 나왔어요";
+"lab.sheet.alert.body" = "%@ 기준으로 새로 정리했어요. 눌러서 확인해 보세요.";
 "lab.shop.limited" = "한정 판매";
 "lab.shop.owned" = "보유 중";
 "lab.shop.ownedShort" = "보유";

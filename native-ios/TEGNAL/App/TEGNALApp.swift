@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 // MARK: - App switcher privacy cover
 
@@ -160,6 +161,8 @@ struct TEGNALApp: App {
         // Encrypted DNS is the first thing set, before any request leaves the app.
         EncryptedDNS.applyStored()
         AppAudio.useMediaVolume()
+        // Set before launch ends, so a tapped cheat-sheet alert that started the app is still delivered.
+        UNUserNotificationCenter.current().delegate = LabSheetAlertDelegate.shared
     }
 
     var body: some Scene {
@@ -229,6 +232,7 @@ struct TEGNALApp: App {
                 env.setCoverQueueActive(phase == .active)
                 if phase == .active { backgroundSync.cancel() }
                 else if phase == .background, env.sync.enabled { backgroundSync.start(env: env) }
+                if phase == .background { LabSheetAlerts.schedule() }
             }
             // An app set to open in a place goes straight on to it: after the blur, or once it has been set up.
             .onChange(of: stage.introFinished) { _, finished in if finished, env.isOnboardingCompleted || isContentUITest { stage.openPreferred() } }
@@ -313,5 +317,7 @@ struct TEGNALApp: App {
                 await env.backups.backUpIfDue()
             }
         }
+        // A new cheat-sheet edition, checked now and then while the app is away, when its alerts are on.
+        .backgroundTask(.appRefresh(LabSheetAlerts.task)) { await LabSheetAlerts.check() }
     }
 }

@@ -28,6 +28,8 @@ struct LabSheetView: View {
                 if let edition = store.edition { LabSheetBoard(edition: edition) } else {
                     ContentUnavailableView(L10n.text("lab.sheet.none"), systemImage: "doc.text")
                 }
+                // At the very foot: whether a new edition should be told when it comes out.
+                LabSheetAlertToggle()
             }
             .padding(.horizontal, 20).padding(.bottom, 32)
         }
@@ -42,6 +44,69 @@ struct LabSheetView: View {
         guard mode.labTab == .sheet else { return }
         let amount = store.read()
         if amount > 0 { withAnimation(.spring(duration: 0.5)) { paid = amount } }
+    }
+}
+
+/// The switch at the foot of the cheat sheet: a notification when a new edition is published (`LabSheetAlerts`).
+/// Turning it on asks iOS for permission; refused, or taken back later in Settings, it says where to allow it.
+struct LabSheetAlertToggle: View {
+    @State private var on = LabSheetAlerts.isOn
+    @State private var blocked = false
+    @State private var working = false
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(get: { on }, set: { change($0) })) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.text("lab.sheet.alerts")).font(.system(size: 16, weight: .semibold))
+                        Text(L10n.text("lab.sheet.alerts.detail")).font(.system(size: 13)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: {
+                    Image(systemName: on ? "bell.badge.fill" : "bell").foregroundStyle(on ? LabPalette.fail : .secondary)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+            }
+            .disabled(working)
+            .accessibilityIdentifier("lab.sheet.alerts")
+            if blocked {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.text("lab.sheet.alerts.blocked")).font(.system(size: 13)).foregroundStyle(LabPalette.fail)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(L10n.text("lab.sheet.alerts.settings")) {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .accessibilityIdentifier("lab.sheet.alerts.settings")
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(14)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .task(id: scenePhase) { await refresh() }
+    }
+
+    private func change(_ wanted: Bool) {
+        LabHaptic.tick()
+        withAnimation { on = wanted }
+        working = true
+        Task {
+            let done = await LabSheetAlerts.set(wanted)
+            withAnimation { on = LabSheetAlerts.isOn; blocked = wanted && !done }
+            working = false
+        }
+    }
+
+    /// The switch can be on while iOS no longer lets the app notify; that is said, not hidden.
+    private func refresh() async {
+        guard scenePhase == .active else { return }
+        on = LabSheetAlerts.isOn
+        let allowed = await LabSheetAlerts.allowed()
+        withAnimation { blocked = on && !allowed || (blocked && !allowed) }
     }
 }
 

@@ -188,12 +188,12 @@ final class StudyUITests: XCTestCase {
         XCTAssertTrue(element(app, "study.node.api-buzz").waitForExistence(timeout: 8))
     }
 
-    func testTheStudioAsksForAKeyAndLeadsToTheLessonsAboutIt() {
+    func testTheGeneratorAsksForAKeyAndLeadsToTheLessonsAboutIt() {
         let app = launch(seed: "s0-order", extra: ["--generation-ui-test", "--generation-no-key"])
         element(app, "study.dock.lab").tap()
-        XCTAssertTrue(app.staticTexts["Connect an API Key First"].waitForExistence(timeout: 5), "Generating needs a key, and the Studio says so")
+        XCTAssertTrue(app.staticTexts["Connect an API Key First"].waitForExistence(timeout: 5), "Generating needs a key, and the generator tab says so")
         element(app, "study.lab.learn").tap()
-        XCTAssertTrue(element(app, "study.cardTitle").waitForExistence(timeout: 10), "The lessons about the API open from the Studio")
+        XCTAssertTrue(element(app, "study.cardTitle").waitForExistence(timeout: 10), "The lessons about the API open from the generator tab")
         XCTAssertTrue(element(app, "study.cardTitle").label.contains("connection"), "It starts with why a connection is needed")
     }
 
@@ -259,7 +259,7 @@ final class StudyUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Review Complete!"].exists)
     }
 
-    // MARK: Studio and viewer
+    // MARK: Generator and viewer
 
     func testALessonTeachesEmphasisWithExamplesAToolAndQuestions() {
         let app = launch(language: "ko", seed: "s0-order")
@@ -276,31 +276,34 @@ final class StudyUITests: XCTestCase {
         XCTAssertEqual(reveal(app, "study.check.0.1").value as? String, "정답", "A question can be tried again")
     }
 
-    func testAPromptIsDrawnWithTheUsersKeyAndKept() {
+    func testAPromptIsDrawnOnTheGeneratorTabWithTheUsersKeyAndKept() {
         let app = launch(seed: "s0-order", extra: ["--generation-ui-test"])
-        element(app, "study.dock.lab").tap(); element(app, "study.lab.generator").tap()
-        XCTAssertTrue(element(app, "generator.model").waitForExistence(timeout: 5))
-        XCTAssertFalse(element(app, "generator.addKey").exists, "A saved key needs no asking")
+        element(app, "study.dock.lab").tap()
+        XCTAssertTrue(element(app, "generator.prompt").waitForExistence(timeout: 5), "The tab is the generator itself")
+        XCTAssertFalse(app.staticTexts["Connect an API Key First"].exists, "A saved key needs no asking")
         reveal(app, "generator.model").tap()
         let field = element(app, "generator.air")
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap()
         field.typeText("urn:air:sdxl:checkpoint:civitai:827184@2514310")
         element(app, "generator.useAIR").tap()
-        XCTAssertTrue(app.staticTexts["Fixture Model · v1"].waitForExistence(timeout: 10), "The model is named from its AIR")
-        let prompt = element(app, "generator.prompt")
+        XCTAssertTrue(app.staticTexts["Fixture Model · v1"].waitForExistence(timeout: 10), "The chosen model is named on the tab")
+        let prompt = reveal(app, "generator.prompt")
         prompt.tap(); prompt.typeText("1girl, smile")
-        app.swipeUp()
         let generate = reveal(app, "generator.generate")
         XCTAssertTrue(generate.isEnabled); generate.tap()
-        XCTAssertTrue(element(app, "generator.result").waitForExistence(timeout: 20), "The finished picture is shown")
-        reveal(app, "generator.result").tap()
+        XCTAssertTrue(element(app, "generator.recent").waitForExistence(timeout: 20), "The finished picture is kept under the canvas")
+        XCTAssertTrue(element(app, "generator.result").exists, "and shown on the canvas")
+        // The first picture earns a badge, shown as soon as it is drawn.
+        XCTAssertTrue(app.staticTexts["Achievement Unlocked!"].waitForExistence(timeout: 10), "The first picture earns its badge at once")
+        app.buttons["Continue"].firstMatch.tap()
+        reveal(app, "generator.recent").tap()
         XCTAssertTrue(element(app, "generator.picture").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["1girl, smile"].exists, "A picture keeps the prompt it was made from")
     }
 
     func testGeneratingWithoutAKeyAsksForOneAndChecksIt() {
         let app = launch(seed: "s0-order", extra: ["--generation-ui-test", "--generation-no-key"])
-        element(app, "study.dock.lab").tap(); element(app, "study.lab.generator").tap()
+        element(app, "study.dock.lab").tap(); reveal(app, "study.lab.generator").tap()
         XCTAssertTrue(element(app, "generator.addKey").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Advanced Settings"].exists, "A beginner sees that the advanced settings are still locked")
         XCTAssertFalse(element(app, "generator.negative").exists, "Advanced settings stay out of the way at first")

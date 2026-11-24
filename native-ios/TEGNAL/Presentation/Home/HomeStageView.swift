@@ -310,8 +310,23 @@ import UIKit
     }
 
     /// A pull that starts on a bar belongs to the scene; a list under it waits for it to give up first.
+    /// The dock is a bar too: its own drag (sliding between tabs) and its buttons wait, so a sweep up that starts on the dock
+    /// takes learning mode home instead of being kept by the tab bar.
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-        (recognizer === back || recognizer === outward) && other.view is UIScrollView
+        guard recognizer === back || recognizer === outward else { return false }
+        if other.view is UIScrollView { return true }
+        // Only learning mode is swept up from its dock; the library's tab bar keeps its own touches.
+        return recognizer === back && phase == .away && placeRealm == .study && Self.inTabBar(other.view)
+    }
+
+    /// Whether a view is part of a tab bar: the stock `UITabBar`, or the floating bar iOS 26 draws with views of its own.
+    private static func inTabBar(_ view: UIView?) -> Bool {
+        var current = view
+        while let candidate = current {
+            if candidate is UITabBar || String(describing: type(of: candidate)).contains("TabBar") { return true }
+            current = candidate.superview
+        }
+        return false
     }
 
     @objc private func pullOut(_ recognizer: UIPanGestureRecognizer) {

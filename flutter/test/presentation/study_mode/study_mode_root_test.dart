@@ -365,11 +365,57 @@ void main() {
       expect(key('study.lab.generator'), findsOneWidget);
       expect(key('study.lab.guide'), findsOneWidget);
 
+      // The generator itself is on the tab from the start, the key card above it.
+      expect(key('generator.prompt'), findsOneWidget);
+      expect(key('generator.model'), findsOneWidget);
+      expect(key('generator.generate'), findsOneWidget);
+      expect(find.text('studio.empty.title'), findsOneWidget);
+
       await tester.runAsync(() => generation.save('a-key'));
       await tester.pumpAndSettle();
-      expect(find.text('API Key Connected'), findsOneWidget);
+      expect(find.text('Connect an API Key First'), findsNothing);
       expect(key('study.lab.learn'), findsNothing);
       expect(key('study.lab.key'), findsNothing);
+      expect(key('generator.prompt'), findsOneWidget);
+    });
+
+    testWidgets('a prompt is drawn on the tab itself, shown on the canvas and kept with the prompt', (tester) async {
+      prepare();
+      tester.view.physicalSize = const Size(1206, 6000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final secure = MemorySecureStorage()..values['tegnal.generation.civitai'] = 'test-key';
+      final defaults = MemoryPreferences();
+      final generation = GenerationStore(
+        folder: Directory('${directory.path}/Generated'),
+        defaults: defaults,
+        keychain: GenerationKeychain(secure),
+        transport: GenerationFixture.transport(delay: Duration.zero),
+      );
+      await tester.runAsync(generation.load);
+      generation.settings = generation.settings.use(GenerationFixture.model);
+      final model = StudyModeModel(harness.booru)..reload();
+      await pumpMode(tester, StudyLabView(model: model, start: (_) {}, generation: generation));
+      expect(find.text('Connect an API Key First'), findsNothing);
+      expect(find.text('Fixture Model · v1'), findsOneWidget);
+      await tester.enterText(key('generator.prompt'), '1girl, smile');
+      await tester.pump();
+      expect(defaults.string(StudyLabView.promptKey), '1girl, smile', reason: 'The prompt being written is kept');
+
+      await tester.tap(key('generator.generate'));
+      for (var step = 0; step < 100 && generation.pictures.isEmpty; step++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      // The empty canvas fades out under the new picture.
+      for (var step = 0; step < 4; step++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      expect(generation.pictures, hasLength(1));
+      expect(generation.pictures.single.prompt, '1girl, smile');
+      expect(key('generator.result'), findsOneWidget, reason: 'The new picture is on the canvas');
+      expect(key('generator.recent'), findsOneWidget);
+      expect(find.text('studio.empty.title'), findsNothing);
     });
 
     testWidgets('Learn What an API Key Is starts that lesson', (tester) async {

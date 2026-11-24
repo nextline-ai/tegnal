@@ -3,6 +3,10 @@
     <!-- The on-device model needs Android 8 or later; it is only called there. -->
     <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt, com.google.mlkit.genai.common" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- New cheat-sheet edition alerts (LabSheetAlerts): asked for only when the switch is turned on. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the alert check scheduled after a restart. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:label="TEGNAL"
         android:fullBackupContent="@xml/backup_rules"
@@ -31,6 +35,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The periodic check for a new cheat-sheet edition. -->
+        <service
+            android:name=".LabSheetJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <!-- Hands a shared image, such as a Recap card, to the app the person picks. -->
         <provider
             android:name="androidx.core.content.FileProvider"

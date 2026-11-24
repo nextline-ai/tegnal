@@ -510,4 +510,13 @@ final class LabTests: XCTestCase {
             for hex in [row.color, row.labelColor].compactMap({ $0 }) { XCTAssertTrue(hex.count == 6 && hex.allSatisfy(\.isHexDigit), hex) }
         }
     }
+
+    func testACheatSheetAlertTellsOnlyAnEditionDatedAfterTheNewestKnown() throws {
+        let bundled = try XCTUnwrap(LabEdition.bundled)
+        var later = bundled; later.date = "2099-01-01"; later.id = "2099-01-01"
+        var correction = bundled; correction.id = bundled.id
+        XCTAssertTrue(LabSheetAlerts.news(later, known: bundled.date), "A later edition is news")
+        XCTAssertFalse(LabSheetAlerts.news(correction, known: bundled.date), "A same-day correction is not")
+        XCTAssertFalse(LabSheetAlerts.news(bundled, known: "2099-01-01"), "Nor is anything older than what was told")
+    }
 }
