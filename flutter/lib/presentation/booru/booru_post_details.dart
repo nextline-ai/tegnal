@@ -389,65 +389,79 @@ class _DetailsPageState extends State<_DetailsPage> {
     final color = artworkTagColor(category, context);
     final kind = category.savedKind.rawValue;
     final saved = _booru.store.savedTags(_server.id, kind: kind).contains(tag.query);
-    return Semantics(
-      button: true,
-      customSemanticsActions: {CustomSemanticsAction(label: L10n.text('Save Tag')): () => _saveTag(tag.query, kind)},
-      child: FormRow(
-        onTap: () => _openFeed(query: tag.query),
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onLongPress: () => _saveTag(tag.query, kind),
-          child: Row(
-            children: [
-              Expanded(
-                // A translated tag keeps the tag itself beneath it, so that what is searched is never hidden.
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(tag.name, style: TegnalType.style(17, color: color)),
-                    if (tag.original != null) ...[
-                      const SizedBox(height: 2),
-                      Text(tag.original!, style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context))),
-                    ],
-                  ],
+    List<ContextMenuAction> actions() => [
+      ContextMenuAction(title: L10n.text(saved ? 'Remove Saved Tag' : 'Save Tag'), icon: CupertinoIcons.tag, onSelected: () => _saveTag(tag.query, kind)),
+      ContextMenuAction(title: L10n.text('Save Artist'), icon: CupertinoIcons.person, onSelected: () => _saveTag(tag.query, 'artist')),
+      ContextMenuAction(
+        title: L10n.text('About This Tag'),
+        icon: StudySymbols.graduationCap,
+        onSelected: () => Navigator.of(context).push(
+          CupertinoPageRoute<void>(
+            builder: (context) => StudyTagView(booru: _booru, name: tag.query),
+          ),
+        ),
+      ),
+      ContextMenuAction(title: L10n.text('Blacklist Tag'), icon: CupertinoIcons.eye_slash, onSelected: () => _hide(tag.query)),
+    ];
+    // A translated tag keeps the tag itself beneath it, so that what is searched is never hidden.
+    final label = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(tag.name, style: TegnalType.style(17, color: color)),
+        if (tag.original != null) ...[
+          const SizedBox(height: 2),
+          Text(tag.original!, style: TegnalType.style(12, color: TegnalColors.secondaryLabel.resolveFrom(context))),
+        ],
+      ],
+    );
+    return Builder(
+      builder: (rowContext) => Semantics(
+        button: true,
+        customSemanticsActions: {CustomSemanticsAction(label: L10n.text('Save Tag')): () => _saveTag(tag.query, kind)},
+        child: FormRow(
+          onTap: () => _openFeed(query: tag.query),
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            // Holding the row lifts it with the same actions as its button, and copying the tag.
+            onLongPress: () => showContextMenu(
+              rowContext,
+              anchor: anchorOf(rowContext),
+              lift: 1.0,
+              child: ColoredBox(
+                color: FormColors.row.resolveFrom(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Align(alignment: Alignment.centerLeft, child: label),
                 ),
               ),
-              Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
-              const SizedBox(width: 10),
-              Builder(
-                builder: (buttonContext) => GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => showActionMenu(
-                    buttonContext,
-                    anchor: anchorOf(buttonContext),
-                    actions: [
-                      ContextMenuAction(
-                        title: L10n.text(saved ? 'Remove Saved Tag' : 'Save Tag'),
-                        icon: CupertinoIcons.tag,
-                        onSelected: () => _saveTag(tag.query, kind),
-                      ),
-                      ContextMenuAction(title: L10n.text('Save Artist'), icon: CupertinoIcons.person, onSelected: () => _saveTag(tag.query, 'artist')),
-                      ContextMenuAction(
-                        title: L10n.text('About This Tag'),
-                        icon: StudySymbols.graduationCap,
-                        onSelected: () => Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (context) => StudyTagView(booru: _booru, name: tag.query),
-                          ),
-                        ),
-                      ),
-                      ContextMenuAction(title: L10n.text('Blacklist Tag'), icon: CupertinoIcons.eye_slash, onSelected: () => _hide(tag.query)),
-                    ],
-                  ),
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: Icon(saved ? CupertinoIcons.star_fill : CupertinoIcons.ellipsis_circle, size: 22, color: color),
+              actions: [
+                ...actions(),
+                ContextMenuAction(
+                  title: L10n.text('Copy Tag'),
+                  icon: CupertinoIcons.doc_on_doc,
+                  onSelected: () => Clipboard.setData(ClipboardData(text: tag.query)),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(child: label),
+                Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
+                const SizedBox(width: 10),
+                Builder(
+                  builder: (buttonContext) => GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showActionMenu(buttonContext, anchor: anchorOf(buttonContext), actions: actions()),
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: Icon(saved ? CupertinoIcons.star_fill : CupertinoIcons.ellipsis_circle, size: 22, color: color),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

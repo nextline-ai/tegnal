@@ -319,7 +319,10 @@ struct ArtworkTagCloud: View {
     var destination: ((ArtworkTag) -> ContentRoute)? = nil
     var action: ((ArtworkTag) -> Void)? = nil
     var savedQueries = Set<String>()
+    /// When set, holding a tag opens its menu: saving it, copying it and, with `exclude`, leaving it out of searches.
     var save: ((ArtworkTag) -> Void)? = nil
+    var excludedQueries = Set<String>()
+    var exclude: ((ArtworkTag) -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: headingStyle == .detail ? 12 : 16) {
             ForEach(groups) { group in
@@ -332,7 +335,8 @@ struct ArtworkTagCloud: View {
                     FlowLayout(spacing: 6) {
                         ForEach(group.tags) { tag in
                             ArtworkTagCloudItem(tag: tag, saved: savedQueries.contains(tag.query.replacingOccurrences(of: " ", with: "_")),
-                                destination: destination, action: action, save: save)
+                                destination: destination, action: action, save: save,
+                                excluded: excludedQueries.contains(AppEnvironment.excludedTagRule(tag.query).lowercased()), exclude: exclude)
                                 .accessibilityLabel(L10n.text(tag.category.title) + ": " + tag.name)
                                 .accessibilityHint(tag.original ?? "")
                                 .accessibilityIdentifier("tags." + group.category.rawValue + "." + tag.query)
@@ -350,10 +354,15 @@ private struct ArtworkTagCloudItem: View {
     let destination: ((ArtworkTag) -> ContentRoute)?
     let action: ((ArtworkTag) -> Void)?
     let save: ((ArtworkTag) -> Void)?
+    let excluded: Bool
+    let exclude: ((ArtworkTag) -> Void)?
     @ScaledMetric(relativeTo: .caption) private var starRoom: CGFloat = 18
     var body: some View {
         if let save {
-            link.highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in save(tag) })
+            link.contextMenu {
+                ArtworkTagMenu(copy: tag.original ?? tag.name, saved: saved, save: { save(tag) },
+                               excluded: excluded, exclude: exclude.map { exclude in { exclude(tag) } })
+            }
                 .accessibilityAction(named: L10n.text(saved ? "Remove Saved Tag" : "Save Tag")) { save(tag) }
                 .layoutValue(key: FlowReservedWidth.self, value: saved ? 0 : starRoom)
         } else { link }
@@ -371,6 +380,28 @@ private struct ArtworkTagCloudItem: View {
     }
 }
 
+
+/// What holding a tag in Work Information offers: saving it, copying it and leaving it out of every search.
+struct ArtworkTagMenu: View {
+    /// The tag as it is written, copied without its category.
+    let copy: String
+    let saved: Bool
+    var saveTitle = "Save Tag"
+    var removeTitle = "Remove Saved Tag"
+    let save: () -> Void
+    var excluded = false
+    var exclude: (() -> Void)? = nil
+    var body: some View {
+        Button(L10n.text(saved ? removeTitle : saveTitle), systemImage: saved ? "star.slash" : "star", action: save)
+            .accessibilityIdentifier("tag.menu.save")
+        Button(L10n.text("Copy Tag"), systemImage: "doc.on.doc") { UIPasteboard.general.string = copy }
+            .accessibilityIdentifier("tag.menu.copy")
+        if let exclude {
+            Button(L10n.text(excluded ? "Include in Searches" : "Exclude from Searches"), systemImage: excluded ? "eye" : "eye.slash", action: exclude)
+                .accessibilityIdentifier("tag.menu.exclude")
+        }
+    }
+}
 
 struct SavedTagStar: View {
     let font: Font

@@ -838,9 +838,9 @@
  "Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you.": "すべてのマンガ検索で一致する作品を除外します。タグだけを入力すると、除外記号のマイナスは自動で追加されます。",
  "Hint": "ヒント",
  "Hold a folder to make it a smart folder. Smart folders show %@ after their name.": "フォルダを長押しするとスマートフォルダにできます。スマートフォルダには名前の末尾に%@が付きます。",
- "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.": "作品情報でタグや作家名を長押しすると、ここに保存できます。もう一度長押しすると保存を解除できます。",
+ "Hold a tag or artist name in Work Information and save it from its menu to see it here.": "作品情報でタグや作家名を長押しし、メニューから保存するとここに表示されます。",
  "Hold a work in Explore and drag it down to the panel that appears.": "探索で作品を長押ししたまま、下に表示される枠までドラッグしてください。",
- "Hold an artist or tag to add it to your favorites. Hold it again to remove it.": "作家やタグを長押しするとお気に入りに追加されます。もう一度長押しすると解除されます。",
+ "Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.": "作家やタグを長押しすると、お気に入りへの追加、コピー、検索からの除外を選べます。",
  "Hold an artist tag in Work Information to add it to your favorite artists.": "作品情報の作家タグを長押しすると、お気に入りに追加できます。",
  "Hold an image to save it, or choose Save to Folder from its menu.": "画像を長押しして保存するか、メニューから保存先のフォルダを選んでください。",
  "Hold to Keep It Off": "長押しでオフのままにする",
@@ -2522,5 +2522,10 @@
  "lab.courses.waiting.kicker": "アップデートが必要",
  "lab.courses.waiting.note": "このコースを開くには、TEGNALを最新バージョンにアップデートしてください。コースは保管され、アップデート後すぐに開けます。",
  "lab.courses.lessonsDone": "終えたレッスン %1$@/%2$@",
- "lab.sheet.example": "例: %@"
+ "lab.sheet.example": "例: %@",
+ "Copy Tag": "タグをコピー",
+ "Exclude from Searches": "検索から除外",
+ "Include in Searches": "検索の除外を解除",
+ "Excluded from Searches": "検索から除外しました",
+ "Included in Searches": "検索の除外を解除しました"
 }

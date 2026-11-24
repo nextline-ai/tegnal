@@ -838,9 +838,9 @@
  "Hides matching works from every comics search. Enter tags normally; the app adds the minus sign for you.": "모든 만화 검색에서 이 태그에 해당하는 작품을 제외합니다. 태그만 입력하면 제외 기호(-)는 자동으로 붙습니다.",
  "Hint": "힌트",
  "Hold a folder to make it a smart folder. Smart folders show %@ after their name.": "폴더를 길게 눌러 스마트 폴더로 만들 수 있습니다. 스마트 폴더는 이름 끝에 %@ 표시가 붙습니다.",
- "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.": "작품 정보에서 태그나 작가 이름을 길게 누르면 이곳에 저장할 수 있습니다. 다시 길게 누르면 저장이 해제됩니다.",
+ "Hold a tag or artist name in Work Information and save it from its menu to see it here.": "작품 정보에서 태그나 작가 이름을 길게 눌러 메뉴에서 저장하면 이곳에 표시됩니다.",
  "Hold a work in Explore and drag it down to the panel that appears.": "탐색에서 작품을 길게 누른 채 아래에 나타나는 영역으로 끌어내리세요.",
- "Hold an artist or tag to add it to your favorites. Hold it again to remove it.": "작가나 태그를 길게 누르면 즐겨찾기에 추가됩니다. 다시 길게 누르면 해제됩니다.",
+ "Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.": "작가나 태그를 길게 누르면 즐겨찾기 추가, 태그 복사, 검색에서 제외를 고를 수 있습니다.",
  "Hold an artist tag in Work Information to add it to your favorite artists.": "작품 정보에서 작가 태그를 길게 눌러 즐겨찾기에 추가하세요.",
  "Hold an image to save it, or choose Save to Folder from its menu.": "이미지를 길게 눌러 저장하거나 메뉴에서 ‘저장할 폴더’를 선택하세요.",
  "Hold to Keep It Off": "길게 눌러 끈 채로 두기",
@@ -2522,5 +2522,10 @@
  "lab.courses.waiting.kicker": "업데이트 필요",
  "lab.courses.waiting.note": "이 코스를 열려면 TEGNAL을 최신 버전으로 업데이트하세요. 코스는 보관해 두었다가 업데이트하면 바로 열립니다.",
  "lab.courses.lessonsDone": "마친 레슨 %1$@/%2$@",
- "lab.sheet.example": "예: %@"
+ "lab.sheet.example": "예: %@",
+ "Copy Tag": "태그 복사",
+ "Exclude from Searches": "검색에서 제외",
+ "Include in Searches": "검색 제외 해제",
+ "Excluded from Searches": "검색에서 제외했습니다",
+ "Included in Searches": "검색 제외를 해제했습니다"
 }

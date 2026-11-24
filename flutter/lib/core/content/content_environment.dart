@@ -233,12 +233,36 @@ class ContentEnvironment extends ChangeNotifier {
   }
 
   void blockMangaArtist(String name) {
-    final artist = splitWhitespace(name).join('_');
-    if (artist.isEmpty) return;
-    final rule = 'artist:$artist';
+    final artist = excludedTagRule(name);
+    if (artist.isEmpty || excludesMangaTag('artist:$artist')) return;
+    toggleExcludedMangaTag('artist:$artist');
+  }
+
+  /// Whether every comics search leaves out works with this tag, such as `female:big breasts` or `artist:name`.
+  bool excludesMangaTag(String tag) {
+    final rule = excludedTagRule(tag);
+    return rule.isNotEmpty && splitWhitespace(defaultExcludedTags).any((term) => _sameExclusion(term, rule));
+  }
+
+  /// Adds the tag to Default Excluded Tags, or takes it out again. Returns whether searches now leave it out.
+  bool toggleExcludedMangaTag(String tag) {
+    final rule = excludedTagRule(tag);
+    if (rule.isEmpty) return false;
     final existing = splitWhitespace(defaultExcludedTags);
-    if (existing.any((term) => term.toLowerCase() == rule.toLowerCase() || term.toLowerCase() == '-${rule.toLowerCase()}')) return;
+    if (existing.any((term) => _sameExclusion(term, rule))) {
+      defaultExcludedTags = existing.where((term) => !_sameExclusion(term, rule)).join(' ');
+      return false;
+    }
     defaultExcludedTags = [...existing, rule].join(' ');
+    return true;
+  }
+
+  /// A tag as Default Excluded Tags writes it: underscores inside, no minus sign.
+  static String excludedTagRule(String tag) => splitWhitespace(tag).join('_');
+
+  static bool _sameExclusion(String term, String rule) {
+    final lower = term.toLowerCase(), target = rule.toLowerCase();
+    return lower == target || lower == '-$target';
   }
 
   bool _showsMangaTitles;

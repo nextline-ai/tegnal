@@ -1267,6 +1267,11 @@
 /* Library maintenance and viewer feedback */
 "Removed from Tags" = "태그 저장을 해제했습니다";
 "Remove Saved Tag" = "태그 저장 해제";
+"Copy Tag" = "태그 복사";
+"Exclude from Searches" = "검색에서 제외";
+"Include in Searches" = "검색 제외 해제";
+"Excluded from Searches" = "검색에서 제외했습니다";
+"Included in Searches" = "검색 제외를 해제했습니다";
 "Reset Settings to Defaults" = "설정을 기본값으로 초기화";
 "Reset Settings to Defaults?" = "설정을 기본값으로 초기화할까요?";
 "Resets this mode’s viewer options. Saved works and reading progress are kept." = "이 모드의 뷰어 설정을 초기화합니다. 저장한 작품과 읽던 위치는 유지됩니다.";
@@ -1307,7 +1312,7 @@
 "Official Discord" = "공식 Discord";
 
 /* Reader coach marks and information hints. */
-"Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "작품 정보에서 태그나 작가 이름을 길게 누르면 이곳에 저장할 수 있습니다. 다시 길게 누르면 저장이 해제됩니다.";
+"Hold a tag or artist name in Work Information and save it from its menu to see it here." = "작품 정보에서 태그나 작가 이름을 길게 눌러 메뉴에서 저장하면 이곳에 표시됩니다.";
 "Turn Pages" = "페이지 넘기기";
 "Step %@ of %@" = "%@ / %@ 단계";
 "Start Reading" = "읽기 시작";
@@ -1501,7 +1506,7 @@
 "Today's picks" = "오늘의 추천";
 "One each from your usual taste, recent interests and something new." = "평소 취향, 최근 관심사, 새로운 발견에서 하나씩 골랐어요.";
 "Chosen from what you've been saving and viewing." = "저장하고 감상한 작품을 바탕으로 골랐어요.";
-"Hold an artist or tag to add it to your favorites. Hold it again to remove it." = "작가나 태그를 길게 누르면 즐겨찾기에 추가됩니다. 다시 길게 누르면 해제됩니다.";
+"Hold an artist or tag to add it to your favorites, copy it or leave it out of searches." = "작가나 태그를 길게 누르면 즐겨찾기 추가, 태그 복사, 검색에서 제외를 고를 수 있습니다.";
 "No Works in This Language" = "이 언어로 된 작품이 없습니다";
 "Show All Languages" = "모든 언어 보기";
 "Artist Works Language" = "작가 작품 언어";

@@ -818,24 +818,31 @@ struct BooruPostView: View {
                     if let original { Text(original).font(.caption).foregroundStyle(.secondary) }
                 }
             }
-                .highPriorityGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) })
                 .accessibilityAction(named: L10n.text("Save Tag")) { saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) }
-            Menu {
-                Button(L10n.text(store.savedTags(serverID: server.id, kind: SavedCollectionKind(category: category).rawValue).contains(tag) ? "Remove Saved Tag" : "Save Tag"), systemImage: "tag") { saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) }
-                Button(L10n.text("Save Artist"), systemImage: "person") { saveTag(tag, kind: "artist") }
-                Button(L10n.text("About This Tag"), systemImage: "graduationcap") { studiedTag = BooruStudiedTag(name: tag) }
-                Button(L10n.text("Blacklist Tag"), systemImage: "eye.slash") {
-                    store.perform {
-                        let old = store.blacklist(serverID: server.id)
-                        try store.setBlacklist(old.isEmpty ? tag : old + "\n" + tag, serverID: server.id)
-                        info = false
-                        closeViewer()
-                    }
-                }
-            } label: {
+            Menu { tagMenu(tag, category: category) } label: {
                 let saved = store.savedTags(serverID: server.id, kind: SavedCollectionKind(category: category).rawValue).contains(tag)
                 Image(systemName: saved ? "star.fill" : "ellipsis.circle").symbolEffect(.bounce, value: saved)
             }.buttonStyle(.borderless)
+        }
+        // Holding the row offers the same as its button, and copying the tag.
+        .contextMenu {
+            tagMenu(tag, category: category)
+            Button(L10n.text("Copy Tag"), systemImage: "doc.on.doc") { UIPasteboard.general.string = tag }
+                .accessibilityIdentifier("tag.menu.copy")
+        }
+    }
+    @ViewBuilder private func tagMenu(_ tag: String, category: ArtworkTagCategory) -> some View {
+        Button(L10n.text(store.savedTags(serverID: server.id, kind: SavedCollectionKind(category: category).rawValue).contains(tag) ? "Remove Saved Tag" : "Save Tag"), systemImage: "tag") { saveTag(tag, kind: SavedCollectionKind(category: category).rawValue) }
+            .accessibilityIdentifier("tag.menu.save")
+        Button(L10n.text("Save Artist"), systemImage: "person") { saveTag(tag, kind: "artist") }
+        Button(L10n.text("About This Tag"), systemImage: "graduationcap") { studiedTag = BooruStudiedTag(name: tag) }
+        Button(L10n.text("Blacklist Tag"), systemImage: "eye.slash") {
+            store.perform {
+                let old = store.blacklist(serverID: server.id)
+                try store.setBlacklist(old.isEmpty ? tag : old + "\n" + tag, serverID: server.id)
+                info = false
+                closeViewer()
+            }
         }
     }
     private func saveTag(_ tag: String, kind: String) {

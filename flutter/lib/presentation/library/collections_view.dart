@@ -316,7 +316,7 @@ class _CollectionsViewState extends State<CollectionsView> {
                   prominentHeader: true,
                   rowColor: row,
                   header: Text(L10n.text('Save a Tag or Artist')),
-                  footer: Text(L10n.text('Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.')),
+                  footer: Text(L10n.text('Hold a tag or artist name in Work Information and save it from its menu to see it here.')),
                   children: [
                     Builder(
                       builder: (context) => FormRow(

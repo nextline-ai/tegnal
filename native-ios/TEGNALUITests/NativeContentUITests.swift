@@ -721,7 +721,15 @@ final class NativeContentUITests: XCTestCase {
         XCTAssertTrue(artist.waitForExistence(timeout: 5))
         let line = artist.frame.minY
         artist.press(forDuration: 0.8)
+        let save = app.buttons["tag.menu.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "Holding an artist opens its menu")
+        XCTAssertEqual(save.label, "Add to Artists")
+        XCTAssertTrue(app.buttons["tag.menu.copy"].exists)
+        XCTAssertTrue(app.buttons["tag.menu.exclude"].exists)
+        save.tap()
+        Thread.sleep(forTimeInterval: 1)
         XCTAssertEqual(artist.frame.minY, line, accuracy: 3)
+        XCTAssertEqual(artist.value as? String, "Favorite Artist")
     }
 
     func testHoldingAGroupSavesIt() {
@@ -737,7 +745,14 @@ final class NativeContentUITests: XCTestCase {
         let group = element(app, "tags.group.group:sample circle")
         XCTAssertTrue(group.waitForExistence(timeout: 5))
         group.press(forDuration: 0.8)
+        let save = app.buttons["tag.menu.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "Holding a tag opens its menu")
+        XCTAssertEqual(save.label, "Save Tag")
+        save.tap()
         Thread.sleep(forTimeInterval: 1)
+        group.press(forDuration: 0.8)
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertEqual(save.label, "Remove Saved Tag", "The menu now offers to remove it")
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); attachment.name = "group saved"; attachment.lifetime = .keepAlways; add(attachment)
     }
 

@@ -1267,6 +1267,11 @@
 /* Library maintenance and viewer feedback */
 "Removed from Tags" = "Removed from Tags";
 "Remove Saved Tag" = "Remove Saved Tag";
+"Copy Tag" = "Copy Tag";
+"Exclude from Searches" = "Exclude from Searches";
+"Include in Searches" = "Include in Searches";
+"Excluded from Searches" = "Excluded from Searches";
+"Included in Searches" = "Included in Searches";
 "Reset Settings to Defaults" = "Reset Settings to Defaults";
 "Reset Settings to Defaults?" = "Reset Settings to Defaults?";
 "Resets this mode’s viewer options. Saved works and reading progress are kept." = "Resets this mode’s viewer options. Saved works and reading progress are kept.";
@@ -1307,7 +1312,7 @@
 "Official Discord" = "Official Discord";
 
 /* Reader coach marks and information hints. */
-"Hold a tag or artist name in Work Information to save it here. Hold it again to remove it." = "Hold a tag or artist name in Work Information to save it here. Hold it again to remove it.";
+"Hold a tag or artist name in Work Information and save it from its menu to see it here." = "Hold a tag or artist name in Work Information and save it from its menu to see it here.";
 "Turn Pages" = "Turn Pages";
 "Step %@ of %@" = "Step %@ of %@";
 "Start Reading" = "Start Reading";
@@ -1501,7 +1506,7 @@
 "Today's picks" = "Today's picks";
 "One each from your usual taste, recent interests and something new." = "One each from your usual taste, recent interests and something new.";
 "Chosen from what you've been saving and viewing." = "Chosen from what you've been saving and viewing.";
-"Hold an artist or tag to add it to your favorites. Hold it again to remove it." = "Hold an artist or tag to add it to your favorites. Hold it again to remove it.";
+"Hold an artist or tag to add it to your favorites, copy it or leave it out of searches." = "Hold an artist or tag to add it to your favorites, copy it or leave it out of searches.";
 "No Works in This Language" = "No Works in This Language";
 "Show All Languages" = "Show All Languages";
 "Artist Works Language" = "Artist Works Language";
