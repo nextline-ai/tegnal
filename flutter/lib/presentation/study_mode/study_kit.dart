@@ -58,9 +58,10 @@ class StudyMode extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Learning mode has been reached through the home scene: the lab, unless a 2D AI entry asked for the course.
+  /// Learning mode has been reached through the home scene: the course last open (user, 2026-11-25), unless a 2D AI entry
+  /// asked for that course. A course no longer there or no longer owned gives way to the AI lab.
   void arrive() {
-    _show(_wanted ?? LearningCourse.labID);
+    _show(_wanted ?? lastCourse);
     _wanted = null;
     notifyListeners();
   }
@@ -108,6 +109,16 @@ class StudyMode extends ChangeNotifier {
       if (id != _courseID) _labTab = LabTab.deck;
     }
     _courseID = id;
+    _preferences?.set(lastCourseKey, id);
+  }
+
+  static const lastCourseKey = 'study.lastCourse';
+
+  /// The course on screen the last time learning mode was used.
+  String get lastCourse {
+    final id = _preferences?.string(lastCourseKey);
+    final course = id == null ? null : LearningCourses.shared.course(id);
+    return course != null && LearningCourses.shared.owned(course) ? id! : LearningCourse.labID;
   }
 
   /// Reads the stored start-up choice from the image-mode preferences (`ReaderPreferences.booruDefaults`). The app

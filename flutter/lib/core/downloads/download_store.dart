@@ -319,10 +319,9 @@ class DownloadStore extends ChangeNotifier {
         if (values is! List) throw SwiftJsonError('Expected a list of downloads');
         items = [for (final value in values) WorkDownload.fromJson(jsonObject(value))];
         for (final item in items) {
-          final files = urls(item);
           if (item.status == WorkDownloadStatus.queued ||
               item.status == WorkDownloadStatus.downloading ||
-              (item.status == WorkDownloadStatus.completed && (item.files.length != item.total || files.any((file) => !file.existsSync())))) {
+              (item.status == WorkDownloadStatus.completed && item.files.length != item.total)) {
             item.status = WorkDownloadStatus.paused;
           }
         }
@@ -330,6 +329,40 @@ class DownloadStore extends ChangeNotifier {
     } on Object catch (error) {
       storageError = '$error';
     }
+    filesChecked = _checkFiles();
+  }
+
+  /// Completes once every finished download's pages have been found on disk, and any with a page missing paused so that
+  /// resuming fetches it again. The check is one file stat per page, thousands in a big library, so it runs on another
+  /// isolate: on the UI isolate, which Android now runs on the main thread, it could hold up input at launch.
+  late final Future<void> filesChecked;
+
+  Future<void> _checkFiles() async {
+    final finished = {
+      for (final item in items)
+        if (item.status == WorkDownloadStatus.completed) item.id: [for (final file in urls(item)) file.path],
+    };
+    if (finished.isEmpty) return;
+    final Set<String> missing;
+    try {
+      missing = await Isolate.run(() => {
+        for (final entry in finished.entries)
+          if (entry.value.any((path) => !File(path).existsSync())) entry.key,
+      });
+    } on Object {
+      return;
+    }
+    var changed = false;
+    for (final item in items) {
+      // A download resumed, removed or redone meanwhile is left as it is now.
+      if (missing.contains(item.id) && item.status == WorkDownloadStatus.completed) {
+        item.status = WorkDownloadStatus.paused;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    _persist();
+    notifyListeners();
   }
 
   /// `Application Support/Downloads`, beside both libraries.
@@ -697,7 +730,7 @@ class DownloadStore extends ChangeNotifier {
           final data = await manga.image(_indexed(page, index), galleryID: gallery.id, thumbnail: false);
           if (run.cancelled) throw const CancellationError();
           final ext = imageExtension(data);
-          _save(data, '${'${index + 1}'.padLeft(5, '0')}.$ext', item, index, run);
+          await _save(data, '${'${index + 1}'.padLeft(5, '0')}.$ext', item, index, run);
           // Match the site's download pacing instead of flooding its servers.
           if (index + 1 < gallery.pages.length && pageDelay > Duration.zero) await Future<void>.delayed(pageDelay);
         }
@@ -750,19 +783,23 @@ class DownloadStore extends ChangeNotifier {
     sourceSite: page.sourceSite,
   );
 
-  void _save(Uint8List data, String name, WorkDownload item, int index, _Run run) {
+  /// Writes a page off the main thread (the flush waits for the disk), then records it. A new page adds its own size; only
+  /// a page written again counts the folder anew.
+  Future<void> _save(Uint8List data, String name, WorkDownload item, int index, _Run run) async {
     if (run.cancelled) throw const CancellationError();
     final file = File('${folder(item).path}/$name');
     final temporary = File('${file.path}.tmp');
-    temporary.writeAsBytesSync(data, flush: true);
-    temporary.renameSync(file.path);
+    await temporary.writeAsBytes(data, flush: true);
+    await temporary.rename(file.path);
+    if (run.cancelled) throw const CancellationError();
     _update(item.id, run, (item) {
       if (index < item.files.length) {
         item.files[index] = name;
+        item.bytes = _fileBytes(folder(item), item.files);
       } else {
         item.files.add(name);
+        item.bytes += data.length;
       }
-      item.bytes = _fileBytes(folder(item), item.files);
     });
   }
 

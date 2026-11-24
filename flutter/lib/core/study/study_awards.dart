@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../booru/booru_store.dart';
 import '../generation/generation_store.dart';
+import '../lab/lab_store.dart';
 import '../support/l10n.dart';
 import 'study_models.dart';
 import 'study_path.dart';
@@ -312,7 +313,7 @@ abstract final class StudyAwards {
 
     return StudyFacts.of(
       path: path ?? StudyPath.bundled,
-      records: read(study.lessons, {}),
+      records: read(() => study.lessons(round: LabStore.shared.tagRound), {}),
       days: read(study.days, []),
       progress: read(study.progress, {}),
       stats: read(study.stats, {}),

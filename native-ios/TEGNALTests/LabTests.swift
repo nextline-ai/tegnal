@@ -261,6 +261,39 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(store.balance, balance, "Resetting the course takes nothing back")
     }
 
+    /// A finished 2D AI 배우기 starts over from its first lesson: earlier rounds keep what they paid, and a later round pays a quarter
+    /// under keys of its own, so another device reads the same round back.
+    func testAFinishedTagCourseStartsOverAndPaysAQuarter() throws {
+        let booru = try BooruStore()
+        let records = LabMemoryRecords()
+        let store = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
+        let rates = course.info.rewards, lessons = StudyPath.bundled.lessons
+        try booru.studyStore.earn(10, lesson: lessons[0].id, stars: 3)
+        store.startTagCourseOver(in: booru.studyStore)
+        XCTAssertEqual(store.tagRound, 0, "Only a finished course starts over")
+        for lesson in lessons { try booru.studyStore.earn(10, lesson: lesson.id, stars: 3) }
+        store.settleTagCourse(in: booru.studyStore)
+        XCTAssertTrue(LabStore.tagCourseFinished(try booru.studyStore.lessons()))
+        let balance = store.balance
+        store.startTagCourseOver(in: booru.studyStore)
+        XCTAssertEqual(store.tagRound, 1)
+        XCTAssertTrue(try booru.studyStore.lessons(round: 1).isEmpty, "The path starts again")
+        XCTAssertEqual(try booru.studyStore.lessons().count, lessons.count, "The first round stays in the records")
+        XCTAssertEqual(store.balance, balance, "What was earned stays")
+
+        try booru.studyStore.earn(10, lesson: lessons[0].id, stars: 3, round: store.tagRound)
+        try booru.studyStore.earn(10, lesson: "course:other:one", stars: 3, round: store.tagRound)
+        XCTAssertNotNil(try booru.studyStore.lessons(round: 1)["course:other:one"], "An imported course's lessons have no rounds")
+        let paid = store.settleTagCourse(in: booru.studyStore)
+        XCTAssertEqual(paid, LabTagPayout(lesson: LabStore.share(rates.courseLesson, round: 1), stars: LabStore.share(rates.courseStars, round: 1), section: 0))
+        XCTAssertEqual(store.settleTagCourse(in: booru.studyStore).total, 0, "Each round pays once")
+        XCTAssertEqual(store.tagCoursePaid.lessons, lessons.count, "The kept-lessons count is the first round's")
+
+        let synced = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
+        XCTAssertEqual(synced.tagRound, 1)
+        XCTAssertEqual(synced.balance, store.balance)
+    }
+
     /// 2D AI 배우기 came before the lab and was free. Its progress stays and pays, but the course must be bought to go on; the
     /// learner is told once.
     func testProgressFromBeforeTheCourseWasSoldPaysButDoesNotOpenIt() throws {
@@ -403,6 +436,39 @@ final class LabTests: XCTestCase {
         XCTAssertEqual(store.buy(tickets), .bought)
         XCTAssertEqual(store.tickets, 20)
         XCTAssertEqual(LabProgress(records: store.progress.records).purchases[tickets.id]?.each, 10, "Kept in the records")
+    }
+
+    /// A finished course can be started over: an empty deck and gallery and the rate at its start, every amount at a quarter,
+    /// and nothing earned before taken back. Earlier rounds stay in the records, so a sync cannot bring their cards back.
+    func testAFinishedCourseStartsOverAndPaysAQuarter() throws {
+        let records = LabMemoryRecords()
+        let store = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
+        store.startOver()
+        XCTAssertEqual(store.round, 0, "Only a finished course starts over")
+        for episode in course.episodes { store.engrave(episode, failsHung: 0) }
+        store.hang(course.fails[0])
+        XCTAssertTrue(store.finished)
+        let balance = store.balance, sheet = try XCTUnwrap(LabEdition.bundled).sections.filter(store.opened).count
+        store.startOver()
+        XCTAssertEqual(store.round, 1)
+        XCTAssertFalse(store.finished)
+        XCTAssertEqual(store.rate, course.base, "The rate starts again")
+        XCTAssertEqual(store.next?.id, course.episodes[0].id)
+        XCTAssertFalse(store.hung(course.fails[0]), "The gallery starts empty")
+        XCTAssertEqual(store.balance, balance, "What was earned stays")
+        XCTAssertEqual(try XCTUnwrap(LabEdition.bundled).sections.filter(store.opened).count, sheet, "The cheat sheet stays open")
+
+        let first = store.engrave(course.episodes[0], failsHung: 1)
+        XCTAssertEqual(first.cardReward, Int((Double(course.episodes[0].reward) / 4).rounded()))
+        XCTAssertEqual(store.failReward, Int((Double(course.info.rewards.fail) / 4).rounded()))
+        XCTAssertTrue(store.hang(course.fails[0]))
+        XCTAssertEqual(store.balance, balance + first.cardReward + store.failReward)
+
+        // Read back, as on another device after a sync: the new round, and nothing of the old one in its deck.
+        let synced = LabStore(course: .bundled, shop: Self.shop, diagnosis: .bundled, records: records, edition: nil)
+        XCTAssertEqual(synced.round, 1)
+        XCTAssertEqual(synced.earnedIDs, [course.episodes[0].id])
+        XCTAssertEqual(synced.balance, store.balance)
     }
 
     /// A course bought in the shop keeps its records under its own id like an imported one, but pays like the AI lab.

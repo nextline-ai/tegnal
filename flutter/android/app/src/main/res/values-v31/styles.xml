@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Android 12 and later always show a system launch screen. It shows plain black and no icon
          (user, 2026-11-24), which every home scene then fades in from. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
@@ -7,9 +7,25 @@
         <item name="android:windowSplashScreenBackground">@color/launch_black</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_icon_none</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
+        <!-- Edge to edge before Android 15, which always draws it: transparent bars from the theme rather than the
+             Window.setStatusBarColor / setNavigationBarColor calls Android 15 deprecates (Play Console recommendation). -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="r">always</item>
     </style>
 
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- Edge to edge before Android 15, which always draws it: transparent bars from the theme rather than the
+             Window.setStatusBarColor / setNavigationBarColor calls Android 15 deprecates (Play Console recommendation). -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="r">always</item>
     </style>
 </resources>

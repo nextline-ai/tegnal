@@ -18,10 +18,18 @@ final class StudyMode {
     var engine: LearningCourse.Engine { LearningCourses.shared.course(courseID)?.engine ?? .deck }
     /// Set by the library's 2D AI entries just before the way through the home scene, so learning mode opens on that course.
     private var wanted: String?
-    /// Learning mode has been reached through the home scene: the lab, unless a 2D AI entry asked for the course.
+    /// Learning mode has been reached through the home scene: the course last open (user, 2026-11-25), unless a 2D AI entry
+    /// asked for that course. A course no longer there or no longer owned gives way to the AI lab.
     func arrive() {
-        show(wanted ?? LearningCourse.labID)
+        show(wanted ?? lastCourse)
         wanted = nil
+    }
+    static let lastCourseKey = "study.lastCourse"
+    /// The course on screen the last time learning mode was used.
+    var lastCourse: String {
+        guard let id = defaults.string(forKey: Self.lastCourseKey), let course = LearningCourses.shared.course(id),
+              LearningCourses.shared.owned(course) else { return LearningCourse.labID }
+        return id
     }
     /// Open straight into learning mode when the app starts.
     var startsActive: Bool { didSet { defaults.set(startsActive, forKey: Self.startKey); if startsActive, startsInLibrary { startsInLibrary = false } } }
@@ -61,6 +69,7 @@ final class StudyMode {
         if engine == .tags, id != courseID { StudySound.rest() }
         if let deck = course.deck { LabStore.shared.show(course: deck); if id != courseID { labTab = .deck } }
         courseID = id
+        defaults.set(id, forKey: Self.lastCourseKey)
     }
     /// Opens learning mode. From the library, the way there leads back up through the home scene and on into the sky.
     func enter(_ tab: StudyTab = .path) {

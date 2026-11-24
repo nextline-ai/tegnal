@@ -10,7 +10,8 @@ import '../support/sql_database.dart';
 /// Keys: `card:<episode>` and `fail:<id>` (engraved, hung; value = 보석 paid, or 1 when it paid nothing or was written before
 /// amounts were kept), `season:<number>`, `edition:<id>`, `lesson:<course>/<lesson>`, `stars:<course>/<lesson>` and
 /// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`, plus `"each"` tickets for ticket goods), and `state:type` (text = type id), `state:greeted`,
-/// `state:legacyNoticed`, `state:seenEdition` (text). Merging two devices keeps the larger value and the earlier time.
+/// `state:legacyNoticed`, `state:seenEdition` (text), `state:round:<course>` (times started over; that round's
+/// cards and 망작 are `card:r<n>/<episode>` and `fail:r<n>/<id>`). Merging two devices keeps the larger value and the earlier time.
 class LabRecord {
   const LabRecord({required this.key, required this.value, this.text, required this.at});
   final String key;
@@ -148,6 +149,11 @@ class LabProgress {
   /// True once a learner who studied 2D AI 배우기 before it was sold has been told the course now opens from the shop.
   bool legacyNoticed = false;
 
+  /// How many times each deck course was finished and started over, by course id. Each round keeps its cards and 망작 under
+  /// keys of its own (`LabStore.key`), so earlier rounds stay: what they paid stays paid, and a sync never brings an old
+  /// round's cards back into the new one.
+  final Map<String, int> rounds = {};
+
   factory LabProgress.fromRecords(Iterable<LabRecord> records) {
     final progress = LabProgress();
     for (final record in records) {
@@ -193,6 +199,8 @@ class LabProgress {
               progress.legacyNoticed = record.value > 0;
             case 'seenEdition':
               progress.seenEdition = record.text;
+            default:
+              if (id.startsWith('round:')) progress.rounds[id.substring(6)] = record.value;
           }
       }
     }
@@ -211,6 +219,8 @@ class LabProgress {
     if (greeted) const LabRecord(key: 'state:greeted', value: 1, at: 0),
     if (legacyNoticed) const LabRecord(key: 'state:legacyNoticed', value: 1, at: 0),
     if (seenEdition != null) LabRecord(key: 'state:seenEdition', value: 1, text: seenEdition, at: 0),
+    for (final entry in rounds.entries)
+      if (entry.value > 0) LabRecord(key: 'state:round:${entry.key}', value: entry.value, at: 0),
   ];
 
   static int _paid(int? gems) => gems == null || gems < 1 ? 1 : gems;

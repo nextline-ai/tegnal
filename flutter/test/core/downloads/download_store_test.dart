@@ -153,6 +153,8 @@ void main() {
     expect(source.calls, 3, reason: 'The completed first page must not be downloaded again');
     downloads.urls(downloads.items[0])[0].deleteSync();
     final restored = store(directory, source);
+    // The pages are checked on another isolate after launch.
+    await restored.filesChecked;
     expect(restored.items[0].status, WorkDownloadStatus.paused);
     restored.resume(id);
     await finish(restored, WorkDownloadStatus.completed);

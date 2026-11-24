@@ -1076,7 +1076,7 @@ class StudyLessonSession extends ChangeNotifier {
     _before.today = days.where((day) => day.day == today).firstOrNull?.xp ?? 0;
     try {
       store.studyStore.raise(StudyCounter.combo, _bestCombo);
-      store.studyStore.earn(_earned, lesson: plan.lesson?.id, stars: _stars, now: _now(), utcOffset: utcOffset);
+      store.studyStore.earn(_earned, lesson: plan.lesson?.id, stars: _stars, round: LabStore.shared.tagRound, now: _now(), utcOffset: utcOffset);
     } on Object {
       // The result is still shown when it cannot be saved.
     }

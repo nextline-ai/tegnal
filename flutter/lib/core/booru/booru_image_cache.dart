@@ -268,6 +268,9 @@ class BooruImageCache {
   /// Completes once downloaded copies started so far are on disk (for tests and relaunch).
   Future<void> get idle => _disk.idle;
 
+  /// Reads the disk cache's index on another isolate, so the first image needs no folder scan on the main thread.
+  Future<void> prepare() => _disk.prepare();
+
   Future<void> clear() async {
     _generation += 1;
     _inFlight.clear();

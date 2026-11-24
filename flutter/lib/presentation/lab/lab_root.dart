@@ -147,7 +147,7 @@ class _LabRootState extends State<LabRoot> {
   Widget _page(LabTab tab) => switch (tab) {
     LabTab.deck => LabDeckView(play: _play, covered: _covered),
     LabTab.fails => LabFailsView(play: _play),
-    LabTab.courses => LabCoursesView(mode: mode, lessons: () => widget.booru.studyStore.lessons().keys.toSet()),
+    LabTab.courses => LabCoursesView(mode: mode, lessons: () => widget.booru.studyStore.lessons(round: store.tagRound).keys.toSet()),
     LabTab.shop => LabShopView(open: mode.open, mode: mode),
     LabTab.sheet => LabSheetView(shown: _sheetShown),
   };
@@ -558,6 +558,8 @@ class _LabDeckViewState extends State<LabDeckView> {
                 children: [
                   TextSpan(text: '${L10n.text('lab.season', ['$season'])} · '),
                   TextSpan(text: '${shown.length}/${course.episodes.length}', style: LabFont.number(13)),
+                  // A course started over says so, and that it pays a quarter now.
+                  if (store.round > 0) TextSpan(text: ' · ${L10n.text('lab.restart.round', ['${store.round + 1}'])}'),
                 ],
               ),
               title: L10n.text('lab.deck.title'),
@@ -700,6 +702,7 @@ class _LabDeckViewState extends State<LabDeckView> {
                 _front(context, next),
               ],
             ),
+            if (store.finished && next == null) _startOver(context),
           ],
         ),
       );
@@ -934,6 +937,61 @@ class _LabDeckViewState extends State<LabDeckView> {
         ),
       ),
     );
+  }
+
+  /// Under a finished deck: the way to play the course again from its first card.
+  Widget _startOver(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 30),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LabButton(
+          key: const Key('lab.deck.restart'),
+          expand: true,
+          onPressed: () => _confirmStartOver(context),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(CupertinoIcons.arrow_counterclockwise, size: 17, color: CupertinoTheme.of(context).primaryColor),
+              const SizedBox(width: 8),
+              Text(
+                L10n.text('lab.restart.action'),
+                style: LabFont.text(17, weight: FontWeight.w600, color: CupertinoTheme.of(context).primaryColor),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(L10n.text('lab.restart.note'), style: LabFont.text(12, color: labSecondary(context))),
+      ],
+    ),
+  );
+
+  Future<void> _confirmStartOver(BuildContext context) async {
+    final yes = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => TegnalAlertDialog(
+        title: Text(L10n.text('lab.restart.confirm')),
+        content: Text(L10n.text('lab.restart.message')),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          CupertinoDialogAction(
+            key: const Key('lab.restart.confirm'),
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(L10n.text('lab.restart.action')),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    LabHaptic.snap();
+    final store = LabStore.shared;
+    store.startOver();
+    setState(() {
+      shown = {...store.earnedIDs};
+      fanned = false;
+    });
   }
 
   Widget _finished(BuildContext context) => LabCardBackground(
@@ -1362,7 +1420,7 @@ class _LabCoursesViewState extends State<LabCoursesView> {
     final rate =
         deck.base +
         deck.episodes
-            .where((episode) => store.progress.cards.containsKey(LabStore.keyIn(episode.id, deck)))
+            .where((episode) => store.progress.cards.containsKey(LabStore.keyIn(episode.id, deck, store.roundOf(deck))))
             .fold<int>(0, (total, episode) => total + episode.impact);
     final first = LabPalette.hex(colors.first);
     final card = _card(
