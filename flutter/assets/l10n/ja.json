@@ -2563,8 +2563,19 @@
  "lab.courses.lessonsDone": "終えたレッスン %1$@/%2$@",
  "lab.sheet.example": "例: %@",
  "Copy Tag": "タグをコピー",
- "Exclude from Searches": "検索から除外",
- "Include in Searches": "検索の除外を解除",
- "Excluded from Searches": "検索から除外しました",
- "Included in Searches": "検索の除外を解除しました"
+ "Add to Default Excluded Tags": "デフォルト除外タグに登録",
+ "Remove from Default Excluded Tags": "デフォルト除外タグから外す",
+ "Added to Default Excluded Tags": "デフォルト除外タグに登録しました",
+ "Removed from Default Excluded Tags": "デフォルト除外タグから外しました",
+ "Explore & Search": "探索と検索",
+ "Appearance & Layout": "外観とレイアウト",
+ "Language & Translation": "言語と翻訳",
+ "Library & Storage": "ライブラリとストレージ",
+ "Start & Safe Mode": "起動とセーフモード",
+ "Help & About": "ヘルプとApp情報",
+ "Search Settings": "設定を検索",
+ "No Matching Settings": "一致する設定はありません",
+ "Explore & Search Filters": "探索・検索フィルタ",
+ "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.": "デフォルトタグと除外タグは、検索だけでなく探索にも適用されます。作品のタグを長押しして「デフォルト除外タグに登録」を選ぶと、すぐに非表示にできます。",
+ "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "サーバーごとにタグのブラックリストがあり、探索と検索の両方で該当する画像を非表示にします。"
 }

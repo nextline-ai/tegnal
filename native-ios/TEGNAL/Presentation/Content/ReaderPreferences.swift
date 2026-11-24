@@ -110,9 +110,28 @@ enum ReaderOpening: Equatable {
     func resolved(continuing: Bool) -> Self { .page(continuing ? page : 1) }
 }
 
+/// The viewer's settings as a sheet over the reader, or from anywhere that presents one.
 struct ReaderSettingsView: View {
     var booru = false
+    var onShowGuide: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            ReaderSettingsForm(booru: booru, onShowGuide: onShowGuide)
+                .scrollContentBackground(.hidden)
+                .background(Color(uiColor: .systemGroupedBackground))
+                .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .navigationTitle(L10n.text("Viewer Detail Settings")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() }.accessibilityIdentifier("reader.settings.done") } }
+        }
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
+/// The viewer's options, shown in the reader's sheet and as the Viewer page of Settings.
+struct ReaderSettingsForm: View {
+    var booru = false
     private var onShowGuide: (() -> Void)?
     @State private var guideQueued = false
     @SwiftUI.AppStorage("reader.resumeBehavior", store: ReaderPreferences.defaults) private var resumeBehavior = ReaderResumeBehavior.ask.rawValue
@@ -160,7 +179,6 @@ struct ReaderSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
             Form {
                 if !booru {
                     Section(L10n.text("Reading Progress")) {
@@ -290,14 +308,7 @@ struct ReaderSettingsView: View {
                 }
                 Section { SettingsResetButton(booru: booru, viewerOnly: true) }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color(uiColor: .systemGroupedBackground))
-            .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .navigationTitle(L10n.text("Viewer Detail Settings")).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Done")) { dismiss() }.accessibilityIdentifier("reader.settings.done") } }
-        }
-        .presentationBackground(Color(uiColor: .systemGroupedBackground))
+            .accessibilityIdentifier("reader.settingsForm")
         .alert(L10n.text("Reader Guide"), isPresented: $guideQueued) {
             Button(L10n.text("OK"), role: .cancel) {}
         } message: { Text(L10n.text("The guide will appear over the next work you open.")) }

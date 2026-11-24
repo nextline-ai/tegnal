@@ -8,24 +8,6 @@ import '../design/grouped_form.dart';
 import 'settings_page.dart';
 import 'settings_rows.dart';
 
-/// `PrivacySecuritySection`: the settings row both modes show for privacy and network choices.
-class PrivacySecuritySection extends StatelessWidget {
-  const PrivacySecuritySection({super.key, this.rowColor});
-  final Color? rowColor;
-
-  @override
-  Widget build(BuildContext context) => FormSection(
-    rowColor: rowColor ?? FormColors.listRow.resolveFrom(context),
-    children: [
-      SettingsLinkRow(
-        title: L10n.text('Privacy & Security'),
-        icon: CupertinoIcons.lock_shield,
-        onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const PrivacySecurityView())),
-      ),
-    ],
-  );
-}
-
 /// `PrivacySecurityView`.
 class PrivacySecurityView extends StatefulWidget {
   const PrivacySecurityView({super.key});

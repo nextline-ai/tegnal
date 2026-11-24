@@ -397,7 +397,7 @@ struct ArtworkTagMenu: View {
         Button(L10n.text("Copy Tag"), systemImage: "doc.on.doc") { UIPasteboard.general.string = copy }
             .accessibilityIdentifier("tag.menu.copy")
         if let exclude {
-            Button(L10n.text(excluded ? "Include in Searches" : "Exclude from Searches"), systemImage: excluded ? "eye" : "eye.slash", action: exclude)
+            Button(L10n.text(excluded ? "Remove from Default Excluded Tags" : "Add to Default Excluded Tags"), systemImage: excluded ? "eye" : "eye.slash", action: exclude)
                 .accessibilityIdentifier("tag.menu.exclude")
         }
     }

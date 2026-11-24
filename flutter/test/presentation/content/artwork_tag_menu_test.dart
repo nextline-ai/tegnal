@@ -43,7 +43,7 @@ void main() {
     expect(chosen, isEmpty, reason: 'Holding no longer saves the tag by itself');
     expect(find.text('Save Tag'), findsOneWidget);
     expect(find.text('Copy Tag'), findsOneWidget);
-    expect(find.text('Exclude from Searches'), findsOneWidget);
+    expect(find.text('Add to Default Excluded Tags'), findsOneWidget);
     await tester.tap(find.text('Save Tag'));
     await tester.pumpAndSettle();
     expect(chosen, ['save']);

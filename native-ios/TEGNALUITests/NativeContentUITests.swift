@@ -135,8 +135,7 @@ final class NativeContentUITests: XCTestCase {
         app.tabBars.buttons["Explore"].tap()
         XCTAssertTrue(element(app, "content.gallery.900000001").waitForExistence(timeout: 10))
         app.tabBars.buttons["Settings"].tap()
-        let setting = element(app, "settings.embeddedBrowser")
-        for _ in 0..<4 where !setting.isHittable { app.swipeUp() }
+        let setting = app.settingsRow("settings.embeddedBrowser")
         XCTAssertTrue(setting.isHittable)
         XCTAssertEqual(setting.value as? String, "0")
         setting.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
@@ -300,8 +299,7 @@ final class NativeContentUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
         app.buttons["Settings"].tap()
-        let picker = element(app, "settings.previewColumns")
-        for _ in 0..<4 where !picker.isHittable { app.swipeUp() }
+        let picker = app.settingsRow("settings.previewColumns")
         XCTAssertTrue(picker.isHittable)
         XCTAssertTrue(picker.label.contains("Automatic (2× Grid)"))
         picker.tap()
@@ -990,8 +988,7 @@ final class NativeContentUITests: XCTestCase {
         app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--automatic-backups-test"]
         app.launch()
         app.tabBars.buttons["Settings"].tap()
-        let tools = element(app, "settings.libraryManagement")
-        for _ in 0..<6 where !tools.isHittable { app.swipeUp() }
+        let tools = app.settingsRow("settings.libraryManagement")
         tools.tap()
         let entry = element(app, "settings.automaticBackups")
         for _ in 0..<4 where !entry.isHittable { app.swipeUp() }
@@ -1027,8 +1024,7 @@ final class NativeContentUITests: XCTestCase {
         app.launchArguments = ["--native-content-ui-test", "--native-content-tab-test", "-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR", "--duplicate-cleanup-test"]
         app.launch()
         app.tabBars.buttons["설정"].tap()
-        let tools = element(app, "settings.libraryManagement")
-        for _ in 0..<6 where !tools.isHittable { app.swipeUp() }
+        let tools = app.settingsRow("settings.libraryManagement")
         tools.tap()
         element(app, "settings.duplicates").tap()
         let summary = element(app, "duplicates.summary")
@@ -1174,8 +1170,7 @@ final class NativeContentUITests: XCTestCase {
         app.tabBars.buttons["Saved"].tap()
         XCTAssertFalse(element(app, "manga.recentFolder").waitForExistence(timeout: 3), "Off until chosen in Settings")
         app.tabBars.buttons["Settings"].tap()
-        let setting = element(app, "settings.recentWorksInSaved")
-        for _ in 0..<8 where !setting.isHittable { app.swipeUp() }
+        let setting = app.settingsRow("settings.recentWorksInSaved")
         XCTAssertTrue(setting.isHittable)
         XCTAssertEqual(setting.value as? String, "0")
         setting.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()

@@ -352,70 +352,25 @@ struct BooruMoreView: View {
     let source: any BooruProviding
     @Environment(AppEnvironment.self) private var env
     @Environment(BooruStore.self) private var store
-    @State private var showOnboarding = false
-    @State private var showReader = false
-    @State private var cacheCleared = false
-    @State private var confirmClearCache = false
-    @SwiftUI.AppStorage("booru.useEmbeddedBrowser", store: ReaderPreferences.booruDefaults) private var useEmbeddedBrowser = false
     var body: some View {
-        Form {
-            if env.discordInvitationVisible { Section { DiscordInvitationBanner() } }
-            Section(L10n.text("Browsing")) {
-                NavigationLink { BooruServersView() } label: { Label(L10n.text("Servers"), systemImage: "server.rack") }
-                    .accessibilityIdentifier("booru.serversLink")
-                NavigationLink { ChallengeLibraryView(source: source) } label: { Label { Text(L10n.text("Challenge Roulette")) } icon: { Image(systemName: "dice").foregroundStyle(.purple) } }
-                    .accessibilityIdentifier("booru.challengesLink")
-                if !store.servers.isEmpty {
-                    NavigationLink {
-                        if store.selectedServers.count == 1, let server = store.selectedServer { BooruPoolsView(server: server, source: source) }
-                        else { BooruPoolServersView(source: source) }
-                    } label: { Label(L10n.text("Pools"), systemImage: "rectangle.stack") }
-                        .accessibilityIdentifier("booru.poolsLink")
-                }
-                NavigationLink { DownloadsView(mode: .booru) } label: { Label(L10n.text("Downloads"), systemImage: "arrow.down.circle") }
-                    .accessibilityIdentifier("booru.downloadsLink")
-                NavigationLink { FolderRulesView(booru: true) } label: { Label(L10n.text("Smart Folders"), systemImage: "sparkles") }
-                    .accessibilityIdentifier("booru.folderRules")
-                NavigationLink { ThumbnailGestureSettings(booru: true) } label: {
-                    Label(L10n.text("Thumbnail Gestures"), systemImage: "hand.tap")
-                }.accessibilityIdentifier("booru.thumbnailGestures")
-                AddonsSettingsRow(mode: .images)
+        SettingsHome(booru: true) {
+            // The servers and the places they lead come first, as an account does in the system Settings app.
+            NavigationLink { BooruServersView() } label: {
+                Label { Text(L10n.text("Servers")) } icon: { SettingsIconTile(symbol: "server.rack", tint: .blue) }
+            }.accessibilityIdentifier("booru.serversLink")
+            NavigationLink { ChallengeLibraryView(source: source) } label: {
+                Label { Text(L10n.text("Challenge Roulette")) } icon: { SettingsIconTile(symbol: "dice.fill", tint: .purple) }
+            }.accessibilityIdentifier("booru.challengesLink")
+            if !store.servers.isEmpty {
+                NavigationLink {
+                    if store.selectedServers.count == 1, let server = store.selectedServer { BooruPoolsView(server: server, source: source) }
+                    else { BooruPoolServersView(source: source) }
+                } label: {
+                    Label { Text(L10n.text("Pools")) } icon: { SettingsIconTile(symbol: "rectangle.stack.fill", tint: .brown) }
+                }.accessibilityIdentifier("booru.poolsLink")
             }
-
-            ReaderSettingsSection(booru: true, isPresented: $showReader)
-            ModeAppearanceSettings()
-            LanguageSettingsSection(booru: true)
-            Section {
-                Toggle(isOn: $useEmbeddedBrowser) {
-                    SettingsHelpLabel("Use Embedded Browser", help: "Opens the website instead of the app’s native screens. Try this if a website does not load correctly.", symbol: "safari")
-                }.accessibilityIdentifier("booru.browserToggle")
-            } header: { Text(L10n.text("Website Connection")) }
-            SearchHistorySettings(booru: true)
-            TasteSettingsSection(mode: .booru)
-            BooruSafeModeSettings()
-            StudyModeSettings()
-            Section {
-                NavigationLink { BooruBackupView() } label: { Label(L10n.text("Library Management"), systemImage: "externaldrive") }
-                    .accessibilityIdentifier("booru.libraryManagement")
-                HStack(spacing: 4) {
-                    Button(L10n.text(cacheCleared ? "Image Cache Cleared" : "Clear Image Cache")) {
-                        confirmClearCache = true
-                    }.accessibilityIdentifier("settings.clearCache")
-                    SettingsInfoButton(title: "Clear Image Cache", message: "Deletes temporary thumbnails and viewer images from this device. Your saved works stay in the library; images download again when needed.")
-                }
-            } header: { Text(L10n.text("Data & Storage")) }
-            PrivacySecuritySection()
-            SettingsSupportSection(showOnboarding: $showOnboarding, booru: true)
-            DeveloperInfoSection()
         }
         .onAppear { env.presentDiscordInvitationIfDue() }
         .toolbar { ToolbarItem(placement: .topBarTrailing) { BooruServerMenu() } }
-        .alert(L10n.text("Clear Image Cache?"), isPresented: $confirmClearCache) {
-            Button(L10n.text("Clear Image Cache"), role: .destructive) { Task { await BooruThumbnailCache.shared.clear(); await BooruViewerImageCache.shared.clear(); cacheCleared = true } }
-            Button(L10n.text("Cancel"), role: .cancel) {}
-        } message: { Text(L10n.text("Saved favorites are kept. Images will be downloaded again when needed.")) }
-        .appSheet(isPresented: $showReader) { ReaderSettingsView(booru: true) }
-        .appFullScreenCover(isPresented: $showOnboarding) { OnboardingView().environment(env) }
-
     }
 }

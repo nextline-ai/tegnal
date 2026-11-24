@@ -2563,8 +2563,19 @@
  "lab.courses.lessonsDone": "Lessons done %1$@/%2$@",
  "lab.sheet.example": "For example: %@",
  "Copy Tag": "Copy Tag",
- "Exclude from Searches": "Exclude from Searches",
- "Include in Searches": "Include in Searches",
- "Excluded from Searches": "Excluded from Searches",
- "Included in Searches": "Included in Searches"
+ "Add to Default Excluded Tags": "Add to Default Excluded Tags",
+ "Remove from Default Excluded Tags": "Remove from Default Excluded Tags",
+ "Added to Default Excluded Tags": "Added to Default Excluded Tags",
+ "Removed from Default Excluded Tags": "Removed from Default Excluded Tags",
+ "Explore & Search": "Explore & Search",
+ "Appearance & Layout": "Appearance & Layout",
+ "Language & Translation": "Language & Translation",
+ "Library & Storage": "Library & Storage",
+ "Start & Safe Mode": "Start & Safe Mode",
+ "Help & About": "Help & About",
+ "Search Settings": "Search Settings",
+ "No Matching Settings": "No Matching Settings",
+ "Explore & Search Filters": "Explore & Search Filters",
+ "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.": "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.",
+ "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "Each server keeps its own tag blacklist, which hides images in Explore and in searches."
 }

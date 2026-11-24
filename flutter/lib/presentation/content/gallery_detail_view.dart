@@ -836,7 +836,7 @@ List<ContextMenuAction> artworkTagMenu({
   ),
   if (exclude != null)
     ContextMenuAction(
-      title: L10n.text(excluded ? 'Include in Searches' : 'Exclude from Searches'),
+      title: L10n.text(excluded ? 'Remove from Default Excluded Tags' : 'Add to Default Excluded Tags'),
       icon: excluded ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
       onSelected: exclude,
     ),
@@ -1089,7 +1089,7 @@ class _GalleryDetailMetadata extends StatelessWidget {
   void _exclude(BuildContext context, String tag) {
     final excluded = content.toggleExcludedMangaTag(tag);
     HapticFeedback.mediumImpact();
-    SemanticsService.sendAnnouncement(View.of(context), L10n.text(excluded ? 'Excluded from Searches' : 'Included in Searches'), Directionality.of(context));
+    SemanticsService.sendAnnouncement(View.of(context), L10n.text(excluded ? 'Added to Default Excluded Tags' : 'Removed from Default Excluded Tags'), Directionality.of(context));
   }
 
   /// Each tag keeps its own category's color, so tags gathered in one section stay apart.

@@ -802,7 +802,7 @@ final class BooruUITests: XCTestCase {
         let app = launch()
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "settings.libraryManagement").tap()
+        app.settingsRow("settings.libraryManagement").tap()
         reveal(app, "library.fillMissing").tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
@@ -811,7 +811,7 @@ final class BooruUITests: XCTestCase {
         let app = launch(extra: ["--bulk-fill-warning-test"])
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "settings.libraryManagement").tap()
+        app.settingsRow("settings.libraryManagement").tap()
         let fill = reveal(app, "library.fillMissing")
         let caption = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "may block your network address")).firstMatch
         XCTAssertTrue(caption.waitForExistence(timeout: 5), "The fill row says why it asks first")
@@ -835,7 +835,7 @@ final class BooruUITests: XCTestCase {
         let app = launch()
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        let toggle = reveal(app, "settings.showMangaCategories")
+        let toggle = app.settingsRow("settings.showMangaCategories")
         // A partly visible row can sit under the floating tab bar.
         for _ in 0..<4 where toggle.frame.maxY > app.frame.maxY - 140 {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
@@ -855,7 +855,7 @@ final class BooruUITests: XCTestCase {
         let app = launch(extra: ["--taste-ui-rich"])
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "settings.libraryManagement").tap()
+        app.settingsRow("settings.libraryManagement").tap()
         let refresh = reveal(app, "library.refreshInformation")
         XCTAssertTrue(refresh.isEnabled)
         refresh.tap()
@@ -867,16 +867,18 @@ final class BooruUITests: XCTestCase {
         XCTAssertFalse(confirm.waitForExistence(timeout: 1))
     }
 
-    func testBothModesCallTheLastTabSettingsWithAddonsAtTheEndOfBrowsing() {
+    func testBothModesCallTheLastTabSettingsWithAddonsAsTheirOwnPage() {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 10), "Image Mode's last tab is Settings, as in Comics Mode")
         app.tabBars.buttons["Settings"].tap()
         for mode in ["booru", "manga"] {
             if mode == "manga" { selectMode(app, mode) }
-            let gestures = reveal(app, mode == "booru" ? "booru.thumbnailGestures" : "settings.thumbnailGestures")
-            let addons = reveal(app, "settings.addons")
-            XCTAssertEqual(addons.frame.minY, gestures.frame.maxY, accuracy: 2, "Add-ons is the row right after Thumbnail Gestures, last in Browsing")
-            capture(app, mode + " add-ons in browsing")
+            let addons = app.settingsRow("settings.addons")
+            let above = mode == "manga" ? element(app, "settings.connection")
+                : element(app, "booru.poolsLink").exists ? element(app, "booru.poolsLink") : element(app, "booru.challengesLink")
+            XCTAssertTrue(addons.isHittable, "Add-ons is a page of Settings' top level")
+            XCTAssertEqual(addons.frame.minY, above.frame.maxY, accuracy: 2, "Add-ons sits right under the website or servers")
+            capture(app, mode + " add-ons in settings")
             addons.tap()
             XCTAssertTrue(element(app, "addons.installed").waitForExistence(timeout: 5), "Installed Add-ons comes first")
             XCTAssertTrue(element(app, "addons.import").exists)
@@ -896,7 +898,7 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         for mode in ["booru", "manga"] {
             if mode == "manga" { selectMode(app, mode) }
-            reveal(app, mode == "booru" ? "booru.libraryManagement" : "settings.libraryManagement").tap()
+            app.settingsRow(mode == "booru" ? "booru.libraryManagement" : "settings.libraryManagement").tap()
             let export = reveal(app, "backup.export")
             XCTAssertTrue(export.isEnabled)
             XCTAssertTrue(element(app, "backup.import").isEnabled)
@@ -923,20 +925,21 @@ final class BooruUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         for mode in ["booru", "manga"] {
             if mode == "manga" { selectMode(app, "manga") }
-            XCTAssertTrue(element(app, "settings.gridColumns").waitForExistence(timeout: 5))
+            XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5), "Settings opens on the system search bar and its pages")
+            XCTAssertTrue(element(app, "settings.category.browsing").exists)
             capture(app, mode + " settings overview")
-            reveal(app, mode == "booru" ? "booru.readerSettings" : "settings.reader").tap()
-            XCTAssertTrue(element(app, "reader.settings.done").waitForExistence(timeout: 5))
-            element(app, "reader.settings.done").tap()
-            let remember = reveal(app, "settings.rememberHistory")
+            app.settingsRow(mode == "booru" ? "booru.readerSettings" : "settings.reader").tap()
+            XCTAssertTrue(element(app, "reader.settingsForm").waitForExistence(timeout: 5), "The viewer's options are a page of Settings")
+            XCTAssertFalse(element(app, "reader.settings.done").exists, "A page, not a sheet")
+            let remember = app.settingsRow("settings.rememberHistory")
             XCTAssertTrue(remember.isEnabled)
-            reveal(app, "settings.privacy").tap()
+            app.settingsRow("settings.privacyPolicyRow").tap()
             XCTAssertTrue(element(app, "settings.privacyPolicy").waitForExistence(timeout: 5))
             XCTAssertFalse(app.staticTexts["Unable to load privacy policy."].exists)
             XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "TEGNAL Privacy Policy")).firstMatch.exists)
             capture(app, mode + " offline privacy policy")
             app.navigationBars.buttons.element(boundBy: 0).tap()
-            let website = reveal(app, "developer.website")
+            let website = app.settingsRow("developer.website")
             XCTAssertTrue(website.isEnabled)
             XCTAssertFalse(element(app, "developer.publisher").exists)
             capture(app, mode + " NextLine support links")
@@ -1037,7 +1040,7 @@ final class BooruUITests: XCTestCase {
     func testICloudDisableWarningAndDeveloperEmail() {
         let app = launch()
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "booru.libraryManagement").tap()
+        app.settingsRow("booru.libraryManagement").tap()
         let toggle = reveal(app, "settings.icloud")
         XCTAssertEqual(toggle.value as? String, "1")
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
@@ -1048,7 +1051,7 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(element(app, "icloudOff.keep").waitForNonExistence(timeout: 5))
         XCTAssertEqual(toggle.value as? String, "1")
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(reveal(app, "developer.email").exists)
+        XCTAssertTrue(app.settingsRow("developer.email").exists)
         capture(app, "SVG developer identity and contact")
     }
 
@@ -1069,7 +1072,7 @@ final class BooruUITests: XCTestCase {
         keep.tap()
         XCTAssertTrue(keep.waitForNonExistence(timeout: 5))
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "booru.libraryManagement").tap()
+        app.settingsRow("booru.libraryManagement").tap()
         XCTAssertEqual(reveal(app, "settings.icloud").value as? String, "1")
     }
 
@@ -1077,7 +1080,7 @@ final class BooruUITests: XCTestCase {
     func testICloudTurnOffNeedsEveryStep() {
         let app = launch()
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "booru.libraryManagement").tap()
+        app.settingsRow("booru.libraryManagement").tap()
         let toggle = reveal(app, "settings.icloud")
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         XCTAssertTrue(element(app, "icloudOff.keep").waitForExistence(timeout: 5))
@@ -1486,6 +1489,7 @@ final class BooruUITests: XCTestCase {
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
         for (index, title) in ["Dark Mode", "Light Mode", "Dark Mode"].enumerated() {
+            app.openSettingsPage("appearance")
             let theme = app.buttons[title]
             for _ in 0..<8 {
                 if theme.exists && theme.isHittable { break }
@@ -1495,7 +1499,7 @@ final class BooruUITests: XCTestCase {
             theme.tap()
             let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: theme)
             XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
-            XCTAssertTrue(reveal(app, "developer.website").isHittable)
+            XCTAssertTrue(app.settingsRow("developer.website").isHittable)
             XCTAssertTrue(element(app, "developer.logo").exists)
             capture(app, "Developer SVG \(index) \(title)")
         }
@@ -1505,11 +1509,11 @@ final class BooruUITests: XCTestCase {
         let app = launch()
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
         app.tabBars.buttons["Settings"].tap()
-        let servers = element(app, "booru.serversLink"), pools = element(app, "booru.poolsLink"), columns = element(app, "settings.gridColumns")
+        let servers = element(app, "booru.serversLink"), pools = element(app, "booru.poolsLink"), browsing = element(app, "settings.category.browsing")
+        XCTAssertTrue(servers.waitForExistence(timeout: 5))
         XCTAssertLessThan(servers.frame.minY, pools.frame.minY)
-        // The import banner can push the settings below the fold; a scroll is not another navigation step.
-        XCTAssertTrue(reveal(app, "settings.gridColumns").isHittable, "More must expose settings without another navigation step")
-        if pools.exists { XCTAssertLessThan(pools.frame.minY, columns.frame.minY) }
+        // The servers and the places they lead come first, then Settings' pages.
+        if pools.exists, browsing.exists { XCTAssertLessThan(pools.frame.minY, browsing.frame.minY) }
         XCTAssertFalse(element(app, "booru.settingsLink").exists)
         capture(app, "Booru More with inline settings")
         XCTAssertFalse(element(app, "booru.validate").exists, "A server's check lives in its own settings")
@@ -1525,15 +1529,15 @@ final class BooruUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No Cookies"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         closeServerSettings(app)
-        XCTAssertTrue(reveal(app, "developer.website").isHittable)
+        XCTAssertTrue(app.settingsRow("developer.website").isHittable)
         XCTAssertTrue(element(app, "developer.logo").exists)
-        XCTAssertTrue(reveal(app, "developer.community").isHittable)
+        XCTAssertTrue(app.settingsRow("developer.community").isHittable)
         capture(app, "Booru developer and community")
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        XCTAssertTrue(reveal(app, "developer.website").isHittable)
+        XCTAssertTrue(app.settingsRow("developer.website").isHittable)
         XCTAssertTrue(element(app, "developer.logo").exists)
-        XCTAssertTrue(reveal(app, "developer.community").isHittable)
+        XCTAssertTrue(app.settingsRow("developer.community").isHittable)
         capture(app, "Manga developer and community")
     }
 
@@ -1588,7 +1592,7 @@ final class BooruUITests: XCTestCase {
         let app = launch()
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "settings.onboarding").tap()
+        app.settingsRow("settings.onboarding").tap()
         XCTAssertTrue(element(app, "onboarding.addServer").waitForExistence(timeout: 10))
         element(app, "onboarding.continue").tap()
         XCTAssertTrue(element(app, "onboarding.mangaViewerImport").waitForExistence(timeout: 5))
@@ -1624,7 +1628,7 @@ final class BooruUITests: XCTestCase {
         let app = launch(extra: ["--booru-import-test", "--booru-import-badge-test"])
         XCTAssertTrue(element(app, "booru.post.201").waitForExistence(timeout: 10))
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "booru.libraryManagement").tap()
+        app.settingsRow("booru.libraryManagement").tap()
         reveal(app, "booru.importLink").tap()
         reveal(app, "booru.import.confirm").tap()
         XCTAssertTrue(element(app, "booru.import.result").waitForExistence(timeout: 10))
@@ -1683,8 +1687,7 @@ final class BooruUITests: XCTestCase {
         let app = launch(extra: ["--booru-import-test"])
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
         app.tabBars.buttons["Settings"].tap()
-        for _ in 0..<4 where !element(app, "booru.libraryManagement").isHittable { app.swipeUp() }
-        reveal(app, "booru.libraryManagement").tap()
+        app.settingsRow("booru.libraryManagement").tap()
         reveal(app, "booru.importLink").tap()
         XCTAssertTrue(app.staticTexts["Backup Contents"].waitForExistence(timeout: 5))
         capture(app, "Anime Boxes import preview")
@@ -1725,8 +1728,8 @@ final class BooruUITests: XCTestCase {
             waitForExpectations(timeout: 5)
         }
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "settings.gridColumns").buttons["5"].tap()
-        reveal(app, "settings.folderColumns").buttons["5"].tap()
+        app.settingsRow("settings.gridColumns").buttons["5"].tap()
+        app.settingsRow("settings.folderColumns").buttons["5"].tap()
         setSwitch("settings.noGridPadding", to: true)
         XCTAssertFalse(element(app, "settings.showMangaTitles").exists)
         app.tabBars.buttons["Explore"].tap()
@@ -1742,10 +1745,10 @@ final class BooruUITests: XCTestCase {
         capture(app, "Dense image folders")
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        let comicsSpacing = reveal(app, "settings.noGridPadding")
+        let comicsSpacing = app.settingsRow("settings.noGridPadding")
         XCTAssertEqual(comicsSpacing.value as? String, "0")
-        reveal(app, "settings.gridColumns").buttons["5"].tap()
-        reveal(app, "settings.folderColumns").buttons["5"].tap()
+        app.settingsRow("settings.gridColumns").buttons["5"].tap()
+        app.settingsRow("settings.folderColumns").buttons["5"].tap()
         setSwitch("settings.noGridPadding", to: true)
         setSwitch("settings.showMangaTitles", to: false)
         setSwitch("settings.showMangaArtists", to: false)
@@ -1763,23 +1766,19 @@ final class BooruUITests: XCTestCase {
         capture(app, "Dense comic folders")
         selectMode(app, "booru")
         app.tabBars.buttons["Settings"].tap()
-        XCTAssertEqual(reveal(app, "settings.noGridPadding").value as? String, "1")
+        XCTAssertEqual(app.settingsRow("settings.noGridPadding").value as? String, "1")
     }
 
     func testMangaDefaultTagsAndGridSettingsStayInTheirMode() {
         let app = launch()
         XCTAssertTrue(element(app, "booru.post.101").waitForExistence(timeout: 10))
         app.tabBars.buttons["Settings"].tap()
-        XCTAssertTrue(element(app, "settings.gridColumns").buttons["3"].isSelected)
+        XCTAssertTrue(app.settingsRow("settings.gridColumns").buttons["3"].isSelected)
         element(app, "settings.gridColumns").buttons["4"].tap()
         selectMode(app, "manga")
         app.tabBars.buttons["Settings"].tap()
-        for _ in 0..<4 {
-            if element(app, "manga.defaultTagsSettings").exists && element(app, "manga.defaultTagsSettings").isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(element(app, "settings.gridColumns").buttons["2"].isSelected)
-        element(app, "manga.defaultTagsSettings").tap()
+        XCTAssertTrue(app.settingsRow("settings.gridColumns").buttons["2"].isSelected)
+        app.settingsRow("manga.defaultTagsSettings").tap()
         let included = element(app, "manga.defaultTags"), excluded = element(app, "manga.defaultExcludedTags")
         XCTAssertTrue(included.waitForExistence(timeout: 5)); included.tap(); included.typeText("tag:scenery")
         excluded.tap(); excluded.typeText("tag:spoilers")
@@ -1787,7 +1786,7 @@ final class BooruUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         selectMode(app, "booru")
         app.tabBars.buttons["Settings"].tap()
-        XCTAssertTrue(element(app, "settings.gridColumns").buttons["4"].isSelected)
+        XCTAssertTrue(app.settingsRow("settings.gridColumns").buttons["4"].isSelected)
     }
 
     /// Translate starts AI translation by default, as in the comics reader; the switch under the
@@ -1986,7 +1985,7 @@ final class BooruUITests: XCTestCase {
         for (index, mode) in ["booru", "manga", "booru"].enumerated() {
             selectMode(app, mode)
             if mode == "manga" { openTab("Settings") }
-            reveal(app, "settings.onboarding").tap()
+            app.settingsRow("settings.onboarding").tap()
             XCTAssertTrue(element(app, "onboarding.addServer").waitForExistence(timeout: 5))
             if index > 0 { XCTAssertTrue(app.staticTexts["sample.booru.org"].exists) }
             element(app, "onboarding.addServer").tap()
@@ -2296,7 +2295,7 @@ final class BooruUITests: XCTestCase {
         let app = launch()
         XCTAssertFalse(element(app, "booru.rating").exists)
         app.tabBars.buttons["Settings"].tap()
-        let browserToggle = reveal(app, "booru.browserToggle")
+        let browserToggle = app.settingsRow("booru.browserToggle")
         browserToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         XCTAssertEqual(browserToggle.value as? String, "1")
         app.tabBars.buttons["Explore"].tap()
@@ -2407,27 +2406,27 @@ final class BooruUITests: XCTestCase {
     func testLanguageSettingsAndOnboardingReplay() {
         let app = launch()
         app.tabBars.buttons["Settings"].tap()
-        element(app, "settings.translationLanguage").tap()
+        app.settingsRow("settings.translationLanguage").tap()
         XCTAssertTrue(element(app, "translation.language.system").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "translation.language.system").isSelected)
         reveal(app, "translation.language.en").tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        element(app, "settings.appLanguage").tap()
+        app.settingsRow("settings.appLanguage").tap()
         app.buttons["한국어"].tap()
         XCTAssertTrue(app.tabBars.buttons["저장"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.tabBars.buttons.element(boundBy: 2).label, "태그")
         app.tabBars.buttons["더보기"].tap()
-        element(app, "settings.translationLanguage").tap()
+        app.settingsRow("settings.translationLanguage").tap()
         XCTAssertTrue(reveal(app, "translation.language.en").isSelected)
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        element(app, "settings.onboarding").tap()
+        app.settingsRow("settings.onboarding").tap()
         XCTAssertTrue(element(app, "onboarding.addServer").waitForExistence(timeout: 5))
         capture(app, "Korean replay onboarding")
         // A settings replay remains dismissible without changing the user's library.
         app.buttons["완료"].tap()
         selectMode(app, "manga")
         app.tabBars.buttons["설정"].tap()
-        element(app, "settings.translationLanguage").tap()
+        app.settingsRow("settings.translationLanguage").tap()
         XCTAssertTrue(element(app, "translation.language.system").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "translation.language.system").isSelected)
     }
@@ -2435,7 +2434,7 @@ final class BooruUITests: XCTestCase {
     func testExplicitTranslationLanguageUsesAppleTranslation() throws {
         let app = launch()
         app.tabBars.buttons["Settings"].tap()
-        reveal(app, "settings.translationLanguage").tap()
+        app.settingsRow("settings.translationLanguage").tap()
         reveal(app, "translation.language.en").tap()
         app.tabBars.buttons["Explore"].tap()
         let card = element(app, "booru.post.101")

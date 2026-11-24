@@ -46,34 +46,6 @@ class AddonOfficialBadge extends StatelessWidget {
   );
 }
 
-/// The row that leads to a mode's add-ons, last in the Browsing section of that mode's settings (`AddonsSettingsRow`).
-class AddonsSettingsRow extends StatelessWidget implements FormSeparatorInset {
-  const AddonsSettingsRow({super.key, required this.booru, required this.mode});
-  final BooruStore booru;
-  final AddonMode mode;
-
-  @override
-  double get separatorInset => settingsIconInset;
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: AddonRuntime.shared,
-    builder: (context, _) {
-      final count = AddonRuntime.shared.effects.enabledCount(mode);
-      return SettingsLinkRow(
-        title: L10n.text('Add-ons'),
-        symbol: (color) => PuzzlePieceSymbol(color: color),
-        value: count > 0 ? '$count' : null,
-        onTap: () => Navigator.of(context).push(
-          CupertinoPageRoute<void>(
-            builder: (_) => AddonsView(booru: booru, mode: mode),
-          ),
-        ),
-      );
-    },
-  );
-}
-
 /// Terms that add-ons apply beside the person's own, shown read-only where the person's own are edited.
 class AddonAddedTermsSection extends StatelessWidget {
   const AddonAddedTermsSection({super.key, required this.title, required this.terms, required this.mode, required this.openAddons, this.rowColor});

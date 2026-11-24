@@ -27,7 +27,6 @@ import '../core/taste/taste_models.dart';
 import '../presentation/booru/booru_common.dart';
 import '../presentation/browser/in_app_manga_browser_view.dart';
 import '../presentation/challenge/challenge_library_view.dart';
-import '../presentation/design/grouped_form.dart';
 import '../presentation/design/symbols.dart';
 import '../presentation/design/system_colors.dart';
 import '../presentation/imports/import_views.dart';
@@ -462,20 +461,10 @@ class _RootState extends State<_Root> {
     explore: () => state.tab = AppTab.works,
   );
 
-  Widget _tasteSettingsRow(BuildContext context, TasteMode mode) => FormSection(
-    prominentHeader: true,
-    rowColor: FormColors.listRow.resolveFrom(context),
-    children: [
-      SettingsLinkRow(
-        title: L10n.text('Taste Analysis'),
-        icon: CupertinoIcons.sparkles,
-        onTap: () => Navigator.of(context).push(
-          CupertinoPageRoute<void>(
-            builder: (_) => TasteSettingsView(taste: _taste, mode: mode),
-          ),
-        ),
-      ),
-    ],
+  void _openTasteSettings(BuildContext context, TasteMode mode) => Navigator.of(context).push(
+    CupertinoPageRoute<void>(
+      builder: (_) => TasteSettingsView(taste: _taste, mode: mode),
+    ),
   );
 
   late final _booruPages = BooruRootPages(
@@ -488,7 +477,7 @@ class _RootState extends State<_Root> {
       content: services.content,
       version: services.version,
       openOnboarding: _replayOnboarding,
-      tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.booru),
+      openTasteSettings: (context) => _openTasteSettings(context, TasteMode.booru),
       openLibraryManagement: (context) => Navigator.of(context).push(
         CupertinoPageRoute<void>(
           builder: (_) => LibraryManagementView(
@@ -558,9 +547,8 @@ class _RootState extends State<_Root> {
         ),
       ),
     ),
-    tasteSettings: (context) => _tasteSettingsRow(context, TasteMode.comics),
+    openTasteSettings: (context) => _openTasteSettings(context, TasteMode.comics),
     safeMode: (context) => SafeModeSection(booru: _booru),
-    addons: (context) => AddonsSettingsRow(booru: services.booru, mode: AddonMode.comics),
     openAddons: (context) => Navigator.of(context).push(
       CupertinoPageRoute<void>(
         builder: (_) => AddonsView(booru: services.booru, mode: AddonMode.comics),

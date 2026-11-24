@@ -2563,8 +2563,19 @@
  "lab.courses.lessonsDone": "마친 레슨 %1$@/%2$@",
  "lab.sheet.example": "예: %@",
  "Copy Tag": "태그 복사",
- "Exclude from Searches": "검색에서 제외",
- "Include in Searches": "검색 제외 해제",
- "Excluded from Searches": "검색에서 제외했습니다",
- "Included in Searches": "검색 제외를 해제했습니다"
+ "Add to Default Excluded Tags": "기본 제외 태그로 등록",
+ "Remove from Default Excluded Tags": "기본 제외 태그에서 빼기",
+ "Added to Default Excluded Tags": "기본 제외 태그로 등록했습니다",
+ "Removed from Default Excluded Tags": "기본 제외 태그에서 뺐습니다",
+ "Explore & Search": "탐색 및 검색",
+ "Appearance & Layout": "테마와 배치",
+ "Language & Translation": "언어와 번역",
+ "Library & Storage": "보관함과 저장 공간",
+ "Start & Safe Mode": "시작 화면과 세이프 모드",
+ "Help & About": "도움말과 앱 정보",
+ "Search Settings": "설정 검색",
+ "No Matching Settings": "일치하는 설정 없음",
+ "Explore & Search Filters": "탐색·검색 필터",
+ "Default tags and excluded tags apply to Explore as well as searches. To hide a tag quickly, touch and hold it on a work and choose Add to Default Excluded Tags.": "기본 태그와 제외 태그는 검색뿐 아니라 탐색 탭에도 적용됩니다. 작품에서 태그를 길게 누르고 ‘기본 제외 태그로 등록’을 고르면 바로 숨길 수 있습니다.",
+ "Each server keeps its own tag blacklist, which hides images in Explore and in searches.": "서버마다 태그 블랙리스트가 따로 있으며, 탐색과 검색 모두에서 해당 이미지를 숨깁니다."
 }
